@@ -17,41 +17,37 @@
  *   { effect: "allow",            condition: "action:read_file"  }  → always allowed
  */
 
-import { randomUUID } from "node:crypto"
 import {
-  type AuditEntry,
-  type ExecutionRecord,
-  type PolicyRule,
-  type Step,
-  type WorkflowRun,
-  AuditService,
-  Learner,
-  MemoryAuditRepository,
-  MemoryEventBus,
-  MemoryExecutionRecordRepository,
-  MemoryRunRepository,
-  PolicyEffect,
-  PolicyViolationError,
-  RunStatus,
-  RulePolicyEvaluator,
-  StepStatus,
-  completeRun,
-  completeStep,
-  createRun,
-  failRun,
-  failStep,
-  runCompleted,
-  runFailed,
-  runStarted,
-  startPlanning,
-  startRunning,
-  startStep,
-  stepCompleted,
-  stepFailed,
-  stepStarted,
+    type AuditEntry,
+    type ExecutionRecord,
+    type Step,
+    type WorkflowRun,
+    AuditService,
+    Learner,
+    MemoryAuditRepository,
+    MemoryEventBus,
+    MemoryExecutionRecordRepository,
+    MemoryRunRepository,
+    PolicyViolationError,
+    RulePolicyEvaluator,
+    StepStatus,
+    completeRun,
+    completeStep,
+    createRun,
+    failRun,
+    failStep,
+    runCompleted,
+    runFailed,
+    runStarted,
+    startPlanning,
+    startRunning,
+    startStep,
+    stepCompleted,
+    stepFailed,
+    stepStarted
 } from "@agent001/engine"
+import { randomUUID } from "node:crypto"
 import { Agent } from "./agent.js"
-import * as log from "./logger.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
 
 // ── Engine infrastructure ────────────────────────────────────────

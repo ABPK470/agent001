@@ -19,13 +19,12 @@
  */
 
 import { createInterface } from "node:readline"
-import { PolicyEffect } from "@agent001/engine"
 import { Agent } from "./agent.js"
 import {
-  createEngineServices,
-  printGovernanceReport,
-  runGoverned,
-  type EngineServices,
+    createEngineServices,
+    printGovernanceReport,
+    runGoverned,
+    type EngineServices,
 } from "./governance.js"
 import { AnthropicClient } from "./llm/anthropic.js"
 import { OpenAIClient } from "./llm/openai.js"

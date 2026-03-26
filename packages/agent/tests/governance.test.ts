@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vitest"
 import { PolicyEffect } from "@agent001/engine"
+import { describe, expect, it } from "vitest"
 import {
-  createEngineServices,
-  runGoverned,
-  type EngineServices,
+    createEngineServices,
+    runGoverned
 } from "../src/governance.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
