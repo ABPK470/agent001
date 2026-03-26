@@ -22,8 +22,8 @@
  *   - The accumulated message history (the agent "remembers" what it did)
  */
 
-import type { AgentConfig, LLMClient, Message, Tool } from "./types.js"
 import * as log from "./logger.js"
+import type { AgentConfig, LLMClient, Message, Tool } from "./types.js"
 
 const DEFAULT_SYSTEM_PROMPT = `You are a capable AI agent that can use tools to accomplish goals.
 

@@ -5,8 +5,8 @@
  * and other coding agents use to interact with your codebase.
  */
 
-import { readFile, writeFile, readdir, stat } from "node:fs/promises"
-import { resolve, relative } from "node:path"
+import { readdir, readFile, stat, writeFile } from "node:fs/promises"
+import { resolve } from "node:path"
 import type { Tool } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */

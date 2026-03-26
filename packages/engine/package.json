@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Agentic Automation Platform — declarative workflow engine where AI agents execute end-to-end work across UIs and APIs with governance built in.",
   "type": "module",
+  "exports": {
+    ".": "./src/lib.ts"
+  },
   "engines": {
     "node": ">=20"
   },

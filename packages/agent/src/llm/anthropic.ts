@@ -9,7 +9,7 @@
  * Same LLMClient interface — the agent doesn't know the difference.
  */
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js";
 
 export class AnthropicClient implements LLMClient {
   private readonly apiKey: string
