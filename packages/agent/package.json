@@ -1,0 +1,21 @@
+{
+  "name": "@agent001/agent",
+  "version": "0.1.0",
+  "description": "A real AI agent with tools — LLM decides what to do, calls tools, observes results, repeats until done.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/cli.ts",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.16.4",
+    "tsx": "^4.7.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
