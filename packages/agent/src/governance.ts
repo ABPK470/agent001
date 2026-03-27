@@ -91,7 +91,7 @@ export interface GovernedResult {
 
 // ── Run state (shared between governed tools) ────────────────────
 
-interface RunState {
+export interface RunState {
   run: WorkflowRun
   actor: string
   stepCounter: number
@@ -99,7 +99,7 @@ interface RunState {
 
 // ── Build a Step for a tool call ─────────────────────────────────
 
-function createToolStep(
+export function createToolStep(
   toolName: string,
   args: Record<string, unknown>,
   state: RunState,
@@ -124,7 +124,7 @@ function createToolStep(
 
 // ── Wrap a tool with governance ──────────────────────────────────
 
-function governTool(
+export function governTool(
   tool: Tool,
   services: EngineServices,
   state: RunState,

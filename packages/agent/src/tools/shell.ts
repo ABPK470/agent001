@@ -40,7 +40,7 @@ export const shellTool: Tool = {
           env: { ...process.env, NO_COLOR: "1" },
         },
         (error, stdout, stderr) => {
-          const parts: string[] = []
+          const parts: string[] = []         
           if (stdout) parts.push(stdout)
           if (stderr) parts.push(`[stderr] ${stderr}`)
           if (error && error.killed) {

@@ -1,0 +1,213 @@
+/**
+ * SQLite persistence layer.
+ *
+ * Stores runs, audit logs, checkpoints (for resume), and dashboard layouts.
+ * Data lives in ~/.agent001/agent001.db — survives server restarts.
+ */
+
+import Database from "better-sqlite3"
+import { mkdirSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+
+const DATA_DIR = join(homedir(), ".agent001")
+mkdirSync(DATA_DIR, { recursive: true })
+
+let _db: Database.Database | null = null
+
+export function getDb(): Database.Database {
+  if (!_db) {
+    _db = new Database(join(DATA_DIR, "agent001.db"))
+    _db.pragma("journal_mode = WAL")
+    _db.pragma("foreign_keys = ON")
+    migrate(_db)
+  }
+  return _db
+}
+
+function migrate(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runs (
+      id TEXT PRIMARY KEY,
+      goal TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      answer TEXT,
+      step_count INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      parent_run_id TEXT,
+      data TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      action TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '{}',
+      timestamp TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS checkpoints (
+      run_id TEXT PRIMARY KEY,
+      messages TEXT NOT NULL,
+      iteration INTEGER NOT NULL DEFAULT 0,
+      step_counter INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      level TEXT NOT NULL DEFAULT 'info',
+      message TEXT NOT NULL,
+      timestamp TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS layouts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      config TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_log(run_id);
+    CREATE INDEX IF NOT EXISTS idx_logs_run ON logs(run_id);
+  `)
+}
+
+// ── Run queries ──────────────────────────────────────────────────
+
+export interface DbRun {
+  id: string
+  goal: string
+  status: string
+  answer: string | null
+  step_count: number
+  error: string | null
+  parent_run_id: string | null
+  data: string
+  created_at: string
+  completed_at: string | null
+}
+
+const upsertRun = () => getDb().prepare(`
+  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, data, created_at, completed_at)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @data, @created_at, @completed_at)
+`)
+
+export function saveRun(run: DbRun): void {
+  upsertRun().run(run)
+}
+
+export function getRun(id: string): DbRun | undefined {
+  return getDb().prepare("SELECT * FROM runs WHERE id = ?").get(id) as DbRun | undefined
+}
+
+export function listRuns(limit = 100, offset = 0): DbRun[] {
+  return getDb()
+    .prepare("SELECT * FROM runs ORDER BY created_at DESC LIMIT ? OFFSET ?")
+    .all(limit, offset) as DbRun[]
+}
+
+// ── Audit queries ────────────────────────────────────────────────
+
+export interface DbAudit {
+  id?: number
+  run_id: string
+  actor: string
+  action: string
+  detail: string
+  timestamp: string
+}
+
+export function saveAudit(entry: Omit<DbAudit, "id">): void {
+  getDb().prepare(`
+    INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
+    VALUES (@run_id, @actor, @action, @detail, @timestamp)
+  `).run(entry)
+}
+
+export function getAuditLog(runId: string): DbAudit[] {
+  return getDb()
+    .prepare("SELECT * FROM audit_log WHERE run_id = ? ORDER BY timestamp")
+    .all(runId) as DbAudit[]
+}
+
+// ── Checkpoint queries ───────────────────────────────────────────
+
+export interface DbCheckpoint {
+  run_id: string
+  messages: string
+  iteration: number
+  step_counter: number
+  updated_at: string
+}
+
+export function saveCheckpoint(cp: DbCheckpoint): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO checkpoints (run_id, messages, iteration, step_counter, updated_at)
+    VALUES (@run_id, @messages, @iteration, @step_counter, @updated_at)
+  `).run(cp)
+}
+
+export function getCheckpoint(runId: string): DbCheckpoint | undefined {
+  return getDb()
+    .prepare("SELECT * FROM checkpoints WHERE run_id = ?")
+    .get(runId) as DbCheckpoint | undefined
+}
+
+// ── Log queries ──────────────────────────────────────────────────
+
+export interface DbLog {
+  id?: number
+  run_id: string
+  level: string
+  message: string
+  timestamp: string
+}
+
+export function saveLog(entry: Omit<DbLog, "id">): void {
+  getDb().prepare(`
+    INSERT INTO logs (run_id, level, message, timestamp)
+    VALUES (@run_id, @level, @message, @timestamp)
+  `).run(entry)
+}
+
+export function getLogs(runId: string, level?: string): DbLog[] {
+  if (level) {
+    return getDb()
+      .prepare("SELECT * FROM logs WHERE run_id = ? AND level = ? ORDER BY timestamp")
+      .all(runId, level) as DbLog[]
+  }
+  return getDb()
+    .prepare("SELECT * FROM logs WHERE run_id = ? ORDER BY timestamp")
+    .all(runId) as DbLog[]
+}
+
+// ── Layout queries ───────────────────────────────────────────────
+
+export interface DbLayout {
+  id: string
+  name: string
+  config: string
+  updated_at: string
+}
+
+export function saveLayout(layout: DbLayout): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO layouts (id, name, config, updated_at)
+    VALUES (@id, @name, @config, @updated_at)
+  `).run(layout)
+}
+
+export function getLayouts(): DbLayout[] {
+  return getDb()
+    .prepare("SELECT * FROM layouts ORDER BY updated_at DESC")
+    .all() as DbLayout[]
+}
+
+export function deleteLayout(id: string): void {
+  getDb().prepare("DELETE FROM layouts WHERE id = ?").run(id)
+}

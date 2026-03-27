@@ -5,8 +5,12 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "npx concurrently -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npm run dev -w packages/ui\"",
     "test": "npm test --workspaces",
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }

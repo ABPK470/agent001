@@ -69,4 +69,8 @@ export interface AgentConfig {
   systemPrompt?: string
   /** Print the agent's reasoning to the console. Default: true */
   verbose?: boolean
+  /** Called after each tool execution round with current messages for checkpointing. */
+  onStep?: (messages: Message[], iteration: number) => void
+  /** AbortSignal for external cancellation. */
+  signal?: AbortSignal
 }

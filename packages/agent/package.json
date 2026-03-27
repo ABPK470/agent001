@@ -3,6 +3,9 @@
     "version": "0.1.0",
     "description": "A real AI agent with tools — LLM decides what to do, calls tools, observes results, repeats until done.",
     "type": "module",
+    "exports": {
+        ".": "./src/lib.ts"
+    },
     "engines": {
         "node": ">=20"
     },

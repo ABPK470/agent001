@@ -12,6 +12,8 @@
 4. [The Agent Package — Every File Explained](#the-agent-package)
 5. [The Engine Package — Every File Explained](#the-engine-package)
 6. [How Everything Connects — The Integration Boundary](#integration-boundary)
+   - [What the Agent Uses vs. Doesn't Use](#what-the-agent-uses-vs-doesnt-use)
+   - [Why In-Memory Is Fine (And When It Isn't)](#why-in-memory-is-fine)
 7. [Complete Execution Flow — Governed Mode](#execution-flow)
 8. [Design Patterns & Architectural Decisions](#design-patterns)
 9. [Why This Architecture Makes Swapping Easy](#swapping)
@@ -925,6 +927,125 @@ After:  agent → temporalTool.execute()  → workflow → activity(tool.execute
 
 Same function signature. Different substrate. Only `governance.ts` changes.
 
+### What the Agent Uses vs. Doesn't Use
+
+This is critical: **the agent does NOT use the Orchestrator, Planner, Executor, Expression Engine, ActionRegistry, WorkQueue, Container, or the REST routes.** These are the engine's execution machinery for declarative workflows. The agent has its own loop.
+
+Importantly: **the agent also never uses `Workflow`, `createWorkflow`, or `activateWorkflow`.** Those exist for the REST API, where users save workflow definitions as templates and run them later. The agent doesn't have templates — it has a goal, and it creates a `WorkflowRun` directly to track the session. Think of it as:
+
+- `Workflow` = a saved recipe (only the REST API creates and manages these)
+- `WorkflowRun` = one cooking session (both the REST API and the agent create these)
+
+The engine has **two entry doors** — and they use different halves:
+
+```
+Door 1: REST API (Fastify)                Door 2: Library import (agent)
+  └─ routes → Container → Orchestrator      └─ governance.ts → createEngineServices()
+  └─ uses: Workflow, createWorkflow,         └─ uses: WorkflowRun, Step, createRun
+     activateWorkflow, Planner, Executor,       AuditService, PolicyEvaluator,
+     Expression engine, ActionRegistry,         Learner, Memory* adapters
+     WorkQueue, all repos, all services
+  └─ does NOT need: agent, LLM, tools       └─ does NOT need: Workflow, Orchestrator,
+                                                Planner, Executor, Container, routes
+```
+
+The `Container` is **not Fastify-specific** — it's just a plain class that wires all dependencies. But only the routes use it, because only the routes need the full engine. The agent wires its own smaller set of services in `createEngineServices()`:
+
+```typescript
+// Container (used by REST API) — wires EVERYTHING:
+class Container {
+  readonly workflowRepo = new MemoryWorkflowRepository()  // ← agent doesn't need
+  readonly orchestrator = new Orchestrator({ ... })        // ← agent doesn't need
+  readonly executor = new StepExecutor(actionRegistry)     // ← agent doesn't need
+  readonly approvalService = new ApprovalService(...)      // ← agent doesn't need
+  // ... 15+ components total
+}
+
+// createEngineServices (used by agent) — wires only what's needed:
+function createEngineServices() {
+  return {
+    runRepo:         new MemoryRunRepository(),
+    auditService:    new AuditService(new MemoryAuditRepository()),
+    policyEvaluator: new RulePolicyEvaluator(),
+    learner:         new Learner(new MemoryExecutionRecordRepository()),
+    eventBus:        new MemoryEventBus(),
+  }
+  // 5 components. No Orchestrator, Planner, Executor, Workflow repos, etc.
+}
+```
+
+**Full usage matrix — who uses what:**
+
+| Engine Component | Used by REST API? | Used by Agent? |
+|---|---|---|
+| `Workflow` + create/activate/archive | Yes | **No** |
+| `WorkflowRun` + state transitions | Yes | Yes (session tracking) |
+| `Step` + state transitions | Yes | Yes (tool call tracking) |
+| `Orchestrator` (execution loop) | Yes | **No** (agent has its own LLM loop) |
+| `Planner` (topological sort) | Yes | **No** (LLM decides dynamically) |
+| `StepExecutor` / `ActionRegistry` | Yes | **No** (agent uses Tool Map) |
+| `Expression engine` (`{{...}}`) | Yes | **No** (LLM reads message history) |
+| `Container` (full DI wiring) | Yes | **No** (agent wires 5 services itself) |
+| `PolicyEvaluator` | Yes | Yes |
+| `AuditService` | Yes | Yes |
+| `Learner` | Yes | Yes |
+| `EventBus` | Yes | Yes |
+| `Memory*` adapters | Yes | Yes |
+| REST routes + Zod schemas | Yes (that IS the API) | **No** |
+| Action handlers (http.request, etc.) | Yes | **No** (agent has its own tools) |
+| `ApprovalService` | Yes | **No** (agent returns "BLOCKED" string) |
+| `WorkQueue` | Yes | **No** |
+
+**What governance.ts imports from @agent001/engine:**
+
+| Category | Imported | Purpose in Agent |
+|----------|----------|-----------------|
+| Domain types | `WorkflowRun`, `Step`, `AuditEntry`, `ExecutionRecord` | Data structures to track the agent session |
+| State transitions | `createRun`, `startStep`, `completeStep`, `failStep`, `completeRun`, `failRun`, etc. | Move entities through legal state changes |
+| Domain events | `runStarted`, `stepCompleted`, `stepFailed`, etc. | Emit events for monitoring/subscribers |
+| Domain errors | `PolicyViolationError` | Distinguish "denied" from "needs approval" |
+| Governance | `AuditService`, `RulePolicyEvaluator` | Policy checks + audit logging |
+| Engine | `Learner` | Stats aggregation only |
+| Adapters | `MemoryRunRepository`, `MemoryAuditRepository`, `MemoryEventBus`, `MemoryExecutionRecordRepository` | In-memory storage for the session |
+
+**Two loops, two paradigms — same governance:**
+
+```
+ENGINE ORCHESTRATOR (declarative workflows):
+  WorkflowDefinition → Planner(topSort) → for each Step:
+    evaluate condition → resolve {{expressions}} → policy check →
+    ActionRegistry.get(action).execute(input) → record → next step
+
+AGENT LOOP (LLM-driven):
+  User goal → for each iteration:
+    LLM.chat(messages, tools) → if text: done → if toolCalls:
+    for each call: governedTool.execute(args) → push result → next iteration
+```
+
+The governance.ts layer makes the agent's loop _look like_ the engine's loop from the outside — each tool call becomes a `Step` on a `WorkflowRun`, gets policy-checked, audited, and metered — but the execution machinery is completely different. The agent cherry-picks the engine's **data model** and **services**, not its **execution engine**.
+
+### Why In-Memory Is Fine (And When It Isn't)
+
+Everything in the agent's governance layer is in-memory: `MemoryRunRepository`, `MemoryAuditRepository`, `MemoryEventBus`, `MemoryExecutionRecordRepository`. Here's why that works:
+
+**Why it's fine for local agent usage:**
+- A single agent session = one process = one `WorkflowRun`
+- The audit trail, steps, events, and stats are collected during the session
+- At the end, `printGovernanceReport()` dumps everything to console
+- When the process exits, the data is gone — and that's OK, because it was already displayed
+- No concurrent access, no multi-user concerns, no durability requirements
+
+**When you'd swap to persistent storage:**
+- **Multi-session history**: Want to see past runs? Need a database.
+- **Audit compliance**: Regulations require durable, tamper-proof logs.
+- **Multi-agent**: Multiple agents running concurrently need shared state.
+- **UI dashboard**: A web frontend querying historical runs.
+- **Crash recovery**: Resume an interrupted agent session.
+
+The swap is mechanical — implement the 5 repository interfaces against PostgreSQL/SQLite/DynamoDB and change 5 lines in the composition layer. The agent, governance logic, and all tools remain untouched.
+
+**This is the same approach used by local-first agent platforms** — start with in-memory for simplicity, add persistence when the use case demands it. The hexagonal architecture makes the swap cost proportional to the number of ports (5 repos + event bus), not the size of the codebase.
+
 ---
 
 <a id="execution-flow"></a>
@@ -1091,17 +1212,172 @@ tool.execute(args)
 - Governance can be added/removed without touching the agent
 - Each concern (policy, audit, metrics) is composed, not embedded
 
-### 5. Domain-Driven Design (DDD)
+### 5. Domain-Driven Design (DDD) — Why and How
 
-**What it is**: Business concepts modeled as entities with behavior, not just data bags.
+#### What is an "Entity"?
 
-**Where it's applied**:
-- `WorkflowRun` isn't just `{ status: string }`. It has `startPlanning()`, `startRunning()`, `completeRun()` — each verifying the transition is legal.
-- `Step` has `startStep()`, `completeStep(output)`, `failStep(error)` — each guarding against illegal states.
-- Domain events describe business facts (`RunStarted`, not `StatusChanged`)
-- Domain errors describe business problems (`PolicyViolationError`, not `Error("denied")`)
+In DDD, an **entity** is a thing with an identity that changes over time. Compare:
 
-**Why it matters**: Business rules are enforced at the entity level. You can't accidentally put a run into `Completed` from `Pending` — you must go through `Planning → Running → Completed`. Bugs that would otherwise produce corrupt state are caught immediately.
+| | Entity | Plain data |
+|---|---|---|
+| **Has identity?** | Yes — `id: string` (UUID). Two runs with the same data but different IDs are different runs. | No — two objects with the same values are the same. |
+| **Changes over time?** | Yes — a `WorkflowRun` starts as `Pending`, transitions to `Running`, ends as `Completed`. It's the same run throughout. | No — data is created, used, discarded. |
+| **Has rules about how it changes?** | Yes — you can't go from `Pending` to `Completed` directly. | No — any field can be set to anything. |
+
+In our code, entities are: `Workflow`, `WorkflowRun`, `Step`, `ApprovalRequest`. They each have an `id`, they change state over time, and their state changes are governed by rules.
+
+Non-entities: `PolicyRule` (just a rule definition, no lifecycle), `AuditEntry` (immutable once created — it's a **value object** in DDD terms), `ExecutionRecord` (same — created once, never modified).
+
+#### The Core DDD Idea: Business Rules Live With the Data They Protect
+
+`models.ts` is the **single source of truth for what states are legal and how entities can change.** It answers questions like:
+
+- Can a Step go from Pending to Completed? (**No** — must go through Running first)
+- Can a Run be cancelled while waiting for approval? (**Yes**)
+- Can an already-approved request be approved again? (**No** — throws `InvalidTransitionError`)
+
+Without `models.ts`, these rules would be scattered across route handlers, the orchestrator, `governance.ts`, tests — everywhere. Anyone could write `step.status = "Completed"` from anywhere, and you'd need to _remember_ the rules. With `models.ts`, the rules are enforced — you literally cannot make an illegal move without getting an exception.
+
+#### What models.ts Covers — The Board Game Analogy
+
+Think of it as the **rule book for a board game**:
+
+| What models.ts defines | Board game analogy |
+|---|---|
+| Interfaces (`Workflow`, `Step`, `WorkflowRun`, ...) | The **pieces** — what exists and what properties they have |
+| Factory functions (`createRun`, `createWorkflow`, ...) | The **setup** — how pieces enter the game in a valid initial state |
+| Transition functions (`startStep`, `completeRun`, ...) | The **legal moves** — how pieces can change, with rules enforced |
+| Transition maps (`STEP_TRANSITIONS`, `RUN_TRANSITIONS`) | The **rulebook** — which moves are allowed from which states |
+
+It does NOT cover:
+- **Where** pieces are stored (that's adapters/repositories)
+- **What triggers** a move (that's orchestrator, governance, routes)
+- **What happens after** a move (that's events, audit, learner)
+
+This separation is the whole point. The rules exist independently of who invokes them. Whether the orchestrator calls `completeStep()` (engine REST API path) or `governance.ts` calls `completeStep()` (agent path) — the same guard runs, the same rules apply.
+
+#### Why DDD? What Problem Does It Solve?
+
+The alternative to understanding is seeing what goes wrong without it:
+
+**Without DDD — rules scattered everywhere:**
+
+```typescript
+// In routes/runs.ts:
+if (run.status === "Running") {
+  run.status = "Completed"         // hope we remembered all the rules
+  run.completedAt = new Date()
+}
+
+// In orchestrator.ts:
+if (run.status === "Running" || run.status === "WaitingForApproval") {
+  run.status = "Failed"            // wait, can we fail from WaitingForApproval?
+  run.completedAt = new Date()     // did we forget this somewhere else?
+}
+
+// In governance.ts:
+run.status = "Completed"           // oops, forgot to check current status
+                                   // oops, forgot to set completedAt
+```
+
+Three files, three places where the "how to complete a run" logic is duplicated. Each slightly different. Bugs guaranteed.
+
+**With DDD — rules in one place:**
+
+```typescript
+// In routes/runs.ts:
+completeRun(run)        // enforces rules, sets completedAt
+
+// In orchestrator.ts:
+completeRun(run)        // same function, same rules
+
+// In governance.ts:
+completeRun(run)        // impossible to forget the rules — they're inside
+```
+
+One function, used everywhere. The rules can't be bypassed because `completeRun()` IS the only way to complete a run. Change the rule once → it changes everywhere.
+
+#### What Would the Alternative Look Like?
+
+**Alternative 1: No domain model (raw data + scattered logic)**
+
+```typescript
+// Just use plain objects, set fields directly
+const run = { id: uuid(), status: "Pending", steps: [], ... }
+
+// Every file that changes state does its own validation:
+function completeRunInRoute(run: any) {
+  if (run.status !== "Running") throw new Error("Can't complete")
+  run.status = "Completed"
+  run.completedAt = new Date()
+}
+
+// Same logic again in orchestrator, again in governance, again in tests...
+```
+
+This is what most quick scripts and small apps do. Works fine until the codebase grows and the rules get complex. Then you get bugs where one place enforces a rule and another doesn't.
+
+**Alternative 2: OOP Rich Domain Model (class-based)**
+
+```typescript
+class WorkflowRun {
+  private status: RunStatus
+
+  complete(): void {
+    if (this.status !== RunStatus.Running)
+      throw new InvalidTransitionError(...)
+    this.status = RunStatus.Completed
+    this.completedAt = new Date()
+  }
+}
+
+// Usage:
+run.complete()
+```
+
+This is classic OOP DDD. Same idea, different style. The downside: classes don't serialize cleanly with `JSON.stringify()` (you need custom `toJSON`/`fromJSON`), they have `this` binding issues in callbacks, and they're harder to test (need to construct class instances with all required state).
+
+**Alternative 3: Immutable + Event Sourcing**
+
+```typescript
+// State is never mutated. Every change creates a new version:
+function completeRun(run: WorkflowRun): WorkflowRun {
+  if (run.status !== RunStatus.Running) throw ...
+  return { ...run, status: RunStatus.Completed, completedAt: new Date() }
+}
+
+// Or even: store events, rebuild state from them
+const events = [RunCreated, PlanningStarted, RunStarted, RunCompleted]
+const currentState = events.reduce(applyEvent, initialState)
+```
+
+Most sophisticated, most complex. Great for audit requirements (you have the full history of changes as events). Overkill for our use case.
+
+**What we chose: Functional Domain Model (our approach)**
+
+```typescript
+// Entities are plain interfaces (data)
+interface WorkflowRun { id: string, status: RunStatus, ... }
+
+// Behavior is in free functions (not methods)
+function completeRun(run: WorkflowRun): void { ... }
+```
+
+This gets the key DDD benefit (rules in one place, enforced on every call) without the downsides of classes (serialization issues, `this` binding) or immutability (propagation complexity). It's the pragmatic middle ground.
+
+#### DDD Summary
+
+| Concept | In our code | Purpose |
+|---|---|---|
+| **Entity** | `WorkflowRun`, `Step`, `Workflow`, `ApprovalRequest` | Things with identity that change over time |
+| **Value Object** | `AuditEntry`, `ExecutionRecord`, `PolicyRule` | Immutable facts or definitions — created once, never modified |
+| **Factory** | `createRun()`, `createWorkflow()`, etc. | Ensures entities start in a valid state |
+| **Guard/Transition** | `completeRun()`, `startStep()`, `failStep()`, etc. | Ensures entities can only move to legal states |
+| **Domain Event** | `RunStarted`, `StepCompleted`, etc. | Facts about what happened — for decoupled reactions |
+| **Domain Error** | `InvalidTransitionError`, `PolicyViolationError` | Business-meaningful failures, not generic errors |
+| **Repository** (port) | `RunRepository`, `AuditRepository` | Storage abstraction — domain doesn't know where data lives |
+
+The entire domain layer (`models.ts`, `enums.ts`, `events.ts`, `errors.ts`, `workflow-schema.ts`) has **zero infrastructure dependencies**. It doesn't import Express, Fastify, database drivers, or even other engine layers. It's pure business logic. This is the DDD ideal: the domain is the center, everything else is plumbing around it.
 
 ### 6. State Machine (Guarded Transitions)
 

@@ -41,7 +41,13 @@ export class Agent {
   private readonly llm: LLMClient
   private readonly tools: Map<string, Tool>
   private readonly toolList: Tool[]
-  private readonly config: Required<AgentConfig>
+  private readonly config: {
+    maxIterations: number
+    systemPrompt: string
+    verbose: boolean
+    onStep: AgentConfig["onStep"]
+    signal: AgentConfig["signal"]
+  }
 
   constructor(llm: LLMClient, tools: Tool[], config: AgentConfig = {}) {
     this.llm = llm
@@ -51,6 +57,8 @@ export class Agent {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
       verbose: config.verbose ?? true,
+      onStep: config.onStep,
+      signal: config.signal,
     }
   }
 
@@ -59,17 +67,21 @@ export class Agent {
    *
    * This is THE agentic loop. Everything else is plumbing.
    */
-  async run(goal: string): Promise<string> {
+  async run(
+    goal: string,
+    resume?: { messages: Message[], iteration: number },
+  ): Promise<string> {
     if (this.config.verbose) log.logGoal(goal)
 
-    // Message history — this IS the agent's "memory"
-    const messages: Message[] = [
+    const messages: Message[] = resume?.messages ?? [
       { role: "system", content: this.config.systemPrompt },
       { role: "user", content: goal },
     ]
 
-    // The loop: think → act → observe → repeat
-    for (let i = 0; i < this.config.maxIterations; i++) {
+    for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
+      if (this.config.signal?.aborted) {
+        return "Agent was cancelled."
+      }
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
       // Ask the LLM what to do next
@@ -115,7 +127,8 @@ export class Agent {
         }
       }
 
-      // Loop back: the LLM will see the tool results and decide what to do next
+      // Checkpoint after tool execution round
+      this.config.onStep?.(messages, i)
     }
 
     const maxIterMsg = `Agent stopped after ${this.config.maxIterations} iterations.`
