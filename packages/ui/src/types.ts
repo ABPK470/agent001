@@ -107,3 +107,13 @@ export interface WsEvent {
   data: Record<string, unknown>
   timestamp: string
 }
+
+// ── Policy ───────────────────────────────────────────────────────
+
+export interface PolicyRule {
+  name: string
+  effect: "allow" | "require_approval" | "deny"
+  condition: string
+  parameters: Record<string, unknown>
+  createdAt: string
+}

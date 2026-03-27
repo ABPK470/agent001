@@ -5,6 +5,17 @@
  * Click to add one to the active view.
  */
 
+import {
+    Activity,
+    BarChart3,
+    Clock,
+    History,
+    MessageSquare,
+    ScrollText,
+    Shield,
+    X,
+} from "lucide-react"
+import type { ComponentType } from "react"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
 
@@ -12,14 +23,14 @@ interface Props {
   onClose: () => void
 }
 
-const CATALOG: Array<{ type: WidgetType, label: string, desc: string, icon: string }> = [
-  { type: "agent-chat",    label: "Agent Chat",    desc: "Send goals to the agent and see responses",  icon: "💬" },
-  { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  icon: "📊" },
-  { type: "live-logs",     label: "Live Logs",     desc: "Streaming log output from agent activity",    icon: "📜" },
-  { type: "audit-trail",   label: "Audit Trail",   desc: "Immutable audit log of every action",         icon: "🔒" },
-  { type: "step-timeline", label: "Step Timeline",  desc: "Visual timeline of tool calls and steps",    icon: "⏱️" },
-  { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                icon: "📈" },
-  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      icon: "📋" },
+const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
+  { type: "agent-chat",    label: "Agent Chat",    desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
+  { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: Activity },
+  { type: "live-logs",     label: "Live Logs",     desc: "Streaming log output from agent activity",    Icon: ScrollText },
+  { type: "audit-trail",   label: "Audit Trail",   desc: "Immutable audit log of every action",         Icon: Shield },
+  { type: "step-timeline", label: "Step Timeline",  desc: "Visual timeline of tool calls and steps",    Icon: Clock },
+  { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                Icon: BarChart3 },
+  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
@@ -37,16 +48,16 @@ export function WidgetCatalog({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border rounded-xl p-6 w-[520px] max-h-[80vh] overflow-auto shadow-2xl"
+        className="bg-surface rounded-2xl p-6 w-[520px] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold text-text">Add Widget</h2>
+          <h2 className="text-base font-semibold text-text">Add Widget</h2>
           <button
-            className="text-text-muted hover:text-text text-lg px-1"
+            className="text-text-muted hover:text-text p-1 rounded transition-colors"
             onClick={onClose}
           >
-            ×
+            <X size={18} />
           </button>
         </div>
 
@@ -54,16 +65,16 @@ export function WidgetCatalog({ onClose }: Props) {
           {CATALOG.map((item) => (
             <button
               key={item.type}
-              className="flex flex-col items-start gap-1.5 p-4 rounded-lg border border-border bg-base hover:border-accent/40 hover:bg-elevated transition-all text-left group"
+              className="flex flex-col items-start gap-2.5 p-4 rounded-xl hover:bg-white/[0.04] cursor-pointer text-left group"
               onClick={() => handleAdd(item.type)}
             >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-xs font-medium text-text group-hover:text-accent transition-colors">
+              <div className="flex items-center gap-2.5">
+                <item.Icon size={18} className="text-text-muted group-hover:text-text-secondary" />
+                <span className="text-sm font-medium text-text-secondary group-hover:text-text">
                   {item.label}
                 </span>
               </div>
-              <span className="text-[11px] text-text-muted leading-snug">
+              <span className="text-[13px] text-text-muted leading-snug">
                 {item.desc}
               </span>
             </button>

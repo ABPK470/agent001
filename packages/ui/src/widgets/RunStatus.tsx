@@ -2,6 +2,7 @@
  * RunStatus — shows current run status, metadata, and progress.
  */
 
+import { Loader2, RotateCcw, Square } from "lucide-react"
 import { api } from "../api"
 import { useStore } from "../store"
 import { statusColor, timeAgo } from "../util"
@@ -15,7 +16,7 @@ export function RunStatus() {
 
   if (!run) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-[11px]">
+      <div className="flex items-center justify-center h-full text-text-muted text-sm">
         No active run
       </div>
     )
@@ -36,38 +37,38 @@ export function RunStatus() {
   return (
     <div className="flex flex-col gap-3">
       {/* Status badge */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
           className="w-2.5 h-2.5 rounded-full"
           style={{ background: statusColor(run.status) }}
         />
-        <span className="text-sm font-semibold uppercase tracking-wide" style={{ color: statusColor(run.status) }}>
+        <span className="text-base font-semibold uppercase tracking-wide" style={{ color: statusColor(run.status) }}>
           {run.status}
         </span>
         {isActive && (
-          <span className="text-[10px] text-accent animate-pulse ml-auto">●</span>
+          <Loader2 size={16} className="text-accent animate-spin ml-auto" />
         )}
       </div>
 
       {/* Goal */}
       <div>
-        <span className="text-[10px] text-text-muted uppercase">Goal</span>
-        <p className="text-xs text-text mt-0.5">{run.goal}</p>
+        <span className="text-[13px] text-text-muted uppercase tracking-wide">Goal</span>
+        <p className="text-sm text-text mt-0.5 leading-relaxed">{run.goal}</p>
       </div>
 
       {/* Metadata grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
         <div>
-          <span className="text-text-muted">Run ID</span>
-          <div className="text-text font-mono text-[10px]">{run.id.slice(0, 8)}</div>
+          <span className="text-text-muted text-[13px]">Run ID</span>
+          <div className="text-text-secondary font-mono text-[13px]">{run.id.slice(0, 8)}</div>
         </div>
         <div>
-          <span className="text-text-muted">Started</span>
-          <div className="text-text">{timeAgo(run.createdAt)}</div>
+          <span className="text-text-muted text-[13px]">Started</span>
+          <div className="text-text-secondary">{timeAgo(run.createdAt)}</div>
         </div>
         <div>
-          <span className="text-text-muted">Steps</span>
-          <div className="text-text">
+          <span className="text-text-muted text-[13px]">Steps</span>
+          <div className="text-text-secondary">
             <span className="text-success">{completedSteps}</span>
             {failedSteps > 0 && <span className="text-error ml-1">/ {failedSteps} failed</span>}
             {` / ${run.stepCount} total`}
@@ -75,8 +76,8 @@ export function RunStatus() {
         </div>
         {run.parentRunId && (
           <div>
-            <span className="text-text-muted">Resumed from</span>
-            <div className="text-accent font-mono text-[10px]">{run.parentRunId.slice(0, 8)}</div>
+            <span className="text-text-muted text-[13px]">Resumed from</span>
+            <div className="text-accent font-mono text-[13px]">{run.parentRunId.slice(0, 8)}</div>
           </div>
         )}
       </div>
@@ -85,17 +86,19 @@ export function RunStatus() {
       <div className="flex gap-2 mt-1">
         {isActive && (
           <button
-            className="px-3 py-1 text-[10px] border border-error/40 text-error rounded hover:bg-error/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-error bg-error/10 hover:bg-error/20 rounded-lg transition-colors"
             onClick={handleCancel}
           >
+            <Square size={13} />
             Cancel
           </button>
         )}
         {run.status === "failed" && (
           <button
-            className="px-3 py-1 text-[10px] border border-accent/40 text-accent rounded hover:bg-accent/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
             onClick={handleResume}
           >
+            <RotateCcw size={13} />
             Resume
           </button>
         )}

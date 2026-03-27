@@ -2,7 +2,7 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { Run, RunDetail, SavedLayout, ViewConfig } from "./types"
+import type { PolicyRule, Run, RunDetail, SavedLayout, ViewConfig } from "./types"
 
 const BASE = ""
 
@@ -45,9 +45,23 @@ export const api = {
 
   // Health
   health: () => json<{ status: string, active: number }>("/api/health"),
+
+  // Policies
+  listPolicies: () => json<PolicyRule[]>("/api/policies"),
+  createPolicy: (rule: { name: string; effect: string; condition: string; parameters?: Record<string, unknown> }) =>
+    json<{ ok: boolean }>("/api/policies", {
+      method: "POST",
+      body: JSON.stringify(rule),
+    }),
+  deletePolicy: (name: string) =>
+    json<{ ok: boolean }>(`/api/policies/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
 }
 
-// ── WebSocket ────────────────────────────────────────────────────
+// ── WebSocket + cross-tab relay via BroadcastChannel ─────────────
+
+const BC_CHANNEL = "agent001-ws-relay"
 
 export function createWs(
   onEvent: (event: { type: string, data: Record<string, unknown>, timestamp: string }) => void,
@@ -60,6 +74,35 @@ export function createWs(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let alive = true
 
+  // Deduplicate events across WS + BroadcastChannel
+  const seen = new Set<string>()
+  function eventKey(e: { type: string; timestamp: string; data: Record<string, unknown> }): string {
+    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}`
+  }
+  function dedupe(event: { type: string; data: Record<string, unknown>; timestamp: string }): boolean {
+    const key = eventKey(event)
+    if (seen.has(key)) return false
+    seen.add(key)
+    // Keep set bounded
+    if (seen.size > 500) {
+      const it = seen.values()
+      for (let i = 0; i < 250; i++) it.next()
+      // Rebuild with recent half
+      const arr = [...seen].slice(-250)
+      seen.clear()
+      arr.forEach((k) => seen.add(k))
+    }
+    return true
+  }
+
+  // Cross-tab relay: share WS events between all windows
+  const bc = new BroadcastChannel(BC_CHANNEL)
+  bc.onmessage = (e) => {
+    try {
+      if (dedupe(e.data)) onEvent(e.data)
+    } catch { /* ignore */ }
+  }
+
   function connect() {
     if (!alive) return
     ws = new WebSocket(url)
@@ -69,7 +112,11 @@ export function createWs(
     ws.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data as string)
-        onEvent(event)
+        if (dedupe(event)) {
+          onEvent(event)
+          // Relay to other tabs/windows
+          bc.postMessage(event)
+        }
       } catch { /* ignore malformed messages */ }
     }
 
@@ -88,6 +135,7 @@ export function createWs(
   return {
     close() {
       alive = false
+      bc.close()
       if (reconnectTimer) clearTimeout(reconnectTimer)
       ws?.close()
     },

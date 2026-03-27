@@ -5,9 +5,10 @@
  *   - Drag handle (header bar)
  *   - Title with widget type label
  *   - Controls: pop-out to new window, close
- *   - Content area with overflow scroll
+ *   - Content area
  */
 
+import { ExternalLink, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
@@ -45,32 +46,32 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface rounded-lg border border-border overflow-hidden">
+    <div className="flex flex-col h-full bg-surface rounded-xl overflow-hidden">
       {/* Header — drag handle */}
-      <div className="widget-drag-handle flex items-center justify-between px-3 h-7 border-b border-border cursor-move shrink-0 select-none">
-        <span className="text-[10px] font-medium text-text-secondary uppercase tracking-wider">
+      <div className="widget-drag-handle flex items-center justify-between px-3 h-8 cursor-move shrink-0 select-none">
+        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           {WIDGET_LABELS[type]}
         </span>
-        <div className="flex items-center gap-1">
+        <div className="widget-controls flex items-center gap-1">
           <button
-            className="text-text-muted hover:text-text text-[11px] px-1 transition-colors"
+            className="text-text-muted hover:text-text p-1 rounded transition-colors"
             onClick={handlePopOut}
             title="Pop out"
           >
-            ⧉
+            <ExternalLink size={14} />
           </button>
           <button
-            className="text-text-muted hover:text-error text-[11px] px-1 transition-colors"
+            className="text-text-muted hover:text-error p-1 rounded transition-colors"
             onClick={() => removeWidget(viewId, widgetId)}
             title="Remove"
           >
-            ×
+            <X size={14} />
           </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex-1 overflow-hidden p-3">
         {children}
       </div>
     </div>

@@ -5,6 +5,7 @@
  * Shows status, goal, time, and step count.
  */
 
+import { GitBranch } from "lucide-react"
 import { useEffect } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -43,40 +44,41 @@ export function RunHistory() {
 
   if (runs.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-[11px]">
+      <div className="flex items-center justify-center h-full text-text-muted text-sm">
         No runs yet
       </div>
     )
   }
 
   return (
-    <div className="space-y-px">
+    <div className="space-y-0.5">
       {runs.map((run) => (
         <div
           key={run.id}
-          className={`flex items-center gap-2.5 px-2 py-2 rounded cursor-pointer transition-colors ${
+          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
             run.id === activeRunId
               ? "bg-elevated"
-              : "hover:bg-elevated/50"
+              : "hover:bg-elevated/40"
           }`}
           onClick={() => handleSelect(run.id)}
         >
           {/* Status dot */}
           <div
-            className="w-2 h-2 rounded-full shrink-0"
+            className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ background: statusColor(run.status) }}
           />
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-text truncate">{truncate(run.goal, 50)}</div>
-            <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
+            <div className="text-sm text-text truncate">{truncate(run.goal, 50)}</div>
+            <div className="flex items-center gap-2 text-[13px] text-text-muted mt-0.5">
               <span>{timeAgo(run.createdAt)}</span>
-              <span>·</span>
+              <span className="text-text-muted/40">·</span>
               <span>{run.stepCount} steps</span>
               {run.parentRunId && (
                 <>
-                  <span>·</span>
+                  <span className="text-text-muted/40">·</span>
+                  <GitBranch size={13} className="text-accent" />
                   <span className="text-accent">resumed</span>
                 </>
               )}
@@ -85,7 +87,7 @@ export function RunHistory() {
 
           {/* Status text */}
           <span
-            className="text-[10px] font-medium shrink-0"
+            className="text-[13px] font-medium shrink-0"
             style={{ color: statusColor(run.status) }}
           >
             {run.status}

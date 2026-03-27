@@ -10,6 +10,12 @@
  *   - Copilot LLM client (GitHub Models API)
  */
 
+import { config } from "dotenv"
+import { resolve } from "node:path"
+
+// Load .env from repo root (npm workspaces sets CWD to packages/server)
+config({ path: resolve(import.meta.dirname, "../../../.env") })
+
 import {
     fetchUrlTool,
     listDirectoryTool,
@@ -25,6 +31,7 @@ import { getDb } from "./db.js"
 import { CopilotClient } from "./llm/copilot.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
+import { registerPolicyRoutes } from "./routes/policies.js"
 import { registerRunRoutes } from "./routes/runs.js"
 import { addClient } from "./ws.js"
 
@@ -68,6 +75,7 @@ async function main() {
   // REST routes
   registerRunRoutes(app, orchestrator)
   registerLayoutRoutes(app)
+  registerPolicyRoutes(app)
 
   // Health check
   app.get("/api/health", async () => ({

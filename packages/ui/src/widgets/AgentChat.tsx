@@ -4,6 +4,7 @@
  * The primary interaction widget: type a goal, agent executes, see the answer.
  */
 
+import { AlertCircle, Loader2, Send, User } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -45,9 +46,9 @@ export function AgentChat() {
   return (
     <div className="flex flex-col h-full gap-2">
       {/* Messages area */}
-      <div className="flex-1 overflow-auto space-y-3 pr-1">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {recentRuns.length === 0 && (
-          <div className="text-text-muted text-[11px] text-center pt-8">
+          <div className="text-text-muted text-sm text-center pt-8">
             Send a goal to start the agent
           </div>
         )}
@@ -55,23 +56,22 @@ export function AgentChat() {
         {[...recentRuns].reverse().map((run) => (
           <div
             key={run.id}
-            className={`space-y-1.5 cursor-pointer rounded-md p-2 transition-colors ${
-              run.id === activeRunId ? "bg-elevated" : "hover:bg-elevated/50"
+            className={`space-y-1.5 cursor-pointer rounded-lg p-2.5 transition-colors ${
+              run.id === activeRunId ? "bg-elevated" : "hover:bg-elevated/40"
             }`}
             onClick={() => setActiveRun(run.id)}
           >
             {/* Goal (user message) */}
             <div className="flex items-start gap-2">
-              <span className="text-accent text-[10px] font-medium shrink-0 mt-0.5">YOU</span>
-              <span className="text-text text-xs">{run.goal}</span>
+              <User size={14} className="text-accent shrink-0 mt-0.5" />
+              <span className="text-text text-sm">{run.goal}</span>
             </div>
 
             {/* Answer (agent response) */}
             {run.answer && (
-              <div className="flex items-start gap-2">
-                <span className="text-success text-[10px] font-medium shrink-0 mt-0.5">AI</span>
-                <span className="text-text-secondary text-xs whitespace-pre-wrap">
-                  {run.answer.length > 300 ? run.answer.slice(0, 300) + "..." : run.answer}
+              <div className="flex items-start gap-2 ml-5">
+                <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
+                  {run.answer}
                 </span>
               </div>
             )}
@@ -79,14 +79,17 @@ export function AgentChat() {
             {/* Error */}
             {run.error && (
               <div className="flex items-start gap-2">
-                <span className="text-error text-[10px] font-medium shrink-0 mt-0.5">ERR</span>
-                <span className="text-error/70 text-xs">{run.error}</span>
+                <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
+                <span className="text-error/80 text-sm">{run.error}</span>
               </div>
             )}
 
             {/* Status badge */}
             {run.status === "running" && (
-              <div className="text-[10px] text-accent animate-pulse">● Running...</div>
+              <div className="flex items-center gap-1.5 text-[13px] text-accent ml-5">
+                <Loader2 size={14} className="animate-spin" />
+                Running
+              </div>
             )}
           </div>
         ))}
@@ -96,7 +99,7 @@ export function AgentChat() {
       {/* Input */}
       <div className="flex gap-2 shrink-0">
         <input
-          className="flex-1 bg-base border border-border rounded-md px-3 py-1.5 text-xs text-text placeholder:text-text-muted outline-none focus:border-accent transition-colors"
+          className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all"
           placeholder={isRunning ? "Agent is working..." : "Enter a goal..."}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -104,11 +107,11 @@ export function AgentChat() {
           disabled={sending}
         />
         <button
-          className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-xs rounded-md transition-colors disabled:opacity-40"
+          className="flex items-center justify-center w-10 h-10 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
           onClick={handleSend}
           disabled={sending || !input.trim()}
         >
-          Send
+          <Send size={16} />
         </button>
       </div>
     </div>

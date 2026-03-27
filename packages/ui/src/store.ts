@@ -91,6 +91,42 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "run-history":   { w: 4, h: 8,  minW: 3, minH: 4 },
 }
 
+const GRID_COLS = 12
+
+/** Find first position where a widget of size (w, h) fits without overlapping existing items. */
+function findFirstFit(existing: LayoutItem[], w: number, h: number): { x: number; y: number } {
+  // Build occupancy set from existing items
+  const occupied = new Set<string>()
+  let maxY = 0
+  for (const item of existing) {
+    for (let row = item.y; row < item.y + item.h; row++) {
+      for (let col = item.x; col < item.x + item.w; col++) {
+        occupied.add(`${col},${row}`)
+      }
+    }
+    maxY = Math.max(maxY, item.y + item.h)
+  }
+
+  // Scan rows then columns, find first position where (w x h) block is fully free
+  for (let y = 0; y <= maxY + 1; y++) {
+    for (let x = 0; x <= GRID_COLS - w; x++) {
+      let fits = true
+      outer: for (let row = y; row < y + h; row++) {
+        for (let col = x; col < x + w; col++) {
+          if (occupied.has(`${col},${row}`)) {
+            fits = false
+            break outer
+          }
+        }
+      }
+      if (fits) return { x, y }
+    }
+  }
+
+  // Fallback: place below everything
+  return { x: 0, y: maxY }
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useStore = create<AppState>()(
@@ -128,10 +164,13 @@ export const useStore = create<AppState>()(
       addWidget: (viewId, type) => set((s) => {
         const widget: Widget = { id: randomId(), type }
         const defaults = WIDGET_DEFAULTS[type]
+        const view = s.views.find((v) => v.id === viewId)
+        const existing = view?.layouts["lg"] ?? []
+        const { x, y } = findFirstFit(existing, defaults.w, defaults.h)
         const layout: LayoutItem = {
           i: widget.id,
-          x: 0,
-          y: Infinity, // bottom
+          x,
+          y,
           ...defaults,
         }
         return {

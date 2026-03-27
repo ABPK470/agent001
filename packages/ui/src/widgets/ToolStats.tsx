@@ -38,26 +38,26 @@ export function ToolStats() {
 
   if (sorted.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-[11px]">
+      <div className="flex items-center justify-center h-full text-text-muted text-sm">
         No tool data yet
       </div>
     )
   }
 
   return (
-    <div className="space-y-3">
+    <div className="h-full overflow-y-auto space-y-3">
       {sorted.map((metric) => {
         const failRate = metric.calls > 0 ? metric.failures / metric.calls : 0
         const barWidth = (metric.calls / maxCalls) * 100
 
         return (
-          <div key={metric.name} className="space-y-1">
-            <div className="flex items-center justify-between text-[11px]">
+          <div key={metric.name} className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
               <span className="text-text font-medium font-mono">{metric.name}</span>
               <span className="text-text-muted">
-                {metric.calls}× · {formatMs(metric.avgMs)} avg
+                {metric.calls}x  ·  {formatMs(metric.avgMs)} avg
                 {metric.failures > 0 && (
-                  <span className="text-error ml-1">{metric.failures} fail</span>
+                  <span className="text-error ml-1.5">{metric.failures} fail</span>
                 )}
               </span>
             </div>

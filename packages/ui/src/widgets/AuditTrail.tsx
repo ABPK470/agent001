@@ -5,6 +5,7 @@
  * completions, failures. Filterable and expandable.
  */
 
+import { ChevronDown, ChevronRight, Search } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
 
@@ -20,32 +21,42 @@ export function AuditTrail() {
   return (
     <div className="flex flex-col h-full gap-2">
       {/* Search */}
-      <input
-        className="bg-base border border-border rounded px-2 py-1 text-[11px] text-text placeholder:text-text-muted outline-none focus:border-accent transition-colors shrink-0"
-        placeholder="Filter by action or actor..."
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-      />
+      <div className="relative shrink-0">
+        <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+        <input
+          className="w-full bg-base rounded-lg pl-8 pr-3 py-1.5 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all"
+          placeholder="Filter by action or actor..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 && (
-          <div className="text-text-muted text-[11px] text-center pt-8">
+          <div className="text-text-muted text-sm text-center pt-8">
             No audit entries
           </div>
         )}
 
-        <div className="space-y-px">
+        <div className="space-y-0.5">
           {filtered.map((entry, i) => (
             <div key={i}>
               <div
-                className="flex items-center gap-3 py-1.5 px-2 hover:bg-elevated/50 rounded-sm cursor-pointer text-[11px]"
+                className="flex items-center gap-3 py-1.5 px-2 hover:bg-elevated/40 rounded-lg cursor-pointer text-sm"
                 onClick={() => setExpanded(expanded === i ? null : i)}
               >
-                <span className="text-text-muted font-mono text-[10px] w-16 shrink-0">
+                {Object.keys(entry.detail).length > 0 ? (
+                  expanded === i
+                    ? <ChevronDown size={14} className="text-text-muted shrink-0" />
+                    : <ChevronRight size={14} className="text-text-muted shrink-0" />
+                ) : (
+                  <span className="w-3 shrink-0" />
+                )}
+                <span className="text-text-muted font-mono text-[13px] w-[6.5rem] shrink-0">
                   {entry.timestamp.slice(11, 23)}
                 </span>
-                <span className="text-text-secondary w-12 shrink-0">{entry.actor}</span>
+                <span className="text-text-secondary w-14 shrink-0">{entry.actor}</span>
                 <span className={`font-medium ${
                   entry.action.includes("blocked") || entry.action.includes("denied")
                     ? "text-error"
@@ -61,7 +72,7 @@ export function AuditTrail() {
 
               {/* Expanded detail */}
               {expanded === i && Object.keys(entry.detail).length > 0 && (
-                <div className="ml-8 mb-2 px-3 py-2 bg-base rounded border border-border text-[10px] font-mono text-text-secondary">
+                <div className="ml-8 mb-2 px-3 py-2 bg-base rounded-lg text-[13px] font-mono text-text-secondary">
                   {Object.entries(entry.detail).map(([k, v]) => (
                     <div key={k} className="flex gap-2">
                       <span className="text-text-muted shrink-0">{k}:</span>
@@ -78,7 +89,7 @@ export function AuditTrail() {
       </div>
 
       {/* Footer */}
-      <div className="text-[10px] text-text-muted shrink-0">
+      <div className="text-[13px] text-text-muted shrink-0">
         {filtered.length} entries
       </div>
     </div>

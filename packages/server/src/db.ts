@@ -74,6 +74,14 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_log(run_id);
     CREATE INDEX IF NOT EXISTS idx_logs_run ON logs(run_id);
+
+    CREATE TABLE IF NOT EXISTS policy_rules (
+      name TEXT PRIMARY KEY,
+      effect TEXT NOT NULL,
+      condition TEXT NOT NULL,
+      parameters TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
   `)
 }
 
@@ -210,4 +218,31 @@ export function getLayouts(): DbLayout[] {
 
 export function deleteLayout(id: string): void {
   getDb().prepare("DELETE FROM layouts WHERE id = ?").run(id)
+}
+
+// ── Policy rule queries ──────────────────────────────────────────
+
+export interface DbPolicyRule {
+  name: string
+  effect: string
+  condition: string
+  parameters: string
+  created_at: string
+}
+
+export function listPolicyRules(): DbPolicyRule[] {
+  return getDb()
+    .prepare("SELECT * FROM policy_rules ORDER BY created_at")
+    .all() as DbPolicyRule[]
+}
+
+export function savePolicyRule(rule: DbPolicyRule): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO policy_rules (name, effect, condition, parameters, created_at)
+    VALUES (@name, @effect, @condition, @parameters, @created_at)
+  `).run(rule)
+}
+
+export function deletePolicyRule(name: string): void {
+  getDb().prepare("DELETE FROM policy_rules WHERE name = ?").run(name)
 }

@@ -67,6 +67,17 @@ export class AgentOrchestrator {
     const controller = new AbortController()
     const services = createEngineServices()
 
+    // Load persisted policy rules into this run's evaluator
+    const dbRules = db.listPolicyRules()
+    for (const r of dbRules) {
+      services.policyEvaluator.addRule({
+        name: r.name,
+        effect: r.effect as unknown as import("@agent001/engine").PolicyEffect,
+        condition: r.condition,
+        parameters: JSON.parse(r.parameters),
+      })
+    }
+
     this.activeRuns.set(runId, { id: runId, goal, controller, services })
 
     broadcast({ type: "run.queued", data: { runId, goal } })
@@ -143,15 +154,16 @@ export class AgentOrchestrator {
     let lastMessages: Message[] = []
     let lastIteration = 0
 
-    // Subscribe to domain events → broadcast to WS + save to DB
-    this.wireEventBroadcasting(services, runId)
-
     // Create a tracked workflow run
     const run = createRun("agent-session", { goal })
     // Override the run ID so we can track it externally
     ;(run as { id: string }).id = runId
     startPlanning(run)
     startRunning(run, [])
+
+    // Subscribe to domain events → broadcast to WS + save to DB
+    this.wireEventBroadcasting(services, runId, run)
+
     await services.runRepo.save(run)
     await services.eventBus.publish(runStarted(run.id, "agent-session"))
 
@@ -273,14 +285,33 @@ export class AgentOrchestrator {
 
   // ── Private: wire domain events to WebSocket ─────────────────
 
-  private wireEventBroadcasting(services: EngineServices, runId: string): void {
+  private wireEventBroadcasting(
+    services: EngineServices,
+    runId: string,
+    run: { steps: { id: string; name: string; action: string; input: Record<string, unknown>; output: Record<string, unknown>; error: string | null }[] },
+  ): void {
     const events = [
       "run.started", "run.completed", "run.failed",
       "step.started", "step.completed", "step.failed",
     ]
     for (const eventType of events) {
       services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
-        broadcast({ type: eventType, data: event as unknown as Record<string, unknown> })
+        const data = event as unknown as Record<string, unknown>
+
+        // Enrich step events with step details from the run
+        if (eventType.startsWith("step.")) {
+          const stepId = data["stepId"] as string
+          const step = run.steps.find((s) => s.id === stepId)
+          if (step) {
+            data["name"] = step.name
+            data["action"] = step.action
+            data["input"] = step.input
+            data["output"] = step.output
+            data["error"] = step.error
+          }
+        }
+
+        broadcast({ type: eventType, data })
 
         // Save as log
         db.saveLog({
@@ -290,6 +321,21 @@ export class AgentOrchestrator {
           timestamp: new Date().toISOString(),
         })
       })
+    }
+
+    // Intercept audit service to broadcast audit entries in real-time
+    const originalLog = services.auditService.log.bind(services.auditService)
+    services.auditService.log = async (entry) => {
+      const result = await originalLog(entry)
+      broadcast({
+        type: "audit",
+        data: {
+          actor: entry.actor,
+          action: entry.action,
+          detail: entry.detail ?? {},
+        },
+      })
+      return result
     }
   }
 
