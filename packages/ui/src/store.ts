@@ -13,6 +13,7 @@ import type {
     LogEntry,
     Run,
     Step,
+    TraceEntry,
     ViewConfig,
     Widget,
     WidgetType,
@@ -62,6 +63,11 @@ interface AppState {
   addAudit: (entry: AuditEntry) => void
   setAudit: (entries: AuditEntry[]) => void
 
+  // Trace (rich agent execution log)
+  trace: TraceEntry[]
+  addTrace: (entry: TraceEntry) => void
+  setTrace: (entries: TraceEntry[]) => void
+
   // WebSocket event handler
   handleWsEvent: (event: WsEvent) => void
 }
@@ -84,6 +90,7 @@ function makeDefaultView(): ViewConfig {
 const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, minH: number }> = {
   "agent-chat":    { w: 4, h: 8,  minW: 3, minH: 5 },
   "run-status":    { w: 4, h: 4,  minW: 2, minH: 3 },
+  "agent-trace":   { w: 6, h: 10, minW: 4, minH: 5 },
   "live-logs":     { w: 6, h: 8,  minW: 3, minH: 4 },
   "audit-trail":   { w: 6, h: 8,  minW: 4, minH: 4 },
   "step-timeline": { w: 4, h: 10, minW: 3, minH: 5 },
@@ -251,6 +258,11 @@ export const useStore = create<AppState>()(
       addAudit: (entry) => set((s) => ({ audit: [...s.audit, entry] })),
       setAudit: (audit) => set({ audit }),
 
+      // Trace
+      trace: [],
+      addTrace: (entry) => set((s) => ({ trace: [...s.trace, entry] })),
+      setTrace: (trace) => set({ trace }),
+
       // WebSocket event handler
       handleWsEvent: (event) => {
         const { type, data, timestamp } = event
@@ -261,6 +273,7 @@ export const useStore = create<AppState>()(
 
         switch (type) {
           case "run.queued":
+            store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({
               id: data["runId"] as string,
               goal: data["goal"] as string,
@@ -275,6 +288,7 @@ export const useStore = create<AppState>()(
             break
 
           case "run.completed":
+            store.addTrace({ kind: "answer", text: data["answer"] as string })
             store.upsertRun({
               id: data["runId"] as string,
               status: "completed",
@@ -285,6 +299,7 @@ export const useStore = create<AppState>()(
             break
 
           case "run.failed":
+            store.addTrace({ kind: "error", text: data["error"] as string })
             store.upsertRun({
               id: data["runId"] as string,
               status: "failed",
@@ -294,7 +309,15 @@ export const useStore = create<AppState>()(
             })
             break
 
-          case "step.started":
+          case "step.started": {
+            const toolName = (data["action"] as string) ?? "unknown"
+            const input = (data["input"] as Record<string, unknown>) ?? {}
+            const argsFormatted = JSON.stringify(input, null, 2)
+            const keys = Object.keys(input)
+            const argsSummary = keys.length > 0
+              ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`.slice(0, 60) : `${keys.length} args`
+              : ""
+            store.addTrace({ kind: "tool-call", tool: toolName, argsSummary, argsFormatted })
             store.upsertStep({
               id: data["stepId"] as string,
               name: data["name"] as string ?? "Step",
@@ -303,16 +326,23 @@ export const useStore = create<AppState>()(
               startedAt: timestamp,
             } as Step)
             break
+          }
 
-          case "step.completed":
+          case "step.completed": {
+            const output = (data["output"] as Record<string, unknown>) ?? {}
+            const result = (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
+            store.addTrace({ kind: "tool-result", text: result })
             store.upsertStep({
               id: data["stepId"] as string,
               status: "completed",
               completedAt: timestamp,
             } as Step)
             break
+          }
 
-          case "step.failed":
+          case "step.failed": {
+            const errText = (data["error"] as string) ?? "unknown error"
+            store.addTrace({ kind: "tool-error", text: errText })
             store.upsertStep({
               id: data["stepId"] as string,
               status: "failed",
@@ -320,6 +350,7 @@ export const useStore = create<AppState>()(
               completedAt: timestamp,
             } as Step)
             break
+          }
 
           case "audit":
             store.addAudit({
@@ -330,13 +361,22 @@ export const useStore = create<AppState>()(
             })
             break
 
-          case "agent.thinking":
+          case "agent.thinking": {
+            const iteration = data["iteration"] as number | undefined
+            if (iteration !== undefined) {
+              store.addTrace({ kind: "iteration", current: iteration + 1, max: 30 })
+            }
+            const content = data["content"] as string
+            if (content) {
+              store.addTrace({ kind: "thinking", text: content })
+            }
             store.addLog({
               level: "thinking",
-              message: data["content"] as string,
+              message: content,
               timestamp,
             })
             break
+          }
         }
       },
     }),

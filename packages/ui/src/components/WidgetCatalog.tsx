@@ -10,6 +10,7 @@ import {
     BarChart3,
     Clock,
     History,
+    ListTree,
     MessageSquare,
     ScrollText,
     Shield,
@@ -25,8 +26,9 @@ interface Props {
 
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
   { type: "agent-chat",    label: "Agent Chat",    desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
+  { type: "agent-trace",   label: "Agent Trace",   desc: "Execution trace: iterations, tool calls, results", Icon: ListTree },
   { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: Activity },
-  { type: "live-logs",     label: "Live Logs",     desc: "Streaming log output from agent activity",    Icon: ScrollText },
+  { type: "live-logs",     label: "Event Stream",   desc: "Raw WebSocket event stream and system events", Icon: ScrollText },
   { type: "audit-trail",   label: "Audit Trail",   desc: "Immutable audit log of every action",         Icon: Shield },
   { type: "step-timeline", label: "Step Timeline",  desc: "Visual timeline of tool calls and steps",    Icon: Clock },
   { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                Icon: BarChart3 },

@@ -4,7 +4,7 @@
  * The primary interaction widget: type a goal, agent executes, see the answer.
  */
 
-import { AlertCircle, Loader2, Send, User } from "lucide-react"
+import { AlertCircle, Bot, Loader2, Send, User } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -46,7 +46,7 @@ export function AgentChat() {
   return (
     <div className="flex flex-col h-full gap-2">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-3 py-1">
         {recentRuns.length === 0 && (
           <div className="text-text-muted text-sm text-center pt-8">
             Send a goal to start the agent
@@ -56,20 +56,23 @@ export function AgentChat() {
         {[...recentRuns].reverse().map((run) => (
           <div
             key={run.id}
-            className={`space-y-1.5 cursor-pointer rounded-lg p-2.5 transition-colors ${
-              run.id === activeRunId ? "bg-elevated" : "hover:bg-elevated/40"
+            className={`space-y-2 cursor-pointer rounded-lg p-2 transition-colors ${
+              run.id === activeRunId ? "bg-elevated/50" : "hover:bg-elevated/25"
             }`}
             onClick={() => setActiveRun(run.id)}
           >
-            {/* Goal (user message) */}
-            <div className="flex items-start gap-2">
-              <User size={14} className="text-accent shrink-0 mt-0.5" />
-              <span className="text-text text-sm">{run.goal}</span>
+            {/* Goal (user message) — right-aligned */}
+            <div className="flex justify-end">
+              <div className="flex items-start gap-2 max-w-[85%]">
+                <span className="text-text text-sm bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">{run.goal}</span>
+                <User size={14} className="text-accent shrink-0 mt-1.5" />
+              </div>
             </div>
 
-            {/* Answer (agent response) */}
+            {/* Answer (agent response) — left-aligned */}
             {run.answer && (
-              <div className="flex items-start gap-2 ml-5">
+              <div className="flex items-start gap-2 max-w-[85%]">
+                <Bot size={14} className="text-text-muted shrink-0 mt-1.5" />
                 <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
                   {run.answer}
                 </span>

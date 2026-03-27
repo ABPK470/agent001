@@ -58,6 +58,18 @@ export interface LogEntry {
   timestamp: string
 }
 
+// ── Trace (rich agent execution trace) ───────────────────────────
+
+export type TraceEntry =
+  | { kind: "goal"; text: string }
+  | { kind: "iteration"; current: number; max: number }
+  | { kind: "thinking"; text: string }
+  | { kind: "tool-call"; tool: string; argsSummary: string; argsFormatted: string }
+  | { kind: "tool-result"; text: string }
+  | { kind: "tool-error"; text: string }
+  | { kind: "answer"; text: string }
+  | { kind: "error"; text: string }
+
 // ── Layout ───────────────────────────────────────────────────────
 
 export interface SavedLayout {
@@ -77,6 +89,7 @@ export interface Widget {
 export type WidgetType =
   | "agent-chat"
   | "run-status"
+  | "agent-trace"
   | "live-logs"
   | "audit-trail"
   | "step-timeline"

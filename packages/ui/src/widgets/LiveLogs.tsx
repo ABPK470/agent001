@@ -1,8 +1,8 @@
 /**
- * LiveLogs — streaming log output from agent activity.
+ * EventStream — raw WebSocket event stream.
  *
- * Shows real-time events as they happen: tool calls, thinking, errors.
- * Displays most recent entries within the visible area.
+ * Shows every system event as it flows through: domain events,
+ * audit entries, thinking signals. Useful for debugging.
  */
 
 import { ArrowDown } from "lucide-react"

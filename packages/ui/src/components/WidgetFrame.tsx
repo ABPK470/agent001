@@ -15,8 +15,9 @@ import type { WidgetType } from "../types"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
+  "agent-trace": "Agent Trace",
   "run-status": "Run Status",
-  "live-logs": "Live Logs",
+  "live-logs": "Event Stream",
   "audit-trail": "Audit Trail",
   "step-timeline": "Step Timeline",
   "tool-stats": "Tool Stats",
