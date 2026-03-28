@@ -99,6 +99,17 @@ export function registerRunRoutes(
     return { runId: newRunId }
   })
 
+  // Get run trace
+  app.get<{ Params: { id: string } }>("/api/runs/:id/trace", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    const entries = db.getTraceEntries(req.params.id)
+    return entries.map((e) => JSON.parse(e.data))
+  })
+
   // Get active runs
   app.get("/api/runs/active", async () => {
     return { runIds: orchestrator.getActiveRunIds() }

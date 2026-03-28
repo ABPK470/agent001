@@ -5,12 +5,18 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5173,
+    port: 5179,
+    host: true,
+    allowedHosts: true,
     proxy: {
-      "/api": "http://localhost:3001",
+      "/api": {
+        target: "http://localhost:3001",
+        configure: (proxy) => { proxy.on("error", () => {}) },
+      },
       "/ws": {
         target: "ws://localhost:3001",
         ws: true,
+        configure: (proxy) => { proxy.on("error", () => {}) },
       },
     },
   },

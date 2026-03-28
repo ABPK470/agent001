@@ -42,6 +42,7 @@ interface ActiveRun {
   goal: string
   controller: AbortController
   services: EngineServices
+  traceSeq: number
 }
 
 export interface OrchestratorConfig {
@@ -78,9 +79,10 @@ export class AgentOrchestrator {
       })
     }
 
-    this.activeRuns.set(runId, { id: runId, goal, controller, services })
+    this.activeRuns.set(runId, { id: runId, goal, controller, services, traceSeq: 0 })
 
     broadcast({ type: "run.queued", data: { runId, goal } })
+    this.saveTrace(runId, { kind: "goal", text: goal })
 
     this.executeRun(runId, goal, services, controller).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
@@ -113,12 +115,14 @@ export class AgentOrchestrator {
       goal: originalRun.goal,
       controller,
       services,
+      traceSeq: 0,
     })
 
     broadcast({
       type: "run.queued",
       data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId },
     })
+    this.saveTrace(newRunId, { kind: "goal", text: originalRun.goal })
 
     const messages = JSON.parse(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
@@ -209,11 +213,25 @@ export class AgentOrchestrator {
           (m) => m.role === "assistant" && m.content,
         )
         if (lastAssistant?.content) {
+          this.saveTrace(runId, { kind: "iteration", current: iteration + 1, max: 30 })
+          this.saveTrace(runId, { kind: "thinking", text: lastAssistant.content })
           broadcast({
             type: "agent.thinking",
             data: { runId, content: lastAssistant.content, iteration },
           })
         }
+
+        // Broadcast token usage update
+        broadcast({
+          type: "usage.updated",
+          data: {
+            runId,
+            promptTokens: agent.usage.promptTokens,
+            completionTokens: agent.usage.completionTokens,
+            totalTokens: agent.usage.totalTokens,
+            llmCalls: agent.llmCalls,
+          },
+        })
 
         // Persist current run state
         this.persistRun(run, goal, resume?.parentRunId)
@@ -241,6 +259,9 @@ export class AgentOrchestrator {
       // Persist final state
       this.persistRun(run, goal, resume?.parentRunId, answer)
       this.persistAuditLog(services, runId)
+      this.persistTokenUsage(runId, agent)
+
+      this.saveTrace(runId, { kind: "answer", text: answer })
 
       broadcast({
         type: "run.completed",
@@ -273,6 +294,9 @@ export class AgentOrchestrator {
 
       this.persistRun(run, goal, resume?.parentRunId, undefined, errMsg)
       this.persistAuditLog(services, runId)
+      this.persistTokenUsage(runId, agent)
+
+      this.saveTrace(runId, { kind: "error", text: errMsg })
 
       broadcast({
         type: "run.failed",
@@ -285,13 +309,27 @@ export class AgentOrchestrator {
 
   // ── Private: wire domain events to WebSocket ─────────────────
 
+  private saveTrace(runId: string, entry: Record<string, unknown>): void {
+    const active = this.activeRuns.get(runId)
+    const seq = active ? active.traceSeq++ : 0
+    db.saveTraceEntry({
+      run_id: runId,
+      seq,
+      data: JSON.stringify(entry),
+      created_at: new Date().toISOString(),
+    })
+  }
+
   private wireEventBroadcasting(
     services: EngineServices,
     runId: string,
     run: { steps: { id: string; name: string; action: string; input: Record<string, unknown>; output: Record<string, unknown>; error: string | null }[] },
   ): void {
+    // Only subscribe to step events here — run.completed and run.failed
+    // are broadcast explicitly with full data (answer, stepCount) after
+    // the agent finishes, to avoid duplicate/incomplete broadcasts.
     const events = [
-      "run.started", "run.completed", "run.failed",
+      "run.started",
       "step.started", "step.completed", "step.failed",
     ]
     for (const eventType of events) {
@@ -312,6 +350,24 @@ export class AgentOrchestrator {
         }
 
         broadcast({ type: eventType, data })
+
+        // Save trace entries for step events
+        if (eventType === "step.started") {
+          const toolName = (data["action"] as string) ?? "unknown"
+          const input = (data["input"] as Record<string, unknown>) ?? {}
+          const argsFormatted = JSON.stringify(input, null, 2)
+          const keys = Object.keys(input)
+          const argsSummary = keys.length > 0
+            ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`.slice(0, 60) : `${keys.length} args`
+            : ""
+          this.saveTrace(runId, { kind: "tool-call", tool: toolName, argsSummary, argsFormatted })
+        } else if (eventType === "step.completed") {
+          const output = (data["output"] as Record<string, unknown>) ?? {}
+          const result = (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
+          this.saveTrace(runId, { kind: "tool-result", text: result })
+        } else if (eventType === "step.failed") {
+          this.saveTrace(runId, { kind: "tool-error", text: (data["error"] as string) ?? "unknown error" })
+        }
 
         // Save as log
         db.saveLog({
@@ -373,6 +429,22 @@ export class AgentOrchestrator {
         action: entry.action,
         detail: JSON.stringify(entry.detail),
         timestamp: entry.timestamp.toISOString(),
+      })
+    }
+  }
+
+  // ── Private: persist token usage ─────────────────────────────
+
+  private persistTokenUsage(runId: string, agent: Agent): void {
+    if (agent.usage.totalTokens > 0 || agent.llmCalls > 0) {
+      db.saveTokenUsage({
+        run_id: runId,
+        prompt_tokens: agent.usage.promptTokens,
+        completion_tokens: agent.usage.completionTokens,
+        total_tokens: agent.usage.totalTokens,
+        llm_calls: agent.llmCalls,
+        model: process.env["MODEL"] ?? "gpt-4o",
+        created_at: new Date().toISOString(),
       })
     }
   }

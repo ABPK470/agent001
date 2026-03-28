@@ -46,6 +46,13 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Mobile safe area (notch / home indicator) ─────────────────── */
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── React Grid Layout overrides ───────────────────────────────── */
@@ -95,4 +102,18 @@ body {
 
 .react-grid-item:hover .react-resizable-handle::after {
   opacity: 1;
+}
+
+/* ── Mobile ────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  /* Prevent iOS auto-zoom on input focus (requires >= 16px) */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Disable hover effects that leave elements stuck on touch */
+  .group:hover .group-hover\:opacity-60 {
+    opacity: unset;
+  }
 }

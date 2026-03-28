@@ -45,9 +45,16 @@ export interface Tool {
 
 // ── LLM client ───────────────────────────────────────────────────
 
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export interface LLMResponse {
   content: string | null
   toolCalls: ToolCall[]
+  usage?: TokenUsage
 }
 
 /**

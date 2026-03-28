@@ -31,6 +31,7 @@ export const api = {
     method: "POST",
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
+  getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
 
   // Layouts
   listLayouts: () => json<SavedLayout[]>("/api/layouts"),
@@ -43,8 +44,22 @@ export const api = {
     method: "DELETE",
   }),
 
+  // Dashboard state (auto-save)
+  getDashboardState: () => json<{ views: ViewConfig[]; activeViewId: string } | null>("/api/dashboard-state"),
+  saveDashboardState: (state: { views: ViewConfig[]; activeViewId: string }) =>
+    json<{ ok: boolean }>("/api/dashboard-state", {
+      method: "PUT",
+      body: JSON.stringify(state),
+    }),
+
   // Health
   health: () => json<{ status: string, active: number }>("/api/health"),
+
+  // Usage
+  getUsage: () => json<{
+    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number }
+    runs: Array<{ runId: string; promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; model: string; createdAt: string }>
+  }>("/api/usage"),
 
   // Policies
   listPolicies: () => json<PolicyRule[]>("/api/policies"),
@@ -57,6 +72,9 @@ export const api = {
     json<{ ok: boolean }>(`/api/policies/${encodeURIComponent(name)}`, {
       method: "DELETE",
     }),
+
+  // Data management
+  resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────

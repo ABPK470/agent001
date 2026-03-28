@@ -19,6 +19,7 @@ export function RunHistory() {
   const setSteps = useStore((s) => s.setSteps)
   const setAudit = useStore((s) => s.setAudit)
   const setLogs = useStore((s) => s.setLogs)
+  const setTrace = useStore((s) => s.setTrace)
 
   // Refresh run list periodically
   useEffect(() => {
@@ -31,12 +32,16 @@ export function RunHistory() {
   async function handleSelect(runId: string) {
     setActiveRun(runId)
 
-    // Load run details
+    // Load run details + trace
     try {
-      const detail = await api.getRun(runId)
+      const [detail, trace] = await Promise.all([
+        api.getRun(runId),
+        api.getRunTrace(runId),
+      ])
       setSteps(detail.data.steps ?? [])
       setAudit(detail.audit)
       setLogs(detail.logs)
+      setTrace(trace as import("../types").TraceEntry[])
     } catch {
       // Run might still be in-memory only
     }
@@ -51,11 +56,11 @@ export function RunHistory() {
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="h-full overflow-y-auto space-y-0.5">
       {runs.map((run) => (
         <div
           key={run.id}
-          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+          className={`flex items-center gap-2.5 px-2.5 py-2 min-h-[44px] rounded-lg cursor-pointer transition-colors ${
             run.id === activeRunId
               ? "bg-elevated"
               : "hover:bg-elevated/40"

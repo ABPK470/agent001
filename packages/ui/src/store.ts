@@ -229,9 +229,10 @@ export const useStore = create<AppState>()(
           updated[idx] = { ...updated[idx], ...run }
           return { runs: updated }
         }
+        // New run — always select it so the UI shows it immediately
         return {
           runs: [run as Run, ...s.runs],
-          activeRunId: s.activeRunId ?? run.id,
+          activeRunId: run.id,
         }
       }),
 
@@ -284,6 +285,13 @@ export const useStore = create<AppState>()(
               parentRunId: (data["resumedFrom"] as string) ?? null,
               createdAt: timestamp,
               completedAt: null,
+            })
+            break
+
+          case "run.started":
+            store.upsertRun({
+              id: data["runId"] as string,
+              status: "running",
             })
             break
 

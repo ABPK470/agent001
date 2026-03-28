@@ -2,20 +2,43 @@
  * AgentChat — send goals to the agent and see responses.
  *
  * The primary interaction widget: type a goal, agent executes, see the answer.
+ * Supports voice input via Web Speech API (any language).
  */
 
-import { AlertCircle, Bot, Loader2, Send, User } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { AlertCircle, Bot, Mic, MicOff, Send, User } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
+
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList
+}
+type SpeechRecognitionInstance = EventTarget & {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  start(): void
+  stop(): void
+  abort(): void
+  onresult: ((e: SpeechRecognitionEvent) => void) | null
+  onend: (() => void) | null
+  onerror: ((e: Event & { error: string }) => void) | null
+}
+const SpeechRecognition = (globalThis as Record<string, unknown>)["SpeechRecognition"] as
+  (new () => SpeechRecognitionInstance) | undefined ??
+  (globalThis as Record<string, unknown>)["webkitSpeechRecognition"] as
+  (new () => SpeechRecognitionInstance) | undefined
 
 export function AgentChat() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
+  const [listening, setListening] = useState(false)
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
 
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
@@ -23,6 +46,11 @@ export function AgentChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [runs])
+
+  // Cleanup recognition on unmount
+  useEffect(() => {
+    return () => { recognitionRef.current?.abort() }
+  }, [])
 
   async function handleSend() {
     const goal = input.trim()
@@ -39,6 +67,53 @@ export function AgentChat() {
       setSending(false)
     }
   }
+
+  const toggleVoice = useCallback(() => {
+    if (!SpeechRecognition) return
+
+    if (listening) {
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.interimResults = true
+    recognition.continuous = false
+    // Auto-detect language — empty string lets browser use device language
+    recognition.lang = ""
+    recognitionRef.current = recognition
+
+    let finalTranscript = ""
+
+    recognition.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = ""
+      for (let i = 0; i < e.results.length; i++) {
+        const result = e.results[i]
+        if (result?.[0]) {
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript
+          } else {
+            interim += result[0].transcript
+          }
+        }
+      }
+      setInput(finalTranscript + interim)
+    }
+
+    recognition.onend = () => {
+      setListening(false)
+      recognitionRef.current = null
+    }
+
+    recognition.onerror = () => {
+      setListening(false)
+      recognitionRef.current = null
+    }
+
+    recognition.start()
+    setListening(true)
+  }, [listening])
 
   // Show recent runs as "conversation"
   const recentRuns = runs.slice(0, 20)
@@ -87,11 +162,18 @@ export function AgentChat() {
               </div>
             )}
 
-            {/* Status badge */}
-            {run.status === "running" && (
-              <div className="flex items-center gap-1.5 text-[13px] text-accent ml-5">
-                <Loader2 size={14} className="animate-spin" />
-                Running
+            {/* Progress indicator — shown while agent is working */}
+            {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && (
+              <div className="flex items-center gap-2 ml-5">
+                <Bot size={14} className="text-accent shrink-0" />
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
+                </div>
+                <span className="text-[12px] text-text-muted">
+                  {run.status === "pending" ? "Queued" : "Thinking"}
+                </span>
               </div>
             )}
           </div>
@@ -103,14 +185,27 @@ export function AgentChat() {
       <div className="flex gap-2 shrink-0">
         <input
           className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all"
-          placeholder={isRunning ? "Agent is working..." : "Enter a goal..."}
+          placeholder={listening ? "Listening..." : isRunning ? "Agent is working..." : "Enter a goal..."}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSend() }}
           disabled={sending}
         />
+        {SpeechRecognition && (
+          <button
+            className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${
+              listening
+                ? "bg-error/20 text-error hover:bg-error/30"
+                : "bg-elevated text-text-muted hover:text-text hover:bg-elevated/80"
+            }`}
+            onClick={toggleVoice}
+            title={listening ? "Stop listening" : "Voice input"}
+          >
+            {listening ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+        )}
         <button
-          className="flex items-center justify-center w-10 h-10 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
+          className="flex items-center justify-center w-11 h-11 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
           onClick={handleSend}
           disabled={sending || !input.trim()}
         >

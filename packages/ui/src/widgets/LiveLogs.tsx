@@ -52,10 +52,10 @@ export function LiveLogs() {
         {[null, "info", "thinking", "error"].map((level) => (
           <button
             key={level ?? "all"}
-            className={`px-2 py-0.5 text-[13px] rounded-md transition-colors ${
+            className={`px-3 py-1.5 min-h-[36px] text-[13px] rounded-md transition-colors ${
               filter === level
                 ? "bg-accent/15 text-accent"
-                : "text-text-muted hover:text-text-secondary"
+                : "text-text-muted hover:text-text-secondary active:text-text"
             }`}
             onClick={() => setFilter(level)}
           >

@@ -83,7 +83,7 @@ export function StepTimeline() {
               {/* Expanded detail */}
               {expanded === step.id && (
                 <div className="mt-2 space-y-2">
-                  {Object.keys(step.input).length > 0 && (
+                  {step.input && Object.keys(step.input).length > 0 && (
                     <div>
                       <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
                       <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-32 overflow-auto">
@@ -91,7 +91,7 @@ export function StepTimeline() {
                       </pre>
                     </div>
                   )}
-                  {Object.keys(step.output).length > 0 && (
+                  {step.output && Object.keys(step.output).length > 0 && (
                     <div>
                       <span className="text-[13px] text-text-muted uppercase tracking-wide">Output</span>
                       <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-32 overflow-auto">

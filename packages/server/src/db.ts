@@ -82,6 +82,26 @@ function migrate(db: Database.Database): void {
       parameters TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS token_usage (
+      run_id TEXT PRIMARY KEY,
+      prompt_tokens INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      llm_calls INTEGER NOT NULL DEFAULT 0,
+      model TEXT NOT NULL DEFAULT 'gpt-4o',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS trace_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      seq INTEGER NOT NULL DEFAULT 0,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trace_run ON trace_entries(run_id, seq);
   `)
 }
 
@@ -245,4 +265,86 @@ export function savePolicyRule(rule: DbPolicyRule): void {
 
 export function deletePolicyRule(name: string): void {
   getDb().prepare("DELETE FROM policy_rules WHERE name = ?").run(name)
+}
+
+// ── Token usage queries ──────────────────────────────────────────
+
+export interface DbTokenUsage {
+  run_id: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  llm_calls: number
+  model: string
+  created_at: string
+}
+
+export function saveTokenUsage(usage: DbTokenUsage): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO token_usage (run_id, prompt_tokens, completion_tokens, total_tokens, llm_calls, model, created_at)
+    VALUES (@run_id, @prompt_tokens, @completion_tokens, @total_tokens, @llm_calls, @model, @created_at)
+  `).run(usage)
+}
+
+export function getTokenUsage(runId: string): DbTokenUsage | undefined {
+  return getDb()
+    .prepare("SELECT * FROM token_usage WHERE run_id = ?")
+    .get(runId) as DbTokenUsage | undefined
+}
+
+export function listTokenUsage(limit = 100): DbTokenUsage[] {
+  return getDb()
+    .prepare("SELECT * FROM token_usage ORDER BY created_at DESC LIMIT ?")
+    .all(limit) as DbTokenUsage[]
+}
+
+export interface UsageTotals {
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  total_tokens: number
+  total_llm_calls: number
+  run_count: number
+}
+
+export function getUsageTotals(): UsageTotals {
+  return getDb()
+    .prepare("SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls, COUNT(*) as run_count FROM token_usage")
+    .get() as UsageTotals
+}
+
+// ── Trace entry queries ──────────────────────────────────────────
+
+export interface DbTraceEntry {
+  id?: number
+  run_id: string
+  seq: number
+  data: string
+  created_at: string
+}
+
+export function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): void {
+  getDb().prepare(`
+    INSERT INTO trace_entries (run_id, seq, data, created_at)
+    VALUES (@run_id, @seq, @data, @created_at)
+  `).run(entry)
+}
+
+export function getTraceEntries(runId: string): DbTraceEntry[] {
+  return getDb()
+    .prepare("SELECT * FROM trace_entries WHERE run_id = ? ORDER BY seq")
+    .all(runId) as DbTraceEntry[]
+}
+
+// ── Data reset (preserve policies + layouts) ─────────────────────
+
+export function clearTransactionalData(): void {
+  const db = getDb()
+  db.exec(`
+    DELETE FROM runs;
+    DELETE FROM audit_log;
+    DELETE FROM checkpoints;
+    DELETE FROM logs;
+    DELETE FROM token_usage;
+    DELETE FROM trace_entries;
+  `)
 }

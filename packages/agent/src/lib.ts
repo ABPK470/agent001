@@ -13,6 +13,7 @@ export type {
     LLMClient,
     LLMResponse,
     Message,
+    TokenUsage,
     Tool,
     ToolCall
 } from "./types.js"
@@ -33,6 +34,6 @@ export { fetchUrlTool } from "./tools/fetch-url.js"
 export {
     listDirectoryTool, readFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
-export { shellTool } from "./tools/shell.js"
+export { setShellCwd, shellTool } from "./tools/shell.js"
 export { thinkTool } from "./tools/think.js"
 

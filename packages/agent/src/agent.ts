@@ -23,7 +23,7 @@
  */
 
 import * as log from "./logger.js"
-import type { AgentConfig, LLMClient, Message, Tool } from "./types.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
 
 const DEFAULT_SYSTEM_PROMPT = `You are a capable AI agent that can use tools to accomplish goals.
 
@@ -48,6 +48,11 @@ export class Agent {
     onStep: AgentConfig["onStep"]
     signal: AgentConfig["signal"]
   }
+
+  /** Cumulative token usage across all LLM calls in this agent's run. */
+  readonly usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  /** Number of LLM API calls made. */
+  llmCalls = 0
 
   constructor(llm: LLMClient, tools: Tool[], config: AgentConfig = {}) {
     this.llm = llm
@@ -86,6 +91,14 @@ export class Agent {
 
       // Ask the LLM what to do next
       const response = await this.llm.chat(messages, this.toolList)
+      this.llmCalls++
+
+      // Accumulate token usage
+      if (response.usage) {
+        this.usage.promptTokens += response.usage.promptTokens
+        this.usage.completionTokens += response.usage.completionTokens
+        this.usage.totalTokens += response.usage.totalTokens
+      }
 
       // If the LLM has something to say, log it
       if (this.config.verbose) log.logThinking(response.content)

@@ -64,6 +64,11 @@ export class CopilotClient implements LLMClient {
           }>
         }
       }>
+      usage?: {
+        prompt_tokens: number
+        completion_tokens: number
+        total_tokens: number
+      }
     }
 
     const choice = data.choices[0].message
@@ -77,6 +82,11 @@ export class CopilotClient implements LLMClient {
           arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
         }),
       ),
+      usage: data.usage ? {
+        promptTokens: data.usage.prompt_tokens,
+        completionTokens: data.usage.completion_tokens,
+        totalTokens: data.usage.total_tokens,
+      } : undefined,
     }
   }
 }

@@ -17,6 +17,7 @@ import {
     X,
 } from "lucide-react"
 import type { ComponentType } from "react"
+import { useIsMobile } from "../hooks/useIsMobile"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
 
@@ -38,6 +39,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
 export function WidgetCatalog({ onClose }: Props) {
   const activeViewId = useStore((s) => s.activeViewId)
   const addWidget = useStore((s) => s.addWidget)
+  const isMobile = useIsMobile()
 
   function handleAdd(type: WidgetType) {
     addWidget(activeViewId, type)
@@ -50,35 +52,54 @@ export function WidgetCatalog({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-2xl p-6 w-[520px] shadow-2xl"
+        className={`bg-surface shadow-2xl ${
+          isMobile
+            ? "w-full h-full rounded-none p-5 flex flex-col"
+            : "rounded-2xl p-6 w-[520px]"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-text">Add Widget</h2>
           <button
-            className="text-text-muted hover:text-text p-1 rounded transition-colors"
+            className="text-text-muted hover:text-text p-2 -mr-2 rounded transition-colors"
             onClick={onClose}
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${isMobile ? "grid-cols-1 overflow-y-auto flex-1" : "grid-cols-2"}`}>
           {CATALOG.map((item) => (
             <button
               key={item.type}
-              className="flex flex-col items-start gap-2.5 p-4 rounded-xl hover:bg-white/[0.04] cursor-pointer text-left group"
+              className={`flex items-start gap-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] cursor-pointer text-left group ${
+                isMobile ? "p-4 border border-white/5" : "flex-col gap-2.5 p-4"
+              }`}
               onClick={() => handleAdd(item.type)}
             >
-              <div className="flex items-center gap-2.5">
-                <item.Icon size={18} className="text-text-muted group-hover:text-text-secondary" />
-                <span className="text-sm font-medium text-text-secondary group-hover:text-text">
-                  {item.label}
-                </span>
+              <div className={`flex items-center shrink-0 ${isMobile ? "w-10 h-10 justify-center rounded-lg bg-elevated" : "gap-2.5"}`}>
+                <item.Icon size={isMobile ? 20 : 18} className="text-text-muted group-hover:text-text-secondary" />
+                {!isMobile && (
+                  <span className="text-sm font-medium text-text-secondary group-hover:text-text">
+                    {item.label}
+                  </span>
+                )}
               </div>
-              <span className="text-[13px] text-text-muted leading-snug">
-                {item.desc}
-              </span>
+              {isMobile ? (
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-medium text-text-secondary group-hover:text-text">
+                    {item.label}
+                  </span>
+                  <span className="text-[13px] text-text-muted leading-snug">
+                    {item.desc}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[13px] text-text-muted leading-snug">
+                  {item.desc}
+                </span>
+              )}
             </button>
           ))}
         </div>

@@ -17,22 +17,25 @@ import { resolve } from "node:path"
 config({ path: resolve(import.meta.dirname, "../../../.env") })
 
 import {
-    fetchUrlTool,
-    listDirectoryTool,
-    readFileTool,
-    shellTool,
-    thinkTool,
-    writeFileTool,
+  fetchUrlTool,
+  listDirectoryTool,
+  readFileTool,
+  setBasePath,
+  setShellCwd,
+  shellTool,
+  thinkTool,
+  writeFileTool,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
-import { getDb } from "./db.js"
+import { clearTransactionalData, getDb } from "./db.js"
 import { CopilotClient } from "./llm/copilot.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerPolicyRoutes } from "./routes/policies.js"
 import { registerRunRoutes } from "./routes/runs.js"
+import { registerUsageRoutes } from "./routes/usage.js"
 import { addClient } from "./ws.js"
 
 const PORT = Number(process.env["PORT"] ?? 3001)
@@ -42,6 +45,12 @@ async function main() {
   // Initialize database
   getDb()
   console.log("📦 Database initialized (~/.agent001/agent001.db)")
+
+  // Set agent workspace — all file/shell operations are scoped here
+  const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? process.cwd())
+  setBasePath(workspace)
+  setShellCwd(workspace)
+  console.log(`📂 Agent workspace: ${workspace}`)
 
   // Create LLM client (token resolved lazily — server starts without it)
   const llm = new CopilotClient({
@@ -76,12 +85,19 @@ async function main() {
   registerRunRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
+  registerUsageRoutes(app)
 
   // Health check
   app.get("/api/health", async () => ({
     status: "ok",
     active: orchestrator.getActiveRunIds().length,
   }))
+
+  // Reset transactional data (keeps policies + layouts)
+  app.delete("/api/data", async () => {
+    clearTransactionalData()
+    return { ok: true }
+  })
 
   // Start
   await app.listen({ port: PORT, host: HOST })
@@ -92,8 +108,13 @@ async function main() {
   console.log(`  Server:    http://localhost:${PORT}`)
   console.log(`  WebSocket: ws://localhost:${PORT}/ws`)
   console.log(`  API:       http://localhost:${PORT}/api`)
-  console.log(`  Dashboard: http://localhost:5173 (dev)`)
+  console.log(`  Dashboard: http://localhost:5179 (dev)`)
   console.log(`${"═".repeat(50)}\n`)
+
+  // Graceful shutdown for tsx hot-reload
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    process.on(sig, () => { process.exit(0) })
+  }
 }
 
 main().catch((err) => {

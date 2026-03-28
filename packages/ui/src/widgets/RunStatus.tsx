@@ -35,7 +35,7 @@ export function RunStatus() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="h-full overflow-y-auto flex flex-col gap-3">
       {/* Status badge */}
       <div className="flex items-center gap-2.5">
         <div
@@ -86,7 +86,7 @@ export function RunStatus() {
       <div className="flex gap-2 mt-1">
         {isActive && (
           <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-error bg-error/10 hover:bg-error/20 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-error bg-error/10 hover:bg-error/20 active:bg-error/25 rounded-lg transition-colors"
             onClick={handleCancel}
           >
             <Square size={13} />
@@ -95,7 +95,7 @@ export function RunStatus() {
         )}
         {run.status === "failed" && (
           <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
             onClick={handleResume}
           >
             <RotateCcw size={13} />
