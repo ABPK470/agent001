@@ -1,6 +1,10 @@
-import type { AuditEntry } from "../domain/models.js"
-import { createAuditEntry } from "../domain/models.js"
-import type { AuditRepository } from "../ports/repositories.js"
+/**
+ * Audit service — immutable log of every action during a run.
+ */
+
+import type { AuditEntry } from "./models.js"
+import { createAuditEntry } from "./models.js"
+import type { AuditRepository } from "./interfaces.js"
 
 export class AuditService {
   constructor(private readonly repo: AuditRepository) {}
@@ -17,10 +21,7 @@ export class AuditService {
     return entry
   }
 
-  async history(
-    resourceType: string,
-    resourceId: string,
-  ): Promise<AuditEntry[]> {
+  async history(resourceType: string, resourceId: string): Promise<AuditEntry[]> {
     return this.repo.listByResource(resourceType, resourceId)
   }
 }

@@ -53,20 +53,20 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center gap-2.5">
-            <Activity size={20} className="text-accent" />
-            <h2 className="text-base font-semibold text-text">Token Usage</h2>
+            <Activity size={20} className="text-text-muted" />
+            <h2 className="text-lg font-semibold text-text">Token Usage</h2>
           </div>
           <button
-            className="text-text-muted hover:text-text p-1 rounded"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors"
             onClick={onClose}
           >
             <X size={18} />
           </button>
         </div>
 
-        <p className="px-6 text-[13px] text-text-muted leading-relaxed -mt-2 mb-4">
+        <p className="px-6 pt-4 text-sm text-text-muted leading-relaxed">
           Token consumption across all agent runs. Included with GitHub Copilot Pro — no per-token cost.
         </p>
 
@@ -77,8 +77,8 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             {/* Stat cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 mb-5">
-              <StatCard icon={<Zap size={15} />} label="Total Tokens" value={formatNumber(data.totals.totalTokens)} accent />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 pt-4 mb-5">
+              <StatCard icon={<Zap size={15} />} label="Total Tokens" value={formatNumber(data.totals.totalTokens)} />
               <StatCard icon={<MessageSquare size={15} />} label="Prompt" value={formatNumber(data.totals.promptTokens)} />
               <StatCard icon={<MessageSquare size={15} />} label="Completion" value={formatNumber(data.totals.completionTokens)} />
               <StatCard icon={<Hash size={15} />} label="LLM Calls" value={formatNumber(data.totals.llmCalls)} />
@@ -86,7 +86,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
             {/* Per-run breakdown */}
             <div className="flex-1 overflow-y-auto px-6 pb-5 min-h-0">
-              <div className="text-[13px] text-text-muted mb-2 font-medium">
+              <div className="text-sm text-text-secondary mb-3 font-medium">
                 Per-run breakdown ({data.totals.runCount} runs)
               </div>
               {data.runs.length === 0 ? (
@@ -98,19 +98,19 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                   {data.runs.map((run) => (
                     <div
                       key={run.runId}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg bg-base text-[13px]"
+                      className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.03] text-[13px]"
                     >
-                      <span className="text-text-muted font-mono text-[11px] w-[5.5rem] shrink-0">
+                      <span className="text-text-muted font-mono text-[12px] w-[6rem] shrink-0">
                         {new Date(run.createdAt).toLocaleString(undefined, {
                           month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                         })}
                       </span>
-                      <span className="text-text-muted font-mono text-[11px] shrink-0">
+                      <span className="text-text-muted font-mono text-[12px] shrink-0">
                         {run.model}
                       </span>
                       <div className="flex-1" />
-                      <span className="text-text-secondary tabular-nums">{formatNumber(run.totalTokens)} tok</span>
-                      <span className="text-text-muted tabular-nums text-[11px]">{run.llmCalls} calls</span>
+                      <span className="text-text font-medium tabular-nums">{formatNumber(run.totalTokens)} tok</span>
+                      <span className="text-text-muted tabular-nums text-[12px]">{run.llmCalls} calls</span>
                     </div>
                   ))}
                 </div>
@@ -125,12 +125,12 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
 function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
   return (
-    <div className="bg-base rounded-xl px-3 py-2.5 flex flex-col gap-1">
-      <div className={`flex items-center gap-1.5 text-[11px] ${accent ? "text-accent" : "text-text-muted"}`}>
+    <div className={`rounded-xl px-4 py-3 flex flex-col gap-1.5 ${accent ? "bg-accent/10 border border-accent/15" : "bg-white/[0.03] border border-white/[0.04]"}`}>
+      <div className={`flex items-center gap-1.5 text-[12px] font-medium ${accent ? "text-accent" : "text-text-muted"}`}>
         {icon}
         {label}
       </div>
-      <div className={`text-lg font-semibold tabular-nums ${accent ? "text-accent" : "text-text"}`}>
+      <div className={`text-xl font-semibold tabular-nums ${accent ? "text-accent" : "text-text"}`}>
         {value}
       </div>
     </div>

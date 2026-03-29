@@ -8,9 +8,9 @@
 import {
     Activity,
     BarChart3,
-    Check,
     Clock,
     History,
+    LayoutGrid,
     ListTree,
     MessageSquare,
     ScrollText,
@@ -64,61 +64,51 @@ export function WidgetCatalog({ onClose }: Props) {
       <div
         className={`bg-surface shadow-2xl ${
           isMobile
-            ? "w-full h-full rounded-none p-5 flex flex-col"
-            : "rounded-2xl p-6 w-[520px]"
+            ? "w-full h-full rounded-none flex flex-col"
+            : "rounded-2xl w-[520px] max-h-[85vh] flex flex-col"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-text">Add Widget</h2>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <LayoutGrid size={20} className="text-text-muted" />
+            <h2 className="text-lg font-semibold text-text">Widgets</h2>
+          </div>
           <button
-            className="text-text-muted hover:text-text p-2 -mr-2 rounded transition-colors"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors"
             onClick={onClose}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className={`grid gap-3 ${isMobile ? "grid-cols-1 overflow-y-auto flex-1" : "grid-cols-2"}`}>
+        <div className={`grid gap-2.5 p-5 overflow-y-auto ${isMobile ? "grid-cols-1 flex-1" : "grid-cols-2"}`}>
           {CATALOG.map((item) => {
             const isActive = activeTypes.has(item.type)
             return (
               <button
                 key={item.type}
-                className={`relative flex items-start gap-3 rounded-xl cursor-pointer text-left group ${
-                  isMobile
-                    ? `p-4 border ${isActive ? "border-accent/25 bg-accent/10" : "border-white/5 hover:bg-white/[0.04]"}`
-                    : `flex-col gap-2.5 p-4 border ${isActive ? "border-accent/25 bg-accent/10" : "border-transparent hover:bg-white/[0.04] active:bg-white/[0.06]"}`
+                className={`relative flex items-center gap-3.5 rounded-xl cursor-pointer text-left p-4 transition-colors border ${
+                  isActive
+                    ? "border-accent/25 bg-accent/[0.08]"
+                    : "border-white/[0.04] bg-white/[0.02] hover:bg-white/[0.05]"
                 }`}
                 onClick={() => handleToggle(item.type)}
               >
-                {isActive && (
-                  <div className="absolute top-2.5 right-2.5">
-                    <Check size={14} className="text-accent" />
-                  </div>
-                )}
-                <div className={`flex items-center shrink-0 ${isMobile ? "w-10 h-10 justify-center rounded-lg bg-elevated" : "gap-2.5"}`}>
-                  <item.Icon size={isMobile ? 20 : 18} className={isActive ? "text-accent" : "text-text-muted group-hover:text-text-secondary"} />
-                  {!isMobile && (
-                    <span className={`text-sm font-medium ${isActive ? "text-accent" : "text-text-secondary group-hover:text-text"}`}>
-                      {item.label}
-                    </span>
-                  )}
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  isActive ? "bg-accent/15" : "bg-white/[0.05]"
+                }`}>
+                  <item.Icon size={18} className={isActive ? "text-accent" : "text-text-muted"} />
                 </div>
-                {isMobile ? (
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className={`text-sm font-medium ${isActive ? "text-accent" : "text-text-secondary group-hover:text-text"}`}>
-                      {item.label}
-                    </span>
-                    <span className="text-[13px] text-text-muted leading-snug">
-                      {item.desc}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-[13px] text-text-muted leading-snug">
+                <div className="flex-1 min-w-0">
+                  <span className={`text-sm font-medium block ${isActive ? "text-accent" : "text-text"}`}>
+                    {item.label}
+                  </span>
+                  <span className="text-[13px] text-text-muted leading-snug block mt-0.5">
                     {item.desc}
                   </span>
-                )}
+                </div>
+
               </button>
             )
           })}

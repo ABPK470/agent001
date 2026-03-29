@@ -25,6 +25,43 @@ export {
 } from "./governance.js"
 export type { EngineServices, GovernedResult, RunState } from "./governance.js"
 
+// Engine (re-export governance infrastructure for server)
+export {
+    AuditService,
+    Learner,
+    MemoryAuditRepository,
+    MemoryEventBus,
+    MemoryExecutionRecordRepository,
+    MemoryRunRepository,
+    PolicyEffect,
+    PolicyViolationError,
+    RulePolicyEvaluator,
+    RunStatus,
+    StepStatus,
+    completeRun,
+    completeStep,
+    createRun,
+    failRun,
+    failStep,
+    runCompleted,
+    runFailed,
+    runStarted,
+    startPlanning,
+    startRunning,
+    startStep,
+    stepCompleted,
+    stepFailed,
+    stepStarted,
+} from "./engine/index.js"
+export type {
+    AgentRun,
+    AuditEntry,
+    DomainEvent,
+    ExecutionRecord,
+    PolicyRule,
+    Step,
+} from "./engine/index.js"
+
 // LLM clients
 export { AnthropicClient } from "./llm/anthropic.js"
 export { OpenAIClient } from "./llm/openai.js"

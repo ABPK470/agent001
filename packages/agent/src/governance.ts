@@ -4,7 +4,7 @@
  * This is where the two packages meet. The engine provides the substrate:
  *   - Audit trail: every tool call logged (who, what, when, why, result)
  *   - Policies: rules that can block or require approval for dangerous tools
- *   - Run tracking: the full agent session as a WorkflowRun with Steps
+ *   - Run tracking: the full agent session as an AgentRun with Steps
  *   - Domain events: every action emits events for monitoring
  *   - Execution records: performance metrics fed to the Learner
  *
@@ -21,7 +21,7 @@ import {
     type AuditEntry,
     type ExecutionRecord,
     type Step,
-    type WorkflowRun,
+    type AgentRun,
     AuditService,
     Learner,
     MemoryAuditRepository,
@@ -45,7 +45,7 @@ import {
     stepCompleted,
     stepFailed,
     stepStarted
-} from "@agent001/engine"
+} from "./engine/index.js"
 import { randomUUID } from "node:crypto"
 import { Agent } from "./agent.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
@@ -82,7 +82,7 @@ export interface GovernedResult {
   /** The agent's final answer. */
   answer: string
   /** Full run with all steps — shows exactly what happened. */
-  run: WorkflowRun
+  run: AgentRun
   /** Audit trail — immutable log of every action. */
   auditTrail: AuditEntry[]
   /** Execution records — performance metrics per tool call. */
@@ -92,7 +92,7 @@ export interface GovernedResult {
 // ── Run state (shared between governed tools) ────────────────────
 
 export interface RunState {
-  run: WorkflowRun
+  run: AgentRun
   actor: string
   stepCounter: number
 }

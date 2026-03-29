@@ -1,4 +1,4 @@
-import { PolicyEffect } from "@agent001/engine"
+import { PolicyEffect } from "../src/engine/index.js"
 import { describe, expect, it } from "vitest"
 import {
     createEngineServices,

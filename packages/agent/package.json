@@ -16,9 +16,7 @@
         "test": "vitest run",
         "lint": "tsc --noEmit"
     },
-    "dependencies": {
-        "@agent001/engine": "*"
-    },
+    "dependencies": {},
     "devDependencies": {
         "@types/node": "^22.16.4",
         "tsx": "^4.7.0",

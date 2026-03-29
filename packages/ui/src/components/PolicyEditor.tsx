@@ -209,25 +209,25 @@ export function PolicyEditor({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center gap-2.5">
             <Shield size={20} className="text-text-muted" />
-            <h2 className="text-base font-semibold text-text">Governance & Security</h2>
+            <h2 className="text-lg font-semibold text-text">Governance & Security</h2>
           </div>
-          <button className="text-text-muted hover:text-text p-1 rounded" onClick={onClose}>
+          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 mb-4 shrink-0">
+        <div className="flex gap-1 px-6 pt-4 pb-3 shrink-0">
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`px-3 py-1.5 text-[13px] rounded-lg transition-colors ${
+              className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${
                 tab === t.id
                   ? "bg-white/10 text-text font-medium"
-                  : "text-text-muted hover:text-text-secondary hover:bg-white/5"
+                  : "text-text-muted hover:text-text-secondary hover:bg-white/[0.04]"
               }`}
               onClick={() => setTab(t.id)}
             >
@@ -250,8 +250,8 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "tools" ? (
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
-              <p className="text-[13px] text-text-muted mb-3">
-                Each tool is <span className="text-success">allowed</span> by default.
+              <p className="text-sm text-text-muted mb-4">
+                Each tool is <span className="text-success font-medium">allowed</span> by default.
                 Set a policy to restrict or gate any tool.
               </p>
               {AGENT_TOOLS.map((tool) => {
@@ -261,24 +261,26 @@ export function PolicyEditor({ onClose }: Props) {
                 const effectStyle = currentEffect ? getEffectStyle(currentEffect) : null
 
                 return (
-                  <div key={tool.name} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-base">
-                    <Icon size={16} className="text-text-muted shrink-0" />
+                  <div key={tool.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                    <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
+                      <Icon size={16} className="text-text-secondary" />
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-text font-mono">{tool.name}</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-sm font-semibold text-text font-mono">{tool.name}</span>
                         {!currentEffect && (
-                          <span className="text-[11px] uppercase font-mono text-success">allowed</span>
+                          <span className="text-[11px] uppercase font-semibold tracking-wider text-success">allowed</span>
                         )}
                         {effectStyle && (
-                          <span className={`text-[11px] uppercase font-mono ${effectStyle.color}`}>
+                          <span className={`text-[11px] uppercase font-semibold tracking-wider ${effectStyle.color}`}>
                             {effectStyle.label}
                           </span>
                         )}
                       </div>
-                      <div className="text-[12px] text-text-muted mt-0.5">{tool.desc}</div>
+                      <div className="text-[13px] text-text-muted mt-0.5">{tool.desc}</div>
                     </div>
                     <select
-                      className="bg-elevated text-text text-[12px] rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0"
+                      className="bg-white/[0.06] text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-white/[0.06]"
                       value={currentEffect ?? "none"}
                       onChange={(e) => handleToolToggle(tool.name, e.target.value as Effect | "none")}
                     >
@@ -294,7 +296,7 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "rules" ? (
             /* ── Custom Rules tab ─────────────────────────── */
             <div className="space-y-4">
-              <p className="text-[13px] text-text-muted">
+              <p className="text-sm text-text-muted">
                 Custom rules for non-tool conditions (e.g. spending limits).
                 Tool-specific rules are managed in the Tool Permissions tab.
               </p>
@@ -313,14 +315,14 @@ export function PolicyEditor({ onClose }: Props) {
 
                     if (isEditing) {
                       return (
-                        <div key={rule.name} className="px-4 py-3 rounded-xl bg-base space-y-2">
+                        <div key={rule.name} className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.04] space-y-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-text">{rule.name}</span>
+                            <span className="text-sm font-semibold text-text">{rule.name}</span>
                             <span className="text-[11px] text-text-muted">editing</span>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2">
                             <select
-                              className="bg-elevated text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
+                              className="bg-white/[0.06] text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer border border-white/[0.06]"
                               value={editEffect}
                               onChange={(e) => setEditEffect(e.target.value as Effect)}
                             >
@@ -329,7 +331,7 @@ export function PolicyEditor({ onClose }: Props) {
                               ))}
                             </select>
                             <input
-                              className="flex-1 bg-elevated rounded-lg px-3 py-2 text-sm text-text font-mono outline-none focus:ring-1 focus:ring-accent"
+                              className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-text font-mono outline-none focus:ring-1 focus:ring-accent"
                               value={editCondition}
                               onChange={(e) => setEditCondition(e.target.value)}
                               onKeyDown={(e) => { if (e.key === "Enter") saveEdit(rule.name) }}
@@ -354,12 +356,14 @@ export function PolicyEditor({ onClose }: Props) {
                     }
 
                     return (
-                      <div key={rule.name} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-base group">
-                        <RuleIcon size={16} className={style.color} />
+                      <div key={rule.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04] group">
+                        <div className="w-8 h-8 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
+                          <RuleIcon size={15} className={style.color} />
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-text">{rule.name}</span>
-                            <span className={`text-[11px] uppercase font-mono ${style.color}`}>
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-sm font-semibold text-text">{rule.name}</span>
+                            <span className={`text-[11px] uppercase font-semibold tracking-wider ${style.color}`}>
                               {style.label}
                             </span>
                           </div>
@@ -396,13 +400,13 @@ export function PolicyEditor({ onClose }: Props) {
 
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
-                    className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
+                    className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
                     placeholder="Rule name (e.g. spending-limit)"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
                   <select
-                    className="bg-base text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
+                    className="bg-white/[0.06] border border-white/[0.06] text-text text-sm rounded-lg px-3 py-2.5 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
                     value={effect}
                     onChange={(e) => setEffect(e.target.value as Effect)}
                   >
@@ -414,7 +418,7 @@ export function PolicyEditor({ onClose }: Props) {
 
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
-                    className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
+                    className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-text font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
                     placeholder="Condition (e.g. amount_gt:1000)"
                     value={condition}
                     onChange={(e) => setCondition(e.target.value)}
@@ -434,32 +438,32 @@ export function PolicyEditor({ onClose }: Props) {
           ) : (
             /* ── Security tab ─────────────────────────────── */
             <div className="space-y-4">
-              <p className="text-[13px] text-text-muted">
+              <p className="text-sm text-text-muted">
                 Built-in security protections. These are always active and cannot be disabled.
               </p>
 
               {/* Workspace */}
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Lock size={14} className="text-accent" />
-                  <span className="text-sm font-medium text-text">Workspace Isolation</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Lock size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Workspace Isolation</span>
                 </div>
-                <p className="text-[12px] text-text-muted">
+                <p className="text-[13px] text-text-muted leading-relaxed">
                   File and shell operations are scoped to the configured workspace directory.
                   The agent cannot access files outside this boundary.
                 </p>
               </div>
 
               {/* Shell blocklist */}
-              <div className="px-4 py-3 rounded-xl bg-base">
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                 <button
-                  className="flex items-center gap-2 w-full text-left"
+                  className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setShellExpanded((v) => !v)}
                 >
                   {shellExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
-                  <Terminal size={14} className="text-error" />
-                  <span className="text-sm font-medium text-text">Shell Command Blocklist</span>
-                  <span className="text-[11px] text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns blocked</span>
+                  <Terminal size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Shell Command Blocklist</span>
+                  <span className="text-[12px] text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns</span>
                 </button>
                 {shellExpanded && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -476,15 +480,15 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* SSRF protection */}
-              <div className="px-4 py-3 rounded-xl bg-base">
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                 <button
-                  className="flex items-center gap-2 w-full text-left"
+                  className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setSsrfExpanded((v) => !v)}
                 >
                   {ssrfExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
-                  <Globe size={14} className="text-warning" />
-                  <span className="text-sm font-medium text-text">SSRF Protection</span>
-                  <span className="text-[11px] text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns blocked</span>
+                  <Globe size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">SSRF Protection</span>
+                  <span className="text-[12px] text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns</span>
                 </button>
                 {ssrfExpanded && (
                   <div className="mt-3">
@@ -506,12 +510,12 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Policy enforcement */}
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield size={14} className="text-success" />
-                  <span className="text-sm font-medium text-text">Policy Enforcement</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Shield size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Policy Enforcement</span>
                 </div>
-                <p className="text-[12px] text-text-muted">
+                <p className="text-[13px] text-text-muted leading-relaxed">
                   All policy rules are evaluated <strong>before every tool call</strong>.
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
@@ -519,14 +523,14 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Reset data */}
-              <div className="h-px bg-white/5 my-2" />
+              <div className="h-px bg-white/[0.06] my-1" />
 
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Trash2 size={14} className="text-error" />
-                  <span className="text-sm font-medium text-text">Restore Defaults</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Trash2 size={15} className="text-error" />
+                  <span className="text-sm font-semibold text-text">Restore Defaults</span>
                 </div>
-                <p className="text-[12px] text-text-muted mb-3">
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
                   Delete all runs, logs, audit entries, trace history, checkpoints, and token usage.
                   <strong> Policies and dashboard layout will be preserved.</strong>
                 </p>

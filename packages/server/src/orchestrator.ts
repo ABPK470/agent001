@@ -14,13 +14,6 @@ import {
     Agent,
     createEngineServices,
     governTool,
-    type EngineServices,
-    type LLMClient,
-    type Message,
-    type RunState,
-    type Tool,
-} from "@agent001/agent"
-import {
     completeRun,
     createRun,
     failRun,
@@ -29,8 +22,14 @@ import {
     runStarted,
     startPlanning,
     startRunning,
+    PolicyEffect,
     type DomainEvent,
-} from "@agent001/engine"
+    type EngineServices,
+    type LLMClient,
+    type Message,
+    type RunState,
+    type Tool,
+} from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import * as db from "./db.js"
 import { broadcast } from "./ws.js"
@@ -73,7 +72,7 @@ export class AgentOrchestrator {
     for (const r of dbRules) {
       services.policyEvaluator.addRule({
         name: r.name,
-        effect: r.effect as unknown as import("@agent001/engine").PolicyEffect,
+        effect: r.effect as PolicyEffect,
         condition: r.condition,
         parameters: JSON.parse(r.parameters),
       })
