@@ -31,6 +31,7 @@ import {
     type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
+import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
 import { broadcast } from "./ws.js"
 
@@ -47,6 +48,7 @@ interface ActiveRun {
 export interface OrchestratorConfig {
   llm: LLMClient
   tools: Tool[]
+  messageRouter?: MessageRouter
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────
@@ -55,10 +57,17 @@ export class AgentOrchestrator {
   private readonly llm: LLMClient
   private readonly tools: Tool[]
   private readonly activeRuns = new Map<string, ActiveRun>()
+  private messageRouter: MessageRouter | null = null
 
   constructor(config: OrchestratorConfig) {
     this.llm = config.llm
     this.tools = config.tools
+    this.messageRouter = config.messageRouter ?? null
+  }
+
+  /** Set the message router (for wiring after construction). */
+  setMessageRouter(router: MessageRouter): void {
+    this.messageRouter = router
   }
 
   /** Start a new governed agent run. Returns the run ID immediately. */
@@ -266,6 +275,13 @@ export class AgentOrchestrator {
         type: "run.completed",
         data: { runId, answer, status: "completed", stepCount: run.steps.length },
       })
+
+      // Route reply to chat platform if this run was triggered by a message
+      if (this.messageRouter) {
+        this.messageRouter.sendReply(runId, answer).catch((err) => {
+          console.error(`Failed to send reply for run ${runId}:`, err)
+        })
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
 
