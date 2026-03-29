@@ -8,6 +8,7 @@
 import {
     Activity,
     BarChart3,
+    Check,
     Clock,
     History,
     ListTree,
@@ -38,17 +39,26 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
 
 export function WidgetCatalog({ onClose }: Props) {
   const activeViewId = useStore((s) => s.activeViewId)
+  const views = useStore((s) => s.views)
   const addWidget = useStore((s) => s.addWidget)
+  const removeWidget = useStore((s) => s.removeWidget)
   const isMobile = useIsMobile()
 
-  function handleAdd(type: WidgetType) {
-    addWidget(activeViewId, type)
-    onClose()
+  const activeView = views.find((v) => v.id === activeViewId)
+  const activeTypes = new Set(activeView?.widgets.map((w) => w.type) ?? [])
+
+  function handleToggle(type: WidgetType) {
+    const existing = activeView?.widgets.find((w) => w.type === type)
+    if (existing) {
+      removeWidget(activeViewId, existing.id)
+    } else {
+      addWidget(activeViewId, type)
+    }
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       onClick={onClose}
     >
       <div
@@ -70,38 +80,48 @@ export function WidgetCatalog({ onClose }: Props) {
         </div>
 
         <div className={`grid gap-3 ${isMobile ? "grid-cols-1 overflow-y-auto flex-1" : "grid-cols-2"}`}>
-          {CATALOG.map((item) => (
-            <button
-              key={item.type}
-              className={`flex items-start gap-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] cursor-pointer text-left group ${
-                isMobile ? "p-4 border border-white/5" : "flex-col gap-2.5 p-4"
-              }`}
-              onClick={() => handleAdd(item.type)}
-            >
-              <div className={`flex items-center shrink-0 ${isMobile ? "w-10 h-10 justify-center rounded-lg bg-elevated" : "gap-2.5"}`}>
-                <item.Icon size={isMobile ? 20 : 18} className="text-text-muted group-hover:text-text-secondary" />
-                {!isMobile && (
-                  <span className="text-sm font-medium text-text-secondary group-hover:text-text">
-                    {item.label}
-                  </span>
+          {CATALOG.map((item) => {
+            const isActive = activeTypes.has(item.type)
+            return (
+              <button
+                key={item.type}
+                className={`relative flex items-start gap-3 rounded-xl cursor-pointer text-left group ${
+                  isMobile
+                    ? `p-4 border ${isActive ? "border-accent/25 bg-accent/10" : "border-white/5 hover:bg-white/[0.04]"}`
+                    : `flex-col gap-2.5 p-4 border ${isActive ? "border-accent/25 bg-accent/10" : "border-transparent hover:bg-white/[0.04] active:bg-white/[0.06]"}`
+                }`}
+                onClick={() => handleToggle(item.type)}
+              >
+                {isActive && (
+                  <div className="absolute top-2.5 right-2.5">
+                    <Check size={14} className="text-accent" />
+                  </div>
                 )}
-              </div>
-              {isMobile ? (
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-sm font-medium text-text-secondary group-hover:text-text">
-                    {item.label}
-                  </span>
+                <div className={`flex items-center shrink-0 ${isMobile ? "w-10 h-10 justify-center rounded-lg bg-elevated" : "gap-2.5"}`}>
+                  <item.Icon size={isMobile ? 20 : 18} className={isActive ? "text-accent" : "text-text-muted group-hover:text-text-secondary"} />
+                  {!isMobile && (
+                    <span className={`text-sm font-medium ${isActive ? "text-accent" : "text-text-secondary group-hover:text-text"}`}>
+                      {item.label}
+                    </span>
+                  )}
+                </div>
+                {isMobile ? (
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className={`text-sm font-medium ${isActive ? "text-accent" : "text-text-secondary group-hover:text-text"}`}>
+                      {item.label}
+                    </span>
+                    <span className="text-[13px] text-text-muted leading-snug">
+                      {item.desc}
+                    </span>
+                  </div>
+                ) : (
                   <span className="text-[13px] text-text-muted leading-snug">
                     {item.desc}
                   </span>
-                </div>
-              ) : (
-                <span className="text-[13px] text-text-muted leading-snug">
-                  {item.desc}
-                </span>
-              )}
-            </button>
-          ))}
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>

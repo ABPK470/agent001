@@ -99,39 +99,71 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
 }
 
 const GRID_COLS = 12
+const TOTAL_ROWS = 12
 
-/** Find first position where a widget of size (w, h) fits without overlapping existing items. */
-function findFirstFit(existing: LayoutItem[], w: number, h: number): { x: number; y: number } {
-  // Build occupancy set from existing items
-  const occupied = new Set<string>()
-  let maxY = 0
-  for (const item of existing) {
-    for (let row = item.y; row < item.y + item.h; row++) {
-      for (let col = item.x; col < item.x + item.w; col++) {
-        occupied.add(`${col},${row}`)
+/** Compute a full-page auto-layout that divides the canvas evenly among all widgets. */
+function computeAutoLayout(widgets: Widget[]): LayoutItem[] {
+  const n = widgets.length
+  if (n === 0) return []
+
+  // Determine how many widgets per row
+  let rowConfig: number[]
+  switch (n) {
+    case 1: rowConfig = [1]; break
+    case 2: rowConfig = [2]; break
+    case 3: rowConfig = [3]; break
+    case 4: rowConfig = [2, 2]; break
+    case 5: rowConfig = [3, 2]; break
+    case 6: rowConfig = [3, 3]; break
+    case 7: rowConfig = [4, 3]; break
+    case 8: rowConfig = [4, 4]; break
+    default: {
+      const rows: number[] = []
+      let remaining = n
+      while (remaining > 0) {
+        rows.push(Math.min(remaining, 4))
+        remaining -= Math.min(remaining, 4)
       }
+      rowConfig = rows
+      break
     }
-    maxY = Math.max(maxY, item.y + item.h)
   }
 
-  // Scan rows then columns, find first position where (w x h) block is fully free
-  for (let y = 0; y <= maxY + 1; y++) {
-    for (let x = 0; x <= GRID_COLS - w; x++) {
-      let fits = true
-      outer: for (let row = y; row < y + h; row++) {
-        for (let col = x; col < x + w; col++) {
-          if (occupied.has(`${col},${row}`)) {
-            fits = false
-            break outer
-          }
-        }
-      }
-      if (fits) return { x, y }
+  const numRows = rowConfig.length
+  const baseRowH = Math.floor(TOTAL_ROWS / numRows)
+  const extraH = TOTAL_ROWS - baseRowH * numRows
+  const layouts: LayoutItem[] = []
+  let idx = 0
+  let yOffset = 0
+
+  for (let r = 0; r < numRows; r++) {
+    const colsInRow = rowConfig[r]
+    const baseColW = Math.floor(GRID_COLS / colsInRow)
+    const extraW = GRID_COLS - baseColW * colsInRow
+    const h = baseRowH + (r < extraH ? 1 : 0)
+    let x = 0
+
+    for (let c = 0; c < colsInRow; c++) {
+      const w = baseColW + (c < extraW ? 1 : 0)
+      const widget = widgets[idx]
+      const defaults = WIDGET_DEFAULTS[widget.type]
+
+      layouts.push({
+        i: widget.id,
+        x,
+        y: yOffset,
+        w,
+        h,
+        minW: defaults.minW,
+        minH: defaults.minH,
+      })
+      x += w
+      idx++
     }
+    yOffset += h
   }
 
-  // Fallback: place below everything
-  return { x: 0, y: maxY }
+  return layouts
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -169,48 +201,30 @@ export const useStore = create<AppState>()(
 
       // Widgets
       addWidget: (viewId, type) => set((s) => {
-        const widget: Widget = { id: randomId(), type }
-        const defaults = WIDGET_DEFAULTS[type]
         const view = s.views.find((v) => v.id === viewId)
-        const existing = view?.layouts["lg"] ?? []
-        const { x, y } = findFirstFit(existing, defaults.w, defaults.h)
-        const layout: LayoutItem = {
-          i: widget.id,
-          x,
-          y,
-          ...defaults,
-        }
+        if (!view) return s
+        const widget: Widget = { id: randomId(), type }
+        const newWidgets = [...view.widgets, widget]
         return {
           views: s.views.map((v) =>
             v.id === viewId
-              ? {
-                  ...v,
-                  widgets: [...v.widgets, widget],
-                  layouts: {
-                    ...v.layouts,
-                    lg: [...(v.layouts["lg"] ?? []), layout],
-                  },
-                }
+              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: computeAutoLayout(newWidgets) } }
               : v,
           ),
         }
       }),
-      removeWidget: (viewId, widgetId) => set((s) => ({
-        views: s.views.map((v) =>
-          v.id === viewId
-            ? {
-                ...v,
-                widgets: v.widgets.filter((w) => w.id !== widgetId),
-                layouts: Object.fromEntries(
-                  Object.entries(v.layouts).map(([k, items]) => [
-                    k,
-                    items.filter((item) => item.i !== widgetId),
-                  ]),
-                ),
-              }
-            : v,
-        ),
-      })),
+      removeWidget: (viewId, widgetId) => set((s) => {
+        const view = s.views.find((v) => v.id === viewId)
+        if (!view) return s
+        const newWidgets = view.widgets.filter((w) => w.id !== widgetId)
+        return {
+          views: s.views.map((v) =>
+            v.id === viewId
+              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: computeAutoLayout(newWidgets) } }
+              : v,
+          ),
+        }
+      }),
       updateLayouts: (viewId, layouts) => set((s) => ({
         views: s.views.map((v) =>
           v.id === viewId ? { ...v, layouts: { ...v.layouts, lg: layouts } } : v,

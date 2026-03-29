@@ -221,7 +221,7 @@ export function App() {
   // ── Desktop layout ─────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-base">
-      <Toolbar />
+      <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} />
       <ViewTabs onAddWidget={() => canvasRef.current?.openCatalog()} />
       <Canvas ref={canvasRef} />
     </div>

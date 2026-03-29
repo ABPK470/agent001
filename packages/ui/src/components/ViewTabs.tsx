@@ -6,7 +6,7 @@
  * Also hosts the "Add Widget" button, pinned to the right.
  */
 
-import { LayoutGrid, Plus, X } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
 
@@ -14,7 +14,7 @@ interface Props {
   onAddWidget: () => void
 }
 
-export function ViewTabs({ onAddWidget }: Props) {
+export function ViewTabs({ onAddWidget: _onAddWidget }: Props) {
   const views = useStore((s) => s.views)
   const activeViewId = useStore((s) => s.activeViewId)
   const setActiveView = useStore((s) => s.setActiveView)
@@ -23,9 +23,6 @@ export function ViewTabs({ onAddWidget }: Props) {
   const renameView = useStore((s) => s.renameView)
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
-
-  const activeView = views.find((v) => v.id === activeViewId)
-  const hasWidgets = (activeView?.widgets.length ?? 0) > 0
 
   function handleDoubleClick(id: string, name: string) {
     setEditing(id)
@@ -92,17 +89,6 @@ export function ViewTabs({ onAddWidget }: Props) {
           <Plus size={16} />
         </button>
       </div>
-
-      {/* Right: Add Widget — only when canvas already has widgets */}
-      {hasWidgets && (
-        <button
-          className="flex items-center gap-1.5 px-3 mr-2 shrink-0 text-text-muted hover:text-text-secondary text-[13px] transition-colors"
-          onClick={onAddWidget}
-        >
-          <LayoutGrid size={14} />
-          <span className="hidden sm:inline whitespace-nowrap">Add Widget</span>
-        </button>
-      )}
     </div>
   )
 }

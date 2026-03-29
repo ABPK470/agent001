@@ -2,31 +2,52 @@
  * Toolbar — top bar with branding, governance settings, usage, and connection status.
  */
 
-import { Activity, Radio, Shield, Wifi, WifiOff } from "lucide-react"
+import { Activity, LayoutGrid, Shield } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
 import { PolicyEditor } from "./PolicyEditor"
 import { UsageModal } from "./UsageModal"
 
-export function Toolbar() {
+interface Props {
+  onAddWidget?: () => void
+}
+
+export function Toolbar({ onAddWidget }: Props) {
   const connected = useStore((s) => s.connected)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
 
   return (
     <>
-      <header className="flex items-center justify-between px-5 h-11 bg-surface shrink-0 select-none">
-        <div className="flex items-center gap-3">
-          <Radio size={18} className="text-accent" />
-          <span className="text-base font-semibold tracking-wide text-text">
+      <header className="flex items-center justify-between px-6 h-14 bg-base shrink-0 select-none">
+        <div className="flex items-center gap-3.5">
+          <span className="relative flex h-2.5 w-2.5" title={connected ? "Connected" : "Offline"}>
+            {connected && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+              connected ? "bg-emerald-500" : "bg-red-500"
+            }`} />
+          </span>
+          <span className="text-[17px] font-semibold tracking-wide text-text">
             AGENT<span className="text-accent">001</span>
           </span>
-          {/* <span className="text-[13px] text-text-muted font-mono">COMMAND CENTER</span> */}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5">
+          {onAddWidget && (
+            <button
+              className="flex items-center gap-2 px-3.5 py-2 text-sm text-text-secondary hover:text-white border border-white/10 hover:border-white/25 rounded-lg transition-colors"
+              onClick={onAddWidget}
+              title="Add Widget"
+            >
+              <LayoutGrid size={15} />
+              <span className="hidden sm:inline">Add Widget</span>
+            </button>
+          )}
+
           <button
-            className="flex items-center gap-1.5 text-[13px] text-text-muted hover:text-text-secondary"
+            className="flex items-center gap-2 px-3.5 py-2 text-sm text-text-secondary hover:text-white border border-white/10 hover:border-white/25 rounded-lg transition-colors"
             onClick={() => setUsageOpen(true)}
             title="Token Usage"
           >
@@ -35,24 +56,13 @@ export function Toolbar() {
           </button>
 
           <button
-            className="flex items-center gap-1.5 text-[13px] text-text-muted hover:text-text-secondary"
+            className="flex items-center gap-2 px-3.5 py-2 text-sm text-text-secondary hover:text-white border border-white/10 hover:border-white/25 rounded-lg transition-colors"
             onClick={() => setPolicyOpen(true)}
             title="Governance Policies"
           >
             <Shield size={15} />
             <span className="hidden sm:inline">Policies</span>
           </button>
-
-          <div className="flex items-center gap-2">
-            {connected ? (
-              <Wifi size={16} className="text-success" />
-            ) : (
-              <WifiOff size={16} className="text-error" />
-            )}
-            <span className="text-[13px] text-text-secondary">
-              {connected ? "Live" : "Offline"}
-            </span>
-          </div>
         </div>
       </header>
 
