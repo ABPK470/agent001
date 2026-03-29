@@ -33,19 +33,13 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
 
   /**
    * Supported conditions:
-   *   "action:<name>"       — step uses a specific tool
-   *   "amount_gt:<number>"  — step input.amount exceeds threshold
+   *   "action:<name>"  — step uses a specific tool
    */
   private matches(rule: PolicyRule, step: Step): boolean {
     const condition = rule.condition
 
     if (condition.startsWith("action:")) {
       return step.action === condition.split(":")[1]
-    }
-    if (condition.startsWith("amount_gt:")) {
-      const threshold = Number(condition.split(":")[1])
-      const amount = step.input["amount"]
-      return amount !== undefined && Number(amount) > threshold
     }
 
     return false

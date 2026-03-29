@@ -5,6 +5,7 @@
 import { Activity, LayoutGrid, Shield } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
+import { Logo } from "./Logo"
 import { PolicyEditor } from "./PolicyEditor"
 import { UsageModal } from "./UsageModal"
 
@@ -20,18 +21,8 @@ export function Toolbar({ onAddWidget }: Props) {
   return (
     <>
       <header className="flex items-center justify-between px-6 h-14 bg-base shrink-0 select-none">
-        <div className="flex items-center gap-3.5">
-          <span className="relative flex h-2.5 w-2.5" title={connected ? "Connected" : "Offline"}>
-            {connected && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            )}
-            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-              connected ? "bg-emerald-500" : "bg-red-500"
-            }`} />
-          </span>
-          <span className="text-[17px] font-semibold tracking-wide text-text">
-            AGENT<span className="text-accent">001</span>
-          </span>
+        <div className="flex items-center">
+          <Logo size={30} online={connected} />
         </div>
 
         <div className="flex items-center gap-2.5">

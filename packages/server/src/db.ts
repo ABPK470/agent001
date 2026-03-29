@@ -102,6 +102,18 @@ function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_trace_run ON trace_entries(run_id, seq);
+
+    CREATE TABLE IF NOT EXISTS llm_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      provider TEXT NOT NULL DEFAULT 'copilot',
+      model TEXT NOT NULL DEFAULT 'gpt-4o',
+      api_key TEXT NOT NULL DEFAULT '',
+      base_url TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    INSERT OR IGNORE INTO llm_config (id, provider, model, api_key, base_url, updated_at)
+    VALUES (1, 'copilot', 'gpt-4o', '', '', datetime('now'));
   `)
 }
 
@@ -347,4 +359,31 @@ export function clearTransactionalData(): void {
     DELETE FROM token_usage;
     DELETE FROM trace_entries;
   `)
+}
+
+// ── LLM config ───────────────────────────────────────────────────
+
+export type LlmProvider = "copilot" | "openai" | "anthropic" | "local"
+
+export interface DbLlmConfig {
+  provider: LlmProvider
+  model: string
+  api_key: string
+  base_url: string
+  updated_at: string
+}
+
+export function getLlmConfig(): DbLlmConfig {
+  return getDb()
+    .prepare("SELECT provider, model, api_key, base_url, updated_at FROM llm_config WHERE id = 1")
+    .get() as DbLlmConfig
+}
+
+export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
+  getDb().prepare(`
+    UPDATE llm_config
+    SET provider = @provider, model = @model, api_key = @api_key,
+        base_url = @base_url, updated_at = datetime('now')
+    WHERE id = 1
+  `).run(cfg)
 }

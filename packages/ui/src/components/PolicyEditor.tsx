@@ -7,13 +7,13 @@
 
 import {
     AlertTriangle,
-    Check,
     ChevronDown,
     ChevronRight,
+    Cpu,
+    Eye,
+    EyeOff,
     FolderOpen,
     Globe,
-    Pencil,
-    Plus,
     Shield,
     ShieldCheck,
     ShieldX,
@@ -60,24 +60,13 @@ const SSRF_BLOCKED = [
   "*.local", "*.internal",
 ]
 
-type Tab = "tools" | "rules" | "security"
+type Tab = "tools" | "model" | "security"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
-
-  // New rule form
-  const [name, setName] = useState("")
-  const [effect, setEffect] = useState<Effect>("deny")
-  const [condition, setCondition] = useState("")
-  const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Inline editing
-  const [editingRule, setEditingRule] = useState<string | null>(null)
-  const [editEffect, setEditEffect] = useState<Effect>("deny")
-  const [editCondition, setEditCondition] = useState("")
 
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
@@ -93,6 +82,19 @@ export function PolicyEditor({ onClose }: Props) {
   // Reset data
   const [confirmReset, setConfirmReset] = useState(false)
   const [resetting, setResetting] = useState(false)
+
+  // LLM config
+  const [llmProvider, setLlmProvider] = useState("copilot")
+  const [llmModel, setLlmModel] = useState("")
+  const [llmApiKey, setLlmApiKey] = useState("")
+  const [llmBaseUrl, setLlmBaseUrl] = useState("")
+  const [llmSaving, setLlmSaving] = useState(false)
+  const [llmSaved, setLlmSaved] = useState(false)
+  const [llmError, setLlmError] = useState<string | null>(null)
+  const [llmDefaults, setLlmDefaults] = useState<Record<string, { model: string; baseUrl: string; placeholder: string }>>({})
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [llmActiveProvider, setLlmActiveProvider] = useState("")
+  const [llmActiveModel, setLlmActiveModel] = useState("")
 
   const loadRules = useCallback(async () => {
     try {
@@ -114,6 +116,41 @@ export function PolicyEditor({ onClose }: Props) {
       setWsOriginal(w.path)
     }).catch(() => {})
   }, [])
+
+  // Load LLM config
+  useEffect(() => {
+    api.getLlmConfig().then((cfg) => {
+      setLlmProvider(cfg.provider)
+      setLlmModel(cfg.model)
+      setLlmBaseUrl(cfg.baseUrl ?? "")
+      setLlmDefaults(cfg.defaults ?? {})
+      setLlmActiveProvider(cfg.provider)
+      setLlmActiveModel(cfg.model)
+    }).catch(() => {})
+  }, [])
+
+  async function handleSaveLlm() {
+    setLlmSaving(true)
+    setLlmError(null)
+    setLlmSaved(false)
+    try {
+      const res = await api.setLlmConfig({
+        provider: llmProvider,
+        model: llmModel || undefined,
+        apiKey: llmApiKey || undefined,
+        baseUrl: llmBaseUrl || undefined,
+      })
+      setLlmActiveProvider(res.provider)
+      setLlmActiveModel(res.model)
+      setLlmApiKey("")
+      setLlmSaved(true)
+      setTimeout(() => setLlmSaved(false), 3000)
+    } catch {
+      setLlmError("Failed to save LLM config")
+    } finally {
+      setLlmSaving(false)
+    }
+  }
 
   async function handleSaveWorkspace() {
     setWsSaving(true)
@@ -142,27 +179,6 @@ export function PolicyEditor({ onClose }: Props) {
     }
     return map
   }, [rules])
-
-  // Non-tool rules (amount_gt, custom conditions)
-  const customRules = useMemo(() => {
-    return rules.filter((r) => !r.condition.match(/^action:\w+$/))
-  }, [rules])
-
-  async function handleAdd() {
-    if (!name.trim() || !condition.trim()) return
-    setAdding(true)
-    setError(null)
-    try {
-      await api.createPolicy({ name: name.trim(), effect, condition: condition.trim() })
-      setName("")
-      setCondition("")
-      await loadRules()
-    } catch {
-      setError("Failed to create rule")
-    } finally {
-      setAdding(false)
-    }
-  }
 
   async function handleDelete(ruleName: string) {
     try {
@@ -198,36 +214,13 @@ export function PolicyEditor({ onClose }: Props) {
     }
   }
 
-  function startEdit(rule: PolicyRule) {
-    setEditingRule(rule.name)
-    setEditEffect(rule.effect as Effect)
-    setEditCondition(rule.condition)
-  }
-
-  async function saveEdit(originalName: string) {
-    setError(null)
-    try {
-      // Delete old rule then create updated one
-      await api.deletePolicy(originalName)
-      await api.createPolicy({
-        name: originalName,
-        effect: editEffect,
-        condition: editCondition.trim(),
-      })
-      setEditingRule(null)
-      await loadRules()
-    } catch {
-      setError("Failed to update rule")
-    }
-  }
-
   function getEffectStyle(e: string) {
     return EFFECTS.find((ef) => ef.value === e) ?? EFFECTS[1]
   }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "tools", label: "Tool Permissions" },
-    { id: "rules", label: "Custom Rules" },
+    { id: "model", label: "Model" },
     { id: "security", label: "Security" },
   ]
 
@@ -325,145 +318,124 @@ export function PolicyEditor({ onClose }: Props) {
                 )
               })}
             </div>
-          ) : tab === "rules" ? (
-            /* ── Custom Rules tab ─────────────────────────── */
+          ) : tab === "model" ? (
+            /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
-              <p className="text-sm text-text-muted">
-                Custom rules for non-tool conditions (e.g. spending limits).
-                Tool-specific rules are managed in the Tool Permissions tab.
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-text-muted">Configure the LLM provider and model used by the agent.</p>
+                {llmActiveProvider && (
+                  <span className="flex items-center gap-1.5 text-[12px] text-text-muted bg-white/[0.04] border border-white/[0.06] rounded-full px-3 py-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+                    {llmActiveProvider} / {llmActiveModel}
+                  </span>
+                )}
+              </div>
 
-              {/* Existing custom rules */}
-              {customRules.length === 0 ? (
-                <div className="text-text-muted text-sm text-center py-6">
-                  No custom rules. Add one below.
+              {/* Provider selector */}
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Cpu size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Provider</span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {customRules.map((rule) => {
-                    const style = getEffectStyle(rule.effect)
-                    const RuleIcon = style.icon
-                    const isEditing = editingRule === rule.name
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  Choose the LLM backend. Switching provider updates the model and URL defaults below.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {(["copilot", "openai", "anthropic", "local"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setLlmProvider(p)
+                        setLlmModel(llmDefaults[p]?.model ?? "")
+                        setLlmBaseUrl(llmDefaults[p]?.baseUrl ?? "")
+                        setLlmApiKey("")
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                        llmProvider === p
+                          ? "bg-accent/20 text-accent border-accent/30"
+                          : "bg-white/[0.04] text-text-muted border-white/[0.06] hover:text-text hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {p === "copilot" ? "GitHub Copilot" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                    if (isEditing) {
-                      return (
-                        <div key={rule.name} className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.04] space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-text">{rule.name}</span>
-                            <span className="text-[11px] text-text-muted">editing</span>
-                          </div>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <select
-                              className="bg-white/[0.06] text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer border border-white/[0.06]"
-                              value={editEffect}
-                              onChange={(e) => setEditEffect(e.target.value as Effect)}
-                            >
-                              {EFFECTS.map((e) => (
-                                <option key={e.value} value={e.value}>{e.label}</option>
-                              ))}
-                            </select>
-                            <input
-                              className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-text font-mono outline-none focus:ring-1 focus:ring-accent"
-                              value={editCondition}
-                              onChange={(e) => setEditCondition(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(rule.name) }}
-                            />
-                          </div>
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              className="px-3 py-1.5 text-[12px] text-text-muted hover:text-text rounded-lg hover:bg-white/5"
-                              onClick={() => setEditingRule(null)}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="flex items-center gap-1 px-3 py-1.5 text-[12px] text-success hover:bg-success/10 rounded-lg"
-                              onClick={() => saveEdit(rule.name)}
-                            >
-                              <Check size={12} /> Save
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    }
+              {/* Model + credentials combined card */}
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <Cpu size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Connection</span>
+                </div>
+                <div className="space-y-3 mb-4">
+                  {/* Model */}
+                  <div>
+                    <label className="text-[13px] text-text-muted block mb-1.5">Model</label>
+                    <input
+                      type="text"
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder={llmDefaults[llmProvider]?.model ?? "model name"}
+                      className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                    />
+                  </div>
 
-                    return (
-                      <div key={rule.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04] group">
-                        <div className="w-8 h-8 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
-                          <RuleIcon size={15} className={style.color} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-sm font-semibold text-text">{rule.name}</span>
-                            <span className={`text-[11px] uppercase font-semibold tracking-wider ${style.color}`}>
-                              {style.label}
-                            </span>
-                          </div>
-                          <div className="text-[13px] text-text-muted font-mono mt-0.5">
-                            {rule.condition}
-                          </div>
-                        </div>
+                  {/* API Key — hidden for local */}
+                  {llmProvider !== "local" && (
+                    <div>
+                      <label className="text-[13px] text-text-muted block mb-1.5">
+                        {llmProvider === "copilot" ? "GitHub Token" : llmProvider === "anthropic" ? "Anthropic API Key" : "OpenAI API Key"}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={llmApiKey}
+                          onChange={(e) => setLlmApiKey(e.target.value)}
+                          placeholder={llmDefaults[llmProvider]?.placeholder ?? "Leave blank to keep existing"}
+                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                        />
                         <button
-                          className="text-text-muted hover:text-accent sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
-                          onClick={() => startEdit(rule)}
-                          title="Edit rule"
+                          type="button"
+                          onClick={() => setShowApiKey((v) => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
                         >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="text-text-muted hover:text-error sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
-                          onClick={() => handleDelete(rule.name)}
-                          title="Delete rule"
-                        >
-                          <Trash2 size={14} />
+                          {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                      <p className="text-[12px] text-text-muted mt-1">Leave blank to keep the existing key.</p>
+                    </div>
+                  )}
 
-              {/* Divider */}
-              <div className="h-px bg-white/5" />
-
-              {/* Add new rule form */}
-              <div className="space-y-3">
-                <div className="text-[13px] text-text-secondary font-medium">Add Custom Rule</div>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
-                    placeholder="Rule name (e.g. spending-limit)"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                  <select
-                    className="bg-white/[0.06] border border-white/[0.06] text-text text-sm rounded-lg px-3 py-2.5 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
-                    value={effect}
-                    onChange={(e) => setEffect(e.target.value as Effect)}
-                  >
-                    {EFFECTS.map((e) => (
-                      <option key={e.value} value={e.value}>{e.label}</option>
-                    ))}
-                  </select>
+                  {/* Base URL — shown for openai and local */}
+                  {(llmProvider === "openai" || llmProvider === "local") && (
+                    <div>
+                      <label className="text-[13px] text-text-muted block mb-1.5">Base URL</label>
+                      <input
+                        type="text"
+                        value={llmBaseUrl}
+                        onChange={(e) => setLlmBaseUrl(e.target.value)}
+                        placeholder={llmDefaults[llmProvider]?.baseUrl ?? "https://api.openai.com/v1"}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                      />
+                      {llmProvider === "local" && (
+                        <p className="text-[12px] text-text-muted mt-1">Default: <code className="font-mono">http://localhost:11434/v1</code> for Ollama.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-text font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
-                    placeholder="Condition (e.g. amount_gt:1000)"
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
-                  />
+                {/* Save */}
+                <div className="flex items-center gap-3">
                   <button
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text text-sm rounded-lg disabled:opacity-40"
-                    onClick={handleAdd}
-                    disabled={adding || !name.trim() || !condition.trim()}
+                    onClick={handleSaveLlm}
+                    disabled={llmSaving}
+                    className="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Plus size={14} />
-                    Add
+                    {llmSaving ? "Saving…" : "Apply"}
                   </button>
+                  {llmSaved && <span className="text-[13px] text-success">Saved — active on next run</span>}
+                  {llmError && <span className="text-[13px] text-error">{llmError}</span>}
                 </div>
               </div>
             </div>

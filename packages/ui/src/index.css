@@ -55,6 +55,26 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* ── Logo eye animations ───────────────────────────────────────── */
+
+@keyframes eye-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+@keyframes eye-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.eye-online {
+  animation: eye-pulse 2.4s ease-in-out infinite, eye-fade-in 0.4s ease;
+}
+
+.eye-offline {
+  animation: eye-fade-in 0.4s ease;
+}
+
 /* ── React Grid Layout overrides ───────────────────────────────── */
 
 .react-grid-layout {

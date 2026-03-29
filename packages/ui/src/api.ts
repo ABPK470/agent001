@@ -83,6 +83,22 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ path }),
     }),
+
+  // LLM config
+  getLlmConfig: () =>
+    json<{
+      provider: string
+      model: string
+      hasApiKey: boolean
+      baseUrl: string
+      updatedAt: string
+      defaults: Record<string, { model: string; baseUrl: string; placeholder: string }>
+    }>("/api/llm"),
+  setLlmConfig: (cfg: { provider: string; model?: string; apiKey?: string; baseUrl?: string }) =>
+    json<{ ok: boolean; provider: string; model: string }>("/api/llm", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    }),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────

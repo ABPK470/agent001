@@ -287,10 +287,205 @@ curl -X POST http://localhost:3000/workflows/{id}/runs \
 
 ---
 
+## Running the platform
+
+```bash
+# Install all deps
+npm install
+
+# Start the backend (port 3001)
+npm run dev -w packages/server
+
+# Start the UI (port 5179)
+npm run dev -w packages/ui
+```
+
+Set your LLM key in `.env` at the repo root:
+
+```bash
+OPENAI_API_KEY=sk-...
+# or
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## Messaging Channels (WhatsApp & Messenger)
+
+The server ships with a production-ready message routing layer. When a user sends a message on WhatsApp or Messenger, it triggers an agent run and the reply is delivered back to them automatically, with per-conversation FIFO queuing and exponential-backoff retry.
+
+### Architecture
+
+```
+User (WhatsApp / Messenger)
+  │
+  ▼ POST /webhooks/{whatsapp,messenger}
+┌─────────────────────┐
+│   Webhook handler   │  HMAC-SHA256 signature validation (reject forgeries)
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│   MessageRouter     │  finds/creates Conversation, starts agent run
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│   Agent run         │  LLM + tools, full governance
+└────────┬────────────┘
+         │ answer
+         ▼
+┌─────────────────────┐
+│   MessageQueue      │  per-(channel, recipient) FIFO serialisation
+└────────┬────────────┘
+         │ retry with backoff (1s → 60s, ×2, jitter, 5 attempts)
+         ▼
+  Platform API (Graph API v21.0)
+```
+
+### Prerequisites
+
+You need a **Meta for Developers** app with the relevant product added:
+
+1. Go to [developers.facebook.com](https://developers.facebook.com) → **My Apps → Create App**
+2. Choose **Business** type
+3. Add the **WhatsApp** and/or **Messenger** products
+
+Your server must be publicly reachable (use [ngrok](https://ngrok.com) for local dev):
+
+```bash
+ngrok http 3001
+# Copy the https://xxx.ngrok.io URL
+```
+
+---
+
+### WhatsApp setup
+
+#### 1 — Collect credentials from Meta dashboard
+
+| Field | Where to find it |
+|---|---|
+| **Phone Number ID** | WhatsApp → API Setup → Phone number ID |
+| **Access Token** | WhatsApp → API Setup → Temporary or permanent token |
+| **App Secret** | App Settings → Basic → App Secret |
+| **Verify Token** | Any string you choose — you'll enter it in both places |
+
+#### 2 — Register the channel with agent001
+
+```bash
+curl -X POST http://localhost:3001/api/channels \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "whatsapp",
+    "platformId": "<Phone_Number_ID>",
+    "accessToken": "<Access_Token>",
+    "appSecret": "<App_Secret>",
+    "verifyToken": "<your_verify_token>"
+  }'
+```
+
+#### 3 — Configure the webhook in Meta dashboard
+
+- **Callback URL:** `https://your-domain/webhooks/whatsapp`
+- **Verify Token:** same string you used above
+- **Webhook fields:** subscribe to `messages`
+
+Click **Verify and Save**. Meta will call `GET /webhooks/whatsapp?hub.verify_token=...` — the server returns the challenge automatically.
+
+---
+
+### Messenger setup
+
+#### 1 — Collect credentials
+
+| Field | Where to find it |
+|---|---|
+| **Page ID** | Your Facebook Page → About → Page ID |
+| **Page Access Token** | Messenger → API Setup → Generate token for your page |
+| **App Secret** | App Settings → Basic → App Secret |
+| **Verify Token** | Any string you choose |
+
+#### 2 — Register the channel
+
+```bash
+curl -X POST http://localhost:3001/api/channels \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "messenger",
+    "platformId": "<Page_ID>",
+    "accessToken": "<Page_Access_Token>",
+    "appSecret": "<App_Secret>",
+    "verifyToken": "<your_verify_token>"
+  }'
+```
+
+#### 3 — Configure the webhook
+
+- **Callback URL:** `https://your-domain/webhooks/messenger`
+- **Verify Token:** same string you used above
+- **Webhook fields:** subscribe to `messages`
+
+---
+
+### Management API
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/channels` | List registered channels |
+| `POST` | `/api/channels` | Register / update a channel |
+| `DELETE` | `/api/channels/:type` | Remove a channel |
+| `GET` | `/api/conversations` | List all conversations |
+| `GET` | `/api/conversations/:id/messages` | Message history for a conversation |
+| `GET` | `/api/delivery/stats` | Delivery success/failure stats |
+
+### Retry policy
+
+Failed deliveries are retried automatically:
+
+| Attempt | Min delay | Max delay |
+|---|---|---|
+| 1 | 1s | 1.5s |
+| 2 | 2s | 3s |
+| 3 | 4s | 6s |
+| 4 | 8s | 12s |
+| 5 | 16s | 24s |
+
+- `429` (rate limited) and `5xx` errors are retried
+- `4xx` errors (bad token, bad request) fail immediately — fix credentials and retry manually
+- Messages within the same conversation are serialised (no out-of-order replies)
+
+---
+
 ## Project structure
 
 ```
 packages/
+├── server/                    # Backend API + agent orchestrator
+│   └── src/
+│       ├── index.ts           # Fastify server, routes, WebSocket
+│       ├── orchestrator.ts    # Agent run lifecycle, WebSocket events
+│       ├── channels/          # WhatsApp + Messenger routing layer
+│       │   ├── types.ts       # ChannelType, InboundMessage, OutboundMessage
+│       │   ├── whatsapp.ts    # WhatsApp Cloud API, HMAC-SHA256 validation
+│       │   ├── messenger.ts   # Messenger Send API, HMAC-SHA256 validation
+│       │   ├── router.ts      # MessageRouter — inbound → agent run → reply
+│       │   ├── queue.ts       # Per-conversation FIFO queue with retry
+│       │   ├── retry.ts       # Exponential backoff + jitter
+│       │   └── store.ts       # SQLite persistence (conversations, queue, configs)
+│       └── routes/
+│           ├── webhooks.ts    # GET+POST /webhooks/{whatsapp,messenger}, channel API
+│           └── ...
+│
+├── ui/                        # React dashboard
+│   └── src/
+│       ├── components/
+│       │   ├── Logo.tsx       # Robot logo — green eyes online, red offline
+│       │   ├── Toolbar.tsx    # Top bar
+│       │   ├── PolicyEditor.tsx # Governance modal
+│       │   └── ...
+│       └── widgets/           # AgentChat, AgentTrace, etc.
+│
 ├── engine/                    # The substrate
 │   └── src/
 │       ├── domain/            # Models, enums, events, errors, workflow schema

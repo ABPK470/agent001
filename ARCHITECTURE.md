@@ -748,7 +748,6 @@ Policy enforcement, approval workflows, and audit trails.
 **Rule conditions** (simple pattern matching):
 - `"action:run_command"` → matches steps with `action === "run_command"`
 - `"action:http.request"` → matches HTTP request steps
-- `"amount_gt:1000"` → matches steps where `input.amount > 1000`
 
 **Rule effects**:
 - `PolicyEffect.Allow` → no-op (null)

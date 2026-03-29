@@ -54,7 +54,7 @@ export interface OrchestratorConfig {
 // ── Orchestrator ─────────────────────────────────────────────────
 
 export class AgentOrchestrator {
-  private readonly llm: LLMClient
+  private llm: LLMClient
   private readonly tools: Tool[]
   private readonly activeRuns = new Map<string, ActiveRun>()
   private messageRouter: MessageRouter | null = null
@@ -63,6 +63,11 @@ export class AgentOrchestrator {
     this.llm = config.llm
     this.tools = config.tools
     this.messageRouter = config.messageRouter ?? null
+  }
+
+  /** Hot-swap the LLM client — takes effect on the next run. */
+  setLlm(client: LLMClient): void {
+    this.llm = client
   }
 
   /** Set the message router (for wiring after construction). */

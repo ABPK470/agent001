@@ -11,8 +11,8 @@
  */
 
 import { config } from "dotenv"
-import { resolve } from "node:path"
 import { existsSync, statSync } from "node:fs"
+import { resolve } from "node:path"
 
 // Load .env from repo root (npm workspaces sets CWD to packages/server)
 config({ path: resolve(import.meta.dirname, "../../../.env") })
@@ -40,10 +40,11 @@ import {
   listChannelConfigs,
   migrateChannels,
 } from "./channels/index.js"
-import { clearTransactionalData, getDb } from "./db.js"
-import { CopilotClient } from "./llm/copilot.js"
+import { clearTransactionalData, getDb, getLlmConfig } from "./db.js"
+import { buildLlmClient } from "./llm/registry.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
+import { registerLlmRoutes } from "./routes/llm.js"
 import { registerPolicyRoutes } from "./routes/policies.js"
 import { registerRunRoutes } from "./routes/runs.js"
 import { registerUsageRoutes } from "./routes/usage.js"
@@ -65,16 +66,10 @@ async function main() {
   setShellCwd(currentWorkspace)
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
 
-  // Create LLM client (token resolved lazily — server starts without it)
-  const llm = new CopilotClient({
-    model: process.env["MODEL"] ?? "gpt-4o",
-  })
-  const hasToken = !!process.env["GITHUB_TOKEN"]
-  console.log(
-    hasToken
-      ? `🧠 LLM: GitHub Copilot (${process.env["MODEL"] ?? "gpt-4o"})`
-      : "⚠️  No GITHUB_TOKEN — server will start but agent runs will fail until token is set",
-  )
+  // Load LLM config from DB (or use defaults) and build the client
+  const llmCfg = getLlmConfig()
+  const llm = buildLlmClient(llmCfg)
+  console.log(`🧠 LLM: ${llmCfg.provider} / ${llmCfg.model}`)
 
   // Create orchestrator
   const orchestrator = new AgentOrchestrator({
@@ -125,6 +120,10 @@ async function main() {
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
   registerWebhookRoutes(app, messageRouter)
+  registerLlmRoutes(app, (newClient) => {
+    orchestrator.setLlm(newClient)
+    console.log("🔄 LLM client hot-swapped")
+  })
 
   // Health check
   app.get("/api/health", async () => ({
