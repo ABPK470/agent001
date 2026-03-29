@@ -1,7 +1,7 @@
 /** Service interfaces — contracts for governance infrastructure. */
 
 import type { DomainEvent } from "./events.js"
-import type { AuditEntry, ExecutionRecord, AgentRun, Step } from "./models.js"
+import type { AgentRun, AuditEntry, ExecutionRecord, Step } from "./models.js"
 
 // ── Repositories ─────────────────────────────────────────────────
 

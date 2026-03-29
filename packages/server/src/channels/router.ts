@@ -13,9 +13,9 @@
  */
 
 import { randomUUID } from "node:crypto"
-import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
-import type { MessageQueue } from "./queue.js"
 import { broadcast } from "../ws.js"
+import type { MessageQueue } from "./queue.js"
+import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
 
 // ── Persistence interface ────────────────────────────────────────
 

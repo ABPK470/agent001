@@ -8,10 +8,10 @@
  *   channel_configs   — registered channel credentials (encrypted at rest TBD)
  */
 
+import { getDb } from "../db.js"
 import type { QueueStore } from "./queue.js"
 import type { ConversationStore } from "./router.js"
 import type { ChannelConfig, ChannelType, Conversation, DeliveryStatus, OutboundMessage } from "./types.js"
-import { getDb } from "../db.js"
 
 // ── Migration ────────────────────────────────────────────────────
 

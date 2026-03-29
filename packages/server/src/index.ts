@@ -12,6 +12,7 @@
 
 import { config } from "dotenv"
 import { resolve } from "node:path"
+import { existsSync, statSync } from "node:fs"
 
 // Load .env from repo root (npm workspaces sets CWD to packages/server)
 config({ path: resolve(import.meta.dirname, "../../../.env") })
@@ -59,10 +60,10 @@ async function main() {
   console.log("📦 Database initialized (~/.agent001/agent001.db)")
 
   // Set agent workspace — all file/shell operations are scoped here
-  const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? process.cwd())
-  setBasePath(workspace)
-  setShellCwd(workspace)
-  console.log(`📂 Agent workspace: ${workspace}`)
+  let currentWorkspace = resolve(process.env["AGENT_WORKSPACE"] ?? process.cwd())
+  setBasePath(currentWorkspace)
+  setShellCwd(currentWorkspace)
+  console.log(`📂 Agent workspace: ${currentWorkspace}`)
 
   // Create LLM client (token resolved lazily — server starts without it)
   const llm = new CopilotClient({
@@ -132,6 +133,32 @@ async function main() {
     channels: messageRouter.listChannels(),
     queuePending: messageQueue.pendingCount,
   }))
+
+  // Workspace — get/set the agent's working directory
+  app.get("/api/workspace", async () => ({
+    path: currentWorkspace,
+  }))
+
+  app.put<{ Body: { path: string } }>("/api/workspace", async (req, reply) => {
+    const { path: newPath } = req.body
+    if (!newPath || typeof newPath !== "string") {
+      reply.code(400)
+      return { error: "path is required" }
+    }
+
+    const resolved = resolve(newPath)
+    if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+      reply.code(400)
+      return { error: "Path does not exist or is not a directory" }
+    }
+
+    currentWorkspace = resolved
+    setBasePath(resolved)
+    setShellCwd(resolved)
+    console.log(`📂 Workspace changed to: ${resolved}`)
+
+    return { ok: true, path: resolved }
+  })
 
   // Reset transactional data (keeps policies + layouts)
   app.delete("/api/data", async () => {

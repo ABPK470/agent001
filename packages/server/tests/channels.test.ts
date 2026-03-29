@@ -8,16 +8,15 @@
  */
 
 import { createHmac } from "node:crypto"
-import { describe, expect, it, vi, beforeEach } from "vitest"
-import { ChannelApiError, computeDelay, withRetry } from "../src/channels/retry.js"
-import { MessageQueue } from "../src/channels/queue.js"
-import type { QueueStore } from "../src/channels/queue.js"
-import { WhatsAppChannel } from "../src/channels/whatsapp.js"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MessengerChannel } from "../src/channels/messenger.js"
-import { MessageRouter } from "../src/channels/router.js"
+import type { QueueStore } from "../src/channels/queue.js"
+import { MessageQueue } from "../src/channels/queue.js"
+import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/channels/retry.js"
 import type { ConversationStore, RunTrigger } from "../src/channels/router.js"
-import type { Channel, ChannelConfig, Conversation, DeliveryStatus, OutboundMessage } from "../src/channels/types.js"
-import { DEFAULT_RETRY_POLICY } from "../src/channels/retry.js"
+import { MessageRouter } from "../src/channels/router.js"
+import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/channels/types.js"
+import { WhatsAppChannel } from "../src/channels/whatsapp.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 

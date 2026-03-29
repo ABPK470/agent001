@@ -10,8 +10,8 @@ import {
     Check,
     ChevronDown,
     ChevronRight,
+    FolderOpen,
     Globe,
-    Lock,
     Pencil,
     Plus,
     Shield,
@@ -83,6 +83,13 @@ export function PolicyEditor({ onClose }: Props) {
   const [shellExpanded, setShellExpanded] = useState(false)
   const [ssrfExpanded, setSsrfExpanded] = useState(false)
 
+  // Workspace
+  const [wsPath, setWsPath] = useState("")
+  const [wsOriginal, setWsOriginal] = useState("")
+  const [wsSaving, setWsSaving] = useState(false)
+  const [wsError, setWsError] = useState<string | null>(null)
+  const [wsSaved, setWsSaved] = useState(false)
+
   // Reset data
   const [confirmReset, setConfirmReset] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -99,6 +106,31 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
+
+  // Load workspace path
+  useEffect(() => {
+    api.getWorkspace().then((w) => {
+      setWsPath(w.path)
+      setWsOriginal(w.path)
+    }).catch(() => {})
+  }, [])
+
+  async function handleSaveWorkspace() {
+    setWsSaving(true)
+    setWsError(null)
+    setWsSaved(false)
+    try {
+      const res = await api.setWorkspace(wsPath)
+      setWsOriginal(res.path)
+      setWsPath(res.path)
+      setWsSaved(true)
+      setTimeout(() => setWsSaved(false), 3000)
+    } catch {
+      setWsError("Failed to update workspace. Check the path exists and is a directory.")
+    } finally {
+      setWsSaving(false)
+    }
+  }
 
   // Build a map of tool → rule for quick lookup
   const toolRuleMap = useMemo(() => {
@@ -444,14 +476,31 @@ export function PolicyEditor({ onClose }: Props) {
 
               {/* Workspace */}
               <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-                <div className="flex items-center gap-2.5 mb-1.5">
-                  <Lock size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">Workspace Isolation</span>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <FolderOpen size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Workspace</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed">
-                  File and shell operations are scoped to the configured workspace directory.
-                  The agent cannot access files outside this boundary.
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  File and shell operations are scoped to this directory. The agent cannot access files outside.
                 </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={wsPath}
+                    onChange={(e) => setWsPath(e.target.value)}
+                    placeholder="/path/to/workspace"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                  />
+                  <button
+                    onClick={handleSaveWorkspace}
+                    disabled={wsSaving || wsPath === wsOriginal}
+                    className="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {wsSaving ? "Saving…" : "Apply"}
+                  </button>
+                </div>
+                {wsError && <p className="text-[12px] text-error mt-1.5">{wsError}</p>}
+                {wsSaved && <p className="text-[12px] text-success mt-1.5">Workspace updated</p>}
               </div>
 
               {/* Shell blocklist */}

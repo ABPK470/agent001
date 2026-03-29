@@ -2,9 +2,9 @@
  * Audit service — immutable log of every action during a run.
  */
 
+import type { AuditRepository } from "./interfaces.js"
 import type { AuditEntry } from "./models.js"
 import { createAuditEntry } from "./models.js"
-import type { AuditRepository } from "./interfaces.js"
 
 export class AuditService {
   constructor(private readonly repo: AuditRepository) {}

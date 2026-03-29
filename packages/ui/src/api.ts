@@ -75,6 +75,14 @@ export const api = {
 
   // Data management
   resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),
+
+  // Workspace
+  getWorkspace: () => json<{ path: string }>("/api/workspace"),
+  setWorkspace: (path: string) =>
+    json<{ ok: boolean; path: string }>("/api/workspace", {
+      method: "PUT",
+      body: JSON.stringify({ path }),
+    }),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────

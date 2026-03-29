@@ -19,51 +19,52 @@ export { DomainError, InvalidTransitionError, PolicyViolationError } from "./err
 
 // Models
 export {
-  completeRun,
-  completeStep,
-  createAuditEntry,
-  createRun,
-  failRun,
-  failStep,
-  startPlanning,
-  startRunning,
-  startStep,
-  type AgentRun,
-  type AuditEntry,
-  type ExecutionRecord,
-  type PolicyRule,
-  type Step,
+    completeRun,
+    completeStep,
+    createAuditEntry,
+    createRun,
+    failRun,
+    failStep,
+    startPlanning,
+    startRunning,
+    startStep,
+    type AgentRun,
+    type AuditEntry,
+    type ExecutionRecord,
+    type PolicyRule,
+    type Step
 } from "./models.js"
 
 // Events
 export {
-  runCompleted,
-  runFailed,
-  runStarted,
-  stepCompleted,
-  stepFailed,
-  stepStarted,
-  type DomainEvent,
+    runCompleted,
+    runFailed,
+    runStarted,
+    stepCompleted,
+    stepFailed,
+    stepStarted,
+    type DomainEvent
 } from "./events.js"
 
 // Interfaces
 export type {
-  AuditRepository,
-  EventBus,
-  ExecutionRecordRepository,
-  PolicyEvaluator,
-  RunRepository,
+    AuditRepository,
+    EventBus,
+    ExecutionRecordRepository,
+    PolicyEvaluator,
+    RunRepository
 } from "./interfaces.js"
 
 // Services
 export { AuditService } from "./audit.js"
-export { RulePolicyEvaluator } from "./policy.js"
 export { Learner, type OperationStats } from "./learner.js"
+export { RulePolicyEvaluator } from "./policy.js"
 
 // In-memory adapters
 export {
-  MemoryAuditRepository,
-  MemoryEventBus,
-  MemoryExecutionRecordRepository,
-  MemoryRunRepository,
+    MemoryAuditRepository,
+    MemoryEventBus,
+    MemoryExecutionRecordRepository,
+    MemoryRunRepository
 } from "./memory.js"
+

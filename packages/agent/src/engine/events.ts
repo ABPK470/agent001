@@ -1,6 +1,6 @@
 /** Domain events emitted during agent runs and tool execution. */
 
-import { randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto";
 
 export interface DomainEvent {
   readonly eventId: string

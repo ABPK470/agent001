@@ -1,5 +1,5 @@
-import { PolicyEffect } from "../src/engine/index.js"
 import { describe, expect, it } from "vitest"
+import { PolicyEffect } from "../src/engine/index.js"
 import {
     createEngineServices,
     runGoverned

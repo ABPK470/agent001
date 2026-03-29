@@ -51,7 +51,7 @@ export {
     startStep,
     stepCompleted,
     stepFailed,
-    stepStarted,
+    stepStarted
 } from "./engine/index.js"
 export type {
     AgentRun,
@@ -59,7 +59,7 @@ export type {
     DomainEvent,
     ExecutionRecord,
     PolicyRule,
-    Step,
+    Step
 } from "./engine/index.js"
 
 // LLM clients

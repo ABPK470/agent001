@@ -16,13 +16,13 @@
 
 import type { FastifyInstance } from "fastify"
 import {
-  type ChannelType,
-  type MessageRouter,
-  deleteChannelConfig,
-  getDeliveryStats,
-  getOutboundMessages,
-  listChannelConfigs,
-  saveChannelConfig,
+    type ChannelType,
+    type MessageRouter,
+    deleteChannelConfig,
+    getDeliveryStats,
+    getOutboundMessages,
+    listChannelConfigs,
+    saveChannelConfig,
 } from "../channels/index.js"
 
 export function registerWebhookRoutes(app: FastifyInstance, router: MessageRouter): void {

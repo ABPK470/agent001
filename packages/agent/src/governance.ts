@@ -17,12 +17,13 @@
  *   { effect: "allow",            condition: "action:read_file"  }  → always allowed
  */
 
+import { randomUUID } from "node:crypto"
+import { Agent } from "./agent.js"
 import {
-    type AuditEntry,
-    type ExecutionRecord,
-    type Step,
     type AgentRun,
+    type AuditEntry,
     AuditService,
+    type ExecutionRecord,
     Learner,
     MemoryAuditRepository,
     MemoryEventBus,
@@ -30,6 +31,7 @@ import {
     MemoryRunRepository,
     PolicyViolationError,
     RulePolicyEvaluator,
+    type Step,
     StepStatus,
     completeRun,
     completeStep,
@@ -46,8 +48,6 @@ import {
     stepFailed,
     stepStarted
 } from "./engine/index.js"
-import { randomUUID } from "node:crypto"
-import { Agent } from "./agent.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
 
 // ── Engine infrastructure ────────────────────────────────────────

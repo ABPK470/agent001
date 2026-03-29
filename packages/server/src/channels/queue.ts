@@ -17,9 +17,9 @@
  */
 
 import { randomUUID } from "node:crypto"
-import type { Channel, ChannelType, DeliveryStatus, OutboundMessage, RetryPolicy } from "./types.js"
-import { DEFAULT_RETRY_POLICY, withRetry } from "./retry.js"
 import { broadcast } from "../ws.js"
+import { DEFAULT_RETRY_POLICY, withRetry } from "./retry.js"
+import type { Channel, ChannelType, DeliveryStatus, OutboundMessage, RetryPolicy } from "./types.js"
 
 // ── Queue entry ──────────────────────────────────────────────────
 

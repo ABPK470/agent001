@@ -7,8 +7,8 @@
 
 import { PolicyEffect } from "./enums.js"
 import { PolicyViolationError } from "./errors.js"
-import type { PolicyRule, Step, AgentRun } from "./models.js"
 import type { PolicyEvaluator } from "./interfaces.js"
+import type { AgentRun, PolicyRule, Step } from "./models.js"
 
 export class RulePolicyEvaluator implements PolicyEvaluator {
   private rules: PolicyRule[] = []
