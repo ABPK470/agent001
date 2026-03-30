@@ -11,6 +11,7 @@ import type {
     AuditEntry,
     LayoutItem,
     LogEntry,
+    Notification,
     Run,
     Step,
     TraceEntry,
@@ -71,6 +72,19 @@ interface AppState {
   trace: TraceEntry[]
   addTrace: (entry: TraceEntry) => void
   setTrace: (entries: TraceEntry[]) => void
+
+  // Notifications
+  notifications: Notification[]
+  unreadCount: number
+  setNotifications: (notifications: Notification[]) => void
+  addNotification: (notification: Notification) => void
+  markNotificationRead: (id: string) => void
+  markAllRead: () => void
+
+  // Modal widget viewer
+  modalWidget: { type: WidgetType; runId?: string } | null
+  openModalWidget: (type: WidgetType, runId?: string) => void
+  closeModalWidget: () => void
 
   // WebSocket event handler
   handleWsEvent: (event: WsEvent) => void
@@ -278,6 +292,36 @@ export const useStore = create<AppState>()(
       addTrace: (entry) => set((s) => ({ trace: [...s.trace, entry] })),
       setTrace: (trace) => set({ trace }),
 
+      // Notifications
+      notifications: [],
+      unreadCount: 0,
+      setNotifications: (notifications) => set({
+        notifications,
+        unreadCount: notifications.filter((n) => !n.read).length,
+      }),
+      addNotification: (notification) => set((s) => ({
+        notifications: [notification, ...s.notifications].slice(0, 100),
+        unreadCount: s.unreadCount + (notification.read ? 0 : 1),
+      })),
+      markNotificationRead: (id) => set((s) => {
+        const updated = s.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n,
+        )
+        return {
+          notifications: updated,
+          unreadCount: updated.filter((n) => !n.read).length,
+        }
+      }),
+      markAllRead: () => set((s) => ({
+        notifications: s.notifications.map((n) => ({ ...n, read: true })),
+        unreadCount: 0,
+      })),
+
+      // Modal widget viewer
+      modalWidget: null,
+      openModalWidget: (type, runId) => set({ modalWidget: { type, runId } }),
+      closeModalWidget: () => set({ modalWidget: null }),
+
       // WebSocket event handler
       handleWsEvent: (event) => {
         const { type, data, timestamp } = event
@@ -397,6 +441,21 @@ export const useStore = create<AppState>()(
               level: "thinking",
               message: content,
               timestamp,
+            })
+            break
+          }
+
+          case "notification": {
+            store.addNotification({
+              id: data["id"] as string,
+              type: data["notificationType"] as string,
+              title: data["title"] as string,
+              message: data["message"] as string,
+              runId: (data["runId"] as string) ?? null,
+              stepId: (data["stepId"] as string) ?? null,
+              actions: (data["actions"] as Notification["actions"]) ?? [],
+              read: false,
+              createdAt: timestamp,
             })
             break
           }

@@ -37,12 +37,14 @@ export {
 
 // Events
 export {
+    approvalRequired,
     runCompleted,
     runFailed,
     runStarted,
     stepCompleted,
     stepFailed,
     stepStarted,
+    type ApprovalRequired,
     type DomainEvent
 } from "./events.js"
 

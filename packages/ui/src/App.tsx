@@ -7,6 +7,7 @@ import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
 import { UsageModal } from "./components/UsageModal"
 import { WidgetCatalog } from "./components/WidgetCatalog"
+import { WidgetModal } from "./components/WidgetModal"
 import { restoreDashboardState, startDashboardSync } from "./dashboardSync"
 import { useIsMobile } from "./hooks/useIsMobile"
 import { useStore } from "./store"
@@ -223,6 +224,7 @@ export function App() {
     <div className="flex flex-col h-screen bg-base">
       <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} />
       <Canvas ref={canvasRef} />
+      <WidgetModal />
     </div>
   )
 }

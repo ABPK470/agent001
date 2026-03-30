@@ -9,6 +9,7 @@ import {
     Activity,
     BarChart3,
     Clock,
+    GitBranch,
     History,
     ListTree,
     MessageSquare,
@@ -22,6 +23,7 @@ import type { Widget, WidgetType } from "../types";
 const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?: string }>> = {
   "agent-chat": MessageSquare,
   "agent-trace": ListTree,
+  "agent-viz": GitBranch,
   "run-status": Activity,
   "live-logs": ScrollText,
   "audit-trail": Shield,
@@ -33,6 +35,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Chat",
   "agent-trace": "Trace",
+  "agent-viz": "Graph",
   "run-status": "Status",
   "live-logs": "Events",
   "audit-trail": "Audit",

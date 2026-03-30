@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react"
 import { useStore } from "../store"
 import { AgentEditor } from "./AgentEditor"
 import { Logo } from "./Logo"
+import { NotificationPanel } from "./NotificationPanel"
 import { PolicyEditor } from "./PolicyEditor"
 import { UsageModal } from "./UsageModal"
 
@@ -123,6 +124,9 @@ export function Toolbar({ onAddWidget }: Props) {
               <span className="hidden sm:inline">Add Widget</span>
             </button>
           )}
+
+          {/* Notifications */}
+          <NotificationPanel />
 
           {/* Menu dropdown */}
           <div className="relative" ref={menuRef}>

@@ -45,3 +45,20 @@ export interface StepFailed extends DomainEvent { type: "step.failed"; runId: st
 export function stepFailed(runId: string, stepId: string, reason: string): StepFailed {
   return { ...base("step.failed"), runId, stepId, reason }
 }
+
+// ── Approval events ──────────────────────────────────────────────
+
+export interface ApprovalRequired extends DomainEvent {
+  type: "approval.required"
+  runId: string
+  stepId: string
+  toolName: string
+  args: Record<string, unknown>
+  reason: string
+}
+export function approvalRequired(
+  runId: string, stepId: string, toolName: string,
+  args: Record<string, unknown>, reason: string,
+): ApprovalRequired {
+  return { ...base("approval.required"), runId, stepId, toolName, args, reason }
+}

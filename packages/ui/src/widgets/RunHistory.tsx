@@ -2,10 +2,10 @@
  * RunHistory — browse past agent runs.
  *
  * Click a run to select it (updates other widgets with that run's data).
- * Shows status, goal, time, and step count.
+ * Shows status, goal, time, step count, and inline actions.
  */
 
-import { GitBranch } from "lucide-react"
+import { GitBranch, RotateCcw, Square } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -69,10 +69,13 @@ export function RunHistory() {
 
   return (
     <div className="h-full overflow-y-auto space-y-0.5">
-      {runs.map((run) => (
+      {runs.map((run) => {
+        const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
+
+        return (
         <div
           key={run.id}
-          className={`flex items-center gap-2.5 px-2.5 py-2 min-h-[44px] rounded-lg cursor-pointer transition-colors ${
+          className={`group flex items-center gap-2.5 px-2.5 py-2 min-h-[44px] rounded-lg cursor-pointer transition-colors ${
             run.id === activeRunId
               ? "bg-elevated"
               : "hover:bg-elevated/40"
@@ -108,6 +111,33 @@ export function RunHistory() {
             </div>
           </div>
 
+          {/* Inline actions (visible on hover) */}
+          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {isActive && (
+              <button
+                className="p-1.5 text-error/70 hover:text-error rounded transition-colors"
+                onClick={(e) => { e.stopPropagation(); api.cancelRun(run.id).catch(() => {}) }}
+                title="Cancel"
+              >
+                <Square size={13} />
+              </button>
+            )}
+            {run.status === "failed" && (
+              <button
+                className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  api.resumeRun(run.id).then((r) => {
+                    if (r.runId) setActiveRun(r.runId)
+                  }).catch(() => {})
+                }}
+                title="Resume from checkpoint"
+              >
+                <RotateCcw size={13} />
+              </button>
+            )}
+          </div>
+
           {/* Status text */}
           <span
             className="text-[13px] font-medium shrink-0"
@@ -116,7 +146,8 @@ export function RunHistory() {
             {run.status}
           </span>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

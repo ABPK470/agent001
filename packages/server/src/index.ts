@@ -34,12 +34,13 @@ import {
   listChannelConfigs,
   migrateChannels,
 } from "./channels/index.js"
-import { clearTransactionalData, getDb, getLlmConfig } from "./db.js"
+import { clearTransactionalData, getDb, getLlmConfig, migrateNotifications } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerAgentRoutes } from "./routes/agents.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerLlmRoutes } from "./routes/llm.js"
+import { registerNotificationRoutes } from "./routes/notifications.js"
 import { registerPolicyRoutes } from "./routes/policies.js"
 import { registerRunRoutes } from "./routes/runs.js"
 import { registerUsageRoutes } from "./routes/usage.js"
@@ -53,6 +54,7 @@ async function main() {
   // Initialize database
   getDb()
   migrateChannels()
+  migrateNotifications()
   console.log("📦 Database initialized (~/.agent001/agent001.db)")
 
   // Set agent workspace — all file/shell operations are scoped here
@@ -115,6 +117,7 @@ async function main() {
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
   registerWebhookRoutes(app, messageRouter)
+  registerNotificationRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
     console.log("🔄 LLM client hot-swapped")
@@ -162,6 +165,12 @@ async function main() {
 
   // Start
   await app.listen({ port: PORT, host: HOST })
+
+  // Auto-recover stale runs from previous server crash
+  const recovery = orchestrator.recoverStaleRuns()
+  if (recovery.failed.length > 0) {
+    console.log(`🔄 Recovered ${recovery.recovered.length} stale runs, ${recovery.failed.length} marked failed`)
+  }
 
   console.log(`\n${"═".repeat(50)}`)
   console.log(`  AGENT001 COMMAND CENTER`)

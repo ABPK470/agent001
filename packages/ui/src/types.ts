@@ -149,3 +149,23 @@ export interface PolicyRule {
   parameters: Record<string, unknown>
   createdAt: string
 }
+
+// ── Notifications ────────────────────────────────────────────────
+
+export interface NotificationAction {
+  label: string
+  action: string
+  data?: Record<string, unknown>
+}
+
+export interface Notification {
+  id: string
+  type: string       // 'run.failed' | 'run.completed' | 'approval.required' | 'run.recovered'
+  title: string
+  message: string
+  runId: string | null
+  stepId: string | null
+  actions: NotificationAction[]
+  read: boolean
+  createdAt: string
+}

@@ -2,7 +2,7 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { AgentDefinition, PolicyRule, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
+import type { AgentDefinition, Notification, PolicyRule, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
 
 const BASE = ""
 
@@ -119,6 +119,17 @@ export const api = {
   deleteAgent: (id: string) =>
     json<{ ok: boolean }>(`/api/agents/${encodeURIComponent(id)}`, {
       method: "DELETE",
+    }),
+
+  // Notifications
+  listNotifications: (limit = 50) => json<Notification[]>(`/api/notifications?limit=${limit}`),
+  getUnreadCount: () => json<{ count: number }>("/api/notifications/unread-count"),
+  markNotificationRead: (id: string) => json<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => json<{ ok: boolean }>("/api/notifications/read-all", { method: "POST" }),
+  executeNotificationAction: (id: string, action: string, data?: Record<string, unknown>) =>
+    json<{ ok: boolean; runId?: string }>(`/api/notifications/${id}/action`, {
+      method: "POST",
+      body: JSON.stringify({ action, data }),
     }),
 }
 

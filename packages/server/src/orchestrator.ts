@@ -129,6 +129,17 @@ export class AgentOrchestrator {
     const originalRun = db.getRun(runId)
     if (!checkpoint || !originalRun) return null
 
+    // Idempotency: prevent resuming a run that's already active or completed
+    if (this.activeRuns.has(runId)) return null
+    if (originalRun.status === "completed") return null
+
+    // Idempotency: check if this run was already resumed (has a child run)
+    const existingRuns = db.listRuns(200)
+    const alreadyResumed = existingRuns.find(
+      (r) => r.parent_run_id === runId && (r.status === "running" || r.status === "pending" || r.status === "planning"),
+    )
+    if (alreadyResumed) return alreadyResumed.id // Return existing child instead of creating duplicate
+
     const newRunId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
@@ -181,6 +192,112 @@ export class AgentOrchestrator {
   /** Get IDs of currently running agents. */
   getActiveRunIds(): string[] {
     return [...this.activeRuns.keys()]
+  }
+
+  /**
+   * Auto-recovery on startup — find runs that were "running" when the
+   * server crashed, mark them as failed, and auto-resume from checkpoint.
+   *
+   * Returns the list of recovered run IDs (new runs that resumed).
+   */
+  recoverStaleRuns(): { recovered: string[], failed: string[] } {
+    const staleRuns = db.findStaleRuns()
+    const recovered: string[] = []
+    const failed: string[] = []
+
+    for (const stale of staleRuns) {
+      // Skip runs that are currently active (shouldn't happen on fresh start)
+      if (this.activeRuns.has(stale.id)) continue
+
+      // Mark the stale run as failed
+      db.markRunCrashed(stale.id)
+      failed.push(stale.id)
+
+      // Attempt to resume from checkpoint
+      const checkpoint = db.getCheckpoint(stale.id)
+      if (checkpoint) {
+        const newRunId = this.resumeRun(stale.id)
+        if (newRunId) {
+          recovered.push(newRunId)
+
+          // Create notification
+          this.createNotification({
+            type: "run.recovered",
+            title: "Run auto-recovered",
+            message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart and has been automatically resumed.`,
+            runId: newRunId,
+            actions: [
+              { label: "View Run", action: "view-run", data: { runId: newRunId } },
+            ],
+          })
+        } else {
+          // Could not resume — notify user
+          this.createNotification({
+            type: "run.failed",
+            title: "Run interrupted",
+            message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`,
+            runId: stale.id,
+            actions: [
+              { label: "Review", action: "view-run", data: { runId: stale.id } },
+              { label: "Resume", action: "resume-run", data: { runId: stale.id } },
+            ],
+          })
+        }
+      } else {
+        // No checkpoint — just notify
+        this.createNotification({
+          type: "run.failed",
+          title: "Run lost",
+          message: `"${stale.goal.slice(0, 80)}" was interrupted with no checkpoint available.`,
+          runId: stale.id,
+          actions: [
+            { label: "Review", action: "view-run", data: { runId: stale.id } },
+          ],
+        })
+      }
+    }
+
+    return { recovered, failed }
+  }
+
+  /**
+   * Create a notification and broadcast it via WebSocket.
+   */
+  createNotification(opts: {
+    type: string
+    title: string
+    message: string
+    runId?: string | null
+    stepId?: string | null
+    actions?: Array<{ label: string; action: string; data?: Record<string, unknown> }>
+  }): void {
+    const notification: db.DbNotification = {
+      id: randomUUID(),
+      type: opts.type,
+      title: opts.title,
+      message: opts.message,
+      run_id: opts.runId ?? null,
+      step_id: opts.stepId ?? null,
+      actions: JSON.stringify(opts.actions ?? []),
+      read: 0,
+      created_at: new Date().toISOString(),
+    }
+
+    db.saveNotification(notification)
+
+    broadcast({
+      type: "notification",
+      data: {
+        id: notification.id,
+        notificationType: notification.type,
+        title: notification.title,
+        message: notification.message,
+        runId: notification.run_id,
+        stepId: notification.step_id,
+        actions: opts.actions ?? [],
+        read: false,
+      },
+    })
   }
 
   // ── Private: execute a governed agent run ────────────────────
@@ -310,6 +427,17 @@ export class AgentOrchestrator {
         data: { runId, answer, status: "completed", stepCount: run.steps.length },
       })
 
+      // Notify on completion
+      this.createNotification({
+        type: "run.completed",
+        title: "Run completed",
+        message: `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`,
+        runId,
+        actions: [
+          { label: "View", action: "view-run", data: { runId } },
+        ],
+      })
+
       // Route reply to chat platform if this run was triggered by a message
       if (this.messageRouter) {
         this.messageRouter.sendReply(runId, answer).catch((err) => {
@@ -350,6 +478,19 @@ export class AgentOrchestrator {
       broadcast({
         type: "run.failed",
         data: { runId, error: errMsg, stepCount: run.steps.length },
+      })
+
+      // Notify on failure with resume action if checkpoint available
+      const hasCheckpoint = !!db.getCheckpoint(runId)
+      this.createNotification({
+        type: "run.failed",
+        title: "Run failed",
+        message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`,
+        runId,
+        actions: [
+          { label: "Review", action: "view-run", data: { runId } },
+          ...(hasCheckpoint ? [{ label: "Resume", action: "resume-run", data: { runId } }] : []),
+        ],
       })
     } finally {
       this.activeRuns.delete(runId)
@@ -442,6 +583,31 @@ export class AgentOrchestrator {
       })
       return result
     }
+
+    // Subscribe to approval requests — create notifications
+    services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
+      const data = event as unknown as Record<string, unknown>
+      const toolName = data["toolName"] as string
+      const reason = data["reason"] as string
+      const stepId = data["stepId"] as string
+
+      this.createNotification({
+        type: "approval.required",
+        title: "Approval required",
+        message: `Tool "${toolName}" needs approval: ${reason}`,
+        runId,
+        stepId,
+        actions: [
+          { label: "Review", action: "view-run", data: { runId } },
+          { label: "Edit Policies", action: "open-policies", data: { runId } },
+        ],
+      })
+
+      broadcast({
+        type: "approval.required",
+        data: { runId, stepId, toolName, reason },
+      })
+    })
   }
 
   // ── Private: persist run to SQLite ───────────────────────────

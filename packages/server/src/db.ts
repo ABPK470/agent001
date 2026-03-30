@@ -20,12 +20,18 @@ export function getDb(): Database.Database {
     _db = new Database(join(DATA_DIR, "agent001.db"))
     _db.pragma("journal_mode = WAL")
     _db.pragma("foreign_keys = ON")
-    migrate(_db)
+    _migrate(_db)
   }
   return _db
 }
 
-function migrate(db: Database.Database): void {
+/** @internal — for testing only. Swap the backing database. */
+export function _setDb(db: Database.Database): void {
+  _db = db
+}
+
+/** @internal — exported for testing. */
+export function _migrate(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
@@ -459,4 +465,83 @@ export function saveAgentDefinition(agent: DbAgentDefinition): void {
 
 export function deleteAgentDefinition(id: string): void {
   getDb().prepare("DELETE FROM agent_definitions WHERE id = ?").run(id)
+}
+
+// ── Stale run recovery ──────────────────────────────────────────
+
+/**
+ * Find runs that were "running" or "pending" when the server crashed.
+ * These are runs that exist in the DB as active but are not in the
+ * in-memory active runs map — stale from a previous server process.
+ */
+export function findStaleRuns(): DbRun[] {
+  return getDb()
+    .prepare("SELECT * FROM runs WHERE status IN ('running', 'pending', 'planning') ORDER BY created_at DESC")
+    .all() as DbRun[]
+}
+
+/**
+ * Mark a run as failed due to server crash (for auto-recovery flow).
+ */
+export function markRunCrashed(runId: string): void {
+  getDb().prepare(
+    "UPDATE runs SET status = 'failed', error = 'Server restarted — run interrupted', completed_at = datetime('now') WHERE id = ?"
+  ).run(runId)
+}
+
+// ── Notifications ────────────────────────────────────────────────
+
+export interface DbNotification {
+  id: string
+  type: string        // 'run.failed' | 'run.completed' | 'approval.required' | 'run.recovered'
+  title: string
+  message: string
+  run_id: string | null
+  step_id: string | null
+  actions: string     // JSON array of { label, action, data }
+  read: number        // 0 or 1
+  created_at: string
+}
+
+export function migrateNotifications(): void {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      run_id TEXT,
+      step_id TEXT,
+      actions TEXT NOT NULL DEFAULT '[]',
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+  `)
+}
+
+export function saveNotification(n: DbNotification): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO notifications (id, type, title, message, run_id, step_id, actions, read, created_at)
+    VALUES (@id, @type, @title, @message, @run_id, @step_id, @actions, @read, @created_at)
+  `).run(n)
+}
+
+export function listNotifications(limit = 50): DbNotification[] {
+  return getDb()
+    .prepare("SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?")
+    .all(limit) as DbNotification[]
+}
+
+export function markNotificationRead(id: string): void {
+  getDb().prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(id)
+}
+
+export function markAllNotificationsRead(): void {
+  getDb().prepare("UPDATE notifications SET read = 1 WHERE read = 0").run()
+}
+
+export function getUnreadNotificationCount(): number {
+  const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as { count: number }
+  return row.count
 }

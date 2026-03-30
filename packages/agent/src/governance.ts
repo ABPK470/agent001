@@ -33,6 +33,7 @@ import {
     RulePolicyEvaluator,
     type Step,
     StepStatus,
+    approvalRequired,
     completeRun,
     completeStep,
     createRun,
@@ -48,6 +49,7 @@ import {
     stepFailed,
     stepStarted
 } from "./engine/index.js"
+import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "./retry.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
@@ -122,13 +124,29 @@ export function createToolStep(
   }
 }
 
+// ── Tool governance options ──────────────────────────────────────
+
+/** Default timeout for tool execution: 60 seconds. */
+const DEFAULT_TOOL_TIMEOUT_MS = 60_000
+
+export interface GovernToolOptions {
+  /** Retry policy for transient tool failures. */
+  retryPolicy?: ToolRetryPolicy
+  /** Timeout in ms for tool execution (default: 60s). */
+  timeoutMs?: number
+}
+
 // ── Wrap a tool with governance ──────────────────────────────────
 
 export function governTool(
   tool: Tool,
   services: EngineServices,
   state: RunState,
+  options?: GovernToolOptions,
 ): Tool {
+  const retryPolicy = options?.retryPolicy ?? TOOL_RETRY_POLICY
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS
+
   return {
     name: tool.name,
     description: tool.description,
@@ -145,7 +163,7 @@ export function governTool(
           step,
         )
         if (policyResult !== null) {
-          // Requires approval — block the tool
+          // Approval required — block and emit event for notification
           startStep(step)
           failStep(step, `Blocked by policy: ${policyResult}`)
           await services.auditService.log({
@@ -155,8 +173,12 @@ export function governTool(
             resourceId: state.run.id,
             detail: { tool: tool.name, reason: policyResult, stepId: step.id },
           })
+          // Emit approval.required event so the orchestrator can create a notification
+          await services.eventBus.publish(
+            approvalRequired(state.run.id, step.id, tool.name, args, policyResult),
+          )
           await services.runRepo.save(state.run)
-          return `BLOCKED: ${policyResult}. This tool call was prevented by a governance policy.`
+          return `BLOCKED: ${policyResult}. This tool call was prevented by a governance policy. The user has been notified and may adjust policies and resume the run.`
         }
       } catch (err) {
         if (err instanceof PolicyViolationError) {
@@ -188,14 +210,66 @@ export function governTool(
         detail: { tool: tool.name, args, stepId: step.id },
       })
 
-      // 4. Execute the actual tool
+      // 4. Execute the tool — with timeout + retry on transient errors
       const startTime = performance.now()
       try {
-        const result = await tool.execute(args)
+        const retryResult = await withToolRetry(async () => {
+          // Wrap execution with a timeout
+          const result = await Promise.race([
+            tool.execute(args),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
+            ),
+          ])
+          return result
+        }, retryPolicy)
+
         const durationMs = Math.round(performance.now() - startTime)
 
+        if (!retryResult.success) {
+          // All retries exhausted — fail the step
+          const errMsg = retryResult.lastError?.message ?? "Tool execution failed"
+          failStep(step, errMsg)
+          await services.eventBus.publish(
+            stepFailed(state.run.id, step.id, errMsg),
+          )
+
+          const record: ExecutionRecord = {
+            id: randomUUID(),
+            runId: state.run.id,
+            stepId: step.id,
+            action: tool.name,
+            success: false,
+            durationMs,
+            result: {},
+            error: errMsg,
+            recordedAt: new Date(),
+          }
+          await services.learner.record(record)
+
+          await services.auditService.log({
+            actor: state.actor,
+            action: "tool.failed",
+            resourceType: "AgentRun",
+            resourceId: state.run.id,
+            detail: {
+              tool: tool.name,
+              stepId: step.id,
+              error: errMsg,
+              durationMs,
+              attempts: retryResult.attempts,
+              retried: retryResult.attempts > 1,
+            },
+          })
+
+          await services.runRepo.save(state.run)
+          throw retryResult.lastError ?? new Error(errMsg)
+        }
+
+        const result = retryResult.value!
+
         // 5. Complete step
-        completeStep(step, { result, durationMs })
+        completeStep(step, { result, durationMs, attempts: retryResult.attempts })
         await services.eventBus.publish(stepCompleted(state.run.id, step.id))
 
         // 6. Record execution metric
@@ -212,7 +286,7 @@ export function governTool(
         }
         await services.learner.record(record)
 
-        // 7. Audit: tool completed
+        // 7. Audit: tool completed (include retry info if retried)
         await services.auditService.log({
           actor: state.actor,
           action: "tool.completed",
@@ -223,6 +297,7 @@ export function governTool(
             stepId: step.id,
             durationMs,
             resultLength: result.length,
+            ...(retryResult.attempts > 1 ? { attempts: retryResult.attempts, retried: true } : {}),
           },
         })
 
@@ -232,36 +307,37 @@ export function governTool(
         const durationMs = Math.round(performance.now() - startTime)
         const errMsg = err instanceof Error ? err.message : String(err)
 
-        // Fail step + emit event
-        failStep(step, errMsg)
-        await services.eventBus.publish(
-          stepFailed(state.run.id, step.id, errMsg),
-        )
+        // Only fail step if not already failed by retry handler above
+        if (step.status !== StepStatus.Failed) {
+          failStep(step, errMsg)
+          await services.eventBus.publish(
+            stepFailed(state.run.id, step.id, errMsg),
+          )
 
-        // Record failure metric
-        const record: ExecutionRecord = {
-          id: randomUUID(),
-          runId: state.run.id,
-          stepId: step.id,
-          action: tool.name,
-          success: false,
-          durationMs,
-          result: {},
-          error: errMsg,
-          recordedAt: new Date(),
+          const record: ExecutionRecord = {
+            id: randomUUID(),
+            runId: state.run.id,
+            stepId: step.id,
+            action: tool.name,
+            success: false,
+            durationMs,
+            result: {},
+            error: errMsg,
+            recordedAt: new Date(),
+          }
+          await services.learner.record(record)
+
+          await services.auditService.log({
+            actor: state.actor,
+            action: "tool.failed",
+            resourceType: "AgentRun",
+            resourceId: state.run.id,
+            detail: { tool: tool.name, stepId: step.id, error: errMsg, durationMs },
+          })
+
+          await services.runRepo.save(state.run)
         }
-        await services.learner.record(record)
 
-        // Audit: tool failed
-        await services.auditService.log({
-          actor: state.actor,
-          action: "tool.failed",
-          resourceType: "AgentRun",
-          resourceId: state.run.id,
-          detail: { tool: tool.name, stepId: step.id, error: errMsg, durationMs },
-        })
-
-        await services.runRepo.save(state.run)
         throw err
       }
     },
