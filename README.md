@@ -1,44 +1,52 @@
 # agent001
 
-An AI agent that runs **on** a workflow engine. The agent decides what to do (LLM + tools). The engine provides the substrate: audit trail, governance policies, run tracking, domain events, and execution metrics.
+A **single-agent platform** where agents are configuration, not code. You build ONE generic runtime, and define agents via configuration — each with its own system prompt, tool set, and personality.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  User: "Find the 3 largest files in src"                         │
 ├──────────────────────────────────────────────────────────────────┤
-│  Agent (LLM + Tools + Loop)                                      │
+│  Agent Definition (from DB)                                      │
+│  ┌────────────────────────────────────────────────────────┐      │
+│  │ name: "Universal Agent"                                │      │
+│  │ tools: [read_file, write_file, list_directory, ...]    │      │
+│  │ systemPrompt: "You are a capable AI agent..."          │      │
+│  └────────────────────────────────────────────────────────┘      │
+├──────────────────────────────────────────────────────────────────┤
+│  Agent Runtime (LLM + Tools + Loop)                              │
 │  ┌─────────────┐    ┌───────────────────────────────────────┐    │
-│  │ LLM "brain" │───→│ Tool call: read_file("src/agent.ts")  │    │
-│  │ (OpenAI /   │    └──────────────────┬────────────────────┘    │
-│  │  Anthropic) │                       │                         │
-│  │             │◄── result ────────────┘                         │
+│  │  LLM brain  │───→│ Tool call: list_directory("src")      │    │
+│  │ (Copilot /  │    └──────────────────┬────────────────────┘    │
+│  │  OpenAI /   │                       │                         │
+│  │  Anthropic /│◄── result ────────────┘                         │
+│  │  Local)     │                                                 │
 │  └─────────────┘                                                 │
 ├──────────────────────────────────────────────────────────────────┤
-│  Engine Substrate (governance, audit, tracking)                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ ┌────────┐ │
-│  │  Policy  │ │  Audit   │ │   Run    │ │  Event  │ │Learner │ │
-│  │  Engine  │ │  Trail   │ │Tracking  │ │   Bus   │ │ Stats  │ │
-│  │          │ │          │ │          │ │         │ │        │ │
-│  │ Can this │ │ Who did  │ │ Full run │ │ Hooks / │ │Success │ │
-│  │ tool run?│ │ what,    │ │ + steps  │ │ monitor │ │rate,   │ │
-│  │ Approval?│ │ when,    │ │ with     │ │ streams │ │avg     │ │
-│  │ Denied?  │ │ result?  │ │ state    │ │         │ │latency │ │
-│  └──────────┘ └──────────┘ └──────────┘ └─────────┘ └────────┘ │
+│  Governance Substrate (policies, audit, tracking)                │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐            │
+│  │  Policy  │ │  Audit   │ │   Run    │ │  Event  │            │
+│  │  Engine  │ │  Trail   │ │Tracking  │ │   Bus   │            │
+│  │          │ │          │ │          │ │         │            │
+│  │ Can this │ │ Who did  │ │ Full run │ │WebSocket│            │
+│  │ tool run?│ │ what,    │ │ + steps  │ │real-time│            │
+│  │ Denied?  │ │ when?    │ │ in SQLite│ │ streams │            │
+│  └──────────┘ └──────────┘ └──────────┘ └─────────┘            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Every tool call** the agent makes goes through the engine:
+**Every tool call** the agent makes goes through the governance engine:
 
 1. **Policy check** — Can this tool run? Should it require human approval? Hard deny?
 2. **Audit log** — Immutable record: actor, action, timestamp, arguments, result
-3. **Step tracking** — Each tool call is a Step in a WorkflowRun with full lifecycle
-4. **Domain events** — `step.started`, `step.completed`, `step.failed` etc. for monitoring
-5. **Execution metrics** — Duration, success/failure rate per tool, fed to the Learner
+3. **Step tracking** — Each tool call is a Step in a Run with full lifecycle
+4. **Domain events** — `step.started`, `step.completed`, `step.failed` — real-time via WebSocket
+5. **Execution metrics** — Token usage, per-tool stats, run history
 
 ```
 packages/
-├── engine/   # The substrate: audit, policies, run tracking, events, learner
-└── agent/    # The AI: LLM clients, tools, agent loop, governance integration
+├── agent/    # The AI core: LLM clients, tools, agent loop, governance engine
+├── server/   # Backend: orchestrator, SQLite, REST API, WebSocket, channels
+└── ui/       # React dashboard: chat, trace, audit, policies, agent management
 ```
 
 ## Quick start
@@ -47,90 +55,104 @@ packages/
 # Prerequisites: Node.js >= 20
 npm install
 
-# Run all tests (71 engine + 18 agent governance)
-npm test -w packages/engine && npm test -w packages/agent
+# Start everything (backend on 3001, UI on 5179)
+npm run dev
 
-# Run the agent with governance (default mode)
-OPENAI_API_KEY=sk-... npm start -w packages/agent
-
-# Or with Anthropic
-ANTHROPIC_API_KEY=sk-ant-... npm start -w packages/agent
-
-# One-shot mode
-OPENAI_API_KEY=sk-... npm start -w packages/agent -- "List files in src and summarize each"
-
-# Raw mode (no governance — bare agent loop, no audit/policies)
-AGENT_MODE=raw OPENAI_API_KEY=sk-... npm start -w packages/agent
+# Run tests (18 agent governance + 30 server channels)
+npm test
 ```
 
-After each governed run, you get a **governance report**:
+Open [http://localhost:5179](http://localhost:5179) — the dashboard connects automatically.
 
-```
-══════════════════════════════════════════════════════════
-  GOVERNANCE REPORT
-══════════════════════════════════════════════════════════
+### LLM providers
 
-  Run ID:     a1b2c3d4-...
-  Status:     completed
-  Steps:      5 tool calls
-  Started:    2026-03-26T14:30:00.000Z
-  Completed:  2026-03-26T14:30:12.345Z (12.3s)
+Configure the LLM in the dashboard (Policies → Model tab), or set env vars:
 
-  ── Steps ──
-  ✅ list_directory (#0) → completed (23ms)
-  ✅ read_file (#1) → completed (4ms)
-  ✅ read_file (#2) → completed (3ms)
-  ✅ think (#3) → completed (0ms)
-  ✅ read_file (#4) → completed (5ms)
+| Provider | Env var | Default model |
+|---|---|---|
+| **GitHub Copilot** (default) | `GITHUB_TOKEN` | gpt-4o |
+| **OpenAI** | `OPENAI_API_KEY` | gpt-4o |
+| **Anthropic** | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
+| **Local** (Ollama, LM Studio) | — | llama3 |
 
-  ── Tool Stats ──
-  list_directory: 1 calls, avg 23ms, 0 failures
-  read_file: 3 calls, avg 4ms, 0 failures
-  think: 1 calls, avg 0ms, 0 failures
-
-  ── Audit Trail ──
-  [14:30:00.001] agent.started — ai-agent
-  [14:30:00.234] tool.invoked — ai-agent    tool=list_directory
-  [14:30:00.257] tool.completed — ai-agent  tool=list_directory, durationMs=23
-  [14:30:01.456] tool.invoked — ai-agent    tool=read_file
-  ...
-  [14:30:12.345] agent.completed — ai-agent iterations=5
-
-══════════════════════════════════════════════════════════
-```
+The LLM provider can be hot-swapped at runtime via the UI or API — no restart needed.
 
 ---
 
-## How the integration works
+## Architecture — Pattern C: Agents as Configuration
 
-The agent loop is simple (~40 lines): ask LLM → execute tool calls → feed results back → repeat. But **every tool goes through the engine first**.
+The core insight: **agents are data, not code.** Each agent is defined by a row in the database:
+
+| Field | Purpose |
+|---|---|
+| `name` | Human-readable label ("Code Reviewer", "Research Assistant") |
+| `description` | What this agent is for |
+| `systemPrompt` | The agent's personality and instructions |
+| `tools` | Subset of available tools (e.g., `["read_file", "think"]`) |
+
+A single generic agent runtime executes _any_ agent definition. To create a new agent, you add a row — not code.
+
+### Agent definitions API
+
+```bash
+# List all agents
+curl http://localhost:3001/api/agents
+
+# Create a read-only code reviewer
+curl -X POST http://localhost:3001/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Code Reviewer",
+    "description": "Reviews code without modifying files",
+    "systemPrompt": "You are a senior code reviewer. Analyze code for bugs, style issues, and improvements. Never modify files — only read and report.",
+    "tools": ["read_file", "list_directory", "think"]
+  }'
+
+# Start a run with that agent
+curl -X POST http://localhost:3001/api/agents/<id>/runs \
+  -H "Content-Type: application/json" \
+  -d '{ "goal": "Review src/orchestrator.ts for potential issues" }'
+```
+
+### Tool registry
+
+Six tools are available. Each agent definition picks a subset:
+
+| Tool | What it does |
+|---|---|
+| `read_file` | Read a local file |
+| `write_file` | Write / create files |
+| `list_directory` | List directory contents |
+| `run_command` | Run a shell command (30s timeout) |
+| `fetch_url` | Fetch a URL, strip HTML, return text |
+| `think` | Chain-of-thought reasoning scratchpad |
+
+```bash
+# List all available tools
+curl http://localhost:3001/api/tools
+```
 
 ### The governance wrapper
 
-```typescript
-// governance.ts — wraps each tool with engine infrastructure
+Every tool call goes through the governance engine before execution:
 
+```typescript
 function governTool(tool: Tool, services: EngineServices, runState: RunState): Tool {
   return {
     ...tool,
     async execute(args) {
-      // 1. Create a Step in the tracked run
-      const step = createToolStep(tool.name, args, runState)
-
-      // 2. Policy check — can this tool run?
+      // 1. Policy check — can this tool run?
       const blocked = await services.policyEvaluator.evaluatePreStep(run, step)
       if (blocked) return "BLOCKED: " + blocked
 
-      // 3. Audit: tool invoked
+      // 2. Audit: tool invoked
       await services.auditService.log({ actor, action: "tool.invoked", ... })
 
-      // 4. Execute the actual tool
+      // 3. Execute the actual tool
       const result = await tool.execute(args)
 
-      // 5. Complete step + record metrics + emit events
+      // 4. Complete step + record metrics + emit events
       completeStep(step, { result, durationMs })
-      await services.learner.record({ action: tool.name, success: true, durationMs })
-      await services.eventBus.publish(stepCompleted(run.id, step.id))
       await services.auditService.log({ actor, action: "tool.completed", ... })
 
       return result
@@ -139,180 +161,55 @@ function governTool(tool: Tool, services: EngineServices, runState: RunState): T
 }
 ```
 
-The agent class itself never changes. Tool wrapping is the integration point.
+The agent class itself never changes. Tool wrapping is the integration point — the **Decorator pattern** at architecture level.
 
 ### Policies
 
-Policies are **data-driven rules** evaluated before each tool executes:
-
-```typescript
-// Block shell commands entirely
-services.policyEvaluator.addRule({
-  name: "no_shell",
-  effect: PolicyEffect.Deny,          // Hard deny — tool returns "DENIED"
-  condition: "action:run_command",
-  parameters: {},
-})
-
-// Require human approval for file writes
-services.policyEvaluator.addRule({
-  name: "approve_writes",
-  effect: PolicyEffect.RequireApproval, // Blocks and logs
-  condition: "action:write_file",
-  parameters: {},
-})
-
-// Block web access
-services.policyEvaluator.addRule({
-  name: "no_web",
-  effect: PolicyEffect.Deny,
-  condition: "action:fetch_url",
-  parameters: {},
-})
-```
-
-Effects: `Allow` (proceed), `RequireApproval` (block + log), `Deny` (hard reject + log).
-
-### What the engine gives the agent
-
-| Engine capability | What it does for the agent |
-|---|---|
-| **Audit trail** | Immutable log of every tool call — who, what, when, args, result |
-| **Policy engine** | Block or gate dangerous tools before they execute |
-| **Run tracking** | Full WorkflowRun with Steps — see exactly what happened |
-| **Domain events** | Subscribe to `step.started`, `run.completed`, etc. for monitoring |
-| **Learner** | Per-tool success rate, avg duration — feedback for optimization |
-| **Repositories** | All runs persisted (in-memory default, swap for Postgres) |
-
----
-
-## The agent core
-
-An AI agent is: **LLM + Tools + Loop**.
-
-```typescript
-async run(goal: string): Promise<string> {
-  const messages: Message[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: goal },
-  ]
-
-  for (let i = 0; i < maxIterations; i++) {
-    const response = await llm.chat(messages, tools)
-
-    if (response.toolCalls.length === 0)
-      return response.content  // Done — final answer
-
-    for (const call of response.toolCalls) {
-      // Each tool.execute() goes through governance (see above)
-      const result = await tools.get(call.name).execute(call.arguments)
-      messages.push({ role: "tool", toolCallId: call.id, content: result })
-    }
-  }
-}
-```
-
-### Tools
-
-| Tool | What it does |
-|---|---|
-| `fetch_url` | Fetch a URL, strip HTML, return text |
-| `read_file` | Read a local file |
-| `write_file` | Write to a local file |
-| `list_directory` | List directory contents |
-| `run_command` | Run a shell command (30s timeout) |
-| `think` | Chain-of-thought reasoning scratchpad |
-
-### LLM support
+Policies are data-driven rules evaluated before each tool executes:
 
 ```bash
-OPENAI_API_KEY=sk-...          # gpt-4o by default
-ANTHROPIC_API_KEY=sk-ant-...   # claude-sonnet-4-20250514 by default
-MODEL=gpt-4-turbo              # Override model name
-```
-
-Both use raw `fetch` — no SDK deps. The `LLMClient` interface makes adding providers trivial.
-
----
-
-## The engine substrate
-
-A generic, declarative workflow engine. Used standalone for deterministic workflows, and as the governance/tracking substrate for the AI agent.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design docs.
-
-### Engine standalone
-
-The engine also works independently as a workflow execution platform:
-
-```bash
-# Dev server
-npm run dev -w packages/engine
-
-# Tests (71 tests)
-npm test -w packages/engine
-```
-
-```bash
-# Create a workflow
-curl -X POST http://localhost:3000/workflows \
+# Block shell commands entirely
+curl -X POST http://localhost:3001/api/policies \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Order Processing",
-    "steps": [
-      { "id": "validate", "name": "Validate", "action": "http.request",
-        "input": { "url": "https://api.example.com/orders/{{input.orderId}}" } },
-      { "id": "notify", "name": "Notify", "action": "http.request",
-        "input": { "url": "https://api.example.com/notify" },
-        "dependsOn": ["validate"] }
-    ]
-  }'
+  -d '{ "name": "no_shell", "effect": "deny", "condition": "action:run_command" }'
 
-# Run it
-curl -X POST http://localhost:3000/workflows/{id}/runs \
-  -d '{ "input": { "orderId": "ORD-123" } }'
+# Require approval for file writes
+curl -X POST http://localhost:3001/api/policies \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "approve_writes", "effect": "require_approval", "condition": "action:write_file" }'
 ```
 
-### API endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `POST` | `/workflows` | Create workflow |
-| `GET` | `/workflows` | List workflows |
-| `POST` | `/workflows/:id/runs` | Start a run |
-| `GET` | `/workflows/:id/runs/:runId` | Get run status |
-| `POST` | `/approvals/:id/resolve` | Approve or reject |
-| `GET` | `/actions` | List action handlers |
+Effects: `allow` (proceed), `require_approval` (block + log), `deny` (hard reject + log).
 
 ---
 
-## Running the platform
+## The dashboard
 
-```bash
-# Install all deps
-npm install
+A React dashboard with configurable widgets. All data updates in real-time via WebSocket.
 
-# Start the backend (port 3001)
-npm run dev -w packages/server
+| Widget | What it shows |
+|---|---|
+| **Agent Chat** | Chat interface — type goals, see responses. Agent picker for switching agents. |
+| **Agent Trace** | Step-by-step execution trace with thinking, tool calls, and results |
+| **Run Status** | Current run progress and state |
+| **Run History** | Past agent executions |
+| **Audit Trail** | Complete action audit log |
+| **Step Timeline** | Visual timeline of tool calls |
+| **Tool Stats** | Per-tool execution metrics |
+| **Live Logs** | Real-time log stream |
 
-# Start the UI (port 5179)
-npm run dev -w packages/ui
-```
+### Management modals
 
-Set your LLM key in `.env` at the repo root:
-
-```bash
-OPENAI_API_KEY=sk-...
-# or
-ANTHROPIC_API_KEY=sk-ant-...
-```
+- **Agents** — Create, edit, delete agent definitions. Each agent gets a name, description, system prompt, and tool selection.
+- **Policies** — Per-tool governance rules (allow / deny / require approval). Workspace path configuration. Data reset.
+- **Model** — LLM provider picker (Copilot, OpenAI, Anthropic, Local) with model, API key, and base URL fields. Hot-swap at runtime.
+- **Usage** — Token consumption per run, total usage metrics.
 
 ---
 
 ## Messaging Channels (WhatsApp & Messenger)
 
-The server ships with a production-ready message routing layer. When a user sends a message on WhatsApp or Messenger, it triggers an agent run and the reply is delivered back to them automatically, with per-conversation FIFO queuing and exponential-backoff retry.
+The server ships with a production-ready message routing layer. When a user sends a message on WhatsApp or Messenger, it triggers an agent run and the reply is delivered back automatically, with per-conversation FIFO queuing and exponential-backoff retry.
 
 ### Architecture
 
@@ -428,7 +325,7 @@ curl -X POST http://localhost:3001/api/channels \
 
 ---
 
-### Management API
+### Channel management API
 
 | Method | Path | Description |
 |---|---|---|
@@ -457,63 +354,164 @@ Failed deliveries are retried automatically:
 
 ---
 
+## Full API reference
+
+### Agent platform
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check (active runs, channels, queue) |
+| `GET` | `/api/workspace` | Current agent workspace path |
+| `PUT` | `/api/workspace` | Change agent workspace |
+| `DELETE` | `/api/data` | Reset transactional data (keeps policies + layouts) |
+
+### Agents
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/agents` | List all agent definitions |
+| `POST` | `/api/agents` | Create agent definition |
+| `GET` | `/api/agents/:id` | Get agent definition |
+| `PUT` | `/api/agents/:id` | Update agent definition |
+| `DELETE` | `/api/agents/:id` | Delete agent (default is protected) |
+| `POST` | `/api/agents/:id/runs` | Start a run scoped to agent's config |
+| `GET` | `/api/tools` | List all available tools in the registry |
+
+### Runs
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/runs` | List all runs |
+| `POST` | `/api/runs` | Start a run (optional agentId) |
+| `GET` | `/api/runs/:id` | Get run detail (steps, audit, logs) |
+| `POST` | `/api/runs/:id/cancel` | Cancel a running agent |
+| `POST` | `/api/runs/:id/resume` | Resume from checkpoint |
+| `GET` | `/api/runs/active` | List active run IDs |
+| `GET` | `/api/runs/:id/trace` | Get rich execution trace |
+
+### Governance & config
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/policies` | List policy rules |
+| `POST` | `/api/policies` | Create policy rule |
+| `DELETE` | `/api/policies/:name` | Delete policy rule |
+| `GET` | `/api/llm` | Get LLM config (provider, model, has key) |
+| `PUT` | `/api/llm` | Update LLM config (hot-swap provider) |
+| `GET` | `/api/usage` | Token usage stats |
+
+### Dashboard
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/layouts` | List saved layouts |
+| `POST` | `/api/layouts` | Save layout |
+| `DELETE` | `/api/layouts/:id` | Delete layout |
+| `GET` | `/api/dashboard-state` | Get persisted dashboard state |
+| `PUT` | `/api/dashboard-state` | Save dashboard state |
+
+---
+
 ## Project structure
 
 ```
 packages/
+├── agent/                     # The AI core
+│   ├── src/
+│   │   ├── types.ts           # Message, Tool, ToolCall, LLMClient interfaces
+│   │   ├── agent.ts           # The Agent class — LLM + tool loop
+│   │   ├── governance.ts      # Engine integration — wraps tools with audit/policies
+│   │   ├── lib.ts             # Library exports for server integration
+│   │   ├── logger.ts          # Colored console output
+│   │   ├── cli.ts             # CLI entry point (governed + raw modes)
+│   │   ├── engine/            # Governance engine (embedded)
+│   │   │   ├── models.ts      # Domain entities: Run, Step, state machines
+│   │   │   ├── enums.ts       # RunStatus, StepStatus, PolicyEffect
+│   │   │   ├── events.ts      # Domain events (runStarted, stepCompleted, ...)
+│   │   │   ├── errors.ts      # PolicyViolationError, InvalidTransitionError
+│   │   │   ├── interfaces.ts  # Port interfaces (repos, services)
+│   │   │   ├── policy.ts      # Rule-based policy evaluator
+│   │   │   ├── audit.ts       # Immutable audit service
+│   │   │   ├── learner.ts     # Execution stats aggregator
+│   │   │   ├── memory.ts      # In-memory adapters (repos, event bus)
+│   │   │   └── index.ts       # Engine barrel export
+│   │   ├── llm/
+│   │   │   ├── openai.ts      # OpenAI function calling (raw fetch)
+│   │   │   └── anthropic.ts   # Anthropic tool use (raw fetch)
+│   │   └── tools/
+│   │       ├── filesystem.ts  # read/write/list with path sandboxing
+│   │       ├── shell.ts       # Shell command execution
+│   │       ├── fetch-url.ts   # HTTP fetch + HTML stripping
+│   │       └── think.ts       # Reasoning tool
+│   └── tests/
+│       └── governance.test.ts # 18 tests — policies, audit, events, tracking
+│
 ├── server/                    # Backend API + agent orchestrator
-│   └── src/
-│       ├── index.ts           # Fastify server, routes, WebSocket
-│       ├── orchestrator.ts    # Agent run lifecycle, WebSocket events
-│       ├── channels/          # WhatsApp + Messenger routing layer
-│       │   ├── types.ts       # ChannelType, InboundMessage, OutboundMessage
-│       │   ├── whatsapp.ts    # WhatsApp Cloud API, HMAC-SHA256 validation
-│       │   ├── messenger.ts   # Messenger Send API, HMAC-SHA256 validation
-│       │   ├── router.ts      # MessageRouter — inbound → agent run → reply
-│       │   ├── queue.ts       # Per-conversation FIFO queue with retry
-│       │   ├── retry.ts       # Exponential backoff + jitter
-│       │   └── store.ts       # SQLite persistence (conversations, queue, configs)
-│       └── routes/
-│           ├── webhooks.ts    # GET+POST /webhooks/{whatsapp,messenger}, channel API
-│           └── ...
+│   ├── src/
+│   │   ├── index.ts           # Fastify server, routes, WebSocket, startup
+│   │   ├── orchestrator.ts    # Agent run lifecycle (start/resume/cancel)
+│   │   ├── db.ts              # SQLite persistence (~/.agent001/agent001.db)
+│   │   ├── tools.ts           # Tool registry — resolves agent tool subsets
+│   │   ├── ws.ts              # WebSocket client management + broadcast
+│   │   ├── llm/
+│   │   │   ├── registry.ts    # LLM provider factory (Copilot/OpenAI/Anthropic/Local)
+│   │   │   └── copilot.ts     # GitHub Copilot LLM client
+│   │   ├── channels/          # WhatsApp + Messenger routing layer
+│   │   │   ├── types.ts       # ChannelType, InboundMessage, OutboundMessage
+│   │   │   ├── whatsapp.ts    # WhatsApp Cloud API, HMAC-SHA256 validation
+│   │   │   ├── messenger.ts   # Messenger Send API, HMAC-SHA256 validation
+│   │   │   ├── router.ts      # MessageRouter — inbound → agent run → reply
+│   │   │   ├── queue.ts       # Per-conversation FIFO queue with retry
+│   │   │   ├── retry.ts       # Exponential backoff + jitter
+│   │   │   └── store.ts       # SQLite persistence (conversations, queue, configs)
+│   │   └── routes/
+│   │       ├── agents.ts      # Agent definition CRUD + scoped runs + tools list
+│   │       ├── runs.ts        # Run lifecycle (start, cancel, resume, list, detail)
+│   │       ├── policies.ts    # Governance policy CRUD
+│   │       ├── llm.ts         # LLM config read/write + hot-swap
+│   │       ├── usage.ts       # Token usage stats
+│   │       ├── layouts.ts     # Dashboard layout persistence
+│   │       └── webhooks.ts    # WhatsApp + Messenger webhook endpoints
+│   └── tests/
+│       └── channels.test.ts   # 30 tests — retry, queue, webhook parsing
 │
-├── ui/                        # React dashboard
-│   └── src/
-│       ├── components/
-│       │   ├── Logo.tsx       # Robot logo — green eyes online, red offline
-│       │   ├── Toolbar.tsx    # Top bar
-│       │   ├── PolicyEditor.tsx # Governance modal
-│       │   └── ...
-│       └── widgets/           # AgentChat, AgentTrace, etc.
-│
-├── engine/                    # The substrate
-│   └── src/
-│       ├── domain/            # Models, enums, events, errors, workflow schema
-│       ├── ports/             # Interface contracts (repos, event bus, queue)
-│       ├── engine/            # Planner, expression resolver, orchestrator, executor, learner
-│       ├── governance/        # Policy engine, approval service, audit service
-│       ├── actions/           # Built-in action handlers (http, transform, filter)
-│       ├── adapters/          # In-memory implementations (swap for Postgres/Redis)
-│       ├── api/               # Fastify HTTP layer + DI container
-│       └── lib.ts             # Library exports for agent integration
-│
-└── agent/                     # The AI
-    ├── src/
-    │   ├── types.ts           # Message, Tool, ToolCall, LLMClient interfaces
-    │   ├── agent.ts           # The Agent class — the core loop
-    │   ├── governance.ts      # Engine integration — wraps tools with audit/policies
-    │   ├── logger.ts          # Colored console output
-    │   ├── cli.ts             # CLI entry point (governed + raw modes)
-    │   ├── llm/
-    │   │   ├── openai.ts      # OpenAI function calling
-    │   │   └── anthropic.ts   # Anthropic tool use
-    │   └── tools/
-    │       ├── fetch-url.ts   # HTTP fetch + HTML stripping
-    │       ├── filesystem.ts  # read/write/list with path safety
-    │       ├── shell.ts       # Shell command execution
-    │       └── think.ts       # Reasoning tool
-    └── tests/
-        └── governance.test.ts # 18 tests — policies, audit, events, tracking
+└── ui/                        # React dashboard
+    └── src/
+        ├── api.ts             # HTTP client to server API
+        ├── store.ts           # Zustand state management
+        ├── types.ts           # Frontend type definitions
+        ├── components/
+        │   ├── AgentEditor.tsx # Agent definition CRUD modal
+        │   ├── PolicyEditor.tsx # Governance + workspace + model config modal
+        │   ├── Toolbar.tsx    # Top bar (Agents, Usage, Policies buttons)
+        │   ├── Logo.tsx       # Robot logo — green eyes online, red offline
+        │   └── ...            # Canvas, ViewTabs, WidgetCatalog, WidgetFrame
+        └── widgets/
+            ├── AgentChat.tsx  # Chat interface with agent picker
+            ├── AgentTrace.tsx # Step-by-step execution trace
+            ├── AuditTrail.tsx # Complete action audit log
+            ├── RunStatus.tsx  # Current run progress
+            ├── RunHistory.tsx # Past executions
+            ├── StepTimeline.tsx # Visual step timeline
+            ├── ToolStats.tsx  # Per-tool metrics
+            └── LiveLogs.tsx   # Real-time log stream
 ```
+
+### Database schema (SQLite)
+
+| Table | Purpose |
+|---|---|
+| `agent_definitions` | Agent configurations (name, system prompt, tools) |
+| `runs` | Agent execution records (goal, status, answer, agent_id) |
+| `audit_log` | Immutable action log |
+| `checkpoints` | Resume points (messages, iteration) |
+| `policy_rules` | Governance rules |
+| `llm_config` | Active LLM provider settings |
+| `token_usage` | Per-run token consumption |
+| `trace_entries` | Rich execution trace data |
+| `logs` | Live event stream |
+| `layouts` | Dashboard configurations |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical design guide.
 
 MIT

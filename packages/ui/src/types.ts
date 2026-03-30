@@ -12,6 +12,7 @@ export interface Run {
   stepCount: number
   error: string | null
   parentRunId: string | null
+  agentId: string | null
   createdAt: string
   completedAt: string | null
 }
@@ -90,6 +91,7 @@ export type WidgetType =
   | "agent-chat"
   | "run-status"
   | "agent-trace"
+  | "agent-viz"
   | "live-logs"
   | "audit-trail"
   | "step-timeline"
@@ -119,6 +121,23 @@ export interface WsEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string
+}
+
+// ── Agent Definitions ────────────────────────────────────────────
+
+export interface AgentDefinition {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  tools: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ToolInfo {
+  name: string
+  description: string
 }
 
 // ── Policy ───────────────────────────────────────────────────────

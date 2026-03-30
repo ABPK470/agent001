@@ -114,7 +114,44 @@ function migrate(db: Database.Database): void {
 
     INSERT OR IGNORE INTO llm_config (id, provider, model, api_key, base_url, updated_at)
     VALUES (1, 'copilot', 'gpt-4o', '', '', datetime('now'));
+
+    CREATE TABLE IF NOT EXISTS agent_definitions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      system_prompt TEXT NOT NULL,
+      tools TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
+
+  // ── Column migrations (idempotent) ─────────────────────────
+  try { db.exec("ALTER TABLE runs ADD COLUMN agent_id TEXT") } catch { /* already exists */ }
+
+  // ── Seed data ──────────────────────────────────────────────
+  db.prepare(`
+    INSERT OR IGNORE INTO agent_definitions (id, name, description, system_prompt, tools, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(
+    "default",
+    "Universal Agent",
+    "General-purpose agent with all tools. Handles any task.",
+    [
+      "You are a capable AI agent that can use tools to accomplish goals.",
+      "",
+      "When given a goal:",
+      "1. Break it down into steps",
+      "2. Use tools to gather information or take actions",
+      "3. Observe the results and decide what to do next",
+      "4. Repeat until the goal is achieved",
+      "5. Provide a clear final answer",
+      "",
+      "Be methodical. Think before acting. If a tool call fails, try a different approach.",
+      "Always explain your reasoning when providing the final answer.",
+    ].join("\n"),
+    JSON.stringify(["read_file", "write_file", "list_directory", "run_command", "fetch_url", "think"]),
+  )
 }
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -127,14 +164,15 @@ export interface DbRun {
   step_count: number
   error: string | null
   parent_run_id: string | null
+  agent_id: string | null
   data: string
   created_at: string
   completed_at: string | null
 }
 
 const upsertRun = () => getDb().prepare(`
-  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, data, created_at, completed_at)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @data, @created_at, @completed_at)
+  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, data, created_at, completed_at)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @data, @created_at, @completed_at)
 `)
 
 export function saveRun(run: DbRun): void {
@@ -386,4 +424,39 @@ export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
         base_url = @base_url, updated_at = datetime('now')
     WHERE id = 1
   `).run(cfg)
+}
+
+// ── Agent definition queries ─────────────────────────────────────
+
+export interface DbAgentDefinition {
+  id: string
+  name: string
+  description: string
+  system_prompt: string
+  tools: string          // JSON array of tool names
+  created_at: string
+  updated_at: string
+}
+
+export function listAgentDefinitions(): DbAgentDefinition[] {
+  return getDb()
+    .prepare("SELECT * FROM agent_definitions ORDER BY created_at")
+    .all() as DbAgentDefinition[]
+}
+
+export function getAgentDefinition(id: string): DbAgentDefinition | undefined {
+  return getDb()
+    .prepare("SELECT * FROM agent_definitions WHERE id = ?")
+    .get(id) as DbAgentDefinition | undefined
+}
+
+export function saveAgentDefinition(agent: DbAgentDefinition): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO agent_definitions (id, name, description, system_prompt, tools, created_at, updated_at)
+    VALUES (@id, @name, @description, @system_prompt, @tools, @created_at, datetime('now'))
+  `).run(agent)
+}
+
+export function deleteAgentDefinition(id: string): void {
+  getDb().prepare("DELETE FROM agent_definitions WHERE id = ?").run(id)
 }

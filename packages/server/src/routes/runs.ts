@@ -5,6 +5,7 @@
 import type { FastifyInstance } from "fastify"
 import * as db from "../db.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
+import { resolveTools } from "../tools.js"
 
 export function registerRunRoutes(
   app: FastifyInstance,
@@ -22,6 +23,7 @@ export function registerRunRoutes(
       stepCount: r.step_count,
       error: r.error,
       parentRunId: r.parent_run_id,
+      agentId: r.agent_id ?? null,
       createdAt: r.created_at,
       completedAt: r.completed_at,
     }))
@@ -47,6 +49,7 @@ export function registerRunRoutes(
       stepCount: run.step_count,
       error: run.error,
       parentRunId: run.parent_run_id,
+      agentId: run.agent_id ?? null,
       data: JSON.parse(run.data),
       createdAt: run.created_at,
       completedAt: run.completed_at,
@@ -65,14 +68,33 @@ export function registerRunRoutes(
     }
   })
 
-  // Start a new run
-  app.post<{ Body: { goal: string } }>("/api/runs", async (req, reply) => {
-    const { goal } = req.body
+  // Start a new run (optionally scoped to an agent definition)
+  app.post<{ Body: { goal: string; agentId?: string } }>("/api/runs", async (req, reply) => {
+    const { goal, agentId } = req.body
     if (!goal || typeof goal !== "string") {
       reply.code(400)
       return { error: "goal is required" }
     }
 
+    // If agentId provided, resolve that agent's config
+    if (agentId) {
+      const agent = db.getAgentDefinition(agentId)
+      if (!agent) {
+        reply.code(400)
+        return { error: `Agent not found: ${agentId}` }
+      }
+      const toolNames = JSON.parse(agent.tools) as string[]
+      const tools = resolveTools(toolNames)
+      const runId = orchestrator.startRun(goal, {
+        agentId: agent.id,
+        tools,
+        systemPrompt: agent.system_prompt,
+      })
+      reply.code(201)
+      return { runId, agentId: agent.id }
+    }
+
+    // No agentId — use all tools + default prompt
     const runId = orchestrator.startRun(goal)
     reply.code(201)
     return { runId }

@@ -1,7 +1,7 @@
 /**
  * Logo — agent001 brand mark.
  *
- * Eyes glow green when online, red when offline.
+ * Eyes glow purple when online (slow blink), disappear when offline.
  *
  * Usage:
  *   <Logo size={32} online />
@@ -16,7 +16,7 @@ interface Props {
 
 const EYE_ONLINE  = "#34d399" // emerald-400
 const EYE_OFFLINE = "#f87171" // red-400
-const BODY        = "#8b5cf6" // violet-500
+const BODY        = "#7B6FC7" // indigo
 
 export function Logo({ size = 32, online = true, className }: Props) {
   const eye = online ? EYE_ONLINE : EYE_OFFLINE
@@ -41,7 +41,7 @@ export function Logo({ size = 32, online = true, className }: Props) {
            M3 5 H7 V9 H3 Z
            M13 5 H17 V9 H13 Z"
       />
-      {/* Eyes — pulse when online, static red when offline */}
+      {/* Eyes — slow blink when online, invisible when offline */}
       <rect x="3"  y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
       <rect x="13" y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
     </svg>

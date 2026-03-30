@@ -18,14 +18,8 @@ import { resolve } from "node:path"
 config({ path: resolve(import.meta.dirname, "../../../.env") })
 
 import {
-  fetchUrlTool,
-  listDirectoryTool,
-  readFileTool,
   setBasePath,
   setShellCwd,
-  shellTool,
-  thinkTool,
-  writeFileTool,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
@@ -43,6 +37,7 @@ import {
 import { clearTransactionalData, getDb, getLlmConfig } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { AgentOrchestrator } from "./orchestrator.js"
+import { registerAgentRoutes } from "./routes/agents.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerLlmRoutes } from "./routes/llm.js"
 import { registerPolicyRoutes } from "./routes/policies.js"
@@ -71,10 +66,9 @@ async function main() {
   const llm = buildLlmClient(llmCfg)
   console.log(`🧠 LLM: ${llmCfg.provider} / ${llmCfg.model}`)
 
-  // Create orchestrator
+  // Create orchestrator (tools are resolved per-run from agent definitions)
   const orchestrator = new AgentOrchestrator({
     llm,
-    tools: [fetchUrlTool, readFileTool, writeFileTool, listDirectoryTool, shellTool, thinkTool],
   })
 
   // ── Message routing (WhatsApp + Messenger) ───────────────────
@@ -116,6 +110,7 @@ async function main() {
 
   // REST routes
   registerRunRoutes(app, orchestrator)
+  registerAgentRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerUsageRoutes(app)

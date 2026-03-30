@@ -6,9 +6,10 @@
  */
 
 import { GitBranch } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
+import type { AgentDefinition } from "../types"
 import { statusColor, timeAgo, truncate } from "../util"
 
 export function RunHistory() {
@@ -20,6 +21,17 @@ export function RunHistory() {
   const setAudit = useStore((s) => s.setAudit)
   const setLogs = useStore((s) => s.setLogs)
   const setTrace = useStore((s) => s.setTrace)
+  const [agents, setAgents] = useState<AgentDefinition[]>([])
+
+  // Load agents
+  useEffect(() => {
+    api.listAgents().then(setAgents).catch(() => {})
+  }, [])
+
+  const agentName = (id: string | null) => {
+    if (!id) return null
+    return agents.find((a) => a.id === id)?.name ?? null
+  }
 
   // Refresh run list periodically
   useEffect(() => {
@@ -77,6 +89,12 @@ export function RunHistory() {
           <div className="flex-1 min-w-0">
             <div className="text-sm text-text truncate">{truncate(run.goal, 50)}</div>
             <div className="flex items-center gap-2 text-[13px] text-text-muted mt-0.5">
+              {agentName(run.agentId) && (
+                <>
+                  <span className="text-accent text-[11px]">{agentName(run.agentId)}</span>
+                  <span className="text-text-muted/40">·</span>
+                </>
+              )}
               <span>{timeAgo(run.createdAt)}</span>
               <span className="text-text-muted/40">·</span>
               <span>{run.stepCount} steps</span>

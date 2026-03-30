@@ -9,6 +9,7 @@ import {
     Activity,
     BarChart3,
     Clock,
+    Eye,
     History,
     LayoutGrid,
     ListTree,
@@ -29,6 +30,7 @@ interface Props {
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
   { type: "agent-chat",    label: "Agent Chat",    desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
   { type: "agent-trace",   label: "Agent Trace",   desc: "Execution trace: iterations, tool calls, results", Icon: ListTree },
+  { type: "agent-viz",     label: "Agent Viz",     desc: "Live network visualization of agent activity", Icon: Eye },
   { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: Activity },
   { type: "live-logs",     label: "Event Stream",   desc: "Raw WebSocket event stream and system events", Icon: ScrollText },
   { type: "audit-trail",   label: "Audit Trail",   desc: "Immutable audit log of every action",         Icon: Shield },

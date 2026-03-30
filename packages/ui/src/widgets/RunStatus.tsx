@@ -3,8 +3,10 @@
  */
 
 import { Loader2, RotateCcw, Square } from "lucide-react"
+import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
+import type { AgentDefinition } from "../types"
 import { statusColor, timeAgo } from "../util"
 
 export function RunStatus() {
@@ -12,7 +14,11 @@ export function RunStatus() {
   const activeRunId = useStore((s) => s.activeRunId)
   const steps = useStore((s) => s.steps)
 
+  const [agents, setAgents] = useState<AgentDefinition[]>([])
+  useEffect(() => { api.listAgents().then(setAgents).catch(() => {}) }, [])
+
   const run = runs.find((r) => r.id === activeRunId)
+  const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
 
   if (!run) {
     return (
@@ -58,6 +64,12 @@ export function RunStatus() {
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+        {agentName && (
+          <div>
+            <span className="text-text-muted text-[13px]">Agent</span>
+            <div className="text-accent text-[13px]">{agentName}</div>
+          </div>
+        )}
         <div>
           <span className="text-text-muted text-[13px]">Run ID</span>
           <div className="text-text-secondary font-mono text-[13px]">{run.id.slice(0, 8)}</div>

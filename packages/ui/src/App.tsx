@@ -6,7 +6,6 @@ import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
 import { UsageModal } from "./components/UsageModal"
-import { ViewTabs } from "./components/ViewTabs"
 import { WidgetCatalog } from "./components/WidgetCatalog"
 import { restoreDashboardState, startDashboardSync } from "./dashboardSync"
 import { useIsMobile } from "./hooks/useIsMobile"
@@ -17,6 +16,7 @@ import { widgetRegistry } from "./widgets"
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
   "agent-trace": "Agent Trace",
+  "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
   "audit-trail": "Audit Trail",
@@ -222,7 +222,6 @@ export function App() {
   return (
     <div className="flex flex-col h-screen bg-base">
       <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} />
-      <ViewTabs onAddWidget={() => canvasRef.current?.openCatalog()} />
       <Canvas ref={canvasRef} />
     </div>
   )

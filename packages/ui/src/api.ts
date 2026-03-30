@@ -2,7 +2,7 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { PolicyRule, Run, RunDetail, SavedLayout, ViewConfig } from "./types"
+import type { AgentDefinition, PolicyRule, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
 
 const BASE = ""
 
@@ -20,9 +20,9 @@ export const api = {
   // Runs
   listRuns: () => json<Run[]>("/api/runs"),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string) => json<{ runId: string }>("/api/runs", {
+  startRun: (goal: string, agentId?: string) => json<{ runId: string }>("/api/runs", {
     method: "POST",
-    body: JSON.stringify({ goal }),
+    body: JSON.stringify(agentId ? { goal, agentId } : { goal }),
   }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {
     method: "POST",
@@ -98,6 +98,27 @@ export const api = {
     json<{ ok: boolean; provider: string; model: string }>("/api/llm", {
       method: "PUT",
       body: JSON.stringify(cfg),
+    }),
+
+  // Tools
+  listTools: () => json<ToolInfo[]>("/api/tools"),
+
+  // Agents
+  listAgents: () => json<AgentDefinition[]>("/api/agents"),
+  getAgent: (id: string) => json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`),
+  createAgent: (agent: { name: string; description?: string; systemPrompt: string; tools: string[] }) =>
+    json<AgentDefinition>("/api/agents", {
+      method: "POST",
+      body: JSON.stringify(agent),
+    }),
+  updateAgent: (id: string, agent: Partial<{ name: string; description: string; systemPrompt: string; tools: string[] }>) =>
+    json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(agent),
+    }),
+  deleteAgent: (id: string) =>
+    json<{ ok: boolean }>(`/api/agents/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     }),
 }
 

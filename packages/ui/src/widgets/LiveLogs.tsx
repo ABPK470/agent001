@@ -59,7 +59,7 @@ export function LiveLogs() {
             }`}
             onClick={() => setFilter(level)}
           >
-            {level ?? "All"}
+            {level ?? "all"}
           </button>
         ))}
         <span className="ml-auto text-[13px] text-text-muted">{filtered.length}</span>

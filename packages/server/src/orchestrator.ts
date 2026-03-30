@@ -33,6 +33,7 @@ import {
 import { randomUUID } from "node:crypto"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
+import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
 
 // ── Types ────────────────────────────────────────────────────────
@@ -40,14 +41,21 @@ import { broadcast } from "./ws.js"
 interface ActiveRun {
   id: string
   goal: string
+  agentId: string | null
   controller: AbortController
   services: EngineServices
   traceSeq: number
 }
 
+/** Per-run agent configuration — which tools and prompt to use. */
+export interface AgentRunConfig {
+  agentId?: string
+  tools?: Tool[]
+  systemPrompt?: string
+}
+
 export interface OrchestratorConfig {
   llm: LLMClient
-  tools: Tool[]
   messageRouter?: MessageRouter
 }
 
@@ -55,13 +63,11 @@ export interface OrchestratorConfig {
 
 export class AgentOrchestrator {
   private llm: LLMClient
-  private readonly tools: Tool[]
   private readonly activeRuns = new Map<string, ActiveRun>()
   private messageRouter: MessageRouter | null = null
 
   constructor(config: OrchestratorConfig) {
     this.llm = config.llm
-    this.tools = config.tools
     this.messageRouter = config.messageRouter ?? null
   }
 
@@ -76,10 +82,14 @@ export class AgentOrchestrator {
   }
 
   /** Start a new governed agent run. Returns the run ID immediately. */
-  startRun(goal: string): string {
+  startRun(goal: string, config?: AgentRunConfig): string {
     const runId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
+    const agentId = config?.agentId ?? null
+
+    // Resolve tools for this run (from config or default: all tools)
+    const tools = config?.tools ?? getAllTools()
 
     // Load persisted policy rules into this run's evaluator
     const dbRules = db.listPolicyRules()
@@ -92,12 +102,12 @@ export class AgentOrchestrator {
       })
     }
 
-    this.activeRuns.set(runId, { id: runId, goal, controller, services, traceSeq: 0 })
+    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0 })
 
-    broadcast({ type: "run.queued", data: { runId, goal } })
+    broadcast({ type: "run.queued", data: { runId, goal, agentId } })
     this.saveTrace(runId, { kind: "goal", text: goal })
 
-    this.executeRun(runId, goal, services, controller).catch((err) => {
+    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
     })
 
@@ -126,6 +136,7 @@ export class AgentOrchestrator {
     this.activeRuns.set(newRunId, {
       id: newRunId,
       goal: originalRun.goal,
+      agentId: originalRun.agent_id ?? null,
       controller,
       services,
       traceSeq: 0,
@@ -140,9 +151,23 @@ export class AgentOrchestrator {
     const messages = JSON.parse(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
 
+    // Resolve tools from agent definition if original run had one
+    let tools = getAllTools()
+    let systemPrompt: string | undefined
+    if (originalRun.agent_id) {
+      const agentDef = db.getAgentDefinition(originalRun.agent_id)
+      if (agentDef) {
+        tools = resolveTools(JSON.parse(agentDef.tools) as string[])
+        systemPrompt = agentDef.system_prompt
+      }
+    }
+
     this.executeRun(
       newRunId,
       originalRun.goal,
+      tools,
+      systemPrompt,
+      originalRun.agent_id ?? null,
       services,
       controller,
       { messages, iteration, parentRunId: runId },
@@ -163,6 +188,9 @@ export class AgentOrchestrator {
   private async executeRun(
     runId: string,
     goal: string,
+    tools: Tool[],
+    systemPrompt: string | undefined,
+    agentId: string | null,
     services: EngineServices,
     controller: AbortController,
     resume?: { messages: Message[], iteration: number, parentRunId: string },
@@ -190,11 +218,11 @@ export class AgentOrchestrator {
       action: "agent.started",
       resourceType: "AgentRun",
       resourceId: run.id,
-      detail: { goal, tools: this.tools.map((t) => t.name) },
+      detail: { goal, tools: tools.map((t) => t.name), agentId },
     })
 
     // Save initial run to DB
-    this.persistRun(run, goal, resume?.parentRunId)
+    this.persistRun(run, goal, agentId, resume?.parentRunId)
 
     // Wrap tools with governance
     const state: RunState = {
@@ -202,12 +230,13 @@ export class AgentOrchestrator {
       actor,
       stepCounter: resume?.iteration ?? 0,
     }
-    const governedTools = this.tools.map((t) => governTool(t, services, state))
+    const governedTools = tools.map((t) => governTool(t, services, state))
 
     // Create agent with checkpoint support
     const agent = new Agent(this.llm, governedTools, {
       verbose: true,
       signal: controller.signal,
+      systemPrompt,
       onStep: (messages, iteration) => {
         lastMessages = messages
         lastIteration = iteration
@@ -247,7 +276,7 @@ export class AgentOrchestrator {
         })
 
         // Persist current run state
-        this.persistRun(run, goal, resume?.parentRunId)
+        this.persistRun(run, goal, agentId, resume?.parentRunId)
       },
     })
 
@@ -270,7 +299,7 @@ export class AgentOrchestrator {
       })
 
       // Persist final state
-      this.persistRun(run, goal, resume?.parentRunId, answer)
+      this.persistRun(run, goal, agentId, resume?.parentRunId, answer)
       this.persistAuditLog(services, runId)
       this.persistTokenUsage(runId, agent)
 
@@ -312,7 +341,7 @@ export class AgentOrchestrator {
         })
       }
 
-      this.persistRun(run, goal, resume?.parentRunId, undefined, errMsg)
+      this.persistRun(run, goal, agentId, resume?.parentRunId, undefined, errMsg)
       this.persistAuditLog(services, runId)
       this.persistTokenUsage(runId, agent)
 
@@ -420,6 +449,7 @@ export class AgentOrchestrator {
   private persistRun(
     run: { id: string, status: string, steps: unknown[], createdAt: Date, completedAt: Date | null },
     goal: string,
+    agentId: string | null,
     parentRunId?: string,
     answer?: string,
     error?: string,
@@ -432,6 +462,7 @@ export class AgentOrchestrator {
       step_count: run.steps.length,
       error: error ?? null,
       parent_run_id: parentRunId ?? null,
+      agent_id: agentId,
       data: JSON.stringify(run),
       created_at: run.createdAt.toISOString(),
       completed_at: run.completedAt?.toISOString() ?? null,

@@ -41,6 +41,10 @@ interface AppState {
   removeWidget: (viewId: string, widgetId: string) => void
   updateLayouts: (viewId: string, layouts: LayoutItem[]) => void
 
+  // Agent selection
+  selectedAgentId: string | null
+  setSelectedAgent: (id: string | null) => void
+
   // Runs
   runs: Run[]
   activeRunId: string | null
@@ -91,6 +95,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "agent-chat":    { w: 4, h: 8,  minW: 3, minH: 5 },
   "run-status":    { w: 4, h: 4,  minW: 2, minH: 3 },
   "agent-trace":   { w: 6, h: 10, minW: 4, minH: 5 },
+  "agent-viz":     { w: 6, h: 8,  minW: 4, minH: 5 },
   "live-logs":     { w: 6, h: 8,  minW: 3, minH: 4 },
   "audit-trail":   { w: 6, h: 8,  minW: 4, minH: 4 },
   "step-timeline": { w: 4, h: 10, minW: 3, minH: 5 },
@@ -99,71 +104,58 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
 }
 
 const GRID_COLS = 12
-const TOTAL_ROWS = 12
 
-/** Compute a full-page auto-layout that divides the canvas evenly among all widgets. */
-function computeAutoLayout(widgets: Widget[]): LayoutItem[] {
-  const n = widgets.length
-  if (n === 0) return []
+/**
+ * Find the best position for a new widget by locating the largest empty
+ * rectangle in the current layout and sizing the widget to fill it.
+ * If no gap exists, appends at the bottom with full width.
+ */
+function findBestFit(
+  existingLayouts: LayoutItem[],
+  widgetId: string,
+  defaults: { w: number; h: number; minW: number; minH: number },
+): LayoutItem {
+  const { minW, minH } = defaults
 
-  // Determine how many widgets per row
-  let rowConfig: number[]
-  switch (n) {
-    case 1: rowConfig = [1]; break
-    case 2: rowConfig = [2]; break
-    case 3: rowConfig = [3]; break
-    case 4: rowConfig = [2, 2]; break
-    case 5: rowConfig = [3, 2]; break
-    case 6: rowConfig = [3, 3]; break
-    case 7: rowConfig = [4, 3]; break
-    case 8: rowConfig = [4, 4]; break
-    default: {
-      const rows: number[] = []
-      let remaining = n
-      while (remaining > 0) {
-        rows.push(Math.min(remaining, 4))
-        remaining -= Math.min(remaining, 4)
+  // First widget: full width
+  if (existingLayouts.length === 0) {
+    return { i: widgetId, x: 0, y: 0, w: GRID_COLS, h: defaults.h, minW, minH }
+  }
+
+  const maxY = Math.max(...existingLayouts.map((l) => l.y + l.h))
+
+  // Build occupancy grid
+  const grid: boolean[][] = Array.from({ length: maxY }, () => Array(GRID_COLS).fill(false))
+  for (const l of existingLayouts) {
+    for (let y = l.y; y < Math.min(l.y + l.h, maxY); y++) {
+      for (let x = l.x; x < Math.min(l.x + l.w, GRID_COLS); x++) {
+        grid[y][x] = true
       }
-      rowConfig = rows
-      break
     }
   }
 
-  const numRows = rowConfig.length
-  const baseRowH = Math.floor(TOTAL_ROWS / numRows)
-  const extraH = TOTAL_ROWS - baseRowH * numRows
-  const layouts: LayoutItem[] = []
-  let idx = 0
-  let yOffset = 0
+  // Find the largest empty rectangle within existing bounds
+  let bestArea = 0
+  let best = { x: 0, y: maxY, w: GRID_COLS, h: defaults.h }
 
-  for (let r = 0; r < numRows; r++) {
-    const colsInRow = rowConfig[r]
-    const baseColW = Math.floor(GRID_COLS / colsInRow)
-    const extraW = GRID_COLS - baseColW * colsInRow
-    const h = baseRowH + (r < extraH ? 1 : 0)
-    let x = 0
-
-    for (let c = 0; c < colsInRow; c++) {
-      const w = baseColW + (c < extraW ? 1 : 0)
-      const widget = widgets[idx]
-      const defaults = WIDGET_DEFAULTS[widget.type]
-
-      layouts.push({
-        i: widget.id,
-        x,
-        y: yOffset,
-        w,
-        h,
-        minW: defaults.minW,
-        minH: defaults.minH,
-      })
-      x += w
-      idx++
+  for (let sy = 0; sy < maxY; sy++) {
+    for (let sx = 0; sx < GRID_COLS; sx++) {
+      if (grid[sy][sx]) continue
+      let maxW = GRID_COLS - sx
+      for (let ey = sy; ey < maxY; ey++) {
+        for (let ex = sx; ex < sx + maxW; ex++) {
+          if (grid[ey][ex]) { maxW = ex - sx; break }
+        }
+        if (maxW < minW) break
+        const h = ey - sy + 1
+        if (h < minH) continue
+        const area = maxW * h
+        if (area > bestArea) { bestArea = area; best = { x: sx, y: sy, w: maxW, h } }
+      }
     }
-    yOffset += h
   }
 
-  return layouts
+  return { i: widgetId, x: best.x, y: best.y, w: best.w, h: best.h, minW, minH }
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -205,10 +197,13 @@ export const useStore = create<AppState>()(
         if (!view) return s
         const widget: Widget = { id: randomId(), type }
         const newWidgets = [...view.widgets, widget]
+        const existing = view.layouts["lg"] ?? []
+        const defaults = WIDGET_DEFAULTS[type]
+        const newItem = findBestFit(existing, widget.id, defaults)
         return {
           views: s.views.map((v) =>
             v.id === viewId
-              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: computeAutoLayout(newWidgets) } }
+              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: [...existing, newItem] } }
               : v,
           ),
         }
@@ -217,10 +212,11 @@ export const useStore = create<AppState>()(
         const view = s.views.find((v) => v.id === viewId)
         if (!view) return s
         const newWidgets = view.widgets.filter((w) => w.id !== widgetId)
+        const newLayouts = (view.layouts["lg"] ?? []).filter((l) => l.i !== widgetId)
         return {
           views: s.views.map((v) =>
             v.id === viewId
-              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: computeAutoLayout(newWidgets) } }
+              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: newLayouts } }
               : v,
           ),
         }
@@ -230,6 +226,10 @@ export const useStore = create<AppState>()(
           v.id === viewId ? { ...v, layouts: { ...v.layouts, lg: layouts } } : v,
         ),
       })),
+
+      // Agent selection
+      selectedAgentId: null,
+      setSelectedAgent: (selectedAgentId) => set({ selectedAgentId }),
 
       // Runs
       runs: [],
@@ -297,6 +297,7 @@ export const useStore = create<AppState>()(
               stepCount: 0,
               error: null,
               parentRunId: (data["resumedFrom"] as string) ?? null,
+              agentId: (data["agentId"] as string) ?? null,
               createdAt: timestamp,
               completedAt: null,
             })
@@ -407,6 +408,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         views: state.views,
         activeViewId: state.activeViewId,
+        selectedAgentId: state.selectedAgentId,
       }),
     },
   ),
