@@ -186,6 +186,11 @@ export function AgentViz() {
   const displayRun = mode === "live" ? activeRun : reflectRun
   const isRunning = mode === "live" && activeRun?.status === "running"
 
+  // The agent that owns the current run (works in both live and reflect)
+  const activeAgentId = displayRun?.agentId ?? null
+  // Whether we have a run context at all (live with trace data, or reflect with loaded trace)
+  const hasRunContext = (mode === "live" && activeAgentId != null && trace.length > 0) || (mode === "reflect" && reflectRunId != null && trace.length > 0)
+
   // Pulse the status dot while running
   useEffect(() => {
     if (!isRunning) return
@@ -223,6 +228,15 @@ export function AgentViz() {
       if (trace[i].kind === "iteration") return (trace[i] as { kind: "iteration"; current: number; max: number }).current
     }
     return 0
+  }, [trace])
+
+  // Set of tool IDs actually used in the current trace
+  const involvedToolIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const entry of trace) {
+      if (entry.kind === "tool-call") ids.add(entry.tool)
+    }
+    return ids
   }, [trace])
 
   // Build graph data from agents — ONLY recompute when agent structure changes
@@ -329,6 +343,8 @@ export function AgentViz() {
   }, [graphData])
 
   // Fit to view on data change — calibrate zoom so initial fit = 100%
+  // Offset the center rightward so the diagram sits in the visible area
+  // to the right of the log overlay panel.
   useEffect(() => {
     const fg = graphRef.current
     if (!fg || agents.length === 0) return
@@ -336,14 +352,26 @@ export function AgentViz() {
       fg.zoomToFit(400, 60)
       setTimeout(() => {
         const z = fg.zoom()
-        const target = z * 0.53
+        const target = z * 0.65
         zoomBaseRef.current = target // this is our "100%"
         fg.zoom(target, 300)
+        // Shift center rightward to account for the log panel
+        // Compute centroid from nodes, then offset by half the panel width in graph coords
+        const nodes = graphData.nodes
+        let cx = 0, cy = 0
+        for (const n of nodes) {
+          cx += (n as NodeObject<VizNode>).x ?? 0
+          cy += (n as NodeObject<VizNode>).y ?? 0
+        }
+        const centroidX = nodes.length > 0 ? cx / nodes.length : 0
+        const centroidY = nodes.length > 0 ? cy / nodes.length : 0
+        const panelOffset = feedW / 2 / target
+        fg.centerAt(centroidX - panelOffset, centroidY, 400)
         setZoomLevel(100)
       }, 450)
     }, 300)
     return () => clearTimeout(timer)
-  }, [agents.length])
+  }, [agents.length, feedW])
 
   // Track zoom changes — display relative to calibrated base
   // Deferred to avoid setState during ForceGraph2D render cycle
@@ -361,31 +389,33 @@ export function AgentViz() {
     const r = node.type === "agent" ? 10 : 7
 
     if (node.type === "agent") {
-      const isActive = activeRun?.agentId === node.agentId && isRunning
+      const isActiveAgent = node.agentId === activeAgentId
+      const isLiveRunning = isActiveAgent && isRunning
+      // Dim agents that are not involved in the current run
+      const dimmed = hasRunContext && !isActiveAgent
 
-      if (isActive) {
-        ctx.fillStyle = node.color + "18"
+      // Subtle glow for the active agent (live running OR reflect)
+      if (isActiveAgent && hasRunContext) {
+        ctx.fillStyle = node.color + (isLiveRunning ? "18" : "0c")
         ctx.beginPath()
-        ctx.arc(x, y, r * 1.8, 0, Math.PI * 2)
+        ctx.arc(x, y, r * 1.5, 0, Math.PI * 2)
         ctx.fill()
       }
 
-      ctx.fillStyle = C.deep + "cc"
+      // Core circle
+      ctx.fillStyle = dimmed ? C.base + "aa" : C.deep + "cc"
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
 
-      ctx.strokeStyle = node.color + (isActive ? "cc" : "80")
-      ctx.lineWidth = isActive ? 1.4 : 1
+      // Ring: slightly brighter for active, muted for others, faint for dimmed
+      ctx.strokeStyle = dimmed ? C.mid + "30" : node.color + (isActiveAgent && hasRunContext ? "aa" : "60")
+      ctx.lineWidth = isActiveAgent && hasRunContext ? 1.2 : dimmed ? 0.5 : 0.8
       ctx.stroke()
 
-      ctx.fillStyle = isActive ? C.text + "aa" : C.muted + "50"
-      ctx.beginPath()
-      ctx.arc(x, y, r * 0.18, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.font = `${Math.max(3, 10 / globalScale)}px sans-serif`
-      ctx.fillStyle = C.text
+      // Label
+      ctx.font = `${Math.max(4, 13 / globalScale)}px sans-serif`
+      ctx.fillStyle = dimmed ? C.muted + "40" : isActiveAgent && hasRunContext ? C.text : C.text + "bb"
       ctx.textAlign = "center"
       ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 3)
@@ -393,42 +423,45 @@ export function AgentViz() {
       // Tool node
       const stats = toolStats.get(node.toolId ?? "")
       const active = stats?.lastStatus === "running"
+      const wasUsed = involvedToolIds.has(node.toolId ?? "")
+      // Dim tools not used in the current run
+      const dimmed = hasRunContext && !wasUsed
       const toolColor = active ? C.accent
         : stats?.lastStatus === "error" ? C.coral
         : stats?.lastStatus === "done" ? C.success
         : C.mid
 
-      ctx.fillStyle = C.elevated
+      ctx.fillStyle = dimmed ? C.base + "88" : C.elevated
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
 
-      ctx.strokeStyle = toolColor + (active ? "cc" : "60")
-      ctx.lineWidth = active ? 1.4 : 0.8
+      ctx.strokeStyle = dimmed ? C.mid + "20" : toolColor + (active ? "cc" : wasUsed ? "88" : "60")
+      ctx.lineWidth = active ? 1.4 : dimmed ? 0.5 : 0.8
       ctx.stroke()
 
       // Call count centered inside the circle (replaces inner dot)
       if (stats && stats.calls > 0) {
-        ctx.font = `${Math.max(3, 9 / globalScale)}px sans-serif`
-        ctx.fillStyle = toolColor
+        ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
+        ctx.fillStyle = dimmed ? toolColor + "30" : toolColor
         ctx.textAlign = "center"
         ctx.textBaseline = "middle"
         ctx.fillText(stats.calls > 99 ? "99+" : String(stats.calls), x, y + 0.5)
       } else {
         // No calls yet — subtle inner dot
-        ctx.fillStyle = toolColor + "40"
+        ctx.fillStyle = dimmed ? toolColor + "10" : toolColor + "40"
         ctx.beginPath()
         ctx.arc(x, y, r * 0.2, 0, Math.PI * 2)
         ctx.fill()
       }
 
-      ctx.font = `${Math.max(2.5, 8 / globalScale)}px sans-serif`
-      ctx.fillStyle = stats && stats.calls > 0 ? C.text : C.muted
+      ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
+      ctx.fillStyle = dimmed ? C.muted + "30" : stats && stats.calls > 0 ? C.text : C.muted
       ctx.textAlign = "center"
       ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 2)
     }
-  }, [activeRun, isRunning, toolStats])
+  }, [activeAgentId, hasRunContext, isRunning, toolStats, involvedToolIds])
 
   // Node click area
   const paintNodeArea = useCallback((node: NodeObject<VizNode>, color: string, ctx: CanvasRenderingContext2D) => {
@@ -443,6 +476,41 @@ export function AgentViz() {
   const handleNodeClick = useCallback((node: NodeObject<VizNode>) => {
     setSelectedNode((prev) => prev === node.id ? null : (node.id as string))
   }, [])
+
+  // Custom link renderer — smooth curved lines, dim non-active agent links
+  const paintLink = useCallback((link: LinkObject<VizNode, VizLink>, ctx: CanvasRenderingContext2D) => {
+    const vLink = link as unknown as VizLink
+    const src = link.source as NodeObject<VizNode>
+    const tgt = link.target as NodeObject<VizNode>
+    if (!src || !tgt || src.x == null || tgt.x == null) return
+
+    const isActiveLink = vLink.agentId === activeAgentId
+    const toolUsed = involvedToolIds.has(tgt.id?.toString().replace("tool:", "") ?? "")
+    // Only highlight links from the active agent to tools that were actually used
+    const highlight = hasRunContext && isActiveLink && toolUsed
+    const dimmed = hasRunContext && !isActiveLink
+
+    // Opacity: highlighted links visible, dimmed nearly invisible
+    const alpha = highlight ? "44" : dimmed ? "08" : "1a"
+
+    // Curve the link slightly for visual smoothness
+    const mx = (src.x + tgt.x) / 2
+    const my = (src.y! + tgt.y!) / 2
+    // Offset control point perpendicular to the link direction
+    const dx = tgt.x - src.x
+    const dy = tgt.y! - src.y!
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    const offset = len * 0.08
+    const cx = mx + (-dy / len) * offset
+    const cy = my + (dx / len) * offset
+
+    ctx.beginPath()
+    ctx.moveTo(src.x, src.y!)
+    ctx.quadraticCurveTo(cx, cy, tgt.x, tgt.y!)
+    ctx.strokeStyle = vLink.color + alpha
+    ctx.lineWidth = highlight ? 1.2 : 0.5
+    ctx.stroke()
+  }, [activeAgentId, hasRunContext, involvedToolIds])
 
   // Pin node after drag so it stays where the user put it
   const handleNodeDragEnd = useCallback((node: NodeObject<VizNode>) => {
@@ -539,7 +607,7 @@ export function AgentViz() {
           graphData={graphData}
           width={graphW}
           height={graphH}
-          backgroundColor={C.base}
+          backgroundColor={"transparent"}
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           nodePointerAreaPaint={paintNodeArea}
@@ -549,8 +617,8 @@ export function AgentViz() {
           enableNodeDrag={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}
-          linkColor={(link: LinkObject<VizNode, VizLink>) => (link as unknown as VizLink).color + "30"}
-          linkWidth={1}
+          linkCanvasObject={paintLink}
+          linkCanvasObjectMode={() => "replace"}
           linkDirectionalParticleWidth={3}
           linkDirectionalParticleSpeed={0.008}
           linkDirectionalParticleColor={(link: LinkObject<VizNode, VizLink>) => (link as unknown as VizLink).color}
@@ -569,11 +637,15 @@ export function AgentViz() {
         className="absolute top-0 left-0 bottom-0 flex flex-col pointer-events-none"
         style={{ width: feedW }}
       >
-        {/* Gradient backdrop: solid base on left, fading to transparent on right */}
+        {/* Gradient backdrop: solid base on left, fading to transparent on right.
+             Uses mask-image instead of a color gradient to avoid 8-bit banding artefacts
+             that appear as subtle vertical lines in dark-to-transparent transitions. */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(to right, ${C.base} 55%, ${C.base}e0 70%, ${C.base}80 82%, ${C.base}30 92%, transparent 100%)`,
+            background: C.base,
+            WebkitMaskImage: `linear-gradient(to right, white 45%, rgba(255,255,255,0.92) 55%, rgba(255,255,255,0.78) 63%, rgba(255,255,255,0.60) 71%, rgba(255,255,255,0.40) 79%, rgba(255,255,255,0.22) 86%, rgba(255,255,255,0.08) 93%, transparent 100%)`,
+            maskImage: `linear-gradient(to right, white 45%, rgba(255,255,255,0.92) 55%, rgba(255,255,255,0.78) 63%, rgba(255,255,255,0.60) 71%, rgba(255,255,255,0.40) 79%, rgba(255,255,255,0.22) 86%, rgba(255,255,255,0.08) 93%, transparent 100%)`,
           }}
         />
 
@@ -646,7 +718,7 @@ export function AgentViz() {
             onClick={() => {
               const fg = graphRef.current
               if (!fg) return
-              // Center the diagram at the centroid of all nodes, preserving zoom
+              // Center the diagram at the centroid of all nodes, offset for log panel
               const nodes = graphData.nodes
               if (nodes.length === 0) return
               let cx = 0, cy = 0
@@ -654,7 +726,9 @@ export function AgentViz() {
                 cx += (n as NodeObject<VizNode>).x ?? 0
                 cy += (n as NodeObject<VizNode>).y ?? 0
               }
-              fg.centerAt(cx / nodes.length, cy / nodes.length, 400)
+              // Shift rightward to account for the log panel
+              const panelOffset = feedW / 2 / fg.zoom()
+              fg.centerAt(cx / nodes.length - panelOffset, cy / nodes.length, 400)
             }}
             title="Center diagram"
           >
