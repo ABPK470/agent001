@@ -11,6 +11,7 @@ import {
     Clock,
     GitBranch,
     History,
+    LayoutGrid,
     ListTree,
     MessageSquare,
     Plus,
@@ -30,6 +31,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "step-timeline": Clock,
   "tool-stats": BarChart3,
   "run-history": History,
+  "command-center": LayoutGrid,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -42,6 +44,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "step-timeline": "Steps",
   "tool-stats": "Stats",
   "run-history": "History",
+  "command-center": "Center",
 }
 
 interface Props {

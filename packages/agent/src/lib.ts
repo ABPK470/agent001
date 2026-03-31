@@ -75,6 +75,8 @@ export { AnthropicClient } from "./llm/anthropic.js"
 export { OpenAIClient } from "./llm/openai.js"
 
 // Built-in tools
+export { createDelegateTool } from "./tools/delegate.js"
+export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
 export { fetchUrlTool } from "./tools/fetch-url.js"
 export {
     listDirectoryTool, readFileTool, setBasePath, writeFileTool

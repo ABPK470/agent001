@@ -58,11 +58,12 @@ function toolLabel(id: string): string {
 
 interface VizNode {
   id: string
-  type: "agent" | "tool"
+  type: "agent" | "tool" | "delegate"
   label: string
   color: string
   agentId?: string
   toolId?: string
+  delegateDepth?: number
   val?: number
   x?: number
   y?: number
@@ -239,7 +240,23 @@ export function AgentViz() {
     return ids
   }, [trace])
 
-  // Build graph data from agents — ONLY recompute when agent structure changes
+  // Track active delegations from trace
+  const activeDelegations = useMemo(() => {
+    const stack: Array<{ depth: number; goal: string; tools: string[] }> = []
+    for (const e of trace) {
+      if (e.kind === "delegation-start") {
+        stack.push({ depth: e.depth, goal: e.goal, tools: e.tools })
+      } else if (e.kind === "delegation-end") {
+        // Pop matching depth
+        for (let j = stack.length - 1; j >= 0; j--) {
+          if (stack[j].depth === e.depth) { stack.splice(j, 1); break }
+        }
+      }
+    }
+    return stack
+  }, [trace])
+
+  // Build graph data from agents + active delegations
   // Visual states (colors, running, stats) are handled in paintNode
   const graphData = useMemo(() => {
     const nodes: VizNode[] = []
@@ -289,8 +306,48 @@ export function AgentViz() {
       }
     })
 
+    // Add ephemeral delegate nodes for active delegations
+    for (const deleg of activeDelegations) {
+      const delegId = `delegate:${deleg.depth}`
+      const color = AGENT_COLORS[(agents.length + deleg.depth) % AGENT_COLORS.length]
+      nodes.push({
+        id: delegId,
+        type: "delegate",
+        label: `D${deleg.depth}`,
+        color,
+        delegateDepth: deleg.depth,
+        val: 4,
+        x: -30,
+        y: (agents.length + deleg.depth - 1) * 50,
+      })
+
+      // Link from active agent to delegate
+      if (activeAgentId) {
+        links.push({
+          source: `agent:${activeAgentId}`,
+          target: delegId,
+          agentId: activeAgentId,
+          color,
+        })
+      }
+
+      // Link from delegate to its tools
+      for (const toolName of deleg.tools) {
+        if (toolName === "delegate") continue
+        const toolNodeId = `tool:${toolName}`
+        if (toolNodeIds.has(toolNodeId)) {
+          links.push({
+            source: delegId,
+            target: toolNodeId,
+            agentId: activeAgentId ?? "",
+            color: color + "80",
+          })
+        }
+      }
+    }
+
     return { nodes, links }
-  }, [agents])
+  }, [agents, activeDelegations, activeAgentId])
 
   // Emit particles when new tool calls arrive (live mode only)
   useEffect(() => {
@@ -386,7 +443,28 @@ export function AgentViz() {
   const paintNode = useCallback((node: NodeObject<VizNode>, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const x = node.x ?? 0
     const y = node.y ?? 0
-    const r = node.type === "agent" ? 10 : 7
+    const r = node.type === "agent" ? 10 : node.type === "delegate" ? 8 : 7
+
+    if (node.type === "delegate") {
+      // Ephemeral delegate node — pulsing diamond shape
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.rotate(Math.PI / 4)
+      ctx.fillStyle = C.deep + "cc"
+      ctx.fillRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
+      ctx.strokeStyle = node.color + "bb"
+      ctx.lineWidth = 1.2
+      ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
+      ctx.restore()
+
+      // Label below
+      ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
+      ctx.fillStyle = node.color
+      ctx.textAlign = "center"
+      ctx.textBaseline = "top"
+      ctx.fillText(node.label, x, y + r + 3)
+      return
+    }
 
     if (node.type === "agent") {
       const isActiveAgent = node.agentId === activeAgentId
@@ -465,7 +543,7 @@ export function AgentViz() {
 
   // Node click area
   const paintNodeArea = useCallback((node: NodeObject<VizNode>, color: string, ctx: CanvasRenderingContext2D) => {
-    const r = node.type === "agent" ? 12 : 9
+    const r = node.type === "agent" ? 12 : node.type === "delegate" ? 10 : 9
     ctx.fillStyle = color
     ctx.beginPath()
     ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, Math.PI * 2)
@@ -556,8 +634,22 @@ export function AgentViz() {
         ],
       }
     }
+    if (selectedNode.startsWith("delegate:")) {
+      const depth = Number(selectedNode.slice(9))
+      const deleg = activeDelegations.find((d) => d.depth === depth)
+      if (!deleg) return null
+      return {
+        title: `Delegate D${depth}`,
+        lines: [
+          { label: "Goal", value: deleg.goal.slice(0, 50) },
+          { label: "Tools", value: String(deleg.tools.length) },
+          { label: "Depth", value: String(depth) },
+          { label: "Status", value: "active" },
+        ],
+      }
+    }
     return null
-  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats])
+  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, activeDelegations])
 
   // Activity feed
   const recentActivity = useMemo(() => {
@@ -576,8 +668,10 @@ export function AgentViz() {
       } else if (e.kind === "answer") {
         items.push({ text: e.text.slice(0, 80), color: C.success, time: i })
       } else if (e.kind === "iteration") {
-        items.push({ text: `iter ${e.current}/${e.max}`, color: C.mid, time: i })
-      }
+        items.push({ text: `iter ${e.current}/${e.max}`, color: C.mid, time: i })      } else if (e.kind === "delegation-start") {
+        items.push({ text: `▶ D${e.depth} ${e.agentName ? `[${e.agentName}] ` : ""}${e.goal.slice(0, 60)}`, color: "#6CB4EE", time: i })
+      } else if (e.kind === "delegation-end") {
+        items.push({ text: `◀ D${e.depth} ${e.status}`, color: e.status === "done" ? C.success : C.coral, time: i })      }
     }
     return items.reverse()
   }, [trace])

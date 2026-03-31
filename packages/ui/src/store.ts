@@ -115,6 +115,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "step-timeline": { w: 4, h: 10, minW: 3, minH: 5 },
   "tool-stats":    { w: 4, h: 6,  minW: 3, minH: 4 },
   "run-history":   { w: 4, h: 8,  minW: 3, minH: 4 },
+  "command-center": { w: 6, h: 10, minW: 4, minH: 6 },
 }
 
 const GRID_COLS = 12
@@ -456,6 +457,29 @@ export const useStore = create<AppState>()(
               actions: (data["actions"] as Notification["actions"]) ?? [],
               read: false,
               createdAt: timestamp,
+            })
+            break
+          }
+
+          case "delegation.started": {
+            store.addTrace({
+              kind: "delegation-start",
+              goal: data["goal"] as string,
+              depth: data["depth"] as number,
+              tools: (data["tools"] as string[]) ?? [],
+              agentId: data["agentId"] as string | undefined,
+              agentName: data["agentName"] as string | undefined,
+            })
+            break
+          }
+
+          case "delegation.ended": {
+            store.addTrace({
+              kind: "delegation-end",
+              depth: data["depth"] as number,
+              status: data["status"] as "done" | "error",
+              answer: data["answer"] as string | undefined,
+              error: data["error"] as string | undefined,
             })
             break
           }

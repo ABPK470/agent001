@@ -23,6 +23,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "step-timeline": "Step Timeline",
   "tool-stats": "Tool Stats",
   "run-history": "Run History",
+  "command-center": "Command Center",
 }
 
 interface Props {

@@ -13,6 +13,7 @@
 import {
     Agent,
     completeRun,
+    createDelegateTool,
     createEngineServices,
     createRun,
     failRun,
@@ -23,10 +24,12 @@ import {
     runStarted,
     startPlanning,
     startRunning,
+    type DelegateContext,
     type DomainEvent,
     type EngineServices,
     type LLMClient,
     type Message,
+    type ResolvedAgent,
     type RunState,
     type Tool,
 } from "@agent001/agent"
@@ -349,8 +352,53 @@ export class AgentOrchestrator {
     }
     const governedTools = tools.map((t) => governTool(t, services, state))
 
+    // Create delegate tool for sub-agent spawning (ephemeral delegation)
+    const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
+    const delegateCtx: DelegateContext = {
+      llm: this.llm,
+      availableTools: governedTools,
+      depth: 0,
+      maxDepth: maxDelegationDepth,
+      signal: controller.signal,
+      resolveAgent: (agentId: string): ResolvedAgent | null => {
+        const def = db.getAgentDefinition(agentId)
+        if (!def) return null
+        const toolNames = JSON.parse(def.tools) as string[]
+        const agentTools = resolveTools(toolNames).map((t) => governTool(t, services, state))
+        return {
+          id: def.id,
+          name: def.name,
+          systemPrompt: def.system_prompt,
+          tools: agentTools,
+        }
+      },
+      onChildTrace: (entry) => {
+        this.saveTrace(runId, entry)
+        // Broadcast delegation events in real-time
+        if (entry.kind === "delegation-start") {
+          broadcast({ type: "delegation.started", data: { runId, ...entry } })
+        } else if (entry.kind === "delegation-end") {
+          broadcast({ type: "delegation.ended", data: { runId, ...entry } })
+        }
+      },
+      onChildUsage: (childUsage) => {
+        broadcast({
+          type: "usage.updated",
+          data: {
+            runId,
+            promptTokens: childUsage.promptTokens,
+            completionTokens: childUsage.completionTokens,
+            totalTokens: childUsage.totalTokens,
+            llmCalls: 0,
+          },
+        })
+      },
+    }
+    const delegateTool = createDelegateTool(delegateCtx)
+    const allTools = delegateTool ? [...governedTools, delegateTool] : governedTools
+
     // Create agent with checkpoint support
-    const agent = new Agent(this.llm, governedTools, {
+    const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
       systemPrompt,

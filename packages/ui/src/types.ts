@@ -70,6 +70,9 @@ export type TraceEntry =
   | { kind: "tool-error"; text: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
+  | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentId?: string; agentName?: string }
+  | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }
+  | { kind: "delegation-end"; depth: number; status: "done" | "error"; answer?: string; error?: string }
 
 // ── Layout ───────────────────────────────────────────────────────
 
@@ -97,6 +100,7 @@ export type WidgetType =
   | "step-timeline"
   | "tool-stats"
   | "run-history"
+  | "command-center"
 
 export interface ViewConfig {
   id: string

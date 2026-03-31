@@ -8,6 +8,7 @@ import { AgentChat } from "./AgentChat"
 import { AgentTrace } from "./AgentTrace"
 import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
+import { CommandCenter } from "./CommandCenter"
 import { LiveLogs } from "./LiveLogs"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
@@ -24,4 +25,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "step-timeline": StepTimeline,
   "tool-stats": ToolStats,
   "run-history": RunHistory,
+  "command-center": CommandCenter,
 }

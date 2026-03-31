@@ -37,6 +37,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "step-timeline", label: "Step Timeline",  desc: "Visual timeline of tool calls and steps",    Icon: Clock },
   { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                Icon: BarChart3 },
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
+  { type: "command-center", label: "Command Center", desc: "Operational overview: status, tools, agents, tokens", Icon: LayoutGrid },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
