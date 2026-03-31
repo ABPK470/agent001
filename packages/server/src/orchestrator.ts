@@ -60,6 +60,7 @@ export interface AgentRunConfig {
 export interface OrchestratorConfig {
   llm: LLMClient
   messageRouter?: MessageRouter
+  workspace?: string
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────
@@ -68,10 +69,17 @@ export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
   private messageRouter: MessageRouter | null = null
+  private workspace: string | null = null
 
   constructor(config: OrchestratorConfig) {
     this.llm = config.llm
     this.messageRouter = config.messageRouter ?? null
+    this.workspace = config.workspace ?? null
+  }
+
+  /** Update the workspace path (used in system prompt context). */
+  setWorkspace(path: string): void {
+    this.workspace = path
   }
 
   /** Hot-swap the LLM client — takes effect on the next run. */
@@ -398,10 +406,13 @@ export class AgentOrchestrator {
     const allTools = delegateTool ? [...governedTools, delegateTool] : governedTools
 
     // Create agent with checkpoint support
+    const effectivePrompt = systemPrompt
+      ? (this.workspace ? `${systemPrompt}\n\nWorkspace: ${this.workspace}` : systemPrompt)
+      : (this.workspace ? `Workspace: ${this.workspace}` : undefined)
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
-      systemPrompt,
+      systemPrompt: effectivePrompt,
       onStep: (messages, iteration) => {
         lastMessages = messages
         lastIteration = iteration

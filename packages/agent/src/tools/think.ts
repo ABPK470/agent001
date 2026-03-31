@@ -16,9 +16,9 @@ import type { Tool } from "../types.js"
 export const thinkTool: Tool = {
   name: "think",
   description:
-    "Use this tool to think through a problem step by step. " +
-    "Record your reasoning, plan next steps, or analyze observations. " +
-    "The thought is recorded in your context for future reference.",
+    "Use ONLY for genuinely complex decisions requiring structured analysis. " +
+    "For simple tasks, act directly without thinking first. " +
+    "Each think call costs a full round-trip — prefer reasoning in your response text instead.",
   parameters: {
     type: "object",
     properties: {

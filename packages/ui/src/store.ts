@@ -68,6 +68,10 @@ interface AppState {
   addAudit: (entry: AuditEntry) => void
   setAudit: (entries: AuditEntry[]) => void
 
+  // Live usage for current run (updated via WS)
+  liveUsage: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number }
+  resetLiveUsage: () => void
+
   // Trace (rich agent execution log)
   trace: TraceEntry[]
   addTrace: (entry: TraceEntry) => void
@@ -288,6 +292,10 @@ export const useStore = create<AppState>()(
       addAudit: (entry) => set((s) => ({ audit: [...s.audit, entry] })),
       setAudit: (audit) => set({ audit }),
 
+      // Live usage
+      liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 },
+      resetLiveUsage: () => set({ liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 } }),
+
       // Trace
       trace: [],
       addTrace: (entry) => set((s) => ({ trace: [...s.trace, entry] })),
@@ -333,6 +341,7 @@ export const useStore = create<AppState>()(
 
         switch (type) {
           case "run.queued":
+            store.resetLiveUsage()
             store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -480,6 +489,18 @@ export const useStore = create<AppState>()(
               status: data["status"] as "done" | "error",
               answer: data["answer"] as string | undefined,
               error: data["error"] as string | undefined,
+            })
+            break
+          }
+
+          case "usage.updated": {
+            set({
+              liveUsage: {
+                promptTokens: (data["promptTokens"] as number) ?? 0,
+                completionTokens: (data["completionTokens"] as number) ?? 0,
+                totalTokens: (data["totalTokens"] as number) ?? 0,
+                llmCalls: (data["llmCalls"] as number) ?? 0,
+              },
             })
             break
           }

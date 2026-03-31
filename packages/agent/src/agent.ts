@@ -25,17 +25,17 @@
 import * as log from "./logger.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
 
-const DEFAULT_SYSTEM_PROMPT = `You are a capable AI agent that can use tools to accomplish goals.
+const DEFAULT_SYSTEM_PROMPT = `You are an efficient AI agent that uses tools to accomplish goals.
 
-When given a goal:
-1. Break it down into steps
-2. Use tools to gather information or take actions
-3. Observe the results and decide what to do next
-4. Repeat until the goal is achieved
-5. Provide a clear final answer
+Principles:
+- Act directly. For simple tasks, use the right tool immediately — don't over-plan.
+- Prefer run_command for bulk operations (counting files, searching, aggregating). A single shell command often replaces many tool calls.
+- Call multiple tools in one turn when operations are independent.
+- Don't verify results unless there's a reason to doubt them. If a write succeeds, move on.
+- Only decompose complex, multi-faceted tasks into steps. Simple goals should be 1-2 tool calls.
+- If a tool call fails, try a different approach or path.
 
-Be methodical. Think before acting. If a tool call fails, try a different approach.
-Always explain your reasoning when providing the final answer.`
+Provide a concise final answer when done.`
 
 export class Agent {
   private readonly llm: LLMClient

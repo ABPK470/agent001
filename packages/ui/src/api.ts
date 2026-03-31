@@ -9,10 +9,9 @@ const BASE = ""
 // ── REST API ─────────────────────────────────────────────────────
 
 async function json<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...opts?.headers },
-  })
+  const headers: Record<string, string> = { ...opts?.headers as Record<string, string> }
+  if (opts?.body) headers["Content-Type"] = "application/json"
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers })
   return res.json() as Promise<T>
 }
 

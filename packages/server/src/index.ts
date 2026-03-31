@@ -71,6 +71,7 @@ async function main() {
   // Create orchestrator (tools are resolved per-run from agent definitions)
   const orchestrator = new AgentOrchestrator({
     llm,
+    workspace: currentWorkspace,
   })
 
   // ── Message routing (WhatsApp + Messenger) ───────────────────
@@ -152,6 +153,7 @@ async function main() {
     currentWorkspace = resolved
     setBasePath(resolved)
     setShellCwd(resolved)
+    orchestrator.setWorkspace(resolved)
     console.log(`📂 Workspace changed to: ${resolved}`)
 
     return { ok: true, path: resolved }

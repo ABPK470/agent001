@@ -54,27 +54,46 @@ export class OpenAIClient implements LLMClient {
       body.tools = tools.map(formatTool)
     }
 
-    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const maxRetries = 3
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`OpenAI API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      // Respect Retry-After header, fall back to exponential backoff
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(1000 * 2 ** attempt, 30_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`OpenAI API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       choices: Array<{
         message: {
           content: string | null
           tool_calls?: OpenAIToolCall[]
         }
       }>
+      usage?: {
+        prompt_tokens: number
+        completion_tokens: number
+        total_tokens: number
+      }
     }
 
     const choice = data.choices[0].message
@@ -88,6 +107,11 @@ export class OpenAIClient implements LLMClient {
           arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
         }),
       ),
+      usage: data.usage ? {
+        promptTokens: data.usage.prompt_tokens,
+        completionTokens: data.usage.completion_tokens,
+        totalTokens: data.usage.total_tokens,
+      } : undefined,
     }
   }
 }

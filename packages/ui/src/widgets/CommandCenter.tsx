@@ -87,6 +87,7 @@ export function CommandCenter() {
   const notifications = useStore((s) => s.notifications)
   const unreadCount = useStore((s) => s.unreadCount)
   const connected = useStore((s) => s.connected)
+  const liveUsage = useStore((s) => s.liveUsage)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setActiveRun = useStore((s) => s.setActiveRun)
@@ -567,15 +568,16 @@ export function CommandCenter() {
         </div>
 
         {/* ── Usage bar ────────────────────────────────────────── */}
-        {usage && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1" style={{ borderBottom: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <StatusField label="CALLS" value={String(liveUsage.llmCalls)} color={liveUsage.llmCalls > 0 ? C.peach : C.dim} />
+          <StatusField label="TK(run)" value={fmtK(liveUsage.totalTokens)} color={liveUsage.totalTokens > 0 ? C.text : C.dim} />
+          {usage && <>
+            <span style={{ color: C.dim }}>│</span>
             <StatusField label="TOKENS" value={fmtK(usage.totals.totalTokens)} color={C.text} />
-            <StatusField label="PROMPT" value={fmtK(usage.totals.promptTokens)} color={C.dim} />
-            <StatusField label="COMPL" value={fmtK(usage.totals.completionTokens)} color={C.dim} />
             <StatusField label="LLM" value={String(usage.totals.llmCalls)} color={C.accent} />
             <StatusField label="RUNS" value={String(usage.totals.runCount)} color={C.text} />
-          </div>
-        )}
+          </>}
+        </div>
 
         {/* ── Recent alerts ────────────────────────────────────── */}
         {recentAlerts.length > 0 && (

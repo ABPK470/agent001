@@ -16,6 +16,8 @@ import {
     type Tool,
 } from "@agent001/agent"
 
+export { thinkTool }
+
 export interface ToolInfo {
   name: string
   description: string
@@ -27,7 +29,6 @@ const ALL_TOOLS: Tool[] = [
   listDirectoryTool,
   shellTool,
   fetchUrlTool,
-  thinkTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
