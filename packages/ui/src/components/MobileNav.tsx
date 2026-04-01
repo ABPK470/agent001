@@ -9,6 +9,7 @@ import {
     Activity,
     BarChart3,
     Clock,
+    Film,
     GitBranch,
     History,
     LayoutGrid,
@@ -32,6 +33,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "tool-stats": BarChart3,
   "run-history": History,
   "command-center": LayoutGrid,
+  "trajectory-replay": Film,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -45,6 +47,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "tool-stats": "Stats",
   "run-history": "History",
   "command-center": "Center",
+  "trajectory-replay": "Replay",
 }
 
 interface Props {

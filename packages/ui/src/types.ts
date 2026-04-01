@@ -101,6 +101,7 @@ export type WidgetType =
   | "tool-stats"
   | "run-history"
   | "command-center"
+  | "trajectory-replay"
 
 export interface ViewConfig {
   id: string

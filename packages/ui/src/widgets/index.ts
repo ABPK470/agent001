@@ -14,6 +14,7 @@ import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
 import { ToolStats } from "./ToolStats"
+import { TrajectoryReplay } from "./TrajectoryReplay"
 
 export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "agent-chat": AgentChat,
@@ -26,4 +27,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "tool-stats": ToolStats,
   "run-history": RunHistory,
   "command-center": CommandCenter,
+  "trajectory-replay": TrajectoryReplay,
 }

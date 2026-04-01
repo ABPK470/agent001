@@ -22,6 +22,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "tool-stats": "Tool Stats",
   "run-history": "Run History",
   "command-center": "Command Center",
+  "trajectory-replay": "Trajectory Replay",
 }
 
 export function WidgetModal() {

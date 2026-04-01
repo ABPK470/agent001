@@ -10,6 +10,7 @@ import {
     BarChart3,
     Clock,
     Eye,
+    Film,
     History,
     LayoutGrid,
     ListTree,
@@ -38,6 +39,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                Icon: BarChart3 },
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
   { type: "command-center", label: "Command Center", desc: "Operational overview: status, tools, agents, tokens", Icon: LayoutGrid },
+  { type: "trajectory-replay", label: "Trajectory Replay", desc: "Step-through debugger for agent run trajectories", Icon: Film },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

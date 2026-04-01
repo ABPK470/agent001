@@ -130,6 +130,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ action, data }),
     }),
+
+  // Trajectory
+  getTrajectory: (runId: string) =>
+    json<{ runId: string; events: Array<{ seq: number; event: Record<string, unknown>; timestamp: string }> }>(
+      `/api/trajectory/${encodeURIComponent(runId)}`,
+    ),
+  replayTrajectory: (runId: string) =>
+    json<{
+      valid: boolean
+      violations: Array<{ seq: number; from: string; to: string; message: string }>
+      scorecard: Record<string, unknown>
+      eventCount: number
+    }>(`/api/trajectory/${encodeURIComponent(runId)}/replay`, { method: "POST" }),
+  gettrajectorySummary: (runId: string) =>
+    json<Record<string, unknown>>(`/api/trajectory/${encodeURIComponent(runId)}/summary`),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────
