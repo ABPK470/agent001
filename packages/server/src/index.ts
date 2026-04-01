@@ -40,6 +40,7 @@ import { AgentOrchestrator } from "./orchestrator.js"
 import { registerAgentRoutes } from "./routes/agents.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerLlmRoutes } from "./routes/llm.js"
+import { registerMemoryRoutes } from "./routes/memory.js"
 import { registerNotificationRoutes } from "./routes/notifications.js"
 import { registerPolicyRoutes } from "./routes/policies.js"
 import { registerRunRoutes } from "./routes/runs.js"
@@ -129,6 +130,7 @@ async function main() {
   registerUsageRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)
+  registerMemoryRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
     console.log("🔄 LLM client hot-swapped")

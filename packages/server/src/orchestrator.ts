@@ -37,6 +37,8 @@ import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
+import { migrateEffects, recordEffect, recordFileWrite, resetEffectSeq } from "./effects.js"
+import { buildMemoryContext, consolidate, extractProcedural, extractRunSummary, migrateMemory } from "./memory.js"
 import { RunQueue, type RunPriority } from "./queue.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
@@ -81,6 +83,10 @@ export class AgentOrchestrator {
     this.messageRouter = config.messageRouter ?? null
     this.workspace = config.workspace ?? null
     this.queue = new RunQueue()
+
+    // Migrate memory + effects tables on startup
+    migrateMemory()
+    migrateEffects()
   }
 
   /** Update the workspace path (used in system prompt context). */
@@ -411,7 +417,10 @@ export class AgentOrchestrator {
       actor,
       stepCounter: resume?.iteration ?? 0,
     }
-    const governedTools = tools.map((t) => governTool(t, services, state))
+
+    // Wrap write_file with effect tracking (pre-write snapshots)
+    const trackedTools = tools.map((t) => this.wrapWithEffects(t, runId))
+    const governedTools = trackedTools.map((t) => governTool(t, services, state))
 
     // Create delegate tools for sub-agent spawning (sequential + parallel)
     const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
@@ -472,7 +481,11 @@ export class AgentOrchestrator {
     const delegateTools = createDelegateTools(delegateCtx)
     const allTools = [...governedTools, ...delegateTools, ...busTools]
 
-    // Build effective system prompt with workspace context
+    // Initialize effect tracking for this run
+    resetEffectSeq(runId)
+
+    // Build memory-augmented system prompt
+    const memoryContext = buildMemoryContext(goal)
     let effectivePrompt = systemPrompt ?? undefined
     if (this.workspace) {
       const wsContext = await this.getWorkspaceContext()
@@ -487,6 +500,7 @@ export class AgentOrchestrator {
         ? `${effectivePrompt}${contextBlock}`
         : contextBlock
     }
+    if (memoryContext) effectivePrompt = effectivePrompt ? `${effectivePrompt}\n${memoryContext}` : memoryContext
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
@@ -559,6 +573,28 @@ export class AgentOrchestrator {
 
       this.saveTrace(runId, { kind: "answer", text: answer })
 
+      // Extract memories from completed run
+      const toolNames = run.steps.map((s) => s.action)
+      extractRunSummary({
+        id: runId,
+        goal,
+        answer,
+        status: "completed",
+        tools: [...new Set(toolNames)],
+        stepCount: run.steps.length,
+      })
+
+      // Extract procedural memory (tool sequences that worked)
+      const traceEvents = run.steps.map((s) => ({
+        kind: "tool-call" as const,
+        tool: s.action,
+        argsSummary: Object.keys(s.input).join(", "),
+      }))
+      extractProcedural({ id: runId, goal, trace: traceEvents })
+
+      // Periodic consolidation (promote episodic → semantic)
+      consolidate({ minAgeHours: 24 })
+
       broadcast({
         type: "run.completed",
         data: { runId, answer, status: "completed", stepCount: run.steps.length },
@@ -612,6 +648,18 @@ export class AgentOrchestrator {
 
       this.saveTrace(runId, { kind: "error", text: errMsg })
 
+      // Extract memory from failed run (lower confidence)
+      const failedTools = run.steps.map((s) => s.action)
+      extractRunSummary({
+        id: runId,
+        goal,
+        answer: null,
+        status: "failed",
+        tools: [...new Set(failedTools)],
+        stepCount: run.steps.length,
+        error: errMsg,
+      })
+
       broadcast({
         type: "run.failed",
         data: { runId, error: errMsg, stepCount: run.steps.length },
@@ -637,6 +685,57 @@ export class AgentOrchestrator {
   }
 
   // ── Private: wire domain events to WebSocket ─────────────────
+
+  /**
+   * Wrap a tool with effect tracking.
+   * For write_file: captures pre-write snapshots and records file effects.
+   * For run_command: records command effects.
+   */
+  private wrapWithEffects(tool: Tool, runId: string): Tool {
+    if (tool.name === "write_file") {
+      return {
+        ...tool,
+        execute: async (args) => {
+          const path = String(args.path)
+          // Resolve to absolute path using workspace
+          const { resolve } = await import("node:path")
+          const basePath = this.workspace ?? process.cwd()
+          const absPath = resolve(basePath, path)
+
+          // Record the effect with pre-write snapshot
+          await recordFileWrite({
+            runId,
+            tool: "write_file",
+            filePath: absPath,
+            newContent: String(args.content),
+          })
+
+          // Execute the actual write
+          return tool.execute(args)
+        },
+      }
+    }
+
+    if (tool.name === "run_command") {
+      return {
+        ...tool,
+        execute: async (args) => {
+          const result = await tool.execute(args)
+          // Record command effect after execution
+          recordEffect({
+            runId,
+            kind: "command",
+            tool: "run_command",
+            target: String(args.command ?? args.cmd ?? ""),
+            metadata: { output: String(result).slice(0, 1000) },
+          })
+          return result
+        },
+      }
+    }
+
+    return tool
+  }
 
   private saveTrace(runId: string, entry: Record<string, unknown>): void {
     const active = this.activeRuns.get(runId)
