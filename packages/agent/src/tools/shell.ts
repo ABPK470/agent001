@@ -95,7 +95,14 @@ export const shellTool: Tool = {
           } else if (error && !stdout && !stderr) {
             parts.push(`Error: ${error.message}`)
           }
-          const output = parts.join("\n").trim()
+          let output = parts.join("\n").trim()
+          // Cap output to avoid blowing up the context window
+          const MAX_OUTPUT = 4000
+          if (output.length > MAX_OUTPUT) {
+            const head = output.slice(0, MAX_OUTPUT / 2)
+            const tail = output.slice(-MAX_OUTPUT / 2)
+            output = `${head}\n\n... (${output.length - MAX_OUTPUT} chars truncated) ...\n\n${tail}`
+          }
           resolve(output || "(no output)")
         },
       )

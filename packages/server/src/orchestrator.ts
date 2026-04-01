@@ -34,6 +34,7 @@ import {
   type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
+import { arch, homedir, platform } from "node:os"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
@@ -67,6 +68,32 @@ export interface OrchestratorConfig {
   llm: LLMClient
   messageRouter?: MessageRouter
   workspace?: string
+}
+
+// ── Environment detection ────────────────────────────────────────
+
+const OS_LABELS: Record<string, string> = {
+  darwin: "macOS",
+  linux: "Linux",
+  win32: "Windows",
+}
+
+function buildEnvironmentContext(): string {
+  const os = OS_LABELS[platform()] ?? platform()
+  const shell = platform() === "win32" ? "cmd.exe / PowerShell" : "/bin/sh (POSIX)"
+  const lines = [
+    "\nEnvironment:",
+    `  OS: ${os} (${arch()})`,
+    `  Shell: ${shell}`,
+    `  Home: ${homedir()}`,
+    `  Node: ${process.version}`,
+  ]
+  if (platform() === "darwin") {
+    lines.push("  Note: macOS uses BSD coreutils (e.g. sed -i '' not sed -i, no GNU extensions by default).")
+  } else if (platform() === "win32") {
+    lines.push("  Note: Use PowerShell syntax or ensure commands are Windows-compatible.")
+  }
+  return lines.join("\n")
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────
@@ -487,6 +514,13 @@ export class AgentOrchestrator {
     // Build memory-augmented system prompt
     const memoryContext = buildMemoryContext(goal)
     let effectivePrompt = systemPrompt ?? undefined
+
+    // Inject runtime environment so the agent knows what OS/shell it's running on
+    const envBlock = buildEnvironmentContext()
+    effectivePrompt = effectivePrompt
+      ? `${effectivePrompt}\n${envBlock}`
+      : envBlock
+
     if (this.workspace) {
       const wsContext = await this.getWorkspaceContext()
       const contextBlock = [

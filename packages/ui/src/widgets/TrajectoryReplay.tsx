@@ -171,14 +171,14 @@ export function TrajectoryReplay() {
   return (
     <div className="flex flex-col h-full gap-0 select-none">
       {/* ── Top bar: run picker + tabs ──────────────────────── */}
-      <div className="flex items-center gap-1 px-1 pb-1.5 shrink-0 border-b border-elevated/50">
+      <div className="flex items-center gap-1.5 px-2 pb-2 shrink-0 border-b border-elevated/50">
         {/* Run picker */}
         <div className="relative">
           <button
-            className="text-[13px] text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors truncate max-w-[140px]"
+            className="text-sm text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors truncate max-w-[180px]"
             onClick={() => setShowRunPicker(!showRunPicker)}
           >
-            {truncate(effectiveRunId, 10)}
+            {truncate(effectiveRunId, 14)}
           </button>
           {showRunPicker && (
             <RunPicker
@@ -192,11 +192,11 @@ export function TrajectoryReplay() {
 
         {/* Validation badge */}
         {replayData && (
-          <div className={`flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${
+          <div className={`flex items-center gap-1.5 text-[13px] font-medium px-2 py-0.5 rounded-full ${
             replayData.valid ? "bg-success/10 text-success" : "bg-error/10 text-error"
           }`}>
-            {replayData.valid ? <Circle size={7} fill="currentColor" /> : <AlertTriangle size={10} />}
-            {replayData.valid ? "Valid" : `${replayData.violations?.length ?? 0} violations`}
+            {replayData.valid ? <Circle size={9} fill="currentColor" /> : <AlertTriangle size={14} />}
+            {replayData.valid ? "Valid" : `${replayData.violations?.length ?? 0} violation${(replayData.violations?.length ?? 0) === 1 ? "" : "s"}`}
           </div>
         )}
 
@@ -206,14 +206,14 @@ export function TrajectoryReplay() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            className={`flex items-center gap-1 text-[12px] px-2 py-1 rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 text-[13px] px-2.5 py-1 rounded-md transition-colors ${
               tab === t.id
                 ? "bg-accent/15 text-accent font-medium"
                 : "text-text-muted hover:text-text hover:bg-elevated/60"
             }`}
             onClick={() => setTab(t.id)}
           >
-            <t.Icon size={12} />
+            <t.Icon size={14} />
             {t.label}
           </button>
         ))}
@@ -321,20 +321,20 @@ function ReplayTab({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Scorecard toggle + counter */}
-      <div className="flex items-center gap-2 px-2 py-1.5 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 shrink-0">
         {replayData?.scorecard && (
           <button
-            className={`flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 text-[13px] px-2.5 py-1 rounded-md transition-colors ${
               showScorecard ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text hover:bg-elevated/60"
             }`}
             onClick={() => setShowScorecard(!showScorecard)}
           >
-            <BarChart3 size={12} />
+            <BarChart3 size={14} />
             Scorecard
           </button>
         )}
         <div className="flex-1" />
-        <span className="text-[12px] text-text-muted font-mono tabular-nums">{cursor + 1}/{trajectory.length}</span>
+        <span className="text-[13px] text-text-muted font-mono tabular-nums">{cursor + 1}/{trajectory.length}</span>
       </div>
 
       {/* Scorecard */}
@@ -347,7 +347,7 @@ function ReplayTab({
 
       {/* Event list + detail */}
       <div className="flex flex-1 min-h-0">
-        <div ref={eventListRef} className="w-[170px] shrink-0 overflow-y-auto border-r border-elevated/50">
+        <div ref={eventListRef} className="w-[260px] shrink-0 overflow-y-auto border-r border-elevated/50">
           {trajectory.map((entry, i) => (
             <EventListItem
               key={entry.seq}
@@ -359,7 +359,7 @@ function ReplayTab({
             />
           ))}
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-2">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
           {currentEntry && (
             <EventDetail entry={currentEntry} violation={violationAt(currentEntry.seq) ?? null} />
           )}
@@ -434,18 +434,18 @@ function MutationTab({
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       {/* Help text */}
-      <div className="px-3 py-2 text-[12px] text-text-muted border-b border-elevated/50">
+      <div className="px-4 py-2.5 text-[13px] text-text-muted border-b border-elevated/50">
         Alter the trajectory and replay to test agent resilience. Drop events, replace them with errors,
         or inject new events — then see how the state machine and scorecard change.
       </div>
 
       {/* Mutation list */}
-      <div className="px-3 py-2 space-y-1.5 shrink-0">
+      <div className="px-4 py-2.5 space-y-2 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium text-text">Mutations ({mutations.length})</span>
+          <span className="text-sm font-medium text-text">Mutations ({mutations.length})</span>
           <div className="flex-1" />
           <button
-            className={`flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md font-medium transition-colors ${
+            className={`flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-md font-medium transition-colors ${
               mutations.length > 0
                 ? "bg-accent/15 text-accent hover:bg-accent/25"
                 : "bg-elevated/50 text-text-muted cursor-not-allowed"
@@ -453,20 +453,20 @@ function MutationTab({
             onClick={runMutatedReplay}
             disabled={mutations.length === 0 || mutLoading}
           >
-            <RefreshCw size={11} className={mutLoading ? "animate-spin" : ""} />
+            <RefreshCw size={13} className={mutLoading ? "animate-spin" : ""} />
             Replay with mutations
           </button>
         </div>
 
         {mutations.length === 0 && (
-          <div className="text-[12px] text-text-muted py-2">
+          <div className="text-[13px] text-text-muted py-2">
             No mutations yet. Click events below to add mutations.
           </div>
         )}
 
         {mutations.map((mut, i) => (
-          <div key={i} className="flex items-center gap-2 bg-elevated/40 rounded-lg px-2.5 py-1.5 text-[12px]">
-            <span className={`font-mono font-medium px-1.5 py-0.5 rounded ${
+          <div key={i} className="flex items-center gap-2.5 bg-elevated/40 rounded-lg px-3 py-2 text-[13px]">
+            <span className={`font-mono font-medium px-2 py-0.5 rounded ${
               mut.type === "drop" ? "bg-error/10 text-error"
                 : mut.type === "replace" ? "bg-warning/10 text-warning"
                   : "bg-accent/10 text-accent"
@@ -477,7 +477,7 @@ function MutationTab({
             {mut.event && <span className="text-text-secondary">→ {mut.event.kind}</span>}
             <div className="flex-1" />
             <button className="text-text-muted hover:text-error transition-colors" onClick={() => removeMutation(i)}>
-              <X size={12} />
+              <X size={15} />
             </button>
           </div>
         ))}
@@ -485,26 +485,26 @@ function MutationTab({
 
       {/* Mutated replay result */}
       {mutatedReplay && (
-        <div className="px-3 py-2 border-t border-elevated/50 space-y-2">
+        <div className="px-4 py-3 border-t border-elevated/50 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-text">Mutated Replay Result</span>
-            <div className={`flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${
+            <span className="text-sm font-medium text-text">Mutated Replay Result</span>
+            <div className={`flex items-center gap-1.5 text-[13px] font-medium px-2 py-0.5 rounded-full ${
               mutatedReplay.valid ? "bg-success/10 text-success" : "bg-error/10 text-error"
             }`}>
-              {mutatedReplay.valid ? <Circle size={7} fill="currentColor" /> : <AlertTriangle size={10} />}
-              {mutatedReplay.valid ? "Valid" : `${mutatedReplay.violations?.length ?? 0} violations`}
+              {mutatedReplay.valid ? <Circle size={9} fill="currentColor" /> : <AlertTriangle size={14} />}
+              {mutatedReplay.valid ? "Valid" : `${mutatedReplay.violations?.length ?? 0} violation${(mutatedReplay.violations?.length ?? 0) === 1 ? "" : "s"}`}
             </div>
           </div>
 
           {/* Compare original vs mutated side-by-side */}
           {replayData?.scorecard && mutatedReplay.scorecard && (
-            <div className="grid grid-cols-2 gap-2 text-[12px]">
+            <div className="grid grid-cols-2 gap-3 text-[13px]">
               <div className="space-y-1">
-                <div className="text-text-muted font-medium">Original</div>
+                <div className="text-text-muted font-medium text-[13px]">Original</div>
                 <MiniScorecard sc={replayData.scorecard} />
               </div>
               <div className="space-y-1">
-                <div className="text-text-muted font-medium">Mutated</div>
+                <div className="text-text-muted font-medium text-[13px]">Mutated</div>
                 <MiniScorecard sc={mutatedReplay.scorecard} />
               </div>
             </div>
@@ -512,11 +512,11 @@ function MutationTab({
 
           {/* Violations */}
           {(mutatedReplay.violations?.length ?? 0) > 0 && (
-            <div className="space-y-1">
-              <div className="text-[12px] text-error font-medium">Violations</div>
+            <div className="space-y-1.5">
+              <div className="text-[13px] text-error font-medium">Violations</div>
               {mutatedReplay.violations!.map((v, i) => (
-                <div key={i} className="flex items-start gap-1.5 text-[12px] text-error/80 bg-error/5 rounded px-2 py-1">
-                  <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                <div key={i} className="flex items-start gap-2 text-[13px] text-error/80 bg-error/5 rounded-lg px-3 py-1.5">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                   <span>#{v.seq}: {v.from} → {v.to} — {v.message}</span>
                 </div>
               ))}
@@ -527,35 +527,127 @@ function MutationTab({
 
       {/* Event list with mutation actions */}
       <div className="border-t border-elevated/50">
-        <div className="px-3 py-1.5 text-[11px] text-text-muted font-medium uppercase tracking-wide">
+        <div className="px-4 py-2 text-[12px] text-text-muted font-medium uppercase tracking-wide">
           Events — click actions to add mutations
         </div>
         {trajectory.map((entry) => {
           const meta = EVENT_META[entry.event.kind] ?? EVENT_META["error"]
-          const hasMutations = mutations.some((m) => m.seq === entry.seq)
-          return (
-            <div
-              key={entry.seq}
-              className={`flex items-center gap-1.5 px-3 py-1 text-[12px] border-b border-elevated/20 ${
-                hasMutations ? "bg-warning/5" : ""
-              }`}
-            >
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
-              <span className="font-mono font-medium w-10" style={{ color: meta.color }}>{meta.short}</span>
-              <span className="text-[11px] text-text-muted font-mono">#{entry.seq}</span>
-              <span className="truncate flex-1 text-text-secondary text-[11px]">{eventPreview(entry.event)}</span>
-              {/* Mutation buttons */}
-              <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                <MutButton title="Drop this event" onClick={() => addMutation("drop", entry.seq)} color="error">
-                  <Trash2 size={10} />
-                </MutButton>
-                <MutButton title="Replace with error" onClick={() => addMutation("replace", entry.seq)} color="warning">
-                  <RefreshCw size={10} />
-                </MutButton>
-                <MutButton title="Inject error before" onClick={() => addMutation("inject", entry.seq)} color="accent">
-                  <Plus size={10} />
-                </MutButton>
+          const kind = entry.event.kind
+          const hasMut = mutations.some((m) => m.seq === entry.seq)
+
+          // Mutation action buttons (shared for all rows)
+          const actions = (
+            <div className="flex items-center gap-1 shrink-0 ml-auto opacity-50 hover:opacity-100 transition-opacity">
+              <MutButton title="Drop this event" onClick={() => addMutation("drop", entry.seq)} color="error">
+                <Trash2 size={14} />
+              </MutButton>
+              <MutButton title="Replace with error" onClick={() => addMutation("replace", entry.seq)} color="warning">
+                <RefreshCw size={14} />
+              </MutButton>
+              <MutButton title="Inject error before" onClick={() => addMutation("inject", entry.seq)} color="accent">
+                <Plus size={14} />
+              </MutButton>
+            </div>
+          )
+
+          const rowBase = `flex items-center px-4 transition-colors ${hasMut ? "bg-warning/5" : ""}`
+
+          // Iteration — separator
+          if (kind === "iteration") {
+            return (
+              <div key={entry.seq} className={`${rowBase} text-text-muted text-[13px] font-mono pt-2 pb-0.5 border-t border-elevated/50 mt-0.5`}>
+                <span>iteration {String(entry.event.current)}/{String(entry.event.max)}</span>
+                {actions}
               </div>
+            )
+          }
+
+          // Goal
+          if (kind === "goal") {
+            return (
+              <div key={entry.seq} className={`${rowBase} pt-1.5 pb-1`}>
+                <span className="text-accent font-semibold text-sm">GOAL</span>
+                <span className="text-text ml-2 text-sm truncate">{trnc(entry.event.text, 60)}</span>
+                {actions}
+              </div>
+            )
+          }
+
+          // Thinking
+          if (kind === "thinking") {
+            return (
+              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4 border-l-2 border-accent/30`}>
+                <span className="text-accent text-[13px] font-medium">THK</span>
+                <span className="text-text-secondary text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
+                {actions}
+              </div>
+            )
+          }
+
+          // Tool call
+          if (kind === "tool-call") {
+            return (
+              <div key={entry.seq} className={`${rowBase} py-1`}>
+                <span className="text-warning text-[13px] font-medium font-mono">CALL</span>
+                <span className="text-text text-sm font-medium font-mono ml-2">{String(entry.event.tool)}</span>
+                {entry.event.argsSummary ? <span className="text-text-muted text-[13px] font-mono ml-1.5 truncate">{String(trnc(entry.event.argsSummary, 40))}</span> : null}
+                {actions}
+              </div>
+            )
+          }
+
+          // Tool result
+          if (kind === "tool-result") {
+            return (
+              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4`}>
+                <span className="text-success text-[13px] font-medium font-mono">RSLT</span>
+                <span className="text-text-muted text-[13px] font-mono ml-2 truncate">{trnc(entry.event.text, 50)}</span>
+                {actions}
+              </div>
+            )
+          }
+
+          // Tool error
+          if (kind === "tool-error") {
+            return (
+              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4`}>
+                <span className="text-error text-[13px] font-medium font-mono">ERR</span>
+                <span className="text-error/80 text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
+                {actions}
+              </div>
+            )
+          }
+
+          // Answer
+          if (kind === "answer") {
+            return (
+              <div key={entry.seq} className={`${rowBase} pt-2 pb-1 border-t border-elevated/50 mt-0.5 flex-col items-start`}>
+                <div className="flex items-center w-full">
+                  <span className="text-success font-semibold text-sm">COMPLETED</span>
+                  {actions}
+                </div>
+                <div className="text-text-secondary text-sm truncate w-full">{trnc(entry.event.text, 80)}</div>
+              </div>
+            )
+          }
+
+          // Error
+          if (kind === "error") {
+            return (
+              <div key={entry.seq} className={`${rowBase} pt-2 pb-1 border-t border-elevated/50 mt-0.5`}>
+                <span className="text-error font-semibold text-sm">FAILED</span>
+                <span className="text-error/80 text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
+                {actions}
+              </div>
+            )
+          }
+
+          // Fallback
+          return (
+            <div key={entry.seq} className={`${rowBase} py-0.5`}>
+              <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
+              <span className="text-text-secondary text-sm ml-2 truncate">{eventPreview(entry.event)}</span>
+              {actions}
             </div>
           )
         })}
@@ -569,7 +661,7 @@ function MutButton({ children, onClick, title, color }: {
 }) {
   return (
     <button
-      className={`w-5 h-5 flex items-center justify-center rounded text-${color}/60 hover:text-${color} hover:bg-${color}/10 transition-colors`}
+      className={`w-7 h-7 flex items-center justify-center rounded text-${color}/60 hover:text-${color} hover:bg-${color}/10 transition-colors`}
       onClick={onClick}
       title={title}
     >
@@ -580,7 +672,7 @@ function MutButton({ children, onClick, title, color }: {
 
 function MiniScorecard({ sc }: { sc: Scorecard }) {
   return (
-    <div className="bg-base rounded-lg px-2 py-1.5 space-y-0.5 font-mono text-[11px]">
+    <div className="bg-base rounded-lg px-3 py-2 space-y-1 font-mono text-[13px]">
       <Row label="Events" value={sc.totalEvents} />
       <Row label="Tool calls" value={sc.toolCalls} />
       <Row label="Errors" value={sc.toolErrors} accent={sc.toolErrors > 0} />
@@ -647,25 +739,25 @@ function CompareTab({
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
       {/* Header */}
-      <div className="px-3 py-2 text-[12px] text-text-muted border-b border-elevated/50">
+      <div className="px-4 py-2.5 text-[13px] text-text-muted border-b border-elevated/50">
         Compare the current run against another to see how they differ in efficiency, tools, and outcomes.
       </div>
 
       {/* Run selection */}
-      <div className="px-3 py-2 flex items-center gap-2 border-b border-elevated/50">
-        <div className="flex items-center gap-1.5 text-[12px]">
+      <div className="px-4 py-2.5 flex items-center gap-2.5 border-b border-elevated/50">
+        <div className="flex items-center gap-1.5 text-[13px]">
           <span className="text-text-muted">A:</span>
-          <span className="font-mono text-text-secondary">{truncate(currentRunId, 12)}</span>
+          <span className="font-mono text-text-secondary">{truncate(currentRunId, 16)}</span>
         </div>
 
-        <ArrowLeftRight size={12} className="text-text-muted" />
+        <ArrowLeftRight size={14} className="text-text-muted" />
 
         <div className="relative">
           <button
-            className="text-[12px] text-accent hover:text-accent/80 px-2 py-1 rounded-md bg-accent/10 hover:bg-accent/15 transition-colors"
+            className="text-[13px] text-accent hover:text-accent/80 px-2.5 py-1 rounded-md bg-accent/10 hover:bg-accent/15 transition-colors"
             onClick={() => setShowPicker(!showPicker)}
           >
-            {compareRunId ? truncate(compareRunId, 12) : "Select run B…"}
+            {compareRunId ? truncate(compareRunId, 16) : "Select run B…"}
           </button>
           {showPicker && (
             <RunPicker
@@ -683,11 +775,11 @@ function CompareTab({
 
         {compareRunId && (
           <button
-            className="text-[12px] text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors"
+            className="text-[13px] text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors"
             onClick={() => runComparison(compareRunId)}
             disabled={compLoading}
           >
-            <RefreshCw size={11} className={compLoading ? "animate-spin" : ""} />
+            <RefreshCw size={14} className={compLoading ? "animate-spin" : ""} />
           </button>
         )}
       </div>
@@ -702,9 +794,9 @@ function CompareTab({
 
       {/* Comparison results */}
       {comparison && !compLoading && (
-        <div className="px-3 py-3 space-y-3">
+        <div className="px-4 py-3 space-y-3">
           {/* Summary banner */}
-          <div className="text-[13px] text-text-secondary leading-relaxed bg-base rounded-lg px-3 py-2">
+          <div className="text-sm text-text-secondary leading-relaxed bg-base rounded-lg px-3 py-2.5">
             {comparison.summary}
           </div>
 
@@ -736,13 +828,13 @@ function CompareTab({
 
           {/* Side-by-side scorecards */}
           {scoreA && scoreB && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <div className="text-[12px] text-text-muted font-medium">Run A</div>
+                <div className="text-[13px] text-text-muted font-medium">Run A</div>
                 <MiniScorecard sc={scoreA} />
               </div>
               <div className="space-y-1">
-                <div className="text-[12px] text-text-muted font-medium">Run B</div>
+                <div className="text-[13px] text-text-muted font-medium">Run B</div>
                 <MiniScorecard sc={scoreB} />
               </div>
             </div>
@@ -761,9 +853,9 @@ function CompareTab({
 
 function CompareMetric({ label, value, good }: { label: string; value: string; good: boolean }) {
   return (
-    <div className="bg-base rounded-lg px-2.5 py-2 text-center">
-      <div className={`text-sm font-semibold font-mono ${good ? "text-success" : "text-text-secondary"}`}>{value}</div>
-      <div className="text-[11px] text-text-muted">{label}</div>
+    <div className="bg-base rounded-lg px-3 py-2.5 text-center">
+      <div className={`text-base font-semibold font-mono ${good ? "text-success" : "text-text-secondary"}`}>{value}</div>
+      <div className="text-[13px] text-text-muted">{label}</div>
     </div>
   )
 }
@@ -775,9 +867,9 @@ function DeltaBar({ label, delta, percent }: { label: string; delta: number; per
   const barWidth = Math.min(absDelta * (percent ? 200 : 20), 100) // scale
 
   return (
-    <div className="flex items-center gap-2 text-[12px]">
-      <span className="w-20 text-text-muted shrink-0">{label}</span>
-      <div className="flex-1 h-3 bg-base rounded relative overflow-hidden">
+    <div className="flex items-center gap-2 text-[13px]">
+      <span className="w-24 text-text-muted shrink-0">{label}</span>
+      <div className="flex-1 h-4 bg-base rounded relative overflow-hidden">
         <div className="absolute top-0 left-1/2 w-px h-full bg-elevated" />
         {delta !== 0 && (
           <div
@@ -810,28 +902,28 @@ function PlaybackControls({
   onCursor: (c: number) => void; onPlay: () => void; onSpeed: () => void; onReset: () => void
 }) {
   return (
-    <div className="flex items-center justify-center gap-1 px-2 py-1.5 shrink-0 border-t border-elevated/50">
-      <CtrlBtn onClick={() => { onCursor(0); }} title="Start (Home)"><SkipBack size={13} /></CtrlBtn>
-      <CtrlBtn onClick={() => onCursor(Math.max(0, cursor - 1))} title="Back (←)"><ChevronLeft size={15} /></CtrlBtn>
+    <div className="flex items-center justify-center gap-1.5 px-3 py-2 shrink-0 border-t border-elevated/50">
+      <CtrlBtn onClick={() => { onCursor(0); }} title="Start (Home)"><SkipBack size={15} /></CtrlBtn>
+      <CtrlBtn onClick={() => onCursor(Math.max(0, cursor - 1))} title="Back (←)"><ChevronLeft size={18} /></CtrlBtn>
       <button
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
+        className="flex items-center justify-center w-10 h-10 rounded-full bg-accent/15 text-accent hover:bg-accent/25 transition-colors"
         onClick={onPlay}
         title="Play/Pause (Space)"
       >
-        {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+        {playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
       </button>
-      <CtrlBtn onClick={() => onCursor(Math.min(total - 1, cursor + 1))} title="Forward (→)"><ChevronRight size={15} /></CtrlBtn>
-      <CtrlBtn onClick={() => onCursor(total - 1)} title="End"><SkipForward size={13} /></CtrlBtn>
-      <div className="w-px h-4 bg-elevated mx-1" />
-      <button className="text-[11px] font-mono text-text-muted hover:text-text px-1.5 py-0.5 rounded hover:bg-elevated/60 tabular-nums transition-colors" onClick={onSpeed} title="Speed">{speed}×</button>
-      <CtrlBtn onClick={onReset} title="Reset"><RotateCcw size={12} /></CtrlBtn>
+      <CtrlBtn onClick={() => onCursor(Math.min(total - 1, cursor + 1))} title="Forward (→)"><ChevronRight size={18} /></CtrlBtn>
+      <CtrlBtn onClick={() => onCursor(total - 1)} title="End"><SkipForward size={15} /></CtrlBtn>
+      <div className="w-px h-5 bg-elevated mx-1.5" />
+      <button className="text-[13px] font-mono text-text-muted hover:text-text px-2 py-1 rounded hover:bg-elevated/60 tabular-nums transition-colors" onClick={onSpeed} title="Speed">{speed}×</button>
+      <CtrlBtn onClick={onReset} title="Reset"><RotateCcw size={14} /></CtrlBtn>
     </div>
   )
 }
 
 function CtrlBtn({ children, onClick, title }: { children: React.ReactNode; onClick: () => void; title?: string }) {
   return (
-    <button className="flex items-center justify-center w-6 h-6 text-text-muted hover:text-text rounded hover:bg-elevated/60 transition-colors" onClick={onClick} title={title}>
+    <button className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded hover:bg-elevated/60 transition-colors" onClick={onClick} title={title}>
       {children}
     </button>
   )
@@ -841,17 +933,112 @@ function EventListItem({ entry, index, isActive, hasViolation, onClick }: {
   entry: TrajectoryEntry; index: number; isActive: boolean; hasViolation: boolean; onClick: () => void
 }) {
   const meta = EVENT_META[entry.event.kind] ?? EVENT_META["error"]
+  const kind = entry.event.kind
+
+  // Base wrapper — active highlight + violation left border
+  const wrapCls = [
+    "cursor-pointer transition-colors px-2.5",
+    isActive ? "bg-elevated/80" : "hover:bg-elevated/30",
+    hasViolation ? "border-l-2 border-error" : "",
+  ].join(" ")
+
+  // Iteration gets a separator
+  if (kind === "iteration") {
+    return (
+      <div data-seq={index} className={`${wrapCls} text-text-muted text-[13px] font-mono pt-2 pb-0.5 border-t border-elevated/50 mt-0.5`} onClick={onClick}>
+        iteration {String(entry.event.current)}/{String(entry.event.max)}
+      </div>
+    )
+  }
+
+  // Goal
+  if (kind === "goal") {
+    return (
+      <div data-seq={index} className={`${wrapCls} pt-1.5 pb-1`} onClick={onClick}>
+        <span className="text-accent font-semibold text-sm">GOAL</span>
+        <span className="text-text ml-2 text-sm">{trnc(entry.event.text, 60)}</span>
+      </div>
+    )
+  }
+
+  // Thinking — left accent stripe
+  if (kind === "thinking") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3 ${!hasViolation ? "border-l-2 border-accent/30" : ""}`} onClick={onClick}>
+        <span className="text-accent text-[13px] font-medium">THK</span>
+        <span className="text-text-secondary text-sm ml-2">{trnc(entry.event.text, 50)}</span>
+      </div>
+    )
+  }
+
+  // Tool call
+  if (kind === "tool-call") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-1`} onClick={onClick}>
+        <span className="text-warning text-[13px] font-medium font-mono">CALL</span>
+        <span className="text-text text-sm font-medium font-mono ml-2">{String(entry.event.tool)}</span>
+        {entry.event.argsSummary ? (
+          <span className="text-text-muted text-[13px] font-mono ml-1.5 truncate">{String(trnc(entry.event.argsSummary, 40))}</span>
+        ) : null}
+      </div>
+    )
+  }
+
+  // Tool result
+  if (kind === "tool-result") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3`} onClick={onClick}>
+        <span className="text-success text-[13px] font-medium font-mono">RSLT</span>
+        <span className="text-text-muted text-[13px] font-mono ml-2">{trnc(entry.event.text, 50)}</span>
+      </div>
+    )
+  }
+
+  // Tool error
+  if (kind === "tool-error") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3`} onClick={onClick}>
+        <span className="text-error text-[13px] font-medium font-mono">ERR</span>
+        <span className="text-error/80 text-sm ml-2">{trnc(entry.event.text, 50)}</span>
+      </div>
+    )
+  }
+
+  // Answer
+  if (kind === "answer") {
+    return (
+      <div data-seq={index} className={`${wrapCls} pt-2 pb-1 border-t border-elevated/50 mt-0.5`} onClick={onClick}>
+        <div className="text-success font-semibold text-sm">COMPLETED</div>
+        <div className="text-text-secondary text-sm truncate">{trnc(entry.event.text, 60)}</div>
+      </div>
+    )
+  }
+
+  // Error
+  if (kind === "error") {
+    return (
+      <div data-seq={index} className={`${wrapCls} pt-2 pb-1 border-t border-elevated/50 mt-0.5`} onClick={onClick}>
+        <span className="text-error font-semibold text-sm">FAILED</span>
+        <span className="text-error/80 text-sm ml-2">{trnc(entry.event.text, 50)}</span>
+      </div>
+    )
+  }
+
+  // Delegation
+  if (kind === "delegation-start" || kind === "delegation-end") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3 ${!hasViolation ? "border-l-2 border-viz-plum/30" : ""}`} onClick={onClick}>
+        <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
+        <span className="text-text-secondary text-sm ml-2">{trnc(entry.event.childGoal ?? entry.event.result ?? entry.event.goal, 50)}</span>
+      </div>
+    )
+  }
+
+  // Fallback
   return (
-    <div
-      data-seq={index}
-      className={`flex items-center gap-1.5 px-2 py-1 cursor-pointer text-[12px] font-mono transition-colors ${
-        isActive ? "bg-elevated text-text" : "text-text-muted hover:bg-elevated/40 hover:text-text-secondary"
-      }`}
-      onClick={onClick}
-    >
-      <div className="w-2 h-2 rounded-full shrink-0" style={{ background: hasViolation ? "var(--color-error)" : meta.color }} />
-      <span className="font-medium" style={{ color: isActive ? meta.color : undefined }}>{meta.short}</span>
-      <span className="truncate flex-1 text-[11px]">{eventPreview(entry.event)}</span>
+    <div data-seq={index} className={`${wrapCls} py-0.5`} onClick={onClick}>
+      <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
+      <span className="text-text-muted text-sm ml-2">{eventPreview(entry.event)}</span>
     </div>
   )
 }
@@ -871,7 +1058,7 @@ function TimelineScrubber({ events, cursor, violationSeqs, onSeek }: {
 
   return (
     <div className="relative">
-      <div ref={barRef} className="h-5 rounded-md bg-base cursor-pointer relative overflow-hidden" onClick={handleClick}>
+      <div ref={barRef} className="h-7 rounded-md bg-base cursor-pointer relative overflow-hidden" onClick={handleClick}>
         {events.map((entry, i) => {
           const pct = events.length > 1 ? (i / (events.length - 1)) * 100 : 50
           const meta = EVENT_META[entry.event.kind] ?? EVENT_META["error"]
@@ -903,14 +1090,14 @@ function EventDetail({ entry, violation }: { entry: TrajectoryEntry; violation: 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: meta.color }} />
-        <span className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</span>
-        <span className="text-[12px] text-text-muted font-mono">#{seq}</span>
-        <span className="text-[12px] text-text-muted font-mono ml-auto">{time}</span>
+        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: meta.color }} />
+        <span className="text-base font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+        <span className="text-[13px] text-text-muted font-mono">#{seq}</span>
+        <span className="text-[13px] text-text-muted font-mono ml-auto">{time}</span>
       </div>
       {violation && (
-        <div className="flex items-start gap-2 bg-error/10 text-error text-[13px] px-3 py-2 rounded-lg">
-          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 bg-error/10 text-error text-sm px-3 py-2.5 rounded-lg">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
           <div>
             <span className="font-medium">Transition violation: </span>
             <span className="text-error/80">{violation.from} → {violation.to} — {violation.message}</span>
@@ -930,43 +1117,43 @@ function EventContent({ event }: { event: TrajectoryEvent }) {
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-text-muted">Tool:</span>
+            <span className="text-sm text-text-muted">Tool:</span>
             <span className="text-sm font-mono font-medium text-warning">{String(event.tool)}</span>
           </div>
-          {event.argsSummary ? <div className="text-[13px] text-text-muted font-mono">{String(event.argsSummary)}</div> : null}
+          {event.argsSummary ? <div className="text-sm text-text-muted font-mono">{String(event.argsSummary)}</div> : null}
           {event.argsFormatted ? (
-            <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-3 max-h-48 overflow-auto whitespace-pre-wrap">{String(event.argsFormatted)}</pre>
+            <pre className="text-sm font-mono text-text-secondary bg-base rounded-lg p-3 max-h-64 overflow-auto whitespace-pre-wrap">{String(event.argsFormatted)}</pre>
           ) : null}
         </div>
       )
     case "tool-result": return <ContentBlock label="Result" text={String(event.text ?? "")} mono />
     case "tool-error": return <ContentBlock label="Error" text={String(event.text ?? "")} mono error />
-    case "iteration": return <div className="text-[13px] text-text-muted font-mono">Iteration {String(event.current)}/{String(event.max)}</div>
+    case "iteration": return <div className="text-sm text-text-muted font-mono">Iteration {String(event.current)}/{String(event.max)}</div>
     case "delegation-start":
       return (
         <div className="space-y-1">
           <ContentBlock label="Delegating" text={String(event.childGoal ?? event.goal ?? "")} />
-          {event.childRunId ? <div className="text-[12px] text-text-muted font-mono">Child run: {String(event.childRunId)}</div> : null}
+          {event.childRunId ? <div className="text-[13px] text-text-muted font-mono">Child run: {String(event.childRunId)}</div> : null}
         </div>
       )
     case "delegation-end": return <ContentBlock label="Delegation result" text={String(event.result ?? event.answer ?? "")} />
     case "answer":
       return (
         <div className="space-y-1">
-          <div className="text-[13px] text-success font-semibold">Final Answer</div>
+          <div className="text-sm text-success font-semibold">Final Answer</div>
           <div className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{String(event.text)}</div>
         </div>
       )
     case "error": return <ContentBlock label="Fatal Error" text={String(event.text ?? "")} error />
-    default: return <pre className="text-[13px] font-mono text-text-muted bg-base rounded-lg p-3 max-h-48 overflow-auto">{JSON.stringify(event, null, 2)}</pre>
+    default: return <pre className="text-sm font-mono text-text-muted bg-base rounded-lg p-3 max-h-64 overflow-auto">{JSON.stringify(event, null, 2)}</pre>
   }
 }
 
 function ContentBlock({ label, text, mono, error: isError }: { label: string; text: string; mono?: boolean; error?: boolean }) {
   return (
     <div className="space-y-1">
-      <div className={`text-[13px] font-medium ${isError ? "text-error" : "text-text-muted"}`}>{label}</div>
-      <div className={`text-sm whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto ${mono ? "font-mono text-[13px] bg-base rounded-lg p-3" : ""} ${isError ? "text-error/80" : "text-text-secondary"}`}>
+      <div className={`text-sm font-medium ${isError ? "text-error" : "text-text-muted"}`}>{label}</div>
+      <div className={`text-sm whitespace-pre-wrap leading-relaxed max-h-80 overflow-auto ${mono ? "font-mono bg-base rounded-lg p-3" : ""} ${isError ? "text-error/80" : "text-text-secondary"}`}>
         {text}
       </div>
     </div>
@@ -974,48 +1161,50 @@ function ContentBlock({ label, text, mono, error: isError }: { label: string; te
 }
 
 function ScorecardPanel({ scorecard }: { scorecard: Scorecard }) {
+  const errPct = Math.round(scorecard.errorRate * 100)
   return (
-    <div className="px-2 py-2 border-b border-elevated/50 space-y-2">
-      <div className="grid grid-cols-4 gap-2">
-        <Metric label="Events" value={scorecard.totalEvents} />
-        <Metric label="Tool calls" value={scorecard.toolCalls} />
-        <Metric label="Errors" value={scorecard.toolErrors} accent={scorecard.toolErrors > 0 ? "error" : undefined} />
-        <Metric label="Iterations" value={scorecard.iterations} />
-        <Metric label="Err rate" value={`${Math.round(scorecard.errorRate * 100)}%`} accent={scorecard.errorRate > 0.2 ? "error" : undefined} />
-        <Metric label="Evt/iter" value={scorecard.eventsPerIteration?.toFixed?.(1) ?? "—"} />
-        <Metric label="Think/act" value={scorecard.thinkToActRatio === Infinity ? "∞" : scorecard.thinkToActRatio?.toFixed?.(1) ?? "—"} />
-        <Metric label="Delegates" value={scorecard.delegations} />
+    <div className="px-3 py-2.5 border-b border-elevated/50 space-y-2.5">
+      {/* Two-row compact stats strip */}
+      <div className="flex items-center gap-4 text-sm font-mono">
+        <Stat label="events" value={scorecard.totalEvents} />
+        <Stat label="calls" value={scorecard.toolCalls} />
+        <Stat label="errors" value={scorecard.toolErrors} color={scorecard.toolErrors > 0 ? "text-error" : undefined} />
+        <Stat label="err%" value={`${errPct}%`} color={errPct > 20 ? "text-error" : undefined} />
+        <Stat label="iters" value={scorecard.iterations} />
+        <Stat label="evt/iter" value={scorecard.eventsPerIteration?.toFixed?.(1) ?? "—"} />
+        <Stat label="thk/act" value={scorecard.thinkToActRatio === Infinity ? "∞" : scorecard.thinkToActRatio?.toFixed?.(1) ?? "—"} />
+        <Stat label="deleg" value={scorecard.delegations} />
       </div>
-      {(scorecard.patterns?.length ?? 0) > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] text-text-muted">Patterns:</span>
-          {scorecard.patterns.map((p) => (
-            <span key={p} className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
-              p === "retry-loop" ? "bg-error/10 text-error" : p === "efficient" ? "bg-success/10 text-success" : "bg-accent/10 text-accent"
-            }`}>{p}</span>
-          ))}
-        </div>
-      )}
-      {(scorecard.toolsUsed?.length ?? 0) > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] text-text-muted">Tools:</span>
-          {scorecard.toolsUsed.map((t) => (
-            <span key={t} className="text-[11px] px-1.5 py-0.5 rounded bg-elevated text-text-secondary font-mono">
-              {t}<span className="text-text-muted ml-1">×{scorecard.toolFrequency[t]}</span>
-            </span>
-          ))}
-        </div>
-      )}
+
+      {/* Patterns + tools inline */}
+      <div className="flex items-center gap-3 flex-wrap text-[13px]">
+        {(scorecard.patterns?.length ?? 0) > 0 && (
+          <>
+            {scorecard.patterns.map((p) => (
+              <span key={p} className={`px-2 py-0.5 rounded-full font-medium ${
+                p === "retry-loop" ? "bg-error/10 text-error"
+                  : p === "efficient" ? "bg-success/10 text-success"
+                    : "bg-accent/10 text-accent"
+              }`}>{p}</span>
+            ))}
+          </>
+        )}
+        {(scorecard.toolsUsed?.length ?? 0) > 0 && scorecard.toolsUsed.map((t) => (
+          <span key={t} className="text-text-secondary font-mono">
+            {t}<span className="text-text-muted">×{scorecard.toolFrequency[t]}</span>
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
 
-function Metric({ label, value, accent }: { label: string; value: string | number; accent?: "error" | "success" }) {
+function Stat({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
-    <div className="text-center">
-      <div className={`text-sm font-semibold font-mono tabular-nums ${accent === "error" ? "text-error" : accent === "success" ? "text-success" : "text-text"}`}>{value}</div>
-      <div className="text-[11px] text-text-muted">{label}</div>
-    </div>
+    <span className="flex items-baseline gap-1">
+      <span className={`font-semibold tabular-nums ${color ?? "text-text"}`}>{value}</span>
+      <span className="text-text-muted text-[12px] font-sans">{label}</span>
+    </span>
   )
 }
 
@@ -1029,18 +1218,18 @@ function RunPicker({ runs, selectedId, onSelect, onClose }: {
     return () => document.removeEventListener("mousedown", handler)
   }, [onClose])
   return (
-    <div ref={ref} className="absolute top-full left-0 mt-1 w-72 max-h-64 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-50">
-      {runs.length === 0 && <div className="px-3 py-4 text-[13px] text-text-muted text-center">No runs</div>}
+    <div ref={ref} className="absolute top-full left-0 mt-1 w-80 max-h-72 overflow-y-auto bg-surface border border-border rounded-xl shadow-xl z-50">
+      {runs.length === 0 && <div className="px-3 py-4 text-sm text-text-muted text-center">No runs</div>}
       {runs.map((run) => (
         <button
           key={run.id}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${run.id === selectedId ? "bg-elevated" : "hover:bg-elevated/40"}`}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${run.id === selectedId ? "bg-elevated" : "hover:bg-elevated/40"}`}
           onClick={() => onSelect(run.id)}
         >
-          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: run.status === "completed" ? "var(--color-success)" : "var(--color-error)" }} />
+          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: run.status === "completed" ? "var(--color-success)" : "var(--color-error)" }} />
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] text-text truncate">{truncate(run.goal, 40)}</div>
-            <div className="text-[11px] text-text-muted">{timeAgo(run.createdAt)} · {run.stepCount} steps</div>
+            <div className="text-sm text-text truncate">{truncate(run.goal, 44)}</div>
+            <div className="text-[13px] text-text-muted">{timeAgo(run.createdAt)} · {run.stepCount} steps</div>
           </div>
         </button>
       ))}
@@ -1052,16 +1241,16 @@ function RunPicker({ runs, selectedId, onSelect, onClose }: {
 
 function eventPreview(event: TrajectoryEvent): string {
   switch (event.kind) {
-    case "goal": return trnc(event.text, 20)
-    case "thinking": return trnc(event.text, 20)
+    case "goal": return trnc(event.text, 50)
+    case "thinking": return trnc(event.text, 50)
     case "tool-call": return String(event.tool ?? "")
-    case "tool-result": return trnc(event.text, 20)
-    case "tool-error": return trnc(event.text, 20)
+    case "tool-result": return trnc(event.text, 50)
+    case "tool-error": return trnc(event.text, 50)
     case "iteration": return `${event.current}/${event.max}`
-    case "delegation-start": return trnc(event.childGoal ?? event.goal, 20)
-    case "delegation-end": return trnc(event.result, 20)
-    case "answer": return trnc(event.text, 20)
-    case "error": return trnc(event.text, 20)
+    case "delegation-start": return trnc(event.childGoal ?? event.goal, 50)
+    case "delegation-end": return trnc(event.result, 50)
+    case "answer": return trnc(event.text, 50)
+    case "error": return trnc(event.text, 50)
     default: return ""
   }
 }

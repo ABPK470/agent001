@@ -25,6 +25,67 @@
 import * as log from "./logger.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
 
+/**
+ * Rough token estimate: ~4 chars per token for English text.
+ * This is intentionally conservative — better to truncate early than crash.
+ */
+function estimateTokens(messages: Message[]): number {
+  let chars = 0
+  for (const m of messages) {
+    chars += (m.content ?? "").length
+    if (m.toolCalls) {
+      for (const tc of m.toolCalls) {
+        chars += tc.name.length + JSON.stringify(tc.arguments).length
+      }
+    }
+  }
+  return Math.ceil(chars / 4)
+}
+
+/** Max token budget for the request body (conservative for GitHub Copilot). */
+const MAX_CONTEXT_TOKENS = 6000
+
+/**
+ * Truncate message history to fit within the token budget.
+ * Strategy: keep system prompt + goal (first 2 messages) and the most recent
+ * messages. Drop the oldest middle messages first. Tool results in remaining
+ * messages are trimmed if they're excessively long.
+ */
+function truncateMessages(messages: Message[]): Message[] {
+  // Trim any single tool result that's excessively long (>1500 chars)
+  const MAX_RESULT_LEN = 1500
+  const trimmed = messages.map((m) => {
+    if (m.role === "tool" && m.content && m.content.length > MAX_RESULT_LEN) {
+      return { ...m, content: m.content.slice(0, MAX_RESULT_LEN) + "\n... (output truncated)" }
+    }
+    return m
+  })
+
+  if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return trimmed
+  if (trimmed.length <= 4) return trimmed // Can't truncate further
+
+  // Keep system + goal (first 2) and recent tail; drop middle
+  const head = trimmed.slice(0, 2)
+  // Start by keeping last 4 messages, grow until we're under budget or run out
+  let tailSize = 4
+  while (tailSize < trimmed.length - 2) {
+    const candidate = [...head, { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" }, ...trimmed.slice(-tailSize)]
+    if (estimateTokens(candidate) > MAX_CONTEXT_TOKENS) {
+      // One step too many — go back
+      tailSize = Math.max(4, tailSize - 2)
+      break
+    }
+    tailSize += 2
+  }
+
+  const result = [
+    ...head,
+    { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" },
+    ...trimmed.slice(-tailSize),
+  ]
+  return result
+}
+
 const DEFAULT_SYSTEM_PROMPT = `You are an efficient AI agent that uses tools to accomplish goals.
 
 Principles:
@@ -35,6 +96,17 @@ Principles:
 - Call multiple tools in one turn when operations are independent.
 - Don't verify results unless there's a reason to doubt them.
 - If a path doesn't exist, check the error message — it often tells you what does exist nearby.
+
+Failure recovery:
+- NEVER repeat the same command (or a trivially similar variant) after it fails. If a command fails, read the error, understand why, and try a fundamentally different approach.
+- If grep/find returns nothing, the pattern or path is wrong — try broader terms, different flags, or list the directory first.
+- After 2 failed attempts at the same task, stop and re-assess your approach entirely.
+- Prefer using list_directory or read_file to understand the codebase structure before running speculative shell commands.
+
+Context efficiency:
+- Keep tool outputs concise. Pipe through head, tail, or grep to limit output size.
+- Avoid dumping entire files when you only need a few lines.
+- Be aware that conversation history has a token budget — work efficiently to avoid hitting limits.
 
 Provide a concise final answer when done.`
 
@@ -90,8 +162,11 @@ export class Agent {
       }
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
+      // Truncate context if approaching token budget
+      const chatMessages = truncateMessages(messages)
+
       // Ask the LLM what to do next
-      const response = await this.llm.chat(messages, this.toolList)
+      const response = await this.llm.chat(chatMessages, this.toolList)
       this.llmCalls++
 
       // Accumulate token usage
