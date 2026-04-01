@@ -118,6 +118,55 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         </div>
       )
 
+    case "delegation-start":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#6CB4EE]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#6CB4EE] text-[13px] font-medium font-mono">DLGT</span>
+            <span className="text-[#6CB4EE]/70 text-[13px]">▶</span>
+            {entry.agentName && (
+              <span className="text-text-secondary text-[13px] font-medium">[{entry.agentName}]</span>
+            )}
+            <span className="text-text-muted text-[12px]">depth {entry.depth}</span>
+          </div>
+          <div className="text-text-secondary text-sm mt-0.5 ml-5">
+            {entry.goal.length > 200 ? entry.goal.slice(0, 200) + "..." : entry.goal}
+          </div>
+          <div className="text-text-muted/50 text-[11px] font-mono mt-0.5 ml-5">
+            tools: {entry.tools.slice(0, 6).join(", ")}{entry.tools.length > 6 ? ` +${entry.tools.length - 6}` : ""}
+          </div>
+        </div>
+      )
+
+    case "delegation-iteration":
+      return (
+        <div className="text-text-muted/50 text-[12px] font-mono pl-6 py-0.5">
+          ↳ child iteration {entry.iteration}/{entry.maxIterations}
+        </div>
+      )
+
+    case "delegation-end":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#6CB4EE]/40 mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#6CB4EE] text-[13px] font-medium font-mono">DLGT</span>
+            <span className={`text-[13px] ${entry.status === "done" ? "text-success" : "text-error"}`}>◀ {entry.status}</span>
+            <span className="text-text-muted text-[12px]">depth {entry.depth}</span>
+          </div>
+          {entry.answer && (
+            <div
+              className="text-text-secondary text-sm mt-0.5 ml-5 cursor-pointer"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? entry.answer : (entry.answer.length > 150 ? entry.answer.slice(0, 150) + "..." : entry.answer)}
+            </div>
+          )}
+          {entry.error && (
+            <div className="text-error/80 text-sm mt-0.5 ml-5">{entry.error}</div>
+          )}
+        </div>
+      )
+
     default:
       return null
   }

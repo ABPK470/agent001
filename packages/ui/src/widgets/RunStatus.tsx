@@ -84,7 +84,7 @@ export function RunStatus() {
           <div className="text-text-secondary">
             <span className="text-success">{completedSteps}</span>
             {failedSteps > 0 && <span className="text-error ml-1">/ {failedSteps} failed</span>}
-            {` / ${run.stepCount} total`}
+            {` / ${isActive ? steps.length : run.stepCount} total`}
           </div>
         </div>
         {run.parentRunId && (

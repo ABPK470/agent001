@@ -481,15 +481,34 @@ export class AgentOrchestrator {
       },
       onChildTrace: (entry) => {
         this.saveTrace(runId, entry)
-        // Broadcast delegation events in real-time
+        // Broadcast delegation events in real-time + audit log
         if (entry.kind === "delegation-start") {
           broadcast({ type: "delegation.started", data: { runId, ...entry } })
+          services.auditService.log({
+            actor: "agent",
+            action: "delegation.started",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { goal: entry.goal, depth: entry.depth, tools: entry.tools, agentName: entry.agentName },
+          }).catch(() => {})
         } else if (entry.kind === "delegation-end") {
           broadcast({ type: "delegation.ended", data: { runId, ...entry } })
+          services.auditService.log({
+            actor: "agent",
+            action: entry.status === "done" ? "delegation.completed" : "delegation.failed",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { depth: entry.depth, status: entry.status, answer: entry.answer, error: entry.error },
+          }).catch(() => {})
+        } else if (entry.kind === "delegation-iteration") {
+          broadcast({ type: "delegation.iteration", data: { runId, ...entry } })
         } else if (entry.kind === "delegation-parallel-start") {
           broadcast({ type: "delegation.parallel-started", data: { runId, ...entry } })
         } else if (entry.kind === "delegation-parallel-end") {
           broadcast({ type: "delegation.parallel-ended", data: { runId, ...entry } })
+        } else if (entry.kind === "thinking") {
+          // Child agent thinking — forward to trace
+          broadcast({ type: "agent.thinking", data: { runId, content: entry.text } })
         }
       },
       onChildUsage: (childUsage) => {

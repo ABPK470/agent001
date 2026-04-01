@@ -174,26 +174,32 @@ export function applyMutations(
 /**
  * Valid transitions in the agent state machine:
  *
- *   goal → thinking | tool-call | answer | error
- *   thinking → tool-call | answer | error | delegation-start
- *   tool-call → tool-result | tool-error
- *   tool-result → thinking | tool-call | answer | iteration
+ *   goal → thinking | tool-call | answer | error | iteration
+ *   thinking → tool-call | answer | error | delegation-start | iteration | thinking
+ *   tool-call → tool-result | tool-error | delegation-start (delegate tool starts child)
+ *   tool-result → thinking | tool-call | answer | iteration | error | delegation-start
  *   tool-error → thinking | tool-call | answer | error | iteration
  *   iteration → thinking | tool-call | answer | error
- *   delegation-start → delegation-end
- *   delegation-end → thinking | tool-call | answer | iteration
+ *   delegation-start → delegation-end | delegation-start (parallel children) | tool-call | thinking | delegation-iteration | iteration
+ *   delegation-iteration → delegation-start | delegation-end | tool-call | thinking | delegation-iteration | iteration
+ *   delegation-end → thinking | tool-call | answer | iteration | delegation-start | delegation-end | tool-result
  *   answer → (terminal)
  *   error → (terminal)
+ *
+ * NOTE: Delegation events interleave with child agent events in the flat trace.
+ * The validator tracks delegation depth to be lenient about transitions within
+ * nested delegation blocks, since child events follow their own state machine.
  */
 const VALID_TRANSITIONS: Record<string, Set<string>> = {
   "goal":              new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
   "thinking":          new Set(["tool-call", "answer", "error", "delegation-start", "iteration", "thinking"]),
-  "tool-call":         new Set(["tool-result", "tool-error"]),
-  "tool-result":       new Set(["thinking", "tool-call", "answer", "iteration", "error"]),
+  "tool-call":         new Set(["tool-result", "tool-error", "delegation-start"]),
+  "tool-result":       new Set(["thinking", "tool-call", "answer", "iteration", "error", "delegation-start"]),
   "tool-error":        new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
   "iteration":         new Set(["thinking", "tool-call", "answer", "error"]),
-  "delegation-start":  new Set(["delegation-end"]),
-  "delegation-end":    new Set(["thinking", "tool-call", "answer", "iteration"]),
+  "delegation-start":  new Set(["delegation-end", "delegation-start", "tool-call", "thinking", "delegation-iteration", "iteration"]),
+  "delegation-iteration": new Set(["delegation-start", "delegation-end", "tool-call", "thinking", "delegation-iteration", "iteration"]),
+  "delegation-end":    new Set(["thinking", "tool-call", "answer", "iteration", "delegation-start", "delegation-end", "tool-result"]),
 }
 
 export interface TransitionViolation {
@@ -206,15 +212,39 @@ export interface TransitionViolation {
 /** Validate all state transitions in a trajectory. */
 export function validateTransitions(trajectory: Trajectory): TransitionViolation[] {
   const violations: TransitionViolation[] = []
+  let delegationDepth = 0
 
-  for (let i = 1; i < trajectory.events.length; i++) {
-    const prev = trajectory.events[i - 1].event.kind
-    const curr = trajectory.events[i].event.kind
+  // "usage" and "delegation-iteration" are observability/meta events, not agent
+  // states. They can appear between any pair of real states and should be
+  // transparent to the state machine validator.
+  const META_KINDS = new Set(["usage", "delegation-iteration"])
+
+  // Build a filtered view that only contains real state events for validation,
+  // while preserving the original seq numbers for violation reporting.
+  const stateEvents: Array<{ seq: number; kind: string }> = []
+  for (const entry of trajectory.events) {
+    if (!META_KINDS.has(entry.event.kind)) {
+      stateEvents.push({ seq: entry.seq, kind: entry.event.kind })
+    }
+  }
+
+  for (let i = 1; i < stateEvents.length; i++) {
+    const prev = stateEvents[i - 1].kind
+    const curr = stateEvents[i].kind
+
+    // Track delegation nesting depth
+    if (prev === "delegation-start") delegationDepth++
+    if (curr === "delegation-end") delegationDepth = Math.max(0, delegationDepth - 1)
+
+    // Inside a delegation block, child agent events follow their own internal
+    // state machine. Skip strict validation — child events are interleaved in
+    // the flat trace and can produce any valid agent transition sequence.
+    if (delegationDepth > 0) continue
 
     // Terminal states should have nothing after them
     if (prev === "answer" || prev === "error") {
       violations.push({
-        seq: trajectory.events[i].seq,
+        seq: stateEvents[i].seq,
         from: prev,
         to: curr,
         message: `Event after terminal state "${prev}"`,
@@ -225,7 +255,7 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
     const valid = VALID_TRANSITIONS[prev]
     if (valid && !valid.has(curr)) {
       violations.push({
-        seq: trajectory.events[i].seq,
+        seq: stateEvents[i].seq,
         from: prev,
         to: curr,
         message: `Invalid transition: "${prev}" → "${curr}"`,

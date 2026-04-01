@@ -381,9 +381,10 @@ export function CommandCenter() {
       else if (e.kind === "thinking") items.push({ text: `THINK ${e.text.slice(0, 80)}`, color: C.peach })
       else if (e.kind === "answer") items.push({ text: `ANS  ${e.text.slice(0, 100)}`, color: C.success })
       else if (e.kind === "iteration") items.push({ text: `ITER ${e.current}/${e.max}`, color: C.dim })
-      else if (e.kind === "goal") items.push({ text: `GOAL ${e.text.slice(0, 100)}`, color: C.cyan })
-      else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${e.goal.slice(0, 80)} [depth ${e.depth}]`, color: C.cyan })
+      else if (e.kind === "goal") items.push({ text: `GOAL ${(e.text ?? "").slice(0, 100)}`, color: C.cyan })
+      else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${(e.goal ?? "").slice(0, 80)} [depth ${e.depth}]`, color: C.cyan })
       else if (e.kind === "delegation-end") items.push({ text: `DELEG ◀ ${e.status} ${(e.answer ?? e.error ?? "").slice(0, 80)}`, color: e.status === "done" ? C.success : C.coral })
+      else if (e.kind === "delegation-iteration") items.push({ text: `  ↳ D${e.depth} iter ${e.iteration}/${e.maxIterations}`, color: C.dim })
     }
     return items
   }, [trace])

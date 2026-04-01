@@ -25,7 +25,7 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
 import type { Run } from "../types"
@@ -36,7 +36,8 @@ import { timeAgo, truncate } from "../util"
 type EventKind =
   | "goal" | "thinking" | "tool-call" | "tool-result"
   | "tool-error" | "iteration" | "delegation-start"
-  | "delegation-end" | "answer" | "error"
+  | "delegation-end" | "delegation-iteration" | "usage"
+  | "answer" | "error"
 
 interface TrajectoryEvent { kind: EventKind; [key: string]: unknown }
 interface TrajectoryEntry { seq: number; event: TrajectoryEvent; timestamp: string }
@@ -68,6 +69,68 @@ interface ComparisonResult {
 
 type TabId = "replay" | "mutations" | "compare"
 
+// ── Trace tree types + builders ──────────────────────────────────
+
+interface TraceNode {
+  entry: TrajectoryEntry
+  flatIndex: number
+  children?: TraceNode[]
+  endEntry?: TrajectoryEntry
+  endFlatIndex?: number
+  subtreeCount?: number
+}
+
+const META_TREE_KINDS = new Set<string>(["usage", "delegation-iteration"])
+
+function buildTraceTree(trajectory: TrajectoryEntry[]): TraceNode[] {
+  const roots: TraceNode[] = []
+  const stack: { nodes: TraceNode[]; dlgt?: TraceNode }[] = [{ nodes: roots }]
+  for (let i = 0; i < trajectory.length; i++) {
+    const entry = trajectory[i]
+    if (META_TREE_KINDS.has(entry.event.kind)) continue
+    if (entry.event.kind === "delegation-start") {
+      const node: TraceNode = { entry, flatIndex: i, children: [], subtreeCount: 0 }
+      stack[stack.length - 1].nodes.push(node)
+      stack.push({ nodes: node.children!, dlgt: node })
+    } else if (entry.event.kind === "delegation-end") {
+      const frame = stack.pop()
+      if (frame?.dlgt) {
+        frame.dlgt.endEntry = entry
+        frame.dlgt.endFlatIndex = i
+        frame.dlgt.subtreeCount = subtreeSize(frame.dlgt)
+      }
+    } else {
+      stack[stack.length - 1].nodes.push({ entry, flatIndex: i })
+    }
+  }
+  return roots
+}
+
+function subtreeSize(node: TraceNode): number {
+  if (!node.children) return 0
+  let c = 0
+  for (const child of node.children) c += 1 + (child.subtreeCount ?? 0)
+  return c
+}
+
+/** Returns the chain of delegation-start TraceNodes containing `flatIndex` */
+function ancestorPath(tree: TraceNode[], flatIndex: number): TraceNode[] {
+  const path: TraceNode[] = []
+  function walk(nodes: TraceNode[]): boolean {
+    for (const n of nodes) {
+      if (n.flatIndex === flatIndex) return true
+      if (n.children && n.endFlatIndex != null && flatIndex > n.flatIndex && flatIndex <= n.endFlatIndex) {
+        path.push(n)
+        if (walk(n.children)) return true
+        path.pop()
+      }
+    }
+    return false
+  }
+  walk(tree)
+  return path
+}
+
 // ── Event color + label map ──────────────────────────────────────
 
 const EVENT_META: Record<EventKind, { color: string; label: string; short: string }> = {
@@ -79,6 +142,8 @@ const EVENT_META: Record<EventKind, { color: string; label: string; short: strin
   "iteration":         { color: "var(--color-text-muted)", label: "Iteration",      short: "ITER" },
   "delegation-start":  { color: "var(--color-viz-plum)",   label: "Delegate Start", short: "DLGT" },
   "delegation-end":    { color: "var(--color-viz-plum)",   label: "Delegate End",   short: "DONE" },
+  "delegation-iteration": { color: "var(--color-viz-plum)", label: "Child Iteration", short: "D·IT" },
+  "usage":             { color: "var(--color-text-muted)", label: "Token Usage",    short: "USG" },
   "answer":            { color: "var(--color-success)",    label: "Final Answer",   short: "ANS" },
   "error":             { color: "var(--color-error)",      label: "Fatal Error",    short: "FAIL" },
 }
@@ -260,9 +325,34 @@ function ReplayTab({
   const [showScorecard, setShowScorecard] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const eventListRef = useRef<HTMLDivElement>(null)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const [panelWidth, setPanelWidth] = useState(320)
+  const draggingRef = useRef(false)
 
   // Reset cursor when trajectory changes
-  useEffect(() => { setCursor(0); setPlaying(false) }, [trajectory])
+  useEffect(() => { setCursor(0); setPlaying(false); setExpanded(new Set()) }, [trajectory])
+
+  // Drag-to-resize left panel
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    draggingRef.current = true
+    const startX = e.clientX
+    const startW = panelWidth
+    function onMove(ev: MouseEvent) {
+      if (!draggingRef.current) return
+      const container = splitRef.current
+      const maxW = container ? container.clientWidth * 0.6 : 600
+      const newW = Math.max(200, Math.min(maxW, startW + ev.clientX - startX))
+      setPanelWidth(newW)
+    }
+    function onUp() {
+      draggingRef.current = false
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+    }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }, [panelWidth])
 
   // Playback timer
   useEffect(() => {
@@ -312,6 +402,37 @@ function ReplayTab({
     [replayData],
   )
 
+  // Build delegation tree from flat trajectory
+  const tree = useMemo(() => buildTraceTree(trajectory), [trajectory])
+
+  // Track which delegation groups are expanded (by flatIndex)
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+
+  const toggleExpanded = useCallback((flatIndex: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(flatIndex)) next.delete(flatIndex)
+      else next.add(flatIndex)
+      return next
+    })
+  }, [])
+
+  // Auto-expand delegations containing the cursor (for VCR playback)
+  useEffect(() => {
+    const ancestors = ancestorPath(tree, cursor)
+    if (ancestors.length === 0) return
+    setExpanded(prev => {
+      const ids = ancestors.map(a => a.flatIndex)
+      if (ids.every(id => prev.has(id))) return prev
+      const next = new Set(prev)
+      for (const id of ids) next.add(id)
+      return next
+    })
+  }, [cursor, tree])
+
+  // Breadcrumb path for current cursor position
+  const breadcrumbs = useMemo(() => ancestorPath(tree, cursor), [tree, cursor])
+
   const currentEntry = trajectory[cursor] ?? null
 
   if (trajectory.length === 0) {
@@ -346,19 +467,39 @@ function ReplayTab({
       </div>
 
       {/* Event list + detail */}
-      <div className="flex flex-1 min-h-0">
-        <div ref={eventListRef} className="w-[260px] shrink-0 overflow-y-auto border-r border-elevated/50">
-          {trajectory.map((entry, i) => (
-            <EventListItem
-              key={entry.seq}
-              entry={entry}
-              index={i}
-              isActive={i === cursor}
-              hasViolation={violationSeqs.has(entry.seq)}
-              onClick={() => { setCursor(i); setPlaying(false) }}
-            />
-          ))}
+      <div ref={splitRef} className="flex flex-1 min-h-0">
+        <div ref={eventListRef} className="shrink-0 overflow-y-auto" style={{ width: panelWidth }}>
+          {breadcrumbs.length > 0 && (
+            <div className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-text-muted border-b border-elevated/30 bg-elevated/20 sticky top-0 z-10 flex-wrap">
+              <button className="hover:text-text transition-colors shrink-0" onClick={() => { setCursor(0); setPlaying(false) }}>Root</button>
+              {breadcrumbs.map((node) => (
+                <Fragment key={node.flatIndex}>
+                  <span className="text-text-muted/40 shrink-0">/</span>
+                  <button
+                    className="hover:text-accent transition-colors truncate max-w-[100px]"
+                    onClick={() => { setCursor(node.flatIndex); setPlaying(false) }}
+                    title={String(node.entry.event.childGoal ?? node.entry.event.goal ?? "")}
+                  >
+                    {trnc(node.entry.event.childGoal ?? node.entry.event.goal, 18)}
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+          )}
+          <TraceTreeView
+            nodes={tree}
+            cursor={cursor}
+            violationSeqs={violationSeqs}
+            expanded={expanded}
+            onToggle={toggleExpanded}
+            onSelect={(fi) => { setCursor(fi); setPlaying(false) }}
+          />
         </div>
+        {/* Drag handle */}
+        <div
+          className="w-1 shrink-0 cursor-col-resize bg-elevated/50 hover:bg-accent/40 active:bg-accent/60 transition-colors"
+          onMouseDown={onDragStart}
+        />
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {currentEntry && (
             <EventDetail entry={currentEntry} violation={violationAt(currentEntry.seq) ?? null} />
@@ -929,6 +1070,113 @@ function CtrlBtn({ children, onClick, title }: { children: React.ReactNode; onCl
   )
 }
 
+// ── Collapsible trace tree ───────────────────────────────────────
+
+function TraceTreeView({ nodes, cursor, violationSeqs, expanded, onToggle, onSelect }: {
+  nodes: TraceNode[]; cursor: number; violationSeqs: Set<number>
+  expanded: Set<number>; onToggle: (fi: number) => void; onSelect: (fi: number) => void
+}) {
+  return (
+    <>
+      {nodes.map((node) => {
+        if (node.children) {
+          return (
+            <DelegationGroup
+              key={node.entry.seq}
+              node={node}
+              cursor={cursor}
+              violationSeqs={violationSeqs}
+              expanded={expanded}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          )
+        }
+        return (
+          <EventListItem
+            key={node.entry.seq}
+            entry={node.entry}
+            index={node.flatIndex}
+            isActive={node.flatIndex === cursor}
+            hasViolation={violationSeqs.has(node.entry.seq)}
+            onClick={() => onSelect(node.flatIndex)}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function DelegationGroup({ node, cursor, violationSeqs, expanded, onToggle, onSelect }: {
+  node: TraceNode; cursor: number; violationSeqs: Set<number>
+  expanded: Set<number>; onToggle: (fi: number) => void; onSelect: (fi: number) => void
+}) {
+  const isExpanded = expanded.has(node.flatIndex)
+  const isActive = node.flatIndex === cursor
+  const isEndActive = node.endFlatIndex != null && node.endFlatIndex === cursor
+  const hasError = !!node.endEntry?.event?.error
+  const goal = String(node.entry.event.childGoal ?? node.entry.event.goal ?? "")
+
+  return (
+    <div>
+      {/* Delegation header */}
+      <div
+        data-seq={node.flatIndex}
+        className={[
+          "flex items-center gap-1.5 cursor-pointer transition-colors pl-1.5 pr-2.5 py-1",
+          isActive ? "bg-elevated/80" : "hover:bg-elevated/30",
+          violationSeqs.has(node.entry.seq) ? "border-l-2 border-error" : "",
+        ].join(" ")}
+        onClick={() => onSelect(node.flatIndex)}
+      >
+        <button
+          className="flex items-center justify-center w-5 h-5 shrink-0 text-text-muted hover:text-text rounded transition-colors"
+          onClick={(e) => { e.stopPropagation(); onToggle(node.flatIndex) }}
+        >
+          <ChevronRight size={14} className={`transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
+        </button>
+        <span className="text-[13px] font-semibold font-mono shrink-0" style={{ color: "var(--color-viz-plum)" }}>DLGT</span>
+        <span className="text-text-secondary text-sm truncate flex-1">{trnc(goal, 36)}</span>
+        {!isExpanded && (
+          <span className={`text-[11px] font-mono shrink-0 ${hasError ? "text-error/70" : "text-success/70"}`}>
+            {node.subtreeCount} {hasError ? "✗" : "✓"}
+          </span>
+        )}
+      </div>
+
+      {/* Children — only rendered when expanded */}
+      {isExpanded && (
+        <div className="ml-3 border-l-2 border-viz-plum/15 pl-0.5">
+          <TraceTreeView
+            nodes={node.children!}
+            cursor={cursor}
+            violationSeqs={violationSeqs}
+            expanded={expanded}
+            onToggle={onToggle}
+            onSelect={onSelect}
+          />
+          {/* Delegation end indicator */}
+          {node.endEntry && (
+            <div
+              data-seq={node.endFlatIndex}
+              className={[
+                "cursor-pointer transition-colors px-2.5 py-0.5 text-[12px] font-mono",
+                isEndActive ? "bg-elevated/80" : "hover:bg-elevated/30",
+                hasError ? "text-error/60" : "text-success/60",
+              ].join(" ")}
+              onClick={() => node.endFlatIndex != null && onSelect(node.endFlatIndex)}
+            >
+              {hasError ? "✗ delegation failed" : "✓ delegation done"}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Event list item (leaf nodes) ─────────────────────────────────
+
 function EventListItem({ entry, index, isActive, hasViolation, onClick }: {
   entry: TrajectoryEntry; index: number; isActive: boolean; hasViolation: boolean; onClick: () => void
 }) {
@@ -1024,12 +1272,20 @@ function EventListItem({ entry, index, isActive, hasViolation, onClick }: {
     )
   }
 
-  // Delegation
-  if (kind === "delegation-start" || kind === "delegation-end") {
+  // Delegation iteration (child iteration tick)
+  if (kind === "delegation-iteration") {
     return (
-      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3 ${!hasViolation ? "border-l-2 border-viz-plum/30" : ""}`} onClick={onClick}>
-        <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
-        <span className="text-text-secondary text-sm ml-2">{trnc(entry.event.childGoal ?? entry.event.result ?? entry.event.goal, 50)}</span>
+      <div data-seq={index} className={`${wrapCls} py-0.5 text-text-muted text-[12px] font-mono`} onClick={onClick}>
+        ↳ child iter {String(entry.event.current ?? "")}/{String(entry.event.max ?? "")}
+      </div>
+    )
+  }
+
+  // Usage (token usage tick)
+  if (kind === "usage") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 text-text-muted text-[12px] font-mono`} onClick={onClick}>
+        ⊙ usage
       </div>
     )
   }
@@ -1137,6 +1393,8 @@ function EventContent({ event }: { event: TrajectoryEvent }) {
         </div>
       )
     case "delegation-end": return <ContentBlock label="Delegation result" text={String(event.result ?? event.answer ?? "")} />
+    case "delegation-iteration": return <div className="text-sm text-text-muted font-mono">Child iteration {String(event.current ?? "")}/{String(event.max ?? "")}</div>
+    case "usage": return <div className="text-sm text-text-muted font-mono">Token usage event</div>
     case "answer":
       return (
         <div className="space-y-1">

@@ -288,14 +288,23 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
     systemPrompt: childPrompt ?? spec.instructions,
     verbose: false,
     signal: ctx.signal,
-    onStep: (_messages, iteration) => {
-      ctx.onChildUsage?.(child.usage, child.llmCalls)
+    onThinking: (content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: "delegation-iteration",
         depth: ctx.depth + 1,
         iteration: iteration + 1,
         maxIterations: maxIter,
       })
+      if (content) {
+        ctx.onChildTrace?.({
+          kind: "thinking",
+          text: `[D${ctx.depth + 1}] ${content.slice(0, 500)}`,
+        })
+      }
+      ctx.onChildUsage?.(child.usage, child.llmCalls)
+    },
+    onStep: (_messages, _iteration) => {
+      ctx.onChildUsage?.(child.usage, child.llmCalls)
     },
   })
 

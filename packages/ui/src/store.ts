@@ -511,6 +511,16 @@ export const useStore = create<AppState>()(
             break
           }
 
+          case "delegation.iteration": {
+            store.addTrace({
+              kind: "delegation-iteration",
+              depth: data["depth"] as number,
+              iteration: data["iteration"] as number,
+              maxIterations: data["maxIterations"] as number,
+            })
+            break
+          }
+
           case "usage.updated": {
             set({
               liveUsage: {
