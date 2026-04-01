@@ -2,18 +2,21 @@
  * LLM provider registry — builds the right LLMClient from a stored config.
  *
  * Supported providers:
- *   copilot   — GitHub Models (OpenAI-compatible, auth via GITHUB_TOKEN)
- *   openai    — OpenAI API or any OpenAI-compatible endpoint
- *   anthropic — Anthropic Messages API
- *   local     — Local model via OpenAI-compatible API (Ollama, LM Studio, etc.)
+ *   copilot-chat — Copilot Chat API (same as VS Code, full context window)
+ *   copilot      — GitHub Models (OpenAI-compatible, 8K token limit)
+ *   openai       — OpenAI API or any OpenAI-compatible endpoint
+ *   anthropic    — Anthropic Messages API
+ *   local        — Local model via OpenAI-compatible API (Ollama, LM Studio, etc.)
  */
 
 import { AnthropicClient, OpenAIClient, type LLMClient } from "@agent001/agent";
 import type { DbLlmConfig } from "../db.js";
+import { CopilotChatClient } from "./copilot-chat.js";
 import { CopilotClient } from "./copilot.js";
 
 /** Default models per provider shown in the UI picker. */
 export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
+  "copilot-chat": { model: "gpt-4o",              baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
   copilot:   { model: "gpt-4o",                   baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
   openai:    { model: "gpt-4o",                   baseUrl: "https://api.openai.com",             placeholder: "sk-..." },
   anthropic: { model: "claude-sonnet-4-20250514", baseUrl: "",                                   placeholder: "sk-ant-..." },
@@ -28,6 +31,12 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
   const { provider, model, api_key, base_url } = cfg
 
   switch (provider) {
+    case "copilot-chat":
+      return new CopilotChatClient({
+        token: api_key || undefined,
+        model: model || "gpt-4o",
+      })
+
     case "copilot":
       return new CopilotClient({
         token:   api_key || undefined,

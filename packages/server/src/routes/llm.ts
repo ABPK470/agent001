@@ -11,7 +11,7 @@ import type { FastifyInstance } from "fastify"
 import { getLlmConfig, saveLlmConfig, type LlmProvider } from "../db.js"
 import { buildLlmClient, PROVIDER_DEFAULTS } from "../llm/registry.js"
 
-const VALID_PROVIDERS: LlmProvider[] = ["copilot", "openai", "anthropic", "local"]
+const VALID_PROVIDERS: LlmProvider[] = ["copilot-chat", "copilot", "openai", "anthropic", "local"]
 
 export function registerLlmRoutes(
   app: FastifyInstance,

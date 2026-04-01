@@ -485,7 +485,7 @@ export function clearTransactionalData(): void {
 
 // ── LLM config ───────────────────────────────────────────────────
 
-export type LlmProvider = "copilot" | "openai" | "anthropic" | "local"
+export type LlmProvider = "copilot-chat" | "copilot" | "openai" | "anthropic" | "local"
 
 export interface DbLlmConfig {
   provider: LlmProvider

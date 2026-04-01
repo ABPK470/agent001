@@ -341,7 +341,7 @@ export function PolicyEditor({ onClose }: Props) {
                   Choose the LLM backend. Switching provider updates the model and URL defaults below.
                 </p>
                 <div className="flex gap-2 flex-wrap">
-                  {(["copilot", "openai", "anthropic", "local"] as const).map((p) => (
+                  {(["copilot-chat", "copilot", "openai", "anthropic", "local"] as const).map((p) => (
                     <button
                       key={p}
                       onClick={() => {
@@ -356,7 +356,7 @@ export function PolicyEditor({ onClose }: Props) {
                           : "bg-white/[0.04] text-text-muted border-white/[0.06] hover:text-text hover:bg-white/[0.06]"
                       }`}
                     >
-                      {p === "copilot" ? "GitHub Copilot" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
+                      {p === "copilot-chat" ? "Copilot Chat" : p === "copilot" ? "GitHub Models" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
                     </button>
                   ))}
                 </div>
@@ -385,7 +385,7 @@ export function PolicyEditor({ onClose }: Props) {
                   {llmProvider !== "local" && (
                     <div>
                       <label className="text-[13px] text-text-muted block mb-1.5">
-                        {llmProvider === "copilot" ? "GitHub Token" : llmProvider === "anthropic" ? "Anthropic API Key" : "OpenAI API Key"}
+                        {llmProvider === "copilot-chat" || llmProvider === "copilot" ? "GitHub Token" : llmProvider === "anthropic" ? "Anthropic API Key" : "OpenAI API Key"}
                       </label>
                       <div className="relative">
                         <input
