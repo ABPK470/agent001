@@ -27,6 +27,8 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "command-center": "Command Center",
 }
 
+const SYNC_CHANNEL = "agent001-active-run"
+
 /** Detect ?widget= param for pop-out mode */
 function getPopOutWidget(): { type: WidgetType; runId: string | null } | null {
   const params = new URLSearchParams(window.location.search)
@@ -89,32 +91,64 @@ export function App() {
     restoreDashboardState().then(() => startDashboardSync())
   }, [])
 
-  // Pop-out: load run detail so the widget has full state
+  // Pop-out: load latest runs + follow active run from main window
   useEffect(() => {
-    if (!popOut?.runId) return
-    setActiveRun(popOut.runId)
-    Promise.all([
-      api.getRun(popOut.runId),
-      api.getRunTrace(popOut.runId),
-    ]).then(([detail, trace]) => {
-      const steps = (detail.data?.steps ?? []).map((s, i) => ({
-        id: s.id ?? `step-${i}`,
-        name: s.name ?? "Step",
-        action: s.action ?? "",
-        status: s.status ?? "completed",
-        order: s.order ?? i,
-        input: s.input ?? {},
-        output: s.output ?? {},
-        error: s.error ?? null,
-        startedAt: s.startedAt as string | null ?? null,
-        completedAt: s.completedAt as string | null ?? null,
-      }))
-      setSteps(steps)
-      setLogs(detail.logs ?? [])
-      setAudit(detail.audit ?? [])
-      setTrace(trace as import("./types").TraceEntry[])
+    if (!popOut) return
+
+    // Load initial runs (same as main window)
+    api.listRuns().then(async (runs) => {
+      setRuns(runs)
+      // Use URL runId as initial hint, otherwise use latest
+      const targetId = popOut.runId ?? runs[0]?.id
+      if (targetId) {
+        setActiveRun(targetId)
+        try {
+          const [detail, trace] = await Promise.all([
+            api.getRun(targetId),
+            api.getRunTrace(targetId),
+          ])
+          setSteps(detail.data.steps ?? [])
+          setLogs(detail.logs ?? [])
+          setAudit(detail.audit ?? [])
+          setTrace(trace as import("./types").TraceEntry[])
+        } catch { /* ignore */ }
+      }
     }).catch(() => {})
-  }, [popOut?.runId, setActiveRun, setSteps, setLogs, setAudit, setTrace])
+
+    // Sync activeRunId from main window
+    const sync = new BroadcastChannel(SYNC_CHANNEL)
+    sync.onmessage = async (e) => {
+      const { activeRunId: newId } = e.data as { activeRunId: string }
+      if (!newId || newId === useStore.getState().activeRunId) return
+      setActiveRun(newId)
+      try {
+        const [detail, trace] = await Promise.all([
+          api.getRun(newId),
+          api.getRunTrace(newId),
+        ])
+        setSteps(detail.data.steps ?? [])
+        setLogs(detail.logs ?? [])
+        setAudit(detail.audit ?? [])
+        setTrace(trace as import("./types").TraceEntry[])
+      } catch { /* ignore */ }
+    }
+    return () => sync.close()
+  }, [popOut?.type, popOut?.runId, setRuns, setActiveRun, setSteps, setLogs, setAudit, setTrace])
+
+  // Main window: broadcast activeRunId changes to pop-outs
+  useEffect(() => {
+    if (popOut) return // only main window broadcasts
+    const unsub = useStore.subscribe(
+      (state, prev) => {
+        if (state.activeRunId && state.activeRunId !== prev.activeRunId) {
+          const sync = new BroadcastChannel(SYNC_CHANNEL)
+          sync.postMessage({ activeRunId: state.activeRunId })
+          sync.close()
+        }
+      },
+    )
+    return unsub
+  }, [popOut])
 
   // Pop-out mode: render only the requested widget
   if (popOut) {

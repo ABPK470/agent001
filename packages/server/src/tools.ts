@@ -32,6 +32,9 @@ const ALL_TOOLS: Tool[] = [
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
+// thinkTool is not in ALL_TOOLS (won't appear in listings) but stays resolvable
+// so existing agent definitions that reference it don't crash.
+toolMap.set(thinkTool.name, thinkTool)
 
 /** Get all registered tools as a Map. */
 export function getToolMap(): ReadonlyMap<string, Tool> {

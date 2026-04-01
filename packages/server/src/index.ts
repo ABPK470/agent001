@@ -18,21 +18,21 @@ import { resolve } from "node:path"
 config({ path: resolve(import.meta.dirname, "../../../.env") })
 
 import {
-  setBasePath,
-  setShellCwd,
+    setBasePath,
+    setShellCwd,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-  MessageQueue,
-  MessageRouter,
-  MessengerChannel,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  WhatsAppChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    MessengerChannel,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    WhatsAppChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getLlmConfig, migrateNotifications } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -57,8 +57,18 @@ async function main() {
   migrateNotifications()
   console.log("📦 Database initialized (~/.agent001/agent001.db)")
 
-  // Set agent workspace — all file/shell operations are scoped here
-  let currentWorkspace = resolve(process.env["AGENT_WORKSPACE"] ?? process.cwd())
+  // Set agent workspace — all file/shell operations are scoped here.
+  // Default to monorepo root (walk up from server package to find .git),
+  // falling back to cwd if not in a monorepo.
+  function findRepoRoot(from: string): string {
+    let dir = resolve(from)
+    while (dir !== resolve(dir, "..")) {
+      if (existsSync(resolve(dir, ".git"))) return dir
+      dir = resolve(dir, "..")
+    }
+    return from
+  }
+  let currentWorkspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
   setBasePath(currentWorkspace)
   setShellCwd(currentWorkspace)
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
@@ -117,7 +127,7 @@ async function main() {
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
-  registerWebhookRoutes(app, messageRouter)
+  registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
@@ -130,6 +140,7 @@ async function main() {
     active: orchestrator.getActiveRunIds().length,
     channels: messageRouter.listChannels(),
     queuePending: messageQueue.pendingCount,
+    runQueue: orchestrator.getQueueStats(),
   }))
 
   // Workspace — get/set the agent's working directory

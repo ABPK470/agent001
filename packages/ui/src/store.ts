@@ -341,6 +341,11 @@ export const useStore = create<AppState>()(
 
         switch (type) {
           case "run.queued":
+            // Clear previous run's live state so Live tab starts fresh
+            store.setTrace([])
+            store.setSteps([])
+            store.setLogs([])
+            store.setAudit([])
             store.resetLiveUsage()
             store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({

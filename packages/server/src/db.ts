@@ -30,8 +30,46 @@ export function _setDb(db: Database.Database): void {
   _db = db
 }
 
+// ── Current seed data (bump SEED_VERSION when changing) ──────
+
+const SEED_VERSION = 2
+
+const DEFAULT_AGENT_PROMPT = [
+  "You are an efficient AI agent that uses tools to accomplish goals.",
+  "",
+  "Principles:",
+  "- Briefly state your approach before acting so the user can follow your reasoning.",
+  "- Act directly. For simple tasks, use the right tool immediately.",
+  "- NEVER browse directories one-by-one. Use run_command with find, grep, wc, etc. A single shell pipeline replaces dozens of tool calls.",
+  "- For data collection tasks (counting lines, searching files, aggregating stats): write and execute ONE shell command or script. Never do it file-by-file.",
+  "- Call multiple tools in one turn when operations are independent.",
+  "- Don't verify results unless there's a reason to doubt them.",
+  "- If a path doesn't exist, check the error message — it often tells you what does exist nearby.",
+  "",
+  "Provide a concise final answer when done.",
+].join("\n")
+
+const DEFAULT_TOOLS = ["read_file", "write_file", "list_directory", "run_command", "fetch_url"]
+
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {
+  // ── Schema version tracking ────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `)
+
+  const getMetaValue = (key: string): string | undefined => {
+    const row = db.prepare("SELECT value FROM schema_meta WHERE key = ?").get(key) as { value: string } | undefined
+    return row?.value
+  }
+  const setMetaValue = (key: string, value: string): void => {
+    db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)").run(key, value)
+  }
+
+  // ── Tables ─────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
@@ -132,10 +170,20 @@ export function _migrate(db: Database.Database): void {
     );
   `)
 
-  // ── Column migrations (idempotent) ─────────────────────────
-  try { db.exec("ALTER TABLE runs ADD COLUMN agent_id TEXT") } catch { /* already exists */ }
+  // ── Column migrations ──────────────────────────────────────
+  // Only suppress "duplicate column" errors, re-throw anything else
+  const addColumnIfMissing = (sql: string): void => {
+    try {
+      db.exec(sql)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!msg.includes("duplicate column")) throw err
+    }
+  }
+  addColumnIfMissing("ALTER TABLE runs ADD COLUMN agent_id TEXT")
 
-  // ── Seed data ──────────────────────────────────────────────
+  // ── Seed default agent (version-aware) ─────────────────────
+  // Insert only on first install. Updates happen via version check below.
   db.prepare(`
     INSERT OR IGNORE INTO agent_definitions (id, name, description, system_prompt, tools, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -143,21 +191,44 @@ export function _migrate(db: Database.Database): void {
     "default",
     "Universal Agent",
     "General-purpose agent with all tools. Handles any task.",
-    [
-      "You are a capable AI agent that can use tools to accomplish goals.",
-      "",
-      "When given a goal:",
-      "1. Break it down into steps",
-      "2. Use tools to gather information or take actions",
-      "3. Observe the results and decide what to do next",
-      "4. Repeat until the goal is achieved",
-      "5. Provide a clear final answer",
-      "",
-      "Be methodical. Think before acting. If a tool call fails, try a different approach.",
-      "Always explain your reasoning when providing the final answer.",
-    ].join("\n"),
-    JSON.stringify(["read_file", "write_file", "list_directory", "run_command", "fetch_url", "think"]),
+    DEFAULT_AGENT_PROMPT,
+    JSON.stringify(DEFAULT_TOOLS),
   )
+
+  // ── Version-based seed update ──────────────────────────────
+  // When SEED_VERSION bumps, update the default agent's prompt and tools
+  // ONLY if the user hasn't customized them (i.e. they still match a known old version).
+  const currentSeedVersion = Number(getMetaValue("seed_version") ?? "0")
+  if (currentSeedVersion < SEED_VERSION) {
+    const existing = db.prepare(
+      "SELECT system_prompt, tools FROM agent_definitions WHERE id = 'default'"
+    ).get() as { system_prompt: string; tools: string } | undefined
+
+    if (existing) {
+      // Check if the user has customized the agent — if so, don't overwrite
+      const isUserCustomized = !isKnownOldSeedPrompt(existing.system_prompt)
+      if (!isUserCustomized) {
+        db.prepare(
+          "UPDATE agent_definitions SET system_prompt = ?, tools = ?, updated_at = datetime('now') WHERE id = 'default'"
+        ).run(DEFAULT_AGENT_PROMPT, JSON.stringify(DEFAULT_TOOLS))
+      }
+    }
+
+    setMetaValue("seed_version", String(SEED_VERSION))
+  }
+}
+
+/**
+ * Returns true if the prompt matches any known previous default prompt,
+ * meaning it's safe to auto-update. If the user wrote their own custom
+ * prompt, this returns false and we leave it alone.
+ */
+function isKnownOldSeedPrompt(prompt: string): boolean {
+  // v0: original verbose prompt
+  if (prompt.includes("Break it down into steps")) return true
+  // v1: efficient prompt (current DEFAULT_AGENT_PROMPT is v2)
+  if (prompt.includes("You are an efficient AI agent that uses tools")) return true
+  return false
 }
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -292,6 +363,12 @@ export function getLayouts(): DbLayout[] {
     .all() as DbLayout[]
 }
 
+export function getLayout(id: string): DbLayout | undefined {
+  return getDb()
+    .prepare("SELECT * FROM layouts WHERE id = ?")
+    .get(id) as DbLayout | undefined
+}
+
 export function deleteLayout(id: string): void {
   getDb().prepare("DELETE FROM layouts WHERE id = ?").run(id)
 }
@@ -402,6 +479,7 @@ export function clearTransactionalData(): void {
     DELETE FROM logs;
     DELETE FROM token_usage;
     DELETE FROM trace_entries;
+    DELETE FROM notifications;
   `)
 }
 

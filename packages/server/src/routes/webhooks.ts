@@ -17,7 +17,10 @@
 import type { FastifyInstance } from "fastify"
 import {
     type ChannelType,
+    type MessageQueue,
     type MessageRouter,
+    MessengerChannel,
+    WhatsAppChannel,
     deleteChannelConfig,
     getDeliveryStats,
     getOutboundMessages,
@@ -25,7 +28,7 @@ import {
     saveChannelConfig,
 } from "../channels/index.js"
 
-export function registerWebhookRoutes(app: FastifyInstance, router: MessageRouter): void {
+export function registerWebhookRoutes(app: FastifyInstance, router: MessageRouter, queue: MessageQueue): void {
 
   // ── Raw body capture for webhook signature validation ───────
   // Store raw bytes on the request so we can verify HMAC signatures.
@@ -182,6 +185,14 @@ export function registerWebhookRoutes(app: FastifyInstance, router: MessageRoute
     }
 
     saveChannelConfig({ type, accessToken, verifyToken, appSecret, platformId })
+
+    // Hot-register: make the channel available immediately without restart
+    const cfg = { type, accessToken, verifyToken, appSecret, platformId }
+    const channel = type === "whatsapp"
+      ? new WhatsAppChannel(cfg)
+      : new MessengerChannel(cfg)
+    queue.registerChannel(channel)
+    router.registerChannel(channel)
 
     reply.code(201)
     return { ok: true, type }

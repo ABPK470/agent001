@@ -47,7 +47,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_directory: "List",
   run_command: "Shell",
   fetch_url: "Fetch",
-  think: "Think",
+  delegate: "Delegate",
 }
 
 function toolLabel(id: string): string {
@@ -232,15 +232,27 @@ export function AgentViz() {
   }, [trace])
 
   // Set of tool IDs actually used in the current trace
+  // Stabilised: returns previous reference when the set of tool names hasn't changed,
+  // so graphData doesn't recompute on every trace append.
+  const prevInvolvedRef = useRef<Set<string>>(new Set())
   const involvedToolIds = useMemo(() => {
     const ids = new Set<string>()
     for (const entry of trace) {
       if (entry.kind === "tool-call") ids.add(entry.tool)
     }
+    // Only return new ref if the set of tools actually changed
+    const prev = prevInvolvedRef.current
+    if (ids.size === prev.size && [...ids].every(id => prev.has(id))) {
+      return prev
+    }
+    prevInvolvedRef.current = ids
     return ids
   }, [trace])
 
   // Track active delegations from trace
+  // Stabilised: only returns a new reference when the delegation stack actually changes,
+  // preventing graphData from recreating (which would restart the d3 simulation).
+  const prevDelegationsRef = useRef<Array<{ depth: number; goal: string; tools: string[] }>>([])
   const activeDelegations = useMemo(() => {
     const stack: Array<{ depth: number; goal: string; tools: string[] }> = []
     for (const e of trace) {
@@ -253,11 +265,23 @@ export function AgentViz() {
         }
       }
     }
+    // Structural comparison — return previous reference if unchanged
+    const prev = prevDelegationsRef.current
+    if (
+      prev.length === stack.length &&
+      prev.every((d, i) => d.depth === stack[i].depth && d.goal === stack[i].goal)
+    ) {
+      return prev
+    }
+    prevDelegationsRef.current = stack
     return stack
   }, [trace])
 
   // Build graph data from agents + active delegations
-  // Visual states (colors, running, stats) are handled in paintNode
+  // Stabilised: returns previous reference when topology is unchanged,
+  // preventing force-graph from reheating the d3 simulation (alpha=1 restart).
+  // Visual state (colors, running, stats) is handled in paintNode/paintLink.
+  const prevGraphRef = useRef<{ nodes: VizNode[]; links: VizLink[] }>({ nodes: [], links: [] })
   const graphData = useMemo(() => {
     const nodes: VizNode[] = []
     const links: VizLink[] = []
@@ -304,6 +328,35 @@ export function AgentViz() {
           color: agentColor,
         })
       }
+
+      // Add runtime-injected tools (e.g. delegate) that appear in the trace
+      // but aren't in the agent's DB definition
+      for (const toolId of involvedToolIds) {
+        const toolNodeId = `tool:${toolId}`
+        if (!toolNodeIds.has(toolNodeId)) {
+          const toolIdx = toolNodeIds.size
+          toolNodeIds.add(toolNodeId)
+          nodes.push({
+            id: toolNodeId,
+            type: "tool",
+            label: toolLabel(toolId),
+            color: C.mid,
+            toolId,
+            val: 3,
+            x: 60,
+            y: (toolIdx - 2.5) * 40,
+          })
+        }
+        // Link from agent to this runtime tool if not already linked
+        if (!links.some(l => l.source === agentNodeId && (typeof l.target === "string" ? l.target : (l.target as VizNode).id) === toolNodeId)) {
+          links.push({
+            source: agentNodeId,
+            target: toolNodeId,
+            agentId: agent.id,
+            color: agentColor,
+          })
+        }
+      }
     })
 
     // Add ephemeral delegate nodes for active delegations
@@ -346,8 +399,23 @@ export function AgentViz() {
       }
     }
 
+    // Structural comparison — only return new reference when topology changes
+    const prev = prevGraphRef.current
+    const nodesKey = nodes.map(n => n.id).join("\0")
+    const linksKey = links.map(l => `${l.source}\0${l.target}`).join("\0")
+    const prevNodesKey = prev.nodes.map(n => n.id).join("\0")
+    const prevLinksKey = prev.links.map(l => {
+      const s = typeof l.source === "string" ? l.source : (l.source as VizNode).id
+      const t = typeof l.target === "string" ? l.target : (l.target as VizNode).id
+      return `${s}\0${t}`
+    }).join("\0")
+
+    if (nodesKey === prevNodesKey && linksKey === prevLinksKey) {
+      return prev
+    }
+    prevGraphRef.current = { nodes, links }
     return { nodes, links }
-  }, [agents, activeDelegations, activeAgentId])
+  }, [agents, activeDelegations, activeAgentId, involvedToolIds])
 
   // Emit particles when new tool calls arrive (live mode only)
   useEffect(() => {
@@ -376,7 +444,9 @@ export function AgentViz() {
     }
   }, [liveTrace, activeRun, graphData.links, mode])
 
-  // Configure d3 forces — tighter layout, agents left / tools right
+  // Configure d3 forces once — tighter layout, agents left / tools right.
+  // The library re-initializes forces internally when graphData changes,
+  // so this only needs to run once after the component mounts.
   useEffect(() => {
     const fg = graphRef.current
     if (!fg) return
@@ -397,7 +467,7 @@ export function AgentViz() {
     xBias.initialize = (nodes: NodeObject<VizNode>[]) => { forceNodes = nodes }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fg.d3Force("xBias", xBias as any)
-  }, [graphData])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fit to view on data change — calibrate zoom so initial fit = 100%
   // Offset the center rightward so the diagram sits in the visible area
@@ -597,7 +667,11 @@ export function AgentViz() {
   }, [])
 
   // Build detail for selected node
-  const detailInfo = useMemo((): { title: string; lines: Array<{ label: string; value: string }> } | null => {
+  const detailInfo = useMemo((): {
+    title: string
+    lines: Array<{ label: string; value: string }>
+    invocations?: Array<{ args: string; result: string; status: "ok" | "error" }>
+  } | null => {
     if (!selectedNode) return null
     if (selectedNode.startsWith("agent:")) {
       const agentId = selectedNode.slice(6)
@@ -623,6 +697,36 @@ export function AgentViz() {
     if (selectedNode.startsWith("tool:")) {
       const toolId = selectedNode.slice(5)
       const stats = toolStats.get(toolId)
+
+      // Extract actual invocations from trace
+      const invocations: Array<{ args: string; result: string; status: "ok" | "error" }> = []
+      for (let i = 0; i < trace.length; i++) {
+        const e = trace[i]
+        if (e.kind === "tool-call" && e.tool === toolId) {
+          const args = e.argsSummary || e.argsFormatted || "..."
+          // Look ahead for the result
+          let result = ""
+          let status: "ok" | "error" = "ok"
+          for (let j = i + 1; j < trace.length; j++) {
+            const r = trace[j]
+            if (r.kind === "tool-result") {
+              result = r.text
+              break
+            } else if (r.kind === "tool-error") {
+              result = r.text
+              status = "error"
+              break
+            } else if (r.kind === "tool-call") {
+              // Next tool call started — this one has no result yet
+              result = "⏳ running..."
+              break
+            }
+          }
+          if (!result) result = "⏳ running..."
+          invocations.push({ args, result, status })
+        }
+      }
+
       return {
         title: toolLabel(toolId),
         lines: stats ? [
@@ -632,6 +736,7 @@ export function AgentViz() {
         ] : [
           { label: "Status", value: "No activity" },
         ],
+        invocations,
       }
     }
     if (selectedNode.startsWith("delegate:")) {
@@ -649,7 +754,7 @@ export function AgentViz() {
       }
     }
     return null
-  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, activeDelegations])
+  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, activeDelegations, trace])
 
   // Activity feed
   const recentActivity = useMemo(() => {
@@ -950,7 +1055,7 @@ export function AgentViz() {
         {/* Detail panel — click a node */}
         {selectedNode && detailInfo && (
           <div
-            className="absolute top-3 right-3 rounded-lg px-4 py-3 font-mono max-w-[220px]"
+            className="absolute top-3 right-3 rounded-lg px-4 py-3 font-mono max-w-[320px] max-h-[70%] flex flex-col"
             style={{ background: `${C.surface}ee`, border: `1px solid ${C.deep}60`, color: C.text }}
           >
             <div className="flex items-center justify-between mb-2">
@@ -969,6 +1074,34 @@ export function AgentViz() {
                 <span className="font-medium">{line.value}</span>
               </div>
             ))}
+            {/* Invocation history — scrollable log of actual tool calls */}
+            {detailInfo.invocations && detailInfo.invocations.length > 0 && (
+              <div className="mt-2 pt-2 overflow-y-auto flex-1 flex flex-col gap-2" style={{ borderTop: `1px solid ${C.deep}40` }}>
+                {detailInfo.invocations.map((inv, i) => (
+                  <div key={i} className="text-[10px]">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ background: inv.status === "error" ? C.coral : inv.result === "⏳ running..." ? C.accent : C.success }}
+                      />
+                      <span style={{ color: C.text }} className="font-medium">#{i + 1}</span>
+                      <span style={{ color: C.muted }} className="truncate">{inv.args.length > 60 ? inv.args.slice(0, 57) + "..." : inv.args}</span>
+                    </div>
+                    <div
+                      className="ml-3 pl-2 leading-snug whitespace-pre-wrap break-all"
+                      style={{
+                        color: inv.status === "error" ? C.coral : inv.result === "⏳ running..." ? C.accent : C.muted,
+                        borderLeft: `2px solid ${inv.status === "error" ? C.coral + "40" : C.deep}`,
+                        maxHeight: 80,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {inv.result.length > 200 ? inv.result.slice(0, 197) + "..." : inv.result}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
     </div>

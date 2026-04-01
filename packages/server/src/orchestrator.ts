@@ -11,31 +11,33 @@
  */
 
 import {
-    Agent,
-    completeRun,
-    createDelegateTool,
-    createEngineServices,
-    createRun,
-    failRun,
-    governTool,
-    PolicyEffect,
-    runCompleted,
-    runFailed,
-    runStarted,
-    startPlanning,
-    startRunning,
-    type DelegateContext,
-    type DomainEvent,
-    type EngineServices,
-    type LLMClient,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
+  Agent,
+  completeRun,
+  createDelegateTools,
+  createEngineServices,
+  createRun,
+  failRun,
+  governTool,
+  PolicyEffect,
+  runCompleted,
+  runFailed,
+  runStarted,
+  startPlanning,
+  startRunning,
+  type DelegateContext,
+  type DomainEvent,
+  type EngineServices,
+  type LLMClient,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
+import { AgentBus, createBusTools } from "./agent-bus.js"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
+import { RunQueue, type RunPriority } from "./queue.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
 
@@ -48,6 +50,8 @@ interface ActiveRun {
   controller: AbortController
   services: EngineServices
   traceSeq: number
+  /** Agent message bus for inter-agent communication within this run tree. */
+  bus: AgentBus
 }
 
 /** Per-run agent configuration — which tools and prompt to use. */
@@ -68,6 +72,7 @@ export interface OrchestratorConfig {
 export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
+  private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
 
@@ -75,6 +80,7 @@ export class AgentOrchestrator {
     this.llm = config.llm
     this.messageRouter = config.messageRouter ?? null
     this.workspace = config.workspace ?? null
+    this.queue = new RunQueue()
   }
 
   /** Update the workspace path (used in system prompt context). */
@@ -85,6 +91,26 @@ export class AgentOrchestrator {
   /** Hot-swap the LLM client — takes effect on the next run. */
   setLlm(client: LLMClient): void {
     this.llm = client
+  }
+
+  /** Generate a shallow workspace tree for system prompt context. */
+  private async getWorkspaceContext(): Promise<string> {
+    if (!this.workspace) return ""
+    try {
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const exec = promisify(execFile)
+      const { stdout } = await exec("find", [
+        ".", "-maxdepth", "3", "-type", "d",
+        "-not", "-path", "*/node_modules/*",
+        "-not", "-path", "*/.git/*",
+        "-not", "-path", "*/dist/*",
+      ], { cwd: this.workspace, timeout: 5000 })
+      const dirs = stdout.trim().split("\n").filter(Boolean).slice(0, 60)
+      return `Structure:\n${dirs.join("\n")}`
+    } catch {
+      return ""
+    }
   }
 
   /** Set the message router (for wiring after construction). */
@@ -113,12 +139,15 @@ export class AgentOrchestrator {
       })
     }
 
-    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0 })
+    // Create a message bus for this run tree (parent + all delegates share it)
+    const bus = new AgentBus(runId)
 
-    broadcast({ type: "run.queued", data: { runId, goal, agentId } })
+    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus })
+
+    broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     this.saveTrace(runId, { kind: "goal", text: goal })
 
-    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller).catch((err) => {
+    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
     })
 
@@ -128,7 +157,11 @@ export class AgentOrchestrator {
   /** Cancel a running agent. */
   cancelRun(runId: string): boolean {
     const active = this.activeRuns.get(runId)
-    if (!active) return false
+    if (!active) {
+      // Might still be in the queue
+      this.queue.remove(runId)
+      return false
+    }
     active.controller.abort()
     broadcast({ type: "run.cancelled", data: { runId } })
     return true
@@ -154,6 +187,7 @@ export class AgentOrchestrator {
     const newRunId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
+    const bus = new AgentBus(newRunId)
 
     this.activeRuns.set(newRunId, {
       id: newRunId,
@@ -162,6 +196,7 @@ export class AgentOrchestrator {
       controller,
       services,
       traceSeq: 0,
+      bus,
     })
 
     broadcast({
@@ -192,6 +227,7 @@ export class AgentOrchestrator {
       originalRun.agent_id ?? null,
       services,
       controller,
+      bus,
       { messages, iteration, parentRunId: runId },
     ).catch((err) => {
       console.error(`Resumed run ${newRunId} crashed:`, err)
@@ -203,6 +239,11 @@ export class AgentOrchestrator {
   /** Get IDs of currently running agents. */
   getActiveRunIds(): string[] {
     return [...this.activeRuns.keys()]
+  }
+
+  /** Get queue statistics. */
+  getQueueStats() {
+    return this.queue.stats()
   }
 
   /**
@@ -321,8 +362,20 @@ export class AgentOrchestrator {
     agentId: string | null,
     services: EngineServices,
     controller: AbortController,
+    bus: AgentBus,
     resume?: { messages: Message[], iteration: number, parentRunId: string },
+    priority: RunPriority = "normal",
   ): Promise<void> {
+    // Acquire a queue slot (waits if at capacity)
+    let releaseSlot: () => void
+    try {
+      releaseSlot = await this.queue.acquire(runId, priority, controller.signal)
+    } catch {
+      // Cancelled while queued — clean up and exit
+      this.activeRuns.delete(runId)
+      return
+    }
+
     const actor = "user"
     let lastMessages: Message[] = []
     let lastIteration = 0
@@ -360,14 +413,24 @@ export class AgentOrchestrator {
     }
     const governedTools = tools.map((t) => governTool(t, services, state))
 
-    // Create delegate tool for sub-agent spawning (ephemeral delegation)
+    // Create delegate tools for sub-agent spawning (sequential + parallel)
     const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
+    const agentName = agentId
+      ? (db.getAgentDefinition(agentId)?.name ?? "Agent")
+      : "Universal Agent"
+
+    // Create bus tools so the agent can communicate with siblings/children
+    const busTools = createBusTools(bus, runId, agentName)
+
     const delegateCtx: DelegateContext = {
       llm: this.llm,
       availableTools: governedTools,
       depth: 0,
       maxDepth: maxDelegationDepth,
       signal: controller.signal,
+      extraChildTools: busTools, // children get messaging tools
+      acquireSlot: (childRunId: string) =>
+        this.queue.acquire(childRunId, "high", controller.signal),
       resolveAgent: (agentId: string): ResolvedAgent | null => {
         const def = db.getAgentDefinition(agentId)
         if (!def) return null
@@ -387,6 +450,10 @@ export class AgentOrchestrator {
           broadcast({ type: "delegation.started", data: { runId, ...entry } })
         } else if (entry.kind === "delegation-end") {
           broadcast({ type: "delegation.ended", data: { runId, ...entry } })
+        } else if (entry.kind === "delegation-parallel-start") {
+          broadcast({ type: "delegation.parallel-started", data: { runId, ...entry } })
+        } else if (entry.kind === "delegation-parallel-end") {
+          broadcast({ type: "delegation.parallel-ended", data: { runId, ...entry } })
         }
       },
       onChildUsage: (childUsage) => {
@@ -402,13 +469,24 @@ export class AgentOrchestrator {
         })
       },
     }
-    const delegateTool = createDelegateTool(delegateCtx)
-    const allTools = delegateTool ? [...governedTools, delegateTool] : governedTools
+    const delegateTools = createDelegateTools(delegateCtx)
+    const allTools = [...governedTools, ...delegateTools, ...busTools]
 
-    // Create agent with checkpoint support
-    const effectivePrompt = systemPrompt
-      ? (this.workspace ? `${systemPrompt}\n\nWorkspace: ${this.workspace}` : systemPrompt)
-      : (this.workspace ? `Workspace: ${this.workspace}` : undefined)
+    // Build effective system prompt with workspace context
+    let effectivePrompt = systemPrompt ?? undefined
+    if (this.workspace) {
+      const wsContext = await this.getWorkspaceContext()
+      const contextBlock = [
+        "",
+        `Workspace: ${this.workspace}`,
+        wsContext,
+        "",
+        "When the user references a path like /agent or /server, match it to the closest directory in the workspace structure above (e.g. packages/agent, packages/server). All tool paths are relative to the workspace root.",
+      ].join("\n")
+      effectivePrompt = effectivePrompt
+        ? `${effectivePrompt}${contextBlock}`
+        : contextBlock
+    }
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
@@ -552,6 +630,8 @@ export class AgentOrchestrator {
         ],
       })
     } finally {
+      releaseSlot()
+      bus.dispose()
       this.activeRuns.delete(runId)
     }
   }

@@ -6,7 +6,7 @@
  */
 
 import { readdir, readFile, stat, writeFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { dirname, resolve } from "node:path"
 import type { Tool } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
@@ -109,6 +109,19 @@ export const listDirectoryTool: Tool = {
 
       return lines.join("\n") || "(empty directory)"
     } catch (err) {
+      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+        // Path doesn't exist — help the agent by listing what's actually in the parent
+        const requestedPath = String(args.path ?? ".")
+        const parentDir = dirname(safePath(requestedPath))
+        try {
+          const parentEntries = await readdir(parentDir)
+          const items = parentEntries.slice(0, 30).join(", ")
+          const rel = parentDir.replace(_basePath, ".") || "."
+          return `Error: "${requestedPath}" does not exist. Contents of ${rel}: ${items}`
+        } catch {
+          return `Error: "${requestedPath}" does not exist.`
+        }
+      }
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },

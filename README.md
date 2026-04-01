@@ -1,17 +1,20 @@
 # agent001
 
-A **single-agent platform** where agents are configuration, not code. You build ONE generic runtime, and define agents via configuration — each with its own system prompt, tool set, and personality.
+A **governed AI agent platform** with multi-agent orchestration, real-time observability, and multi-channel messaging.
+
+One runtime executes any goal. A concurrency-controlled queue manages parallel runs. Agents can delegate sub-tasks to child agents that work concurrently and communicate via an in-memory message bus. Every tool call passes through a governance layer — policy checks, audit logging, step tracking, and domain events — all streamed live to the dashboard via WebSocket.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  User: "Find the 3 largest files in src"                         │
+│  (via Dashboard, REST API, WhatsApp, or Messenger)               │
 ├──────────────────────────────────────────────────────────────────┤
-│  Agent Definition (from DB)                                      │
-│  ┌────────────────────────────────────────────────────────┐      │
-│  │ name: "Universal Agent"                                │      │
-│  │ tools: [read_file, write_file, list_directory, ...]    │      │
-│  │ systemPrompt: "You are a capable AI agent..."          │      │
-│  └────────────────────────────────────────────────────────┘      │
+│  Orchestrator (queue, lifecycle, persistence)                    │
+│  ┌─────────────────────────────────────────────────────────┐     │
+│  │ RunQueue (concurrency-limited, priority-based)          │     │
+│  │ AgentBus (inter-agent messaging within a run tree)      │     │
+│  │ Checkpointing + auto-resume on crash                    │     │
+│  └─────────────────────────────────────────────────────────┘     │
 ├──────────────────────────────────────────────────────────────────┤
 │  Agent Runtime (LLM + Tools + Loop)                              │
 │  ┌─────────────┐    ┌───────────────────────────────────────┐    │
@@ -19,10 +22,13 @@ A **single-agent platform** where agents are configuration, not code. You build 
 │  │ (Copilot /  │    └──────────────────┬────────────────────┘    │
 │  │  OpenAI /   │                       │                         │
 │  │  Anthropic /│◄── result ────────────┘                         │
-│  │  Local)     │                                                 │
-│  └─────────────┘                                                 │
+│  │  Local)     │    ┌───────────────────────────────────────┐    │
+│  │             │───→│ delegate_parallel([task1, task2])      │    │
+│  │             │    │  → child agent 1 (concurrent)         │    │
+│  └─────────────┘    │  → child agent 2 (concurrent)         │    │
+│                     └───────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────┤
-│  Governance Substrate (policies, audit, tracking)                │
+│  Governance Layer (every tool call passes through this)          │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐            │
 │  │  Policy  │ │  Audit   │ │   Run    │ │  Event  │            │
 │  │  Engine  │ │  Trail   │ │Tracking  │ │   Bus   │            │
@@ -44,9 +50,9 @@ A **single-agent platform** where agents are configuration, not code. You build 
 
 ```
 packages/
-├── agent/    # The AI core: LLM clients, tools, agent loop, governance engine
-├── server/   # Backend: orchestrator, SQLite, REST API, WebSocket, channels
-└── ui/       # React dashboard: chat, trace, audit, policies, agent management
+├── agent/    # Pure runtime: LLM loop, tools, governance engine, delegation
+├── server/   # Orchestrator, queue, bus, SQLite, REST API, WebSocket, channels
+└── ui/       # React dashboard: chat, trace, audit, policies, usage
 ```
 
 ## Quick start
@@ -58,7 +64,7 @@ npm install
 # Start everything (backend on 3001, UI on 5179)
 npm run dev
 
-# Run tests (18 agent governance + 30 server channels)
+# Run tests (31 agent + 40 server)
 npm test
 ```
 
@@ -79,20 +85,32 @@ The LLM provider can be hot-swapped at runtime via the UI or API — no restart 
 
 ---
 
-## Architecture — Pattern C: Agents as Configuration
+## Architecture
 
-The core insight: **agents are data, not code.** Each agent is defined by a row in the database:
+The core loop is simple: **LLM + Tools + Loop**. The agent asks the LLM what to do, executes the tool calls, feeds results back, and repeats until the LLM returns a final answer with no tool calls. That loop is ~40 lines in `agent.ts`.
 
-| Field | Purpose |
+Everything else is orchestration around that loop:
+
+| Layer | Responsibility |
 |---|---|
-| `name` | Human-readable label ("Code Reviewer", "Research Assistant") |
-| `description` | What this agent is for |
-| `systemPrompt` | The agent's personality and instructions |
-| `tools` | Subset of available tools (e.g., `["read_file", "think"]`) |
+| **Agent** (`packages/agent`) | LLM interaction loop, tool execution, domain models, governance wrappers |
+| **Orchestrator** (`packages/server`) | Run lifecycle, concurrency queue, inter-agent bus, persistence, WebSocket |
+| **UI** (`packages/ui`) | Dashboard with real-time visualization |
 
-A single generic agent runtime executes _any_ agent definition. To create a new agent, you add a row — not code.
+### Multi-agent delegation
 
-### Agent definitions API
+An agent can delegate sub-tasks to child agents via two built-in tools:
+
+- **`delegate`** — spawn one child agent, wait for its answer (sequential)
+- **`delegate_parallel`** — spawn multiple children concurrently, collect all answers
+
+Children share the parent's abort signal (cancel propagates), acquire queue slots (respects concurrency limits), and can communicate via the message bus (`send_message` / `check_messages` tools).
+
+Delegation is recursive up to a configurable depth (default 3). Each child is a fresh `Agent` instance with its own iteration budget.
+
+### Agent definitions
+
+Agents can be configured via the database — each with a name, system prompt, and tool subset. Delegated children can resolve named agent definitions, allowing specialized agents (e.g., "Code Reviewer" with read-only tools) to be composed into larger workflows.
 
 ```bash
 # List all agents
@@ -116,7 +134,7 @@ curl -X POST http://localhost:3001/api/agents/<id>/runs \
 
 ### Tool registry
 
-Six tools are available. Each agent definition picks a subset:
+Built-in tools available to every agent run:
 
 | Tool | What it does |
 |---|---|
@@ -125,7 +143,10 @@ Six tools are available. Each agent definition picks a subset:
 | `list_directory` | List directory contents |
 | `run_command` | Run a shell command (30s timeout) |
 | `fetch_url` | Fetch a URL, strip HTML, return text |
-| `think` | Chain-of-thought reasoning scratchpad |
+| `delegate` | Spawn a child agent for a sub-task |
+| `delegate_parallel` | Spawn multiple children concurrently |
+| `send_message` | Send a message to sibling/child agents |
+| `check_messages` | Read messages from other agents |
 
 ```bash
 # List all available tools
@@ -388,6 +409,7 @@ Failed deliveries are retried automatically:
 | `POST` | `/api/runs/:id/resume` | Resume from checkpoint |
 | `GET` | `/api/runs/active` | List active run IDs |
 | `GET` | `/api/runs/:id/trace` | Get rich execution trace |
+| `GET` | `/api/queue` | Run queue stats (active, queued, concurrency) |
 
 ### Governance & config
 
@@ -416,15 +438,16 @@ Failed deliveries are retried automatically:
 
 ```
 packages/
-├── agent/                     # The AI core
+├── agent/                     # Pure runtime (zero infrastructure deps)
 │   ├── src/
 │   │   ├── types.ts           # Message, Tool, ToolCall, LLMClient interfaces
-│   │   ├── agent.ts           # The Agent class — LLM + tool loop
+│   │   ├── agent.ts           # The Agent class — LLM + tool loop (~40 lines of core)
 │   │   ├── governance.ts      # Engine integration — wraps tools with audit/policies
+│   │   ├── retry.ts           # Tool retry with exponential backoff + jitter
 │   │   ├── lib.ts             # Library exports for server integration
 │   │   ├── logger.ts          # Colored console output
 │   │   ├── cli.ts             # CLI entry point (governed + raw modes)
-│   │   ├── engine/            # Governance engine (embedded)
+│   │   ├── engine/            # Domain layer (governance infrastructure)
 │   │   │   ├── models.ts      # Domain entities: Run, Step, state machines
 │   │   │   ├── enums.ts       # RunStatus, StepStatus, PolicyEffect
 │   │   │   ├── events.ts      # Domain events (runStarted, stepCompleted, ...)
@@ -439,17 +462,20 @@ packages/
 │   │   │   ├── openai.ts      # OpenAI function calling (raw fetch)
 │   │   │   └── anthropic.ts   # Anthropic tool use (raw fetch)
 │   │   └── tools/
+│   │       ├── delegate.ts    # Sub-agent spawning (sequential + parallel)
 │   │       ├── filesystem.ts  # read/write/list with path sandboxing
 │   │       ├── shell.ts       # Shell command execution
 │   │       ├── fetch-url.ts   # HTTP fetch + HTML stripping
 │   │       └── think.ts       # Reasoning tool
 │   └── tests/
-│       └── governance.test.ts # 18 tests — policies, audit, events, tracking
+│       └── governance.test.ts # 31 tests — policies, audit, events, tracking
 │
 ├── server/                    # Backend API + agent orchestrator
 │   ├── src/
 │   │   ├── index.ts           # Fastify server, routes, WebSocket, startup
-│   │   ├── orchestrator.ts    # Agent run lifecycle (start/resume/cancel)
+│   │   ├── orchestrator.ts    # Agent run lifecycle (start/resume/cancel/recover)
+│   │   ├── queue.ts           # Concurrency-limited run queue with priority
+│   │   ├── agent-bus.ts       # Inter-agent messaging (pub/sub per run tree)
 │   │   ├── db.ts              # SQLite persistence (~/.agent001/agent001.db)
 │   │   ├── tools.ts           # Tool registry — resolves agent tool subsets
 │   │   ├── ws.ts              # WebSocket client management + broadcast
@@ -466,14 +492,14 @@ packages/
 │   │   │   └── store.ts       # SQLite persistence (conversations, queue, configs)
 │   │   └── routes/
 │   │       ├── agents.ts      # Agent definition CRUD + scoped runs + tools list
-│   │       ├── runs.ts        # Run lifecycle (start, cancel, resume, list, detail)
+│   │       ├── runs.ts        # Run lifecycle (start, cancel, resume, list, detail, queue stats)
 │   │       ├── policies.ts    # Governance policy CRUD
 │   │       ├── llm.ts         # LLM config read/write + hot-swap
 │   │       ├── usage.ts       # Token usage stats
 │   │       ├── layouts.ts     # Dashboard layout persistence
 │   │       └── webhooks.ts    # WhatsApp + Messenger webhook endpoints
 │   └── tests/
-│       └── channels.test.ts   # 30 tests — retry, queue, webhook parsing
+│       └── channels.test.ts   # 40 tests — retry, queue, webhook parsing
 │
 └── ui/                        # React dashboard
     └── src/
@@ -502,16 +528,18 @@ packages/
 | Table | Purpose |
 |---|---|
 | `agent_definitions` | Agent configurations (name, system prompt, tools) |
-| `runs` | Agent execution records (goal, status, answer, agent_id) |
+| `runs` | Agent execution records (goal, status, answer, parent_run_id, agent_id) |
 | `audit_log` | Immutable action log |
-| `checkpoints` | Resume points (messages, iteration) |
+| `checkpoints` | Resume points (messages, iteration) for crash recovery |
 | `policy_rules` | Governance rules |
 | `llm_config` | Active LLM provider settings |
 | `token_usage` | Per-run token consumption |
 | `trace_entries` | Rich execution trace data |
 | `logs` | Live event stream |
 | `layouts` | Dashboard configurations |
+| `notifications` | System notifications (run completed, failed, approval needed) |
+| `schema_meta` | Schema version tracking for safe migrations |
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical design guide.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical guide, and [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) for the reasoning behind every structural choice.
 
 MIT

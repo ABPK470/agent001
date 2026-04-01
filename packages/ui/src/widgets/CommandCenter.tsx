@@ -87,7 +87,7 @@ export function CommandCenter() {
   const notifications = useStore((s) => s.notifications)
   const unreadCount = useStore((s) => s.unreadCount)
   const connected = useStore((s) => s.connected)
-  const liveUsage = useStore((s) => s.liveUsage)
+  const liveUsage = useStore((s) => s.liveUsage) ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 }
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setActiveRun = useStore((s) => s.setActiveRun)

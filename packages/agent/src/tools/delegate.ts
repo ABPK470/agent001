@@ -1,22 +1,23 @@
 /**
- * Delegate tool — ephemeral sub-agent spawning.
+ * Delegate tools — sub-agent spawning (sequential and parallel).
  *
- * This is the core of true agentic delegation. When the parent agent
- * calls `delegate`, it spawns a child agent inline with:
- *   - A sub-goal (required)
- *   - An optional system prompt / instructions for the child
- *   - An optional subset of tools the child may use
- *   - A max iteration cap (default 15, capped by remaining parent budget)
+ * This is the core of true agentic delegation. Two tools:
  *
- * The child runs the same Agent loop, sharing the parent's abort signal.
- * Its final answer becomes the tool result for the parent. From the parent's
- * perspective it's just a tool call that takes longer.
+ *   delegate          — spawn ONE child agent, wait for its answer (sequential)
+ *   delegate_parallel — spawn MULTIPLE children concurrently, collect all answers
  *
- * Key properties:
- *   - Ephemeral: the child has no persistent identity — it's born, works, returns, dies
- *   - Recursive: the child can also delegate (up to a configurable depth limit)
- *   - Governed: the child's tool calls go through the same governance layer
- *   - Cancellable: parent abort signal propagates to children
+ * Both tools create ephemeral child agents that:
+ *   - Have their own iteration loop and tool set
+ *   - Share the parent's abort signal (cancel propagates down)
+ *   - Can delegate further (up to configurable depth limit)
+ *   - Get optional inter-agent messaging tools if a bus is provided
+ *   - Are governed by the same policy layer
+ *
+ * Why parallel matters:
+ *   In multi-agent orchestration, the parent often decomposes work into
+ *   independent pieces (research + implementation, or analyze-3-files).
+ *   Running these sequentially wastes time. delegate_parallel runs them
+ *   concurrently with Promise.allSettled so one failure doesn't kill the rest.
  */
 
 import { Agent } from "../agent.js"
@@ -53,29 +54,30 @@ export interface DelegateContext {
   onChildTrace?: (entry: Record<string, unknown>) => void
   /** Called when child agent completes a step (for token rollup). */
   onChildUsage?: (usage: TokenUsage, llmCalls: number) => void
+  /** Extra tools to inject into every child (e.g., bus messaging tools). */
+  extraChildTools?: Tool[]
+  /** Optional: acquire a concurrency slot before running a child. */
+  acquireSlot?: (childRunId: string) => Promise<() => void>
 }
 
 /**
- * Create a delegate tool bound to the current run context.
+ * Create the delegation tools bound to the current run context.
  *
- * This is a factory — each run gets its own delegate tool instance
- * because it needs to close over the LLM, tools, and abort signal.
+ * Returns an array with up to 2 tools: [delegate, delegate_parallel].
+ * Returns empty array if depth >= maxDepth.
  */
-export function createDelegateTool(ctx: DelegateContext): Tool | null {
+export function createDelegateTools(ctx: DelegateContext): Tool[] {
   const maxDepth = ctx.maxDepth ?? DEFAULT_MAX_DEPTH
+  if (ctx.depth >= maxDepth) return []
 
-  // Don't allow delegation beyond max depth
-  if (ctx.depth >= maxDepth) return null
+  const toolNames = ctx.availableTools.map(t => t.name).join(", ")
 
-  return {
+  const delegateTool: Tool = {
     name: "delegate",
     description:
       `Delegate a sub-task to a focused child agent. The child runs independently ` +
-      `with its own iteration loop and returns a final answer. Use this when:\n` +
-      `- A sub-task is self-contained and benefits from focused attention\n` +
-      `- You want to isolate a complex operation (research, analysis, multi-step build)\n` +
-      `- Parallel-style decomposition: break work into independent pieces\n\n` +
-      `The child agent has access to the same tools as you (or a subset you specify). ` +
+      `with its own iteration loop and returns a final answer. Use this for ` +
+      `self-contained sub-tasks that benefit from focused attention. ` +
       `Current delegation depth: ${ctx.depth}/${maxDepth}.`,
 
     parameters: {
@@ -87,120 +89,240 @@ export function createDelegateTool(ctx: DelegateContext): Tool | null {
         },
         agentId: {
           type: "string",
-          description: "Optional ID of a named agent definition to use. The child will inherit that agent's system prompt and tools. Overrides 'instructions' and 'tools' if provided.",
+          description: "Optional ID of a named agent definition to use. The child inherits that agent's system prompt and tools.",
         },
         instructions: {
           type: "string",
-          description: "Optional system-level instructions for the child (role, constraints, output format). Ignored if agentId is provided. Defaults to a general-purpose prompt.",
+          description: "Optional system-level instructions for the child. Ignored if agentId is provided.",
         },
         tools: {
           type: "array",
           items: { type: "string" },
-          description: `Optional subset of tool names the child may use. Ignored if agentId is provided. Available: ${ctx.availableTools.map(t => t.name).join(", ")}. Omit to give all tools.`,
+          description: `Optional subset of tool names. Ignored if agentId is provided. Available: ${toolNames}.`,
         },
         maxIterations: {
           type: "number",
-          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: 25). Lower = faster + cheaper.`,
+          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: 25).`,
         },
       },
       required: ["goal"],
     },
 
     async execute(args) {
-      const goal = String(args.goal)
-      const agentId = args.agentId ? String(args.agentId) : undefined
-      const instructions = args.instructions ? String(args.instructions) : undefined
-      const maxIter = Math.min(Number(args.maxIterations) || DEFAULT_CHILD_ITERATIONS, 25)
-
-      // If agentId is provided, resolve the named agent definition
-      let resolvedAgent: ResolvedAgent | null = null
-      if (agentId && ctx.resolveAgent) {
-        resolvedAgent = ctx.resolveAgent(agentId)
-        if (!resolvedAgent) {
-          return `Delegation failed: agent "${agentId}" not found. Available agents can be discovered via the system.`
-        }
-      }
-
-      // Resolve tools: named agent's tools > explicit tool list > all tools
-      let childTools: Tool[]
-      let childPrompt: string | undefined
-
-      if (resolvedAgent) {
-        // Use the named agent's tools and prompt
-        childTools = resolvedAgent.tools.filter(t => t.name !== "delegate")
-        childPrompt = resolvedAgent.systemPrompt
-      } else if (Array.isArray(args.tools) && args.tools.length > 0) {
-        const requested = new Set(args.tools.map(String))
-        childTools = ctx.availableTools.filter(t => requested.has(t.name))
-        // Always filter out the delegate tool itself from the subset if it wasn't explicitly requested
-        // (the child gets its own delegate tool via the recursive context below)
-      } else {
-        // Give all tools except the current delegate tool (child gets its own)
-        childTools = ctx.availableTools.filter(t => t.name !== "delegate")
-      }
-
-      // Create a delegate tool for the child (recursive, depth + 1)
-      const childDelegate = createDelegateTool({
-        ...ctx,
-        depth: ctx.depth + 1,
+      return spawnChild(ctx, {
+        goal: String(args.goal),
+        agentId: args.agentId ? String(args.agentId) : undefined,
+        instructions: args.instructions ? String(args.instructions) : undefined,
+        tools: Array.isArray(args.tools) ? args.tools.map(String) : undefined,
+        maxIterations: args.maxIterations ? Number(args.maxIterations) : undefined,
       })
-      if (childDelegate) {
-        childTools = [...childTools.filter(t => t.name !== "delegate"), childDelegate]
-      }
-
-      // Emit delegation-start trace
-      ctx.onChildTrace?.({
-        kind: "delegation-start",
-        goal,
-        depth: ctx.depth + 1,
-        tools: childTools.map(t => t.name),
-        ...(resolvedAgent ? { agentId: resolvedAgent.id, agentName: resolvedAgent.name } : {}),
-      })
-
-      const child = new Agent(ctx.llm, childTools, {
-        maxIterations: maxIter,
-        systemPrompt: childPrompt ?? instructions,
-        verbose: false,
-        signal: ctx.signal,
-        onStep: (_messages, iteration) => {
-          // Forward token usage to parent
-          ctx.onChildUsage?.(child.usage, child.llmCalls)
-          // Emit iteration trace for the child
-          ctx.onChildTrace?.({
-            kind: "delegation-iteration",
-            depth: ctx.depth + 1,
-            iteration: iteration + 1,
-            maxIterations: maxIter,
-          })
-        },
-      })
-
-      try {
-        const answer = await child.run(goal)
-
-        // Roll up final usage
-        ctx.onChildUsage?.(child.usage, child.llmCalls)
-
-        ctx.onChildTrace?.({
-          kind: "delegation-end",
-          depth: ctx.depth + 1,
-          status: "done",
-          answer: answer.slice(0, 500),
-        })
-
-        return answer
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-
-        ctx.onChildTrace?.({
-          kind: "delegation-end",
-          depth: ctx.depth + 1,
-          status: "error",
-          error: errMsg,
-        })
-
-        return `Delegation failed: ${errMsg}`
-      }
     },
+  }
+
+  const delegateParallelTool: Tool = {
+    name: "delegate_parallel",
+    description:
+      `Delegate MULTIPLE sub-tasks to child agents that run in PARALLEL. ` +
+      `Each child runs independently and concurrently. Results are collected ` +
+      `and returned together. Use this when you have 2+ independent sub-tasks. ` +
+      `One child failing does not stop the others. ` +
+      `Current delegation depth: ${ctx.depth}/${maxDepth}.`,
+
+    parameters: {
+      type: "object",
+      properties: {
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              goal: { type: "string", description: "Specific goal for this child agent." },
+              agentId: { type: "string", description: "Optional agent definition ID." },
+              instructions: { type: "string", description: "Optional child instructions." },
+              tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
+              maxIterations: { type: "number", description: "Max iterations (default: 15, max: 25)." },
+            },
+            required: ["goal"],
+          },
+          description: "Array of sub-tasks to run in parallel. Each gets its own child agent.",
+        },
+      },
+      required: ["tasks"],
+    },
+
+    async execute(args) {
+      const tasks = args.tasks as Array<{
+        goal: string
+        agentId?: string
+        instructions?: string
+        tools?: string[]
+        maxIterations?: number
+      }>
+
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        return "No tasks provided."
+      }
+
+      ctx.onChildTrace?.({
+        kind: "delegation-parallel-start",
+        depth: ctx.depth + 1,
+        taskCount: tasks.length,
+        goals: tasks.map(t => t.goal),
+      })
+
+      // Run all children concurrently with Promise.allSettled
+      const results = await Promise.allSettled(
+        tasks.map((task) =>
+          spawnChild(ctx, {
+            goal: String(task.goal),
+            agentId: task.agentId ? String(task.agentId) : undefined,
+            instructions: task.instructions ? String(task.instructions) : undefined,
+            tools: task.tools?.map(String),
+            maxIterations: task.maxIterations ? Number(task.maxIterations) : undefined,
+          }),
+        ),
+      )
+
+      ctx.onChildTrace?.({
+        kind: "delegation-parallel-end",
+        depth: ctx.depth + 1,
+        taskCount: tasks.length,
+        fulfilled: results.filter(r => r.status === "fulfilled").length,
+        rejected: results.filter(r => r.status === "rejected").length,
+      })
+
+      // Format results as a structured report
+      const lines = results.map((result, i) => {
+        const goalLabel = tasks[i].goal.slice(0, 80)
+        if (result.status === "fulfilled") {
+          return `## Task ${i + 1}: ${goalLabel}\n${result.value}`
+        }
+        return `## Task ${i + 1}: ${goalLabel}\n[FAILED] ${result.reason}`
+      })
+
+      return lines.join("\n\n---\n\n")
+    },
+  }
+
+  return [delegateTool, delegateParallelTool]
+}
+
+/**
+ * @deprecated Use createDelegateTools instead. Kept for backward compatibility.
+ */
+export function createDelegateTool(ctx: DelegateContext): Tool | null {
+  const tools = createDelegateTools(ctx)
+  return tools.find(t => t.name === "delegate") ?? null
+}
+
+// ── Internal: spawn a single child agent ─────────────────────────
+
+interface ChildSpec {
+  goal: string
+  agentId?: string
+  instructions?: string
+  tools?: string[]
+  maxIterations?: number
+}
+
+async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string> {
+  const maxIter = Math.min(spec.maxIterations ?? DEFAULT_CHILD_ITERATIONS, 25)
+
+  // Resolve named agent definition
+  let resolvedAgent: ResolvedAgent | null = null
+  if (spec.agentId && ctx.resolveAgent) {
+    resolvedAgent = ctx.resolveAgent(spec.agentId)
+    if (!resolvedAgent) {
+      return `Delegation failed: agent "${spec.agentId}" not found.`
+    }
+  }
+
+  // Resolve tools: named agent's tools > explicit tool list > all tools
+  let childTools: Tool[]
+  let childPrompt: string | undefined
+
+  if (resolvedAgent) {
+    childTools = resolvedAgent.tools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
+    childPrompt = resolvedAgent.systemPrompt
+  } else if (spec.tools && spec.tools.length > 0) {
+    const requested = new Set(spec.tools)
+    childTools = ctx.availableTools.filter(t => requested.has(t.name))
+  } else {
+    childTools = ctx.availableTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
+  }
+
+  // Create delegate tools for the child (recursive, depth + 1)
+  const childCtx = { ...ctx, depth: ctx.depth + 1 }
+  const childDelegateTools = createDelegateTools(childCtx)
+  childTools = [
+    ...childTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel"),
+    ...childDelegateTools,
+  ]
+
+  // Inject extra tools (e.g., bus messaging tools)
+  if (ctx.extraChildTools) {
+    const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
+    childTools = [
+      ...childTools.filter(t => !extraNames.has(t.name)),
+      ...ctx.extraChildTools,
+    ]
+  }
+
+  ctx.onChildTrace?.({
+    kind: "delegation-start",
+    goal: spec.goal,
+    depth: ctx.depth + 1,
+    tools: childTools.map(t => t.name),
+    ...(resolvedAgent ? { agentId: resolvedAgent.id, agentName: resolvedAgent.name } : {}),
+  })
+
+  // Optionally acquire a queue slot
+  let releaseSlot: (() => void) | undefined
+  if (ctx.acquireSlot) {
+    const childRunId = `delegate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    releaseSlot = await ctx.acquireSlot(childRunId)
+  }
+
+  const child = new Agent(ctx.llm, childTools, {
+    maxIterations: maxIter,
+    systemPrompt: childPrompt ?? spec.instructions,
+    verbose: false,
+    signal: ctx.signal,
+    onStep: (_messages, iteration) => {
+      ctx.onChildUsage?.(child.usage, child.llmCalls)
+      ctx.onChildTrace?.({
+        kind: "delegation-iteration",
+        depth: ctx.depth + 1,
+        iteration: iteration + 1,
+        maxIterations: maxIter,
+      })
+    },
+  })
+
+  try {
+    const answer = await child.run(spec.goal)
+
+    ctx.onChildUsage?.(child.usage, child.llmCalls)
+    ctx.onChildTrace?.({
+      kind: "delegation-end",
+      depth: ctx.depth + 1,
+      status: "done",
+      answer: answer.slice(0, 500),
+    })
+
+    return answer
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+
+    ctx.onChildTrace?.({
+      kind: "delegation-end",
+      depth: ctx.depth + 1,
+      status: "error",
+      error: errMsg,
+    })
+
+    return `Delegation failed: ${errMsg}`
+  } finally {
+    releaseSlot?.()
   }
 }

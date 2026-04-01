@@ -136,4 +136,9 @@ export function registerRunRoutes(
   app.get("/api/runs/active", async () => {
     return { runIds: orchestrator.getActiveRunIds() }
   })
+
+  // Queue stats
+  app.get("/api/queue", async () => {
+    return orchestrator.getQueueStats()
+  })
 }
