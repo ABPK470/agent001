@@ -1,21 +1,38 @@
 /**
- * Copilot Chat LLM client — uses the same API that VS Code Copilot uses.
+ * Copilot Chat LLM client — full Copilot access (no 8K limit).
  *
- * Unlike the GitHub Models API (models.inference.ai.azure.com) which has an
- * 8000-token request limit, the Copilot Chat API supports the model's full
- * context window (128K for gpt-4o).
+ * Uses GitHub Device Flow with the VS Code Copilot extension's OAuth client
+ * to obtain a token compatible with the Copilot internal API:
+ *   1. Device Flow → GitHub OAuth token (cached to ~/.agent001/copilot-token.json)
+ *   2. OAuth token → Copilot session token via api.github.com/copilot_internal/v2/token
+ *   3. Session token → chat completions via the Copilot endpoint
  *
- * Auth flow:
- *   1. GITHUB_TOKEN (or `gh auth token`) → short-lived Copilot session token
- *   2. Session token → Copilot Chat completions endpoint
+ * First use: the server console will print a one-time code + URL.
+ *   Open the URL in your browser, enter the code, and authorize.
+ *   The token is then cached permanently (refresh handled automatically).
  *
  * Requires an active GitHub Copilot Pro/Business/Enterprise subscription.
  */
 
 import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@agent001/agent"
-import { execSync } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
 
-const TOKEN_EXCHANGE_URL = "https://api.github.com/copilot_internal/v2/token"
+/**
+ * VS Code Copilot extension's public OAuth client ID.
+ * This is the only client ID whose tokens the copilot_internal endpoints accept.
+ */
+const COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98"
+
+const TOKEN_CACHE_DIR = join(homedir(), ".agent001")
+const TOKEN_CACHE_PATH = join(TOKEN_CACHE_DIR, "copilot-token.json")
+
+interface CachedOAuthToken {
+  access_token: string
+  token_type: string
+  scope: string
+}
 
 interface CopilotSession {
   token: string
@@ -23,26 +40,111 @@ interface CopilotSession {
   expiresAt: number
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 export class CopilotChatClient implements LLMClient {
-  private _githubToken: string | null
   private readonly model: string
   private session: CopilotSession | null = null
+  private oauthToken: string | null = null
 
   constructor(opts?: { token?: string; model?: string }) {
-    this._githubToken = opts?.token ?? tryResolveToken()
+    this.oauthToken = opts?.token ?? null
     this.model = opts?.model ?? "gpt-4o"
   }
 
-  private get githubToken(): string {
-    if (!this._githubToken) {
-      this._githubToken = resolveToken()
-    }
-    return this._githubToken
-  }
+  // ── OAuth token management ───────────────────────────────────
 
   /**
-   * Exchange the GitHub token for a short-lived Copilot session token.
-   * Tokens are cached and refreshed when they expire (with a 60s buffer).
+   * Get a GitHub OAuth token with Copilot scope.
+   * Priority: constructor arg → cached file → Device Flow (interactive).
+   */
+  private async getOAuthToken(): Promise<string> {
+    if (this.oauthToken) return this.oauthToken
+
+    // Try loading cached token
+    const cached = loadCachedToken()
+    if (cached) {
+      this.oauthToken = cached
+      return cached
+    }
+
+    // Interactive Device Flow
+    console.log("\n┌─────────────────────────────────────────────┐")
+    console.log("│  Copilot Chat — One-time authorization      │")
+    console.log("└─────────────────────────────────────────────┘")
+
+    const deviceRes = await fetch("https://github.com/login/device/code", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: `client_id=${COPILOT_CLIENT_ID}&scope=copilot`,
+    })
+
+    if (!deviceRes.ok) {
+      throw new Error(`Device Flow initiation failed: ${await deviceRes.text()}`)
+    }
+
+    const device = (await deviceRes.json()) as {
+      device_code: string
+      user_code: string
+      verification_uri: string
+      expires_in: number
+      interval: number
+    }
+
+    console.log(`\n  1. Open:  ${device.verification_uri}`)
+    console.log(`  2. Enter: ${device.user_code}`)
+    console.log(`  3. Authorize the GitHub Copilot plugin\n`)
+    console.log("  Waiting for authorization...")
+
+    // Poll for completion
+    const interval = Math.max(device.interval, 5) * 1000
+    const deadline = Date.now() + device.expires_in * 1000
+
+    while (Date.now() < deadline) {
+      await sleep(interval)
+
+      const pollRes = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        body: `client_id=${COPILOT_CLIENT_ID}&device_code=${device.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
+      })
+
+      const poll = (await pollRes.json()) as {
+        access_token?: string
+        token_type?: string
+        scope?: string
+        error?: string
+      }
+
+      if (poll.error === "authorization_pending") continue
+      if (poll.error === "slow_down") {
+        await sleep(5000)
+        continue
+      }
+      if (poll.error) {
+        throw new Error(`Device Flow failed: ${poll.error}`)
+      }
+
+      if (poll.access_token) {
+        console.log("  ✓ Authorized! Token cached to ~/.agent001/copilot-token.json\n")
+        saveCachedToken({
+          access_token: poll.access_token,
+          token_type: poll.token_type ?? "bearer",
+          scope: poll.scope ?? "copilot",
+        })
+        this.oauthToken = poll.access_token
+        return poll.access_token
+      }
+    }
+
+    throw new Error("Device Flow timed out — please try again.")
+  }
+
+  // ── Copilot session (short-lived token) ──────────────────────
+
+  /**
+   * Exchange the OAuth token for a short-lived Copilot session token.
+   * Caches with 60s expiry buffer.
    */
   private async getSession(): Promise<CopilotSession> {
     const now = Math.floor(Date.now() / 1000)
@@ -50,23 +152,31 @@ export class CopilotChatClient implements LLMClient {
       return this.session
     }
 
-    const res = await fetch(TOKEN_EXCHANGE_URL, {
+    const oauthToken = await this.getOAuthToken()
+
+    const res = await fetch("https://api.github.com/copilot_internal/v2/token", {
       headers: {
-        Authorization: `token ${this.githubToken}`,
+        Authorization: `token ${oauthToken}`,
         Accept: "application/json",
-        "User-Agent": "agent001/1.0",
+        "User-Agent": "GithubCopilot/1.255.0",
+        "Editor-Version": "vscode/1.96.0",
+        "Editor-Plugin-Version": "copilot/1.255.0",
       },
     })
 
+    if (res.status === 401) {
+      // Token revoked or expired — clear cache and retry via Device Flow
+      clearCachedToken()
+      this.oauthToken = null
+      this.session = null
+      throw new Error(
+        "Copilot OAuth token expired or was revoked.\n" +
+        "Restart the server to re-authorize via Device Flow.",
+      )
+    }
+
     if (!res.ok) {
       const text = await res.text()
-      if (res.status === 401) {
-        throw new Error(
-          "GitHub token rejected by Copilot. Ensure you have an active Copilot Pro subscription " +
-          "and your token has the `copilot` scope.\n\n" +
-          "Try: gh auth refresh --scopes copilot",
-        )
-      }
       throw new Error(`Copilot token exchange failed (${res.status}): ${text}`)
     }
 
@@ -81,9 +191,10 @@ export class CopilotChatClient implements LLMClient {
       endpoint: data.endpoints?.api ?? "https://api.individual.githubcopilot.com",
       expiresAt: data.expires_at,
     }
-
     return this.session
   }
+
+  // ── LLMClient.chat ──────────────────────────────────────────
 
   async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
     const session = await this.getSession()
@@ -111,12 +222,9 @@ export class CopilotChatClient implements LLMClient {
 
     if (!res.ok) {
       const text = await res.text()
-
-      // If session expired mid-request, clear and let next call refresh
       if (res.status === 401) {
         this.session = null
       }
-
       throw new Error(`Copilot Chat API error ${res.status}: ${text}`)
     }
 
@@ -160,34 +268,30 @@ export class CopilotChatClient implements LLMClient {
   }
 }
 
-// ── Token resolution (shared logic with copilot.ts) ──────────────
+// ── Token cache helpers ──────────────────────────────────────────
 
-function tryResolveToken(): string | null {
-  const envToken = process.env["GITHUB_TOKEN"]
-  if (envToken) return envToken
-
+function loadCachedToken(): string | null {
   try {
-    const cliToken = execSync("gh auth token", { encoding: "utf-8" }).trim()
-    if (cliToken) return cliToken
+    if (!existsSync(TOKEN_CACHE_PATH)) return null
+    const raw = readFileSync(TOKEN_CACHE_PATH, "utf-8")
+    const data = JSON.parse(raw) as CachedOAuthToken
+    return data.access_token || null
   } catch {
-    // gh CLI not available or not authenticated
+    return null
   }
-
-  return null
 }
 
-function resolveToken(): string {
-  const token = tryResolveToken()
-  if (token) return token
+function saveCachedToken(token: CachedOAuthToken): void {
+  mkdirSync(TOKEN_CACHE_DIR, { recursive: true })
+  writeFileSync(TOKEN_CACHE_PATH, JSON.stringify(token, null, 2), { mode: 0o600 })
+}
 
-  throw new Error(
-    "GitHub token required for Copilot Chat access.\n\n" +
-    "Set one of these:\n" +
-    "  export GITHUB_TOKEN=ghp_...\n" +
-    "  gh auth login\n\n" +
-    "Requires GitHub Copilot Pro subscription.\n" +
-    "Get a token at: https://github.com/settings/tokens",
-  )
+function clearCachedToken(): void {
+  try {
+    writeFileSync(TOKEN_CACHE_PATH, "{}", { mode: 0o600 })
+  } catch {
+    // ignore
+  }
 }
 
 // ── Format helpers (OpenAI-compatible) ───────────────────────────

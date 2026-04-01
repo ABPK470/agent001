@@ -16,7 +16,7 @@ import { CopilotClient } from "./copilot.js";
 
 /** Default models per provider shown in the UI picker. */
 export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
-  "copilot-chat": { model: "gpt-4o",              baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
+  "copilot-chat": { model: "gpt-4o",              baseUrl: "",                                   placeholder: "Automatic (Device Flow — authorize once)" },
   copilot:   { model: "gpt-4o",                   baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
   openai:    { model: "gpt-4o",                   baseUrl: "https://api.openai.com",             placeholder: "sk-..." },
   anthropic: { model: "claude-sonnet-4-20250514", baseUrl: "",                                   placeholder: "sk-ant-..." },

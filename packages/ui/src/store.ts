@@ -360,6 +360,10 @@ export const useStore = create<AppState>()(
               agentId: (data["agentId"] as string) ?? null,
               createdAt: timestamp,
               completedAt: null,
+              totalTokens: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              llmCalls: 0,
             })
             break
 
@@ -378,6 +382,10 @@ export const useStore = create<AppState>()(
               answer: data["answer"] as string,
               stepCount: data["stepCount"] as number,
               completedAt: timestamp,
+              totalTokens: (data["totalTokens"] as number) ?? 0,
+              promptTokens: (data["promptTokens"] as number) ?? 0,
+              completionTokens: (data["completionTokens"] as number) ?? 0,
+              llmCalls: (data["llmCalls"] as number) ?? 0,
             })
             break
 
@@ -389,6 +397,10 @@ export const useStore = create<AppState>()(
               error: data["error"] as string,
               stepCount: data["stepCount"] as number,
               completedAt: timestamp,
+              totalTokens: (data["totalTokens"] as number) ?? 0,
+              promptTokens: (data["promptTokens"] as number) ?? 0,
+              completionTokens: (data["completionTokens"] as number) ?? 0,
+              llmCalls: (data["llmCalls"] as number) ?? 0,
             })
             break
 

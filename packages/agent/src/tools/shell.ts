@@ -97,7 +97,7 @@ export const shellTool: Tool = {
           }
           let output = parts.join("\n").trim()
           // Cap output to avoid blowing up the context window
-          const MAX_OUTPUT = 4000
+          const MAX_OUTPUT = 16000
           if (output.length > MAX_OUTPUT) {
             const head = output.slice(0, MAX_OUTPUT / 2)
             const tail = output.slice(-MAX_OUTPUT / 2)

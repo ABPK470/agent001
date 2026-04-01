@@ -42,8 +42,8 @@ function estimateTokens(messages: Message[]): number {
   return Math.ceil(chars / 4)
 }
 
-/** Max token budget for the request body (conservative for GitHub Copilot). */
-const MAX_CONTEXT_TOKENS = 6000
+/** Max token budget for the request body. */
+const MAX_CONTEXT_TOKENS = 64000
 
 /**
  * Truncate message history to fit within the token budget.
@@ -52,8 +52,8 @@ const MAX_CONTEXT_TOKENS = 6000
  * messages are trimmed if they're excessively long.
  */
 function truncateMessages(messages: Message[]): Message[] {
-  // Trim any single tool result that's excessively long (>1500 chars)
-  const MAX_RESULT_LEN = 1500
+  // Trim any single tool result that's excessively long
+  const MAX_RESULT_LEN = 8000
   const trimmed = messages.map((m) => {
     if (m.role === "tool" && m.content && m.content.length > MAX_RESULT_LEN) {
       return { ...m, content: m.content.slice(0, MAX_RESULT_LEN) + "\n... (output truncated)" }

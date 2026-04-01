@@ -652,7 +652,16 @@ export class AgentOrchestrator {
 
       broadcast({
         type: "run.completed",
-        data: { runId, answer, status: "completed", stepCount: run.steps.length },
+        data: {
+          runId,
+          answer,
+          status: "completed",
+          stepCount: run.steps.length,
+          totalTokens: agent.usage.totalTokens,
+          promptTokens: agent.usage.promptTokens,
+          completionTokens: agent.usage.completionTokens,
+          llmCalls: agent.llmCalls,
+        },
       })
 
       // Notify on completion
@@ -724,7 +733,15 @@ export class AgentOrchestrator {
 
       broadcast({
         type: "run.failed",
-        data: { runId, error: errMsg, stepCount: run.steps.length },
+        data: {
+          runId,
+          error: errMsg,
+          stepCount: run.steps.length,
+          totalTokens: agent.usage.totalTokens,
+          promptTokens: agent.usage.promptTokens,
+          completionTokens: agent.usage.completionTokens,
+          llmCalls: agent.llmCalls,
+        },
       })
 
       // Notify on failure with resume action if checkpoint available
