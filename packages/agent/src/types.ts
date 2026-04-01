@@ -76,6 +76,8 @@ export interface AgentConfig {
   systemPrompt?: string
   /** Print the agent's reasoning to the console. Default: true */
   verbose?: boolean
+  /** Called right after the LLM responds, before tools execute. Use for trace/UI updates. */
+  onThinking?: (content: string | null, toolCalls: ToolCall[], iteration: number) => void
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
   /** AbortSignal for external cancellation. */

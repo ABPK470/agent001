@@ -540,29 +540,16 @@ export class AgentOrchestrator {
       verbose: true,
       signal: controller.signal,
       systemPrompt: effectivePrompt,
-      onStep: (messages, iteration) => {
-        lastMessages = messages
-        lastIteration = iteration
+      onThinking: (content, _toolCalls, iteration) => {
+        // Fires right after LLM responds, BEFORE tool execution.
+        // This ensures iteration + thinking appear before CALL/RSLT in the trace.
 
-        // Save checkpoint
-        db.saveCheckpoint({
-          run_id: runId,
-          messages: JSON.stringify(messages),
-          iteration,
-          step_counter: state.stepCounter,
-          updated_at: new Date().toISOString(),
-        })
-
-        // Broadcast thinking
-        const lastAssistant = [...messages].reverse().find(
-          (m) => m.role === "assistant" && m.content,
-        )
-        if (lastAssistant?.content) {
-          this.saveTrace(runId, { kind: "iteration", current: iteration + 1, max: 30 })
-          this.saveTrace(runId, { kind: "thinking", text: lastAssistant.content })
+        this.saveTrace(runId, { kind: "iteration", current: iteration + 1, max: 30 })
+        if (content) {
+          this.saveTrace(runId, { kind: "thinking", text: content })
           broadcast({
             type: "agent.thinking",
-            data: { runId, content: lastAssistant.content, iteration },
+            data: { runId, content, iteration },
           })
         }
 
@@ -589,6 +576,20 @@ export class AgentOrchestrator {
             totalTokens: agent.usage.totalTokens,
             llmCalls: agent.llmCalls,
           },
+        })
+      },
+      onStep: (messages, iteration) => {
+        // Fires after tool execution — used for checkpointing only.
+        lastMessages = messages
+        lastIteration = iteration
+
+        // Save checkpoint
+        db.saveCheckpoint({
+          run_id: runId,
+          messages: JSON.stringify(messages),
+          iteration,
+          step_counter: state.stepCounter,
+          updated_at: new Date().toISOString(),
         })
 
         // Persist current run state

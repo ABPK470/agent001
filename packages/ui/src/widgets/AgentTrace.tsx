@@ -25,8 +25,10 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
 
     case "iteration":
       return (
-        <div className="text-text-muted text-[13px] font-mono pt-2 pb-0.5 border-t border-elevated/50 mt-1">
-          iteration {entry.current}/{entry.max}
+        <div className="text-text-muted text-[13px] font-mono pt-3 pb-0.5 border-t border-text-muted/20 mt-2 flex items-center gap-2">
+          <span className="text-text-muted/60">──</span>
+          <span>iteration {entry.current}/{entry.max}</span>
+          <span className="text-text-muted/60">──</span>
         </div>
       )
 

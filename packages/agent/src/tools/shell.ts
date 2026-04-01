@@ -93,7 +93,12 @@ export const shellTool: Tool = {
           if (error && error.killed) {
             parts.push("[command timed out after 30s]")
           } else if (error && !stdout && !stderr) {
-            parts.push(`Error: ${error.message}`)
+            // Many commands (grep, diff, test) use non-zero exit to signal
+            // "no match" or "false" — not a crash.  Return a descriptive
+            // message instead of the raw Node error so the agent doesn't
+            // think the command itself is broken.
+            const code = (error as { code?: number }).code
+            parts.push(`Command exited with code ${code ?? "non-zero"} and produced no output.`)
           }
           let output = parts.join("\n").trim()
           // Cap output to avoid blowing up the context window

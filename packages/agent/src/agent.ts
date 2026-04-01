@@ -118,6 +118,7 @@ export class Agent {
     maxIterations: number
     systemPrompt: string
     verbose: boolean
+    onThinking: AgentConfig["onThinking"]
     onStep: AgentConfig["onStep"]
     signal: AgentConfig["signal"]
   }
@@ -135,6 +136,7 @@ export class Agent {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
       verbose: config.verbose ?? true,
+      onThinking: config.onThinking,
       onStep: config.onStep,
       signal: config.signal,
     }
@@ -178,6 +180,9 @@ export class Agent {
 
       // If the LLM has something to say, log it
       if (this.config.verbose) log.logThinking(response.content)
+
+      // Notify listener before tool execution (for trace/UI)
+      this.config.onThinking?.(response.content, response.toolCalls, i)
 
       // No tool calls → the agent is done, return the final answer
       if (response.toolCalls.length === 0) {

@@ -25,8 +25,9 @@
    - [Widgets](#ui-widgets)
 7. [How Everything Connects](#integration-boundary)
 8. [Complete Execution Flow](#execution-flow)
-9. [Design Patterns & Architectural Decisions](#design-patterns)
-10. [Resilience, Notifications & Approval Workflow](#resilience)
+9. [Terminology — Step vs Iteration](#terminology)
+10. [Design Patterns & Architectural Decisions](#design-patterns)
+11. [Resilience, Notifications & Approval Workflow](#resilience)
     - [Tool Retry with Exponential Backoff](#tool-retry)
     - [Tool Timeouts](#tool-timeouts)
     - [Idempotent Resume](#idempotent-resume)
@@ -34,9 +35,9 @@
     - [Approval Workflow](#approval-workflow)
     - [Notification System](#notification-system)
     - [Modal Widget Viewer](#modal-widget-viewer)
-11. [Why This Architecture Makes Swapping Easy](#swapping)
-12. [Testing Strategy](#testing-strategy)
-13. [Dependency Flow](#dependency-flow)
+12. [Why This Architecture Makes Swapping Easy](#swapping)
+13. [Testing Strategy](#testing-strategy)
+14. [Dependency Flow](#dependency-flow)
 
 ---
 
@@ -1092,6 +1093,46 @@ runGoverned() continues:
   → return GovernedResult { answer, run, auditTrail, stats }
 
 printGovernanceReport(result)                       ← formats and prints to console
+```
+
+---
+
+<a id="terminology"></a>
+## Terminology — Step vs Iteration
+
+Two related but distinct concepts appear throughout the codebase. Keeping them separate is intentional.
+
+### Step (tool execution)
+
+A **Step** is a single tool invocation — one call to `run_command`, `read_file`, `write_file`, etc. It has its own lifecycle (Pending → Running → Completed/Failed), timestamps, input/output, and domain events (`step.started`, `step.completed`, `step.failed`).
+
+- **Domain model**: `Step` interface in `engine/models.ts` — the core data type
+- **UI type**: `Step` interface in `ui/types.ts`
+- **Events**: `StepStarted`, `StepCompleted`, `StepFailed` in `engine/events.ts`
+- **Policy hooks**: `evaluatePreStep()` runs governance rules before each step
+- **DB field**: `step_counter` — number of steps executed so far
+- **API field**: `stepCount` in run responses — total `Step` objects in the run
+- **Widgets**: RunHistory ("N steps"), RunStatus (completed/failed/total), StepTimeline, ToolStats
+
+### Iteration (ReAct loop turn)
+
+An **Iteration** is one full cycle of the agent's think-act-observe loop: LLM call → (optional thinking) → execute one or more tool calls → checkpoint. One iteration can produce **multiple Steps** if the LLM requests parallel tool calls.
+
+- **Agent loop**: The `for` loop counter `i` in `Agent.run()`
+- **Config**: `maxIterations` (default: 30) — the loop safety limit
+- **Callbacks**: `onThinking(content, toolCalls, iteration)` fires after LLM responds (before tools), `onStep(messages, iteration)` fires after tools complete (for checkpointing)
+- **Trace entry**: `{ kind: "iteration", current, max }` — the iteration header in AgentTrace
+- **Widgets**: AgentTrace ("iteration N/M"), CommandCenter ("ITER N/M" in DAG), AgentViz (info panel)
+
+### Relationship
+
+```
+Iteration 1:     LLM call → THK → Step 1 (grep) → Step 2 (cat) → checkpoint
+Iteration 2:     LLM call → THK → Step 3 (write_file) → checkpoint
+Iteration 3:     LLM call → answer (no steps)
+                             ↑
+                  3 iterations, 3 steps
+                  (could be 3 iterations, 5 steps if LLM requests multiple tools)
 ```
 
 ---
