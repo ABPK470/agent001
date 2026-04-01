@@ -7,12 +7,13 @@ import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
 import type { AgentDefinition } from "../types"
-import { statusColor, timeAgo } from "../util"
+import { fmtTokens, statusColor, timeAgo } from "../util"
 
 export function RunStatus() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const steps = useStore((s) => s.steps)
+  const liveUsage = useStore((s) => s.liveUsage)
 
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   useEffect(() => { api.listAgents().then(setAgents).catch(() => {}) }, [])
@@ -90,6 +91,27 @@ export function RunStatus() {
           <div>
             <span className="text-text-muted text-[13px]">Resumed from</span>
             <div className="text-accent font-mono text-[13px]">{run.parentRunId.slice(0, 8)}</div>
+          </div>
+        )}
+        <div>
+          <span className="text-text-muted text-[13px]">Tokens</span>
+          <div className="text-text-secondary font-mono text-[13px]">
+            {isActive
+              ? <>{fmtTokens(liveUsage.totalTokens)} <span className="text-text-muted">({liveUsage.llmCalls} calls)</span></>
+              : run.totalTokens > 0
+                ? <>{fmtTokens(run.totalTokens)} <span className="text-text-muted">({run.llmCalls} calls)</span></>
+                : <span className="text-text-muted">—</span>
+            }
+          </div>
+        </div>
+        {(isActive ? liveUsage.promptTokens > 0 : run.promptTokens > 0) && (
+          <div>
+            <span className="text-text-muted text-[13px]">Prompt / Completion</span>
+            <div className="text-text-secondary font-mono text-[13px]">
+              {fmtTokens(isActive ? liveUsage.promptTokens : run.promptTokens)}
+              {" / "}
+              {fmtTokens(isActive ? liveUsage.completionTokens : run.completionTokens)}
+            </div>
           </div>
         )}
       </div>

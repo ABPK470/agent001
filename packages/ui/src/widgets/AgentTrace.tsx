@@ -9,6 +9,7 @@ import { ArrowDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
+import { fmtTokens } from "../util"
 
 function TraceItem({ entry }: { entry: TraceEntry }) {
   const [expanded, setExpanded] = useState(false)
@@ -101,6 +102,17 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         <div className="pt-2 pb-1 border-t border-elevated/50 mt-1">
           <span className="text-error font-semibold text-sm">FAILED</span>
           <span className="text-error/80 text-sm ml-2">{entry.text}</span>
+        </div>
+      )
+
+    case "usage":
+      return (
+        <div className="flex items-center gap-3 py-0.5 text-[12px] font-mono text-text-muted/60">
+          <span>+{fmtTokens(entry.iterationTokens)} tk</span>
+          <span className="text-text-muted/30">│</span>
+          <span>total {fmtTokens(entry.totalTokens)}</span>
+          <span className="text-text-muted/30">│</span>
+          <span>{entry.llmCalls} calls</span>
         </div>
       )
 

@@ -12,9 +12,9 @@ export function registerRunRoutes(
   orchestrator: AgentOrchestrator,
 ): void {
 
-  // List all runs
+  // List all runs (with token usage)
   app.get("/api/runs", async () => {
-    const runs = db.listRuns()
+    const runs = db.listRunsWithUsage()
     return runs.map((r) => ({
       id: r.id,
       goal: r.goal,
@@ -26,6 +26,10 @@ export function registerRunRoutes(
       agentId: r.agent_id ?? null,
       createdAt: r.created_at,
       completedAt: r.completed_at,
+      totalTokens: r.total_tokens ?? 0,
+      promptTokens: r.prompt_tokens ?? 0,
+      completionTokens: r.completion_tokens ?? 0,
+      llmCalls: r.llm_calls ?? 0,
     }))
   })
 
@@ -40,6 +44,7 @@ export function registerRunRoutes(
     const audit = db.getAuditLog(run.id)
     const logs = db.getLogs(run.id)
     const checkpoint = db.getCheckpoint(run.id)
+    const usage = db.getTokenUsage(run.id)
 
     return {
       id: run.id,
@@ -53,6 +58,10 @@ export function registerRunRoutes(
       data: JSON.parse(run.data),
       createdAt: run.created_at,
       completedAt: run.completed_at,
+      totalTokens: usage?.total_tokens ?? 0,
+      promptTokens: usage?.prompt_tokens ?? 0,
+      completionTokens: usage?.completion_tokens ?? 0,
+      llmCalls: usage?.llm_calls ?? 0,
       audit: audit.map((a) => ({
         actor: a.actor,
         action: a.action,

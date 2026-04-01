@@ -15,6 +15,10 @@ export interface Run {
   agentId: string | null
   createdAt: string
   completedAt: string | null
+  totalTokens: number
+  promptTokens: number
+  completionTokens: number
+  llmCalls: number
 }
 
 export interface RunDetail extends Run {
@@ -70,6 +74,7 @@ export type TraceEntry =
   | { kind: "tool-error"; text: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
+  | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
   | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentId?: string; agentName?: string }
   | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }
   | { kind: "delegation-end"; depth: number; status: "done" | "error"; answer?: string; error?: string }

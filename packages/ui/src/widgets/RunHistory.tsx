@@ -10,7 +10,7 @@ import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
 import type { AgentDefinition } from "../types"
-import { statusColor, timeAgo, truncate } from "../util"
+import { fmtTokens, statusColor, timeAgo, truncate } from "../util"
 
 export function RunHistory() {
   const runs = useStore((s) => s.runs)
@@ -101,6 +101,12 @@ export function RunHistory() {
               <span>{timeAgo(run.createdAt)}</span>
               <span className="text-text-muted/40">·</span>
               <span>{run.stepCount} steps</span>
+              {run.totalTokens > 0 && (
+                <>
+                  <span className="text-text-muted/40">·</span>
+                  <span className="text-text-muted font-mono">{fmtTokens(run.totalTokens)} tk</span>
+                </>
+              )}
               {run.parentRunId && (
                 <>
                   <span className="text-text-muted/40">·</span>

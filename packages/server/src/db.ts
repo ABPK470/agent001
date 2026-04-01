@@ -266,6 +266,24 @@ export function listRuns(limit = 100, offset = 0): DbRun[] {
     .all(limit, offset) as DbRun[]
 }
 
+export interface DbRunWithUsage extends DbRun {
+  total_tokens: number | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  llm_calls: number | null
+}
+
+export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
+  return getDb()
+    .prepare(`
+      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
+      FROM runs r
+      LEFT JOIN token_usage t ON t.run_id = r.id
+      ORDER BY r.created_at DESC LIMIT ? OFFSET ?
+    `)
+    .all(limit, offset) as DbRunWithUsage[]
+}
+
 // ── Audit queries ────────────────────────────────────────────────
 
 export interface DbAudit {

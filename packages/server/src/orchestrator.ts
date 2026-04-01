@@ -535,6 +535,7 @@ export class AgentOrchestrator {
         : contextBlock
     }
     if (memoryContext) effectivePrompt = effectivePrompt ? `${effectivePrompt}\n${memoryContext}` : memoryContext
+    let prevTotalTokens = 0
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
@@ -566,6 +567,19 @@ export class AgentOrchestrator {
         }
 
         // Broadcast token usage update
+        const iterationTokens = agent.usage.totalTokens - prevTotalTokens
+        prevTotalTokens = agent.usage.totalTokens
+
+        // Save per-iteration token snapshot to trace
+        this.saveTrace(runId, {
+          kind: "usage",
+          iterationTokens,
+          totalTokens: agent.usage.totalTokens,
+          promptTokens: agent.usage.promptTokens,
+          completionTokens: agent.usage.completionTokens,
+          llmCalls: agent.llmCalls,
+        })
+
         broadcast({
           type: "usage.updated",
           data: {
@@ -597,7 +611,14 @@ export class AgentOrchestrator {
         action: "agent.completed",
         resourceType: "AgentRun",
         resourceId: run.id,
-        detail: { goal, answer: answer.slice(0, 500) },
+        detail: {
+          goal,
+          answer: answer.slice(0, 500),
+          totalTokens: agent.usage.totalTokens,
+          promptTokens: agent.usage.promptTokens,
+          completionTokens: agent.usage.completionTokens,
+          llmCalls: agent.llmCalls,
+        },
       })
 
       // Persist final state
@@ -662,7 +683,14 @@ export class AgentOrchestrator {
         action: "agent.failed",
         resourceType: "AgentRun",
         resourceId: run.id,
-        detail: { goal, error: errMsg },
+        detail: {
+          goal,
+          error: errMsg,
+          totalTokens: agent.usage.totalTokens,
+          promptTokens: agent.usage.promptTokens,
+          completionTokens: agent.usage.completionTokens,
+          llmCalls: agent.llmCalls,
+        },
       })
 
       // Save checkpoint for potential resume
