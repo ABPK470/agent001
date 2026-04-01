@@ -136,15 +136,31 @@ export const api = {
     json<{ runId: string; events: Array<{ seq: number; event: Record<string, unknown>; timestamp: string }> }>(
       `/api/trajectory/${encodeURIComponent(runId)}`,
     ),
-  replayTrajectory: (runId: string) =>
+  replayTrajectory: (runId: string, mutations?: Array<Record<string, unknown>>) =>
     json<{
       valid: boolean
       violations: Array<{ seq: number; from: string; to: string; message: string }>
       scorecard: Record<string, unknown>
       eventCount: number
-    }>(`/api/trajectory/${encodeURIComponent(runId)}/replay`, { method: "POST" }),
-  gettrajectorySummary: (runId: string) =>
-    json<Record<string, unknown>>(`/api/trajectory/${encodeURIComponent(runId)}/summary`),
+    }>(`/api/trajectory/${encodeURIComponent(runId)}/replay`, {
+      method: "POST",
+      body: JSON.stringify({ mutations }),
+    }),
+  compareTrajectories: (runIdA: string, runIdB: string) =>
+    json<{
+      sameGoal: boolean
+      toolOverlap: number
+      toolCallDelta: number
+      iterationDelta: number
+      errorRateDelta: number
+      moreEfficient: "a" | "b" | "equal"
+      summary: string
+    }>("/api/trajectory/compare", {
+      method: "POST",
+      body: JSON.stringify({ runIdA, runIdB }),
+    }),
+  getTrajectorySummary: (runId: string) =>
+    json<{ summary: string }>(`/api/trajectory/${encodeURIComponent(runId)}/summary`),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────
