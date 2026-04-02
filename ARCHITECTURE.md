@@ -35,9 +35,12 @@
     - [Approval Workflow](#approval-workflow)
     - [Notification System](#notification-system)
     - [Modal Widget Viewer](#modal-widget-viewer)
-12. [Why This Architecture Makes Swapping Easy](#swapping)
-13. [Testing Strategy](#testing-strategy)
-14. [Dependency Flow](#dependency-flow)
+12. [Effect Tracking & Atomic Rollback](#effects)
+13. [Docker Sandbox](#sandbox)
+14. [Trajectory Replay & Validation](#trajectory)
+15. [Why This Architecture Makes Swapping Easy](#swapping)
+16. [Testing Strategy](#testing-strategy)
+17. [Dependency Flow](#dependency-flow)
 
 ---
 
@@ -45,9 +48,9 @@
 
 agent001 is three things in one:
 
-1. **An AI agent** (`packages/agent`) — an LLM (GPT-4o, Claude, GitHub Copilot, etc.) with tools (filesystem, shell, web fetch) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
-2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), multi-platform messaging (WhatsApp, Messenger), real-time WebSocket updates, and a comprehensive REST API.
-3. **A real-time dashboard** (`packages/ui`) — a React 19 + Tailwind CSS web UI with 9 draggable widgets (chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, run status), notifications, and a mobile-responsive layout.
+1. **An AI agent** (`packages/agent`) — an LLM (GPT-4o, Claude, GitHub Copilot, etc.) with tools (filesystem, shell, web fetch, browser testing, delegation) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
+2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), 3-tier persistent memory, effect tracking with atomic rollback, Docker sandbox execution, trajectory replay & validation, multi-platform messaging (WhatsApp, Messenger), real-time WebSocket updates, and a comprehensive REST API.
+3. **A real-time dashboard** (`packages/ui`) — a React 19 + Tailwind CSS web UI with 11 draggable widgets (chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, run status, command center, trajectory replay), notifications with action buttons, and a mobile-responsive layout.
 
 The key insight: **the agent runs _on_ a governance engine embedded within it.** Every time the LLM calls a tool, that call passes through the governance layer before the tool actually runs. This gives you:
 
@@ -57,6 +60,8 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 - **Domain events** — every state change emits an event for monitoring/WebSocket
 - **Execution metrics** — timing, success rates, failure counts per tool
 - **Tool retry + timeouts** — exponential backoff on transient failures, 60s timeout
+- **Effect tracking** — every file write/delete captured with pre-snapshots for atomic rollback
+- **Docker sandboxing** — isolated container execution with resource limits and watchdog lifecycle
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -95,7 +100,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
                            ▲
 ┌──────────────────────────┴──────────────────────────────────┐
 │                   packages/ui (React 19 + Vite)              │
-│   9 widgets · notifications · graph viz · grid layout        │
+│   11 widgets · notifications · graph viz · grid layout       │
 │   WebSocket subscription · Zustand state · Tailwind CSS      │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -109,9 +114,12 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 agent001/                          ← npm workspaces monorepo root
 ├── package.json                   ← workspaces: ["packages/*"], shared scripts (dev, test, build, lint)
 ├── ARCHITECTURE.md                ← this file
+├── DESIGN_DECISIONS.md            ← reasoning behind every structural choice
 ├── README.md                      ← quickstart, usage examples
 ├── docs/
-│   └── NETWORK_ACCESS.md         ← guide for accessing server from other devices
+│   ├── NETWORK_ACCESS.md         ← guide for accessing server from other devices
+│   ├── memory-system.md          ← memory system architecture & context mechanisms
+│   └── notes.md                  ← working notes
 ├── .env                           ← API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
 │
 ├── packages/agent/                ← THE AGENT — LLM + tools + governance engine (embedded)
@@ -141,10 +149,12 @@ agent001/                          ← npm workspaces monorepo root
 │   │   │   ├── openai.ts          ← OpenAI Chat Completions client (raw fetch, no SDK)
 │   │   │   └── anthropic.ts       ← Anthropic Messages API client (raw fetch, no SDK)
 │   │   └── tools/
-│   │       ├── filesystem.ts      ← read_file, write_file, list_directory (sandboxed with path escape prevention)
-│   │       ├── shell.ts           ← run_command (30s timeout, command blocklist)
-│   │       ├── fetch-url.ts       ← fetch_url (HTML stripping, SSRF blocker, 15s timeout)
-│   │       └── think.ts           ← think (chain-of-thought passthrough)
+│   │       ├── filesystem.ts      ← read_file, write_file, list_directory (4-layer path validation)
+│   │       ├── shell.ts           ← run_command (30s timeout, 2-tier deny list: container vs host)
+│   │       ├── fetch-url.ts       ← fetch_url (SSRF blocker, DNS pre-check, 15s timeout)
+│   │       ├── think.ts           ← think (chain-of-thought passthrough)
+│   │       ├── browser-check.ts   ← browser_check (headless Chrome via Puppeteer, Docker sandbox)
+│   │       └── delegate.ts        ← delegate, delegate_parallel (sub-agent spawning)
 │   └── tests/
 │       ├── governance.test.ts     ← 18 tests (mock LLM, no API keys needed)
 │       └── retry.test.ts          ← 13 tests (exponential backoff, retryable error detection)
@@ -156,9 +166,15 @@ agent001/                          ← npm workspaces monorepo root
 │   ├── src/
 │   │   ├── index.ts               ← server startup — Fastify factory, route registration, migrations
 │   │   ├── orchestrator.ts        ← AgentOrchestrator — manages run lifecycle (start, track, resume, cancel, recover)
-│   │   ├── db.ts                  ← SQLite persistence (~9 tables: runs, audit, checkpoints, logs, layouts, policies, usage, notifications, channels)
+│   │   ├── db.ts                  ← SQLite persistence (~12 core tables + channel tables + memory tables + effect tables)
 │   │   ├── tools.ts               ← tool registry — resolves tool names to agent tool implementations
 │   │   ├── ws.ts                  ← WebSocket broadcast — real-time event distribution to UI
+│   │   ├── memory.ts              ← 3-tier persistent memory (working/episodic/semantic + procedural), FTS5 + vector search
+│   │   ├── effects.ts             ← effect tracking + compensation log — pre-snapshots, SHA-256 hashing, atomic rollback
+│   │   ├── sandbox.ts             ← Docker sandbox — isolated container execution with watchdog lifecycle
+│   │   ├── trajectory.ts          ← trajectory replay — event validation, mutations, run comparison
+│   │   ├── agent-bus.ts           ← AgentBus — scoped inter-agent messaging (pub/sub per run tree)
+│   │   ├── queue.ts               ← RunQueue — priority-based (critical/high/normal/low), semaphore, AbortSignal
 │   │   ├── channels/              ← multi-platform messaging (8 files)
 │   │   │   ├── index.ts           ← barrel export
 │   │   │   ├── types.ts           ← Channel, ChannelConfig, InboundMessage, OutboundMessage
@@ -167,11 +183,12 @@ agent001/                          ← npm workspaces monorepo root
 │   │   │   ├── queue.ts           ← MessageQueue — FIFO, per-user serialization
 │   │   │   ├── retry.ts           ← ChannelApiError, withRetry — exponential backoff for API calls
 │   │   │   ├── router.ts          ← MessageRouter — inbound → agent run, run → outbound queue
-│   │   │   └── store.ts           ← SqliteConversationStore, SqliteQueueStore
+│   │   │   └── store.ts           ← SqliteConversationStore, SqliteQueueStore (4 tables)
 │   │   ├── llm/                   ← LLM provider management
 │   │   │   ├── copilot.ts         ← CopilotClient — GitHub Models API (OpenAI-compatible)
-│   │   │   └── registry.ts        ← buildLlmClient() factory, PROVIDER_DEFAULTS for 4 providers
-│   │   └── routes/                ← REST API endpoints (8 files)
+│   │   │   ├── copilot-chat.ts    ← CopilotChatClient — Copilot Chat API (Device Flow auth, full context)
+│   │   │   └── registry.ts        ← buildLlmClient() factory, PROVIDER_DEFAULTS for 5 providers
+│   │   └── routes/                ← REST API endpoints (9 files)
 │   │       ├── runs.ts            ← GET/POST /api/runs — start, list, resume, cancel, trace
 │   │       ├── agents.ts          ← GET/POST/PUT/DELETE /api/agents, GET /api/tools
 │   │       ├── layouts.ts         ← GET/PUT /api/dashboard-state, CRUD /api/layouts
@@ -179,6 +196,7 @@ agent001/                          ← npm workspaces monorepo root
 │   │       ├── notifications.ts   ← GET/POST /api/notifications — list, mark-read, execute actions
 │   │       ├── llm.ts             ← GET/PUT /api/llm — provider config + hot-swap
 │   │       ├── usage.ts           ← GET /api/usage — token consumption tracking
+│   │       ├── memory.ts          ← Memory search/CRUD, trajectory replay/compare, effects/rollback
 │   │       └── webhooks.ts        ← GET/POST /webhooks/whatsapp, /webhooks/messenger, /api/channels
 │   └── tests/
 │       ├── channels.test.ts       ← 30 tests (retry, queue, webhook parsing, HMAC, routing)
@@ -194,42 +212,45 @@ agent001/                          ← npm workspaces monorepo root
         ├── App.tsx                ← root component — toolbar, canvas, modals
         ├── api.ts                 ← HTTP client + WebSocket subscription to server
         ├── store.ts               ← Zustand store — views, runs, widgets, logs, audit, notifications
-        ├── types.ts               ← Run, Step, AuditEntry, TraceEntry, WidgetType, Notification
+        ├── types.ts               ← Run, Step, AuditEntry, TraceEntry, WidgetType, Notification, RollbackResult/Preview
         ├── util.ts                ← randomId, timeAgo, truncate, formatMs, statusColor
         ├── dashboardSync.ts       ← auto-save views to server (2s debounce), restore on startup
         ├── index.css              ← global Tailwind styles + CSS theme variables
         ├── hooks/
         │   └── useIsMobile.ts     ← responsive hook (width < 768px)
-        ├── components/            ← reusable UI (12 files)
+        ├── components/            ← reusable UI (13 files)
         │   ├── Canvas.tsx         ← grid layout container (react-grid-layout), drag/resize
         │   ├── Toolbar.tsx        ← top bar — logo, tabs, notification bell, menu dropdown
         │   ├── ViewTabs.tsx       ← tab bar for multiple dashboard views
-        │   ├── WidgetCatalog.tsx  ← modal for adding widgets (9 types)
+        │   ├── WidgetCatalog.tsx  ← modal for adding widgets (11 types)
         │   ├── WidgetFrame.tsx    ← chrome around each widget (drag handle, pop-out, close)
         │   ├── WidgetModal.tsx    ← pop-out widget viewer as floating modal
-        │   ├── NotificationPanel.tsx ← bell icon + dropdown with notification list
+        │   ├── NotificationPanel.tsx ← bell icon + dropdown with notification list + action buttons (rollback, resume)
         │   ├── Logo.tsx           ← SVG brand mark with online/offline glow
         │   ├── AgentEditor.tsx    ← agent CRUD (list/create/edit/delete, tool picker, prompt editor)
         │   ├── PolicyEditor.tsx   ← governance dashboard (tools, permissions, blocklists)
         │   ├── UsageModal.tsx     ← token stats (cumulative + per-run breakdown)
+        │   ├── LlmSettings.tsx    ← LLM provider configuration (5 providers, hot-swap)
         │   └── MobileNav.tsx      ← bottom nav for mobile (widget switcher with icons)
-        └── widgets/               ← agent visualization & interaction (10 files)
-            ├── index.ts           ← widget registry — maps WidgetType → React component
+        └── widgets/               ← agent visualization & interaction (12 files)
+            ├── index.ts           ← widget registry — maps WidgetType → React component (11 widgets)
             ├── AgentChat.tsx      ← send goals to agent (voice input, agent picker, auto-scroll)
             ├── AgentTrace.tsx     ← rich execution trace (ReAct loop visualization)
             ├── AgentViz.tsx       ← force-directed graph (react-force-graph-2d, draggable nodes, particles)
-            ├── RunStatus.tsx      ← current run metadata (status badge, timing, step counts, actions)
-            ├── RunHistory.tsx     ← list of past runs (click to select, inline cancel/resume)
+            ├── RunStatus.tsx      ← current run metadata (status badge, timing, step counts, rollback)
+            ├── RunHistory.tsx     ← list of past runs (click to select, inline cancel/resume/rollback)
             ├── StepTimeline.tsx   ← vertical timeline of steps (status icons, duration, retry badge)
             ├── ToolStats.tsx      ← performance metrics per tool (call count, avg duration, failure rate)
             ├── AuditTrail.tsx     ← immutable audit log (filterable by action/actor, expandable)
-            └── LiveLogs.tsx       ← event stream (filter by level, auto-scroll)
+            ├── LiveLogs.tsx       ← event stream (filter by level, auto-scroll)
+            ├── CommandCenter.tsx  ← operational dashboard (status bar, live DAG, usage, alerts, inline prompt)
+            └── TrajectoryReplay.tsx ← debugging tool (VCR replay, mutation testing, run comparison, rollback)
 ```
 
 **Why three packages?** Separation of concerns:
-- **agent** — pure TypeScript, zero runtime dependencies. The LLM loop + governance engine + tools. Can run standalone via CLI or be imported as a library.
-- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), messaging (WhatsApp/Messenger), and a REST API + WebSocket layer. Imports `@agent001/agent`.
-- **ui** — the visual interface. Connects to the server via HTTP + WebSocket. No direct dependency on the agent package.
+- **agent** — pure TypeScript, zero runtime dependencies. The LLM loop + governance engine + tools (8 built-in). Can run standalone via CLI or be imported as a library.
+- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + WebSocket layer. Imports `@agent001/agent`.
+- **ui** — the visual interface. 11 draggable widgets including a command center and trajectory debugger. Connects to the server via HTTP + WebSocket. No direct dependency on the agent package.
 
 ---
 
@@ -245,7 +266,7 @@ npm run dev
 # → UI on http://localhost:5179
 ```
 
-Open the browser. You see a dashboard with draggable widgets — chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs. Type a goal into the Agent Chat widget. The server starts an agent run, and results stream in real-time via WebSocket.
+Open the browser. You see a dashboard with draggable widgets — chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, command center, trajectory replay. Type a goal into the Agent Chat widget. The server starts an agent run, and results stream in real-time via WebSocket.
 
 ### What You See (Web Dashboard)
 
@@ -257,8 +278,10 @@ Open the browser. You see a dashboard with draggable widgets — chat, trace, gr
 - **Tool Stats**: Bar chart of tool performance (count, avg duration, failure rate)
 - **Audit Trail**: Immutable log table, filterable by action/actor
 - **Live Logs**: Real-time event stream with level filtering
-- **Run Status**: Current run metadata — status badge, goal, timing, step counts
-- **Notification Bell**: Top-right corner — alerts for run completion, failures, approvals
+- **Run Status**: Current run metadata — status badge, goal, timing, step counts, cancel/resume/rollback
+- **Command Center**: Operational dashboard — status bar, live DAG of iterations/tools, usage metrics, inline prompt
+- **Trajectory Replay**: Full debugging tool — replay events, test mutations, compare runs
+- **Notification Bell**: Top-right corner — alerts for run completion, failures, approvals, with action buttons (Review, Resume, Rollback)
 
 ### Starting the Agent (Standalone CLI)
 
@@ -313,11 +336,11 @@ AGENT_MODE=raw OPENAI_API_KEY=sk-... npm start -w packages/agent
 1. User types goal in Agent Chat widget
 2. UI calls `POST /api/runs` with `{ goal, agentId? }`
 3. Server's `orchestrator.startRun()` creates run in SQLite, broadcasts `run.queued` via WebSocket
-4. Orchestrator creates engine services, wraps tools with governance, starts agent in background
-5. Each tool call: governance intercepts → policy check → audit → retry/timeout → execute → record
+4. Orchestrator creates engine services, wraps tools with governance + effect tracking, builds memory-augmented system prompt, starts agent in background
+5. Each tool call: governance intercepts → policy check → audit → retry/timeout → execute → record effects → record metrics
 6. Trace events, step updates, and logs stream to UI via WebSocket
-7. On completion: run saved, notification created, `run.completed` broadcast
-8. UI updates RunHistory, StepTimeline, AuditTrail, ToolStats — all in real-time
+7. On completion: run saved, memories extracted (episodic + procedural), notification created, `run.completed` broadcast
+8. UI updates RunHistory, StepTimeline, AuditTrail, ToolStats, CommandCenter — all in real-time
 
 ---
 
@@ -390,7 +413,7 @@ Both modes support:
 
 **Key functions in this file**:
 - `createLLMClient()` — reads `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, picks provider, respects `MODEL` env var for override. Auto-detection order: Anthropic first, then OpenAI.
-- `allTools()` — returns the array of 6 tools (fetch, read, write, list, shell, think)
+- `allTools()` — returns the array of 8 tools (fetch, read, write, list, shell, think, browser-check, delegate)
 - `setupDefaultPolicies()` — hook with commented-out examples showing how to add rules
 - `main()` — the actual entrypoint: create client → check mode → run/repl
 
@@ -439,7 +462,7 @@ Same `LLMClient` interface, completely different wire protocol:
 
 ### `src/tools/filesystem.ts` — File I/O (Sandboxed)
 
-Three tools + a safety function:
+Three tools + a 4-layer safety pipeline:
 
 | Tool | What It Does |
 |------|-------------|
@@ -447,11 +470,11 @@ Three tools + a safety function:
 | `write_file` | `writeFile(path, content)` → creates/overwrites file |
 | `list_directory` | `readdir(path)` → returns formatted list with file/dir indicators |
 
-**`safePath(requestedPath)`** — the security boundary:
-- Resolves the path against a base directory (defaults to `process.cwd()`)
-- Checks that the resolved path is _inside_ the base directory
-- Prevents `../../etc/passwd` style escapes
-- `setBasePath()` lets you change the base directory
+**4-layer path validation** (`safePath()` pipeline):
+1. **Input sanitization** — reject null bytes, normalize path separators
+2. **Traversal detection** — resolve the path against a base directory, confirm it stays inside
+3. **Symlink resolution** — `realpath()` checks that symlinks don't escape the sandbox
+4. **Root check** — final verification the resolved path starts with the workspace root
 
 **Design decision**: Tools return error strings instead of throwing. Why? If `read_file` throws, the agent crashes. If it returns `"Error: ENOENT..."`, the LLM sees the error and can try a different path. Resilience through error-as-data.
 
@@ -460,6 +483,9 @@ Three tools + a safety function:
 Runs commands via `child_process.execFile('/bin/sh', ['-c', command])`:
 - 30-second timeout (kills process if exceeded)
 - 1MB max buffer
+- **2-tier deny list**: `CONTAINER_RULES` (lenient, for Docker) vs `HOST_RULES` (strict, blocks `rm -rf /`, `curl | sh`, etc.)
+- Filtered environment (strips sensitive env vars)
+- Optional Docker executor injection via `setShellExecutor()` for sandbox mode
 - Returns `stdout + stderr` combined
 - Caught errors return the error message as a string
 
@@ -472,6 +498,31 @@ execute: async (args) => args.thought as string
 ```
 
 **Why does this exist?** It forces the LLM to separate reasoning from action. When the LLM calls `think("I should check the package.json first because...")`, that thought gets recorded in the message history. This leads to better decisions on the _next_ iteration because the LLM can reference its own reasoning. Anthropic and OpenAI both recommend this pattern.
+
+### `src/tools/browser-check.ts` — Headless Browser Testing
+
+Opens URLs in headless Chrome (Puppeteer) to verify rendered output:
+- Loads a URL, waits for network idle
+- Captures console errors, network failures, and page content
+- Supports optional click interactions before capture
+- Runs in a Docker container when sandbox mode is enabled (`agent001-browser:latest` image)
+- Lazy-loads Puppeteer (not bundled) — gracefully degrades if unavailable
+
+### `src/tools/delegate.ts` — Sub-Agent Spawning
+
+Two tools for multi-agent delegation:
+
+| Tool | What It Does |
+|------|-------------|
+| `delegate` | Spawns a single child agent with a sub-goal, waits for result |
+| `delegate_parallel` | Spawns multiple child agents concurrently, collects all results |
+
+**Design constraints**:
+- Flat hierarchy — children run at depth 0 only (no re-delegation), preventing infinite recursion
+- Each child acquires its own queue slot, respecting `MAX_CONCURRENT_RUNS`
+- Token usage from children rolls up to the parent run
+- Children share the parent's bus tools for inter-agent messaging
+- Agent resolution by ID — children can use different agent definitions (different system prompts, tool sets)
 
 ### `src/governance.ts` — THE Integration Layer
 
@@ -556,7 +607,7 @@ The public API for `@agent001/agent`. This is what the server package imports. R
 - **Engine**: all models, enums, events, errors, interfaces, services, adapters
 - **Retry**: `withToolRetry()`, `ToolRetryPolicy`, `isRetryableError()`
 - **LLM clients**: `AnthropicClient`, `OpenAIClient`
-- **Tools**: `fetchUrlTool`, `readFileTool`, `writeFileTool`, `listDirectoryTool`, `shellTool`, `thinkTool`, `setBasePath`, `setShellCwd`
+- **Tools**: `fetchUrlTool`, `readFileTool`, `writeFileTool`, `listDirectoryTool`, `shellTool`, `thinkTool`, `browserCheckTool`, `createDelegateTools`, `setBasePath`, `setShellCwd`, `setShellExecutor`, `setBrowserCheckCwd`
 
 ---
 
@@ -703,21 +754,27 @@ Creates the Fastify instance, registers all route modules, runs database migrati
 
 `AgentOrchestrator` — the central coordinator for all agent runs:
 
-- **`startRun(goal, agentId?)`** — creates run in DB, resolves tools + LLM, wraps with governance, starts agent in background. Broadcasts trace events via WebSocket.
+- **`startRun(goal, agentId?)`** — creates run in DB, resolves tools + LLM, wraps with governance + effect tracking, builds memory-augmented system prompt, starts agent in background. Broadcasts trace events via WebSocket.
 - **`cancelRun(runId)`** — aborts a running agent via AbortController signal.
 - **`resumeRun(runId)`** — resumes from checkpoint with idempotency guards (prevents duplicates).
 - **`recoverStaleRuns()`** — on startup, finds interrupted runs, marks as crashed, auto-resumes from checkpoints.
-- **`createNotification(opts)`** — saves to DB + broadcasts via WebSocket.
+- **`createNotification(opts)`** — saves to DB + broadcasts via WebSocket. Includes action buttons (Review, Resume, Rollback).
+- **`wrapWithEffects(tools)`** — intercepts `write_file` and `run_command` to capture file effects with pre-snapshots for rollback.
 
 Tracks active runs in a `Map<runId, { controller, services, ... }>`. Wires domain event subscriptions to broadcast step updates, trace entries, and notifications in real-time.
+
+**Context injection**: Before each run, the orchestrator injects environment context (OS, Node version, shell) and workspace directory structure into the system prompt alongside memory context from `memory.ts`.
 
 #### `src/db.ts` — SQLite Persistence
 
 Single-file database layer using better-sqlite3. Data lives in `~/.agent001/agent001.db`.
 
-**Tables** (~9):
+**Tables** (~22 total across modules):
+
+Core tables (db.ts — 12):
 | Table | Purpose |
 |-------|---------|
+| `schema_meta` | Migration version tracking |
 | `runs` | Agent run tracking (id, goal, status, answer, step_count, parent_run_id, etc.) |
 | `audit_log` | Immutable action history |
 | `checkpoints` | Run state snapshots for resume (messages JSON, iteration, step_counter) |
@@ -725,8 +782,31 @@ Single-file database layer using better-sqlite3. Data lives in `~/.agent001/agen
 | `layouts` | Saved dashboard configurations |
 | `policy_rules` | Governance rules (persisted across restarts) |
 | `token_usage` | LLM token consumption tracking |
+| `trace_entries` | Sequential trace events per run (the full ReAct trace) |
+| `llm_config` | LLM provider configuration (provider, model, api_key, base_url) |
+| `agent_definitions` | Named agent configs (system prompt, tool set, description) |
 | `notifications` | System notifications (type, title, message, actions JSON, read status) |
-| Channel tables | conversations, outbound_messages, delivery_attempts, channel_configs |
+
+Channel tables (channels/store.ts — 4):
+| Table | Purpose |
+|-------|---------|
+| `conversations` | Per-user conversation state (channel, user_id, agent_id, metadata) |
+| `outbound_messages` | Queued outbound messages pending delivery |
+| `delivery_attempts` | Delivery tracking with retry counts |
+| `channel_configs` | Channel-specific configuration (tokens, webhook secrets) |
+
+Memory tables (memory.ts — 3):
+| Table | Purpose |
+|-------|---------|
+| `memory_entries` | 3-tier memory (working/episodic/semantic) with FTS5 full-text index |
+| `procedural_memories` | Successful tool sequences keyed by trigger text |
+| `memory_vectors` | Optional vector embeddings for semantic similarity (Ollama) |
+
+Effect tables (effects.ts — 2):
+| Table | Purpose |
+|-------|---------|
+| `effects` | Side-effect log (run_id, seq, kind, tool, target, pre/post hash, status) |
+| `file_snapshots` | Pre-write/pre-delete file content + permissions for rollback |
 
 **Key functions**: `saveRun()`, `getRun()`, `listRuns()`, `saveCheckpoint()`, `getCheckpoint()`, `saveNotification()`, `listNotifications()`, `findStaleRuns()`, `markRunCrashed()`, etc.
 
@@ -734,9 +814,93 @@ Single-file database layer using better-sqlite3. Data lives in `~/.agent001/agen
 
 Maps tool names to agent tool implementations. Resolves which tools an agent run should have based on agent definitions (custom tool sets per agent) or defaults (all tools).
 
+**Key functions**: `getToolMap()` → `ReadonlyMap<string, Tool>`, `resolveTools(names)` → `Tool[]`, `listAvailableTools()` → `ToolInfo[]`, `getAllTools()` → `Tool[]`.
+
+Eight built-in tools: `read_file`, `write_file`, `list_directory`, `run_command`, `fetch_url`, `browser_check`, `think`, plus `delegate`/`delegate_parallel` (added dynamically by orchestrator).
+
 #### `src/ws.ts` — WebSocket Broadcast
 
 `broadcast(event)` — sends a JSON event to all connected WebSocket clients. Used by the orchestrator to stream trace entries, run status changes, step updates, and notifications in real-time.
+
+#### `src/memory.ts` — 3-Tier Persistent Memory
+
+Budget-weighted retrieval pipeline backed by SQLite FTS5 + optional vector embeddings:
+
+| Tier | Budget | What it stores | Expires |
+|------|--------|----------------|---------|
+| **Working** | 34% | Raw turns from current/recent sessions | Short-lived |
+| **Episodic** | 22% | Session summaries, compacted fragments | 30 days |
+| **Semantic** | 44% | Consolidated long-lived knowledge | Never |
+| **Procedural** | — | Tool sequences that worked, keyed by trigger | Never |
+
+**Key features**: salience scoring on ingestion (skip noise), near-duplicate detection (Jaccard ≥ 0.92), confidence decay (7-day half-life) with ACT-R activation bonus, hybrid search (FTS5 BM25 + optional Ollama embeddings), token-budget consolidation pipeline.
+
+See [docs/memory-system.md](docs/memory-system.md) for the complete memory system architecture.
+
+#### `src/effects.ts` — Effect Tracking & Compensation Log
+
+Records every side-effect (file create/modify/delete, commands, network) with SHA-256 hashing and pre-write snapshots for atomic rollback.
+
+**Pattern**: Compensation log (like a database WAL) — effects are recorded incrementally as they happen, not batched. If a run fails at step 23, all 23 effects are already in SQLite and available for rollback.
+
+**Key functions**:
+- `recordEffect()` — persist any side-effect with pre/post hashes
+- `recordFileWrite()` — captures pre-write snapshot (content + permissions) before file modification
+- `recordFileDelete()` — captures full content + permissions before file deletion
+- `previewRollback(runId)` — dry-run categorization: `wouldCompensate` / `wouldSkip` / `wouldFail`
+- `rollbackRun(runId)` — atomic two-phase rollback (validate ALL snapshots → apply ALL compensations)
+- `getRunEffects()`, `getFileHistory()`, `getEffectStats()` — query functions
+
+See [Effect Tracking & Atomic Rollback](#effects) for the full design.
+
+#### `src/sandbox.ts` — Docker Sandbox
+
+Isolated container execution with resource limits and automatic lifecycle management.
+
+**Modes**: `"all"` (Docker required), `"docker"` (try Docker, fallback to host), `"host"` (always host).
+
+**Security profile**: `--read-only --cap-drop=ALL --security-opt=no-new-privileges --user 1000:1000 --network=none --memory=4g --cpus=2.0`.
+
+**Lifecycle**: Semaphore-based concurrency control (default 4), watchdog timer reaps idle/expired containers.
+
+See [Docker Sandbox](#sandbox) for the full design.
+
+#### `src/trajectory.ts` — Trajectory Replay & Validation
+
+Loads, validates, mutates, and compares agent run trajectories as ordered event sequences.
+
+**Event types**: Goal, Thinking, ToolCall, ToolResult, ToolError, Iteration, DelegationStart, DelegationEnd, Answer, Error.
+
+**Key functions**:
+- `loadTrajectory(runId)` — loads all trace events from DB as typed `TrajectoryEvent[]`
+- `validateTransitions(trajectory)` — checks state machine validity, returns violations
+- `applyMutations(trajectory, mutations)` — drop/replace/inject events for resilience testing
+- `replay(runId, mutations?)` — full dry replay with validation + scorecard
+
+See [Trajectory Replay & Validation](#trajectory) for the full design.
+
+#### `src/agent-bus.ts` — Inter-Agent Messaging
+
+Scoped pub/sub bus for communication between agents in a delegation tree.
+
+One bus per run tree. Parent creates it; all delegates share it. Messages are in-memory, ephemeral, and invisible across run trees.
+
+**API**: `publish(topic, fromRunId, fromAgent, content)`, `subscribe(topic, handler)`, `history(topic?)`, `dispose()`.
+
+**Built-in tools** (injected via `createBusTools()`): `send_message(topic, content)`, `check_messages(topic?)`.
+
+#### `src/queue.ts` — Run Queue
+
+Priority-based semaphore for concurrent run management:
+
+| Priority | Level | Use Case |
+|----------|-------|----------|
+| `critical` | 0 | System recovery (stale run resume) |
+| `high` | 1 | Delegated child runs |
+| `normal` | 2 | User-initiated runs |
+| `low` | 3 | Background tasks |
+
+**Default max concurrent**: 5 (configurable via `MAX_CONCURRENT_RUNS`). FIFO within each priority level. Supports `AbortSignal` for cancellation while waiting.
 
 <a id="channels"></a>
 ### Channels — Multi-Platform Messaging (8 files)
@@ -756,15 +920,16 @@ The `channels/` subdirectory implements inbound/outbound messaging for WhatsApp 
 **Flow**: Webhook arrives → `router.handleInbound()` → creates/reuses conversation → starts agent run → on completion → queues outbound reply → channel sends via API.
 
 <a id="llm-registry"></a>
-### LLM Registry (2 files)
+### LLM Registry (3 files)
 
 | File | Purpose |
 |------|---------|
 | `llm/copilot.ts` | `CopilotClient` — GitHub Models API (OpenAI-compatible endpoint for Copilot Pro users) |
-| `llm/registry.ts` | `buildLlmClient()` factory — creates LLM client based on provider config. Supports 4 providers: `copilot`, `openai`, `anthropic`, `local` (any OpenAI-compatible endpoint) |
+| `llm/copilot-chat.ts` | `CopilotChatClient` — Copilot Chat API (Device Flow OAuth, full context window, same endpoint as VS Code Copilot) |
+| `llm/registry.ts` | `buildLlmClient()` factory — creates LLM client based on provider config. Supports 5 providers: `copilot-chat`, `copilot`, `openai`, `anthropic`, `local` (any OpenAI-compatible endpoint) |
 
 <a id="rest-api-routes"></a>
-### REST API Routes (8 files)
+### REST API Routes (9 files)
 
 | File | Key Endpoints | Purpose |
 |------|---------------|---------|
@@ -772,9 +937,10 @@ The `channels/` subdirectory implements inbound/outbound messaging for WhatsApp 
 | `routes/agents.ts` | `GET/POST/PUT/DELETE /api/agents`, `GET /api/tools` | Agent definitions CRUD + tool registry |
 | `routes/layouts.ts` | `GET/PUT /api/dashboard-state`, `CRUD /api/layouts` | Dashboard configuration persistence |
 | `routes/policies.ts` | `GET/POST/DELETE /api/policies` | Governance rule management |
-| `routes/notifications.ts` | `GET/POST /api/notifications/*` | Notification CRUD + action execution |
+| `routes/notifications.ts` | `GET/POST /api/notifications/*` | Notification CRUD + action execution (resume, rollback) |
 | `routes/llm.ts` | `GET/PUT /api/llm` | LLM provider configuration + hot-swap |
 | `routes/usage.ts` | `GET /api/usage` | Token consumption tracking |
+| `routes/memory.ts` | `POST /api/memory/search`, `GET /api/trajectory/:runId`, `GET /api/effects/:runId`, `POST /api/effects/:runId/rollback` | Memory search/CRUD, trajectory replay/compare, effects/rollback |
 | `routes/webhooks.ts` | `GET/POST /webhooks/{whatsapp,messenger}`, `GET/POST /api/channels` | Chat platform webhook ingress |
 
 ---
@@ -793,32 +959,33 @@ The UI package (`packages/ui`) is a React 19 + Tailwind CSS v4 web dashboard bui
 |------|---------|
 | `App.tsx` | Root component — renders Toolbar, Canvas (desktop) or MobileNav (mobile), WidgetModal |
 | `store.ts` | Zustand global store — views, runs, widgets, logs, audit, notifications, modal state. Handles WebSocket events. |
-| `api.ts` | HTTP client (raw fetch) + `createWs()` WebSocket subscription factory |
-| `types.ts` | TypeScript interfaces: `Run`, `Step`, `AuditEntry`, `TraceEntry`, `WidgetType`, `Notification`, etc. |
+| `api.ts` | HTTP client (raw fetch) + `createWs()` WebSocket subscription factory + rollback/trajectory API functions |
+| `types.ts` | TypeScript interfaces: `Run`, `Step`, `AuditEntry`, `TraceEntry`, `WidgetType`, `Notification`, `RollbackResult`, `RollbackPreview`, etc. |
 | `util.ts` | Helpers: `randomId()`, `timeAgo()`, `truncate()`, `formatMs()`, `statusColor()` |
 | `dashboardSync.ts` | Auto-saves dashboard layout to server (2s debounce), restores on startup |
 | `index.css` | Global Tailwind styles + CSS theme variables (`--color-base: #09090b`, `--color-accent: #7B6FC7`, etc.) |
 
 <a id="ui-components"></a>
-### Components (12 files)
+### Components (13 files)
 
 | Component | Purpose |
 |-----------|---------|
 | `Canvas.tsx` | Grid layout container using react-grid-layout — drag, resize, snap widgets |
 | `Toolbar.tsx` | Top bar — logo, view tabs, notification bell, "Add Widget" button, settings menu |
 | `ViewTabs.tsx` | Tab bar for multiple dashboard views (add/rename/remove) |
-| `WidgetCatalog.tsx` | Modal for adding widgets — 9 types selectable |
+| `WidgetCatalog.tsx` | Modal for adding widgets — 11 types selectable |
 | `WidgetFrame.tsx` | Chrome around each widget — drag handle, title, pop-out button, close button |
 | `WidgetModal.tsx` | Pop-out any widget as a floating modal overlay |
-| `NotificationPanel.tsx` | Bell icon with unread badge + dropdown notification list with action buttons |
+| `NotificationPanel.tsx` | Bell icon with unread badge + dropdown notification list with action buttons (resume, rollback, view) |
 | `Logo.tsx` | SVG brand mark — eyes glow green (online) or red (offline) with blink animation |
 | `AgentEditor.tsx` | Agent CRUD modal — list, create, edit, delete agents with tool picker and prompt editor |
 | `PolicyEditor.tsx` | Governance dashboard — tools & permissions, policy rules, blocklists, workspace settings |
 | `UsageModal.tsx` | Token consumption stats — cumulative + per-run breakdown |
+| `LlmSettings.tsx` | LLM provider configuration — 5 providers, model selection, API key management, hot-swap |
 | `MobileNav.tsx` | Bottom nav for mobile — widget switcher with icons |
 
 <a id="ui-widgets"></a>
-### Widgets (9 types, 10 files)
+### Widgets (11 types, 12 files)
 
 The `widgets/index.ts` registry maps `WidgetType` → React component:
 
@@ -827,12 +994,14 @@ The `widgets/index.ts` registry maps `WidgetType` → React component:
 | `chat` | `AgentChat` | Send goals to agent — voice input (Web Speech API), agent picker, auto-scroll |
 | `trace` | `AgentTrace` | Rich execution trace — ReAct loop visualization, expandable tool calls |
 | `agent-viz` | `AgentViz` | Force-directed graph — react-force-graph-2d, draggable nodes, animated particles |
-| `run-status` | `RunStatus` | Current run metadata — status badge, goal, timing, step counts, cancel/resume |
-| `run-history` | `RunHistory` | List of past runs — click to select, inline cancel/resume buttons on hover |
+| `run-status` | `RunStatus` | Current run metadata — status badge, goal, timing, step counts, cancel/resume/rollback |
+| `run-history` | `RunHistory` | List of past runs — click to select, inline cancel/resume/rollback buttons on hover |
 | `step-timeline` | `StepTimeline` | Vertical timeline of steps — status icons, duration, expandable I/O, retry badge |
 | `tool-stats` | `ToolStats` | Performance metrics per tool — call count, avg duration, failure rate, sorted bars |
 | `audit-trail` | `AuditTrail` | Immutable audit log table — filterable by action/actor, expandable details |
 | `live-logs` | `LiveLogs` | Real-time event stream — filter by level, auto-scroll, raw logs |
+| `command-center` | `CommandCenter` | Operational dashboard — status bar (provider, model, queue, WS, tools, agents), live DAG (iterations → tool calls), usage bar (tokens + LLM calls), inline goal prompt, recent alerts |
+| `trajectory-replay` | `TrajectoryReplay` | Full debugging tool — VCR replay with play/pause/forward/back, event validation scorecard, mutation testing (drop/replace/inject events), side-by-side run comparison, rollback controls |
 
 ---
 
@@ -919,7 +1088,7 @@ The UI communicates exclusively through HTTP + WebSocket:
 UI (store.ts)
   ├─ HTTP: GET/POST /api/runs, /api/agents, /api/layouts, /api/policies, etc.
   ├─ WS: receives trace, run-update, step-update, notification events
-  └─ renders: 9 widget types, each subscribed to relevant store slices
+  └─ renders: 11 widget types, each subscribed to relevant store slices
 ```
 
 ### Why In-Memory Is Fine (And When It Isn't)
@@ -968,6 +1137,8 @@ orchestrator.startRun(goal, agentId):
   → resolve LLM client (from registry)
   → createEngineServices()
   → governedTools = tools.map(t => governTool(t, services, state))
+  → wrapWithEffects(governedTools)                 ← intercept writes for rollback
+  → buildMemoryContext(goal)                       ← FTS5 search for relevant memories
   → subscribe domain events → broadcast via WebSocket
   → agent = new Agent(llm, governedTools, config)
   → spawn async: agent.run(goal)                  ← runs in background
@@ -1003,6 +1174,7 @@ UI Zustand store handles these:
   → StepTimeline widget: adds step entries
   → NotificationPanel: shows new notifications
   → AgentViz widget: animates graph nodes + particles
+  → CommandCenter widget: updates DAG + usage bars
 ```
 
 ### CLI Flow
@@ -1175,7 +1347,7 @@ The same interface with multiple implementations:
 
 | Interface | Implementations |
 |-----------|----------------|
-| `LLMClient` | `CopilotClient`, `OpenAIClient`, `AnthropicClient`, `LocalClient` (via registry) |
+| `LLMClient` | `CopilotChatClient`, `CopilotClient`, `OpenAIClient`, `AnthropicClient`, `LocalClient` (via registry) |
 | `Tool.execute()` | filesystem, shell, fetch, think (each a different strategy) |
 | `PolicyEvaluator` | `RulePolicyEvaluator` (could add ML-based, remote API, etc.) |
 | `RunRepository` | `MemoryRunRepository` (swap for Postgres, DynamoDB) |
@@ -1582,16 +1754,16 @@ The tool call is currently blocked (returns the policy deny message to the agent
 | GET | `/api/notifications/unread-count` | Get unread count for badge |
 | POST | `/api/notifications/:id/read` | Mark single notification read |
 | POST | `/api/notifications/read-all` | Mark all notifications read |
-| POST | `/api/notifications/:id/action` | Execute a notification action (resume-run, cancel-run, view-run) |
+| POST | `/api/notifications/:id/action` | Execute a notification action (resume-run, cancel-run, view-run, rollback-run) |
 
 **Real-time delivery**: When a notification is created via `createNotification()`, it is both persisted to SQLite and broadcast over WebSocket as a `"notification"` event. The Zustand store (`handleWsEvent`) picks this up and adds it to `notifications[]` + increments `unreadCount`.
 
 **Notification types**:
 | Type | When | Actions |
 |---|---|---|
-| `run.completed` | Run finishes successfully | View Run |
-| `run.failed` | Run fails | View Run, Resume |
-| `run.recovered` | Stale run auto-resumed on startup | View Run |
+| `run.completed` | Run finishes successfully | Review |
+| `run.failed` | Run fails | Review, Resume (if checkpoint), Rollback |
+| `run.recovered` | Stale run auto-resumed on startup | Review |
 | `approval.required` | Policy requires human approval | Approve*, Reject* |
 
 **UI details**: The bell icon sits in the top-right corner of the Toolbar. An unread count badge (red circle) appears when there are unread notifications. Clicking opens a dropdown with:
@@ -1619,7 +1791,252 @@ When a notification action references a widget type that isn't in the user's cur
 Two existing widgets were enhanced with inline action buttons:
 
 - **RunHistory** (`packages/ui/src/widgets/RunHistory.tsx`): Hover over a run row to see Cancel (for active runs) or Resume (for failed runs) buttons.
+- **RunHistory** (`packages/ui/src/widgets/RunHistory.tsx`): Hover over a run row to see Cancel (for active runs), Resume (for failed runs), or Rollback (for completed/failed runs) buttons.
+- **RunStatus** (`packages/ui/src/widgets/RunStatus.tsx`): Rollback button with full preview dialog (shows what would be compensated/skipped/failed before confirming).
+- **CommandCenter** (`packages/ui/src/widgets/CommandCenter.tsx`): Compact rollback button with inline status message.
+- **TrajectoryReplay** (`packages/ui/src/widgets/TrajectoryReplay.tsx`): Rollback button in the top bar with preview panel — the forensic view (see what happened, then undo).
 - **StepTimeline** (`packages/ui/src/widgets/StepTimeline.tsx`): Steps that were retried show a badge with the retry count (e.g., "2 attempts").
+
+---
+
+<a id="effects"></a>
+## Effect Tracking & Atomic Rollback
+
+**File**: `packages/server/src/effects.ts`
+
+The effect system implements a **compensation log** pattern (similar to a database write-ahead log). Every side-effect the agent produces is recorded incrementally — not batched at the end of a run.
+
+### Why This Exists
+
+Agent runs modify the real world — they create files, modify code, run shell commands. If a run fails at step 23, you have 23 side-effects that may need to be undone. The effect system makes this possible.
+
+### How It Works
+
+```
+Agent calls write_file(path, content)
+  → orchestrator.wrapWithEffects() intercepts
+    → recordFileWrite({ runId, tool: "write_file", filePath: path })
+      → read existing file content + permissions (pre-snapshot)
+      → SHA-256 hash both old and new content
+      → save effect + snapshot to SQLite
+    → proceed with actual file write
+```
+
+### Effect Types
+
+| Kind | Captured By | Rollback Action |
+|------|-------------|-----------------|
+| `create` | New file written (no pre-existing file) | Delete the file |
+| `modify` | Existing file overwritten | Restore from pre-snapshot |
+| `delete` | File deleted | Recreate from pre-snapshot with original permissions |
+| `command` | Shell command executed | Not compensable (logged for audit only) |
+| `network` | Network request made | Not compensable (logged for audit only) |
+
+### Atomic Two-Phase Rollback
+
+Rollback uses a two-phase protocol to ensure atomicity:
+
+**Phase 1 — Validate** (`previewRollback(runId)`):
+- Walk all effects for the run in reverse order
+- For each file effect, check if the file still matches the post-hash (detect external modifications)
+- Categorize into: `wouldCompensate` (safe), `wouldSkip` (non-file effect), `wouldFail` (hash mismatch — file was modified externally)
+
+**Phase 2 — Apply** (only if Phase 1 shows zero failures):
+- Walk effects in reverse order
+- For `create` effects: delete the file
+- For `modify` effects: restore content from pre-snapshot
+- For `delete` effects: recreate file from pre-snapshot, restore `file_mode` via `chmod()`
+- Mark each effect as `compensated`
+
+If Phase 1 finds any `wouldFail` entries, the rollback is aborted entirely — no partial rollback.
+
+### Rollback Surfaces
+
+Rollback is accessible from 5 UI surfaces:
+1. **RunStatus** widget — full preview dialog with confirm/cancel
+2. **RunHistory** widget — inline hover button with browser confirm
+3. **CommandCenter** widget — compact button with auto-execute after preview
+4. **TrajectoryReplay** widget — button in top bar with preview panel
+5. **Notification actions** — "Rollback" button on failure notifications
+
+### Schema
+
+```sql
+-- effects table
+CREATE TABLE effects (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  kind TEXT NOT NULL,        -- create | modify | delete | command | network
+  tool TEXT NOT NULL,
+  target TEXT,               -- file path or command string
+  pre_hash TEXT,             -- SHA-256 of content before
+  post_hash TEXT,            -- SHA-256 of content after
+  status TEXT DEFAULT 'applied',
+  metadata TEXT,             -- JSON blob for extra context
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- file_snapshots table
+CREATE TABLE file_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  effect_id TEXT NOT NULL REFERENCES effects(id),
+  file_path TEXT NOT NULL,
+  content TEXT NOT NULL,     -- full file content before modification
+  hash TEXT NOT NULL,        -- SHA-256 of content
+  file_mode INTEGER,         -- Unix permissions (e.g., 0o644)
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/effects/:runId` | All effects for a run |
+| GET | `/api/effects/:runId/stats` | Breakdown counts (creates, modifies, deletes, commands) |
+| GET | `/api/effects/:runId/snapshots` | Pre-write file snapshots |
+| GET | `/api/effects/:runId/rollback-preview` | Dry-run: what would happen |
+| POST | `/api/effects/:runId/rollback` | Execute atomic rollback |
+| POST | `/api/effects/file-history` | Cross-run file modification history |
+
+---
+
+<a id="sandbox"></a>
+## Docker Sandbox
+
+**File**: `packages/server/src/sandbox.ts`
+
+Provides isolated container execution for shell commands and browser checks. Commands run inside Docker containers with strict resource limits and security hardening.
+
+### Modes
+
+| Mode | Behavior |
+|------|----------|
+| `"all"` | Docker required — error if Docker is unavailable |
+| `"docker"` | Try Docker first, fall back to host execution |
+| `"host"` | Always run on host (development mode) |
+
+### Security Profile
+
+Every container runs with:
+
+```
+--rm                            Remove container after execution
+--read-only                     Read-only root filesystem
+--cap-drop=ALL                  Drop all Linux capabilities
+--security-opt=no-new-privileges  Prevent privilege escalation
+--user 1000:1000                Non-root user
+--network=none                  No network access (configurable)
+--tmpfs /tmp:rw,noexec,nosuid,size=64m   Writable /tmp only
+```
+
+### Resource Limits
+
+| Resource | Default | Configurable Via |
+|----------|---------|-----------------|
+| Memory | 4 GB | `SandboxConfig.maxMemory` |
+| CPU | 2.0 cores | `SandboxConfig.maxCpu` |
+| Max concurrent containers | 4 | `SandboxConfig.maxConcurrent` |
+| Idle timeout | 30 minutes | `SandboxConfig.idleTimeoutMs` |
+| Max lifetime | 5 minutes | `SandboxConfig.maxLifetimeMs` |
+| Output cap | 16 KB | Truncated in result |
+
+### Lifecycle Management
+
+The `DockerSandbox` class manages container lifecycle:
+
+1. **Semaphore** — limits concurrent containers (acquire/release pattern)
+2. **Watchdog timer** — runs every 60 seconds, calls `reapContainers()`
+3. **Container tracking** — each container tracked with `startedAt` and `lastActivityAt`
+4. **Reaping** — kills containers exceeding max lifetime OR idle timeout
+
+### Workspace Mounting
+
+| Mode | Docker Flag | Use Case |
+|------|-------------|----------|
+| `"readwrite"` | `-v /workspace:/workspace:rw` | Shell commands (default) |
+| `"readonly"` | `-v /workspace:/workspace:ro` | Browser checks (default) |
+| `"none"` | No mount | Maximum isolation |
+
+### Browser Container
+
+For `browser_check` tool calls, a specialized Docker image (`agent001-browser:latest`) is built on demand:
+- Base: `node:20-slim` + Chromium + Puppeteer
+- Built via `ensureBrowserImage()` (lazy, once per session)
+- Workspace mounted read-only
+- Used for SSR verification, console error capture, and visual testing
+
+### Shell Integration
+
+The `shellTool` in the agent package accepts an optional executor via `setShellExecutor()`. The orchestrator injects the sandbox executor, routing shell commands through Docker when sandbox mode is active. The tool itself doesn't know whether it's running on host or in a container.
+
+---
+
+<a id="trajectory"></a>
+## Trajectory Replay & Validation
+
+**File**: `packages/server/src/trajectory.ts`
+
+The trajectory system treats a completed agent run as an ordered sequence of events that can be loaded, validated, mutated, and compared.
+
+### Event Types
+
+Every trace entry from a run is typed as a `TrajectoryEvent` (discriminated union):
+
+| Event Type | When Emitted | Key Fields |
+|-----------|-------------|------------|
+| `goal` | Run starts | goal text |
+| `iteration` | Each ReAct loop turn | current, max |
+| `thinking` | LLM produces reasoning | content |
+| `tool-call` | LLM requests a tool | name, arguments |
+| `tool-result` | Tool returns successfully | name, result |
+| `tool-error` | Tool fails | name, error |
+| `delegation-start` | Child agent spawned | childRunId, agent |
+| `delegation-end` | Child agent completes | childRunId, result |
+| `answer` | LLM produces final answer | content |
+| `error` | Run fails | message |
+
+### Validation
+
+`validateTransitions(trajectory)` checks the state machine validity of a trajectory:
+- Terminal states (`answer`, `error`) must be final — nothing allowed after
+- Tool results must follow tool calls
+- Delegation nesting is tracked (children inside delegation blocks are exempt from strict parent validation)
+- Meta events (`usage`, `delegation-iteration`, `delegation-parallel-*`) are transparent
+- Returns `TransitionViolation[]` — empty array means valid
+
+### Mutation Testing
+
+`applyMutations(trajectory, mutations)` alters an event sequence for resilience testing:
+
+| Mutation | Effect |
+|----------|--------|
+| `drop(seq)` | Remove event at sequence number |
+| `replace(seq, event)` | Swap event at sequence number |
+| `inject(seq, event)` | Insert new event at position |
+
+After mutation, `replay()` validates the result and generates a scorecard showing violations introduced by the change.
+
+### Run Comparison
+
+`compareTrajectories(runIdA, runIdB)` loads two trajectories and produces a side-by-side analysis — useful for comparing a run before and after mutations, or comparing two different approaches to the same goal.
+
+### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/trajectory/:runId` | Full trajectory (all events) |
+| GET | `/api/trajectory/:runId/summary` | Human-readable summary |
+| POST | `/api/trajectory/:runId/replay` | Validate with optional mutations |
+| POST | `/api/trajectory/compare` | Side-by-side analysis of two runs |
+
+### UI: TrajectoryReplay Widget
+
+The `TrajectoryReplay` widget provides three tabs:
+1. **Replay** — VCR controls (play/pause/forward/back), event list with color-coding by kind, validation scorecard
+2. **Mutations** — Drop/replace/inject events, replay with mutations to test resilience
+3. **Compare** — Select two runs for side-by-side comparison
 
 ---
 

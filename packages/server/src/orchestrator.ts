@@ -782,6 +782,7 @@ export class AgentOrchestrator {
         actions: [
           { label: "Review", action: "view-run", data: { runId } },
           ...(hasCheckpoint ? [{ label: "Resume", action: "resume-run", data: { runId } }] : []),
+          { label: "Rollback", action: "rollback-run", data: { runId } },
         ],
       })
     } finally {

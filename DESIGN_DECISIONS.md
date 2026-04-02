@@ -450,9 +450,89 @@ The system is a single-process Node.js app with SQLite. Redis would add:
 - Connection management and reconnection logic
 - Docker/infra complexity for what is currently `npm start`
 
-The queue's job is narrow: **throttle concurrent LLM calls** (default 5). It's a semaphore with priority ordering. Durability comes from SQLite checkpoints + `recoverStaleRuns()`.
+The queue's job is narrow: **throttle concurrent LLM calls** (default 5). It's a semaphore with priority ordering (critical > high > normal > low). Durability comes from SQLite checkpoints + `recoverStaleRuns()`.
 
 The seams exist for scaling: `RunQueue` is a class, `acquire()/release()` is the contract. Swapping to Redis means implementing the same interface with a different backing store.
+
+---
+
+## Why Compensation Log, Not Sagas
+
+The rollback system in `effects.ts` uses a **compensation log** pattern rather than the saga pattern commonly used in distributed systems.
+
+**What's a compensation log?** Like a database write-ahead log (WAL). Every side-effect is recorded _as it happens_, with a pre-snapshot. To undo, walk the log in reverse and apply compensations.
+
+**Why not sagas?** Sagas solve a different problem — coordinating rollback across multiple independent services. Our system is a single process with a single SQLite database. The complexity of saga orchestration (compensating transactions, idempotency tokens, failure modes for each participant) is unnecessary when everything runs in one process.
+
+**How it handles mid-run failure:** If the agent fails at step 23, the first 23 effects and their snapshots are already in SQLite (they were written as each tool executed, not batched). The user can rollback those 23 effects via the UI — or inspect them first and decide not to.
+
+**Why not auto-rollback on failure?** The user may want to keep partial results. A run that completes 23 out of 25 file writes might have 23 perfectly good files. Auto-rollback would destroy them. Instead, the system makes rollback _available_ (prominently, in 5 UI surfaces) and lets the user decide.
+
+**Why two-phase?** The preview/confirm approach (validate ALL → apply ALL) prevents partial rollback. If one file was modified externally since the agent wrote it, the rollback would produce an inconsistent state. The preview catches this — the user sees "this file will fail" and can abort the entire operation.
+
+---
+
+## Why Docker Sandbox Instead of Process-Level Isolation
+
+Shell commands from an AI agent are inherently dangerous. Two constraints drove the Docker sandbox choice:
+
+1. **Process-level sandboxing is platform-dependent** — `seccomp`, `landlock`, `pledge/unveil` depend on the OS. Docker provides consistent isolation across macOS and Linux.
+2. **File system isolation is the critical requirement** — the agent must be able to write files in its workspace but must not be able to read/modify system files. Docker's volume mounting (`-v workspace:/workspace:rw`) solves this cleanly.
+
+**The fallback matters**: Not every development machine has Docker installed. The sandbox supports `"host"` mode (no Docker, direct execution) for development setups. The `"docker"` mode tries Docker first and falls back to host if unavailable. Only `"all"` mode requires Docker.
+
+**Why not Firecracker/gVisor?** Overkill for development-time agent execution. Docker with `--cap-drop=ALL --read-only --security-opt=no-new-privileges` provides sufficient isolation. The security posture can be upgraded by swapping the container runtime — the interface (`exec()` → `SandboxResult`) stays the same.
+
+---
+
+## Why 4-Layer Path Validation Instead of `realpath()`
+
+The filesystem tools (`read_file`, `write_file`, `list_directory`) use a 4-layer validation pipeline instead of a simple `realpath()` + prefix check:
+
+1. **Input sanitization** — reject null bytes, normalize path separators. Catches the most obvious attacks.
+2. **Traversal detection** — resolve the path against the workspace root, confirm it stays inside. Catches `../../etc/passwd`.
+3. **Symlink resolution** — `realpath()` follows symlinks to their final target, then checks the target is inside the workspace. Catches `ln -s /etc/passwd ./safe-looking-name`.
+4. **Root check** — final verification the fully resolved path starts with the workspace root. Defense in depth.
+
+A single `realpath()` + prefix check would miss TOCTOU races (file created between check and access) and wouldn't catch null byte injection. The layered approach provides defense in depth — each layer catches attacks the others might miss.
+
+---
+
+## Why 2-Tier Shell Deny List
+
+The `shellTool` maintains two separate deny lists: `CONTAINER_RULES` (for Docker sandbox) and `HOST_RULES` (for direct host execution).
+
+**Host rules are strict**: Block `rm -rf /`, `curl | sh`, `chmod -R 777`, etc. The agent is running with the user's full permissions on the host.
+
+**Container rules are lenient**: Inside Docker with `--cap-drop=ALL`, `--read-only`, and `--network=none`, most dangerous commands are already neutralized by the container runtime. The deny list is shorter because the container provides the safety boundary.
+
+This avoids over-restricting the agent in sandbox mode (where Docker already provides isolation) while maintaining safety on the host (where the agent has real permissions).
+
+---
+
+## Why Budget-Weighted Memory Retrieval
+
+The memory system (`memory.ts`) allocates token budget across tiers using fixed percentages: Working 34%, Episodic 22%, Semantic 44%.
+
+**Why not retrieve everything?** LLM context windows are finite. Injecting 50 irrelevant memories wastes tokens and degrades reasoning quality. Budget allocation ensures a balanced mix: recent context (working), moderate-age summaries (episodic), and long-lived knowledge (semantic).
+
+**Why fixed percentages?** Adaptive allocation (e.g., "use more semantic if episodic is empty") adds complexity without clear benefit. The fixed split is predictable and debuggable. The percentages were tuned empirically — semantic gets the most because consolidated knowledge is highest-signal.
+
+**Why FTS5 + optional vectors?** FTS5 (BM25 keyword matching) works without any external services — pure SQLite. Vector embeddings (via Ollama) provide semantic similarity ("similar meaning, different words") but require a running embedding service. Making vectors optional keeps the system self-contained while allowing upgrades.
+
+---
+
+## Why Trajectory Replay Uses Event Sequences, Not State Snapshots
+
+The trajectory system (`trajectory.ts`) represents runs as ordered event sequences rather than state snapshots at each point.
+
+**Event sequences are smaller** — a single event like `{ kind: "tool-call", name: "write_file", args: {...} }` is much smaller than a full state snapshot of the agent's message history + run state + step state.
+
+**Mutations are natural** — dropping, replacing, or injecting events into a sequence is straightforward array manipulation. Doing the equivalent on state snapshots would require computing state diffs.
+
+**Validation is a state machine walk** — given a sequence of events, `validateTransitions()` walks through them and checks each transition is legal. This is the standard approach for replay validation (same pattern as event sourcing replay).
+
+**The trade-off** — you can't jump to an arbitrary point in the trajectory without replaying from the start. For our use case (debugging agent runs, which are typically 1-30 iterations), this is acceptable.
 
 ---
 
@@ -460,12 +540,16 @@ The seams exist for scaling: `RunQueue` is a class, `acquire()/release()` is the
 
 | Pattern | Where Used | Reasoning |
 |---|---|---|
-| **Class with mutable state** | `Agent`, `AgentOrchestrator`, `RunQueue`, `AgentBus` | State scoped to instance lifetime |
+| **Class with mutable state** | `Agent`, `AgentOrchestrator`, `RunQueue`, `AgentBus`, `DockerSandbox` | State scoped to instance lifetime |
 | **Interface + free functions** | `AgentRun`, `Step` + `createRun()`, `completeRun()` | Serializable data, testable transitions, no constructor |
 | **Factory function** | `createDelegateTools()`, `createBusTools()`, `createEngineServices()` | Context-dependent construction |
-| **Decorator/wrapper function** | `governTool()` | Cross-cutting concerns without modifying the original |
+| **Decorator/wrapper function** | `governTool()`, `wrapWithEffects()` | Cross-cutting concerns without modifying the original |
 | **Composition root** | `executeRun()` | One place assembles everything; pieces tested independently |
 | **Callbacks for DI** | `onStep`, `onChildTrace`, `onChildUsage` | Bridge packages without circular imports |
+| **Compensation log** | `effects.ts` (recordEffect → rollbackRun) | Incremental side-effect capture with atomic reversal |
+| **Two-phase commit** | `previewRollback()` → `rollbackRun()` | Validate all before changing any — prevents partial rollback |
 | **Module-level singleton** | `tools.ts` tool registry | Stateless catalog, set once |
-| **Internal instantiation** | `RunQueue`, `activeRuns` | Implementation detail, one variant |
+| **Internal instantiation** | `RunQueue`, `activeRuns`, `DockerSandbox` | Implementation detail, one variant |
 | **Constructor injection** | `LLMClient`, `MessageRouter` | Multiple implementations or test doubles |
+| **Budget-weighted retrieval** | `memory.ts` (working 34%, episodic 22%, semantic 44%) | Balanced context injection under token constraints |
+| **Event sequence over snapshots** | `trajectory.ts` (replay, mutations, validation) | Compact, natural mutation support, state machine validation |

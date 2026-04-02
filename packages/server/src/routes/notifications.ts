@@ -72,6 +72,14 @@ export function registerNotificationRoutes(
           // Client handles navigation — just mark as read
           return { ok: true }
 
+        case "rollback-run": {
+          const runId = data?.runId as string
+          if (!runId) { reply.code(400); return { error: "runId required" } }
+          const { rollbackRun } = await import("../effects.js")
+          const result = await rollbackRun(runId)
+          return { ok: true, compensated: result.compensated, skipped: result.skipped, failed: result.failed.length }
+        }
+
         default:
           return { ok: true }
       }

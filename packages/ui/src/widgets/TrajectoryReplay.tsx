@@ -22,12 +22,13 @@ import {
     SkipBack,
     SkipForward,
     Trash2,
+    Undo2,
     X,
 } from "lucide-react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
-import type { Run } from "../types"
+import type { RollbackPreview, Run } from "../types"
 import { timeAgo, truncate } from "../util"
 
 // ── Types ────────────────────────────────────────────────────────
@@ -217,6 +218,46 @@ export function TrajectoryReplay() {
     }
   }, [effectiveRunId, effectiveRunStatus, loadTrajectory])
 
+  // ── Rollback state ──────────────────────────────────────────
+  const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
+  const [rollbackLoading, setRollbackLoading] = useState(false)
+  const [rollbackResult, setRollbackResult] = useState<string | null>(null)
+  const canRollback = effectiveRunStatus === "completed" || effectiveRunStatus === "failed"
+
+  const handleRollbackPreview = useCallback(async () => {
+    if (!effectiveRunId) return
+    setRollbackLoading(true)
+    setRollbackResult(null)
+    try {
+      const preview = await api.previewRollback(effectiveRunId)
+      if (preview.wouldCompensate.length === 0 && preview.wouldFail.length === 0) {
+        setRollbackResult("No file effects to rollback")
+      } else {
+        setRollbackPreview(preview)
+      }
+    } catch {
+      setRollbackResult("Failed to load preview")
+    }
+    setRollbackLoading(false)
+  }, [effectiveRunId])
+
+  const handleRollbackConfirm = useCallback(async () => {
+    if (!effectiveRunId) return
+    setRollbackLoading(true)
+    try {
+      const result = await api.rollbackRun(effectiveRunId)
+      if (result.failed.length > 0) {
+        setRollbackResult(`Rolled back ${result.compensated}, ${result.failed.length} failed`)
+      } else {
+        setRollbackResult(`Rolled back ${result.compensated} effects, ${result.skipped} skipped`)
+      }
+    } catch {
+      setRollbackResult("Rollback failed")
+    }
+    setRollbackPreview(null)
+    setRollbackLoading(false)
+  }, [effectiveRunId])
+
   // ── Empty / error states ─────────────────────────────────────
 
   if (!effectiveRunId) {
@@ -278,6 +319,22 @@ export function TrajectoryReplay() {
           </div>
         )}
 
+        {/* Rollback button */}
+        {canRollback && !rollbackPreview && (
+          <button
+            className="flex items-center gap-1 text-[13px] text-warning/80 hover:text-warning px-2 py-1 rounded-md hover:bg-warning/10 transition-colors"
+            onClick={handleRollbackPreview}
+            disabled={rollbackLoading}
+            title="Rollback all file changes from this run"
+          >
+            <Undo2 size={13} />
+            {rollbackLoading ? "..." : "Rollback"}
+          </button>
+        )}
+        {rollbackResult && (
+          <span className="text-[11px] text-text-muted px-1">{rollbackResult}</span>
+        )}
+
         <div className="flex-1" />
 
         {/* Tabs */}
@@ -296,6 +353,50 @@ export function TrajectoryReplay() {
           </button>
         ))}
       </div>
+
+      {/* ── Rollback preview panel ─────────────────────────────── */}
+      {rollbackPreview && (
+        <div className="px-3 py-2 border-b border-elevated/50 bg-elevated/30 space-y-1.5">
+          <div className="text-[13px] font-semibold text-warning">Rollback Preview</div>
+          {rollbackPreview.wouldCompensate.length > 0 && (
+            <div className="text-[12px]">
+              <span className="text-success">Restore ({rollbackPreview.wouldCompensate.length}): </span>
+              <span className="text-text-muted font-mono">
+                {rollbackPreview.wouldCompensate.slice(0, 5).map(e => e.target.split("/").pop()).join(", ")}
+                {rollbackPreview.wouldCompensate.length > 5 && ` +${rollbackPreview.wouldCompensate.length - 5} more`}
+              </span>
+            </div>
+          )}
+          {rollbackPreview.wouldSkip.length > 0 && (
+            <div className="text-[12px] text-text-muted">
+              Skip: {rollbackPreview.wouldSkip.length} (commands/already done)
+            </div>
+          )}
+          {rollbackPreview.wouldFail.length > 0 && (
+            <div className="text-[12px] text-error">
+              Blocked: {rollbackPreview.wouldFail.map(e => `${e.target.split("/").pop()} — ${e.reason}`).join("; ")}
+            </div>
+          )}
+          <div className="flex gap-2 pt-0.5">
+            {rollbackPreview.wouldFail.length === 0 && rollbackPreview.wouldCompensate.length > 0 && (
+              <button
+                className="flex items-center gap-1 text-[12px] text-warning bg-warning/10 hover:bg-warning/20 px-2.5 py-1 rounded-md transition-colors"
+                onClick={handleRollbackConfirm}
+                disabled={rollbackLoading}
+              >
+                <Undo2 size={11} />
+                Confirm
+              </button>
+            )}
+            <button
+              className="text-[12px] text-text-muted hover:text-text px-2.5 py-1 rounded-md transition-colors"
+              onClick={() => setRollbackPreview(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Tab content ─────────────────────────────────────── */}
       {tab === "replay" && (

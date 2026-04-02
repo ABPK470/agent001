@@ -99,6 +99,17 @@ export function NotificationPanel() {
         break
       }
 
+      case "rollback-run": {
+        const runId = action.data?.runId as string | undefined
+        if (runId) {
+          try {
+            await api.rollbackRun(runId)
+          } catch { /* swallow */ }
+        }
+        setOpen(false)
+        break
+      }
+
       case "open-policies": {
         // This action is handled by the parent — we just close the panel
         // The PolicyEditor modal will be opened by the parent

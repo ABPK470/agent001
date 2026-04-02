@@ -18,33 +18,13 @@ export function RunStatus() {
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   useEffect(() => { api.listAgents().then(setAgents).catch(() => {}) }, [])
 
-  const run = runs.find((r) => r.id === activeRunId)
-  const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
-
-  if (!run) {
-    return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        No active run
-      </div>
-    )
-  }
-
-  const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
-  const completedSteps = steps.filter((s) => s.status === "completed").length
-  const failedSteps = steps.filter((s) => s.status === "failed").length
-
-  async function handleCancel() {
-    if (run) await api.cancelRun(run.id).catch(() => {})
-  }
-
-  async function handleResume() {
-    if (run) await api.resumeRun(run.id).catch(() => {})
-  }
-
-  // ── Rollback state ──
+  // ── Rollback state (must be before any early returns) ──
   const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackResult, setRollbackResult] = useState<string | null>(null)
+
+  const run = runs.find((r) => r.id === activeRunId)
+  const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
 
   const handleRollbackPreview = useCallback(async () => {
     if (!run) return
@@ -75,6 +55,26 @@ export function RunStatus() {
     setRollbackPreview(null)
     setRollbackLoading(false)
   }, [run])
+
+  if (!run) {
+    return (
+      <div className="flex items-center justify-center h-full text-text-muted text-sm">
+        No active run
+      </div>
+    )
+  }
+
+  const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
+  const completedSteps = steps.filter((s) => s.status === "completed").length
+  const failedSteps = steps.filter((s) => s.status === "failed").length
+
+  async function handleCancel() {
+    if (run) await api.cancelRun(run.id).catch(() => {})
+  }
+
+  async function handleResume() {
+    if (run) await api.resumeRun(run.id).catch(() => {})
+  }
 
   return (
     <div className="h-full overflow-y-auto flex flex-col gap-3">
