@@ -27,7 +27,7 @@ import { promisify } from "node:util"
 
 const exec = promisify(execFile)
 
-/** Sandbox configuration. */
+/** Sandbox configuration — matches agenc-core's SandboxConfig shape. */
 export interface SandboxConfig {
   /**
    * Execution mode:
@@ -42,11 +42,32 @@ export interface SandboxConfig {
   mode?: "all" | "docker" | "host"
   /** Docker image to use. Default: node:20-slim */
   image?: string
-  /** Memory limit. Default: 256m */
-  memoryLimit?: string
-  /** CPU limit (number of CPUs). Default: 1 */
-  cpuLimit?: number
-  /** Command timeout in ms. Default: 30000 */
+  /** Memory limit per container. Default: "4g" */
+  maxMemory?: string
+  /** CPU limit per container. Default: "2.0" */
+  maxCpu?: string
+  /** Maximum concurrent containers. Default: 4 */
+  maxConcurrent?: number
+  /**
+   * Kill containers idle longer than this (ms).
+   * With ephemeral (--rm) containers this is a safety net.
+   * Default: 1_800_000 (30 min)
+   */
+  idleTimeoutMs?: number
+  /**
+   * Hard cap on any single container's lifetime (ms).
+   * Separate from command timeout — the watchdog enforces this.
+   * Default: 300_000 (5 min)
+   */
+  maxLifetimeMs?: number
+  /**
+   * Workspace mount mode inside the container.
+   *   "readwrite" — full read/write (shell sandbox default)
+   *   "readonly"  — read-only mount (browser sandbox default)
+   *   "none"      — workspace not mounted at all
+   */
+  workspaceAccess?: "none" | "readonly" | "readwrite"
+  /** Command timeout in ms. Default: 30_000 */
   timeout?: number
   /** Allow network access inside container. Default: false */
   network?: boolean
@@ -65,10 +86,60 @@ export interface SandboxResult {
 const DEFAULT_IMAGE = "node:20-slim"
 const BROWSER_IMAGE = "agent001-browser:latest"
 const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../docker/Dockerfile.browser")
-const DEFAULT_MEMORY = "256m"
-const DEFAULT_CPU = 1
+const DEFAULT_MAX_MEMORY = "4g"
+const DEFAULT_MAX_CPU = "2.0"
+const DEFAULT_MAX_CONCURRENT = 4
+const DEFAULT_IDLE_TIMEOUT = 30 * 60 * 1000  // 30 min
+const DEFAULT_MAX_LIFETIME = 5 * 60 * 1000   // 5 min
+const DEFAULT_WORKSPACE_ACCESS = "readwrite" as const
 const DEFAULT_TIMEOUT = 30_000
 const MAX_OUTPUT = 16_000
+const WATCHDOG_INTERVAL = 60_000  // check every 60s
+
+// ── Concurrency semaphore ──────────────────────────────────────────
+
+class Semaphore {
+  private current = 0
+  private readonly waiting: Array<{ resolve: () => void; timer: ReturnType<typeof setTimeout> }> = []
+
+  constructor(private readonly max: number) {}
+
+  get active(): number { return this.current }
+
+  acquire(timeoutMs = 60_000): Promise<void> {
+    if (this.current < this.max) {
+      this.current++
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve, reject) => {
+      const entry = {
+        resolve: () => { /* replaced below */ },
+        timer: setTimeout(() => {
+          const idx = this.waiting.indexOf(entry)
+          if (idx !== -1) {
+            this.waiting.splice(idx, 1)
+            reject(new Error(`Concurrency limit reached (${this.max} containers). Try again later.`))
+          }
+        }, timeoutMs),
+      }
+      entry.resolve = () => {
+        clearTimeout(entry.timer)
+        this.current++
+        resolve()
+      }
+      this.waiting.push(entry)
+    })
+  }
+
+  release(): void {
+    const next = this.waiting.shift()
+    if (next) {
+      next.resolve()
+    } else {
+      this.current--
+    }
+  }
+}
 
 /** Safe environment variables to forward into the container. */
 const SAFE_ENV_KEYS = new Set([
@@ -82,20 +153,60 @@ const SAFE_ENV_KEYS = new Set([
   "NODE_ENV",
 ])
 
+/** Tracked container metadata for the watchdog. */
+interface TrackedContainer {
+  startedAt: number
+  lastActivityAt: number
+}
+
 export class DockerSandbox {
   private dockerAvailable: boolean | null = null
   private browserImageReady: boolean | null = null
   private readonly config: Required<SandboxConfig>
   private activeContainers = new Set<string>()
+  private trackedContainers = new Map<string, TrackedContainer>()
+  private semaphore: Semaphore
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(config: SandboxConfig = {}) {
     this.config = {
       mode: config.mode ?? "docker",
       image: config.image ?? DEFAULT_IMAGE,
-      memoryLimit: config.memoryLimit ?? DEFAULT_MEMORY,
-      cpuLimit: config.cpuLimit ?? DEFAULT_CPU,
+      maxMemory: config.maxMemory ?? DEFAULT_MAX_MEMORY,
+      maxCpu: config.maxCpu ?? DEFAULT_MAX_CPU,
+      maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
+      idleTimeoutMs: config.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT,
+      maxLifetimeMs: config.maxLifetimeMs ?? DEFAULT_MAX_LIFETIME,
+      workspaceAccess: config.workspaceAccess ?? DEFAULT_WORKSPACE_ACCESS,
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       network: config.network ?? false,
+    }
+    this.semaphore = new Semaphore(this.config.maxConcurrent)
+    this.startWatchdog()
+  }
+
+  // ── Container lifecycle watchdog ────────────────────────────────
+
+  private startWatchdog(): void {
+    if (this.watchdogTimer) return
+    this.watchdogTimer = setInterval(() => void this.reapContainers(), WATCHDOG_INTERVAL)
+    this.watchdogTimer.unref() // Don't prevent process exit
+  }
+
+  /** Kill containers that exceed lifetime or idle limits. */
+  private async reapContainers(): Promise<void> {
+    const now = Date.now()
+    for (const [id, info] of this.trackedContainers) {
+      const lifetime = now - info.startedAt
+      const idle = now - info.lastActivityAt
+      if (lifetime > this.config.maxLifetimeMs || idle > this.config.idleTimeoutMs) {
+        console.log(
+          `🧹 Reaping container ${id} (lifetime=${Math.round(lifetime / 1000)}s, idle=${Math.round(idle / 1000)}s)`,
+        )
+        await exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {})
+        this.trackedContainers.delete(id)
+        this.activeContainers.delete(id)
+      }
     }
   }
 
@@ -180,13 +291,18 @@ export class DockerSandbox {
     const allowNetwork = options?.network ?? this.config.network
     const containerId = `agent001-sandbox-${randomBytes(6).toString("hex")}`
 
+    // Workspace mount based on workspaceAccess config
+    const mountArgs = this.buildWorkspaceMount(workspacePath)
+
     const args: string[] = [
       "run",
       "--rm",
       "--name", containerId,
       // Resource limits
-      `--memory=${this.config.memoryLimit}`,
-      `--cpus=${this.config.cpuLimit}`,
+      `--memory=${this.config.maxMemory}`,
+      `--cpus=${this.config.maxCpu}`,
+      // Prevent OOM-killer from sparing the container
+      "--oom-kill-disable=false",
       // No network by default
       ...(allowNetwork ? [] : ["--network=none"]),
       // Non-root user (node:20-slim has user 'node' with uid 1000)
@@ -195,8 +311,8 @@ export class DockerSandbox {
       "--read-only",
       // Tmpfs for /tmp so programs can write temp files
       "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
-      // Bind-mount workspace
-      "-v", `${workspacePath}:/workspace:rw`,
+      // Workspace mount (controlled by workspaceAccess)
+      ...mountArgs,
       // Working directory
       "-w", containerCwd,
       // Drop all capabilities
@@ -211,7 +327,12 @@ export class DockerSandbox {
       "/bin/sh", "-c", command,
     ]
 
+    // Acquire semaphore slot (blocks if maxConcurrent reached)
+    await this.semaphore.acquire(this.config.timeout)
+
+    const now = Date.now()
     this.activeContainers.add(containerId)
+    this.trackedContainers.set(containerId, { startedAt: now, lastActivityAt: now })
 
     try {
       const { stdout, stderr } = await exec("docker", args, {
@@ -243,7 +364,9 @@ export class DockerSandbox {
         sandboxed: true,
       }
     } finally {
+      this.trackedContainers.delete(containerId)
       this.activeContainers.delete(containerId)
+      this.semaphore.release()
     }
   }
 
@@ -293,6 +416,20 @@ export class DockerSandbox {
         timedOut: error.killed === true,
         sandboxed: false,
       }
+    }
+  }
+
+  /** Build workspace mount args based on workspaceAccess config. */
+  private buildWorkspaceMount(workspacePath: string, overrideAccess?: SandboxConfig["workspaceAccess"]): string[] {
+    const access = overrideAccess ?? this.config.workspaceAccess
+    switch (access) {
+      case "none":
+        return [] // no mount at all
+      case "readonly":
+        return ["-v", `${workspacePath}:/workspace:ro`]
+      case "readwrite":
+      default:
+        return ["-v", `${workspacePath}:/workspace:rw`]
     }
   }
 
@@ -393,8 +530,9 @@ export class DockerSandbox {
       "run",
       "--rm",
       "--name", containerId,
-      `--memory=512m`,
-      `--cpus=${this.config.cpuLimit}`,
+      `--memory=${this.config.maxMemory}`,
+      `--cpus=${this.config.maxCpu}`,
+      "--oom-kill-disable=false",
       // No network — the static server runs INSIDE the container
       "--network=none",
       // Chromium needs SYS_ADMIN for its own sandbox (seccomp + namespaces)
@@ -404,8 +542,8 @@ export class DockerSandbox {
       // Read-only root, writable workspace + tmp
       "--read-only",
       "--tmpfs", "/tmp:rw,exec,nosuid,size=128m",
-      // Bind-mount workspace
-      "-v", `${workspacePath}:/workspace:ro`,
+      // Browser always gets read-only workspace access
+      ...this.buildWorkspaceMount(workspacePath, "readonly"),
       // Working directory
       "-w", "/workspace",
       // Environment
@@ -418,7 +556,11 @@ export class DockerSandbox {
       "node", "-e", scriptContent,
     ]
 
+    await this.semaphore.acquire(timeout)
+
+    const now = Date.now()
     this.activeContainers.add(containerId)
+    this.trackedContainers.set(containerId, { startedAt: now, lastActivityAt: now })
 
     try {
       const { stdout, stderr } = await exec("docker", args, {
@@ -449,16 +591,23 @@ export class DockerSandbox {
         sandboxed: true,
       }
     } finally {
+      this.trackedContainers.delete(containerId)
       this.activeContainers.delete(containerId)
+      this.semaphore.release()
     }
   }
 
-  /** Kill all active containers (for cleanup on server shutdown). */
+  /** Kill all active containers and stop the watchdog. */
   async cleanup(): Promise<void> {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer)
+      this.watchdogTimer = null
+    }
     const kills = [...this.activeContainers].map((id) =>
       exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {}),
     )
     await Promise.all(kills)
+    this.trackedContainers.clear()
     this.activeContainers.clear()
   }
 }
