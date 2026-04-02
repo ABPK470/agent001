@@ -39,7 +39,7 @@ import { AgentBus, createBusTools } from "./agent-bus.js"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
 import { migrateEffects, recordEffect, recordFileWrite, resetEffectSeq } from "./effects.js"
-import { buildMemoryContext, consolidate, extractProcedural, extractRunSummary, migrateMemory } from "./memory.js"
+import { consolidate, extractProcedural, ingestRunTurns, migrateMemory, retrieveContext } from "./memory.js"
 import { RunQueue, type RunPriority } from "./queue.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
@@ -62,8 +62,6 @@ export interface AgentRunConfig {
   agentId?: string
   tools?: Tool[]
   systemPrompt?: string
-  /** Previous conversation turns (goal+answer pairs) for multi-turn context */
-  history?: Array<{ goal: string; answer: string }>
 }
 
 export interface OrchestratorConfig {
@@ -182,7 +180,7 @@ export class AgentOrchestrator {
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     this.saveTrace(runId, { kind: "goal", text: goal })
 
-    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus, undefined, "normal", config?.history).catch((err) => {
+    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
     })
 
@@ -400,7 +398,6 @@ export class AgentOrchestrator {
     bus: AgentBus,
     resume?: { messages: Message[], iteration: number, parentRunId: string },
     priority: RunPriority = "normal",
-    history?: Array<{ goal: string; answer: string }>,
   ): Promise<void> {
     // Acquire a queue slot (waits if at capacity)
     let releaseSlot: () => void
@@ -533,8 +530,8 @@ export class AgentOrchestrator {
     // Initialize effect tracking for this run
     resetEffectSeq(runId)
 
-    // Build memory-augmented system prompt
-    const memoryContext = buildMemoryContext(goal)
+    // Build memory-augmented system prompt (unified retrieval pipeline)
+    const { context: memoryContext } = retrieveContext(goal, { sessionId: agentId ?? "default", runId })
     let effectivePrompt = systemPrompt ?? undefined
 
     // Inject runtime environment so the agent knows what OS/shell it's running on
@@ -620,23 +617,7 @@ export class AgentOrchestrator {
     })
 
     try {
-      // Build initial context with conversation history if available
-      let runArg: { messages: Message[]; iteration: number } | undefined
-      if (resume) {
-        runArg = { messages: resume.messages, iteration: resume.iteration }
-      } else if (history?.length) {
-        // Inject previous conversation turns so the agent has multi-turn context
-        const msgs: Message[] = [
-          { role: "system", content: agent.systemPrompt },
-        ]
-        for (const turn of history) {
-          msgs.push({ role: "user", content: turn.goal })
-          msgs.push({ role: "assistant", content: turn.answer })
-        }
-        msgs.push({ role: "user", content: goal })
-        runArg = { messages: msgs, iteration: 0 }
-      }
-      const answer = await agent.run(goal, runArg)
+      const answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
 
       // Complete the run
       completeRun(run)
@@ -664,26 +645,29 @@ export class AgentOrchestrator {
 
       this.saveTrace(runId, { kind: "answer", text: answer })
 
-      // Extract memories from completed run
+      // Ingest all significant turns into unified memory
       const toolNames = run.steps.map((s) => s.action)
-      extractRunSummary({
+      const traceEvents = run.steps.map((s) => ({
+        kind: "tool-call" as const,
+        tool: s.action,
+        text: `${s.action}(${Object.keys(s.input).join(", ")})`,
+        argsSummary: Object.keys(s.input).join(", "),
+      }))
+      ingestRunTurns({
         id: runId,
         goal,
         answer,
         status: "completed",
+        agentId,
         tools: [...new Set(toolNames)],
         stepCount: run.steps.length,
+        trace: traceEvents,
       })
 
       // Extract procedural memory (tool sequences that worked)
-      const traceEvents = run.steps.map((s) => ({
-        kind: "tool-call" as const,
-        tool: s.action,
-        argsSummary: Object.keys(s.input).join(", "),
-      }))
       extractProcedural({ id: runId, goal, trace: traceEvents })
 
-      // Periodic consolidation (promote episodic → semantic)
+      // Periodic consolidation (promote episodic -> semantic)
       consolidate({ minAgeHours: 24 })
 
       broadcast({
@@ -755,16 +739,24 @@ export class AgentOrchestrator {
 
       this.saveTrace(runId, { kind: "error", text: errMsg })
 
-      // Extract memory from failed run (lower confidence)
+      // Ingest failed run into memory (lower confidence)
       const failedTools = run.steps.map((s) => s.action)
-      extractRunSummary({
+      const failedTrace = run.steps.map((s) => ({
+        kind: "tool-call" as const,
+        tool: s.action,
+        text: `${s.action}(${Object.keys(s.input).join(", ")})`,
+        argsSummary: Object.keys(s.input).join(", "),
+      }))
+      ingestRunTurns({
         id: runId,
         goal,
         answer: null,
         status: "failed",
+        agentId,
         tools: [...new Set(failedTools)],
         stepCount: run.steps.length,
         error: errMsg,
+        trace: failedTrace,
       })
 
       broadcast({

@@ -11,12 +11,12 @@ import {
     rollbackRun,
 } from "../effects.js"
 import {
-    buildMemoryContext,
     clearAllMemories,
     consolidate,
     getMemoryStats,
     listMemories,
     prune,
+    retrieveContext,
     searchMemories,
     searchProcedures,
     type MemoryTier,
@@ -98,8 +98,20 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const context = buildMemoryContext(goal)
-      return { context }
+      const { context, results } = retrieveContext(goal)
+      return {
+        context,
+        resultCount: results.length,
+        results: results.map((r) => ({
+          tier: r.entry.tier,
+          role: r.entry.role,
+          content: r.entry.content.slice(0, 200),
+          confidence: r.entry.confidence,
+          relevance: r.relevance,
+          recency: r.recency,
+          combined: r.combined,
+        })),
+      }
     },
   )
 
