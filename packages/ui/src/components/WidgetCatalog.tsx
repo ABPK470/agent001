@@ -12,6 +12,7 @@ import {
     Eye,
     Film,
     History,
+    LayoutDashboard,
     LayoutGrid,
     ListTree,
     MessageSquare,
@@ -40,6 +41,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
   { type: "command-center", label: "Command Center", desc: "Operational overview: status, tools, agents, tokens", Icon: LayoutGrid },
   { type: "trajectory-replay", label: "Trajectory Replay", desc: "Step-through debugger for agent run trajectories", Icon: Film },
+  { type: "operator-env", label: "Operator Environment", desc: "IDE-style integrated dashboard — all data, resizable panels, full control", Icon: LayoutDashboard },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

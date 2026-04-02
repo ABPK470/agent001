@@ -26,6 +26,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "run-history": "Run History",
   "command-center": "Command Center",
   "trajectory-replay": "Trajectory Replay",
+  "operator-env": "Operator Environment",
 }
 
 const SYNC_CHANNEL = "agent001-active-run"

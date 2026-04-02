@@ -121,6 +121,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "run-history":   { w: 4, h: 8,  minW: 3, minH: 4 },
   "command-center": { w: 6, h: 10, minW: 4, minH: 6 },
   "trajectory-replay": { w: 8, h: 10, minW: 5, minH: 6 },
+  "operator-env": { w: 12, h: 10, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12

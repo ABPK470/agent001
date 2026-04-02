@@ -12,6 +12,7 @@ import {
     Film,
     GitBranch,
     History,
+    LayoutDashboard,
     LayoutGrid,
     ListTree,
     MessageSquare,
@@ -34,6 +35,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "run-history": History,
   "command-center": LayoutGrid,
   "trajectory-replay": Film,
+  "operator-env": LayoutDashboard,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -48,6 +50,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "run-history": "History",
   "command-center": "Center",
   "trajectory-replay": "Replay",
+  "operator-env": "IOE",
 }
 
 interface Props {

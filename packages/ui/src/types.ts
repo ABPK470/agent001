@@ -109,6 +109,7 @@ export type WidgetType =
   | "run-history"
   | "command-center"
   | "trajectory-replay"
+  | "operator-env"
 
 export interface ViewConfig {
   id: string

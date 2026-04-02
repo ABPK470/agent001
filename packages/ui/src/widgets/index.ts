@@ -10,6 +10,7 @@ import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
 import { CommandCenter } from "./CommandCenter"
 import { LiveLogs } from "./LiveLogs"
+import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
@@ -28,4 +29,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "run-history": RunHistory,
   "command-center": CommandCenter,
   "trajectory-replay": TrajectoryReplay,
+  "operator-env": OperatorEnvironment,
 }

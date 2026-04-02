@@ -23,6 +23,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "run-history": "Run History",
   "command-center": "Command Center",
   "trajectory-replay": "Trajectory Replay",
+  "operator-env": "Operator Environment",
 }
 
 export function WidgetModal() {
