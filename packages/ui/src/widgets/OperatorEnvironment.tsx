@@ -14,6 +14,7 @@ import {
     History,
     MessageSquare,
     PanelBottom,
+    Rows2,
     Search,
     Terminal,
     X,
@@ -101,10 +102,10 @@ export function OperatorEnvironment() {
   const [bottomRightTab, setBottomRightTab] = useState<BottomTab>("audit")
 
   // ── Resizable panels ──────────────────────────────────────────
-  const sidebar = useResizable(260, 180, 480, "horizontal")
-  const sidebarV = useResizable(200, 80, 400, "vertical")
-  const bottom = useResizable(200, 100, 500, "vertical")
-  const chatR = useResizable(300, 200, 500, "horizontal")
+  const sidebar = useResizable(260, "horizontal")
+  const sidebarV = useResizable(200, "vertical")
+  const bottom = useResizable(200, "vertical", true)
+  const chatR = useResizable(300, "horizontal", true)
 
   // ── Operational state ─────────────────────────────────────────
   const [goalInput, setGoalInput] = useState("")
@@ -388,7 +389,7 @@ export function OperatorEnvironment() {
                 onClick={() => setSidebarSplit((v) => !v)}
                 title="Toggle split sidebar"
               >
-                <Columns2 size={14} />
+                <Rows2 size={14} />
               </button>
             </div>
 
@@ -564,7 +565,6 @@ export function OperatorEnvironment() {
                 <div className="flex-1" />
                 {bottomSplit && (
                   <>
-                    <span className="text-[11px] mr-1" style={{ color: C.dim }}>│</span>
                     {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
                       <button
                         key={`r-${tab}`}

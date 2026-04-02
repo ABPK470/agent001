@@ -10,9 +10,8 @@ import { C } from "./constants"
 
 export function useResizable(
   initial: number,
-  min: number,
-  max: number,
   direction: "horizontal" | "vertical",
+  invert = false,
 ) {
   const [size, setSize] = useState(initial)
   const dragging = useRef(false)
@@ -28,8 +27,9 @@ export function useResizable(
 
       const onMouseMove = (ev: MouseEvent) => {
         if (!dragging.current) return
-        const delta = (direction === "horizontal" ? ev.clientX : ev.clientY) - startPos.current
-        setSize(Math.max(min, Math.min(max, startSize.current + delta)))
+        const raw = (direction === "horizontal" ? ev.clientX : ev.clientY) - startPos.current
+        const delta = invert ? -raw : raw
+        setSize(Math.max(40, startSize.current + delta))
       }
       const onMouseUp = () => {
         dragging.current = false
@@ -39,7 +39,7 @@ export function useResizable(
       document.addEventListener("mousemove", onMouseMove)
       document.addEventListener("mouseup", onMouseUp)
     },
-    [size, min, max, direction],
+    [size, direction, invert],
   )
 
   return { size, onMouseDown, setSize }
