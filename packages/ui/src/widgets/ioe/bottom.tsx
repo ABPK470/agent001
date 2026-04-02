@@ -85,7 +85,7 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
       {problems.map((p, i) => (
         <div key={i} className="flex items-start gap-2 py-0.5">
           <AlertTriangle size={11} className="mt-0.5 shrink-0" style={{ color: C.coral }} />
-          <span className="text-[10px] shrink-0 uppercase w-12" style={{ color: C.dim }}>{p.source}</span>
+          <span className="text-[12px] shrink-0 uppercase w-12" style={{ color: C.dim }}>{p.source}</span>
           <span className="truncate" style={{ color: C.coral }}>{p.text}</span>
           {p.time && (
             <span className="ml-auto shrink-0" style={{ color: C.dim }}>{ts(p.time)}</span>

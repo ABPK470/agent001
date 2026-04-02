@@ -33,7 +33,7 @@ export const C = {
 
 // ── Layout types ─────────────────────────────────────────────────
 
-export type SidebarSection = "explorer" | "runs" | "agents" | "notifications" | "search"
+export type SidebarSection = "explorer" | "runs" | "agents" | "notifications"
 export type EditorTab = "trace" | "dag" | "timeline" | "details"
 export type BottomTab = "output" | "audit" | "feed" | "problems"
 export type PanelSide = "left" | "right"
@@ -312,4 +312,31 @@ export function buildSearchResults(
     }
   }
   return results.slice(0, 50)
+}
+
+// ── Chat message types ───────────────────────────────────────────
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "tool" | "system"
+  content: string
+  toolName?: string
+}
+
+export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
+  const msgs: ChatMessage[] = []
+  for (const e of trace) {
+    if (e.kind === "goal") msgs.push({ role: "user", content: e.text ?? "" })
+    else if (e.kind === "thinking") msgs.push({ role: "assistant", content: e.text })
+    else if (e.kind === "tool-call")
+      msgs.push({ role: "tool", content: `${e.tool}(${e.argsSummary || "..."})`, toolName: e.tool })
+    else if (e.kind === "tool-result") msgs.push({ role: "tool", content: e.text })
+    else if (e.kind === "tool-error") msgs.push({ role: "system", content: `Error: ${e.text}` })
+    else if (e.kind === "answer") msgs.push({ role: "assistant", content: e.text })
+    else if (e.kind === "error") msgs.push({ role: "system", content: e.text })
+    else if (e.kind === "delegation-start")
+      msgs.push({ role: "system", content: `Delegating to ${e.agentName ?? "sub-agent"}: ${e.goal}` })
+    else if (e.kind === "delegation-end")
+      msgs.push({ role: "system", content: `Delegation ${e.status}${e.answer ? `: ${e.answer}` : ""}` })
+  }
+  return msgs
 }

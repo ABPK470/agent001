@@ -41,7 +41,7 @@ export function ExplorerPanel({
   usage: UsageData | null
 }) {
   return (
-    <div className="text-xs">
+    <div className="text-[13px]">
       <TreeSection title="Active Run" defaultOpen>
         {run ? (
           <>
@@ -83,19 +83,19 @@ export function ExplorerPanel({
         )}
       </TreeSection>
 
-      <TreeSection title={`Agents (${agents.length})`}>
+      <TreeSection title={`Agents (${agents.length})`} defaultOpen>
         {agents.map((a) => (
           <TreeItem key={a.id} label={a.name} value={`${a.tools.length} tools`} />
         ))}
       </TreeSection>
 
-      <TreeSection title={`Tools (${tools.length})`}>
+      <TreeSection title={`Tools (${tools.length})`} defaultOpen>
         {tools.map((t) => (
           <TreeItem key={t.name} label={t.name} value={truncate(t.description, 40)} />
         ))}
       </TreeSection>
 
-      <TreeSection title={`Policies (${policies.length})`}>
+      <TreeSection title={`Policies (${policies.length})`} defaultOpen>
         {policies.map((p) => (
           <TreeItem
             key={p.name}
@@ -123,7 +123,7 @@ export function RunsPanel({
   onSelect: (id: string) => void
 }) {
   return (
-    <div className="text-xs">
+    <div className="text-[13px]">
       {runs.length === 0 ? (
         <div className="px-4 py-3" style={{ color: C.dim }}>No runs yet</div>
       ) : (
@@ -166,7 +166,7 @@ export function AgentsToolsPanel({
   policies: PolicyRule[]
 }) {
   return (
-    <div className="text-xs">
+    <div className="text-[13px]">
       <TreeSection title={`Agents (${agents.length})`} defaultOpen>
         {agents.map((a) => (
           <div key={a.id} className="px-4 py-1">
@@ -223,7 +223,7 @@ export function NotificationsPanel({
   onRead: (id: string) => void
 }) {
   return (
-    <div className="text-xs">
+    <div className="text-[13px]">
       {notifications.length === 0 ? (
         <div className="px-4 py-3" style={{ color: C.dim }}>No notifications</div>
       ) : (
@@ -250,7 +250,7 @@ export function NotificationsPanel({
                 }}
               />
               <span className="truncate" style={{ color: C.text }}>{n.title}</span>
-              <span className="ml-auto shrink-0 text-[10px]" style={{ color: C.dim }}>
+              <span className="ml-auto shrink-0 text-[12px]" style={{ color: C.dim }}>
                 {timeAgo(n.createdAt)}
               </span>
             </div>
@@ -269,18 +269,18 @@ export function SearchResultsList({ results }: { results: SearchResult[] | null 
   return (
     <div className="mt-2 flex flex-col gap-0.5">
       {results.length === 0 && (
-        <div className="text-xs px-1" style={{ color: C.muted }}>No results</div>
+        <div className="text-[13px] px-1" style={{ color: C.muted }}>No results</div>
       )}
       {results.map((r, i) => (
         <div
           key={i}
-          className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-white/5 cursor-default"
+          className="flex items-center gap-2 px-2 py-1 rounded text-[13px] hover:bg-white/5 cursor-default"
           style={{ color: C.textSecondary }}
         >
-          <span className="text-[10px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>
+          <span className="text-[12px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>
           <span className="truncate">{r.text}</span>
           {r.detail && (
-            <span className="ml-auto shrink-0 text-[10px]" style={{ color: C.dim }}>{r.detail}</span>
+            <span className="ml-auto shrink-0 text-[12px]" style={{ color: C.dim }}>{r.detail}</span>
           )}
         </div>
       ))}
