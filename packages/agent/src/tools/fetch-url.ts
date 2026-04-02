@@ -3,9 +3,22 @@
  *
  * Fetches a URL, strips HTML tags, returns plain text.
  * This is how agents "browse the web."
+ *
+ * Security:
+ *   - DNS resolution BEFORE request — prevents DNS rebinding / TOCTOU attacks
+ *   - Blocks private/internal IPs (IPv4 + IPv6, incl. mapped addresses)
+ *   - Redirects followed manually with re-check at each hop
+ *   - Response body size-limited (1 MB)
+ *   - 15s timeout
  */
 
+import { lookup } from "node:dns/promises"
 import type { Tool } from "../types.js"
+
+/** Max response body size (1 MB). */
+const MAX_BODY = 1_048_576
+/** Max redirect hops. */
+const MAX_REDIRECTS = 5
 
 export const fetchUrlTool: Tool = {
   name: "fetch_url",
@@ -42,61 +55,162 @@ export const fetchUrlTool: Tool = {
       return `Error: Only http/https URLs are supported`
     }
 
-    // Block internal/private IPs (SSRF protection)
-    const hostname = parsed.hostname
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "[::1]" ||
-      hostname === "0.0.0.0" ||
-      hostname.startsWith("10.") ||
-      hostname.startsWith("192.168.") ||
-      hostname.startsWith("169.254.") ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-      hostname.endsWith(".local") ||
-      hostname.endsWith(".internal")
-    ) {
-      return `Error: Access to internal/private addresses is blocked`
-    }
-
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+    // Check hostname + resolve DNS BEFORE making the request
+    const hostnameErr = checkHostname(parsed.hostname)
+    if (hostnameErr) return hostnameErr
 
     try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "agent001/0.1",
-          Accept: "text/html,application/json,text/plain",
-        },
-      })
-
-      if (!res.ok) {
-        return `Error: HTTP ${res.status} ${res.statusText}`
-      }
-
-      let text = await res.text()
-
-      // Strip HTML tags for readability
-      text = text
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-
-      if (text.length > maxLength) {
-        text = text.slice(0, maxLength) + "\n... (truncated)"
-      }
-
-      return text || "(empty response)"
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        return "Error: Request timed out (15s)"
-      }
-      return `Error: ${err instanceof Error ? err.message : String(err)}`
-    } finally {
-      clearTimeout(timeout)
+      const resolved = await lookup(parsed.hostname)
+      const ipErr = checkResolvedIp(resolved.address)
+      if (ipErr) return ipErr
+    } catch {
+      return `Error: Could not resolve hostname "${parsed.hostname}"`
     }
+
+    // Follow redirects manually to re-check each hop
+    let currentUrl = url
+    let response: Response | null = null
+
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15_000)
+
+      try {
+        response = await fetch(currentUrl, {
+          signal: controller.signal,
+          redirect: "manual",
+          headers: {
+            "User-Agent": "agent001/0.1",
+            Accept: "text/html,application/json,text/plain",
+          },
+        })
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return "Error: Request timed out (15s)"
+        }
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      } finally {
+        clearTimeout(timeout)
+      }
+
+      // Check for redirect
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location")
+        if (!location) return `Error: HTTP ${response.status} redirect with no Location header`
+
+        let nextParsed: URL
+        try {
+          nextParsed = new URL(location, currentUrl)
+        } catch {
+          return `Error: Invalid redirect URL "${location}"`
+        }
+
+        if (nextParsed.protocol !== "http:" && nextParsed.protocol !== "https:") {
+          return `Error: Redirect to non-HTTP protocol blocked`
+        }
+
+        const redirHostErr = checkHostname(nextParsed.hostname)
+        if (redirHostErr) return redirHostErr
+
+        try {
+          const resolved = await lookup(nextParsed.hostname)
+          const ipErr = checkResolvedIp(resolved.address)
+          if (ipErr) return ipErr
+        } catch {
+          return `Error: Could not resolve redirect hostname "${nextParsed.hostname}"`
+        }
+
+        currentUrl = nextParsed.href
+        continue
+      }
+
+      break
+    }
+
+    if (!response) return "Error: No response received"
+    if (!response.ok) return `Error: HTTP ${response.status} ${response.statusText}`
+
+    // Read body with size limit
+    let text: string
+    try {
+      const buffer = await response.arrayBuffer()
+      if (buffer.byteLength > MAX_BODY) {
+        text = new TextDecoder().decode(buffer.slice(0, MAX_BODY))
+        text += "\n... (response truncated at 1 MB)"
+      } else {
+        text = new TextDecoder().decode(buffer)
+      }
+    } catch (err) {
+      return `Error reading response: ${err instanceof Error ? err.message : String(err)}`
+    }
+
+    // Strip HTML tags for readability
+    text = text
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    if (text.length > maxLength) {
+      text = text.slice(0, maxLength) + "\n... (truncated)"
+    }
+
+    return text || "(empty response)"
   },
+}
+
+/** Check hostname against known-bad patterns (before DNS resolution). */
+function checkHostname(hostname: string): string | null {
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0" ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    hostname.startsWith("169.254.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".localhost")
+  ) {
+    return `Error: Access to internal/private addresses is blocked`
+  }
+  return null
+}
+
+/** Check a resolved IP address against private/internal ranges. */
+function checkResolvedIp(ip: string): string | null {
+  // IPv4 private ranges
+  if (
+    ip === "127.0.0.1" ||
+    ip === "0.0.0.0" ||
+    ip.startsWith("10.") ||
+    ip.startsWith("192.168.") ||
+    ip.startsWith("169.254.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+  ) {
+    return `Error: Access to internal/private addresses is blocked (resolved to ${ip})`
+  }
+
+  // IPv6 private/loopback
+  if (
+    ip === "::1" ||
+    ip === "::" ||
+    ip.startsWith("fc") || // unique local
+    ip.startsWith("fd") || // unique local
+    ip.startsWith("fe80") // link-local
+  ) {
+    return `Error: Access to internal/private addresses is blocked (resolved to ${ip})`
+  }
+
+  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1, ::ffff:10.0.0.1)
+  const v4Mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)
+  if (v4Mapped) {
+    return checkResolvedIp(v4Mapped[1])
+  }
+
+  return null
 }

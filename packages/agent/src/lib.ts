@@ -82,6 +82,7 @@ export { fetchUrlTool } from "./tools/fetch-url.js"
 export {
     listDirectoryTool, readFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
-export { setShellCwd, shellTool } from "./tools/shell.js"
+export { setShellCwd, setShellExecutor, shellTool } from "./tools/shell.js"
+export type { ShellExecResult } from "./tools/shell.js"
 export { thinkTool } from "./tools/think.js"
 

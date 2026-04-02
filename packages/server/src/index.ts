@@ -21,6 +21,7 @@ import {
     setBasePath,
     setBrowserCheckCwd,
     setShellCwd,
+    setShellExecutor,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
@@ -38,6 +39,7 @@ import {
 import { clearTransactionalData, getDb, getLlmConfig, migrateNotifications } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { AgentOrchestrator } from "./orchestrator.js"
+import { initSandbox } from "./sandbox.js"
 import { registerAgentRoutes } from "./routes/agents.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerLlmRoutes } from "./routes/llm.js"
@@ -75,6 +77,23 @@ async function main() {
   setShellCwd(currentWorkspace)
   setBrowserCheckCwd(currentWorkspace)
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
+
+  // Initialize Docker sandbox for isolated code execution
+  const sandbox = initSandbox({
+    mode: process.env["SANDBOX_MODE"] === "host" ? "host" : "docker",
+  })
+  const dockerReady = await sandbox.isDockerAvailable()
+  if (dockerReady) {
+    setShellExecutor(async (command, cwd) => {
+      const result = await sandbox.exec(command, currentWorkspace, {
+        cwd: cwd !== currentWorkspace ? cwd.replace(currentWorkspace + "/", "") : undefined,
+      })
+      return result
+    })
+    console.log("🐳 Docker sandbox: ACTIVE (commands run in isolated containers)")
+  } else {
+    console.log("⚠️  Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
+  }
 
   // Load LLM config from DB (or use defaults) and build the client
   const llmCfg = getLlmConfig()
@@ -203,8 +222,9 @@ async function main() {
 
   // Graceful shutdown for tsx hot-reload
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
-    process.on(sig, () => {
+    process.on(sig, async () => {
       messageQueue.stop()
+      await sandbox.cleanup()
       process.exit(0)
     })
   }

@@ -93,8 +93,8 @@ export function CommandCenter() {
 
   // API-fetched data
   const [agents, setAgents] = useState<AgentDefinition[]>([])
-  const [tools, setTools] = useState<ToolInfo[]>([])
-  const [policies, setPolicies] = useState<PolicyRule[]>([])
+  const [, setTools] = useState<ToolInfo[]>([])
+  const [, setPolicies] = useState<PolicyRule[]>([])
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [llm, setLlm] = useState<LlmConfig | null>(null)
   const [health, setHealth] = useState<HealthData | null>(null)
@@ -128,7 +128,6 @@ export function CommandCenter() {
 
   // Derived data
   const activeRun = runs.find((r) => r.id === activeRunId)
-  const runningRuns = runs.filter((r) => r.status === "running")
   const queuedRuns = runs.filter((r) => r.status === "pending" || r.status === "planning")
   const completedRuns = runs.filter((r) => r.status === "completed")
   const failedRuns = runs.filter((r) => r.status === "failed")
