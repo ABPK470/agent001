@@ -5,13 +5,12 @@
  * all critical system data with full operational controls.
  *
  * Sections:
- *   1. Status bar — run state, provider, model, queue, runtime, WS
+ *   1. Status bar — run state, provider, model, queue, runtime, WS, tools, agents, errors, alerts
  *   2. Objective + operational controls (cancel, resume, submit goal)
  *   3. LIVE DAG — cascading tree of iterations → tool calls with status
- *   4. Panels row — TOOLS, GUARD, AGENTS
- *   5. Usage bar — token counts, LLM calls
- *   6. Recent alerts + live feed
- *   7. Operator prompt — submit new goals inline
+ *   4. Usage bar — token counts, LLM calls
+ *   5. Recent alerts + live feed
+ *   6. Operator prompt — submit new goals inline
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -339,13 +338,6 @@ export function CommandCenter() {
     return n
   }, [toolActivity])
 
-  const latestTool = useMemo(() => {
-    for (let i = trace.length - 1; i >= 0; i--) {
-      if (trace[i].kind === "tool-call") return (trace[i] as Extract<TraceEntry, { kind: "tool-call" }>).tool
-    }
-    return null
-  }, [trace])
-
   const currentIteration = useMemo(() => {
     for (let i = trace.length - 1; i >= 0; i--) {
       if (trace[i].kind === "iteration") return (trace[i] as Extract<TraceEntry, { kind: "iteration" }>)
@@ -389,8 +381,6 @@ export function CommandCenter() {
     return items
   }, [trace])
 
-  const denyCount = policies.filter((p) => p.effect === "deny").length
-  const approvalCount = policies.filter((p) => p.effect === "require_approval").length
   const runtimeLabel = health?.status === "ok" ? "healthy" : health?.status ?? "unknown"
   const runtimeColor = runtimeLabel === "healthy" ? C.success : C.coral
   const runStatus = activeRun?.status ?? "idle"
@@ -407,6 +397,13 @@ export function CommandCenter() {
         <StatusField label="QUEUE" value={String(queuedRuns.length)} color={queuedRuns.length > 0 ? C.peach : C.dim} />
         <StatusField label="RUNTIME" value={runtimeLabel} color={runtimeColor} />
         <StatusField label="WS" value={connected ? "connected" : "offline"} color={connected ? C.success : C.coral} />
+        <span style={{ color: C.dim }}>│</span>
+        <StatusField label="TOOLS" value={String(totalToolCalls)} color={totalToolCalls > 0 ? C.accent : C.dim} />
+        {totalToolErrors > 0 && <StatusField label="ERRORS" value={String(totalToolErrors)} color={C.coral} />}
+        <StatusField label="AGENTS" value={String(agents.length)} color={C.text} />
+        <StatusField label="DONE" value={String(completedRuns.length)} color={completedRuns.length > 0 ? C.success : C.dim} />
+        {failedRuns.length > 0 && <StatusField label="FAIL" value={String(failedRuns.length)} color={C.coral} />}
+        {unreadCount > 0 && <StatusField label="ALERTS" value={String(unreadCount)} color={C.coral} />}
       </div>
 
       {/* ── Objective + controls ───────────────────────────────── */}
@@ -546,28 +543,6 @@ export function CommandCenter() {
           </div>
         )}
 
-        {/* ── Panels row ───────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
-          <Panel title="TOOLS" badge={`${totalToolCalls} recent`}>
-            <PanelRow label="LATEST" value={latestTool ?? "idle"} color={latestTool ? C.accent : C.dim} />
-            <PanelRow label="ERRORS" value={String(totalToolErrors)} color={totalToolErrors > 0 ? C.coral : C.dim} />
-            <PanelRow label="AGENTS" value={String(agents.length)} color={C.text} />
-            <PanelRow label="RUNTIME" value={runtimeLabel} color={runtimeColor} />
-          </Panel>
-          <Panel title="GUARD" badge={`${policies.length} rules`}>
-            <PanelRow label="DENY" value={String(denyCount)} color={denyCount > 0 ? C.coral : C.dim} />
-            <PanelRow label="APPROVE" value={String(approvalCount)} color={approvalCount > 0 ? C.peach : C.dim} />
-            <PanelRow label="ALERTS" value={String(unreadCount)} color={unreadCount > 0 ? C.coral : C.dim} />
-            <PanelRow label="TOOLS" value={String(tools.length)} color={C.text} />
-          </Panel>
-          <Panel title="AGENTS" badge={`${runningRuns.length} active`}>
-            <PanelRow label="ACTIVE" value={String(runningRuns.length)} color={runningRuns.length > 0 ? C.success : C.dim} />
-            <PanelRow label="DONE" value={String(completedRuns.length)} color={completedRuns.length > 0 ? C.success : C.dim} />
-            <PanelRow label="FAIL" value={String(failedRuns.length)} color={failedRuns.length > 0 ? C.coral : C.dim} />
-            <PanelRow label="QUEUE" value={String(queuedRuns.length)} color={queuedRuns.length > 0 ? C.peach : C.dim} />
-          </Panel>
-        </div>
-
         {/* ── Usage bar ────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1" style={{ borderBottom: `1px solid ${C.border}` }}>
           <StatusField label="CALLS" value={String(liveUsage.llmCalls)} color={liveUsage.llmCalls > 0 ? C.peach : C.dim} />
@@ -656,28 +631,5 @@ function StatusField({ label, value, color }: { label: string; value: string; co
       <span style={{ color: C.dim }}>{label}:</span>{" "}
       <span style={{ color }}>{value}</span>
     </span>
-  )
-}
-
-function Panel({ title, badge, children }: { title: string; badge: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg p-2" style={{ border: `1px solid ${C.border}`, background: C.surface }}>
-      <div className="flex items-center justify-between mb-1">
-        <span style={{ color: C.accent }} className="font-semibold">{title}</span>
-        <span style={{ color: C.dim }} className="text-[10px]">{badge}</span>
-      </div>
-      <div className="flex flex-col gap-0.5">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function PanelRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span style={{ color: C.dim }}>{label}:</span>
-      <span style={{ color }} className="font-medium">{value}</span>
-    </div>
   )
 }

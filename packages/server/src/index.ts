@@ -19,6 +19,7 @@ config({ path: resolve(import.meta.dirname, "../../../.env") })
 
 import {
     setBasePath,
+    setBrowserCheckCwd,
     setShellCwd,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
@@ -72,6 +73,7 @@ async function main() {
   let currentWorkspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
   setBasePath(currentWorkspace)
   setShellCwd(currentWorkspace)
+  setBrowserCheckCwd(currentWorkspace)
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
 
   // Load LLM config from DB (or use defaults) and build the client
@@ -166,6 +168,7 @@ async function main() {
     currentWorkspace = resolved
     setBasePath(resolved)
     setShellCwd(resolved)
+    setBrowserCheckCwd(resolved)
     orchestrator.setWorkspace(resolved)
     console.log(`📂 Workspace changed to: ${resolved}`)
 

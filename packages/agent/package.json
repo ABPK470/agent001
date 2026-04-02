@@ -16,7 +16,9 @@
         "test": "vitest run",
         "lint": "tsc --noEmit"
     },
-    "dependencies": {},
+    "dependencies": {
+        "puppeteer": "^24.40.0"
+    },
     "devDependencies": {
         "@types/node": "^22.16.4",
         "tsx": "^4.7.0",

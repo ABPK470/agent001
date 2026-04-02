@@ -9,9 +9,14 @@
  * Both tools create ephemeral child agents that:
  *   - Have their own iteration loop and tool set
  *   - Share the parent's abort signal (cancel propagates down)
- *   - Can delegate further (up to configurable depth limit)
+ *   - Do NOT delegate further — only the root orchestrator delegates (flat hierarchy)
  *   - Get optional inter-agent messaging tools if a bus is provided
  *   - Are governed by the same policy layer
+ *
+ * Verification pattern:
+ *   The parent agent is instructed to verify delegation results and can
+ *   re-delegate with feedback if the output doesn't meet expectations.
+ *   Max retries are capped per task to prevent infinite rework loops.
  *
  * Why parallel matters:
  *   In multi-agent orchestration, the parent often decomposes work into
@@ -22,9 +27,6 @@
 
 import { Agent } from "../agent.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
-
-/** Default maximum nesting depth to prevent infinite recursion. */
-const DEFAULT_MAX_DEPTH = 3
 
 /** Default iteration budget for a child agent. */
 const DEFAULT_CHILD_ITERATIONS = 15
@@ -64,11 +66,12 @@ export interface DelegateContext {
  * Create the delegation tools bound to the current run context.
  *
  * Returns an array with up to 2 tools: [delegate, delegate_parallel].
- * Returns empty array if depth >= maxDepth.
+ * Returns empty array if depth > 0 (only root agent can delegate — flat hierarchy).
  */
 export function createDelegateTools(ctx: DelegateContext): Tool[] {
-  const maxDepth = ctx.maxDepth ?? DEFAULT_MAX_DEPTH
-  if (ctx.depth >= maxDepth) return []
+  // Only the root orchestrator (depth 0) gets delegation tools.
+  // Children are workers — they execute, they don't re-delegate.
+  if (ctx.depth > 0) return []
 
   const toolNames = ctx.availableTools.map(t => t.name).join(", ")
 
@@ -76,9 +79,11 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
     name: "delegate",
     description:
       `Delegate a sub-task to a focused child agent. The child runs independently ` +
-      `with its own iteration loop and returns a final answer. Use this for ` +
-      `self-contained sub-tasks that benefit from focused attention. ` +
-      `Current delegation depth: ${ctx.depth}/${maxDepth}.`,
+      `with its own iteration loop and returns a final answer. ` +
+      `The child is a WORKER — it cannot delegate further. ` +
+      `IMPORTANT: After receiving the result, ALWAYS verify the output meets your ` +
+      `expectations (check files, run tests, review output). If the result is ` +
+      `incomplete or wrong, re-delegate with corrective feedback in the goal.`,
 
     parameters: {
       type: "object",
@@ -109,13 +114,17 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
     },
 
     async execute(args) {
-      return spawnChild(ctx, {
-        goal: String(args.goal),
+      const goal = String(args.goal)
+      const spec: ChildSpec = {
+        goal,
         agentId: args.agentId ? String(args.agentId) : undefined,
         instructions: args.instructions ? String(args.instructions) : undefined,
         tools: Array.isArray(args.tools) ? args.tools.map(String) : undefined,
         maxIterations: args.maxIterations ? Number(args.maxIterations) : undefined,
-      })
+      }
+
+      const result = await spawnChild(ctx, spec)
+      return result
     },
   }
 
@@ -123,10 +132,12 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
     name: "delegate_parallel",
     description:
       `Delegate MULTIPLE sub-tasks to child agents that run in PARALLEL. ` +
-      `Each child runs independently and concurrently. Results are collected ` +
-      `and returned together. Use this when you have 2+ independent sub-tasks. ` +
-      `One child failing does not stop the others. ` +
-      `Current delegation depth: ${ctx.depth}/${maxDepth}.`,
+      `Each child is a WORKER — it executes independently and CANNOT delegate further. ` +
+      `Results are collected and returned together. Use this when you have 2+ ` +
+      `independent sub-tasks. One child failing does not stop the others. ` +
+      `IMPORTANT: After receiving all results, VERIFY each output meets your ` +
+      `expectations. If any result is incomplete or wrong, re-delegate that ` +
+      `specific task with corrective feedback (use delegate for targeted rework).`,
 
     parameters: {
       type: "object",
@@ -251,13 +262,8 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
     childTools = ctx.availableTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
   }
 
-  // Create delegate tools for the child (recursive, depth + 1)
-  const childCtx = { ...ctx, depth: ctx.depth + 1 }
-  const childDelegateTools = createDelegateTools(childCtx)
-  childTools = [
-    ...childTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel"),
-    ...childDelegateTools,
-  ]
+  // Children are workers — no delegation tools. Just their execution tools.
+  childTools = childTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
 
   // Inject extra tools (e.g., bus messaging tools)
   if (ctx.extraChildTools) {
