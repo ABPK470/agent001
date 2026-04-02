@@ -388,7 +388,7 @@ export function TimelinePanel({
 
               {isOpen && (
                 <div className="mt-1.5 space-y-1">
-                  {Object.keys(step.input).length > 0 && (
+                  {step.input && Object.keys(step.input).length > 0 && (
                     <div>
                       <span className="text-[13px] uppercase" style={{ color: C.dim }}>Input</span>
                       <pre
@@ -399,7 +399,7 @@ export function TimelinePanel({
                       </pre>
                     </div>
                   )}
-                  {Object.keys(step.output).length > 0 && (
+                  {step.output && Object.keys(step.output).length > 0 && (
                     <div>
                       <span className="text-[13px] uppercase" style={{ color: C.dim }}>Output</span>
                       <pre

@@ -810,6 +810,57 @@ Effect tables (effects.ts — 2):
 
 **Key functions**: `saveRun()`, `getRun()`, `listRuns()`, `saveCheckpoint()`, `getCheckpoint()`, `saveNotification()`, `listNotifications()`, `findStaleRuns()`, `markRunCrashed()`, etc.
 
+##### Seed Versioning — Safe Auto-Updates for Default Agent Config
+
+The database has a lightweight **seed versioning** system that evolves the default agent's prompt and tool set across code releases without clobbering user customizations. It's separate from schema migrations (table creation, `ALTER TABLE`) which run unconditionally.
+
+**How it works:**
+
+```
+Code:  const SEED_VERSION = 3          ← bumped when defaults change
+DB:    schema_meta.seed_version = "2"   ← last-applied version
+
+On startup: if DB version < code version → update needed
+```
+
+1. **Version check** — `_migrate()` reads `seed_version` from `schema_meta`. If it's lower than the `SEED_VERSION` constant in code, an update is pending.
+
+2. **Customization guard** — Before overwriting, `isKnownOldSeedPrompt()` fingerprints the existing prompt against known previous defaults. If the prompt matches a known old version (e.g. contains "Break it down into steps" for v0, or "You are an efficient AI agent" for v1/v2), it's safe to update. If the user has written a custom prompt, the update is **skipped** to preserve their work.
+
+3. **Apply & stamp** — If safe, both `system_prompt` and `tools` are updated on the `'default'` agent. The new version number is written to `schema_meta` so the update only runs once.
+
+```
+Startup
+  │
+  ▼
+DB seed_version < SEED_VERSION?
+  │ no → skip
+  │ yes ↓
+  ▼
+Prompt matches known old default?
+  │ no → user customized, skip update
+  │ yes ↓
+  ▼
+UPDATE agent_definitions
+  SET system_prompt = DEFAULT_AGENT_PROMPT,
+      tools = DEFAULT_TOOLS
+  WHERE id = 'default'
+  │
+  ▼
+SET schema_meta.seed_version = SEED_VERSION
+```
+
+**Version history:**
+
+| SEED_VERSION | Change |
+|:---:|--------|
+| 0 | Original verbose prompt ("Break it down into steps") |
+| 1 | Concise efficient prompt ("You are an efficient AI agent...") |
+| 2 | Minor prompt refinements |
+| 3 | Added `browser_check` to default tools, added web browsing + internet access instructions to prompt |
+
+**When to bump:** Change `DEFAULT_AGENT_PROMPT` or `DEFAULT_TOOLS` → bump `SEED_VERSION` → add the old prompt's fingerprint to `isKnownOldSeedPrompt()` if your change alters the fingerprint text.
+
 #### `src/tools.ts` — Tool Registry
 
 Maps tool names to agent tool implementations. Resolves which tools an agent run should have based on agent definitions (custom tool sets per agent) or defaults (all tools).
