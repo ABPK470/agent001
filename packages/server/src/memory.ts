@@ -661,7 +661,8 @@ export function buildMemoryContext(
   if (episodicResults.length > 0) {
     blocks.push("## Recent relevant runs")
     for (const r of episodicResults) {
-      blocks.push(`- ${r.memory.content.split("\n").slice(0, 3).join(" | ")}`)
+      // Include all lines (Goal, Status, Tools, Answer) — don't truncate the answer
+      blocks.push(`- ${r.memory.content.split("\n").join(" | ")}`)
     }
   }
 

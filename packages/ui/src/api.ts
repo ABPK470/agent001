@@ -19,10 +19,11 @@ export const api = {
   // Runs
   listRuns: () => json<Run[]>("/api/runs"),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string, agentId?: string) => json<{ runId: string }>("/api/runs", {
-    method: "POST",
-    body: JSON.stringify(agentId ? { goal, agentId } : { goal }),
-  }),
+  startRun: (goal: string, agentId?: string, history?: Array<{ goal: string; answer: string }>) =>
+    json<{ runId: string }>("/api/runs", {
+      method: "POST",
+      body: JSON.stringify({ goal, ...(agentId ? { agentId } : {}), ...(history?.length ? { history } : {}) }),
+    }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {
     method: "POST",
   }),

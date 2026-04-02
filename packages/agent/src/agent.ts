@@ -142,6 +142,11 @@ export class Agent {
     }
   }
 
+  /** The system prompt used for this agent instance. */
+  get systemPrompt(): string {
+    return this.config.systemPrompt
+  }
+
   /**
    * Run the agent with a goal. Returns the final answer.
    *

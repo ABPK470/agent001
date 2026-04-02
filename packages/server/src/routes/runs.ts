@@ -78,12 +78,17 @@ export function registerRunRoutes(
   })
 
   // Start a new run (optionally scoped to an agent definition)
-  app.post<{ Body: { goal: string; agentId?: string } }>("/api/runs", async (req, reply) => {
-    const { goal, agentId } = req.body
+  app.post<{ Body: { goal: string; agentId?: string; history?: Array<{ goal: string; answer: string }> } }>("/api/runs", async (req, reply) => {
+    const { goal, agentId, history } = req.body
     if (!goal || typeof goal !== "string") {
       reply.code(400)
       return { error: "goal is required" }
     }
+
+    // Validate history if provided
+    const safeHistory = Array.isArray(history)
+      ? history.filter((h) => typeof h.goal === "string" && typeof h.answer === "string").slice(0, 10)
+      : undefined
 
     // If agentId provided, resolve that agent's config
     if (agentId) {
@@ -98,13 +103,14 @@ export function registerRunRoutes(
         agentId: agent.id,
         tools,
         systemPrompt: agent.system_prompt,
+        history: safeHistory,
       })
       reply.code(201)
       return { runId, agentId: agent.id }
     }
 
     // No agentId — use all tools + default prompt
-    const runId = orchestrator.startRun(goal)
+    const runId = orchestrator.startRun(goal, safeHistory?.length ? { history: safeHistory } : undefined)
     reply.code(201)
     return { runId }
   })

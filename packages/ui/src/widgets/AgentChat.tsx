@@ -84,7 +84,13 @@ export function AgentChat() {
     setInput("")
     try {
       const agentId = selectedAgent?.id
-      const { runId } = await api.startRun(goal, agentId)
+      // Build conversation history from recent completed runs (same agent)
+      const history = runs
+        .filter((r) => r.status === "completed" && r.answer && (!agentId || r.agentId === agentId))
+        .slice(0, 10)
+        .reverse()
+        .map((r) => ({ goal: r.goal, answer: r.answer! }))
+      const { runId } = await api.startRun(goal, agentId, history)
       setActiveRun(runId)
     } catch (err) {
       console.error("Failed to start run:", err)

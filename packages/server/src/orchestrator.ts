@@ -11,27 +11,27 @@
  */
 
 import {
-  Agent,
-  completeRun,
-  createDelegateTools,
-  createEngineServices,
-  createRun,
-  failRun,
-  governTool,
-  PolicyEffect,
-  runCompleted,
-  runFailed,
-  runStarted,
-  startPlanning,
-  startRunning,
-  type DelegateContext,
-  type DomainEvent,
-  type EngineServices,
-  type LLMClient,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
+    Agent,
+    completeRun,
+    createDelegateTools,
+    createEngineServices,
+    createRun,
+    failRun,
+    governTool,
+    PolicyEffect,
+    runCompleted,
+    runFailed,
+    runStarted,
+    startPlanning,
+    startRunning,
+    type DelegateContext,
+    type DomainEvent,
+    type EngineServices,
+    type LLMClient,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { arch, homedir, platform } from "node:os"
@@ -62,6 +62,8 @@ export interface AgentRunConfig {
   agentId?: string
   tools?: Tool[]
   systemPrompt?: string
+  /** Previous conversation turns (goal+answer pairs) for multi-turn context */
+  history?: Array<{ goal: string; answer: string }>
 }
 
 export interface OrchestratorConfig {
@@ -180,7 +182,7 @@ export class AgentOrchestrator {
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     this.saveTrace(runId, { kind: "goal", text: goal })
 
-    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus).catch((err) => {
+    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus, undefined, "normal", config?.history).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
     })
 
@@ -398,6 +400,7 @@ export class AgentOrchestrator {
     bus: AgentBus,
     resume?: { messages: Message[], iteration: number, parentRunId: string },
     priority: RunPriority = "normal",
+    history?: Array<{ goal: string; answer: string }>,
   ): Promise<void> {
     // Acquire a queue slot (waits if at capacity)
     let releaseSlot: () => void
@@ -617,10 +620,23 @@ export class AgentOrchestrator {
     })
 
     try {
-      const answer = await agent.run(goal, resume ? {
-        messages: resume.messages,
-        iteration: resume.iteration,
-      } : undefined)
+      // Build initial context with conversation history if available
+      let runArg: { messages: Message[]; iteration: number } | undefined
+      if (resume) {
+        runArg = { messages: resume.messages, iteration: resume.iteration }
+      } else if (history?.length) {
+        // Inject previous conversation turns so the agent has multi-turn context
+        const msgs: Message[] = [
+          { role: "system", content: agent.systemPrompt },
+        ]
+        for (const turn of history) {
+          msgs.push({ role: "user", content: turn.goal })
+          msgs.push({ role: "assistant", content: turn.answer })
+        }
+        msgs.push({ role: "user", content: goal })
+        runArg = { messages: msgs, iteration: 0 }
+      }
+      const answer = await agent.run(goal, runArg)
 
       // Complete the run
       completeRun(run)
