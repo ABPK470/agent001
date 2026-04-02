@@ -64,7 +64,7 @@ export interface LLMResponse {
  * The agent doesn't care which model is behind this interface.
  */
 export interface LLMClient {
-  chat(messages: Message[], tools: Tool[]): Promise<LLMResponse>
+  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse>
 }
 
 // ── Agent config ─────────────────────────────────────────────────

@@ -415,6 +415,16 @@ export const useStore = create<AppState>()(
             set({ pendingInput: null })
             break
 
+          case "run.cancelled":
+            store.addTrace({ kind: "error", text: "Run cancelled by user" })
+            store.upsertRun({
+              id: data["runId"] as string,
+              status: "cancelled",
+              completedAt: timestamp,
+            })
+            set({ pendingInput: null })
+            break
+
           case "step.started": {
             const toolName = (data["action"] as string) ?? "unknown"
             const input = (data["input"] as Record<string, unknown>) ?? {}

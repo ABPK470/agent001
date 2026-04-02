@@ -44,7 +44,7 @@ import {
     type SidebarSection,
     type UsageData
 } from "./ioe/constants"
-import { DagPanel, DetailsPanel, EditorTabs, TimelinePanel, TracePanel } from "./ioe/editors"
+import { DagPanel, DetailsPanel, EditorTabs, MapPanel, TimelinePanel, TracePanel } from "./ioe/editors"
 import { ActionBtn, useResizable } from "./ioe/primitives"
 import {
     AgentsToolsPanel,
@@ -277,6 +277,8 @@ export function OperatorEnvironment() {
       )
     if (tab === "details")
       return <DetailsPanel run={activeRun} toolStats={toolStats} liveUsage={liveUsage} usage={usage} />
+    if (tab === "map")
+      return <MapPanel trace={trace} run={activeRun} agents={agents} />
     return null
   }
 
@@ -516,7 +518,7 @@ export function OperatorEnvironment() {
                     className="flex items-center shrink-0 select-none"
                     style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}
                   >
-                    {(["trace", "dag", "timeline", "details"] as EditorTab[]).map((tab) => (
+                    {(["trace", "dag", "timeline", "details", "map"] as EditorTab[]).map((tab) => (
                       <button
                         key={tab}
                         className="px-2.5 py-1 text-[13px] transition-colors capitalize cursor-pointer"

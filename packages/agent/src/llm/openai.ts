@@ -44,7 +44,7 @@ export class OpenAIClient implements LLMClient {
     this.baseUrl = opts.baseUrl ?? "https://api.openai.com"
   }
 
-  async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
+  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
@@ -65,6 +65,7 @@ export class OpenAIClient implements LLMClient {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
+        signal: opts?.signal,
       })
 
       if (res.status !== 429 || attempt === maxRetries) break

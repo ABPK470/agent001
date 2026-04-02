@@ -8,7 +8,7 @@ import type {
     Run,
     ToolInfo,
 } from "../../types"
-import { fmtTokens, timeAgo, truncate } from "../../util"
+import { fmtTokens, timeAgo } from "../../util"
 import {
     C,
     dur,
@@ -19,7 +19,7 @@ import {
     type SearchResult,
     type UsageData,
 } from "./constants"
-import { TreeItem, TreeSection } from "./primitives"
+import { Tip, TreeItem, TreeSection } from "./primitives"
 
 // ── Explorer ─────────────────────────────────────────────────────
 
@@ -46,14 +46,14 @@ export function ExplorerPanel({
         {run ? (
           <>
             <TreeItem label="Status" value={run.status} valueColor={statusDot(run.status)} />
-            <TreeItem label="Goal" value={truncate(run.goal, 60)} />
+            <TreeItem label="Goal" value={run.goal} />
             <TreeItem label="Steps" value={String(run.stepCount)} />
             <TreeItem label="Tokens" value={fmtTokens(run.totalTokens)} />
             <TreeItem label="LLM Calls" value={String(run.llmCalls)} />
             <TreeItem label="Started" value={timeAgo(run.createdAt)} />
             {run.completedAt && <TreeItem label="Duration" value={dur(run.createdAt, run.completedAt)} />}
-            {run.answer && <TreeItem label="Answer" value={truncate(run.answer, 80)} />}
-            {run.error && <TreeItem label="Error" value={truncate(run.error, 80)} valueColor={C.error} />}
+            {run.answer && <TreeItem label="Answer" value={run.answer} />}
+            {run.error && <TreeItem label="Error" value={run.error} valueColor={C.error} />}
           </>
         ) : (
           <div className="px-4 py-1" style={{ color: C.dim }}>No active run</div>
@@ -91,7 +91,7 @@ export function ExplorerPanel({
 
       <TreeSection title={`Tools (${tools.length})`} defaultOpen>
         {tools.map((t) => (
-          <TreeItem key={t.name} label={t.name} value={truncate(t.description, 40)} />
+          <TreeItem key={t.name} label={t.name} value={t.description} />
         ))}
       </TreeSection>
 
@@ -139,7 +139,9 @@ export function RunsPanel({
               style={{ background: statusDot(r.status) }}
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate" style={{ color: C.text }}>{truncate(r.goal, 50)}</div>
+              <Tip text={r.goal}>
+                <div className="truncate" style={{ color: C.text }}>{r.goal}</div>
+              </Tip>
               <div className="flex items-center gap-2 mt-0.5" style={{ color: C.dim }}>
                 <span>{r.status}</span>
                 <span>{timeAgo(r.createdAt)}</span>
@@ -169,19 +171,25 @@ export function AgentsToolsPanel({
     <div className="text-[13px]">
       <TreeSection title={`Agents (${agents.length})`} defaultOpen>
         {agents.map((a) => (
-          <div key={a.id} className="px-4 py-1">
-            <div style={{ color: C.text }}>{a.name}</div>
-            <div style={{ color: C.dim }}>{truncate(a.description, 60)}</div>
-            <div style={{ color: C.muted }}>tools: {a.tools.join(", ")}</div>
+          <div key={a.id} className="px-4 py-1 min-w-0">
+            <div className="truncate" style={{ color: C.text }}>{a.name}</div>
+            <Tip text={a.description}>
+              <div className="truncate" style={{ color: C.dim }}>{a.description}</div>
+            </Tip>
+            <Tip text={`tools: ${a.tools.join(", ")}`}>
+              <div className="truncate" style={{ color: C.muted }}>tools: {a.tools.join(", ")}</div>
+            </Tip>
           </div>
         ))}
       </TreeSection>
 
       <TreeSection title={`Tools (${tools.length})`} defaultOpen>
         {tools.map((t) => (
-          <div key={t.name} className="px-4 py-1">
-            <div style={{ color: C.accent }}>{t.name}</div>
-            <div style={{ color: C.dim }}>{truncate(t.description, 80)}</div>
+          <div key={t.name} className="px-4 py-1 min-w-0">
+            <div className="truncate" style={{ color: C.accent }}>{t.name}</div>
+            <Tip text={t.description}>
+              <div className="truncate" style={{ color: C.dim }}>{t.description}</div>
+            </Tip>
           </div>
         ))}
       </TreeSection>
@@ -249,12 +257,16 @@ export function NotificationsPanel({
                         : C.accent,
                 }}
               />
-              <span className="truncate" style={{ color: C.text }}>{n.title}</span>
+              <Tip text={n.title}>
+                <span className="truncate" style={{ color: C.text }}>{n.title}</span>
+              </Tip>
               <span className="ml-auto shrink-0 text-[13px]" style={{ color: C.dim }}>
                 {timeAgo(n.createdAt)}
               </span>
             </div>
-            <div className="pl-3.5 truncate mt-0.5" style={{ color: C.muted }}>{n.message}</div>
+            <Tip text={n.message}>
+              <div className="pl-3.5 truncate mt-0.5" style={{ color: C.muted }}>{n.message}</div>
+            </Tip>
           </div>
         ))
       )}
@@ -278,7 +290,9 @@ export function SearchResultsList({ results }: { results: SearchResult[] | null 
           style={{ color: C.textSecondary }}
         >
           <span className="text-[13px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>
-          <span className="truncate">{r.text}</span>
+          <Tip text={r.text}>
+            <span className="truncate">{r.text}</span>
+          </Tip>
           {r.detail && (
             <span className="ml-auto shrink-0 text-[13px]" style={{ color: C.dim }}>{r.detail}</span>
           )}

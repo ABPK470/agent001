@@ -3,7 +3,8 @@
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { useCallback, useRef, useState } from "react"
+import { cloneElement, useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { C } from "./constants"
 
 // ── useResizable — drag-to-resize hook ───────────────────────────
@@ -45,6 +46,76 @@ export function useResizable(
   return { size, onMouseDown, setSize }
 }
 
+// ── Tip — inline hover reveal for truncated text (VS Code style) ─
+
+export function Tip({ text, children }: { text: string; children: React.ReactElement }) {
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const show = useCallback((e: React.MouseEvent) => {
+    const el = e.currentTarget as HTMLElement
+    // Only show if text is actually truncated
+    if (el.scrollWidth <= el.clientWidth + 1) return
+    clearTimeout(timerRef.current)
+    const r = el.getBoundingClientRect()
+    timerRef.current = setTimeout(() => setRect(r), 150)
+  }, [])
+
+  const hide = useCallback(() => {
+    clearTimeout(timerRef.current)
+    setRect(null)
+  }, [])
+
+  // Dismiss on scroll anywhere
+  useEffect(() => {
+    if (!rect) return
+    const dismiss = () => setRect(null)
+    window.addEventListener("scroll", dismiss, true)
+    return () => window.removeEventListener("scroll", dismiss, true)
+  }, [rect])
+
+  // Clone child to inject event handlers directly onto the truncated element
+  const child = cloneElement(children, {
+    onMouseEnter: show,
+    onMouseLeave: hide,
+  } as React.HTMLAttributes<HTMLElement>)
+
+  return (
+    <>
+      {child}
+      {rect && createPortal(
+        <div
+          onMouseLeave={hide}
+          style={{
+            position: "fixed",
+            // Align to the same row — same Y, starts at the text's left edge
+            left: rect.left,
+            top: rect.top,
+            maxWidth: Math.max(360, window.innerWidth - rect.left - 12),
+            minHeight: rect.height,
+            display: "flex",
+            alignItems: "center",
+            padding: "1px 10px 1px 0",
+            borderRadius: 3,
+            background: C.elevated,
+            border: `1px solid ${C.borderSolid}`,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.36)",
+            color: C.text,
+            fontSize: 13,
+            lineHeight: "1.4",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            zIndex: 9999,
+          }}
+        >
+          {text}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 // ── TreeSection — collapsible section header ─────────────────────
 
 export function TreeSection({
@@ -84,11 +155,16 @@ export function TreeItem({
   valueColor?: string
 }) {
   return (
-    <div className="flex items-baseline gap-2 px-4 py-0.5 text-[13px]">
-      <span style={{ color: C.muted }}>{label}</span>
-      <span className="truncate" style={{ color: valueColor ?? C.textSecondary }}>
-        {value}
-      </span>
+    <div className="flex items-baseline gap-2 px-4 py-0.5 text-[13px] min-w-0">
+      <span className="shrink-0" style={{ color: C.muted }}>{label}</span>
+      <Tip text={value}>
+        <span
+          className="truncate min-w-0"
+          style={{ color: valueColor ?? C.textSecondary }}
+        >
+          {value}
+        </span>
+      </Tip>
     </div>
   )
 }

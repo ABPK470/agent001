@@ -34,7 +34,7 @@ export const C = {
 // ── Layout types ─────────────────────────────────────────────────
 
 export type SidebarSection = "explorer" | "runs" | "agents" | "notifications"
-export type EditorTab = "trace" | "dag" | "timeline" | "details"
+export type EditorTab = "trace" | "dag" | "timeline" | "details" | "map"
 export type BottomTab = "output" | "audit" | "feed" | "problems"
 export type PanelSide = "left" | "right"
 

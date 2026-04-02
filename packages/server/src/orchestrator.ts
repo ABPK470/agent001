@@ -194,8 +194,8 @@ export class AgentOrchestrator {
     const active = this.activeRuns.get(runId)
     if (!active) {
       // Might still be in the queue
-      this.queue.remove(runId)
-      return false
+      const removed = this.queue.remove(runId)
+      return removed
     }
     active.controller.abort()
     broadcast({ type: "run.cancelled", data: { runId } })

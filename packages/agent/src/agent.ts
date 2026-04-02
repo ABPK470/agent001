@@ -186,7 +186,7 @@ export class Agent {
       const chatMessages = truncateMessages(messages)
 
       // Ask the LLM what to do next
-      const response = await this.llm.chat(chatMessages, this.toolList)
+      const response = await this.llm.chat(chatMessages, this.toolList, { signal: this.config.signal })
       this.llmCalls++
 
       // Accumulate token usage
@@ -218,6 +218,9 @@ export class Agent {
 
       // Execute each tool the LLM requested
       for (const call of response.toolCalls) {
+        if (this.config.signal?.aborted) {
+          return "Agent was cancelled."
+        }
         if (this.config.verbose) log.logToolCall(call.name, call.arguments)
 
         const tool = this.tools.get(call.name)

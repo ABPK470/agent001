@@ -20,7 +20,7 @@ export class AnthropicClient implements LLMClient {
     this.model = opts.model ?? "claude-sonnet-4-20250514"
   }
 
-  async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
+  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse> {
     // Anthropic wants system prompt as a separate param
     let systemPrompt: string | undefined
     const apiMessages: AnthropicMessage[] = []
@@ -83,6 +83,7 @@ export class AnthropicClient implements LLMClient {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
+      signal: opts?.signal,
     })
 
     if (!res.ok) {
