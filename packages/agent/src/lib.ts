@@ -75,6 +75,7 @@ export { AnthropicClient } from "./llm/anthropic.js"
 export { OpenAIClient } from "./llm/openai.js"
 
 // Built-in tools
+export { browseWebTool, closeAllBrowserSessions } from "./tools/browse-web.js"
 export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
 export type { BrowserCheckResult } from "./tools/browser-check.js"
 export { createDelegateTool, createDelegateTools } from "./tools/delegate.js"

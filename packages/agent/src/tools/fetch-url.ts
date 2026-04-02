@@ -266,7 +266,7 @@ async function fetchWithBrowser(url: string, maxLength: number): Promise<string 
     // Wait a short time for JS-rendered content
     await new Promise((r) => setTimeout(r, 2000))
 
-    let text = await page.evaluate(() => document.body?.innerText ?? "")
+    let text = String(await page.evaluate('document.body?.innerText ?? ""'))
     text = text.replace(/\s+/g, " ").trim()
 
     if (text.length > maxLength) {
