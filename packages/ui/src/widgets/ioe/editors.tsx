@@ -41,13 +41,13 @@ export function EditorTabs({
 
   return (
     <div
-      className="flex items-center shrink-0"
+      className="flex items-center shrink-0 select-none"
       style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}
     >
       {tabs.map((tab) => (
         <button
           key={tab.id}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] transition-colors cursor-pointer"
           style={{
             color: current === tab.id ? C.text : C.muted,
             background: current === tab.id ? C.base : "transparent",

@@ -270,7 +270,7 @@ export function OperatorEnvironment() {
 
   return (
     <div
-      className="flex flex-col h-full overflow-hidden select-none"
+      className="flex flex-col h-full overflow-hidden"
       style={{ background: C.base, color: C.text, fontFamily: "var(--font-sans)", fontSize: 13 }}
     >
       {/* ── Search Bar (top) ─────────────────────────────── */}
@@ -309,7 +309,7 @@ export function OperatorEnvironment() {
       <div className="flex flex-1 min-h-0">
         {/* ── Activity Bar ──────────────────────────────────── */}
         <div
-          className="flex flex-col items-center py-1 shrink-0"
+          className="flex flex-col items-center py-1 shrink-0 select-none"
           style={{ width: 48, background: C.surface, borderRight: `1px solid ${C.borderSolid}` }}
         >
           {activityItems.map((item) => {
@@ -379,7 +379,7 @@ export function OperatorEnvironment() {
             style={{ width: sidebar.size, borderRight: `1px solid ${C.borderSolid}`, background: C.surface }}
           >
             <div
-              className="flex items-center justify-between px-3 py-1.5 text-[13px] uppercase tracking-wider shrink-0 select-none"
+              className="flex items-center justify-between px-3 py-1.5 text-[13px] uppercase tracking-wider shrink-0 select-none cursor-default"
               style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}
             >
               <span>{sidebarSection}</span>
@@ -404,13 +404,13 @@ export function OperatorEnvironment() {
                 />
                 <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                   <div
-                    className="flex items-center gap-0.5 px-2 py-1 shrink-0"
+                    className="flex items-center gap-0.5 px-2 py-1 shrink-0 select-none"
                     style={{ borderTop: `1px solid ${C.border}` }}
                   >
                     {(["explorer", "runs", "agents", "notifications"] as SidebarSection[]).map((s) => (
                       <button
                         key={s}
-                        className="px-1.5 py-0.5 text-[13px] rounded capitalize"
+                        className="px-1.5 py-0.5 text-[13px] rounded capitalize cursor-pointer"
                         style={{
                           color: sidebarBottomSection === s ? C.text : C.dim,
                           background: sidebarBottomSection === s ? C.elevated : "transparent",
@@ -501,13 +501,13 @@ export function OperatorEnvironment() {
                 <div className="w-px shrink-0" style={{ background: C.borderSolid }} />
                 <div className="flex flex-col min-w-0 min-h-0" style={{ width: "50%" }}>
                   <div
-                    className="flex items-center shrink-0"
+                    className="flex items-center shrink-0 select-none"
                     style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}
                   >
                     {(["trace", "dag", "timeline", "details"] as EditorTab[]).map((tab) => (
                       <button
                         key={tab}
-                        className="px-2.5 py-1 text-[13px] transition-colors capitalize"
+                        className="px-2.5 py-1 text-[13px] transition-colors capitalize cursor-pointer"
                         style={{
                           color: editorRightTab === tab ? C.text : C.dim,
                           borderBottom: editorRightTab === tab ? `1px solid ${C.cyan}` : "1px solid transparent",
@@ -540,11 +540,11 @@ export function OperatorEnvironment() {
               className="shrink-0 flex flex-col"
               style={{ height: bottom.size, borderTop: `1px solid ${C.borderSolid}` }}
             >
-              <div className="flex items-center shrink-0" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <div className="flex items-center shrink-0 select-none" style={{ borderBottom: `1px solid ${C.border}` }}>
                 {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
                   <button
                     key={tab}
-                    className="px-3 py-1 text-[13px] uppercase tracking-wide transition-colors"
+                    className="px-3 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"
                     style={{
                       color: bottomTab === tab ? C.text : C.muted,
                       borderBottom: bottomTab === tab ? `1px solid ${C.accent}` : "1px solid transparent",
@@ -568,7 +568,7 @@ export function OperatorEnvironment() {
                     {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
                       <button
                         key={`r-${tab}`}
-                        className="px-2 py-1 text-[13px] uppercase tracking-wide transition-colors"
+                        className="px-2 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"
                         style={{
                           color: bottomRightTab === tab ? C.text : C.dim,
                           borderBottom: bottomRightTab === tab ? `1px solid ${C.cyan}` : "1px solid transparent",

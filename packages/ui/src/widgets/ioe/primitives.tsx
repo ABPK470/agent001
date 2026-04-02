@@ -60,7 +60,7 @@ export function TreeSection({
   return (
     <div>
       <button
-        className="w-full flex items-center gap-1 px-2 py-1 text-[13px] uppercase tracking-wide hover:bg-white/[0.03] transition-colors font-semibold"
+        className="w-full flex items-center gap-1 px-2 py-1 text-[13px] uppercase tracking-wide hover:bg-white/[0.03] transition-colors font-semibold cursor-pointer"
         style={{ color: C.muted }}
         onClick={() => setOpen(!open)}
       >
@@ -118,7 +118,7 @@ export function ActionBtn({
   return (
     <button
       onClick={onClick}
-      className="px-2 py-0.5 rounded text-[13px] font-medium transition-colors"
+      className="px-2 py-0.5 rounded text-[13px] font-medium transition-colors cursor-pointer"
       style={{ background: color + "18", color, border: `1px solid ${color}30` }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = color + "35"
