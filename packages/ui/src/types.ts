@@ -181,3 +181,18 @@ export interface Notification {
   read: boolean
   createdAt: string
 }
+
+// ── Rollback ─────────────────────────────────────────────────────
+
+export interface RollbackResult {
+  total: number
+  compensated: number
+  skipped: number
+  failed: Array<{ effectId: string; target: string; reason: string }>
+}
+
+export interface RollbackPreview {
+  wouldCompensate: Array<{ effectId: string; target: string; kind: string; hasSnapshot: boolean }>
+  wouldSkip: Array<{ effectId: string; target: string; reason: string }>
+  wouldFail: Array<{ effectId: string; target: string; reason: string }>
+}

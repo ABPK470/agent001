@@ -2,7 +2,7 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { AgentDefinition, Notification, PolicyRule, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
+import type { AgentDefinition, Notification, PolicyRule, RollbackPreview, RollbackResult, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
 
 const BASE = ""
 
@@ -32,6 +32,14 @@ export const api = {
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+
+  // Rollback
+  previewRollback: (runId: string) =>
+    json<RollbackPreview>(`/api/effects/${encodeURIComponent(runId)}/rollback-preview`),
+  rollbackRun: (runId: string) =>
+    json<RollbackResult>(`/api/effects/${encodeURIComponent(runId)}/rollback`, {
+      method: "POST",
+    }),
 
   // Layouts
   listLayouts: () => json<SavedLayout[]>("/api/layouts"),

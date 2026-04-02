@@ -177,6 +177,12 @@ export function TrajectoryReplay() {
     [runs],
   )
 
+  // Derive the effective run's status so we can reload when it changes
+  const effectiveRunStatus = useMemo(
+    () => runs.find((r: Run) => r.id === effectiveRunId)?.status ?? null,
+    [runs, effectiveRunId],
+  )
+
   // ── Shared trajectory data ───────────────────────────────────
   const [trajectory, setTrajectory] = useState<TrajectoryEntry[]>([])
   const [replayData, setReplayData] = useState<ReplayResponse | null>(null)
@@ -202,9 +208,14 @@ export function TrajectoryReplay() {
     }
   }, [])
 
+  // Load trajectory when run ID changes or when its status transitions to completed/failed.
+  // Without the status dependency, trajectory loaded at run start (with just 1 "goal" event)
+  // would never refresh when the run finishes.
   useEffect(() => {
-    if (effectiveRunId) loadTrajectory(effectiveRunId)
-  }, [effectiveRunId, loadTrajectory])
+    if (effectiveRunId && (effectiveRunStatus === "completed" || effectiveRunStatus === "failed")) {
+      loadTrajectory(effectiveRunId)
+    }
+  }, [effectiveRunId, effectiveRunStatus, loadTrajectory])
 
   // ── Empty / error states ─────────────────────────────────────
 

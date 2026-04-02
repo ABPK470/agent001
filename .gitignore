@@ -3,3 +3,6 @@ dist
 .env
 docs
 .DS_Store
+/tmp
+*.log
+*.cache

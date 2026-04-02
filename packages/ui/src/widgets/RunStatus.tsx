@@ -2,11 +2,11 @@
  * RunStatus — shows current run status, metadata, and progress.
  */
 
-import { Loader2, RotateCcw, Square } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
-import type { AgentDefinition } from "../types"
+import type { AgentDefinition, RollbackPreview } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
 
 export function RunStatus() {
@@ -40,6 +40,41 @@ export function RunStatus() {
   async function handleResume() {
     if (run) await api.resumeRun(run.id).catch(() => {})
   }
+
+  // ── Rollback state ──
+  const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
+  const [rollbackLoading, setRollbackLoading] = useState(false)
+  const [rollbackResult, setRollbackResult] = useState<string | null>(null)
+
+  const handleRollbackPreview = useCallback(async () => {
+    if (!run) return
+    setRollbackLoading(true)
+    setRollbackResult(null)
+    try {
+      const preview = await api.previewRollback(run.id)
+      setRollbackPreview(preview)
+    } catch {
+      setRollbackResult("Failed to load preview")
+    }
+    setRollbackLoading(false)
+  }, [run])
+
+  const handleRollbackConfirm = useCallback(async () => {
+    if (!run) return
+    setRollbackLoading(true)
+    try {
+      const result = await api.rollbackRun(run.id)
+      if (result.failed.length > 0) {
+        setRollbackResult(`Rolled back ${result.compensated} effects, ${result.failed.length} failed`)
+      } else {
+        setRollbackResult(`Rolled back ${result.compensated} effects, ${result.skipped} skipped`)
+      }
+    } catch {
+      setRollbackResult("Rollback failed")
+    }
+    setRollbackPreview(null)
+    setRollbackLoading(false)
+  }, [run])
 
   return (
     <div className="h-full overflow-y-auto flex flex-col gap-3">
@@ -136,7 +171,82 @@ export function RunStatus() {
             Resume
           </button>
         )}
+        {(run.status === "completed" || run.status === "failed") && (
+          <button
+            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
+            onClick={handleRollbackPreview}
+            disabled={rollbackLoading}
+          >
+            <Undo2 size={13} />
+            {rollbackLoading ? "Loading..." : "Rollback"}
+          </button>
+        )}
       </div>
+
+      {/* Rollback result */}
+      {rollbackResult && (
+        <div className="text-[13px] text-text-secondary bg-elevated px-3 py-2 rounded-lg">
+          {rollbackResult}
+        </div>
+      )}
+
+      {/* Rollback preview dialog */}
+      {rollbackPreview && (
+        <div className="bg-elevated border border-border rounded-lg p-3 space-y-2">
+          <div className="text-sm font-semibold text-warning">Rollback Preview</div>
+          {rollbackPreview.wouldCompensate.length > 0 && (
+            <div>
+              <div className="text-[13px] text-success">Will restore ({rollbackPreview.wouldCompensate.length}):</div>
+              {rollbackPreview.wouldCompensate.map((e) => (
+                <div key={e.effectId} className="text-[11px] text-text-muted font-mono truncate pl-2">
+                  {e.kind} {e.target.split("/").pop()}
+                </div>
+              ))}
+            </div>
+          )}
+          {rollbackPreview.wouldSkip.length > 0 && (
+            <div>
+              <div className="text-[13px] text-text-muted">Will skip ({rollbackPreview.wouldSkip.length}):</div>
+              {rollbackPreview.wouldSkip.slice(0, 5).map((e) => (
+                <div key={e.effectId} className="text-[11px] text-text-muted font-mono truncate pl-2">
+                  {e.target.split("/").pop()} — {e.reason}
+                </div>
+              ))}
+              {rollbackPreview.wouldSkip.length > 5 && (
+                <div className="text-[11px] text-text-muted pl-2">...and {rollbackPreview.wouldSkip.length - 5} more</div>
+              )}
+            </div>
+          )}
+          {rollbackPreview.wouldFail.length > 0 && (
+            <div>
+              <div className="text-[13px] text-error">Would fail ({rollbackPreview.wouldFail.length}) — rollback blocked:</div>
+              {rollbackPreview.wouldFail.map((e) => (
+                <div key={e.effectId} className="text-[11px] text-error/80 font-mono truncate pl-2">
+                  {e.target.split("/").pop()} — {e.reason}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
+            {rollbackPreview.wouldFail.length === 0 && rollbackPreview.wouldCompensate.length > 0 && (
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-warning bg-warning/10 hover:bg-warning/20 rounded-lg transition-colors"
+                onClick={handleRollbackConfirm}
+                disabled={rollbackLoading}
+              >
+                <Undo2 size={12} />
+                Confirm Rollback
+              </button>
+            )}
+            <button
+              className="px-3 py-1.5 text-[13px] text-text-muted hover:text-text rounded-lg transition-colors"
+              onClick={() => setRollbackPreview(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

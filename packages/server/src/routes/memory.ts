@@ -8,6 +8,7 @@ import {
     getFileHistory,
     getRunEffects,
     getRunSnapshots,
+    previewRollback,
     rollbackRun,
 } from "../effects.js"
 import {
@@ -265,6 +266,15 @@ export function registerMemoryRoutes(
         postHash: e.postHash,
         createdAt: e.createdAt,
       }))
+    },
+  )
+
+  /** Preview what a rollback would do (dry-run). */
+  app.get<{ Params: { runId: string } }>(
+    "/api/effects/:runId/rollback-preview",
+    async (req) => {
+      const preview = await previewRollback(req.params.runId)
+      return preview
     },
   )
 

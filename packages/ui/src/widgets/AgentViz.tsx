@@ -28,6 +28,7 @@ const C = {
   rose:     "#D17877",
   peach:    "#F49D6C",
   coral:    "#EA6248",
+  warning:  "#d4a64a",
   success:  "#5db078",
   text:     "#f4f4f5",
   muted:    "#a1a1aa",
@@ -43,12 +44,12 @@ const AGENT_COLORS = [C.accent, C.rose, C.peach, C.coral, C.success, C.plum, "#6
 const SPINE_COLORS: Record<string, string> = {
   goal:               C.accent,
   thinking:           C.accent,
-  "tool-call":        C.peach,
+  "tool-call":        C.warning,
   "tool-result":      C.success,
   "tool-error":       C.coral,
   iteration:          C.mid,
-  "delegation-start": "#6CB4EE",
-  "delegation-end":   "#6CB4EE",
+  "delegation-start": C.plum,
+  "delegation-end":   C.plum,
   answer:             C.success,
   error:              C.coral,
 }

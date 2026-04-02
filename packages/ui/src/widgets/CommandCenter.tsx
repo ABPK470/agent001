@@ -22,9 +22,11 @@ import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types
 
 const C = {
   accent:   "#7B6FC7",
+  warning:  "#d4a64a",
   success:  "#5db078",
   coral:    "#EA6248",
   peach:    "#F49D6C",
+  plum:     "#825776",
   cyan:     "#6CB4EE",
   text:     "#f4f4f5",
   muted:    "#a1a1aa",
@@ -106,6 +108,7 @@ export function CommandCenter() {
   const [submitting, setSubmitting] = useState(false)
   const [expandedDag, setExpandedDag] = useState<string | null>(null)
   const [resumeError, setResumeError] = useState<string | null>(null)
+  const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
 
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -170,6 +173,26 @@ export function CommandCenter() {
       setResumeError("resume failed — no checkpoint available")
     }
   }, [activeRun, setActiveRun, setTrace])
+
+  const handleRollback = useCallback(async () => {
+    if (!activeRun) return
+    setRollbackMsg(null)
+    try {
+      const preview = await api.previewRollback(activeRun.id)
+      if (preview.wouldCompensate.length === 0) {
+        setRollbackMsg("nothing to rollback")
+        return
+      }
+      if (preview.wouldFail.length > 0) {
+        setRollbackMsg(`blocked: ${preview.wouldFail[0].reason}`)
+        return
+      }
+      const result = await api.rollbackRun(activeRun.id)
+      setRollbackMsg(`rolled back ${result.compensated} effects`)
+    } catch {
+      setRollbackMsg("rollback failed")
+    }
+  }, [activeRun])
 
   // ── LIVE DAG ────────────────────────────────────────────────────
 
@@ -366,14 +389,14 @@ export function CommandCenter() {
     const items: Array<{ text: string; color: string }> = []
     for (let i = Math.max(0, trace.length - 30); i < trace.length; i++) {
       const e = trace[i]
-      if (e.kind === "tool-call") items.push({ text: `CALL ${e.tool}(${e.argsSummary || "..."})`, color: C.accent })
+      if (e.kind === "tool-call") items.push({ text: `CALL ${e.tool}(${e.argsSummary || "..."})`, color: C.warning })
       else if (e.kind === "tool-result") items.push({ text: `RET  ${e.text.slice(0, 100)}`, color: C.success })
       else if (e.kind === "tool-error") items.push({ text: `ERR  ${e.text.slice(0, 100)}`, color: C.coral })
-      else if (e.kind === "thinking") items.push({ text: `THINK ${e.text.slice(0, 80)}`, color: C.peach })
+      else if (e.kind === "thinking") items.push({ text: `THINK ${e.text.slice(0, 80)}`, color: C.accent })
       else if (e.kind === "answer") items.push({ text: `ANS  ${e.text.slice(0, 100)}`, color: C.success })
       else if (e.kind === "iteration") items.push({ text: `ITER ${e.current}/${e.max}`, color: C.dim })
-      else if (e.kind === "goal") items.push({ text: `GOAL ${(e.text ?? "").slice(0, 100)}`, color: C.cyan })
-      else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${(e.goal ?? "").slice(0, 80)} [depth ${e.depth}]`, color: C.cyan })
+      else if (e.kind === "goal") items.push({ text: `GOAL ${(e.text ?? "").slice(0, 100)}`, color: C.accent })
+      else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${(e.goal ?? "").slice(0, 80)} [depth ${e.depth}]`, color: C.plum })
       else if (e.kind === "delegation-end") items.push({ text: `DELEG ◀ ${e.status} ${(e.answer ?? e.error ?? "").slice(0, 80)}`, color: e.status === "done" ? C.success : C.coral })
       else if (e.kind === "delegation-iteration") items.push({ text: `  ↳ D${e.depth} iter ${e.iteration}/${e.maxIterations}`, color: C.dim })
     }
@@ -438,8 +461,22 @@ export function CommandCenter() {
                 RESUME
               </button>
             )}
+            {(activeRun.status === "completed" || isFailed) && (
+              <button
+                onClick={handleRollback}
+                className="px-2 py-0.5 rounded text-[10px] transition-colors"
+                style={{ background: C.warning + "20", color: C.warning, border: `1px solid ${C.warning}40` }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = C.warning + "40" }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = C.warning + "20" }}
+              >
+                ROLLBACK
+              </button>
+            )}
             {resumeError && (
               <span className="text-[10px]" style={{ color: C.coral }}>{resumeError}</span>
+            )}
+            {rollbackMsg && (
+              <span className="text-[10px]" style={{ color: C.warning }}>{rollbackMsg}</span>
             )}
           </div>
         </div>

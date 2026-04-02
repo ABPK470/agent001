@@ -5,7 +5,7 @@
  * Shows status, goal, time, step count, and inline actions.
  */
 
-import { GitBranch, RotateCcw, Square } from "lucide-react"
+import { GitBranch, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -140,6 +140,20 @@ export function RunHistory() {
                 title="Resume from checkpoint"
               >
                 <RotateCcw size={13} />
+              </button>
+            )}
+            {(run.status === "completed" || run.status === "failed") && (
+              <button
+                className="p-1.5 text-warning/70 hover:text-warning rounded transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (confirm("Rollback all file changes from this run?")) {
+                    api.rollbackRun(run.id).catch(() => {})
+                  }
+                }}
+                title="Rollback file changes"
+              >
+                <Undo2 size={13} />
               </button>
             )}
           </div>
