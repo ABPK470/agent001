@@ -135,6 +135,14 @@ export const fetchUrlTool: Tool = {
     }
 
     if (!response) return "Error: No response received"
+
+    // If we get a bot-block status, fall back to headless browser
+    if (response.status === 403 || response.status === 503) {
+      const browserText = await fetchWithBrowser(currentUrl, maxLength)
+      if (browserText) return browserText
+      return `Error: HTTP ${response.status} ${response.statusText} (browser fallback also failed)`
+    }
+
     if (!response.ok) return `Error: HTTP ${response.status} ${response.statusText}`
 
     // Read body with size limit
@@ -220,4 +228,55 @@ function checkResolvedIp(ip: string): string | null {
   }
 
   return null
+}
+
+/**
+ * Fallback: use headless Chromium via Puppeteer to fetch a page that blocks plain HTTP.
+ * Lazy-imports puppeteer so it's only loaded when actually needed.
+ */
+async function fetchWithBrowser(url: string, maxLength: number): Promise<string | null> {
+  let launch: (options?: Record<string, unknown>) => Promise<import("puppeteer").Browser>
+  try {
+    const mod = await import("puppeteer")
+    launch = mod.default?.launch ?? mod.launch
+  } catch {
+    return null // puppeteer not available
+  }
+
+  let browser: import("puppeteer").Browser | null = null
+  try {
+    browser = await launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+      ],
+    })
+
+    const page = await browser.newPage()
+    await page.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    )
+
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 })
+
+    // Wait a short time for JS-rendered content
+    await new Promise((r) => setTimeout(r, 2000))
+
+    let text = await page.evaluate(() => document.body?.innerText ?? "")
+    text = text.replace(/\s+/g, " ").trim()
+
+    if (text.length > maxLength) {
+      text = text.slice(0, maxLength) + "\n... (truncated)"
+    }
+
+    return text || null
+  } catch {
+    return null
+  } finally {
+    if (browser) await browser.close().catch(() => {})
+  }
 }
