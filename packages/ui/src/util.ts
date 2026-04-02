@@ -15,7 +15,8 @@ export function timeAgo(date: string): string {
   return `${days}d ago`
 }
 
-export function truncate(str: string, len: number): string {
+export function truncate(str: string | null | undefined, len: number): string {
+  if (!str) return ""
   return str.length > len ? str.slice(0, len) + "..." : str
 }
 

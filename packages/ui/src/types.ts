@@ -78,6 +78,8 @@ export type TraceEntry =
   | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentId?: string; agentName?: string }
   | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }
   | { kind: "delegation-end"; depth: number; status: "done" | "error"; answer?: string; error?: string }
+  | { kind: "delegation-parallel-start"; depth: number; taskCount: number; goals: string[] }
+  | { kind: "delegation-parallel-end"; depth: number; taskCount: number; fulfilled: number; rejected: number }
 
 // ── Layout ───────────────────────────────────────────────────────
 

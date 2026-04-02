@@ -8,22 +8,21 @@
  */
 
 import {
-  AlertTriangle,
-  ArrowLeftRight,
-  BarChart3,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-  FlaskConical,
-  Pause,
-  Play,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  SkipBack,
-  SkipForward,
-  Trash2,
-  X,
+    AlertTriangle,
+    ArrowLeftRight,
+    ChevronLeft,
+    ChevronRight,
+    Circle,
+    FlaskConical,
+    Pause,
+    Play,
+    Plus,
+    RefreshCw,
+    RotateCcw,
+    SkipBack,
+    SkipForward,
+    Trash2,
+    X,
 } from "lucide-react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -37,6 +36,7 @@ type EventKind =
   | "goal" | "thinking" | "tool-call" | "tool-result"
   | "tool-error" | "iteration" | "delegation-start"
   | "delegation-end" | "delegation-iteration" | "usage"
+  | "delegation-parallel-start" | "delegation-parallel-end"
   | "answer" | "error"
 
 interface TrajectoryEvent { kind: EventKind; [key: string]: unknown }
@@ -80,7 +80,7 @@ interface TraceNode {
   subtreeCount?: number
 }
 
-const META_TREE_KINDS = new Set<string>(["usage", "delegation-iteration"])
+const META_TREE_KINDS = new Set<string>(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end"])
 
 function buildTraceTree(trajectory: TrajectoryEntry[]): TraceNode[] {
   const roots: TraceNode[] = []
@@ -121,8 +121,8 @@ function ancestorPath(tree: TraceNode[], flatIndex: number): TraceNode[] {
       if (n.flatIndex === flatIndex) return true
       if (n.children && n.endFlatIndex != null && flatIndex > n.flatIndex && flatIndex <= n.endFlatIndex) {
         path.push(n)
-        if (walk(n.children)) return true
-        path.pop()
+        walk(n.children) // try deeper match; even if none found, this delegation contains the cursor
+        return true
       }
     }
     return false
@@ -144,6 +144,8 @@ const EVENT_META: Record<EventKind, { color: string; label: string; short: strin
   "delegation-end":    { color: "var(--color-viz-plum)",   label: "Delegate End",   short: "DONE" },
   "delegation-iteration": { color: "var(--color-viz-plum)", label: "Child Iteration", short: "D·IT" },
   "usage":             { color: "var(--color-text-muted)", label: "Token Usage",    short: "USG" },
+  "delegation-parallel-start": { color: "var(--color-viz-plum)", label: "Parallel Start", short: "P·GO" },
+  "delegation-parallel-end":   { color: "var(--color-viz-plum)", label: "Parallel End",   short: "P·DN" },
   "answer":            { color: "var(--color-success)",    label: "Final Answer",   short: "ANS" },
   "error":             { color: "var(--color-error)",      label: "Fatal Error",    short: "FAIL" },
 }
@@ -240,10 +242,10 @@ export function TrajectoryReplay() {
         {/* Run picker */}
         <div className="relative">
           <button
-            className="text-sm text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors truncate max-w-[180px]"
+            className="text-sm text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors"
             onClick={() => setShowRunPicker(!showRunPicker)}
           >
-            {truncate(effectiveRunId, 14)}
+            {effectiveRunId}
           </button>
           {showRunPicker && (
             <RunPicker
@@ -322,12 +324,33 @@ function ReplayTab({
   const [cursor, setCursor] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(1)
-  const [showScorecard, setShowScorecard] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const eventListRef = useRef<HTMLDivElement>(null)
   const splitRef = useRef<HTMLDivElement>(null)
   const [panelWidth, setPanelWidth] = useState(320)
   const draggingRef = useRef(false)
+
+  // Build delegation tree from flat trajectory
+  const tree = useMemo(() => buildTraceTree(trajectory), [trajectory])
+
+  // Track which delegation groups are expanded (by flatIndex)
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+  // Flag: cursor was moved by timeline/VCR/keyboard (not tree click)
+  const seekRef = useRef(false)
+
+  const seekTo = useCallback((idx: number) => {
+    seekRef.current = true
+    setCursor(idx)
+  }, [])
+
+  const toggleExpanded = useCallback((flatIndex: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(flatIndex)) next.delete(flatIndex)
+      else next.add(flatIndex)
+      return next
+    })
+  }, [])
 
   // Reset cursor when trajectory changes
   useEffect(() => { setCursor(0); setPlaying(false); setExpanded(new Set()) }, [trajectory])
@@ -361,6 +384,7 @@ function ReplayTab({
       timerRef.current = setInterval(() => {
         setCursor((prev) => {
           if (prev >= trajectory.length - 1) { setPlaying(false); return prev }
+          seekRef.current = true
           return prev + 1
         })
       }, 800 / speed)
@@ -382,15 +406,15 @@ function ReplayTab({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       switch (e.key) {
         case " ": e.preventDefault(); setPlaying((p) => !p); break
-        case "ArrowRight": e.preventDefault(); setCursor((c) => Math.min(c + 1, trajectory.length - 1)); break
-        case "ArrowLeft": e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); break
-        case "Home": e.preventDefault(); setCursor(0); break
-        case "End": e.preventDefault(); setCursor(trajectory.length - 1); break
+        case "ArrowRight": e.preventDefault(); seekTo(Math.min(cursor + 1, trajectory.length - 1)); break
+        case "ArrowLeft": e.preventDefault(); seekTo(Math.max(cursor - 1, 0)); break
+        case "Home": e.preventDefault(); seekTo(0); break
+        case "End": e.preventDefault(); seekTo(trajectory.length - 1); break
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [trajectory.length])
+  }, [cursor, trajectory.length, seekTo])
 
   const violationSeqs = useMemo(() => {
     if (!replayData?.violations) return new Set<number>()
@@ -402,33 +426,30 @@ function ReplayTab({
     [replayData],
   )
 
-  // Build delegation tree from flat trajectory
-  const tree = useMemo(() => buildTraceTree(trajectory), [trajectory])
-
-  // Track which delegation groups are expanded (by flatIndex)
-  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
-
-  const toggleExpanded = useCallback((flatIndex: number) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(flatIndex)) next.delete(flatIndex)
-      else next.add(flatIndex)
-      return next
-    })
-  }, [])
-
-  // Auto-expand delegations containing the cursor (for VCR playback)
+  // Auto-expand delegations containing the cursor
   useEffect(() => {
     const ancestors = ancestorPath(tree, cursor)
-    if (ancestors.length === 0) return
-    setExpanded(prev => {
+    // If cursor is on a delegation-start, also expand it so children are visible
+    const cursorKind = trajectory[cursor]?.event?.kind
+    if (seekRef.current) {
+      // Timeline / VCR / keyboard seek — show exactly the path to cursor
+      seekRef.current = false
+      const needed = new Set(ancestors.map(a => a.flatIndex))
+      if (cursorKind === "delegation-start") needed.add(cursor)
+      setExpanded(needed)
+    } else {
+      // Tree click — just ensure ancestors are expanded, don't collapse others
       const ids = ancestors.map(a => a.flatIndex)
-      if (ids.every(id => prev.has(id))) return prev
-      const next = new Set(prev)
-      for (const id of ids) next.add(id)
-      return next
-    })
-  }, [cursor, tree])
+      if (cursorKind === "delegation-start") ids.push(cursor)
+      if (ids.length === 0) return
+      setExpanded(prev => {
+        if (ids.every(id => prev.has(id))) return prev
+        const next = new Set(prev)
+        for (const id of ids) next.add(id)
+        return next
+      })
+    }
+  }, [cursor, tree, trajectory])
 
   // Breadcrumb path for current cursor position
   const breadcrumbs = useMemo(() => ancestorPath(tree, cursor), [tree, cursor])
@@ -441,29 +462,16 @@ function ReplayTab({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Scorecard toggle + counter */}
-      <div className="flex items-center gap-2 px-3 py-2 shrink-0">
-        {replayData?.scorecard && (
-          <button
-            className={`flex items-center gap-1.5 text-[13px] px-2.5 py-1 rounded-md transition-colors ${
-              showScorecard ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text hover:bg-elevated/60"
-            }`}
-            onClick={() => setShowScorecard(!showScorecard)}
-          >
-            <BarChart3 size={14} />
-            Scorecard
-          </button>
-        )}
+      {/* Scorecard + counter */}
+      {replayData?.scorecard && <ScorecardPanel scorecard={replayData.scorecard} />}
+      <div className="flex items-center px-3 py-1 shrink-0">
         <div className="flex-1" />
         <span className="text-[13px] text-text-muted font-mono tabular-nums">{cursor + 1}/{trajectory.length}</span>
       </div>
 
-      {/* Scorecard */}
-      {showScorecard && replayData?.scorecard && <ScorecardPanel scorecard={replayData.scorecard} />}
-
       {/* Timeline */}
       <div className="px-2 py-1 shrink-0">
-        <TimelineScrubber events={trajectory} cursor={cursor} violationSeqs={violationSeqs} onSeek={setCursor} />
+        <TimelineScrubber events={trajectory} cursor={cursor} violationSeqs={violationSeqs} onSeek={seekTo} />
       </div>
 
       {/* Event list + detail */}
@@ -471,13 +479,13 @@ function ReplayTab({
         <div ref={eventListRef} className="shrink-0 overflow-y-auto" style={{ width: panelWidth }}>
           {breadcrumbs.length > 0 && (
             <div className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-text-muted border-b border-elevated/30 bg-elevated/20 sticky top-0 z-10 flex-wrap">
-              <button className="hover:text-text transition-colors shrink-0" onClick={() => { setCursor(0); setPlaying(false) }}>Root</button>
+              <button className="hover:text-text transition-colors shrink-0" onClick={() => { seekTo(0); setPlaying(false) }}>Root</button>
               {breadcrumbs.map((node) => (
                 <Fragment key={node.flatIndex}>
                   <span className="text-text-muted/40 shrink-0">/</span>
                   <button
                     className="hover:text-accent transition-colors truncate max-w-[100px]"
-                    onClick={() => { setCursor(node.flatIndex); setPlaying(false) }}
+                    onClick={() => { seekTo(node.flatIndex); setPlaying(false) }}
                     title={String(node.entry.event.childGoal ?? node.entry.event.goal ?? "")}
                   >
                     {trnc(node.entry.event.childGoal ?? node.entry.event.goal, 18)}
@@ -513,10 +521,10 @@ function ReplayTab({
         total={trajectory.length}
         playing={playing}
         speed={speed}
-        onCursor={setCursor}
-        onPlay={() => { if (cursor >= trajectory.length - 1) setCursor(0); setPlaying(!playing) }}
+        onCursor={seekTo}
+        onPlay={() => { if (cursor >= trajectory.length - 1) seekTo(0); setPlaying(!playing) }}
         onSpeed={() => { const idx = SPEEDS.indexOf(speed as typeof SPEEDS[number]); setSpeed(SPEEDS[(idx + 1) % SPEEDS.length]) }}
-        onReset={() => { setCursor(0); setPlaying(false) }}
+        onReset={() => { seekTo(0); setPlaying(false) }}
       />
     </div>
   )
@@ -538,6 +546,11 @@ function MutationTab({
   const [mutations, setMutations] = useState<Mutation[]>([])
   const [mutatedReplay, setMutatedReplay] = useState<ReplayResponse | null>(null)
   const [mutLoading, setMutLoading] = useState(false)
+  const [selectedSeq, setSelectedSeq] = useState<number | null>(null)
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+
+  const tree = useMemo(() => buildTraceTree(trajectory), [trajectory])
+  const mutatedSeqs = useMemo(() => new Set(mutations.map(m => m.seq)), [mutations])
 
   function addMutation(type: Mutation["type"], seq: number) {
     const event: TrajectoryEvent = type === "inject"
@@ -555,6 +568,15 @@ function MutationTab({
     setMutations((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const toggleExpanded = useCallback((flatIndex: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(flatIndex)) next.delete(flatIndex)
+      else next.add(flatIndex)
+      return next
+    })
+  }, [])
+
   async function runMutatedReplay() {
     if (mutations.length === 0) return
     setMutLoading(true)
@@ -568,247 +590,389 @@ function MutationTab({
     }
   }
 
+  const selectedEntry = selectedSeq != null
+    ? trajectory.find(e => e.seq === selectedSeq) ?? null
+    : null
+
   if (trajectory.length === 0) {
     return <div className="flex-1 flex items-center justify-center text-text-muted text-sm">No trajectory to mutate</div>
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
-      {/* Help text */}
-      <div className="px-4 py-2.5 text-[13px] text-text-muted border-b border-elevated/50">
-        Alter the trajectory and replay to test agent resilience. Drop events, replace them with errors,
-        or inject new events — then see how the state machine and scorecard change.
-      </div>
-
-      {/* Mutation list */}
-      <div className="px-4 py-2.5 space-y-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text">Mutations ({mutations.length})</span>
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* ── Mutation bar ─────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-elevated/40">
+        <div className="flex items-center gap-3 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <FlaskConical size={14} className="text-accent" />
+            <span className="text-sm font-semibold text-text">Mutations</span>
+            <span className="text-[12px] font-mono text-text-muted bg-elevated/60 px-1.5 py-0.5 rounded">
+              {mutations.length}
+            </span>
+          </div>
           <div className="flex-1" />
+          {mutations.length > 0 && (
+            <button
+              className="text-[12px] text-text-muted hover:text-error transition-colors"
+              onClick={() => { setMutations([]); setMutatedReplay(null) }}
+            >
+              Clear all
+            </button>
+          )}
           <button
-            className={`flex items-center gap-1.5 text-[13px] px-3 py-1.5 rounded-md font-medium transition-colors ${
+            className={`flex items-center gap-1.5 text-[13px] px-3.5 py-1.5 rounded-lg font-medium transition-all ${
               mutations.length > 0
-                ? "bg-accent/15 text-accent hover:bg-accent/25"
-                : "bg-elevated/50 text-text-muted cursor-not-allowed"
+                ? "bg-accent/15 text-accent hover:bg-accent/25 shadow-sm shadow-accent/10"
+                : "bg-elevated/30 text-text-muted cursor-not-allowed"
             }`}
             onClick={runMutatedReplay}
             disabled={mutations.length === 0 || mutLoading}
           >
             <RefreshCw size={13} className={mutLoading ? "animate-spin" : ""} />
-            Replay with mutations
+            Replay
           </button>
         </div>
 
-        {mutations.length === 0 && (
-          <div className="text-[13px] text-text-muted py-2">
-            No mutations yet. Click events below to add mutations.
+        {/* Applied mutations as chips */}
+        {mutations.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-4 pb-2.5">
+            {mutations.map((mut, i) => (
+              <div key={i} className={`inline-flex items-center gap-1.5 text-[12px] font-mono rounded-md px-2 py-1 border ${
+                mut.type === "drop" ? "bg-error/8 text-error/80 border-error/15"
+                  : mut.type === "replace" ? "bg-warning/8 text-warning/80 border-warning/15"
+                    : "bg-accent/8 text-accent/80 border-accent/15"
+              }`}>
+                <span className="font-semibold">{mut.type.toUpperCase()}</span>
+                <span className="text-text-muted">#{mut.seq}</span>
+                {mut.event && <span className="opacity-60">→ {mut.event.kind}</span>}
+                <button
+                  className="ml-0.5 hover:text-error transition-colors"
+                  onClick={() => removeMutation(i)}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
           </div>
         )}
-
-        {mutations.map((mut, i) => (
-          <div key={i} className="flex items-center gap-2.5 bg-elevated/40 rounded-lg px-3 py-2 text-[13px]">
-            <span className={`font-mono font-medium px-2 py-0.5 rounded ${
-              mut.type === "drop" ? "bg-error/10 text-error"
-                : mut.type === "replace" ? "bg-warning/10 text-warning"
-                  : "bg-accent/10 text-accent"
-            }`}>
-              {mut.type.toUpperCase()}
-            </span>
-            <span className="text-text-muted">seq #{mut.seq}</span>
-            {mut.event && <span className="text-text-secondary">→ {mut.event.kind}</span>}
-            <div className="flex-1" />
-            <button className="text-text-muted hover:text-error transition-colors" onClick={() => removeMutation(i)}>
-              <X size={15} />
-            </button>
-          </div>
-        ))}
       </div>
 
-      {/* Mutated replay result */}
-      {mutatedReplay && (
-        <div className="px-4 py-3 border-t border-elevated/50 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text">Mutated Replay Result</span>
-            <div className={`flex items-center gap-1.5 text-[13px] font-medium px-2 py-0.5 rounded-full ${
-              mutatedReplay.valid ? "bg-success/10 text-success" : "bg-error/10 text-error"
-            }`}>
-              {mutatedReplay.valid ? <Circle size={9} fill="currentColor" /> : <AlertTriangle size={14} />}
-              {mutatedReplay.valid ? "Valid" : `${mutatedReplay.violations?.length ?? 0} violation${(mutatedReplay.violations?.length ?? 0) === 1 ? "" : "s"}`}
-            </div>
+      {/* ── Main body: tree (left) + detail/results (right) ─── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: Nested event tree */}
+        <div className="flex-1 min-w-0 overflow-y-auto border-r border-elevated/30">
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted/60 border-b border-elevated/20 sticky top-0 bg-base z-10">
+            Event Tree — hover to mutate
           </div>
+          <MutationTreeView
+            nodes={tree}
+            expanded={expanded}
+            onToggle={toggleExpanded}
+            selectedSeq={selectedSeq}
+            onSelect={setSelectedSeq}
+            mutatedSeqs={mutatedSeqs}
+          />
+        </div>
 
-          {/* Compare original vs mutated side-by-side */}
-          {replayData?.scorecard && mutatedReplay.scorecard && (
-            <div className="grid grid-cols-2 gap-3 text-[13px]">
-              <div className="space-y-1">
-                <div className="text-text-muted font-medium text-[13px]">Original</div>
-                <MiniScorecard sc={replayData.scorecard} />
+        {/* Right: Detail + Results */}
+        <div className="w-[45%] shrink-0 overflow-y-auto flex flex-col">
+          {/* Selected event detail */}
+          {selectedEntry ? (
+            <div className="p-4 border-b border-elevated/30">
+              <div className="flex items-center gap-2 mb-3">
+                <span
+                  className="text-[12px] font-bold font-mono px-2 py-0.5 rounded"
+                  style={{ color: (EVENT_META[selectedEntry.event.kind] ?? EVENT_META["error"]).color }}
+                >
+                  {(EVENT_META[selectedEntry.event.kind] ?? EVENT_META["error"]).short}
+                </span>
+                <span className="text-[12px] text-text-muted font-mono">seq #{selectedEntry.seq}</span>
+                <span className="text-[12px] text-text-muted/60 ml-auto">{new Date(selectedEntry.timestamp).toLocaleTimeString()}</span>
               </div>
-              <div className="space-y-1">
-                <div className="text-text-muted font-medium text-[13px]">Mutated</div>
-                <MiniScorecard sc={mutatedReplay.scorecard} />
+              <div className="text-sm text-text leading-relaxed whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto bg-elevated/20 rounded-lg p-3 font-mono text-[13px]">
+                {mutEventFullText(selectedEntry.event)}
               </div>
+              {/* Mutation actions for selected */}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-elevated/20">
+                <MutActionBtn label="Drop" icon={<Trash2 size={13} />} color="error" onClick={() => addMutation("drop", selectedEntry.seq)} />
+                <MutActionBtn label="Replace" icon={<RefreshCw size={13} />} color="warning" onClick={() => addMutation("replace", selectedEntry.seq)} />
+                <MutActionBtn label="Inject before" icon={<Plus size={13} />} color="accent" onClick={() => addMutation("inject", selectedEntry.seq)} />
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 flex flex-col items-center justify-center text-center border-b border-elevated/30 min-h-[120px]">
+              <div className="text-text-muted/40 mb-1"><FlaskConical size={24} /></div>
+              <div className="text-[13px] text-text-muted">Select an event to see full details and mutation options</div>
             </div>
           )}
 
-          {/* Violations */}
-          {(mutatedReplay.violations?.length ?? 0) > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[13px] text-error font-medium">Violations</div>
-              {mutatedReplay.violations!.map((v, i) => (
-                <div key={i} className="flex items-start gap-2 text-[13px] text-error/80 bg-error/5 rounded-lg px-3 py-1.5">
-                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                  <span>#{v.seq}: {v.from} → {v.to} — {v.message}</span>
+          {/* Replay results */}
+          {mutatedReplay && (
+            <div className="p-4 space-y-4 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-text">Replay Result</span>
+                <div className={`flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full ${
+                  mutatedReplay.valid ? "bg-success/10 text-success" : "bg-error/10 text-error"
+                }`}>
+                  {mutatedReplay.valid ? <Circle size={8} fill="currentColor" /> : <AlertTriangle size={13} />}
+                  {mutatedReplay.valid ? "Valid" : `${mutatedReplay.violations?.length ?? 0} violations`}
                 </div>
-              ))}
+              </div>
+
+              {/* Scorecard comparison */}
+              {replayData?.scorecard && mutatedReplay.scorecard && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted/60">Original</div>
+                    <MiniScorecard sc={replayData.scorecard} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted/60">Mutated</div>
+                    <MiniScorecard sc={mutatedReplay.scorecard} />
+                  </div>
+                </div>
+              )}
+
+              {/* Violations */}
+              {(mutatedReplay.violations?.length ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-error/70">Violations</div>
+                  {mutatedReplay.violations!.map((v, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-[13px] bg-error/5 border border-error/10 rounded-lg px-3 py-2">
+                      <AlertTriangle size={14} className="text-error shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="font-mono text-error font-medium">#{v.seq}</span>
+                        <span className="text-text-muted mx-1.5">·</span>
+                        <span className="text-text-secondary">{v.from} → {v.to}</span>
+                        <div className="text-error/70 mt-0.5 break-words">{v.message}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty state for results */}
+          {!mutatedReplay && mutations.length > 0 && (
+            <div className="flex-1 flex items-center justify-center text-text-muted text-[13px] p-4">
+              Click <span className="font-medium text-accent mx-1">Replay</span> to test with mutations applied
+            </div>
+          )}
+
+          {/* Hint when no mutations and no selection */}
+          {!mutatedReplay && mutations.length === 0 && !selectedEntry && (
+            <div className="flex-1 flex flex-col items-center justify-center text-text-muted/50 p-6 text-center">
+              <div className="text-[13px] leading-relaxed max-w-[240px]">
+                Hover events in the tree and click mutation icons to drop, replace, or inject errors.
+              </div>
             </div>
           )}
         </div>
-      )}
-
-      {/* Event list with mutation actions */}
-      <div className="border-t border-elevated/50">
-        <div className="px-4 py-2 text-[12px] text-text-muted font-medium uppercase tracking-wide">
-          Events — click actions to add mutations
-        </div>
-        {trajectory.map((entry) => {
-          const meta = EVENT_META[entry.event.kind] ?? EVENT_META["error"]
-          const kind = entry.event.kind
-          const hasMut = mutations.some((m) => m.seq === entry.seq)
-
-          // Mutation action buttons (shared for all rows)
-          const actions = (
-            <div className="flex items-center gap-1 shrink-0 ml-auto opacity-50 hover:opacity-100 transition-opacity">
-              <MutButton title="Drop this event" onClick={() => addMutation("drop", entry.seq)} color="error">
-                <Trash2 size={14} />
-              </MutButton>
-              <MutButton title="Replace with error" onClick={() => addMutation("replace", entry.seq)} color="warning">
-                <RefreshCw size={14} />
-              </MutButton>
-              <MutButton title="Inject error before" onClick={() => addMutation("inject", entry.seq)} color="accent">
-                <Plus size={14} />
-              </MutButton>
-            </div>
-          )
-
-          const rowBase = `flex items-center px-4 transition-colors ${hasMut ? "bg-warning/5" : ""}`
-
-          // Iteration — separator
-          if (kind === "iteration") {
-            return (
-              <div key={entry.seq} className={`${rowBase} text-text-muted text-[13px] font-mono pt-2 pb-0.5 border-t border-elevated/50 mt-0.5`}>
-                <span>iteration {String(entry.event.current)}/{String(entry.event.max)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Goal
-          if (kind === "goal") {
-            return (
-              <div key={entry.seq} className={`${rowBase} pt-1.5 pb-1`}>
-                <span className="text-accent font-semibold text-sm">GOAL</span>
-                <span className="text-text ml-2 text-sm truncate">{trnc(entry.event.text, 60)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Thinking
-          if (kind === "thinking") {
-            return (
-              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4 border-l-2 border-accent/30`}>
-                <span className="text-accent text-[13px] font-medium">THK</span>
-                <span className="text-text-secondary text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Tool call
-          if (kind === "tool-call") {
-            return (
-              <div key={entry.seq} className={`${rowBase} py-1`}>
-                <span className="text-warning text-[13px] font-medium font-mono">CALL</span>
-                <span className="text-text text-sm font-medium font-mono ml-2">{String(entry.event.tool)}</span>
-                {entry.event.argsSummary ? <span className="text-text-muted text-[13px] font-mono ml-1.5 truncate">{String(trnc(entry.event.argsSummary, 40))}</span> : null}
-                {actions}
-              </div>
-            )
-          }
-
-          // Tool result
-          if (kind === "tool-result") {
-            return (
-              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4`}>
-                <span className="text-success text-[13px] font-medium font-mono">RSLT</span>
-                <span className="text-text-muted text-[13px] font-mono ml-2 truncate">{trnc(entry.event.text, 50)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Tool error
-          if (kind === "tool-error") {
-            return (
-              <div key={entry.seq} className={`${rowBase} py-0.5 pl-4`}>
-                <span className="text-error text-[13px] font-medium font-mono">ERR</span>
-                <span className="text-error/80 text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Answer
-          if (kind === "answer") {
-            return (
-              <div key={entry.seq} className={`${rowBase} pt-2 pb-1 border-t border-elevated/50 mt-0.5 flex-col items-start`}>
-                <div className="flex items-center w-full">
-                  <span className="text-success font-semibold text-sm">COMPLETED</span>
-                  {actions}
-                </div>
-                <div className="text-text-secondary text-sm truncate w-full">{trnc(entry.event.text, 80)}</div>
-              </div>
-            )
-          }
-
-          // Error
-          if (kind === "error") {
-            return (
-              <div key={entry.seq} className={`${rowBase} pt-2 pb-1 border-t border-elevated/50 mt-0.5`}>
-                <span className="text-error font-semibold text-sm">FAILED</span>
-                <span className="text-error/80 text-sm ml-2 truncate">{trnc(entry.event.text, 50)}</span>
-                {actions}
-              </div>
-            )
-          }
-
-          // Fallback
-          return (
-            <div key={entry.seq} className={`${rowBase} py-0.5`}>
-              <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
-              <span className="text-text-secondary text-sm ml-2 truncate">{eventPreview(entry.event)}</span>
-              {actions}
-            </div>
-          )
-        })}
       </div>
     </div>
   )
 }
 
-function MutButton({ children, onClick, title, color }: {
-  children: React.ReactNode; onClick: () => void; title: string; color: string
+// ── Mutation tree components ─────────────────────────────────────
+
+function MutationTreeView({ nodes, expanded, onToggle, selectedSeq, onSelect, mutatedSeqs }: {
+  nodes: TraceNode[]; expanded: Set<number>; onToggle: (fi: number) => void
+  selectedSeq: number | null; onSelect: (seq: number) => void
+  mutatedSeqs: Set<number>
+}) {
+  return (
+    <>
+      {nodes.map((node) => {
+        if (node.children) {
+          return (
+            <MutDelegationGroup
+              key={node.entry.seq}
+              node={node}
+              expanded={expanded}
+              onToggle={onToggle}
+              selectedSeq={selectedSeq}
+              onSelect={onSelect}
+              mutatedSeqs={mutatedSeqs}
+            />
+          )
+        }
+        return (
+          <MutLeafNode
+            key={node.entry.seq}
+            entry={node.entry}
+            isSelected={node.entry.seq === selectedSeq}
+            isMutated={mutatedSeqs.has(node.entry.seq)}
+            onSelect={() => onSelect(node.entry.seq)}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function MutDelegationGroup({ node, expanded, onToggle, selectedSeq, onSelect, mutatedSeqs }: {
+  node: TraceNode; expanded: Set<number>; onToggle: (fi: number) => void
+  selectedSeq: number | null; onSelect: (seq: number) => void
+  mutatedSeqs: Set<number>
+}) {
+  const isExpanded = expanded.has(node.flatIndex)
+  const isSelected = node.entry.seq === selectedSeq
+  const isMutated = mutatedSeqs.has(node.entry.seq)
+  const hasError = !!node.endEntry?.event?.error
+  const goal = String(node.entry.event.childGoal ?? node.entry.event.goal ?? "")
+
+  return (
+    <div>
+      <div
+        className={[
+          "flex items-center gap-1.5 cursor-pointer transition-colors pl-1.5 pr-3 py-1.5",
+          isSelected ? "bg-elevated/70" : "hover:bg-elevated/20",
+          isMutated ? "ring-1 ring-inset ring-warning/30 bg-warning/5" : "",
+        ].join(" ")}
+        onClick={() => onSelect(node.entry.seq)}
+      >
+        <button
+          className="flex items-center justify-center w-5 h-5 shrink-0 text-text-muted hover:text-text rounded transition-colors"
+          onClick={(e) => { e.stopPropagation(); onToggle(node.flatIndex) }}
+        >
+          <ChevronRight size={14} className={`transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
+        </button>
+        <span className="text-[12px] font-bold font-mono shrink-0" style={{ color: "var(--color-viz-plum)" }}>DLGT</span>
+        <span className="text-sm text-text-secondary flex-1 min-w-0 line-clamp-2">{trnc(goal, 200)}</span>
+        {!isExpanded && (
+          <span className={`text-[11px] font-mono shrink-0 ml-2 ${hasError ? "text-error/60" : "text-success/60"}`}>
+            {node.subtreeCount} {hasError ? "✗" : "✓"}
+          </span>
+        )}
+      </div>
+
+      {isExpanded && (
+        <div className="ml-3 border-l-2 border-viz-plum/15 pl-0.5">
+          <MutationTreeView
+            nodes={node.children!}
+            expanded={expanded}
+            onToggle={onToggle}
+            selectedSeq={selectedSeq}
+            onSelect={onSelect}
+            mutatedSeqs={mutatedSeqs}
+          />
+          {node.endEntry && (
+            <div
+              className={[
+                "flex items-center gap-1.5 cursor-pointer transition-colors px-2.5 py-1 text-[12px] font-mono",
+                node.endEntry.seq === selectedSeq ? "bg-elevated/70" : "hover:bg-elevated/20",
+                hasError ? "text-error/60" : "text-success/60",
+              ].join(" ")}
+              onClick={() => onSelect(node.endEntry!.seq)}
+            >
+              <span>{hasError ? "✗ delegation failed" : "✓ delegation done"}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MutLeafNode({ entry, isSelected, isMutated, onSelect }: {
+  entry: TrajectoryEntry; isSelected: boolean; isMutated: boolean
+  onSelect: () => void
+}) {
+  const meta = EVENT_META[entry.event.kind] ?? EVENT_META["error"]
+  const kind = entry.event.kind
+
+  const baseCls = [
+    "flex items-start gap-2 cursor-pointer transition-colors px-3 py-1.5",
+    isSelected ? "bg-elevated/70" : "hover:bg-elevated/20",
+    isMutated ? "ring-1 ring-inset ring-warning/30 bg-warning/5" : "",
+  ].join(" ")
+
+  // Iteration separator
+  if (kind === "iteration") {
+    return (
+      <div className={`${baseCls} items-center text-text-muted text-[13px] font-mono pt-3 pb-1 border-t border-elevated/40 mt-1`} onClick={onSelect}>
+        <span>iteration {String(entry.event.current)}/{String(entry.event.max)}</span>
+      </div>
+    )
+  }
+
+  const preview = (() => {
+    switch (kind) {
+      case "goal": return trnc(entry.event.text, 200)
+      case "thinking": return trnc(entry.event.text, 200)
+      case "tool-call": {
+        const tool = String(entry.event.tool ?? "")
+        const args = entry.event.argsSummary ? ` ${trnc(entry.event.argsSummary, 160)}` : ""
+        return tool + args
+      }
+      case "tool-result": return trnc(entry.event.text, 200)
+      case "tool-error": return trnc(entry.event.text, 200)
+      case "delegation-start": return trnc(entry.event.childGoal ?? entry.event.goal, 200)
+      case "delegation-end": return trnc(entry.event.result, 200)
+      case "answer": return trnc(entry.event.text, 200)
+      case "error": return trnc(entry.event.text, 200)
+      default: return trnc(eventPreview(entry.event), 200)
+    }
+  })()
+
+  return (
+    <div className={baseCls} onClick={onSelect}>
+      <span
+        className="text-[11px] font-bold font-mono shrink-0 px-1.5 py-0.5 rounded mt-0.5"
+        style={{ color: meta.color }}
+      >
+        {meta.short}
+      </span>
+      <span className={`text-[13px] min-w-0 flex-1 break-words line-clamp-3 leading-relaxed ${
+        kind === "error" || kind === "tool-error" ? "text-error/80" : "text-text-secondary"
+      }`}>
+        {preview}
+      </span>
+    </div>
+  )
+}
+
+function MutActionBtn({ label, icon, color, onClick }: {
+  label: string; icon: React.ReactNode; color: string; onClick: () => void
 }) {
   return (
     <button
-      className={`w-7 h-7 flex items-center justify-center rounded text-${color}/60 hover:text-${color} hover:bg-${color}/10 transition-colors`}
+      className={`flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-md transition-colors text-${color}/70 hover:text-${color} hover:bg-${color}/10`}
       onClick={onClick}
-      title={title}
     >
-      {children}
+      {icon}
+      {label}
     </button>
   )
+}
+
+function mutEventFullText(event: TrajectoryEvent): string {
+  switch (event.kind) {
+    case "goal": return String(event.text ?? "")
+    case "thinking": return String(event.text ?? "")
+    case "tool-call": {
+      const tool = String(event.tool ?? "")
+      const args = event.args ?? event.argsSummary
+      return args ? `${tool}\n\n${typeof args === "string" ? args : JSON.stringify(args, null, 2)}` : tool
+    }
+    case "tool-result": return String(event.text ?? "")
+    case "tool-error": return String(event.text ?? "")
+    case "iteration": return `Iteration ${String(event.current)}/${String(event.max)}`
+    case "delegation-start": {
+      const goal = String(event.childGoal ?? event.goal ?? "")
+      const delegate = event.delegate ? `\nDelegate: ${String(event.delegate)}` : ""
+      return `Goal: ${goal}${delegate}`
+    }
+    case "delegation-end": {
+      const result = String(event.result ?? "")
+      const error = event.error ? `\nError: ${String(event.error)}` : ""
+      return `Result: ${result}${error}`
+    }
+    case "answer": return String(event.text ?? "")
+    case "error": return String(event.text ?? "")
+    default: return JSON.stringify(event, null, 2)
+  }
 }
 
 function MiniScorecard({ sc }: { sc: Scorecard }) {
@@ -1378,7 +1542,7 @@ function EventContent({ event }: { event: TrajectoryEvent }) {
           </div>
           {event.argsSummary ? <div className="text-sm text-text-muted font-mono">{String(event.argsSummary)}</div> : null}
           {event.argsFormatted ? (
-            <pre className="text-sm font-mono text-text-secondary bg-base rounded-lg p-3 max-h-64 overflow-auto whitespace-pre-wrap">{String(event.argsFormatted)}</pre>
+            <pre className="text-sm font-mono text-text-secondary bg-base rounded-lg p-3 overflow-auto whitespace-pre-wrap">{String(event.argsFormatted)}</pre>
           ) : null}
         </div>
       )
@@ -1403,7 +1567,7 @@ function EventContent({ event }: { event: TrajectoryEvent }) {
         </div>
       )
     case "error": return <ContentBlock label="Fatal Error" text={String(event.text ?? "")} error />
-    default: return <pre className="text-sm font-mono text-text-muted bg-base rounded-lg p-3 max-h-64 overflow-auto">{JSON.stringify(event, null, 2)}</pre>
+    default: return <pre className="text-sm font-mono text-text-muted bg-base rounded-lg p-3 overflow-auto">{JSON.stringify(event, null, 2)}</pre>
   }
 }
 
@@ -1411,7 +1575,7 @@ function ContentBlock({ label, text, mono, error: isError }: { label: string; te
   return (
     <div className="space-y-1">
       <div className={`text-sm font-medium ${isError ? "text-error" : "text-text-muted"}`}>{label}</div>
-      <div className={`text-sm whitespace-pre-wrap leading-relaxed max-h-80 overflow-auto ${mono ? "font-mono bg-base rounded-lg p-3" : ""} ${isError ? "text-error/80" : "text-text-secondary"}`}>
+      <div className={`text-sm whitespace-pre-wrap leading-relaxed ${mono ? "font-mono bg-base rounded-lg p-3" : ""} ${isError ? "text-error/80" : "text-text-secondary"}`}>
         {text}
       </div>
     </div>
@@ -1421,9 +1585,8 @@ function ContentBlock({ label, text, mono, error: isError }: { label: string; te
 function ScorecardPanel({ scorecard }: { scorecard: Scorecard }) {
   const errPct = Math.round(scorecard.errorRate * 100)
   return (
-    <div className="px-3 py-2.5 border-b border-elevated/50 space-y-2.5">
-      {/* Two-row compact stats strip */}
-      <div className="flex items-center gap-4 text-sm font-mono">
+    <div className="px-3 py-2 border-b border-elevated/50">
+      <div className="flex items-center gap-3 flex-wrap text-sm font-mono">
         <Stat label="events" value={scorecard.totalEvents} />
         <Stat label="calls" value={scorecard.toolCalls} />
         <Stat label="errors" value={scorecard.toolErrors} color={scorecard.toolErrors > 0 ? "text-error" : undefined} />
@@ -1432,23 +1595,21 @@ function ScorecardPanel({ scorecard }: { scorecard: Scorecard }) {
         <Stat label="evt/iter" value={scorecard.eventsPerIteration?.toFixed?.(1) ?? "—"} />
         <Stat label="thk/act" value={scorecard.thinkToActRatio === Infinity ? "∞" : scorecard.thinkToActRatio?.toFixed?.(1) ?? "—"} />
         <Stat label="deleg" value={scorecard.delegations} />
-      </div>
-
-      {/* Patterns + tools inline */}
-      <div className="flex items-center gap-3 flex-wrap text-[13px]">
         {(scorecard.patterns?.length ?? 0) > 0 && (
-          <>
-            {scorecard.patterns.map((p) => (
-              <span key={p} className={`px-2 py-0.5 rounded-full font-medium ${
-                p === "retry-loop" ? "bg-error/10 text-error"
-                  : p === "efficient" ? "bg-success/10 text-success"
-                    : "bg-accent/10 text-accent"
-              }`}>{p}</span>
-            ))}
-          </>
+          <span className="text-text-muted/30">│</span>
+        )}
+        {(scorecard.patterns?.length ?? 0) > 0 && scorecard.patterns.map((p) => (
+          <span key={p} className={`text-[12px] px-2 py-0.5 rounded-full font-medium ${
+            p === "retry-loop" ? "bg-error/10 text-error"
+              : p === "efficient" ? "bg-success/10 text-success"
+                : "bg-accent/10 text-accent"
+          }`}>{p}</span>
+        ))}
+        {(scorecard.toolsUsed?.length ?? 0) > 0 && (
+          <span className="text-text-muted/30">│</span>
         )}
         {(scorecard.toolsUsed?.length ?? 0) > 0 && scorecard.toolsUsed.map((t) => (
-          <span key={t} className="text-text-secondary font-mono">
+          <span key={t} className="text-[12px] text-text-secondary">
             {t}<span className="text-text-muted">×{scorecard.toolFrequency[t]}</span>
           </span>
         ))}
@@ -1499,16 +1660,16 @@ function RunPicker({ runs, selectedId, onSelect, onClose }: {
 
 function eventPreview(event: TrajectoryEvent): string {
   switch (event.kind) {
-    case "goal": return trnc(event.text, 50)
-    case "thinking": return trnc(event.text, 50)
-    case "tool-call": return String(event.tool ?? "")
-    case "tool-result": return trnc(event.text, 50)
-    case "tool-error": return trnc(event.text, 50)
+    case "goal": return trnc(event.text, 200)
+    case "thinking": return trnc(event.text, 200)
+    case "tool-call": return `${String(event.tool ?? "")} ${trnc(event.argsSummary, 160)}`
+    case "tool-result": return trnc(event.text, 200)
+    case "tool-error": return trnc(event.text, 200)
     case "iteration": return `${event.current}/${event.max}`
-    case "delegation-start": return trnc(event.childGoal ?? event.goal, 50)
-    case "delegation-end": return trnc(event.result, 50)
-    case "answer": return trnc(event.text, 50)
-    case "error": return trnc(event.text, 50)
+    case "delegation-start": return trnc(event.childGoal ?? event.goal, 200)
+    case "delegation-end": return trnc(event.result, 200)
+    case "answer": return trnc(event.text, 200)
+    case "error": return trnc(event.text, 200)
     default: return ""
   }
 }

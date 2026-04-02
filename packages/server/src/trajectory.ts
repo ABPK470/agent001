@@ -214,10 +214,10 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
   const violations: TransitionViolation[] = []
   let delegationDepth = 0
 
-  // "usage" and "delegation-iteration" are observability/meta events, not agent
-  // states. They can appear between any pair of real states and should be
-  // transparent to the state machine validator.
-  const META_KINDS = new Set(["usage", "delegation-iteration"])
+  // "usage", "delegation-iteration", and "delegation-parallel-*" are
+  // observability/meta events, not agent states. They can appear between any
+  // pair of real states and should be transparent to the state machine validator.
+  const META_KINDS = new Set(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end"])
 
   // Build a filtered view that only contains real state events for validation,
   // while preserving the original seq numbers for violation reporting.

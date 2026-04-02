@@ -521,6 +521,27 @@ export const useStore = create<AppState>()(
             break
           }
 
+          case "delegation.parallel-started": {
+            store.addTrace({
+              kind: "delegation-parallel-start",
+              depth: data["depth"] as number,
+              taskCount: data["taskCount"] as number,
+              goals: data["goals"] as string[],
+            })
+            break
+          }
+
+          case "delegation.parallel-ended": {
+            store.addTrace({
+              kind: "delegation-parallel-end",
+              depth: data["depth"] as number,
+              taskCount: data["taskCount"] as number,
+              fulfilled: data["fulfilled"] as number,
+              rejected: data["rejected"] as number,
+            })
+            break
+          }
+
           case "usage.updated": {
             set({
               liveUsage: {

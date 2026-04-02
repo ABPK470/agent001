@@ -39,6 +39,21 @@ const C = {
 // Agent colors — distinguish up to 8 agents visually
 const AGENT_COLORS = [C.accent, C.rose, C.peach, C.coral, C.success, C.plum, "#6CB4EE", "#B8A9C9"]
 
+// Spine event colors — actions bright, results/thinking subtle
+const SPINE_COLORS: Record<string, string> = {
+  goal:               C.accent,
+  thinking:           C.accent,
+  "tool-call":        C.peach,
+  "tool-result":      C.success,
+  "tool-error":       C.coral,
+  iteration:          C.mid,
+  "delegation-start": "#6CB4EE",
+  "delegation-end":   "#6CB4EE",
+  answer:             C.success,
+  error:              C.coral,
+}
+const SPINE_PRIMARY = new Set(["goal", "tool-call", "delegation-start", "error", "tool-error", "answer"])
+
 // ── Tool label mapping ───────────────────────────────────────────
 
 const TOOL_LABELS: Record<string, string> = {
@@ -64,6 +79,7 @@ interface VizNode {
   agentId?: string
   toolId?: string
   delegateDepth?: number
+  delegateStatus?: "active" | "done" | "error"
   val?: number
   x?: number
   y?: number
@@ -92,6 +108,7 @@ export function AgentViz() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const prevTraceLen = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
+  const spineRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
@@ -124,6 +141,8 @@ export function AgentViz() {
 
   // Feed width for the left panel — generous so headers don't clip
   const feedW = Math.max(200, Math.min(360, size.w * 0.45))
+  // Spine width for the right panel
+  const spineW = Math.max(140, Math.min(220, size.w * 0.20))
 
   // Track resize
   useEffect(() => {
@@ -249,32 +268,39 @@ export function AgentViz() {
     return ids
   }, [trace])
 
-  // Track active delegations from trace
-  // Stabilised: only returns a new reference when the delegation stack actually changes,
-  // preventing graphData from recreating (which would restart the d3 simulation).
-  const prevDelegationsRef = useRef<Array<{ depth: number; goal: string; tools: string[] }>>([])
-  const activeDelegations = useMemo(() => {
-    const stack: Array<{ depth: number; goal: string; tools: string[] }> = []
+  // Track ALL delegations from trace (active + completed)
+  // Each delegation gets a unique key so multiple delegations at the same depth are distinguishable.
+  const prevDelegationsRef = useRef<Array<{ key: string; depth: number; goal: string; tools: string[]; status: "active" | "done" | "error" }>>([])
+  const traceDelegations = useMemo(() => {
+    const all: Array<{ key: string; depth: number; goal: string; tools: string[]; status: "active" | "done" | "error" }> = []
+    // Stack of indices into `all` for currently-active delegations
+    const active: number[] = []
     for (const e of trace) {
       if (e.kind === "delegation-start") {
-        stack.push({ depth: e.depth, goal: e.goal, tools: e.tools })
+        const idx = all.length
+        all.push({ key: `d${idx}`, depth: e.depth, goal: e.goal, tools: e.tools, status: "active" })
+        active.push(idx)
       } else if (e.kind === "delegation-end") {
-        // Pop matching depth
-        for (let j = stack.length - 1; j >= 0; j--) {
-          if (stack[j].depth === e.depth) { stack.splice(j, 1); break }
+        // Close the most recent active delegation at this depth
+        for (let j = active.length - 1; j >= 0; j--) {
+          if (all[active[j]].depth === e.depth) {
+            all[active[j]].status = e.status === "error" ? "error" : "done"
+            active.splice(j, 1)
+            break
+          }
         }
       }
     }
     // Structural comparison — return previous reference if unchanged
     const prev = prevDelegationsRef.current
     if (
-      prev.length === stack.length &&
-      prev.every((d, i) => d.depth === stack[i].depth && d.goal === stack[i].goal)
+      prev.length === all.length &&
+      prev.every((d, i) => d.key === all[i].key && d.status === all[i].status)
     ) {
       return prev
     }
-    prevDelegationsRef.current = stack
-    return stack
+    prevDelegationsRef.current = all
+    return all
   }, [trace])
 
   // Build graph data from agents + active delegations
@@ -359,16 +385,18 @@ export function AgentViz() {
       }
     })
 
-    // Add ephemeral delegate nodes for active delegations
-    for (const deleg of activeDelegations) {
-      const delegId = `delegate:${deleg.depth}`
-      const color = AGENT_COLORS[(agents.length + deleg.depth) % AGENT_COLORS.length]
+    // Add delegate nodes for all delegations (active + completed)
+    for (const deleg of traceDelegations) {
+      const delegId = `delegate:${deleg.key}`
+      const baseColor = AGENT_COLORS[(agents.length + deleg.depth) % AGENT_COLORS.length]
+      const color = deleg.status === "active" ? baseColor : deleg.status === "error" ? C.coral : baseColor
       nodes.push({
         id: delegId,
         type: "delegate",
         label: `D${deleg.depth}`,
         color,
         delegateDepth: deleg.depth,
+        delegateStatus: deleg.status,
         val: 4,
         x: -30,
         y: (agents.length + deleg.depth - 1) * 50,
@@ -415,7 +443,7 @@ export function AgentViz() {
     }
     prevGraphRef.current = { nodes, links }
     return { nodes, links }
-  }, [agents, activeDelegations, activeAgentId, involvedToolIds])
+  }, [agents, traceDelegations, activeAgentId, involvedToolIds])
 
   // Emit particles when new tool calls arrive (live mode only)
   useEffect(() => {
@@ -479,7 +507,7 @@ export function AgentViz() {
       fg.zoomToFit(400, 60)
       setTimeout(() => {
         const z = fg.zoom()
-        const target = z * 0.65
+        const target = z * 5.3
         zoomBaseRef.current = target // this is our "100%"
         fg.zoom(target, 300)
         // Shift center rightward to account for the log panel
@@ -516,16 +544,29 @@ export function AgentViz() {
     const r = node.type === "agent" ? 10 : node.type === "delegate" ? 8 : 7
 
     if (node.type === "delegate") {
-      // Ephemeral delegate node — pulsing diamond shape
+      const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
+      const opacity = isDone ? "66" : "cc"
+      const strokeOpacity = isDone ? "55" : "bb"
+      // Delegate node — diamond shape (dimmed when completed)
       ctx.save()
       ctx.translate(x, y)
       ctx.rotate(Math.PI / 4)
-      ctx.fillStyle = C.deep + "cc"
+      ctx.fillStyle = C.deep + opacity
       ctx.fillRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
-      ctx.strokeStyle = node.color + "bb"
+      ctx.strokeStyle = node.color + strokeOpacity
       ctx.lineWidth = 1.2
       ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
-      ctx.restore()
+      // Small check/cross for completed delegations
+      if (isDone) {
+        ctx.restore()
+        ctx.font = `${Math.max(4, 10 / globalScale)}px sans-serif`
+        ctx.fillStyle = node.delegateStatus === "error" ? C.coral + "aa" : C.success + "aa"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(node.delegateStatus === "error" ? "✗" : "✓", x, y)
+      } else {
+        ctx.restore()
+      }
 
       // Label below
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
@@ -740,26 +781,26 @@ export function AgentViz() {
       }
     }
     if (selectedNode.startsWith("delegate:")) {
-      const depth = Number(selectedNode.slice(9))
-      const deleg = activeDelegations.find((d) => d.depth === depth)
+      const key = selectedNode.slice(9)
+      const deleg = traceDelegations.find((d) => d.key === key)
       if (!deleg) return null
       return {
-        title: `Delegate D${depth}`,
+        title: `Delegate D${deleg.depth}`,
         lines: [
           { label: "Goal", value: deleg.goal.slice(0, 50) },
           { label: "Tools", value: String(deleg.tools.length) },
-          { label: "Depth", value: String(depth) },
-          { label: "Status", value: "active" },
+          { label: "Depth", value: String(deleg.depth) },
+          { label: "Status", value: deleg.status },
         ],
       }
     }
     return null
-  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, activeDelegations, trace])
+  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, traceDelegations, trace])
 
   // Activity feed
   const recentActivity = useMemo(() => {
     const items: Array<{ text: string; color: string; time: number }> = []
-    for (let i = trace.length - 1; i >= 0 && items.length < 80; i--) {
+    for (let i = trace.length - 1; i >= 0; i--) {
       const e = trace[i]
       if (e.kind === "tool-call") {
         items.push({ text: `${toolLabel(e.tool)}(${e.argsSummary || "..."})`, color: C.accent, time: i })
@@ -791,6 +832,38 @@ export function AgentViz() {
     const el = feedRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [recentActivity.length])
+
+  // Execution depth spine — live flame chart of trace complexity
+  const spineData = useMemo(() => {
+    const events: { kind: string; depth: number; idx: number }[] = []
+    let d = 0
+    let maxD = 0
+    let errorCount = 0
+    let delegations = 0
+    for (let i = 0; i < trace.length; i++) {
+      const e = trace[i]
+      if (e.kind === "usage" || e.kind === "delegation-iteration") continue
+      if (e.kind === "tool-error" || e.kind === "error") errorCount++
+      if (e.kind === "delegation-start") {
+        delegations++
+        events.push({ kind: e.kind, depth: d, idx: i })
+        d++
+        if (d > maxD) maxD = d
+      } else if (e.kind === "delegation-end") {
+        d = Math.max(0, d - 1)
+        events.push({ kind: e.kind, depth: d, idx: i })
+      } else {
+        events.push({ kind: e.kind, depth: d, idx: i })
+      }
+    }
+    return { events, currentDepth: d, maxDepth: maxD, errorCount, delegations }
+  }, [trace])
+
+  // Auto-scroll spine
+  useEffect(() => {
+    const el = spineRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [spineData.events.length])
 
   // Graph dimensions — full width, graph renders under the log overlay
   const graphW = size.w
@@ -849,8 +922,8 @@ export function AgentViz() {
         />
 
 
-        {/* Feed items — terminal style: newest at bottom, gradient fade */}
-        <div ref={feedRef} className="flex-1 overflow-y-auto px-3 pb-2 flex flex-col justify-end gap-0.5 relative pointer-events-auto">
+        {/* Feed items — scrollable log, newest at bottom */}
+        <div ref={feedRef} className="flex-1 overflow-y-auto px-3 pb-2 pt-2 flex flex-col gap-0.5 relative pointer-events-auto">
           {recentActivity.length === 0 ? (
             <div className="text-xs" style={{ color: C.mid }}>
               {mode === "reflect" && !reflectRunId ? "Select a past run to review"
@@ -881,11 +954,89 @@ export function AgentViz() {
         </div>
       </div>
 
+      {/* Right overlay — execution depth spine */}
+      {spineData.events.length > 0 && (
+        <div
+          className="absolute top-0 right-0 bottom-0 flex flex-col pointer-events-none"
+          style={{ width: spineW }}
+        >
+          {/* Gradient backdrop — solid right, fading to transparent left */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: C.base,
+              WebkitMaskImage: `linear-gradient(to left, white 30%, rgba(255,255,255,0.85) 45%, rgba(255,255,255,0.60) 58%, rgba(255,255,255,0.32) 72%, rgba(255,255,255,0.10) 86%, transparent 100%)`,
+              maskImage: `linear-gradient(to left, white 30%, rgba(255,255,255,0.85) 45%, rgba(255,255,255,0.60) 58%, rgba(255,255,255,0.32) 72%, rgba(255,255,255,0.10) 86%, transparent 100%)`,
+            }}
+          />
+
+          {/* Stats strip */}
+          <div className="relative shrink-0 flex items-center justify-end gap-2.5 px-3 pt-2 pb-1">
+            {spineData.maxDepth > 0 && (
+              <span className="text-xs font-mono" style={{ color: "#6CB4EE", opacity: 0.7 }}>
+                d{spineData.currentDepth}/{spineData.maxDepth}
+              </span>
+            )}
+            {spineData.delegations > 0 && (
+              <span className="text-xs font-mono" style={{ color: C.plum, opacity: 0.6 }}>
+                {spineData.delegations}d
+              </span>
+            )}
+            {spineData.errorCount > 0 && (
+              <span className="text-xs font-mono" style={{ color: C.coral, opacity: 0.7 }}>
+                {spineData.errorCount}✗
+              </span>
+            )}
+            <span className="text-xs font-mono" style={{ color: C.muted, opacity: 0.4 }}>
+              {spineData.events.length}
+            </span>
+          </div>
+
+          {/* Depth flame — right-aligned bars, fills full height */}
+          <div
+            ref={spineRef}
+            className="flex-1 overflow-hidden relative pointer-events-auto px-2 pb-2 pt-1 flex flex-col justify-between"
+          >
+            {spineData.events.map((ev, i) => {
+              const isLast = i === spineData.events.length - 1
+              const maxD = Math.max(spineData.maxDepth, 1)
+              const depthFrac = ev.depth / maxD
+              const widthPct = 100 - depthFrac * 60
+              const color = SPINE_COLORS[ev.kind] ?? C.mid
+              const primary = SPINE_PRIMARY.has(ev.kind)
+              const n = spineData.events.length
+              const pos = n <= 1 ? 1 : i / (n - 1)
+              const opacity = 0.10 + Math.pow(pos, 1.6) * 0.90
+              const barAlpha = primary ? "aa" : "44"
+
+              return (
+                <div
+                  key={ev.idx}
+                  className="flex justify-end flex-1 min-h-[1px]"
+                  style={{ opacity }}
+                >
+                  <div
+                    style={{
+                      width: `${widthPct}%`,
+                      minHeight: primary ? 3 : 1,
+                      borderRadius: 1,
+                      background: color + (isLast ? "dd" : barAlpha),
+                      boxShadow: isLast && isRunning ? `0 0 8px ${color}50` : undefined,
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Controls overlay — positioned relative to full container */}
 
-      {/* Zoom controls */}
+      {/* Zoom controls — bottom center */}
         <div
-          className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg px-1 py-0.5"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-lg px-1 py-0.5"
           style={{ background: C.surface + "cc" }}
         >
           <button
@@ -1055,8 +1206,8 @@ export function AgentViz() {
         {/* Detail panel — click a node */}
         {selectedNode && detailInfo && (
           <div
-            className="absolute top-3 right-3 rounded-lg px-4 py-3 font-mono max-w-[320px] max-h-[70%] flex flex-col"
-            style={{ background: `${C.surface}ee`, border: `1px solid ${C.deep}60`, color: C.text }}
+            className="absolute top-3 rounded-lg px-4 py-3 font-mono max-w-[320px] max-h-[70%] flex flex-col transition-[right] duration-300"
+            style={{ background: `${C.surface}ee`, border: `1px solid ${C.deep}60`, color: C.text, right: spineData.events.length > 0 ? spineW + 12 : 12 }}
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-[13px] font-semibold" style={{ color: C.accent }}>{detailInfo.title}</span>
