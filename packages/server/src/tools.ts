@@ -7,6 +7,7 @@
  */
 
 import {
+    askUserTool,
     browserCheckTool,
     browseWebTool,
     fetchUrlTool,
@@ -33,6 +34,7 @@ const ALL_TOOLS: Tool[] = [
   fetchUrlTool,
   browserCheckTool,
   browseWebTool,
+  askUserTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))

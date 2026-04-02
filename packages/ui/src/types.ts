@@ -80,6 +80,8 @@ export type TraceEntry =
   | { kind: "delegation-end"; depth: number; status: "done" | "error"; answer?: string; error?: string }
   | { kind: "delegation-parallel-start"; depth: number; taskCount: number; goals: string[] }
   | { kind: "delegation-parallel-end"; depth: number; taskCount: number; fulfilled: number; rejected: number }
+  | { kind: "user-input-request"; question: string; options?: string[]; sensitive?: boolean }
+  | { kind: "user-input-response"; text: string }
 
 // ── Layout ───────────────────────────────────────────────────────
 

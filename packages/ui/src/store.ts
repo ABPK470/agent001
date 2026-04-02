@@ -90,6 +90,10 @@ interface AppState {
   openModalWidget: (type: WidgetType, runId?: string) => void
   closeModalWidget: () => void
 
+  // Pending user input (ask_user tool)
+  pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
+  clearPendingInput: () => void
+
   // WebSocket event handler
   handleWsEvent: (event: WsEvent) => void
 }
@@ -333,6 +337,10 @@ export const useStore = create<AppState>()(
       openModalWidget: (type, runId) => set({ modalWidget: { type, runId } }),
       closeModalWidget: () => set({ modalWidget: null }),
 
+      // Pending user input
+      pendingInput: null,
+      clearPendingInput: () => set({ pendingInput: null }),
+
       // WebSocket event handler
       handleWsEvent: (event) => {
         const { type, data, timestamp } = event
@@ -388,6 +396,7 @@ export const useStore = create<AppState>()(
               completionTokens: (data["completionTokens"] as number) ?? 0,
               llmCalls: (data["llmCalls"] as number) ?? 0,
             })
+            set({ pendingInput: null })
             break
 
           case "run.failed":
@@ -403,6 +412,7 @@ export const useStore = create<AppState>()(
               completionTokens: (data["completionTokens"] as number) ?? 0,
               llmCalls: (data["llmCalls"] as number) ?? 0,
             })
+            set({ pendingInput: null })
             break
 
           case "step.started": {
@@ -552,6 +562,29 @@ export const useStore = create<AppState>()(
                 llmCalls: (data["llmCalls"] as number) ?? 0,
               },
             })
+            break
+          }
+
+          case "user_input.required": {
+            store.addTrace({
+              kind: "user-input-request",
+              question: data["question"] as string,
+              options: data["options"] as string[] | undefined,
+              sensitive: data["sensitive"] as boolean | undefined,
+            })
+            set({
+              pendingInput: {
+                runId: data["runId"] as string,
+                question: data["question"] as string,
+                options: (data["options"] as string[]) ?? undefined,
+                sensitive: data["sensitive"] as boolean | undefined,
+              },
+            })
+            break
+          }
+
+          case "user_input.response": {
+            set({ pendingInput: null })
             break
           }
         }

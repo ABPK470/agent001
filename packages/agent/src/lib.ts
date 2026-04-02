@@ -75,6 +75,8 @@ export { AnthropicClient } from "./llm/anthropic.js"
 export { OpenAIClient } from "./llm/openai.js"
 
 // Built-in tools
+export { askUserTool, setAskUserResolver } from "./tools/ask-user.js"
+export type { AskUserResolver } from "./tools/ask-user.js"
 export { browseWebTool, closeAllBrowserSessions } from "./tools/browse-web.js"
 export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
 export type { BrowserCheckResult } from "./tools/browser-check.js"

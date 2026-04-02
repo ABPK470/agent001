@@ -30,6 +30,10 @@ export const api = {
   resumeRun: (id: string) => json<{ runId: string }>(`/api/runs/${id}/resume`, {
     method: "POST",
   }),
+  respondToRun: (id: string, response: string) => json<{ ok: boolean }>(`/api/runs/${id}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ response }),
+  }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
 

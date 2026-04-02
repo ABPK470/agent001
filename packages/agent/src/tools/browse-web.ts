@@ -24,6 +24,7 @@ interface BrowserSession {
   page: import("puppeteer").Page
   lastUsed: number
   url: string
+  visible: boolean
 }
 
 const sessions = new Map<string, BrowserSession>()
@@ -98,7 +99,7 @@ async function validateUrl(url: string): Promise<string | null> {
 /*  Browser helpers                                                    */
 /* ------------------------------------------------------------------ */
 
-async function launchSession(): Promise<{ session: BrowserSession; id: string } | string> {
+async function launchSession(visible = false): Promise<{ session: BrowserSession; id: string } | string> {
   let puppeteer: typeof import("puppeteer")
   try {
     const mod = await import("puppeteer")
@@ -108,7 +109,7 @@ async function launchSession(): Promise<{ session: BrowserSession; id: string } 
   }
 
   const browser = await (puppeteer as any).launch({
-    headless: true,
+    headless: !visible,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   })
   const page = await browser.newPage()
@@ -118,7 +119,7 @@ async function launchSession(): Promise<{ session: BrowserSession; id: string } 
   await page.setViewport({ width: 1280, height: 800 })
 
   const id = `s${++sessionCounter}`
-  const session: BrowserSession = { browser, page, lastUsed: Date.now(), url: "" }
+  const session: BrowserSession = { browser, page, lastUsed: Date.now(), url: "", visible }
   sessions.set(id, session)
   return { session, id }
 }
@@ -173,7 +174,9 @@ export const browseWebTool: Tool = {
     "Actions: navigate (open URL), click (CSS selector or button text), " +
     "type (into input field), scroll (up/down), read (get current page text), close (end session). " +
     "Returns page text after each action. Use for complex web interactions " +
-    "(forms, cookie consent, multi-page flows). For simple reads, prefer fetch_url.",
+    "(forms, cookie consent, multi-page flows). For simple reads, prefer fetch_url. " +
+    "Set visible=true on navigate to open a browser window the user can see — " +
+    "use with ask_user when the user needs to complete a step (CAPTCHA, payment, 2FA).",
   parameters: {
     type: "object",
     properties: {
@@ -185,6 +188,12 @@ export const browseWebTool: Tool = {
       url: {
         type: "string",
         description: "URL to navigate to (for 'navigate' action).",
+      },
+      visible: {
+        type: "boolean",
+        description:
+          "Set to true to open a visible browser window the user can see and interact with. " +
+          "Use when the user needs to take over (CAPTCHA, payment, login). Default: false (headless).",
       },
       selector: {
         type: "string",
@@ -235,7 +244,8 @@ export const browseWebTool: Tool = {
         if (typeof s === "string") return s
         session = s; id = sessionId
       } else {
-        const result = await launchSession()
+        const visible = Boolean(args.visible)
+        const result = await launchSession(visible)
         if (typeof result === "string") return result
         session = result.session; id = result.id
       }

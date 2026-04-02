@@ -317,9 +317,11 @@ export function buildSearchResults(
 // ── Chat message types ───────────────────────────────────────────
 
 export interface ChatMessage {
-  role: "user" | "assistant" | "tool" | "system"
+  role: "user" | "assistant" | "tool" | "system" | "input-request"
   content: string
   toolName?: string
+  options?: string[]
+  sensitive?: boolean
 }
 
 export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
@@ -337,6 +339,10 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
       msgs.push({ role: "system", content: `Delegating to ${e.agentName ?? "sub-agent"}: ${e.goal}` })
     else if (e.kind === "delegation-end")
       msgs.push({ role: "system", content: `Delegation ${e.status}${e.answer ? `: ${e.answer}` : ""}` })
+    else if (e.kind === "user-input-request")
+      msgs.push({ role: "input-request", content: e.question, options: e.options, sensitive: e.sensitive })
+    else if (e.kind === "user-input-response")
+      msgs.push({ role: "user", content: e.text })
   }
   return msgs
 }

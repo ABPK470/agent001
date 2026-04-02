@@ -32,7 +32,7 @@ export function _setDb(db: Database.Database): void {
 
 // ── Current seed data (bump SEED_VERSION when changing) ──────
 
-const SEED_VERSION = 4
+const SEED_VERSION = 5
 
 const DEFAULT_AGENT_PROMPT = [
   "You are an efficient AI agent that uses tools to accomplish goals.",
@@ -46,12 +46,13 @@ const DEFAULT_AGENT_PROMPT = [
   "- Don't verify results unless there's a reason to doubt them.",
   "- If a path doesn't exist, check the error message — it often tells you what does exist nearby.",
   "- You CAN access the internet. Use fetch_url to read any web page or API. For interactive web tasks (clicking buttons, filling forms, navigating multi-page flows, handling cookie consents), use browse_web which gives you a persistent browser session.",
+  "- When you need information from the user (credentials, personal details, choices, confirmation), use ask_user. The agent pauses until the user responds. For things only the user can do in a browser (CAPTCHA, payment, 2FA), open a visible browser with browse_web(visible=true) and use ask_user to tell the user what to do.",
   "- After creating or modifying web projects (HTML/JS/CSS), use browser_check to verify the page loads without errors.",
   "",
   "Provide a concise final answer when done.",
 ].join("\n")
 
-const DEFAULT_TOOLS = ["read_file", "write_file", "list_directory", "run_command", "fetch_url", "browser_check", "browse_web"]
+const DEFAULT_TOOLS = ["read_file", "write_file", "list_directory", "run_command", "fetch_url", "browser_check", "browse_web", "ask_user"]
 
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {

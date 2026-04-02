@@ -130,6 +130,21 @@ export function registerRunRoutes(
     return { runId: newRunId }
   })
 
+  // Respond to a pending ask_user request
+  app.post<{ Params: { id: string }; Body: { response: string } }>("/api/runs/:id/respond", async (req, reply) => {
+    const { response } = req.body
+    if (!response && response !== "") {
+      reply.code(400)
+      return { error: "response is required" }
+    }
+    const ok = orchestrator.respondToRun(req.params.id, String(response))
+    if (!ok) {
+      reply.code(404)
+      return { error: "No pending input request for this run" }
+    }
+    return { ok: true }
+  })
+
   // Get run trace
   app.get<{ Params: { id: string } }>("/api/runs/:id/trace", async (req, reply) => {
     const run = db.getRun(req.params.id)

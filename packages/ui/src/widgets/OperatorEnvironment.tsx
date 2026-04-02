@@ -78,6 +78,8 @@ export function OperatorEnvironment() {
   const setSteps = useStore((s) => s.setSteps)
   const setLogs = useStore((s) => s.setLogs)
   const setAudit = useStore((s) => s.setAudit)
+  const pendingInput = useStore((s) => s.pendingInput)
+  const clearPendingInput = useStore((s) => s.clearPendingInput)
   // ── API data ──────────────────────────────────────────────────
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [tools, setTools] = useState<ToolInfo[]>([])
@@ -179,6 +181,16 @@ export function OperatorEnvironment() {
     }
     setSubmitting(false)
   }, [goalInput, submitting, selectedAgentId, agents, setActiveRun])
+
+  const handleRespondToInput = useCallback(async (response: string) => {
+    if (!pendingInput) return
+    try {
+      await api.respondToRun(pendingInput.runId, response)
+    } catch {
+      /* swallow */
+    }
+    clearPendingInput()
+  }, [pendingInput, clearPendingInput])
 
   const handleCancel = useCallback(async () => {
     if (activeRun) await api.cancelRun(activeRun.id).catch(() => {})
@@ -665,6 +677,8 @@ export function OperatorEnvironment() {
               onSubmit={handleSubmitGoal}
               isRunning={isRunning ?? false}
               submitting={submitting}
+              pendingInput={pendingInput}
+              onRespond={handleRespondToInput}
             />
           </div>
         )}

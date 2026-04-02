@@ -12,6 +12,7 @@
 
 import {
     Agent,
+    askUserTool,
     completeRun,
     createDelegateTools,
     createEngineServices,
@@ -101,6 +102,7 @@ function buildEnvironmentContext(): string {
 export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
+  private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
@@ -277,6 +279,18 @@ export class AgentOrchestrator {
   /** Get queue statistics. */
   getQueueStats() {
     return this.queue.stats()
+  }
+
+  /** Respond to a pending ask_user request. Returns true if a request was pending. */
+  respondToRun(runId: string, response: string): boolean {
+    const pending = this.pendingInputs.get(runId)
+    if (!pending) return false
+    pending.resolve(response)
+    this.pendingInputs.delete(runId)
+
+    this.saveTrace(runId, { kind: "user-input-response", text: response })
+    broadcast({ type: "user_input.response", data: { runId } })
+    return true
   }
 
   /**
@@ -525,7 +539,33 @@ export class AgentOrchestrator {
       },
     }
     const delegateTools = createDelegateTools(delegateCtx)
-    const allTools = [...governedTools, ...delegateTools, ...busTools]
+
+    // Create a run-scoped ask_user tool that blocks on user input via WS
+    const runAskUserTool: Tool = {
+      ...askUserTool,
+      execute: async (args) => {
+        const question = String(args.question ?? "")
+        if (!question) return "Error: 'question' is required"
+        const options = Array.isArray(args.options) ? args.options.map(String) : undefined
+        const sensitive = Boolean(args.sensitive)
+
+        // Save trace + broadcast to UI
+        this.saveTrace(runId, { kind: "user-input-request", question, options, sensitive })
+        broadcast({
+          type: "user_input.required",
+          data: { runId, question, options: options ?? [], sensitive },
+        })
+
+        // Block until user responds via POST /api/runs/:id/respond
+        const response = await new Promise<string>((resolve) => {
+          this.pendingInputs.set(runId, { resolve })
+        })
+
+        return response
+      },
+    }
+
+    const allTools = [...governedTools, ...delegateTools, ...busTools, runAskUserTool]
 
     // Initialize effect tracking for this run
     resetEffectSeq(runId)
@@ -788,6 +828,7 @@ export class AgentOrchestrator {
     } finally {
       releaseSlot()
       bus.dispose()
+      this.pendingInputs.delete(runId)
       this.activeRuns.delete(runId)
     }
   }
