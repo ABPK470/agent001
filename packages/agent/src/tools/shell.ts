@@ -45,6 +45,18 @@ export function setShellExecutor(executor: ShellExecutor): void {
   _executor = executor
 }
 
+/**
+ * Whether the sandbox is in strict mode ("all").
+ * When true, commands run in Docker and only the minimal deny list applies.
+ * The agent can freely run `node game.js`, `npm install`, `python script.py`, etc.
+ */
+let _sandboxStrict = false
+
+/** Set by the server when sandbox mode is "all". */
+export function setShellSandboxStrict(strict: boolean): void {
+  _sandboxStrict = strict
+}
+
 /** Safe environment variables — the ONLY keys forwarded to child processes. */
 const SAFE_ENV_KEYS = new Set([
   "PATH",
@@ -60,22 +72,43 @@ const SAFE_ENV_KEYS = new Set([
 /**
  * Command deny list — regex patterns that block dangerous commands.
  *
- * Defense-in-depth: with Docker sandboxing, the container itself is the primary
- * barrier. These patterns are a supplementary layer that catches mistakes even
- * in host-fallback mode.
+ * TWO tiers:
+ *   CONTAINER_RULES — minimal list for sandboxed (Docker) execution.
+ *     Even inside a container, we block fork bombs, resource exhaustion,
+ *     and container-escape attempts. Everything else is allowed because
+ *     the container IS the sandbox (no host access, no network).
  *
- * Categories:
- *   - Destructive filesystem operations
- *   - System administration / shutdown
- *   - Privilege escalation
- *   - Reverse shells / network listeners
- *   - Credential / secret access
- *   - Code execution via pipe/eval
- *   - Container / VM escape
- *   - Package-manager abuse
- *   - History / log exfiltration
+ *   HOST_RULES — full list for host execution (no Docker).
+ *     Blocks destructive operations, privilege escalation, credential
+ *     access, reverse shells, etc. because there's no container barrier.
  */
-const BLOCKED_RULES: Array<{ pattern: RegExp; label: string }> = [
+
+/** Rules that apply even INSIDE a Docker container. */
+const CONTAINER_RULES: Array<{ pattern: RegExp; label: string }> = [
+  // Fork bombs / resource exhaustion
+  { pattern: /:\(\)\s*\{.*\}.*:\s*;/,                  label: "fork bomb" },
+  { pattern: /\bfork\s*bomb/i,                         label: "fork bomb" },
+
+  // Container / VM escape attempts
+  { pattern: /\bdocker\s+run\b/i,                      label: "docker run" },
+  { pattern: /\bdocker\s+exec\b/i,                     label: "docker exec" },
+  { pattern: /\bdocker\s+cp\b/i,                       label: "docker cp" },
+  { pattern: /--privileged/i,                           label: "--privileged" },
+  { pattern: /--pid=host/i,                             label: "--pid=host" },
+  { pattern: /--net=host/i,                             label: "--net=host" },
+  { pattern: /\bnsenter\b/i,                           label: "nsenter" },
+  { pattern: /\bchroot\b/i,                            label: "chroot" },
+  { pattern: /\bunshare\b/i,                           label: "unshare" },
+  { pattern: /\bkubectl\s+exec/i,                      label: "kubectl exec" },
+
+  // Kernel module manipulation (even w/ dropped caps, block by name)
+  { pattern: /\bmodprobe\b/i,                          label: "modprobe" },
+  { pattern: /\binsmod\b/i,                            label: "insmod" },
+  { pattern: /\brmmod\b/i,                             label: "rmmod" },
+]
+
+/** Additional rules that apply ONLY on host (no Docker). */
+const HOST_ONLY_RULES: Array<{ pattern: RegExp; label: string }> = [
   // ── Destructive filesystem ──────────────────────────────────────
   { pattern: /rm\s+-[a-z]*r[a-z]*f?\s+\/(?!\w)/i,   label: "rm -rf /" },
   { pattern: /rm\s+-[a-z]*f[a-z]*r?\s+\/(?!\w)/i,    label: "rm -rf /" },
@@ -91,9 +124,7 @@ const BLOCKED_RULES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /chmod\s+-R\s+777\s+\//i,                 label: "chmod -R 777 /" },
   { pattern: /chown\s+-R\s+.*\s+\//i,                  label: "chown -R /" },
 
-  // ── Fork bombs / resource exhaustion ─────────────────────────
-  { pattern: /:\(\)\s*\{.*\}.*:\s*;/,                  label: "fork bomb" },
-  { pattern: /\bfork\s*bomb/i,                         label: "fork bomb" },
+  // ── Infinite loops ──────────────────────────────────────────
   { pattern: /while\s*true.*do.*done/i,                label: "infinite loop" },
 
   // ── System administration / shutdown ────────────────────────
@@ -106,9 +137,6 @@ const BLOCKED_RULES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\blaunchctl\b/i,                         label: "launchctl" },
   { pattern: /\bsysctl\s+-w\b/i,                       label: "sysctl -w" },
   { pattern: /\bkernelctl\b/i,                         label: "kernelctl" },
-  { pattern: /\bmodprobe\b/i,                          label: "modprobe" },
-  { pattern: /\binsmod\b/i,                            label: "insmod" },
-  { pattern: /\brmmod\b/i,                             label: "rmmod" },
 
   // ── Cron / scheduled tasks ──────────────────────────────────
   { pattern: /\bcrontab\b/i,                           label: "crontab" },
@@ -174,18 +202,6 @@ const BLOCKED_RULES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /perl\s+-e\s.*system/i,                   label: "perl -e system" },
   { pattern: /ruby\s+-e\s.*system/i,                   label: "ruby -e system" },
 
-  // ── Container / VM escape ───────────────────────────────────
-  { pattern: /\bdocker\s+run\b/i,                      label: "docker run" },
-  { pattern: /\bdocker\s+exec\b/i,                     label: "docker exec" },
-  { pattern: /\bdocker\s+cp\b/i,                       label: "docker cp" },
-  { pattern: /--privileged/i,                           label: "--privileged" },
-  { pattern: /--pid=host/i,                             label: "--pid=host" },
-  { pattern: /--net=host/i,                             label: "--net=host" },
-  { pattern: /\bnsenter\b/i,                           label: "nsenter" },
-  { pattern: /\bchroot\b/i,                            label: "chroot" },
-  { pattern: /\bunshare\b/i,                           label: "unshare" },
-  { pattern: /\bkubectl\s+exec/i,                      label: "kubectl exec" },
-
   // ── Package-manager abuse ───────────────────────────────────
   { pattern: /npm\s+.*--unsafe-perm/i,                 label: "npm --unsafe-perm" },
   { pattern: /pip\s+install\s+--pre/i,                 label: "pip install --pre" },
@@ -202,8 +218,20 @@ const BLOCKED_RULES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\blosetup\b/i,                           label: "losetup" },
 ]
 
+/**
+ * Check if a command is blocked.
+ * When _sandboxStrict is true (mode="all"), only CONTAINER_RULES apply.
+ * Otherwise, both CONTAINER_RULES and HOST_ONLY_RULES apply.
+ */
 function isBlocked(command: string): string | null {
-  for (const rule of BLOCKED_RULES) {
+  for (const rule of CONTAINER_RULES) {
+    if (rule.pattern.test(command)) {
+      return rule.label
+    }
+  }
+  // In strict sandbox mode, skip host-only rules — the container is the sandbox
+  if (_sandboxStrict) return null
+  for (const rule of HOST_ONLY_RULES) {
     if (rule.pattern.test(command)) {
       return rule.label
     }

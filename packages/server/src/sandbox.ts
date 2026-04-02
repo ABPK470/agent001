@@ -29,8 +29,17 @@ const exec = promisify(execFile)
 
 /** Sandbox configuration. */
 export interface SandboxConfig {
-  /** Execution mode: "docker" | "host". Default: auto-detect. */
-  mode?: "docker" | "host"
+  /**
+   * Execution mode:
+   *   "all"    — Docker is MANDATORY. Commands fail if Docker is unavailable.
+   *              Deny list is relaxed (container is the sandbox). This matches
+   *              agenc-core's recommended mode.
+   *   "docker" — Use Docker if available, fall back to host if not.
+   *              Full deny list always applies.
+   *   "host"   — Always run on host (for development/debugging only).
+   *              Full deny list always applies.
+   */
+  mode?: "all" | "docker" | "host"
   /** Docker image to use. Default: node:20-slim */
   image?: string
   /** Memory limit. Default: 256m */
@@ -109,6 +118,16 @@ export class DockerSandbox {
     return this.isDockerAvailable()
   }
 
+  /** Whether mode is "all" (mandatory Docker, no fallback). */
+  get isStrictMode(): boolean {
+    return this.config.mode === "all"
+  }
+
+  /** Current mode setting. */
+  get mode(): "all" | "docker" | "host" {
+    return this.config.mode
+  }
+
   /**
    * Execute a command inside a Docker container.
    *
@@ -129,6 +148,16 @@ export class DockerSandbox {
     const useDocker = await this.isSandboxed()
 
     if (!useDocker) {
+      // mode="all" → Docker is mandatory, no fallback
+      if (this.config.mode === "all") {
+        return {
+          stdout: "",
+          stderr: "Docker is required but unavailable. Install Docker or set SANDBOX_MODE=docker to allow host fallback.",
+          exitCode: 1,
+          timedOut: false,
+          sandboxed: false,
+        }
+      }
       return this.execHost(command, workspacePath, options)
     }
 

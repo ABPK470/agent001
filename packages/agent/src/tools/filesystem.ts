@@ -4,15 +4,19 @@
  * These are the same kind of tools that GitHub Copilot, Cursor,
  * and other coding agents use to interact with your codebase.
  *
- * Security:
- *   - All paths resolved relative to a base directory
- *   - Symlinks are followed and the REAL path is checked against the base
- *     (prevents symlink-escape attacks like: agent creates symlink → reads /etc/shadow)
- *   - Path traversal ("../") is blocked by resolve + startsWith check
+ * Security — 4-layer path validation (matching agenc-core):
+ *   Layer 1: Input validation — reject null bytes, URL-encoded separators
+ *   Layer 2: Traversal detection — reject ".." BEFORE path resolution
+ *   Layer 3: Symlink resolution — walk every component with realpath()
+ *   Layer 4: Allowed root check — canonical path must be under _basePath
+ *
+ * Delete protection:
+ *   No delete tool is exposed. Shell blocklist prevents rm on sensitive paths.
+ *   write_file only creates/overwrites — no unlink/rmdir.
  */
 
 import { lstat, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
-import { dirname, resolve } from "node:path"
+import { dirname, resolve, sep } from "node:path"
 import type { Tool } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
@@ -22,13 +26,53 @@ export function setBasePath(path: string): void {
   _basePath = resolve(path)
 }
 
+// ── Layer 1: Input validation ────────────────────────────────────
+
 /**
- * Resolve a path safely within the base directory.
- *
- * 1. resolve() normalizes ".." and relative segments
- * 2. startsWith() ensures the result is under _basePath
+ * Reject paths containing dangerous byte sequences BEFORE any resolution.
+ * Catches:
+ *   - Null bytes (\0) — can truncate paths at the C level
+ *   - URL-encoded separators (%2f, %5c) — can bypass string checks
+ *   - URL-encoded null (%00) — same null byte trick via encoding
+ *   - Backslash on non-Windows — can be misinterpreted
+ */
+function validateInput(p: string): void {
+  if (p.includes("\0") || p.includes("%00")) {
+    throw new Error("Path contains null byte — rejected")
+  }
+  if (/%2f/i.test(p) || /%5c/i.test(p)) {
+    throw new Error("Path contains encoded separator — rejected")
+  }
+  // On POSIX, reject backslashes (common in cross-platform attacks)
+  if (sep === "/" && p.includes("\\")) {
+    throw new Error("Path contains backslash — rejected on POSIX")
+  }
+}
+
+// ── Layer 2: Traversal detection ─────────────────────────────────
+
+/**
+ * Reject explicit ".." segments BEFORE path.resolve() processes them.
+ * Defense-in-depth: resolve() handles ".." correctly in Node, but
+ * rejecting early prevents any edge-case where a different layer
+ * might interpret the path differently.
+ */
+function rejectTraversal(p: string): void {
+  const segments = p.split(/[/\\]/)
+  if (segments.includes("..")) {
+    throw new Error(`Path "${p}" contains ".." traversal — rejected`)
+  }
+}
+
+// ── Layers 3+4: Symlink resolution + root check ─────────────────
+
+/**
+ * Resolve a path safely within the base directory (Layer 4 only).
+ * Used as a fast synchronous check when symlink resolution isn't needed.
  */
 function safePath(p: string): string {
+  validateInput(p)
+  rejectTraversal(p)
   const resolved = resolve(_basePath, p)
   if (!resolved.startsWith(_basePath + "/") && resolved !== _basePath) {
     throw new Error(`Path "${p}" escapes the allowed directory`)
@@ -37,26 +81,19 @@ function safePath(p: string): string {
 }
 
 /**
- * Like safePath but also walks EVERY path component to detect symlinks.
+ * Full 4-layer validation: input → traversal → symlink walk → root check.
  *
- * Checks each intermediate directory from _basePath downward:
+ * Walks EVERY path component from _basePath downward:
  *   /workspace/a/b/c.txt → check /workspace/a, then /workspace/a/b
  *
  * If any component is a symlink, follow it with realpath() and verify
- * the real target stays inside _basePath. This prevents:
- *   - Agent creates symlink /workspace/evil → /etc
- *   - Agent reads /workspace/evil/shadow
- *   - resolve() gives /workspace/evil/shadow (looks safe)
- *   - But evil/ is a symlink to /etc/ so real path is /etc/shadow
- *
- * By checking each component we catch this at the "evil" directory level.
+ * the real target stays inside _basePath.
  */
 async function safePathResolved(p: string): Promise<string> {
-  const resolved = safePath(p) // first check logical path
+  const resolved = safePath(p) // Layers 1, 2, 4 (logical check)
 
-  // Walk each component from _basePath downward
-  // e.g. for /workspace/a/b/c.txt → segments = ["a", "b", "c.txt"]
-  const suffix = resolved.slice(_basePath.length + 1) // "a/b/c.txt"
+  // Layer 3: walk each component for symlinks
+  const suffix = resolved.slice(_basePath.length + 1)
   if (!suffix) return resolved // path IS _basePath
 
   const segments = suffix.split("/")
@@ -69,6 +106,7 @@ async function safePathResolved(p: string): Promise<string> {
       const info = await lstat(current)
       if (info.isSymbolicLink()) {
         const real = await realpath(current)
+        // Layer 4 re-check on the real path
         if (!real.startsWith(_basePath + "/") && real !== _basePath) {
           throw new Error(`Symlink at "${current.slice(_basePath.length + 1)}" points outside the allowed directory`)
         }
@@ -76,9 +114,9 @@ async function safePathResolved(p: string): Promise<string> {
         current = real
       }
     } catch (err) {
-      // ENOENT: path doesn't exist yet (for writes) — fine, stop walking
+      // ENOENT: path doesn't exist yet (for writes) — stop walking
       if ((err as NodeJS.ErrnoException).code === "ENOENT") break
-      // Re-throw our own symlink errors and real I/O errors
+      // Re-throw our own symlink/validation errors
       if (err instanceof Error && err.message.includes("outside the allowed directory")) throw err
       // Other errors (EACCES etc.) — propagate
       if ((err as NodeJS.ErrnoException).code) throw err

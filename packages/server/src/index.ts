@@ -23,6 +23,7 @@ import {
     setBrowserCheckExecutor,
     setShellCwd,
     setShellExecutor,
+    setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
@@ -80,9 +81,12 @@ async function main() {
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
 
   // Initialize Docker sandbox for isolated code execution
-  const sandbox = initSandbox({
-    mode: process.env["SANDBOX_MODE"] === "host" ? "host" : "docker",
-  })
+  const sandboxMode = process.env["SANDBOX_MODE"] === "host"
+    ? "host" as const
+    : process.env["SANDBOX_MODE"] === "all"
+      ? "all" as const
+      : "docker" as const
+  const sandbox = initSandbox({ mode: sandboxMode })
   const dockerReady = await sandbox.isDockerAvailable()
   if (dockerReady) {
     setShellExecutor(async (command, cwd) => {
@@ -91,7 +95,12 @@ async function main() {
       })
       return result
     })
-    console.log("🐳 Docker sandbox: ACTIVE (commands run in isolated containers)")
+    if (sandbox.isStrictMode) {
+      setShellSandboxStrict(true)
+      console.log("🐳 Docker sandbox: STRICT mode (all commands require Docker, relaxed deny list)")
+    } else {
+      console.log("🐳 Docker sandbox: ACTIVE (commands run in isolated containers)")
+    }
 
     // Build browser image in background (don't block startup)
     sandbox.ensureBrowserImage().then((ready) => {
@@ -124,6 +133,10 @@ async function main() {
       }
     })
   } else {
+    if (sandbox.isStrictMode) {
+      console.error("❌ SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
+      process.exit(1)
+    }
     console.log("⚠️  Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
