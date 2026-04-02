@@ -21,8 +21,9 @@
  */
 
 import { execFile } from "node:child_process"
-import { promisify } from "node:util"
 import { randomBytes } from "node:crypto"
+import { resolve } from "node:path"
+import { promisify } from "node:util"
 
 const exec = promisify(execFile)
 
@@ -53,6 +54,8 @@ export interface SandboxResult {
 }
 
 const DEFAULT_IMAGE = "node:20-slim"
+const BROWSER_IMAGE = "agent001-browser:latest"
+const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../docker/Dockerfile.browser")
 const DEFAULT_MEMORY = "256m"
 const DEFAULT_CPU = 1
 const DEFAULT_TIMEOUT = 30_000
@@ -72,6 +75,7 @@ const SAFE_ENV_KEYS = new Set([
 
 export class DockerSandbox {
   private dockerAvailable: boolean | null = null
+  private browserImageReady: boolean | null = null
   private readonly config: Required<SandboxConfig>
   private activeContainers = new Set<string>()
 
@@ -277,6 +281,147 @@ export class DockerSandbox {
       }
     }
     return args
+  }
+
+  // ── Browser sandbox ────────────────────────────────────────────
+
+  /**
+   * Build the browser Docker image if not already available.
+   * Uses Dockerfile.browser which has Node + Chromium + Puppeteer.
+   * Only built once per session; cached by Docker layer cache thereafter.
+   */
+  async ensureBrowserImage(): Promise<boolean> {
+    if (this.browserImageReady !== null) return this.browserImageReady
+    if (!(await this.isDockerAvailable())) {
+      this.browserImageReady = false
+      return false
+    }
+
+    // Check if image already exists
+    try {
+      await exec("docker", ["image", "inspect", BROWSER_IMAGE], { timeout: 5000 })
+      this.browserImageReady = true
+      return true
+    } catch {
+      // Image doesn't exist — build it
+    }
+
+    try {
+      const dockerfileDir = resolve(BROWSER_DOCKERFILE, "..")
+      await exec("docker", [
+        "build",
+        "-t", BROWSER_IMAGE,
+        "-f", BROWSER_DOCKERFILE,
+        dockerfileDir,
+      ], { timeout: 300_000 }) // 5min for first build
+      this.browserImageReady = true
+      return true
+    } catch (err) {
+      console.error("Failed to build browser image:", (err as Error).message)
+      this.browserImageReady = false
+      return false
+    }
+  }
+
+  /**
+   * Execute a browser check inside a Docker container.
+   *
+   * Runs a self-contained Node.js script inside the browser container that:
+   *   1. Starts a static file server for the workspace files
+   *   2. Launches Chromium (using the container's sandbox)
+   *   3. Navigates to the HTML file
+   *   4. Collects errors, warnings, network failures
+   *   5. Outputs JSON results to stdout
+   *
+   * The container has:
+   *   - SYS_ADMIN cap (required for Chromium's native sandbox)
+   *   - No network access (--network=none)
+   *   - Read-only root, writable workspace mount
+   *   - Memory/CPU limits
+   */
+  async browserExec(
+    scriptContent: string,
+    workspacePath: string,
+    options?: { timeout?: number },
+  ): Promise<SandboxResult> {
+    const useDocker = await this.ensureBrowserImage()
+
+    if (!useDocker) {
+      // Fallback: execute on host (browser_check.ts handles this natively)
+      return {
+        stdout: "",
+        stderr: "FALLBACK_TO_HOST",
+        exitCode: 1,
+        timedOut: false,
+        sandboxed: false,
+      }
+    }
+
+    const timeout = options?.timeout ?? 30_000
+    const containerId = `agent001-browser-${randomBytes(6).toString("hex")}`
+
+    const args: string[] = [
+      "run",
+      "--rm",
+      "--name", containerId,
+      `--memory=512m`,
+      `--cpus=${this.config.cpuLimit}`,
+      // No network — the static server runs INSIDE the container
+      "--network=none",
+      // Chromium needs SYS_ADMIN for its own sandbox (seccomp + namespaces)
+      "--cap-drop=ALL",
+      "--cap-add=SYS_ADMIN",
+      "--security-opt=no-new-privileges",
+      // Read-only root, writable workspace + tmp
+      "--read-only",
+      "--tmpfs", "/tmp:rw,exec,nosuid,size=128m",
+      // Bind-mount workspace
+      "-v", `${workspacePath}:/workspace:ro`,
+      // Working directory
+      "-w", "/workspace",
+      // Environment
+      "-e", "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true",
+      "-e", "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium",
+      "-e", "NO_COLOR=1",
+      // Image
+      BROWSER_IMAGE,
+      // Execute the script via stdin
+      "node", "-e", scriptContent,
+    ]
+
+    this.activeContainers.add(containerId)
+
+    try {
+      const { stdout, stderr } = await exec("docker", args, {
+        timeout: timeout + 10_000, // extra for container + browser startup
+        maxBuffer: 2 * 1024 * 1024,
+      })
+
+      return {
+        stdout: truncateOutput(stdout),
+        stderr: truncateOutput(stderr),
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true,
+      }
+    } catch (err: unknown) {
+      const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
+      const timedOut = error.killed === true
+
+      if (timedOut) {
+        await exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {})
+      }
+
+      return {
+        stdout: truncateOutput(error.stdout ?? ""),
+        stderr: truncateOutput(error.stderr ?? ""),
+        exitCode: error.code ?? 1,
+        timedOut,
+        sandboxed: true,
+      }
+    } finally {
+      this.activeContainers.delete(containerId)
+    }
   }
 
   /** Kill all active containers (for cleanup on server shutdown). */

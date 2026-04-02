@@ -27,9 +27,6 @@ export function setBasePath(path: string): void {
  *
  * 1. resolve() normalizes ".." and relative segments
  * 2. startsWith() ensures the result is under _basePath
- * 3. For reads: realpath() follows symlinks and re-checks the target
- *    (prevents symlink escape: agent writes a symlink pointing to /etc/shadow,
- *     then reads it — realpath reveals the true destination)
  */
 function safePath(p: string): string {
   const resolved = resolve(_basePath, p)
@@ -40,28 +37,55 @@ function safePath(p: string): string {
 }
 
 /**
- * Like safePath but also follows symlinks to verify the real target.
- * Use for read operations where symlink escape is a risk.
+ * Like safePath but also walks EVERY path component to detect symlinks.
+ *
+ * Checks each intermediate directory from _basePath downward:
+ *   /workspace/a/b/c.txt → check /workspace/a, then /workspace/a/b
+ *
+ * If any component is a symlink, follow it with realpath() and verify
+ * the real target stays inside _basePath. This prevents:
+ *   - Agent creates symlink /workspace/evil → /etc
+ *   - Agent reads /workspace/evil/shadow
+ *   - resolve() gives /workspace/evil/shadow (looks safe)
+ *   - But evil/ is a symlink to /etc/ so real path is /etc/shadow
+ *
+ * By checking each component we catch this at the "evil" directory level.
  */
 async function safePathResolved(p: string): Promise<string> {
   const resolved = safePath(p) // first check logical path
 
-  // Check if the path itself is a symlink — follow it and verify destination
-  try {
-    const info = await lstat(resolved)
-    if (info.isSymbolicLink()) {
-      const real = await realpath(resolved)
-      if (!real.startsWith(_basePath + "/") && real !== _basePath) {
-        throw new Error(`Symlink "${p}" points outside the allowed directory`)
+  // Walk each component from _basePath downward
+  // e.g. for /workspace/a/b/c.txt → segments = ["a", "b", "c.txt"]
+  const suffix = resolved.slice(_basePath.length + 1) // "a/b/c.txt"
+  if (!suffix) return resolved // path IS _basePath
+
+  const segments = suffix.split("/")
+  let current = _basePath
+
+  for (const segment of segments) {
+    current = resolve(current, segment)
+
+    try {
+      const info = await lstat(current)
+      if (info.isSymbolicLink()) {
+        const real = await realpath(current)
+        if (!real.startsWith(_basePath + "/") && real !== _basePath) {
+          throw new Error(`Symlink at "${current.slice(_basePath.length + 1)}" points outside the allowed directory`)
+        }
+        // Continue walking from the resolved real path
+        current = real
       }
-      return real
+    } catch (err) {
+      // ENOENT: path doesn't exist yet (for writes) — fine, stop walking
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") break
+      // Re-throw our own symlink errors and real I/O errors
+      if (err instanceof Error && err.message.includes("outside the allowed directory")) throw err
+      // Other errors (EACCES etc.) — propagate
+      if ((err as NodeJS.ErrnoException).code) throw err
     }
-  } catch (err) {
-    // ENOENT is fine — file doesn't exist yet (write path)
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
   }
 
-  return resolved
+  return current
 }
 
 // ── read_file ────────────────────────────────────────────────────

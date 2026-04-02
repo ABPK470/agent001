@@ -26,6 +26,31 @@ export function setBrowserCheckCwd(cwd: string): void {
   _browserCheckCwd = cwd
 }
 
+/** Result from a sandboxed browser check. */
+export interface BrowserCheckResult {
+  /** Structured report text. */
+  report: string
+  /** Whether the check ran in Docker or on host. */
+  sandboxed: boolean
+}
+
+/**
+ * Optional executor injected by the server for Docker-sandboxed browser checks.
+ * When set, the browser runs inside a container with Chromium + its own sandbox.
+ */
+type BrowserCheckExecutor = (
+  htmlPath: string,
+  clicks: string[],
+  waitMs: number,
+  cwd: string,
+) => Promise<BrowserCheckResult>
+let _browserExecutor: BrowserCheckExecutor | null = null
+
+/** Inject a sandbox executor for browser checks (called once at server startup). */
+export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
+  _browserExecutor = executor
+}
+
 /** MIME types for common web files. */
 const MIME: Record<string, string> = {
   ".html": "text/html",
@@ -132,6 +157,18 @@ export const browserCheckTool: Tool = {
     } catch {
       return `Error: File not found: ${relPath}`
     }
+
+    // Route through Docker sandbox if executor is available
+    if (_browserExecutor) {
+      try {
+        const result = await _browserExecutor(relPath, clicks, waitMs, _browserCheckCwd)
+        return result.report
+      } catch (err) {
+        return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`
+      }
+    }
+
+    // Fallback: run Puppeteer on host
 
     // Dynamically import puppeteer (it's a heavy dep, only load when needed)
     let launchBrowser: (opts: Record<string, unknown>) => Promise<import("puppeteer").Browser>
