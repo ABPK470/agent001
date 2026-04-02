@@ -410,7 +410,7 @@ export function OperatorEnvironment() {
                     {(["explorer", "runs", "agents", "notifications"] as SidebarSection[]).map((s) => (
                       <button
                         key={s}
-                        className="px-1.5 py-0.5 text-[11px] rounded capitalize"
+                        className="px-1.5 py-0.5 text-[13px] rounded capitalize"
                         style={{
                           color: sidebarBottomSection === s ? C.text : C.dim,
                           background: sidebarBottomSection === s ? C.elevated : "transparent",
@@ -452,7 +452,7 @@ export function OperatorEnvironment() {
               {activeRun ? activeRun.goal : "No active run — submit a goal below"}
             </span>
             {currentIteration && (
-              <span className="shrink-0 text-[12px]" style={{ color: C.dim }}>
+              <span className="shrink-0 text-[13px]" style={{ color: C.dim }}>
                 iter {currentIteration.current}/{currentIteration.max}
               </span>
             )}
@@ -463,7 +463,7 @@ export function OperatorEnvironment() {
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (
-                <span className="text-[12px] ml-1" style={{ color: C.warning }}>{rollbackMsg}</span>
+                <span className="text-[13px] ml-1" style={{ color: C.warning }}>{rollbackMsg}</span>
               )}
             </div>
           </div>
@@ -507,7 +507,7 @@ export function OperatorEnvironment() {
                     {(["trace", "dag", "timeline", "details"] as EditorTab[]).map((tab) => (
                       <button
                         key={tab}
-                        className="px-2.5 py-1 text-[12px] transition-colors capitalize"
+                        className="px-2.5 py-1 text-[13px] transition-colors capitalize"
                         style={{
                           color: editorRightTab === tab ? C.text : C.dim,
                           borderBottom: editorRightTab === tab ? `1px solid ${C.cyan}` : "1px solid transparent",
@@ -568,7 +568,7 @@ export function OperatorEnvironment() {
                     {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
                       <button
                         key={`r-${tab}`}
-                        className="px-2 py-1 text-[12px] uppercase tracking-wide transition-colors"
+                        className="px-2 py-1 text-[13px] uppercase tracking-wide transition-colors"
                         style={{
                           color: bottomRightTab === tab ? C.text : C.dim,
                           borderBottom: bottomRightTab === tab ? `1px solid ${C.cyan}` : "1px solid transparent",
@@ -641,7 +641,7 @@ export function OperatorEnvironment() {
                 disabled={isRunning || submitting}
               />
               {liveUsage.totalTokens > 0 && (
-                <span className="text-[12px] shrink-0" style={{ color: C.dim }}>
+                <span className="text-[13px] shrink-0" style={{ color: C.dim }}>
                   {fmtK(liveUsage.totalTokens)} tk
                 </span>
               )}

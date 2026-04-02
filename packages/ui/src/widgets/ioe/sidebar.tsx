@@ -250,7 +250,7 @@ export function NotificationsPanel({
                 }}
               />
               <span className="truncate" style={{ color: C.text }}>{n.title}</span>
-              <span className="ml-auto shrink-0 text-[12px]" style={{ color: C.dim }}>
+              <span className="ml-auto shrink-0 text-[13px]" style={{ color: C.dim }}>
                 {timeAgo(n.createdAt)}
               </span>
             </div>
@@ -277,10 +277,10 @@ export function SearchResultsList({ results }: { results: SearchResult[] | null 
           className="flex items-center gap-2 px-2 py-1 rounded text-[13px] hover:bg-white/5 cursor-default"
           style={{ color: C.textSecondary }}
         >
-          <span className="text-[12px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>
+          <span className="text-[13px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>
           <span className="truncate">{r.text}</span>
           {r.detail && (
-            <span className="ml-auto shrink-0 text-[12px]" style={{ color: C.dim }}>{r.detail}</span>
+            <span className="ml-auto shrink-0 text-[13px]" style={{ color: C.dim }}>{r.detail}</span>
           )}
         </div>
       ))}

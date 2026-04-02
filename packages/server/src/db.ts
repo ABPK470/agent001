@@ -195,6 +195,18 @@ export function _migrate(db: Database.Database): void {
     JSON.stringify(DEFAULT_TOOLS),
   )
 
+  // ── Seed default policies ──────────────────────────────────
+  const seedPolicies: { name: string; effect: string; condition: string; parameters: string }[] = [
+    { name: "Tool Permission", effect: "allow", condition: "tool_call", parameters: JSON.stringify({ scope: "all_tools", description: "Controls which tools agents are permitted to invoke" }) },
+    { name: "Model", effect: "allow", condition: "model_selection", parameters: JSON.stringify({ scope: "all_models", description: "Controls model selection and usage limits" }) },
+    { name: "Security", effect: "require_approval", condition: "sensitive_action", parameters: JSON.stringify({ scope: "destructive_ops", description: "Requires approval for destructive or sensitive operations" }) },
+  ]
+  const insertPolicy = db.prepare(`
+    INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at)
+    VALUES (@name, @effect, @condition, @parameters, datetime('now'))
+  `)
+  for (const p of seedPolicies) insertPolicy.run(p)
+
   // ── Version-based seed update ──────────────────────────────
   // When SEED_VERSION bumps, update the default agent's prompt and tools
   // ONLY if the user hasn't customized them (i.e. they still match a known old version).

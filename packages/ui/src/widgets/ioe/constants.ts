@@ -248,13 +248,13 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
   for (let i = Math.max(0, trace.length - 50); i < trace.length; i++) {
     const e = trace[i]
     if (e.kind === "tool-call") items.push({ text: `CALL ${e.tool}(${e.argsSummary || "..."})`, color: C.warning })
-    else if (e.kind === "tool-result") items.push({ text: `RET  ${e.text.slice(0, 120)}`, color: C.success })
-    else if (e.kind === "tool-error") items.push({ text: `ERR  ${e.text.slice(0, 120)}`, color: C.coral })
-    else if (e.kind === "thinking") items.push({ text: `THINK ${e.text.slice(0, 80)}`, color: C.accent })
-    else if (e.kind === "answer") items.push({ text: `ANS  ${e.text.slice(0, 120)}`, color: C.success })
+    else if (e.kind === "tool-result") items.push({ text: `RET  ${e.text}`, color: C.success })
+    else if (e.kind === "tool-error") items.push({ text: `ERR  ${e.text}`, color: C.coral })
+    else if (e.kind === "thinking") items.push({ text: `THINK ${e.text}`, color: C.accent })
+    else if (e.kind === "answer") items.push({ text: `ANS  ${e.text}`, color: C.success })
     else if (e.kind === "iteration") items.push({ text: `ITER ${e.current}/${e.max}`, color: C.dim })
-    else if (e.kind === "goal") items.push({ text: `GOAL ${(e.text ?? "").slice(0, 100)}`, color: C.accent })
-    else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${e.goal.slice(0, 80)}`, color: C.plum })
+    else if (e.kind === "goal") items.push({ text: `GOAL ${e.text ?? ""}`, color: C.accent })
+    else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${e.goal}`, color: C.plum })
     else if (e.kind === "delegation-end") items.push({ text: `DELEG ◀ ${e.status}`, color: e.status === "done" ? C.success : C.coral })
   }
   return items

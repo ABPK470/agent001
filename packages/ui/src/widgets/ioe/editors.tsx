@@ -58,7 +58,7 @@ export function EditorTabs({
         >
           {tab.label}
           {tab.count != null && tab.count > 0 && (
-            <span className="text-[11px] px-1 rounded" style={{ background: C.elevated, color: C.dim }}>
+            <span className="text-[12px] px-1 rounded" style={{ background: C.elevated, color: C.dim }}>
               {tab.count}
             </span>
           )}
@@ -99,7 +99,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "goal") {
     return (
       <div className="py-0.5" style={{ color: C.accent }}>
-        <span className="text-[12px] uppercase mr-2" style={{ color: C.dim }}>GOAL</span>
+        <span className="text-[13px] uppercase mr-2" style={{ color: C.dim }}>GOAL</span>
         {e.text}
       </div>
     )
@@ -114,7 +114,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "thinking") {
     return (
       <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[12px] mr-2" style={{ color: C.plum }}>THINK</span>
+        <span className="text-[13px] mr-2" style={{ color: C.plum }}>THINK</span>
         <span style={{ color: C.muted }}>{expanded ? e.text : truncate(e.text, 120)}</span>
       </div>
     )
@@ -122,12 +122,12 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "tool-call") {
     return (
       <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[12px] mr-2" style={{ color: C.warning }}>CALL</span>
+        <span className="text-[13px] mr-2" style={{ color: C.warning }}>CALL</span>
         <span style={{ color: C.text }}>{e.tool}</span>
         <span style={{ color: C.dim }}>({e.argsSummary || "..."})</span>
         {expanded && (
           <pre
-            className="mt-1 ml-4 p-2 rounded text-[12px] overflow-x-auto"
+            className="mt-1 ml-4 p-2 rounded text-[13px] overflow-x-auto"
             style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
           >
             {e.argsFormatted}
@@ -139,7 +139,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "tool-result") {
     return (
       <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[12px] mr-2" style={{ color: C.success }}>RET</span>
+        <span className="text-[13px] mr-2" style={{ color: C.success }}>RET</span>
         <span style={{ color: C.textSecondary }}>{expanded ? e.text : truncate(e.text, 120)}</span>
       </div>
     )
@@ -147,7 +147,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "tool-error") {
     return (
       <div className="py-0.5">
-        <span className="text-[12px] mr-2" style={{ color: C.coral }}>ERR</span>
+        <span className="text-[13px] mr-2" style={{ color: C.coral }}>ERR</span>
         <span style={{ color: C.coral }}>{truncate(e.text, 200)}</span>
       </div>
     )
@@ -155,7 +155,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "answer") {
     return (
       <div className="py-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
-        <span className="text-[12px] mr-2" style={{ color: C.success }}>ANSWER</span>
+        <span className="text-[13px] mr-2" style={{ color: C.success }}>ANSWER</span>
         <span style={{ color: C.text }}>{e.text}</span>
       </div>
     )
@@ -163,7 +163,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "error") {
     return (
       <div className="py-0.5">
-        <span className="text-[12px] mr-2" style={{ color: C.coral }}>ERROR</span>
+        <span className="text-[13px] mr-2" style={{ color: C.coral }}>ERROR</span>
         <span style={{ color: C.coral }}>{e.text}</span>
       </div>
     )
@@ -171,7 +171,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "usage") {
     return (
       <div className="py-0.5" style={{ color: C.dim }}>
-        <span className="text-[12px] mr-2">USAGE</span>
+        <span className="text-[13px] mr-2">USAGE</span>
         {fmtK(e.totalTokens)} tokens · {e.llmCalls} calls
       </div>
     )
@@ -179,7 +179,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-start") {
     return (
       <div className="py-0.5 mt-0.5" style={{ color: C.plum }}>
-        <span className="text-[12px] mr-2">DELEG▶</span>
+        <span className="text-[13px] mr-2">DELEG▶</span>
         {e.agentName ? `[${e.agentName}] ` : ""}
         {e.goal}
         <span style={{ color: C.dim }}> (depth {e.depth})</span>
@@ -189,7 +189,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-end") {
     return (
       <div className="py-0.5" style={{ color: e.status === "done" ? C.success : C.coral }}>
-        <span className="text-[12px] mr-2">DELEG◀</span>
+        <span className="text-[13px] mr-2">DELEG◀</span>
         {e.status} {e.answer ? truncate(e.answer, 100) : e.error ? truncate(e.error, 100) : ""}
       </div>
     )
@@ -204,7 +204,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-start") {
     return (
       <div className="py-0.5" style={{ color: C.plum }}>
-        <span className="text-[12px] mr-2">PAR▶</span>
+        <span className="text-[13px] mr-2">PAR▶</span>
         {e.taskCount} tasks{" "}
         {e.goals.map((g, i) => (
           <Fragment key={i}>
@@ -218,7 +218,7 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-end") {
     return (
       <div className="py-0.5" style={{ color: C.plum }}>
-        <span className="text-[12px] mr-2">PAR◀</span>
+        <span className="text-[13px] mr-2">PAR◀</span>
         {e.fulfilled}/{e.taskCount} fulfilled, {e.rejected} rejected
       </div>
     )
@@ -252,7 +252,7 @@ export function DagPanel({
 
   return (
     <div className="h-full overflow-y-auto px-3 py-2 font-mono text-[13px]">
-      <div className="flex items-center gap-3 mb-2 text-[12px]">
+      <div className="flex items-center gap-3 mb-2 text-[13px]">
         <span style={{ color: C.success }}>LIVE {liveCount}</span>
         <span style={{ color: C.success }}>DONE {doneCount}</span>
         <span style={{ color: failCount > 0 ? C.coral : C.dim }}>FAIL {failCount}</span>
@@ -288,7 +288,7 @@ export function DagPanel({
                 style={{ background: dotColor }}
               />
               <span
-                className="shrink-0 w-5 text-center text-[12px]"
+                className="shrink-0 w-5 text-center text-[13px]"
                 style={{
                   color: node.label.startsWith("D") ? C.cyan : node.depth === 0 ? C.accent : C.muted,
                 }}
@@ -296,13 +296,13 @@ export function DagPanel({
                 {node.label}
               </span>
               <span className="truncate flex-1" style={{ color: C.text }}>{node.detail}</span>
-              <span className="shrink-0 text-[12px]" style={{ color: dotColor }}>
+              <span className="shrink-0 text-[13px]" style={{ color: dotColor }}>
                 {node.status === "running" ? "live" : node.status}
               </span>
             </div>
             {isExpanded && (
               <div
-                className="mb-1 px-2 py-1 rounded text-[12px] overflow-auto"
+                className="mb-1 px-2 py-1 rounded text-[13px] overflow-auto"
                 style={{
                   marginLeft: node.depth * 16 + 24,
                   background: C.surface,
@@ -379,8 +379,8 @@ export function TimelinePanel({
               <div className="flex items-center gap-2">
                 <span style={{ color: C.text }}>{step.name}</span>
                 {step.action !== step.name && <span style={{ color: C.dim }}>({step.action})</span>}
-                <span className="ml-auto text-[12px]" style={{ color: C.dim }}>{duration}</span>
-                <span className="text-[12px]" style={{ color: dotColor }}>{step.status}</span>
+                <span className="ml-auto text-[13px]" style={{ color: C.dim }}>{duration}</span>
+                <span className="text-[13px]" style={{ color: dotColor }}>{step.status}</span>
               </div>
               {step.error && (
                 <div className="mt-0.5" style={{ color: C.error }}>{truncate(step.error, 100)}</div>
@@ -390,9 +390,9 @@ export function TimelinePanel({
                 <div className="mt-1.5 space-y-1">
                   {Object.keys(step.input).length > 0 && (
                     <div>
-                      <span className="text-[12px] uppercase" style={{ color: C.dim }}>Input</span>
+                      <span className="text-[13px] uppercase" style={{ color: C.dim }}>Input</span>
                       <pre
-                        className="mt-0.5 p-2 rounded text-[12px] overflow-x-auto"
+                        className="mt-0.5 p-2 rounded text-[13px] overflow-x-auto"
                         style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
                       >
                         {JSON.stringify(step.input, null, 2)}
@@ -401,9 +401,9 @@ export function TimelinePanel({
                   )}
                   {Object.keys(step.output).length > 0 && (
                     <div>
-                      <span className="text-[12px] uppercase" style={{ color: C.dim }}>Output</span>
+                      <span className="text-[13px] uppercase" style={{ color: C.dim }}>Output</span>
                       <pre
-                        className="mt-0.5 p-2 rounded text-[12px] overflow-x-auto"
+                        className="mt-0.5 p-2 rounded text-[13px] overflow-x-auto"
                         style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
                       >
                         {JSON.stringify(step.output, null, 2)}
@@ -487,7 +487,7 @@ export function DetailsPanel({
                     {s.calls}× {avgMs > 0 ? `${avgMs}ms` : ""}
                   </span>
                   {s.errors > 0 && (
-                    <span className="shrink-0 text-[12px]" style={{ color: C.coral }}>{s.errors} err</span>
+                    <span className="shrink-0 text-[13px]" style={{ color: C.coral }}>{s.errors} err</span>
                   )}
                 </div>
               )

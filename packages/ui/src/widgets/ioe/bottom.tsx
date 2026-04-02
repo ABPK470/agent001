@@ -17,7 +17,7 @@ export function OutputPanel({ logs }: { logs: LogEntry[] }) {
       {logs.slice(-200).map((log, i) => {
         const levelColor = log.level === "error" ? C.coral : log.level === "warn" ? C.warning : C.muted
         return (
-          <div key={i} className="truncate">
+          <div key={i}>
             <span style={{ color: C.dim }}>[{ts(log.timestamp)}]</span>{" "}
             <span style={{ color: levelColor, textTransform: "uppercase" }}>{log.level.slice(0, 3)}</span>{" "}
             <span style={{ color: C.textSecondary }}>{log.message}</span>
@@ -45,12 +45,12 @@ export function AuditPanel({ audit }: { audit: AuditEntry[] }) {
               ? C.warning
               : C.textSecondary
         return (
-          <div key={i} className="truncate">
+          <div key={i}>
             <span style={{ color: C.dim }}>[{ts(a.timestamp)}]</span>{" "}
             <span style={{ color: C.accent }}>{a.actor}</span>{" "}
             <span style={{ color: actionColor }}>{a.action}</span>
             {Object.keys(a.detail).length > 0 && (
-              <span style={{ color: C.dim }}> {JSON.stringify(a.detail).slice(0, 100)}</span>
+              <span style={{ color: C.dim }}> {JSON.stringify(a.detail)}</span>
             )}
           </div>
         )
@@ -68,7 +68,7 @@ export function FeedPanel({ items }: { items: FeedItem[] }) {
   return (
     <div className="px-3 py-1">
       {items.map((item, i) => (
-        <div key={i} className="truncate" style={{ color: item.color }}>{item.text}</div>
+        <div key={i} style={{ color: item.color }}>{item.text}</div>
       ))}
     </div>
   )
@@ -84,9 +84,9 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
     <div className="px-3 py-1">
       {problems.map((p, i) => (
         <div key={i} className="flex items-start gap-2 py-0.5">
-          <AlertTriangle size={11} className="mt-0.5 shrink-0" style={{ color: C.coral }} />
-          <span className="text-[12px] shrink-0 uppercase w-12" style={{ color: C.dim }}>{p.source}</span>
-          <span className="truncate" style={{ color: C.coral }}>{p.text}</span>
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: C.coral }} />
+          <span className="text-[13px] shrink-0 uppercase w-12" style={{ color: C.dim }}>{p.source}</span>
+          <span style={{ color: C.coral }}>{p.text}</span>
           {p.time && (
             <span className="ml-auto shrink-0" style={{ color: C.dim }}>{ts(p.time)}</span>
           )}
