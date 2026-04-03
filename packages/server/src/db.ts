@@ -470,12 +470,18 @@ export interface UsageTotals {
   total_tokens: number
   total_llm_calls: number
   run_count: number
+  completed_runs: number
+  failed_runs: number
 }
 
 export function getUsageTotals(): UsageTotals {
-  return getDb()
-    .prepare("SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls, COUNT(*) as run_count FROM token_usage")
-    .get() as UsageTotals
+  const tokens = getDb()
+    .prepare("SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls FROM token_usage")
+    .get() as Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
+  const runStats = getDb()
+    .prepare("SELECT COUNT(*) as run_count, COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as completed_runs, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_runs FROM runs")
+    .get() as { run_count: number; completed_runs: number; failed_runs: number }
+  return { ...tokens, ...runStats }
 }
 
 // ── Trace entry queries ──────────────────────────────────────────

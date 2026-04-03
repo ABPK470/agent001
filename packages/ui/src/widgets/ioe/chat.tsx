@@ -74,7 +74,7 @@ export function ChatPanel({
                 {pendingInput!.options.map((opt, i) => (
                   <button
                     key={i}
-                    className="px-2 py-1 rounded text-[12px] cursor-pointer transition-colors"
+                    className="px-2 py-1 rounded text-[12px] cursor-pointer transition-colors hover:brightness-125"
                     style={{
                       background: C.accent + "20",
                       color: C.accent,
@@ -102,7 +102,7 @@ export function ChatPanel({
                 autoFocus
               />
               <button
-                className="p-1 rounded transition-colors cursor-pointer"
+                className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
                 style={{ color: responseInput.trim() ? C.accent : C.dim }}
                 onClick={handleRespond}
                 disabled={!responseInput.trim()}
@@ -129,7 +129,7 @@ export function ChatPanel({
               disabled={isRunning || submitting}
             />
             <button
-              className="p-1 rounded transition-colors"
+              className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
               style={{ color: goalInput.trim() ? C.accent : C.dim }}
               onClick={onSubmit}
               disabled={isRunning || submitting || !goalInput.trim()}

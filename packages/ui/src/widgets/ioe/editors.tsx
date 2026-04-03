@@ -434,15 +434,20 @@ export function DetailsPanel({
   liveUsage: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number }
   usage: UsageData | null
 }) {
+  // For completed/failed runs, use the run's own token data; liveUsage is only valid while running
+  const runUsage = run && run.status !== "running" && run.status !== "pending"
+    ? { promptTokens: run.promptTokens, completionTokens: run.completionTokens, totalTokens: run.totalTokens, llmCalls: run.llmCalls }
+    : liveUsage
+
   return (
     <div className="h-full overflow-y-auto px-4 py-3 text-[13px] space-y-4">
       <section>
         <h3 className="text-[13px] uppercase tracking-wide mb-2" style={{ color: C.cyan }}>Run Usage</h3>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-          <KV label="Prompt Tokens" value={fmtK(liveUsage.promptTokens)} />
-          <KV label="Completion Tokens" value={fmtK(liveUsage.completionTokens)} />
-          <KV label="Total Tokens" value={fmtK(liveUsage.totalTokens)} />
-          <KV label="LLM Calls" value={String(liveUsage.llmCalls)} />
+          <KV label="Prompt Tokens" value={fmtK(runUsage.promptTokens)} />
+          <KV label="Completion Tokens" value={fmtK(runUsage.completionTokens)} />
+          <KV label="Total Tokens" value={fmtK(runUsage.totalTokens)} />
+          <KV label="LLM Calls" value={String(runUsage.llmCalls)} />
         </div>
       </section>
 
@@ -1045,16 +1050,16 @@ export function MapPanel({
 
       {/* Zoom controls — bottom center */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-lg px-1 py-0.5" style={{ background: C.surface + "cc" }}>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 0.7, 200) }}>
           <span className="text-sm">−</span>
         </button>
         <span className="text-[10px] font-mono w-8 text-center" style={{ color: C.muted }}>{zoomLevel}%</span>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 1.4, 200) }}>
           <span className="text-sm">+</span>
         </button>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => {
             const fg = graphRef.current; if (!fg) return
             const nodes = graphData.nodes; if (nodes.length === 0) return

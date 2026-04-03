@@ -78,6 +78,8 @@ export function ExplorerPanel({
           <>
             <TreeItem label="Total Tokens" value={fmtK(usage.totals.totalTokens)} />
             <TreeItem label="Total Runs" value={String(usage.totals.runCount)} />
+            <TreeItem label="Completed" value={String(usage.totals.completedRuns)} valueColor={C.success} />
+            <TreeItem label="Failed" value={String(usage.totals.failedRuns)} valueColor={C.error} />
             <TreeItem label="LLM Calls" value={String(usage.totals.llmCalls)} />
           </>
         )}
@@ -130,7 +132,7 @@ export function RunsPanel({
         runs.map((r) => (
           <button
             key={r.id}
-            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.03]"
+            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.03] cursor-pointer"
             style={{ background: r.id === activeRunId ? "rgba(123,111,199,0.08)" : "transparent" }}
             onClick={() => onSelect(r.id)}
           >

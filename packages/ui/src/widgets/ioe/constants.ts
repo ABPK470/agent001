@@ -54,6 +54,8 @@ export interface UsageData {
     totalTokens: number
     llmCalls: number
     runCount: number
+    completedRuns: number
+    failedRuns: number
   }
 }
 

@@ -6,19 +6,19 @@
  */
 
 import {
-    Bell,
-    Bot,
-    CircleDot,
-    Columns2,
-    FolderTree,
-    History,
-    MessageSquare,
-    PanelBottom,
-    Rows2,
-    Search,
-    Terminal,
-    X,
-    type LucideIcon
+  Bell,
+  Bot,
+  CircleDot,
+  Columns2,
+  FolderTree,
+  History,
+  MessageSquare,
+  PanelBottom,
+  Rows2,
+  Search,
+  Terminal,
+  X,
+  type LucideIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -28,30 +28,30 @@ import { fmtTokens } from "../util"
 import { AuditPanel, FeedPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel } from "./ioe/chat"
 import {
-    C,
-    buildChatMessages,
-    buildDagNodes,
-    buildFeedItems,
-    buildProblems,
-    buildSearchResults,
-    buildToolStats,
-    fmtK,
-    statusDot,
-    type BottomTab,
-    type EditorTab,
-    type HealthData,
-    type LlmConfig,
-    type SidebarSection,
-    type UsageData
+  C,
+  buildChatMessages,
+  buildDagNodes,
+  buildFeedItems,
+  buildProblems,
+  buildSearchResults,
+  buildToolStats,
+  fmtK,
+  statusDot,
+  type BottomTab,
+  type EditorTab,
+  type HealthData,
+  type LlmConfig,
+  type SidebarSection,
+  type UsageData
 } from "./ioe/constants"
 import { DagPanel, DetailsPanel, EditorTabs, MapPanel, TimelinePanel, TracePanel } from "./ioe/editors"
-import { ActionBtn, useResizable } from "./ioe/primitives"
+import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
-    AgentsToolsPanel,
-    ExplorerPanel,
-    NotificationsPanel,
-    RunsPanel,
-    SearchResultsList,
+  AgentsToolsPanel,
+  ExplorerPanel,
+  NotificationsPanel,
+  RunsPanel,
+  SearchResultsList,
 } from "./ioe/sidebar"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -303,7 +303,7 @@ export function OperatorEnvironment() {
             autoFocus
           />
           <button
-            className="p-1 rounded hover:bg-white/10 transition-colors"
+            className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
             style={{ color: C.muted }}
             onClick={() => { setSearchOpen(false); setSearchQuery("") }}
           >
@@ -324,14 +324,14 @@ export function OperatorEnvironment() {
         {/* ── Activity Bar ──────────────────────────────────── */}
         <div
           className="flex flex-col items-center py-1 shrink-0 select-none"
-          style={{ width: 48, background: C.surface, borderRight: `1px solid ${C.borderSolid}` }}
+          style={{ width: 52, background: C.surface, borderRight: `1px solid ${C.borderSolid}`, paddingRight: 4 }}
         >
           {activityItems.map((item) => {
             const active = sidebarVisible && sidebarSection === item.id
             return (
               <button
                 key={item.id}
-                className="relative flex items-center justify-center w-12 h-10 transition-colors"
+                className="relative flex items-center justify-center w-12 h-10 cursor-pointer group"
                 style={{
                   color: active ? C.text : C.muted,
                   borderLeft: active ? `2px solid ${C.accent}` : "2px solid transparent",
@@ -345,7 +345,7 @@ export function OperatorEnvironment() {
                 }}
                 title={item.label}
               >
-                <item.Icon size={20} />
+                <item.Icon size={22} className="transition-[filter] duration-150 group-hover:brightness-150" />
                 {item.badge != null && item.badge > 0 && (
                   <span
                     className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full text-[11px] font-semibold flex items-center justify-center px-1"
@@ -361,28 +361,28 @@ export function OperatorEnvironment() {
           <div className="flex-1" />
 
           <button
-            className="flex items-center justify-center w-12 h-9 transition-colors"
+            className="flex items-center justify-center w-12 h-9 cursor-pointer group"
             style={{ color: searchOpen ? C.text : C.muted }}
             onClick={() => setSearchOpen((v) => !v)}
             title="Search"
           >
-            <Search size={18} />
+            <Search size={20} className="transition-[filter] duration-150 group-hover:brightness-150" />
           </button>
           <button
-            className="flex items-center justify-center w-12 h-9 transition-colors"
+            className="flex items-center justify-center w-12 h-9 cursor-pointer group"
             style={{ color: bottomVisible ? C.text : C.muted }}
             onClick={() => setBottomVisible((v) => !v)}
             title="Toggle bottom panel"
           >
-            <PanelBottom size={18} />
+            <PanelBottom size={20} className="transition-[filter] duration-150 group-hover:brightness-150" />
           </button>
           <button
-            className="flex items-center justify-center w-12 h-9 transition-colors"
+            className="flex items-center justify-center w-12 h-9 cursor-pointer group"
             style={{ color: chatVisible ? C.text : C.muted }}
             onClick={() => setChatVisible((v) => !v)}
             title="Toggle Copilot chat"
           >
-            <MessageSquare size={18} />
+            <MessageSquare size={20} className="transition-[filter] duration-150 group-hover:brightness-150" />
           </button>
         </div>
 
@@ -390,15 +390,17 @@ export function OperatorEnvironment() {
         {sidebarVisible && (
           <div
             className="flex flex-col h-full overflow-hidden shrink-0"
+            data-sidebar-panel
             style={{ width: sidebar.size, borderRight: `1px solid ${C.borderSolid}`, background: C.surface }}
           >
+          <TipProvider>
             <div
               className="flex items-center justify-between px-3 py-1.5 text-[13px] uppercase tracking-wider shrink-0 select-none cursor-default"
               style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}
             >
               <span>{sidebarSection}</span>
               <button
-                className="p-0.5 rounded hover:bg-white/5 transition-colors"
+                className="p-0.5 rounded hover:bg-white/5 transition-colors cursor-pointer"
                 style={{ color: sidebarSplit ? C.text : C.muted }}
                 onClick={() => setSidebarSplit((v) => !v)}
                 title="Toggle split sidebar"
@@ -445,6 +447,7 @@ export function OperatorEnvironment() {
                 {renderSidebarSection(sidebarSection)}
               </div>
             )}
+          </TipProvider>
           </div>
         )}
         {sidebarVisible && (
@@ -496,7 +499,7 @@ export function OperatorEnvironment() {
             />
             <div className="flex-1" />
             <button
-              className="px-2 py-1 mr-1 rounded transition-colors"
+              className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
               style={{ color: editorSplit ? C.text : C.dim }}
               onClick={() => setEditorSplit((v) => !v)}
               title="Split editor"
@@ -595,7 +598,7 @@ export function OperatorEnvironment() {
                   </>
                 )}
                 <button
-                  className="px-2 py-1 mr-1 rounded transition-colors"
+                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
                   style={{ color: bottomSplit ? C.text : C.dim }}
                   onClick={() => setBottomSplit((v) => !v)}
                   title="Split bottom panel"
@@ -723,8 +726,8 @@ export function OperatorEnvironment() {
         )}
         <div className="flex-1" />
         <span>
-          {runs.length > 0
-            ? `${runs.filter((r) => r.status === "completed").length}✓ ${runs.filter((r) => r.status === "failed").length}✗`
+          {usage
+            ? `${usage.totals.completedRuns}✓ ${usage.totals.failedRuns}✗`
             : ""}
         </span>
       </div>

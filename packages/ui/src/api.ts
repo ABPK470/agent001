@@ -69,7 +69,7 @@ export const api = {
 
   // Usage
   getUsage: () => json<{
-    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number }
+    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number; completedRuns: number; failedRuns: number }
     runs: Array<{ runId: string; promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; model: string; createdAt: string }>
   }>("/api/usage"),
 

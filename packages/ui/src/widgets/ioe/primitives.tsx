@@ -3,7 +3,7 @@
  */
 
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { cloneElement, useCallback, useEffect, useRef, useState } from "react"
+import { cloneElement, createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { C } from "./constants"
 
@@ -46,74 +46,120 @@ export function useResizable(
   return { size, onMouseDown, setSize }
 }
 
-// ── Tip — inline hover reveal for truncated text (VS Code style) ─
+// ── Tip — VS Code-style hover bubble for truncated text ─────────
+//
+// Shared bubble: all Tip instances feed into a single TipBubble portal.
+// Moving the cursor between rows smoothly updates the bubble position and
+// content without any pop-out / pop-in flicker.
 
-export function Tip({ text, children }: { text: string; children: React.ReactElement }) {
-  const [rect, setRect] = useState<DOMRect | null>(null)
+type TipState = { text: string; x: number; y: number; arrowY: number } | null
+
+const TipCtx = createContext<{
+  show: (text: string, el: HTMLElement) => void
+  hide: (id: number) => void
+  nextId: () => number
+}>({ show: () => {}, hide: () => {}, nextId: () => 0 })
+
+/** Wrap the sidebar (or any region) in TipProvider so Tip instances share one bubble. */
+export function TipProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<TipState>(null)
+  const stateRef = useRef<TipState>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const activeId = useRef(0)
+  const idCounter = useRef(0)
 
-  const show = useCallback((e: React.MouseEvent) => {
-    const el = e.currentTarget as HTMLElement
-    // Only show if text is actually truncated
-    if (el.scrollWidth <= el.clientWidth + 1) return
+  // Keep ref in sync with state
+  stateRef.current = state
+
+  const nextId = useCallback(() => ++idCounter.current, [])
+
+  const show = useCallback((text: string, el: HTMLElement) => {
+    const id = idCounter.current
+    activeId.current = id
     clearTimeout(timerRef.current)
-    const r = el.getBoundingClientRect()
-    timerRef.current = setTimeout(() => setRect(r), 150)
+
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      let sidebar = el.parentElement
+      while (sidebar && !sidebar.getAttribute("data-sidebar-panel")) sidebar = sidebar.parentElement
+      const right = sidebar ? sidebar.getBoundingClientRect().right : r.right
+      setState({ text, x: right + 8, y: r.top + r.height / 2, arrowY: r.top + r.height / 2 })
+    }
+
+    // If bubble is already visible, update immediately (no delay when moving between rows)
+    if (stateRef.current) {
+      update()
+    } else {
+      timerRef.current = setTimeout(update, 1000)
+    }
   }, [])
 
-  const hide = useCallback(() => {
+  const hide = useCallback((id: number) => {
+    // Only hide if the caller is still the active one (not superseded by a new row)
+    if (id !== activeId.current) return
     clearTimeout(timerRef.current)
-    setRect(null)
+    // Small grace period so moving between adjacent rows doesn't flash
+    timerRef.current = setTimeout(() => {
+      if (id === activeId.current) setState(null)
+    }, 120)
   }, [])
 
-  // Dismiss on scroll anywhere
+  // Dismiss on scroll
   useEffect(() => {
-    if (!rect) return
-    const dismiss = () => setRect(null)
+    if (!state) return
+    const dismiss = () => { clearTimeout(timerRef.current); setState(null) }
     window.addEventListener("scroll", dismiss, true)
     return () => window.removeEventListener("scroll", dismiss, true)
-  }, [rect])
+  }, [state])
 
-  // Clone child to inject event handlers directly onto the truncated element
-  const child = cloneElement(children, {
-    onMouseEnter: show,
-    onMouseLeave: hide,
-  } as React.HTMLAttributes<HTMLElement>)
+  const bubbleMaxH = 200
+  const clampedTop = state ? Math.min(state.y - 14, window.innerHeight - bubbleMaxH - 12) : 0
+  const arrowOffset = state ? state.arrowY - clampedTop : 0
 
   return (
-    <>
-      {child}
-      {rect && createPortal(
-        <div
-          onMouseLeave={hide}
-          style={{
-            position: "fixed",
-            // Align to the same row — same Y, starts at the text's left edge
-            left: rect.left,
-            top: rect.top,
-            maxWidth: Math.max(360, window.innerWidth - rect.left - 12),
-            minHeight: rect.height,
-            display: "flex",
-            alignItems: "center",
-            padding: "1px 10px 1px 0",
-            borderRadius: 3,
-            background: C.elevated,
-            border: `1px solid ${C.borderSolid}`,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.36)",
-            color: C.text,
-            fontSize: 13,
-            lineHeight: "1.4",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            zIndex: 9999,
-          }}
-        >
-          {text}
+    <TipCtx.Provider value={{ show, hide, nextId }}>
+      {children}
+      {state && createPortal(
+        <div style={{ position: "fixed", left: state.x, top: clampedTop, zIndex: 9999, pointerEvents: "none" }}>
+          {/* Chevron arrow */}
+          <div style={{ position: "absolute", left: -6, top: arrowOffset - 6, width: 0, height: 0, borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderRight: `6px solid ${C.borderSolid}` }} />
+          <div style={{ position: "absolute", left: -5, top: arrowOffset - 6, width: 0, height: 0, borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderRight: `6px solid ${C.elevated}` }} />
+          {/* Bubble */}
+          <div style={{
+            maxWidth: 380, padding: "8px 12px", borderRadius: 6,
+            background: C.elevated, border: `1px solid ${C.borderSolid}`,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)", color: C.text,
+            fontSize: 13, lineHeight: "1.55", whiteSpace: "pre-wrap", wordBreak: "break-word",
+          }}>
+            {state.text}
+          </div>
         </div>,
         document.body,
       )}
-    </>
+    </TipCtx.Provider>
   )
+}
+
+/** Wrap a truncated element — shows the shared bubble on hover. */
+export function Tip({ text, children }: { text: string; children: React.ReactElement }) {
+  const { show, hide, nextId } = useContext(TipCtx)
+  const idRef = useRef(0)
+
+  const onEnter = useCallback((e: React.MouseEvent) => {
+    const el = e.currentTarget as HTMLElement
+    if (el.scrollWidth <= el.clientWidth + 1) return
+    idRef.current = nextId()
+    show(text, el)
+  }, [text, show, nextId])
+
+  const onLeave = useCallback(() => {
+    hide(idRef.current)
+  }, [hide])
+
+  return cloneElement(children, {
+    onMouseEnter: onEnter,
+    onMouseLeave: onLeave,
+  } as React.HTMLAttributes<HTMLElement>)
 }
 
 // ── TreeSection — collapsible section header ─────────────────────
