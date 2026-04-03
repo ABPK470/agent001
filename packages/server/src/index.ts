@@ -14,33 +14,38 @@ import { config } from "dotenv"
 import { existsSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
-// Load .env from repo root (npm workspaces sets CWD to packages/server)
-config({ path: resolve(import.meta.dirname, "../../../.env") })
+// Load .env — from CWD when running as installed package, from monorepo root in dev
+const _pkgRoot = process.env["AGENT001_PACKAGE_ROOT"]
+config({
+  path: _pkgRoot
+    ? resolve(process.cwd(), ".env")
+    : resolve(import.meta.dirname, "../../../.env"),
+})
 
 import {
-    closeMssqlPool,
-    setBasePath,
-    setBrowserCheckCwd,
-    setBrowserCheckExecutor,
-    setMssqlConfig,
-    setMssqlWriteEnabled,
-    setShellCwd,
-    setShellExecutor,
-    setShellSandboxStrict,
+  closeMssqlPool,
+  setBasePath,
+  setBrowserCheckCwd,
+  setBrowserCheckExecutor,
+  setMssqlConfig,
+  setMssqlWriteEnabled,
+  setShellCwd,
+  setShellExecutor,
+  setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-    MessageQueue,
-    MessageRouter,
-    MessengerChannel,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    WhatsAppChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  MessengerChannel,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  WhatsAppChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getLlmConfig, migrateNotifications } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -210,8 +215,10 @@ async function main() {
   await app.register(cors, { origin: true })
   await app.register(websocket)
 
-  // Serve built UI in production (packages/ui/dist)
-  const uiDist = resolve(import.meta.dirname, "../../../packages/ui/dist")
+  // Serve built UI — from dist/ui in package mode, packages/ui/dist in dev
+  const uiDist = _pkgRoot
+    ? resolve(_pkgRoot, "dist/ui")
+    : resolve(import.meta.dirname, "../../../packages/ui/dist")
   if (existsSync(uiDist)) {
     await app.register(fastifyStatic, {
       root: uiDist,

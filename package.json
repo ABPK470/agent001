@@ -1,16 +1,42 @@
 {
   "name": "agent001",
-  "private": true,
+  "version": "0.1.0",
+  "description": "AI Agent Command Center — autonomous agents with tools, policies, memory, and a real-time dashboard.",
+  "type": "module",
+  "bin": {
+    "agent001": "./bin/agent001.js"
+  },
+  "main": "./dist/server.js",
+  "files": [
+    "dist/",
+    "bin/"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "dev": "npx concurrently -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npm run dev -w packages/ui\"",
     "test": "npm test --workspaces",
-    "build": "npm run build --workspaces",
-    "lint": "npm run lint --workspaces"
+    "build:dev": "npm run build --workspaces",
+    "build": "node scripts/build.mjs",
+    "lint": "npm run lint --workspaces",
+    "pack:test": "npm run build && npm pack"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.3.3",
+    "@fastify/cors": "^10.0.3",
+    "@fastify/static": "^8.0.4",
+    "@fastify/websocket": "^11.0.2",
+    "mssql": "^12.2.1",
+    "puppeteer": "^24.40.0"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.28.0"
   }
 }
