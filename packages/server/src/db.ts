@@ -10,7 +10,7 @@ import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const DATA_DIR = join(homedir(), ".agent001")
+const DATA_DIR = process.env["AGENT001_DATA_DIR"] || join(homedir(), ".agent001")
 mkdirSync(DATA_DIR, { recursive: true })
 
 let _db: Database.Database | null = null

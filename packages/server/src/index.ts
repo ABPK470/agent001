@@ -18,14 +18,18 @@ import { resolve } from "node:path"
 config({ path: resolve(import.meta.dirname, "../../../.env") })
 
 import {
+    closeMssqlPool,
     setBasePath,
     setBrowserCheckCwd,
     setBrowserCheckExecutor,
+    setMssqlConfig,
+    setMssqlWriteEnabled,
     setShellCwd,
     setShellExecutor,
     setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
+import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
@@ -140,6 +144,29 @@ async function main() {
     console.log("⚠️  Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
+  // ── MSSQL configuration ───────────────────────────────────────
+
+  const mssqlServer = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
+  if (mssqlServer) {
+    setMssqlConfig({
+      server: mssqlServer,
+      port: Number(process.env["MSSQL_PORT"] ?? 1433),
+      user: process.env["MSSQL_USER"] ?? "sa",
+      password: process.env["MSSQL_PASSWORD"] ?? "",
+      database: process.env["MSSQL_DATABASE"] ?? "master",
+      options: {
+        encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
+        trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
+      },
+    })
+    if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
+      setMssqlWriteEnabled(true)
+      console.log(`🗄️  MSSQL: ${mssqlServer} (WRITE mode enabled)`)
+    } else {
+      console.log(`🗄️  MSSQL: ${mssqlServer} (read-only)`)
+    }
+  }
+
   // Load LLM config from DB (or use defaults) and build the client
   const llmCfg = getLlmConfig()
   const llm = buildLlmClient(llmCfg)
@@ -182,6 +209,24 @@ async function main() {
   // Plugins
   await app.register(cors, { origin: true })
   await app.register(websocket)
+
+  // Serve built UI in production (packages/ui/dist)
+  const uiDist = resolve(import.meta.dirname, "../../../packages/ui/dist")
+  if (existsSync(uiDist)) {
+    await app.register(fastifyStatic, {
+      root: uiDist,
+      prefix: "/",
+      wildcard: false,
+    })
+    // SPA fallback — serve index.html for non-API, non-WS routes
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith("/api") || req.url.startsWith("/ws") || req.url.startsWith("/webhooks")) {
+        reply.code(404).send({ error: "Not found" })
+      } else {
+        reply.sendFile("index.html")
+      }
+    })
+  }
 
   // WebSocket endpoint
   app.get("/ws", { websocket: true }, (socket) => {
@@ -261,14 +306,16 @@ async function main() {
   console.log(`  WebSocket: ws://localhost:${PORT}/ws`)
   console.log(`  API:       http://localhost:${PORT}/api`)
   console.log(`  Webhooks:  http://localhost:${PORT}/webhooks/{whatsapp,messenger}`)
-  console.log(`  Dashboard: http://localhost:5179 (dev)`)
+  console.log(`  Dashboard: ${existsSync(uiDist) ? `http://localhost:${PORT}` : "http://localhost:5179 (dev)"}`)
   console.log(`  Channels:  ${channelConfigs.length > 0 ? channelConfigs.map(c => c.type).join(", ") : "none (configure via POST /api/channels)"}`)
+  console.log(`  MSSQL:     ${mssqlServer ? `${mssqlServer}:${process.env["MSSQL_PORT"] ?? 1433}/${process.env["MSSQL_DATABASE"] ?? "master"}` : "not configured"}`)
   console.log(`${"═".repeat(50)}\n`)
 
   // Graceful shutdown for tsx hot-reload
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
     process.on(sig, async () => {
       messageQueue.stop()
+      await closeMssqlPool()
       await sandbox.cleanup()
       process.exit(0)
     })

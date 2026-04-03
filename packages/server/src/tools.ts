@@ -12,6 +12,8 @@ import {
     browseWebTool,
     fetchUrlTool,
     listDirectoryTool,
+    mssqlSchemaTool,
+    mssqlTool,
     readFileTool,
     shellTool,
     thinkTool,
@@ -35,6 +37,8 @@ const ALL_TOOLS: Tool[] = [
   browserCheckTool,
   browseWebTool,
   askUserTool,
+  mssqlTool,
+  mssqlSchemaTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))

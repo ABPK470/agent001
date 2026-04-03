@@ -86,6 +86,9 @@ export { fetchUrlTool } from "./tools/fetch-url.js"
 export {
     listDirectoryTool, readFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
+export {
+    closeMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled
+} from "./tools/mssql.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, shellTool } from "./tools/shell.js"
 export type { ShellExecResult } from "./tools/shell.js"
 export { thinkTool } from "./tools/think.js"
