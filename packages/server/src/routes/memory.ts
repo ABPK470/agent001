@@ -99,7 +99,7 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const { context, results } = retrieveContext(goal)
+      const { context, results } = await retrieveContext(goal)
       return {
         context,
         resultCount: results.length,

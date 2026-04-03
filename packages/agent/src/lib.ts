@@ -8,11 +8,17 @@
 export { Agent } from "./agent.js"
 
 // Types
+export {
+    DROP_PRIORITY,
+    NEVER_DROP_SECTIONS,
+    SECTION_WEIGHTS
+} from "./types.js"
 export type {
     AgentConfig,
     LLMClient,
     LLMResponse,
     Message,
+    PromptBudgetSection,
     TokenUsage,
     Tool,
     ToolCall
@@ -87,7 +93,7 @@ export {
     listDirectoryTool, readFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
 export {
-    closeMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled
+    closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, shellTool } from "./tools/shell.js"
 export type { ShellExecResult } from "./tools/shell.js"

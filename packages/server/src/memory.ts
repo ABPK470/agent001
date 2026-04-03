@@ -120,7 +120,9 @@ const RECENCY_HALF_LIFE_H = 24
 const DECAY_HALF_LIFE_DAYS = 7
 const RECENCY_WEIGHT = 0.4
 const SALIENCE_THRESHOLD = 0.15
-const DEDUP_JACCARD_THRESHOLD = 0.92
+const DEDUP_JACCARD_THRESHOLD = 0.86
+/** Minimum combined score for a memory to be included in context. */
+const RELEVANCE_THRESHOLD = 0.15
 const DEFAULT_BUDGET: MemoryBudget = { maxTokens: 3000, maxItems: 15 }
 
 const TIER_BUDGET: Record<MemoryTier, number> = {
@@ -168,6 +170,33 @@ function computeSalience(content: string, role: MemoryRole): number {
   return lengthScore + actionScore + structureScore
 }
 
+// ── Text truncation ──────────────────────────────────────────────
+
+/** Truncate text at the last complete line boundary within maxLen. */
+function truncateAtBoundary(text: string, maxLen: number, suffix = ""): string {
+  if (text.length <= maxLen) return text
+  // Find the last newline before maxLen
+  const lastNewline = text.lastIndexOf("\n", maxLen)
+  if (lastNewline > maxLen * 0.5) {
+    return text.slice(0, lastNewline) + suffix
+  }
+  // Fallback: last sentence-ending punctuation
+  const lastSentence = Math.max(
+    text.lastIndexOf(". ", maxLen),
+    text.lastIndexOf("! ", maxLen),
+    text.lastIndexOf("? ", maxLen),
+  )
+  if (lastSentence > maxLen * 0.5) {
+    return text.slice(0, lastSentence + 1) + suffix
+  }
+  // Last resort: last space
+  const lastSpace = text.lastIndexOf(" ", maxLen)
+  if (lastSpace > maxLen * 0.5) {
+    return text.slice(0, lastSpace) + suffix
+  }
+  return text.slice(0, maxLen) + suffix
+}
+
 // ── Deduplication ────────────────────────────────────────────────
 
 function tokenize(text: string): Set<string> {
@@ -203,8 +232,20 @@ function confidenceDecay(createdAt: string, now: Date = new Date()): number {
   return Math.pow(0.5, ageDays / DECAY_HALF_LIFE_DAYS)
 }
 
-function activationBonus(accessCount: number): number {
-  return 0.5 + 0.1 * Math.log(accessCount + 1)
+/**
+ * ACT-R inspired activation (agenc-core pattern).
+ * Frequently accessed + recently accessed memories stay most relevant.
+ *
+ * activation = (1 + log(accessCount + 1)) / 7 × accessRecency
+ * accessRecency is 1.0 for just-accessed, decays exponentially.
+ */
+function activationBonus(accessCount: number, updatedAt?: string, now?: Date): number {
+  const base = (1 + Math.log(accessCount + 1)) / 7
+  if (!updatedAt) return base
+  const ageMs = (now ?? new Date()).getTime() - new Date(updatedAt).getTime()
+  const ageH = ageMs / (1000 * 60 * 60)
+  const accessRecency = Math.exp(-ageH / (RECENCY_HALF_LIFE_H * 2)) // Slower decay for activation
+  return base * (0.5 + 0.5 * accessRecency) // Blend base + recency
 }
 
 // ── Schema migration ─────────────────────────────────────────────
@@ -493,7 +534,7 @@ export function ingestRunTurns(run: {
   const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
   lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
   if (run.answer) {
-    const a = run.answer.length > 800 ? run.answer.slice(0, 800) + "\u2026" : run.answer
+    const a = truncateAtBoundary(run.answer, 800, "\u2026")
     lines.push(`Answer: ${a}`)
   }
   if (run.error) lines.push(`Error: ${run.error}`)
@@ -601,14 +642,18 @@ export function extractProcedural(run: {
  * Scoring: combined = relevance * (1 - w) + recency * w
  * Recent turns always win because recency ~ 1.0.
  */
-export function retrieveContext(
+export async function retrieveContext(
   goal: string,
   opts?: {
     sessionId?: string
     runId?: string
     budget?: MemoryBudget
   },
-): { context: string; results: UnifiedSearchResult[] } {
+): Promise<{
+  context: string
+  results: UnifiedSearchResult[]
+  perTier: { working: string; episodic: string; semantic: string }
+}> {
   const budget = opts?.budget ?? DEFAULT_BUDGET
   const now = new Date()
   const allResults: UnifiedSearchResult[] = []
@@ -620,7 +665,7 @@ export function retrieveContext(
       maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier]),
     }
 
-    const results = searchEntries(goal, {
+    const results = await searchEntries(goal, {
       tier,
       budget: tierBudget,
       sessionId: tier === "working" ? opts?.sessionId : undefined,
@@ -629,16 +674,39 @@ export function retrieveContext(
     allResults.push(...results)
   }
 
-  // Also search procedural memories
+  // Also search procedural memories (kept for activation tracking, but not injected into prompt)
   const procedures = searchProcedures(goal, 3)
 
   // Sort all results by combined score descending
   allResults.sort((a, b) => b.combined - a.combined)
 
+  // Cross-tier deduplication: if the same content got promoted from
+  // working → episodic → semantic, only keep the highest-scoring copy.
+  const deduped: UnifiedSearchResult[] = []
+  const seenContent = new Map<string, number>() // tokenized content hash → index in deduped
+  for (const r of allResults) {
+    // Skip entries below relevance threshold (prevents irrelevant memories)
+    if (r.combined < RELEVANCE_THRESHOLD) continue
+
+    const tokens = tokenize(r.entry.content)
+    let isDup = false
+    for (const [hash] of seenContent) {
+      if (jaccardSimilarity(tokens, tokenize(hash)) >= DEDUP_JACCARD_THRESHOLD) {
+        // Keep the higher-scored one (already in deduped since we sorted)
+        isDup = true
+        break
+      }
+    }
+    if (!isDup) {
+      seenContent.set(r.entry.content, deduped.length)
+      deduped.push(r)
+    }
+  }
+
   // Pack within total token budget
   const packed: UnifiedSearchResult[] = []
   let tokenCount = 0
-  for (const r of allResults) {
+  for (const r of deduped) {
     const approxTokens = Math.ceil(r.entry.content.length / 4)
     if (tokenCount + approxTokens > budget.maxTokens) break
     if (packed.length >= budget.maxItems) break
@@ -656,13 +724,33 @@ export function retrieveContext(
   }
 
   const context = formatMemoryContext(packed, procedures)
-  return { context, results: packed }
+
+  // Also produce per-tier formatted content for structured prompt assembly
+  const workingItems = packed.filter((r) => r.entry.tier === "working")
+  const episodicItems = packed.filter((r) => r.entry.tier === "episodic")
+  const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
+
+  const perTier = {
+    working: workingItems.length > 0
+      ? workingItems.map((r) => r.entry.content).join("\n")
+      : "",
+    episodic: episodicItems.length > 0
+      ? episodicItems.map((r) => r.entry.content).join("\n")
+      : "",
+    semantic: semanticItems.length > 0
+      ? semanticItems.map((r) => r.entry.content).join("\n")
+      : "",
+  }
+
+  return { context, results: packed, perTier }
 }
 
 /**
- * Search memory entries with hybrid relevance + recency scoring.
+ * Search memory entries with hybrid FTS5 + vector relevance scoring.
+ * When Ollama embeddings are available, blends keyword (FTS5 BM25) and
+ * semantic (cosine similarity) results for true hybrid search.
  */
-function searchEntries(
+async function searchEntries(
   query: string,
   opts: {
     tier?: MemoryTier
@@ -670,7 +758,7 @@ function searchEntries(
     sessionId?: string
     excludeRunId?: string
   },
-): UnifiedSearchResult[] {
+): Promise<UnifiedSearchResult[]> {
   const now = new Date()
 
   const ftsQuery = sanitizeFtsQuery(query)
@@ -721,12 +809,40 @@ function searchEntries(
     const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence)
     const rec = recencyScore(entry.createdAt, now)
     const decay = confidenceDecay(entry.createdAt, now)
-    const activation = activationBonus(entry.accessCount)
+    const activation = activationBonus(entry.accessCount, entry.updatedAt, now)
     const relevance = normRelevance * decay * activation
     const combined = relevance * (1 - RECENCY_WEIGHT) + rec * RECENCY_WEIGHT
 
     return { entry, relevance, recency: rec, combined }
   })
+
+  // ── Vector search: blend semantic matches when embeddings exist ──
+  // This catches cases like "revenue" matching a memory about "sales totals"
+  // that FTS5 keyword matching would miss entirely.
+  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier)
+  if (vecResults.length > 0) {
+    const ftsIds = new Set(ftsResults.map((r) => r.entry.id))
+    for (const vr of vecResults) {
+      if (ftsIds.has(vr.entryId)) continue // already have this from FTS
+      if (vr.similarity < 0.5) continue     // skip weak matches
+
+      const row = getDb().prepare("SELECT * FROM memory_entries WHERE id = ?").get(vr.entryId) as Record<string, unknown> | undefined
+      if (!row) continue
+      if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
+      if (opts.sessionId && opts.tier === "working" && row.session_id !== opts.sessionId) continue
+
+      const entry = rowToEntry(row)
+      const rec = recencyScore(entry.createdAt, now)
+      const decay = confidenceDecay(entry.createdAt, now)
+      const activation = activationBonus(entry.accessCount, entry.updatedAt, now)
+      // Use vector similarity as the relevance signal
+      const relevance = vr.similarity * SOURCE_WEIGHT[entry.source] * decay * activation
+      const combined = relevance * (1 - RECENCY_WEIGHT) + rec * RECENCY_WEIGHT
+
+      ftsResults.push({ entry, relevance, recency: rec, combined })
+      ftsIds.add(vr.entryId)
+    }
+  }
 
   // Merge with recent entries, deduplicate by ID
   const seen = new Set(ftsResults.map((r) => r.entry.id))
@@ -776,7 +892,7 @@ function getRecentEntries(
     const rec = recencyScore(entry.createdAt, now)
     return {
       entry,
-      relevance: entry.confidence * activationBonus(entry.accessCount),
+      relevance: entry.confidence * activationBonus(entry.accessCount, entry.updatedAt, now),
       recency: rec,
       combined: entry.confidence * 0.3 + rec * 0.7,
     }
@@ -787,9 +903,9 @@ function getRecentEntries(
 
 function formatMemoryContext(
   results: UnifiedSearchResult[],
-  procedures: ProceduralMemory[],
+  _procedures: ProceduralMemory[],
 ): string {
-  if (results.length === 0 && procedures.length === 0) return ""
+  if (results.length === 0) return ""
 
   const blocks: string[] = []
 
@@ -797,44 +913,41 @@ function formatMemoryContext(
   const episodic = results.filter((r) => r.entry.tier === "episodic")
   const semantic = results.filter((r) => r.entry.tier === "semantic")
 
-  for (const r of working) {
-    const conf = r.entry.confidence.toFixed(2)
-    blocks.push(`<memory source="working" role="${r.entry.role}" confidence="${conf}">`)
-    blocks.push(r.entry.content)
-    blocks.push("</memory>")
+  // Working memory — recent conversation turns (high recency, fresh context)
+  if (working.length > 0) {
+    blocks.push("<working_memory>")
+    for (const r of working) {
+      blocks.push(r.entry.content)
+    }
+    blocks.push("</working_memory>")
   }
 
-  for (const r of episodic) {
-    const conf = r.entry.confidence.toFixed(2)
-    blocks.push(`<memory source="episodic" role="${r.entry.role}" confidence="${conf}">`)
-    blocks.push(r.entry.content)
-    blocks.push("</memory>")
+  // Episodic memory — session summaries (medium age, pattern recognition)
+  if (episodic.length > 0) {
+    blocks.push("<episodic_memory>")
+    for (const r of episodic) {
+      blocks.push(r.entry.content)
+    }
+    blocks.push("</episodic_memory>")
   }
 
-  for (const r of semantic) {
-    const conf = r.entry.confidence.toFixed(2)
-    blocks.push(`<memory source="semantic" role="${r.entry.role}" confidence="${conf}">`)
-    blocks.push(r.entry.content)
-    blocks.push("</memory>")
+  // Semantic memory — long-lived consolidated knowledge
+  if (semantic.length > 0) {
+    blocks.push("<semantic_memory>")
+    for (const r of semantic) {
+      blocks.push(r.entry.content)
+    }
+    blocks.push("</semantic_memory>")
   }
 
-  const useful = procedures.filter((p) => p.successCount > p.failureCount)
-  for (const p of useful) {
-    const seq = p.toolSequence.map((s) => s.tool).join(" \u2192 ")
-    const rate = Math.round((p.successCount / (p.successCount + p.failureCount)) * 100)
-    blocks.push(`<memory source="procedural" role="system" confidence="${(rate / 100).toFixed(2)}">`)
-    blocks.push(`Tool approach: ${seq} (${rate}% success rate, used ${p.successCount}\u00d7)`)
-    blocks.push("</memory>")
-  }
-
-  if (blocks.length === 0) return ""
+  // Note: procedural memories (tool sequences) are intentionally excluded.
+  // They consume tokens without improving LLM tool selection.
 
   return [
     "",
-    "--- Memory Context (from past experience) ---",
-    "The following are relevant memories from previous interactions. Recent conversation turns have high confidence. Use them to maintain continuity.",
+    "<memory_context>",
     ...blocks,
-    "--- End Memory Context ---",
+    "</memory_context>",
     "",
   ].join("\n")
 }
@@ -925,26 +1038,46 @@ export async function vectorSearch(
   return scored.slice(0, limit)
 }
 
-// ── Consolidation pipeline ───────────────────────────────────────
+// ── Consolidation pipeline (agenc-core pattern) ─────────────────
+//
+// Promotes repeated episodic/working patterns into long-lived semantic facts.
+// Runs after each completed run (non-blocking) and as periodic background task.
+//
+// Pipeline:
+//   1. Fetch recent episodic + old working entries past the lookback window
+//   2. Agglomerative clustering by Jaccard token similarity (≥ 0.4)
+//   3. Clusters with ≥ 2 entries → promotion candidates
+//   4. Cross-tier dedup: check against existing semantic entries (Jaccard ≥ 0.86)
+//   5. Promote with boosted confidence: 0.5 + clusterSize × 0.1 (capped at 0.95)
+//   6. Soft-delete source entries (reduce confidence so they fade)
 
 export function consolidate(opts?: {
   minAgeHours?: number
   maxBatchSize?: number
 }): { promoted: number; pruned: number } {
   const minAgeHours = opts?.minAgeHours ?? 24
-  const maxBatchSize = opts?.maxBatchSize ?? 50
+  const maxBatchSize = opts?.maxBatchSize ?? 200  // agenc-core uses 200
   const cutoff = new Date(Date.now() - minAgeHours * 60 * 60 * 1000).toISOString()
 
+  // Fetch candidates: episodic entries older than cutoff + old working entries
   const candidates = getDb().prepare(`
     SELECT * FROM memory_entries
-    WHERE tier = 'episodic' AND created_at < ?
+    WHERE (tier = 'episodic' OR (tier = 'working' AND created_at < ?))
+      AND created_at < ?
     ORDER BY created_at ASC
     LIMIT ?
-  `).all(cutoff, maxBatchSize) as Array<Record<string, unknown>>
+  `).all(cutoff, cutoff, maxBatchSize) as Array<Record<string, unknown>>
 
-  if (candidates.length < 5) return { promoted: 0, pruned: 0 }
+  if (candidates.length < 3) return { promoted: 0, pruned: 0 }
 
-  // Cluster by Jaccard token similarity >= 0.4
+  // Load existing semantic entries for cross-tier dedup
+  const existingSemantic = getDb().prepare(`
+    SELECT content FROM memory_entries WHERE tier = 'semantic'
+    ORDER BY created_at DESC LIMIT 100
+  `).all() as Array<{ content: string }>
+  const semanticTokenSets = existingSemantic.map((s) => tokenize(s.content))
+
+  // Agglomerative clustering by Jaccard ≥ 0.4
   const entries = candidates.map((r) => ({
     row: r,
     tokens: tokenize(r.content as string),
@@ -976,23 +1109,42 @@ export function consolidate(opts?: {
 
     const contents = cluster.map((c) => c.row.content as string)
     const merged = contents.join("\n---\n")
+    const mergedTokens = tokenize(merged)
 
-    const maxConf = Math.max(...cluster.map((c) => c.row.confidence as number))
-    const bonus = Math.min(0.2, cluster.length * 0.05)
-    const confidence = Math.min(1.0, maxConf + bonus)
+    // Cross-tier dedup: skip if this cluster duplicates an existing semantic entry
+    const isDupOfSemantic = semanticTokenSets.some(
+      (st) => jaccardSimilarity(mergedTokens, st) >= DEDUP_JACCARD_THRESHOLD,
+    )
+    if (isDupOfSemantic) {
+      // Still soft-delete the source entries since their content is already in semantic
+      const ids = cluster.map((c) => c.row.id as string)
+      const placeholders = ids.map(() => "?").join(", ")
+      getDb().prepare(
+        `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
+      ).run(new Date().toISOString(), ...ids)
+      pruned += ids.length
+      continue
+    }
+
+    // Boosted confidence: 0.5 + clusterSize × 0.1 (agenc-core formula, cap at 0.95)
+    const confidence = Math.min(0.95, 0.5 + cluster.length * 0.1)
 
     ingestTurn({
       tier: "semantic",
       role: "summary",
-      content: merged.length > 2000 ? merged.slice(0, 2000) + "\n\u2026(consolidated)" : merged,
+      content: truncateAtBoundary(merged, 2000, "\n\u2026(consolidated)"),
       metadata: {
         sourceCount: cluster.length,
+        provenance: "consolidation:episodic_promotion",
         consolidatedFrom: cluster.map((c) => c.row.id),
       },
       source: "system",
       confidence,
     })
     promoted++
+
+    // Add to semantic set so later clusters in this batch also dedup
+    semanticTokenSets.push(mergedTokens)
 
     // Soft-delete: reduce confidence so they fade naturally
     const ids = cluster.map((c) => c.row.id as string)
@@ -1052,8 +1204,8 @@ function sanitizeFtsQuery(query: string): string {
 // ── Compat: Legacy API surface ───────────────────────────────────
 
 /** @deprecated Use retrieveContext() */
-export function buildMemoryContext(goal: string, _budget?: MemoryBudget): string {
-  const { context } = retrieveContext(goal)
+export async function buildMemoryContext(goal: string, _budget?: MemoryBudget): Promise<string> {
+  const { context } = await retrieveContext(goal)
   return context
 }
 
@@ -1070,7 +1222,7 @@ export function extractRunSummary(run: {
   const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
   lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
   if (run.answer) {
-    const a = run.answer.length > 800 ? run.answer.slice(0, 800) + "\u2026" : run.answer
+    const a = truncateAtBoundary(run.answer, 800, "\u2026")
     lines.push(`Answer: ${a}`)
   }
   if (run.error) lines.push(`Error: ${run.error}`)

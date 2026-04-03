@@ -8,6 +8,7 @@
 import {
     Activity,
     BarChart3,
+    Bug,
     Clock,
     Film,
     GitBranch,
@@ -36,6 +37,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "command-center": LayoutGrid,
   "trajectory-replay": Film,
   "operator-env": LayoutDashboard,
+  "debug-inspector": Bug,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -51,6 +53,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "command-center": "Center",
   "trajectory-replay": "Replay",
   "operator-env": "IOE",
+  "debug-inspector": "Debug",
 }
 
 interface Props {

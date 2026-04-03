@@ -8,6 +8,57 @@
  *   LLMClient — the "brain" interface (swap OpenAI, Anthropic, local, etc.)
  */
 
+// ── Prompt budget ────────────────────────────────────────────────
+
+/**
+ * Tags for prompt sections — determines truncation priority.
+ *
+ * Inspired by agenc-core's PromptBudgetSection.
+ * "never-drop" sections survive any budget pressure.
+ * Droppable sections are removed newest-first (runtime, memory)
+ * or oldest-first (history) when the context window fills up.
+ */
+export type PromptBudgetSection =
+  | "system_anchor"     // Base prompt + env — NEVER dropped
+  | "system_runtime"    // Capabilities, workspace context — droppable
+  | "memory_working"    // Recent turns — droppable
+  | "memory_episodic"   // Session summaries — droppable
+  | "memory_semantic"   // Long-lived knowledge — droppable
+  | "history"           // Conversation history — droppable, oldest-first
+  | "user"              // Current user message — NEVER dropped
+
+/** Sections that must never be dropped during truncation. */
+export const NEVER_DROP_SECTIONS: ReadonlySet<PromptBudgetSection> = new Set([
+  "system_anchor",
+  "user",
+])
+
+/**
+ * Drop priority order — first to drop → last to drop.
+ * When over budget, we try dropping sections in this order.
+ */
+export const DROP_PRIORITY: readonly PromptBudgetSection[] = [
+  "memory_semantic",    // Oldest knowledge, least time-sensitive
+  "memory_episodic",    // Session summaries
+  "system_runtime",     // Capabilities / workspace
+  "memory_working",     // Recent turns (valuable but replaceable)
+  "history",            // Conversation — drop oldest first
+]
+
+/**
+ * Default budget weights per section (fraction of total context).
+ * Matches agenc-core allocation with minor adjustments.
+ */
+export const SECTION_WEIGHTS: Readonly<Record<PromptBudgetSection, number>> = {
+  system_anchor: 0.20,
+  system_runtime: 0.10,
+  memory_working: 0.10,
+  memory_episodic: 0.06,
+  memory_semantic: 0.12,
+  history: 0.32,
+  user: 0.10,
+}
+
 // ── Messages ─────────────────────────────────────────────────────
 
 export interface Message {
@@ -17,6 +68,8 @@ export interface Message {
   toolCalls?: ToolCall[]
   /** Which tool call this message is the result of (only on tool messages). */
   toolCallId?: string
+  /** Budget section tag — used for intelligent truncation. Not sent to LLM. */
+  section?: PromptBudgetSection
 }
 
 // ── Tool calling ─────────────────────────────────────────────────
@@ -74,12 +127,20 @@ export interface AgentConfig {
   maxIterations?: number
   /** System prompt — sets the agent's personality and capabilities. */
   systemPrompt?: string
+  /**
+   * Structured system messages with section tags.
+   * When provided, takes precedence over systemPrompt.
+   * Enables budget-aware truncation (agenc-core pattern).
+   */
+  systemMessages?: Message[]
   /** Print the agent's reasoning to the console. Default: true */
   verbose?: boolean
   /** Called right after the LLM responds, before tools execute. Use for trace/UI updates. */
   onThinking?: (content: string | null, toolCalls: ToolCall[], iteration: number) => void
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
+  /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */
+  onLlmCall?: (data: { phase: "request"; messages: Message[]; tools: Tool[]; iteration: number } | { phase: "response"; response: LLMResponse; iteration: number; durationMs: number }) => void
   /** AbortSignal for external cancellation. */
   signal?: AbortSignal
 }

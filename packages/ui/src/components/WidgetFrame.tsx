@@ -26,6 +26,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "command-center": "Command Center",
   "trajectory-replay": "Trajectory Replay",
   "operator-env": "Operator Environment",
+  "debug-inspector": "Debug Inspector",
 }
 
 interface Props {

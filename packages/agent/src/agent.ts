@@ -23,7 +23,8 @@
  */
 
 import * as log from "./logger.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
+import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
+import { DROP_PRIORITY } from "./types.js"
 
 /**
  * Rough token estimate: ~4 chars per token for English text.
@@ -46,10 +47,14 @@ function estimateTokens(messages: Message[]): number {
 const MAX_CONTEXT_TOKENS = 64000
 
 /**
- * Truncate message history to fit within the token budget.
- * Strategy: keep system prompt + goal (first 2 messages) and the most recent
- * messages. Drop the oldest middle messages first. Tool results in remaining
- * messages are trimmed if they're excessively long.
+ * Budget-aware message truncation (agenc-core pattern).
+ *
+ * Strategy:
+ *   1. Trim excessively long tool results (> 8KB)
+ *   2. If still over budget, drop entire sections in priority order:
+ *      memory_semantic → memory_episodic → system_runtime → memory_working → history
+ *   3. For history: drop oldest messages first (preserve recent context)
+ *   4. NEVER drop: system_anchor, user, tools
  */
 function truncateMessages(messages: Message[]): Message[] {
   // Trim any single tool result that's excessively long
@@ -62,28 +67,95 @@ function truncateMessages(messages: Message[]): Message[] {
   })
 
   if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return trimmed
-  if (trimmed.length <= 4) return trimmed // Can't truncate further
+  if (trimmed.length <= 4) return trimmed
 
-  // Keep system + goal (first 2) and recent tail; drop middle
-  const head = trimmed.slice(0, 2)
-  // Start by keeping last 4 messages, grow until we're under budget or run out
+  // Check if any messages have section tags (new structured prompt)
+  const hasStructuredPrompt = trimmed.some((m) => m.section != null)
+
+  if (hasStructuredPrompt) {
+    return truncateBySection(trimmed)
+  }
+
+  // Legacy fallback: keep head (system + goal) and recent tail, drop middle
+  return truncateLegacy(trimmed)
+}
+
+/**
+ * Section-aware truncation: drop droppable sections in priority order.
+ */
+function truncateBySection(messages: Message[]): Message[] {
+  let current = [...messages]
+
+  for (const section of DROP_PRIORITY) {
+    if (estimateTokens(current) <= MAX_CONTEXT_TOKENS) break
+
+    if (section === "history") {
+      // For history: drop oldest messages first, keep recent ones
+      current = dropOldestHistory(current)
+    } else {
+      // Drop all messages from this section
+      current = current.filter((m) => m.section !== section)
+    }
+  }
+
+  // If still over budget after dropping all droppable sections,
+  // fall back to aggressive history trimming
+  if (estimateTokens(current) > MAX_CONTEXT_TOKENS) {
+    current = truncateLegacy(current)
+  }
+
+  return current
+}
+
+/**
+ * Drop oldest history messages (assistant/tool pairs) while keeping recent context.
+ * Preserves system messages and the most recent tail.
+ */
+function dropOldestHistory(messages: Message[]): Message[] {
+  // Find the boundaries of history messages (non-system, non-section-tagged)
+  const systemEnd = messages.findIndex(
+    (m) => m.role !== "system" && m.section !== "system_anchor" && m.section !== "system_runtime"
+      && m.section !== "memory_working" && m.section !== "memory_episodic" && m.section !== "memory_semantic",
+  )
+  if (systemEnd < 0) return messages
+
+  // Find user message (the goal)
+  const userIdx = messages.findIndex((m) => m.section === "user" || (m.role === "user" && !m.section))
+  const historyStart = Math.max(systemEnd, userIdx + 1)
+
+  const head = messages.slice(0, historyStart)
+  const tail = messages.slice(historyStart)
+
+  if (tail.length <= 6) return messages // Not enough to trim
+
+  // Keep only the most recent half of history
+  const keepCount = Math.max(6, Math.floor(tail.length / 2))
+  const keptTail = tail.slice(-keepCount)
+
+  return [
+    ...head,
+    { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]", section: "history" as PromptBudgetSection },
+    ...keptTail,
+  ]
+}
+
+/** Legacy truncation for non-sectioned messages. */
+function truncateLegacy(messages: Message[]): Message[] {
+  const head = messages.slice(0, 2)
   let tailSize = 4
-  while (tailSize < trimmed.length - 2) {
-    const candidate = [...head, { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" }, ...trimmed.slice(-tailSize)]
+  while (tailSize < messages.length - 2) {
+    const candidate = [...head, { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" }, ...messages.slice(-tailSize)]
     if (estimateTokens(candidate) > MAX_CONTEXT_TOKENS) {
-      // One step too many — go back
       tailSize = Math.max(4, tailSize - 2)
       break
     }
     tailSize += 2
   }
-
-  const result = [
+  return [
     ...head,
     { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" },
-    ...trimmed.slice(-tailSize),
+    ...messages.slice(-tailSize),
   ]
-  return result
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are an efficient AI agent that uses tools to accomplish goals.
@@ -130,9 +202,11 @@ export class Agent {
   private readonly config: {
     maxIterations: number
     systemPrompt: string
+    systemMessages: Message[] | null
     verbose: boolean
     onThinking: AgentConfig["onThinking"]
     onStep: AgentConfig["onStep"]
+    onLlmCall: AgentConfig["onLlmCall"]
     signal: AgentConfig["signal"]
   }
 
@@ -148,15 +222,23 @@ export class Agent {
     this.config = {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
+      systemMessages: config.systemMessages ?? null,
       verbose: config.verbose ?? true,
       onThinking: config.onThinking,
       onStep: config.onStep,
+      onLlmCall: config.onLlmCall,
       signal: config.signal,
     }
   }
 
   /** The system prompt used for this agent instance. */
   get systemPrompt(): string {
+    if (this.config.systemMessages) {
+      return this.config.systemMessages
+        .filter((m) => m.role === "system")
+        .map((m) => m.content ?? "")
+        .join("\n\n")
+    }
     return this.config.systemPrompt
   }
 
@@ -171,10 +253,12 @@ export class Agent {
   ): Promise<string> {
     if (this.config.verbose) log.logGoal(goal)
 
-    const messages: Message[] = resume?.messages ?? [
-      { role: "system", content: this.config.systemPrompt },
-      { role: "user", content: goal },
-    ]
+    const messages: Message[] = resume?.messages ?? this.buildInitialMessages(goal)
+
+    // Stuck detection state (agenc-core pattern):
+    // Track recent failing tool calls to detect loops.
+    const recentFailures: Array<{ name: string; argsKey: string }> = []
+    const MAX_IDENTICAL_FAILURES = 3
 
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
@@ -185,9 +269,27 @@ export class Agent {
       // Truncate context if approaching token budget
       const chatMessages = truncateMessages(messages)
 
+      // Notify listener before LLM call (for debug/trace)
+      this.config.onLlmCall?.({
+        phase: "request",
+        messages: chatMessages,
+        tools: this.toolList,
+        iteration: i,
+      })
+
       // Ask the LLM what to do next
+      const t0 = Date.now()
       const response = await this.llm.chat(chatMessages, this.toolList, { signal: this.config.signal })
+      const durationMs = Date.now() - t0
       this.llmCalls++
+
+      // Notify listener after LLM call (for debug/trace)
+      this.config.onLlmCall?.({
+        phase: "response",
+        response,
+        iteration: i,
+        durationMs,
+      })
 
       // Accumulate token usage
       if (response.usage) {
@@ -214,9 +316,11 @@ export class Agent {
         role: "assistant",
         content: response.content,
         toolCalls: response.toolCalls,
+        section: "history",
       })
 
       // Execute each tool the LLM requested
+      let failuresThisRound = 0
       for (const call of response.toolCalls) {
         if (this.config.signal?.aborted) {
           return "Agent was cancelled."
@@ -227,18 +331,42 @@ export class Agent {
         if (!tool) {
           const errMsg = `Unknown tool "${call.name}". Available: ${[...this.tools.keys()].join(", ")}`
           if (this.config.verbose) log.logToolError(errMsg)
-          messages.push({ role: "tool", toolCallId: call.id, content: errMsg })
+          messages.push({ role: "tool", toolCallId: call.id, content: errMsg, section: "history" })
+          failuresThisRound++
           continue
         }
 
         try {
           const result = await tool.execute(call.arguments)
           if (this.config.verbose) log.logToolResult(result)
-          messages.push({ role: "tool", toolCallId: call.id, content: result })
+          messages.push({ role: "tool", toolCallId: call.id, content: result, section: "history" })
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err)
           if (this.config.verbose) log.logToolError(errMsg)
-          messages.push({ role: "tool", toolCallId: call.id, content: `Error: ${errMsg}` })
+          messages.push({ role: "tool", toolCallId: call.id, content: `Error: ${errMsg}`, section: "history" })
+          failuresThisRound++
+
+          // Stuck detection: track this failure
+          const argsKey = JSON.stringify(call.arguments)
+          recentFailures.push({ name: call.name, argsKey })
+          // Keep only last 10 failures
+          if (recentFailures.length > 10) recentFailures.shift()
+
+          // Check for identical repeated failures
+          const identicalCount = recentFailures.filter(
+            (f) => f.name === call.name && f.argsKey === argsKey,
+          ).length
+          if (identicalCount >= MAX_IDENTICAL_FAILURES) {
+            // Inject a recovery hint so the LLM tries a different approach
+            messages.push({
+              role: "system",
+              content: `STUCK DETECTION: Tool "${call.name}" has failed ${identicalCount} times with identical arguments. You MUST try a fundamentally different approach. Do NOT retry the same call.`,
+              section: "history",
+            })
+            if (this.config.verbose) {
+              log.logError(`Stuck: ${call.name} failed ${identicalCount}x with same args`)
+            }
+          }
         }
       }
 
@@ -249,5 +377,25 @@ export class Agent {
     const maxIterMsg = `Agent stopped after ${this.config.maxIterations} iterations.`
     if (this.config.verbose) log.logError(maxIterMsg)
     return maxIterMsg
+  }
+
+  /**
+   * Build the initial message array for a new run.
+   *
+   * When systemMessages is provided (structured prompt), uses multiple
+   * system messages with section tags. Otherwise falls back to single
+   * system prompt (legacy mode).
+   */
+  private buildInitialMessages(goal: string): Message[] {
+    if (this.config.systemMessages && this.config.systemMessages.length > 0) {
+      return [
+        ...this.config.systemMessages,
+        { role: "user", content: goal, section: "user" },
+      ]
+    }
+    return [
+      { role: "system", content: this.config.systemPrompt, section: "system_anchor" },
+      { role: "user", content: goal, section: "user" },
+    ]
   }
 }

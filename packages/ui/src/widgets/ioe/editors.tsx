@@ -32,19 +32,34 @@ export function EditorTabs({
   dagNodes: DagNode[]
   steps: Step[]
 }) {
+  // Count only user-visible trace entries (exclude debug/internal ones)
+  const visibleTraceCount = useMemo(() =>
+    trace.filter((e) =>
+      e.kind === "goal" || e.kind === "iteration" || e.kind === "thinking" ||
+      e.kind === "tool-call" || e.kind === "tool-result" || e.kind === "tool-error" ||
+      e.kind === "answer" || e.kind === "error" || e.kind === "usage" ||
+      e.kind === "delegation-start" || e.kind === "delegation-end" || e.kind === "delegation-iteration" ||
+      e.kind === "delegation-parallel-start" || e.kind === "delegation-parallel-end"
+    ).length,
+    [trace],
+  )
+
+  // Count tool-call DAG nodes only (not thinking, not iterations)
+  const dagToolCount = useMemo(() =>
+    dagNodes.filter((n) => n.type === "tool-call").length,
+    [dagNodes],
+  )
+
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
-    { id: "trace", label: "Trace", count: trace.length },
-    { id: "dag", label: "DAG", count: dagNodes.length },
+    { id: "trace", label: "Trace", count: visibleTraceCount },
+    { id: "dag", label: "DAG", count: dagToolCount },
     { id: "timeline", label: "Timeline", count: steps.length },
     { id: "details", label: "Details" },
     { id: "map", label: "Map" },
   ]
 
   return (
-    <div
-      className="flex items-center shrink-0 select-none"
-      style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}
-    >
+    <>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -65,7 +80,7 @@ export function EditorTabs({
           )}
         </button>
       ))}
-    </div>
+    </>
   )
 }
 
@@ -99,37 +114,49 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
 
   if (e.kind === "goal") {
     return (
-      <div className="py-0.5" style={{ color: C.accent }}>
-        <span className="text-[13px] uppercase mr-2" style={{ color: C.dim }}>GOAL</span>
-        {e.text}
+      <div className="pt-2 pb-1">
+        <span className="text-[13px] font-semibold mr-2" style={{ color: C.accent }}>GOAL</span>
+        <span className="text-[13px]" style={{ color: C.text }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "iteration") {
     return (
-      <div className="py-0.5 mt-1" style={{ color: C.cyan, borderTop: `1px solid ${C.border}` }}>
-        ── Iteration {e.current}/{e.max} ──
+      <div
+        className="text-[13px] font-mono pt-3 pb-0.5 mt-2 flex items-center gap-2"
+        style={{ color: C.muted, borderTop: `1px solid ${C.border}` }}
+      >
+        <span style={{ opacity: 0.6 }}>──</span>
+        <span>iteration {e.current}/{e.max}</span>
+        <span style={{ opacity: 0.6 }}>──</span>
       </div>
     )
   }
   if (e.kind === "thinking") {
     return (
-      <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[13px] mr-2" style={{ color: C.plum }}>THINK</span>
-        <span style={{ color: C.muted }}>{expanded ? e.text : truncate(e.text, 120)}</span>
+      <div className="py-0.5 pl-3" style={{ borderLeft: `2px solid ${C.accent}4d` }}>
+        <span className="text-[13px] font-medium mr-2" style={{ color: C.accent }}>THK</span>
+        <span className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "tool-call") {
     return (
-      <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[13px] mr-2" style={{ color: C.warning }}>CALL</span>
-        <span style={{ color: C.text }}>{e.tool}</span>
-        <span style={{ color: C.dim }}>({e.argsSummary || "..."})</span>
+      <div className="py-1">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="text-[13px] font-medium font-mono" style={{ color: C.warning }}>CALL</span>
+          <span className="text-[13px] font-medium font-mono" style={{ color: C.text }}>{e.tool}</span>
+          {!expanded && e.argsSummary && (
+            <span className="text-[13px] font-mono truncate" style={{ color: C.muted }}>{e.argsSummary}</span>
+          )}
+        </div>
         {expanded && (
           <pre
-            className="mt-1 ml-4 p-2 rounded text-[13px] overflow-x-auto"
-            style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
+            className="text-[13px] font-mono rounded-lg p-2 mt-1 max-h-40 overflow-auto whitespace-pre-wrap"
+            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.argsFormatted}
           </pre>
@@ -139,78 +166,123 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   }
   if (e.kind === "tool-result") {
     return (
-      <div className="py-0.5 cursor-pointer hover:bg-white/[0.02] rounded" onClick={() => setExpanded(!expanded)}>
-        <span className="text-[13px] mr-2" style={{ color: C.success }}>RET</span>
-        <span style={{ color: C.textSecondary }}>{expanded ? e.text : truncate(e.text, 120)}</span>
+      <div className="py-0.5 pl-3">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="text-[13px] font-medium font-mono" style={{ color: C.success }}>RSLT</span>
+          {!expanded && (
+            <span className="text-[13px] font-mono truncate" style={{ color: C.muted }}>
+              {e.text.length > 120 ? e.text.slice(0, 120) + "..." : e.text}
+            </span>
+          )}
+        </div>
+        {expanded && (
+          <pre
+            className="text-[13px] font-mono rounded-lg p-2 mt-1 max-h-40 overflow-auto whitespace-pre-wrap"
+            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+          >
+            {e.text}
+          </pre>
+        )}
       </div>
     )
   }
   if (e.kind === "tool-error") {
     return (
-      <div className="py-0.5">
-        <span className="text-[13px] mr-2" style={{ color: C.coral }}>ERR</span>
-        <span style={{ color: C.coral }}>{truncate(e.text, 200)}</span>
+      <div className="py-0.5 pl-3">
+        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: C.coral }}>ERR</span>
+        <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "answer") {
     return (
-      <div className="py-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
-        <span className="text-[13px] mr-2" style={{ color: C.success }}>ANSWER</span>
-        <span style={{ color: C.text }}>{e.text}</span>
+      <div className="pt-2 pb-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
+        <div className="text-[13px] font-semibold mb-1" style={{ color: C.success }}>COMPLETED</div>
+        <div className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: C.textSecondary }}>{e.text}</div>
       </div>
     )
   }
   if (e.kind === "error") {
     return (
-      <div className="py-0.5">
-        <span className="text-[13px] mr-2" style={{ color: C.coral }}>ERROR</span>
-        <span style={{ color: C.coral }}>{e.text}</span>
+      <div className="pt-2 pb-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
+        <span className="text-[13px] font-semibold mr-2" style={{ color: C.coral }}>FAILED</span>
+        <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "usage") {
     return (
-      <div className="py-0.5" style={{ color: C.dim }}>
-        <span className="text-[13px] mr-2">USAGE</span>
-        {fmtK(e.totalTokens)} tokens · {e.llmCalls} calls
+      <div className="flex items-center gap-3 py-0.5 text-[12px] font-mono" style={{ color: C.dim }}>
+        <span>+{fmtK(e.iterationTokens)} tk</span>
+        <span style={{ opacity: 0.3 }}>│</span>
+        <span>total {fmtK(e.totalTokens)}</span>
+        <span style={{ opacity: 0.3 }}>│</span>
+        <span>{e.llmCalls} calls</span>
       </div>
     )
   }
   if (e.kind === "delegation-start") {
     return (
-      <div className="py-0.5 mt-0.5" style={{ color: C.plum }}>
-        <span className="text-[13px] mr-2">DELEG▶</span>
-        {e.agentName ? `[${e.agentName}] ` : ""}
-        {e.goal}
-        <span style={{ color: C.dim }}> (depth {e.depth})</span>
+      <div className="py-1 pl-3 mt-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium font-mono" style={{ color: "#6CB4EE" }}>DLGT</span>
+          <span className="text-[13px]" style={{ color: "#6CB4EE", opacity: 0.7 }}>▶</span>
+          {e.agentName && (
+            <span className="text-[13px] font-medium" style={{ color: C.textSecondary }}>[{e.agentName}]</span>
+          )}
+          <span className="text-[12px]" style={{ color: C.muted }}>depth {e.depth}</span>
+        </div>
+        <div className="text-[13px] mt-0.5 ml-5" style={{ color: C.textSecondary }}>
+          {e.goal.length > 200 ? e.goal.slice(0, 200) + "..." : e.goal}
+        </div>
+        <div className="text-[11px] font-mono mt-0.5 ml-5" style={{ color: C.dim, opacity: 0.5 }}>
+          tools: {e.tools.slice(0, 6).join(", ")}{e.tools.length > 6 ? ` +${e.tools.length - 6}` : ""}
+        </div>
       </div>
     )
   }
   if (e.kind === "delegation-end") {
     return (
-      <div className="py-0.5" style={{ color: e.status === "done" ? C.success : C.coral }}>
-        <span className="text-[13px] mr-2">DELEG◀</span>
-        {e.status} {e.answer ? truncate(e.answer, 100) : e.error ? truncate(e.error, 100) : ""}
+      <div className="py-1 pl-3 mb-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium font-mono" style={{ color: "#6CB4EE" }}>DLGT</span>
+          <span className="text-[13px]" style={{ color: e.status === "done" ? C.success : C.coral }}>◀ {e.status}</span>
+          <span className="text-[12px]" style={{ color: C.muted }}>depth {e.depth}</span>
+        </div>
+        {e.answer && (
+          <div
+            className="text-[13px] mt-0.5 ml-5 cursor-pointer"
+            style={{ color: C.textSecondary }}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? e.answer : (e.answer.length > 150 ? e.answer.slice(0, 150) + "..." : e.answer)}
+          </div>
+        )}
+        {e.error && (
+          <div className="text-[13px] mt-0.5 ml-5" style={{ color: C.coral, opacity: 0.8 }}>{e.error}</div>
+        )}
       </div>
     )
   }
   if (e.kind === "delegation-iteration") {
     return (
-      <div className="py-0.5 pl-4" style={{ color: C.dim }}>
-        ↳ D{e.depth} iter {e.iteration}/{e.maxIterations}
+      <div className="text-[12px] font-mono pl-6 py-0.5" style={{ color: C.dim, opacity: 0.5 }}>
+        ↳ child iteration {e.iteration}/{e.maxIterations}
       </div>
     )
   }
   if (e.kind === "delegation-parallel-start") {
     return (
-      <div className="py-0.5" style={{ color: C.plum }}>
-        <span className="text-[13px] mr-2">PAR▶</span>
-        {e.taskCount} tasks{" "}
+      <div className="py-1 pl-3 mt-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
+        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: "#6CB4EE" }}>PAR▶</span>
+        <span className="text-[13px]" style={{ color: C.muted }}>{e.taskCount} tasks</span>
         {e.goals.map((g, i) => (
           <Fragment key={i}>
             <br />
-            <span className="pl-6" style={{ color: C.muted }}>• {truncate(g, 80)}</span>
+            <span className="pl-6 text-[13px]" style={{ color: C.muted }}>• {truncate(g, 80)}</span>
           </Fragment>
         ))}
       </div>
@@ -218,9 +290,9 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   }
   if (e.kind === "delegation-parallel-end") {
     return (
-      <div className="py-0.5" style={{ color: C.plum }}>
-        <span className="text-[13px] mr-2">PAR◀</span>
-        {e.fulfilled}/{e.taskCount} fulfilled, {e.rejected} rejected
+      <div className="py-1 pl-3 mb-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
+        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: "#6CB4EE" }}>PAR◀</span>
+        <span className="text-[13px]" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} fulfilled, {e.rejected} rejected</span>
       </div>
     )
   }

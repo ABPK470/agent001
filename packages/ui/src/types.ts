@@ -82,6 +82,11 @@ export type TraceEntry =
   | { kind: "delegation-parallel-end"; depth: number; taskCount: number; fulfilled: number; rejected: number }
   | { kind: "user-input-request"; question: string; options?: string[]; sensitive?: boolean }
   | { kind: "user-input-response"; text: string }
+  // Debug/inspector entries
+  | { kind: "system-prompt"; text: string }
+  | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }
+  | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
+  | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
 
 // ── Layout ───────────────────────────────────────────────────────
 
@@ -112,6 +117,7 @@ export type WidgetType =
   | "command-center"
   | "trajectory-replay"
   | "operator-env"
+  | "debug-inspector"
 
 export interface ViewConfig {
   id: string

@@ -8,6 +8,7 @@
 import {
     Activity,
     BarChart3,
+    Bug,
     Clock,
     Eye,
     Film,
@@ -42,6 +43,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "command-center", label: "Command Center", desc: "Operational overview: status, tools, agents, tokens", Icon: LayoutGrid },
   { type: "trajectory-replay", label: "Trajectory Replay", desc: "Step-through debugger for agent run trajectories", Icon: Film },
   { type: "operator-env", label: "Operator Environment", desc: "IDE-style integrated dashboard — all data, resizable panels, full control", Icon: LayoutDashboard },
+  { type: "debug-inspector", label: "Debug Inspector", desc: "Deep-dive debugging: system prompts, tool resolution, LLM requests & responses", Icon: Bug },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

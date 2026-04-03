@@ -18,6 +18,7 @@ import {
     createEngineServices,
     createRun,
     failRun,
+    getMssqlConfig,
     governTool,
     PolicyEffect,
     runCompleted,
@@ -95,6 +96,38 @@ function buildEnvironmentContext(): string {
     lines.push("  Note: Use PowerShell syntax or ensure commands are Windows-compatible.")
   }
   return lines.join("\n")
+}
+
+/**
+ * Build capability context for tools that need ambient awareness in the prompt.
+ * Tool definitions alone tell the LLM *how* to call a tool, but not *when* or *why*.
+ * This injects discoverable capability summaries so the LLM knows what resources exist.
+ */
+function buildToolContext(tools: Tool[]): string {
+  const sections: string[] = []
+
+  // ── MSSQL database ──
+  const hasMssql = tools.some((t) => t.name === "query_mssql" || t.name === "explore_mssql_schema")
+  if (hasMssql) {
+    const cfg = getMssqlConfig()
+    if (cfg) {
+      const mode = cfg.writeEnabled ? "read-write" : "read-only"
+      sections.push(
+        `Database: You have ${mode} access to a Microsoft SQL Server database (server: ${cfg.server}, database: ${cfg.database}).`,
+      )
+    } else {
+      sections.push(
+        "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",
+      )
+    }
+    sections.push(
+      "Use explore_mssql_schema to discover tables and columns before writing queries.",
+      "Use query_mssql to run T-SQL queries. When asked about data, revenue, customers, sales, or any analytical question, query the database.",
+    )
+  }
+
+  if (sections.length === 0) return ""
+  return "\nCapabilities:\n  " + sections.join("\n  ")
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────
@@ -570,35 +603,131 @@ export class AgentOrchestrator {
     // Initialize effect tracking for this run
     resetEffectSeq(runId)
 
-    // Build memory-augmented system prompt (unified retrieval pipeline)
-    const { context: memoryContext } = retrieveContext(goal, { sessionId: agentId ?? "default", runId })
-    let effectivePrompt = systemPrompt ?? undefined
+    // ── Build structured multi-message system prompt (agenc-core pattern) ──
+    // Each section gets its own system message with a budget section tag.
+    // This enables intelligent truncation: never drop the anchor, drop
+    // least-critical sections first when approaching token limits.
 
-    // Inject runtime environment so the agent knows what OS/shell it's running on
+    const systemMessages: Message[] = []
+
+    // Section 1: system_anchor — base prompt + environment (NEVER dropped)
+    const basePrompt = systemPrompt ?? undefined
     const envBlock = buildEnvironmentContext()
-    effectivePrompt = effectivePrompt
-      ? `${effectivePrompt}\n${envBlock}`
+    const anchorContent = basePrompt
+      ? `${basePrompt}\n${envBlock}`
       : envBlock
+    systemMessages.push({
+      role: "system",
+      content: anchorContent,
+      section: "system_anchor",
+    })
 
+    // Section 2: system_runtime — tool capabilities (droppable)
+    const toolCtx = buildToolContext(allTools)
+    if (toolCtx) {
+      systemMessages.push({
+        role: "system",
+        content: toolCtx.trim(),
+        section: "system_runtime",
+      })
+    }
+
+    // Section 3: system_runtime — workspace context (droppable)
     if (this.workspace) {
       const wsContext = await this.getWorkspaceContext()
       const contextBlock = [
-        "",
         `Workspace: ${this.workspace}`,
         wsContext,
         "",
         "When the user references a path like /agent or /server, match it to the closest directory in the workspace structure above (e.g. packages/agent, packages/server). All tool paths are relative to the workspace root.",
       ].join("\n")
-      effectivePrompt = effectivePrompt
-        ? `${effectivePrompt}${contextBlock}`
-        : contextBlock
+      systemMessages.push({
+        role: "system",
+        content: contextBlock,
+        section: "system_runtime",
+      })
     }
-    if (memoryContext) effectivePrompt = effectivePrompt ? `${effectivePrompt}\n${memoryContext}` : memoryContext
+
+    // Sections 4-6: memory tiers (each as separate message for independent truncation)
+    const { perTier } = await retrieveContext(goal, { sessionId: agentId ?? "default", runId })
+
+    if (perTier.working) {
+      systemMessages.push({
+        role: "system",
+        content: `<working_memory>\n${perTier.working}\n</working_memory>`,
+        section: "memory_working",
+      })
+    }
+    if (perTier.episodic) {
+      systemMessages.push({
+        role: "system",
+        content: `<episodic_memory>\n${perTier.episodic}\n</episodic_memory>`,
+        section: "memory_episodic",
+      })
+    }
+    if (perTier.semantic) {
+      systemMessages.push({
+        role: "system",
+        content: `<semantic_memory>\n${perTier.semantic}\n</semantic_memory>`,
+        section: "memory_semantic",
+      })
+    }
+
+    // For debug trace, concatenate all system messages into one view
+    const effectivePrompt = systemMessages.map((m) => m.content).join("\n\n")
+
+    // ── Debug trace: capture the full context the agent starts with ──
+    let debugSeq = 0
+
+    const systemPromptEntry = {
+      kind: "system-prompt" as const,
+      text: effectivePrompt ?? "(no system prompt)",
+    }
+    this.saveTrace(runId, systemPromptEntry)
+    broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry: systemPromptEntry } })
+
+    const toolsResolvedEntry = {
+      kind: "tools-resolved" as const,
+      tools: allTools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })),
+    }
+    this.saveTrace(runId, toolsResolvedEntry)
+    broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry: toolsResolvedEntry } })
+
     let prevTotalTokens = 0
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
-      systemPrompt: effectivePrompt,
+      systemMessages,
+      onLlmCall: (data) => {
+        if (data.phase === "request") {
+          const entry = {
+            kind: "llm-request" as const,
+            iteration: data.iteration,
+            messageCount: data.messages.length,
+            toolCount: data.tools.length,
+            // Full message history for debugging
+            messages: data.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+              toolCallId: m.toolCallId ?? null,
+            })),
+          }
+          this.saveTrace(runId, entry)
+          broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry } })
+        } else {
+          const entry = {
+            kind: "llm-response" as const,
+            iteration: data.iteration,
+            durationMs: data.durationMs,
+            content: data.response.content,
+            toolCalls: data.response.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
+            usage: data.response.usage ?? null,
+          }
+          this.saveTrace(runId, entry)
+          broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry } })
+        }
+      },
       onThinking: (content, _toolCalls, iteration) => {
         // Fires right after LLM responds, BEFORE tool execution.
         // This ensures iteration + thinking appear before CALL/RSLT in the trace.

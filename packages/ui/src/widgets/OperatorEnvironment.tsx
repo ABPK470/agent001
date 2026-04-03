@@ -6,19 +6,19 @@
  */
 
 import {
-  Bell,
-  Bot,
-  CircleDot,
-  Columns2,
-  FolderTree,
-  History,
-  MessageSquare,
-  PanelBottom,
-  Rows2,
-  Search,
-  Terminal,
-  X,
-  type LucideIcon
+    Bell,
+    Bot,
+    CircleDot,
+    Columns2,
+    FolderTree,
+    History,
+    MessageSquare,
+    PanelBottom,
+    Rows2,
+    Search,
+    Terminal,
+    X,
+    type LucideIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -28,30 +28,30 @@ import { fmtTokens } from "../util"
 import { AuditPanel, FeedPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel } from "./ioe/chat"
 import {
-  C,
-  buildChatMessages,
-  buildDagNodes,
-  buildFeedItems,
-  buildProblems,
-  buildSearchResults,
-  buildToolStats,
-  fmtK,
-  statusDot,
-  type BottomTab,
-  type EditorTab,
-  type HealthData,
-  type LlmConfig,
-  type SidebarSection,
-  type UsageData
+    C,
+    buildChatMessages,
+    buildDagNodes,
+    buildFeedItems,
+    buildProblems,
+    buildSearchResults,
+    buildToolStats,
+    fmtK,
+    statusDot,
+    type BottomTab,
+    type EditorTab,
+    type HealthData,
+    type LlmConfig,
+    type SidebarSection,
+    type UsageData
 } from "./ioe/constants"
 import { DagPanel, DetailsPanel, EditorTabs, MapPanel, TimelinePanel, TracePanel } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
-  AgentsToolsPanel,
-  ExplorerPanel,
-  NotificationsPanel,
-  RunsPanel,
-  SearchResultsList,
+    AgentsToolsPanel,
+    ExplorerPanel,
+    NotificationsPanel,
+    RunsPanel,
+    SearchResultsList,
 } from "./ioe/sidebar"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -485,56 +485,51 @@ export function OperatorEnvironment() {
             </div>
           </div>
 
-          {/* Editor tabs + split toggle */}
-          <div
-            className="flex items-center shrink-0"
-            style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}
-          >
-            <EditorTabs
-              current={editorTab}
-              onChange={setEditorTab}
-              trace={trace}
-              dagNodes={dagNodes}
-              steps={steps}
-            />
-            <div className="flex-1" />
-            <button
-              className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
-              style={{ color: editorSplit ? C.text : C.dim }}
-              onClick={() => setEditorSplit((v) => !v)}
-              title="Split editor"
-            >
-              <Columns2 size={14} />
-            </button>
-          </div>
-
           {/* Editor content (split or single) */}
           <div className="flex flex-1 min-h-0" style={{ background: C.base }}>
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {renderEditorContent(editorTab)}
+            {/* Left panel */}
+            <div className="flex flex-col flex-1 min-w-0 min-h-0">
+              {/* Left tab bar */}
+              <div className="flex items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+                <EditorTabs
+                  current={editorTab}
+                  onChange={setEditorTab}
+                  trace={trace}
+                  dagNodes={dagNodes}
+                  steps={steps}
+                />
+                <div className="flex-1" />
+                <button
+                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                  style={{ color: editorSplit ? C.text : C.dim }}
+                  onClick={() => setEditorSplit((v) => !v)}
+                  title="Split editor"
+                >
+                  <Columns2 size={14} />
+                </button>
+              </div>
+              {/* Left content */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {renderEditorContent(editorTab)}
+              </div>
             </div>
+
             {editorSplit && (
               <>
                 <div className="w-px shrink-0" style={{ background: C.borderSolid }} />
-                <div className="flex flex-col min-w-0 min-h-0" style={{ width: "50%" }}>
-                  <div
-                    className="flex items-center shrink-0 select-none"
-                    style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}
-                  >
-                    {(["trace", "dag", "timeline", "details", "map"] as EditorTab[]).map((tab) => (
-                      <button
-                        key={tab}
-                        className="px-2.5 py-1 text-[13px] transition-colors capitalize cursor-pointer"
-                        style={{
-                          color: editorRightTab === tab ? C.text : C.dim,
-                          borderBottom: editorRightTab === tab ? `1px solid ${C.cyan}` : "1px solid transparent",
-                        }}
-                        onClick={() => setEditorRightTab(tab)}
-                      >
-                        {tab}
-                      </button>
-                    ))}
+                {/* Right panel */}
+                <div className="flex flex-col flex-1 min-w-0 min-h-0">
+                  {/* Right tab bar (same structure as left) */}
+                  <div className="flex items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+                    <EditorTabs
+                      current={editorRightTab}
+                      onChange={setEditorRightTab}
+                      trace={trace}
+                      dagNodes={dagNodes}
+                      steps={steps}
+                    />
                   </div>
+                  {/* Right content */}
                   <div className="flex-1 overflow-y-auto min-h-0">
                     {renderEditorContent(editorRightTab)}
                   </div>

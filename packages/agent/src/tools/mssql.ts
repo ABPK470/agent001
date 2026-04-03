@@ -44,6 +44,12 @@ export function setMssqlWriteEnabled(enabled: boolean): void {
   _writeEnabled = enabled
 }
 
+/** Return a safe summary of the current config (no credentials). Null if not configured. */
+export function getMssqlConfig(): { server: string; database: string; writeEnabled: boolean } | null {
+  if (!_config) return null
+  return { server: _config.server!, database: _config.database!, writeEnabled: _writeEnabled }
+}
+
 /** Get or create the connection pool. */
 async function getPool(): Promise<sql.ConnectionPool> {
   if (!_config) throw new Error("MSSQL not configured. Call setMssqlConfig() at startup.")

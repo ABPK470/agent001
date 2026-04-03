@@ -9,6 +9,7 @@ import { AgentTrace } from "./AgentTrace"
 import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
 import { CommandCenter } from "./CommandCenter"
+import { DebugInspector } from "./DebugInspector"
 import { LiveLogs } from "./LiveLogs"
 import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
@@ -30,4 +31,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "command-center": CommandCenter,
   "trajectory-replay": TrajectoryReplay,
   "operator-env": OperatorEnvironment,
+  "debug-inspector": DebugInspector,
 }

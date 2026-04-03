@@ -194,7 +194,11 @@ export function createWs(
   // Deduplicate events across WS + BroadcastChannel
   const seen = new Set<string>()
   function eventKey(e: { type: string; timestamp: string; data: Record<string, unknown> }): string {
-    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}`
+    // debug.trace events need entry-level uniqueness (kind + seq) since
+    // multiple entries can share the same timestamp + runId
+    const seq = e.data["seq"] ?? ""
+    const kind = e.type === "debug.trace" ? ((e.data["entry"] as Record<string, unknown>)?.["kind"] ?? "") : ""
+    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}:${kind}:${seq}`
   }
   function dedupe(event: { type: string; data: Record<string, unknown>; timestamp: string }): boolean {
     const key = eventKey(event)
