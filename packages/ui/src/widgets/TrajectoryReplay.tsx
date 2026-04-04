@@ -39,6 +39,8 @@ type EventKind =
   | "delegation-end" | "delegation-iteration" | "usage"
   | "delegation-parallel-start" | "delegation-parallel-end"
   | "answer" | "error"
+  | "system-prompt" | "tools-resolved" | "llm-request" | "llm-response"
+  | "user-input-request" | "user-input-response"
 
 interface TrajectoryEvent { kind: EventKind; [key: string]: unknown }
 interface TrajectoryEntry { seq: number; event: TrajectoryEvent; timestamp: string }
@@ -81,7 +83,7 @@ interface TraceNode {
   subtreeCount?: number
 }
 
-const META_TREE_KINDS = new Set<string>(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end"])
+const META_TREE_KINDS = new Set<string>(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end", "system-prompt", "tools-resolved", "llm-request", "llm-response"])
 
 function buildTraceTree(trajectory: TrajectoryEntry[]): TraceNode[] {
   const roots: TraceNode[] = []
@@ -149,6 +151,12 @@ const EVENT_META: Record<EventKind, { color: string; label: string; short: strin
   "delegation-parallel-end":   { color: "var(--color-viz-plum)", label: "Parallel End",   short: "P·DN" },
   "answer":            { color: "var(--color-success)",    label: "Final Answer",   short: "ANS" },
   "error":             { color: "var(--color-error)",      label: "Fatal Error",    short: "FAIL" },
+  "system-prompt":     { color: "var(--color-text-muted)", label: "System Prompt",  short: "SYS" },
+  "tools-resolved":    { color: "var(--color-text-muted)", label: "Tools Resolved", short: "TOOL" },
+  "llm-request":       { color: "var(--color-text-muted)", label: "LLM Request",    short: "LLM→" },
+  "llm-response":      { color: "var(--color-text-muted)", label: "LLM Response",   short: "→LLM" },
+  "user-input-request":  { color: "var(--color-accent)",  label: "User Prompt",    short: "ASK" },
+  "user-input-response": { color: "var(--color-accent)",  label: "User Reply",     short: "RPL" },
 }
 
 const SPEEDS = [0.5, 1, 2, 4] as const
@@ -1083,6 +1091,15 @@ function mutEventFullText(event: TrajectoryEvent): string {
     }
     case "answer": return String(event.text ?? "")
     case "error": return String(event.text ?? "")
+    case "system-prompt": return String(event.text ?? "")
+    case "tools-resolved": {
+      const tools = (event as unknown as { tools: Array<{ name: string }> }).tools ?? []
+      return tools.map((t: { name: string }) => t.name).join("\n")
+    }
+    case "llm-request": return JSON.stringify(event, null, 2)
+    case "llm-response": return JSON.stringify(event, null, 2)
+    case "user-input-request": return String((event as unknown as { question: string }).question ?? event.text ?? "")
+    case "user-input-response": return String(event.text ?? "")
     default: return JSON.stringify(event, null, 2)
   }
 }
@@ -1566,11 +1583,31 @@ function EventListItem({ entry, index, isActive, hasViolation, onClick }: {
     )
   }
 
-  // Fallback
+  // User input request
+  if (kind === "user-input-request") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-1`} onClick={onClick}>
+        <span className="text-accent text-[13px] font-medium font-mono">ASK</span>
+        <span className="text-text-secondary text-sm ml-2">{trnc(entry.event.question ?? entry.event.text, 60)}</span>
+      </div>
+    )
+  }
+
+  // User input response
+  if (kind === "user-input-response") {
+    return (
+      <div data-seq={index} className={`${wrapCls} py-0.5 pl-3`} onClick={onClick}>
+        <span className="text-accent text-[13px] font-medium font-mono">RPL</span>
+        <span className="text-text-muted text-[13px] font-mono ml-2">{trnc(entry.event.text, 60)}</span>
+      </div>
+    )
+  }
+
+  // Fallback — render with proper meta (no more false "FAIL")
   return (
-    <div data-seq={index} className={`${wrapCls} py-0.5`} onClick={onClick}>
-      <span className="text-[13px] font-medium font-mono" style={{ color: meta.color }}>{meta.short}</span>
-      <span className="text-text-muted text-sm ml-2">{eventPreview(entry.event)}</span>
+    <div data-seq={index} className={`${wrapCls} py-0.5 text-text-muted text-[12px] font-mono`} onClick={onClick}>
+      <span style={{ color: meta.color }}>{meta.short}</span>
+      <span className="ml-2">{eventPreview(entry.event)}</span>
     </div>
   )
 }
@@ -1671,6 +1708,26 @@ function EventContent({ event }: { event: TrajectoryEvent }) {
     case "delegation-end": return <ContentBlock label="Delegation result" text={String(event.result ?? event.answer ?? "")} />
     case "delegation-iteration": return <div className="text-sm text-text-muted font-mono">Child iteration {String(event.current ?? "")}/{String(event.max ?? "")}</div>
     case "usage": return <div className="text-sm text-text-muted font-mono">Token usage event</div>
+    case "system-prompt": return <ContentBlock label="System Prompt" text={String(event.text ?? "")} mono />
+    case "tools-resolved": {
+      const tools = (event as unknown as { tools: Array<{ name: string }> }).tools ?? []
+      return <ContentBlock label={`Tools Resolved (${tools.length})`} text={tools.map((t: { name: string }) => t.name).join(", ")} mono />
+    }
+    case "llm-request": {
+      const req = event as unknown as { iteration: number; messageCount: number; toolCount: number }
+      return <div className="text-sm text-text-muted font-mono">LLM Request — iteration {req.iteration + 1}, {req.messageCount} messages, {req.toolCount} tools</div>
+    }
+    case "llm-response": {
+      const res = event as unknown as { iteration: number; durationMs: number; content: string | null; toolCalls: unknown[] }
+      return (
+        <div className="space-y-1">
+          <div className="text-sm text-text-muted font-mono">LLM Response — {res.durationMs}ms, {res.toolCalls?.length ?? 0} tool calls</div>
+          {res.content && <ContentBlock label="Content" text={res.content} />}
+        </div>
+      )
+    }
+    case "user-input-request": return <ContentBlock label="Question" text={String((event as unknown as { question: string }).question ?? event.text ?? "")} />
+    case "user-input-response": return <ContentBlock label="User Reply" text={String(event.text ?? "")} />
     case "answer":
       return (
         <div className="space-y-1">
@@ -1782,6 +1839,21 @@ function eventPreview(event: TrajectoryEvent): string {
     case "delegation-end": return trnc(event.result, 200)
     case "answer": return trnc(event.text, 200)
     case "error": return trnc(event.text, 200)
+    case "system-prompt": return trnc(event.text, 80)
+    case "tools-resolved": {
+      const tools = (event as unknown as { tools: Array<{ name: string }> }).tools ?? []
+      return `${tools.length} tools`
+    }
+    case "llm-request": {
+      const req = event as unknown as { messageCount: number }
+      return `${req.messageCount ?? "?"} messages`
+    }
+    case "llm-response": {
+      const res = event as unknown as { durationMs: number }
+      return `${res.durationMs ?? "?"}ms`
+    }
+    case "user-input-request": return trnc((event as unknown as { question: string }).question ?? event.text, 200)
+    case "user-input-response": return trnc(event.text, 200)
     default: return ""
   }
 }

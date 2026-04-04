@@ -27,6 +27,16 @@ export type TrajectoryEvent =
   | DelegationEndEvent
   | AnswerEvent
   | ErrorEvent
+  | UsageEvent
+  | DelegationIterationEvent
+  | DelegationParallelStartEvent
+  | DelegationParallelEndEvent
+  | SystemPromptEvent
+  | ToolsResolvedEvent
+  | LlmRequestEvent
+  | LlmResponseEvent
+  | UserInputRequestEvent
+  | UserInputResponseEvent
 
 interface GoalEvent {
   kind: "goal"
@@ -80,6 +90,76 @@ interface AnswerEvent {
 
 interface ErrorEvent {
   kind: "error"
+  text: string
+}
+
+interface UsageEvent {
+  kind: "usage"
+  iterationTokens: number
+  totalTokens: number
+  promptTokens: number
+  completionTokens: number
+  llmCalls: number
+}
+
+interface DelegationIterationEvent {
+  kind: "delegation-iteration"
+  depth: number
+  iteration: number
+  maxIterations: number
+}
+
+interface DelegationParallelStartEvent {
+  kind: "delegation-parallel-start"
+  depth: number
+  taskCount: number
+  goals: string[]
+}
+
+interface DelegationParallelEndEvent {
+  kind: "delegation-parallel-end"
+  depth: number
+  taskCount: number
+  fulfilled: number
+  rejected: number
+}
+
+interface SystemPromptEvent {
+  kind: "system-prompt"
+  text: string
+}
+
+interface ToolsResolvedEvent {
+  kind: "tools-resolved"
+  tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>
+}
+
+interface LlmRequestEvent {
+  kind: "llm-request"
+  iteration: number
+  messageCount: number
+  toolCount: number
+  messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }>
+}
+
+interface LlmResponseEvent {
+  kind: "llm-response"
+  iteration: number
+  durationMs: number
+  content: string | null
+  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null
+}
+
+interface UserInputRequestEvent {
+  kind: "user-input-request"
+  question: string
+  options?: string[]
+  sensitive?: boolean
+}
+
+interface UserInputResponseEvent {
+  kind: "user-input-response"
   text: string
 }
 
@@ -217,7 +297,7 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
   // "usage", "delegation-iteration", and "delegation-parallel-*" are
   // observability/meta events, not agent states. They can appear between any
   // pair of real states and should be transparent to the state machine validator.
-  const META_KINDS = new Set(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end"])
+  const META_KINDS = new Set(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end", "system-prompt", "tools-resolved", "llm-request", "llm-response", "user-input-request", "user-input-response"])
 
   // Build a filtered view that only contains real state events for validation,
   // while preserving the original seq numbers for violation reporting.
