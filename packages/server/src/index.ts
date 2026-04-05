@@ -277,6 +277,14 @@ async function main() {
     })
   }
 
+  // Global error handler — consistent 500 shape for uncaught route errors
+  app.setErrorHandler((error, _req, reply) => {
+    const status = (error as { statusCode?: number }).statusCode ?? 500
+    const message = error instanceof Error ? error.message : "Internal server error"
+    if (status >= 500) console.error("[server] unhandled route error:", error)
+    reply.code(status).send({ error: message })
+  })
+
   // WebSocket endpoint
   app.get("/ws", { websocket: true }, (socket) => {
     addClient(socket)

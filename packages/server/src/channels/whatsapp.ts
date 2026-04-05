@@ -9,7 +9,7 @@
  * Webhooks: Verify with hub.verify_token, validate with HMAC-SHA256
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { validateHmacSignature } from "./crypto.js"
 import { ChannelApiError } from "./retry.js"
 import type { Channel, ChannelConfig, InboundMessage } from "./types.js"
 
@@ -56,19 +56,8 @@ export class WhatsAppChannel implements Channel {
     return result.messages?.[0]?.id ?? "unknown"
   }
 
-  /**
-   * Validate webhook signature (HMAC-SHA256).
-   *
-   * WhatsApp signs payloads with the app secret.
-   * Header: X-Hub-Signature-256: sha256=<hex>
-   */
   validateSignature(payload: Buffer, signature: string): boolean {
-    const expected = "sha256=" + createHmac("sha256", this.config.appSecret)
-      .update(payload)
-      .digest("hex")
-
-    if (signature.length !== expected.length) return false
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    return validateHmacSignature(payload, signature, this.config.appSecret)
   }
 
   /** Parse WhatsApp webhook payload into inbound messages. */

@@ -92,12 +92,6 @@ export interface Memory {
   expiresAt: string | null
 }
 
-/** @deprecated Use UnifiedSearchResult */
-export interface MemorySearchResult {
-  memory: Memory
-  rank: number
-  score: number
-}
 
 function entryToLegacy(e: MemoryEntry): Memory {
   return {
@@ -773,7 +767,7 @@ export async function retrieveContext(
  * When Ollama embeddings are available, blends keyword (FTS5 BM25) and
  * semantic (cosine similarity) results for true hybrid search.
  */
-async function searchEntries(
+export async function searchEntries(
   query: string,
   opts: {
     tier?: MemoryTier
@@ -1224,97 +1218,6 @@ function sanitizeFtsQuery(query: string): string {
   return tokens.map((t) => `"${t}"`).join(" OR ")
 }
 
-// ── Compat: Legacy API surface ───────────────────────────────────
-
-/** @deprecated Use retrieveContext() */
-export async function buildMemoryContext(goal: string, _budget?: MemoryBudget): Promise<string> {
-  const { context } = await retrieveContext(goal)
-  return context
-}
-
-/** @deprecated Use ingestRunTurns() */
-export function extractRunSummary(run: {
-  id: string
-  goal: string
-  answer: string | null
-  status: string
-  tools: string[]
-  stepCount: number
-  error?: string | null
-}): Memory {
-  const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
-  lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
-  if (run.answer) {
-    const a = truncateAtBoundary(run.answer, 800, "\u2026")
-    lines.push(`Answer: ${a}`)
-  }
-  if (run.error) lines.push(`Error: ${run.error}`)
-
-  const entry = ingestTurn({
-    tier: "episodic",
-    role: "summary",
-    content: lines.join("\n"),
-    metadata: { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status },
-    source: "agent",
-    confidence: run.status === "completed" ? 0.7 : 0.3,
-    runId: run.id,
-  })
-
-  if (!entry) {
-    const now = new Date().toISOString()
-    return {
-      id: randomUUID(), tier: "episodic", content: lines.join("\n"),
-      metadata: {}, source: "agent", confidence: 0.3, accessCount: 0,
-      runId: run.id, createdAt: now, updatedAt: now, expiresAt: null,
-    }
-  }
-  return entryToLegacy(entry)
-}
-
-/** @deprecated Use searchEntries via retrieveContext() */
-export function searchMemories(
-  query: string,
-  opts?: { tier?: MemoryTier; budget?: MemoryBudget; minConfidence?: number; excludeRunId?: string },
-): MemorySearchResult[] {
-  const budget = opts?.budget ?? DEFAULT_BUDGET
-  const ftsQuery = sanitizeFtsQuery(query)
-  if (!ftsQuery) return []
-
-  let sql = `
-    SELECT e.*, memory_entries_fts.rank AS fts_rank
-    FROM memory_entries e
-    JOIN memory_entries_fts ON e.rowid = memory_entries_fts.rowid
-    WHERE memory_entries_fts MATCH ?
-  `
-  const params: unknown[] = [ftsQuery]
-
-  if (opts?.tier) {
-    sql += " AND e.tier = ?"
-    params.push(opts.tier)
-  }
-  if (opts?.excludeRunId) {
-    sql += " AND (e.run_id IS NULL OR e.run_id != ?)"
-    params.push(opts.excludeRunId)
-  }
-
-  sql += " ORDER BY fts_rank LIMIT ?"
-  params.push(budget.maxItems * 3)
-
-  const rows = getDb().prepare(sql).all(...params) as Array<
-    Record<string, unknown> & { fts_rank: number }
-  >
-
-  const results: MemorySearchResult[] = rows.map((row) => {
-    const entry = rowToEntry(row)
-    const rawRank = Math.abs(row.fts_rank)
-    const score = rawRank * (SOURCE_WEIGHT[entry.source] ?? 0.5) * confidenceDecay(entry.createdAt) * entry.confidence
-    return { memory: entryToLegacy(entry), rank: rawRank, score }
-  })
-
-  results.sort((a, b) => b.score - a.score)
-  return results.slice(0, budget.maxItems)
-}
-
 // ── Maintenance ──────────────────────────────────────────────────
 
 export function prune(): { deleted: number } {
@@ -1392,38 +1295,6 @@ export function clearAllMemories(): void {
     DELETE FROM procedural_memories;
     DELETE FROM memory_vectors;
   `)
-}
-
-/** @deprecated Use ingestTurn() */
-export function storeMemory(opts: {
-  tier: MemoryTier | "procedural"
-  content: string
-  metadata?: Record<string, unknown>
-  source?: MemorySource
-  confidence?: number
-  runId?: string | null
-  expiresAt?: string | null
-}): Memory {
-  const tier: MemoryTier = opts.tier === "procedural" ? "episodic" : opts.tier
-  const entry = ingestTurn({
-    tier,
-    role: "summary",
-    content: opts.content,
-    metadata: opts.metadata,
-    source: opts.source,
-    confidence: opts.confidence,
-    runId: opts.runId,
-  })
-  if (!entry) {
-    const now = new Date().toISOString()
-    return {
-      id: randomUUID(), tier, content: opts.content,
-      metadata: opts.metadata ?? {}, source: opts.source ?? "agent",
-      confidence: opts.confidence ?? 0.5, accessCount: 0,
-      runId: opts.runId ?? null, createdAt: now, updatedAt: now, expiresAt: null,
-    }
-  }
-  return entryToLegacy(entry)
 }
 
 // ── Row mappers ──────────────────────────────────────────────────

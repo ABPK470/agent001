@@ -9,7 +9,7 @@
  * Webhooks: Verify with hub.verify_token, validate with HMAC-SHA1
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { validateHmacSignature } from "./crypto.js"
 import { ChannelApiError } from "./retry.js"
 import type { Channel, ChannelConfig, InboundMessage } from "./types.js"
 
@@ -54,19 +54,8 @@ export class MessengerChannel implements Channel {
     return result.message_id ?? "unknown"
   }
 
-  /**
-   * Validate webhook signature (HMAC-SHA256).
-   *
-   * Messenger signs payloads with the app secret.
-   * Header: X-Hub-Signature-256: sha256=<hex>
-   */
   validateSignature(payload: Buffer, signature: string): boolean {
-    const expected = "sha256=" + createHmac("sha256", this.config.appSecret)
-      .update(payload)
-      .digest("hex")
-
-    if (signature.length !== expected.length) return false
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    return validateHmacSignature(payload, signature, this.config.appSecret)
   }
 
   /** Parse Messenger webhook payload into inbound messages. */

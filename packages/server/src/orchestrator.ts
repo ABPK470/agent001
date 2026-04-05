@@ -18,7 +18,6 @@ import {
   createEngineServices,
   createRun,
   failRun,
-  getMssqlConfig,
   governTool,
   PolicyEffect,
   runCompleted,
@@ -36,12 +35,12 @@ import {
   type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
-import { arch, homedir, platform } from "node:os"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 import type { MessageRouter } from "./channels/router.js"
 import * as db from "./db.js"
 import { migrateEffects, recordEffect, recordFileWrite, resetEffectSeq } from "./effects.js"
 import { consolidate, extractProcedural, ingestRunTurns, migrateMemory, retrieveContext } from "./memory.js"
+import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "./prompt-builder.js"
 import { RunQueue, type RunPriority } from "./queue.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
@@ -70,64 +69,6 @@ export interface OrchestratorConfig {
   llm: LLMClient
   messageRouter?: MessageRouter
   workspace?: string
-}
-
-// ── Environment detection ────────────────────────────────────────
-
-const OS_LABELS: Record<string, string> = {
-  darwin: "macOS",
-  linux: "Linux",
-  win32: "Windows",
-}
-
-function buildEnvironmentContext(): string {
-  const os = OS_LABELS[platform()] ?? platform()
-  const shell = platform() === "win32" ? "cmd.exe / PowerShell" : "/bin/sh (POSIX)"
-  const lines = [
-    "\nEnvironment:",
-    `  OS: ${os} (${arch()})`,
-    `  Shell: ${shell}`,
-    `  Home: ${homedir()}`,
-    `  Node: ${process.version}`,
-  ]
-  if (platform() === "darwin") {
-    lines.push("  Note: macOS uses BSD coreutils (e.g. sed -i '' not sed -i, no GNU extensions by default).")
-  } else if (platform() === "win32") {
-    lines.push("  Note: Use PowerShell syntax or ensure commands are Windows-compatible.")
-  }
-  return lines.join("\n")
-}
-
-/**
- * Build capability context for tools that need ambient awareness in the prompt.
- * Tool definitions alone tell the LLM *how* to call a tool, but not *when* or *why*.
- * This injects discoverable capability summaries so the LLM knows what resources exist.
- */
-function buildToolContext(tools: Tool[]): string {
-  const sections: string[] = []
-
-  // ── MSSQL database ──
-  const hasMssql = tools.some((t) => t.name === "query_mssql" || t.name === "explore_mssql_schema")
-  if (hasMssql) {
-    const cfg = getMssqlConfig()
-    if (cfg) {
-      const mode = cfg.writeEnabled ? "read-write" : "read-only"
-      sections.push(
-        `Database: You have ${mode} access to a Microsoft SQL Server database (server: ${cfg.server}, database: ${cfg.database}).`,
-      )
-    } else {
-      sections.push(
-        "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",
-      )
-    }
-    sections.push(
-      "Use explore_mssql_schema to discover tables and columns before writing queries.",
-      "Use query_mssql to run T-SQL queries. When asked about data, revenue, customers, sales, or any analytical question, query the database.",
-    )
-  }
-
-  if (sections.length === 0) return ""
-  return "\nCapabilities:\n  " + sections.join("\n  ")
 }
 
 // ── Orchestrator ─────────────────────────────────────────────────
@@ -159,26 +100,6 @@ export class AgentOrchestrator {
   /** Hot-swap the LLM client — takes effect on the next run. */
   setLlm(client: LLMClient): void {
     this.llm = client
-  }
-
-  /** Generate a shallow workspace tree for system prompt context. */
-  private async getWorkspaceContext(): Promise<string> {
-    if (!this.workspace) return ""
-    try {
-      const { execFile } = await import("node:child_process")
-      const { promisify } = await import("node:util")
-      const exec = promisify(execFile)
-      const { stdout } = await exec("find", [
-        ".", "-maxdepth", "3", "-type", "d",
-        "-not", "-path", "*/node_modules/*",
-        "-not", "-path", "*/.git/*",
-        "-not", "-path", "*/dist/*",
-      ], { cwd: this.workspace, timeout: 5000 })
-      const dirs = stdout.trim().split("\n").filter(Boolean).slice(0, 60)
-      return `Structure:\n${dirs.join("\n")}`
-    } catch {
-      return ""
-    }
   }
 
   /** Set the message router (for wiring after construction). */
@@ -634,7 +555,7 @@ export class AgentOrchestrator {
 
     // Section 3: system_runtime — workspace context (droppable)
     if (this.workspace) {
-      const wsContext = await this.getWorkspaceContext()
+      const wsContext = await getWorkspaceContext(this.workspace)
       const contextBlock = [
         `Workspace: ${this.workspace}`,
         wsContext,

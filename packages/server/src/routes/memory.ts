@@ -18,7 +18,7 @@ import {
     listMemories,
     prune,
     retrieveContext,
-    searchMemories,
+    searchEntries,
     searchProcedures,
     type MemoryTier,
 } from "../memory.js"
@@ -46,21 +46,22 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "query is required" }
       }
-      const results = searchMemories(query, {
+      const limit = maxItems ?? 20
+      const results = await searchEntries(query, {
         tier,
-        budget: maxItems ? { maxTokens: 8000, maxItems } : undefined,
+        budget: { maxTokens: 8000, maxItems: limit },
       })
       return results.map((r) => ({
-        id: r.memory.id,
-        tier: r.memory.tier,
-        content: r.memory.content,
-        metadata: r.memory.metadata,
-        source: r.memory.source,
-        confidence: r.memory.confidence,
-        accessCount: r.memory.accessCount,
-        rank: r.rank,
-        score: r.score,
-        createdAt: r.memory.createdAt,
+        id: r.entry.id,
+        tier: r.entry.tier,
+        content: r.entry.content,
+        metadata: r.entry.metadata,
+        source: r.entry.source,
+        confidence: r.entry.confidence,
+        accessCount: r.entry.accessCount,
+        rank: r.relevance,
+        score: r.combined,
+        createdAt: r.entry.createdAt,
       }))
     },
   )

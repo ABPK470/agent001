@@ -11,6 +11,10 @@
  *   Every write_file, run_command, or fetch_url produces an Effect.
  *   For file writes, we capture a pre-write snapshot (original content + hash).
  *   On rollback, we restore files to their pre-write state.
+ *
+ *   EffectTracker holds per-run sequence counters as instance state.
+ *   A default singleton is exported for convenience; create fresh
+ *   instances in tests to avoid shared state.
  */
 
 import { createHash, randomUUID } from "node:crypto"
@@ -26,21 +30,13 @@ export type EffectStatus = "pending" | "applied" | "compensated" | "skipped"
 export interface Effect {
   id: string
   runId: string
-  /** Sequential index within the run. */
   seq: number
-  /** What kind of side-effect. */
   kind: EffectKind
-  /** What tool produced this effect. */
   tool: string
-  /** Target (file path, URL, command). */
   target: string
-  /** SHA-256 of the target before the effect (null for create). */
   preHash: string | null
-  /** SHA-256 of the target after the effect. */
   postHash: string | null
-  /** Current status. */
   status: EffectStatus
-  /** Extra metadata (command output, response status, etc.). */
   metadata: Record<string, unknown>
   createdAt: string
 }
@@ -49,32 +45,22 @@ export interface FileSnapshot {
   id: string
   effectId: string
   runId: string
-  /** Absolute file path. */
   filePath: string
-  /** Original content before the write. Null if file didn't exist. */
   content: string | null
-  /** SHA-256 hash of the original content. */
   hash: string | null
   createdAt: string
 }
 
 export interface RollbackResult {
-  /** Total effects in the run. */
   total: number
-  /** Successfully compensated. */
   compensated: number
-  /** Skipped (file was already at pre-write state or was never captured). */
   skipped: number
-  /** Failed to compensate (file was modified by another run or manually). */
   failed: Array<{ effectId: string; target: string; reason: string }>
 }
 
 export interface RollbackPreview {
-  /** Effects that would be compensated. */
   wouldCompensate: Array<{ effectId: string; target: string; kind: EffectKind; hasSnapshot: boolean }>
-  /** Effects that would be skipped. */
   wouldSkip: Array<{ effectId: string; target: string; reason: string }>
-  /** Effects that would fail. */
   wouldFail: Array<{ effectId: string; target: string; reason: string }>
 }
 
@@ -115,7 +101,6 @@ export function migrateEffects(): void {
     CREATE INDEX IF NOT EXISTS idx_snapshots_path ON file_snapshots(file_path);
   `)
 
-  // Add file_mode column if missing (tracks permissions)
   try {
     getDb().exec(`ALTER TABLE file_snapshots ADD COLUMN file_mode INTEGER`)
   } catch {
@@ -123,23 +108,164 @@ export function migrateEffects(): void {
   }
 }
 
-// ── Core: record effects ─────────────────────────────────────────
+// ── EffectTracker (stateful — holds per-run sequence counters) ───
 
-let _seqCounters = new Map<string, number>()
+export class EffectTracker {
+  private seqCounters = new Map<string, number>()
 
-/** Get next sequence number for a run. */
-function nextSeq(runId: string): number {
-  const current = _seqCounters.get(runId) ?? 0
-  _seqCounters.set(runId, current + 1)
-  return current
+  private nextSeq(runId: string): number {
+    const current = this.seqCounters.get(runId) ?? 0
+    this.seqCounters.set(runId, current + 1)
+    return current
+  }
+
+  resetEffectSeq(runId: string): void {
+    this.seqCounters.delete(runId)
+  }
+
+  recordEffect(opts: {
+    runId: string
+    kind: EffectKind
+    tool: string
+    target: string
+    preHash?: string | null
+    postHash?: string | null
+    metadata?: Record<string, unknown>
+  }): Effect {
+    const now = new Date().toISOString()
+    const effect: Effect = {
+      id: randomUUID(),
+      runId: opts.runId,
+      seq: this.nextSeq(opts.runId),
+      kind: opts.kind,
+      tool: opts.tool,
+      target: opts.target,
+      preHash: opts.preHash ?? null,
+      postHash: opts.postHash ?? null,
+      status: "applied",
+      metadata: opts.metadata ?? {},
+      createdAt: now,
+    }
+
+    getDb().prepare(`
+      INSERT INTO effects (id, run_id, seq, kind, tool, target, pre_hash, post_hash, status, metadata, created_at)
+      VALUES (@id, @run_id, @seq, @kind, @tool, @target, @pre_hash, @post_hash, @status, @metadata, @created_at)
+    `).run({
+      ...effect,
+      run_id: effect.runId,
+      pre_hash: effect.preHash,
+      post_hash: effect.postHash,
+      metadata: JSON.stringify(effect.metadata),
+      created_at: effect.createdAt,
+    })
+
+    broadcast({
+      type: "effect.recorded",
+      data: {
+        id: effect.id,
+        runId: effect.runId,
+        kind: effect.kind,
+        tool: effect.tool,
+        target: effect.target,
+        status: effect.status,
+      },
+    })
+
+    return effect
+  }
+
+  async recordFileWrite(opts: {
+    runId: string
+    tool: string
+    filePath: string
+    newContent: string
+  }): Promise<Effect> {
+    const newHash = hashContent(opts.newContent)
+    try {
+      const existing = await readFile(opts.filePath, "utf-8")
+      const existingHash = hashContent(existing)
+      if (existingHash === newHash) {
+        return this.recordEffect({
+          runId: opts.runId,
+          kind: "modify",
+          tool: opts.tool,
+          target: opts.filePath,
+          preHash: existingHash,
+          postHash: newHash,
+          metadata: { idempotent: true, skipped: true },
+        })
+      }
+    } catch {
+      // File doesn't exist yet — this will be a "create"
+    }
+
+    let kind: EffectKind = "create"
+    let preHash: string | null = null
+    try {
+      await stat(opts.filePath)
+      kind = "modify"
+      const existing = await readFile(opts.filePath, "utf-8")
+      preHash = hashContent(existing)
+    } catch {
+      // File doesn't exist
+    }
+
+    const effect = this.recordEffect({
+      runId: opts.runId,
+      kind,
+      tool: opts.tool,
+      target: opts.filePath,
+      preHash,
+      postHash: newHash,
+    })
+
+    await captureSnapshot(opts.runId, effect.id, opts.filePath)
+    return effect
+  }
+
+  async recordFileDelete(opts: {
+    runId: string
+    tool: string
+    filePath: string
+  }): Promise<Effect> {
+    let preHash: string | null = null
+    try {
+      const existing = await readFile(opts.filePath, "utf-8")
+      preHash = hashContent(existing)
+    } catch {
+      return this.recordEffect({
+        runId: opts.runId,
+        kind: "delete",
+        tool: opts.tool,
+        target: opts.filePath,
+        preHash: null,
+        postHash: null,
+        metadata: { skipped: true, reason: "file did not exist" },
+      })
+    }
+
+    const effect = this.recordEffect({
+      runId: opts.runId,
+      kind: "delete",
+      tool: opts.tool,
+      target: opts.filePath,
+      preHash,
+      postHash: null,
+    })
+
+    await captureSnapshot(opts.runId, effect.id, opts.filePath)
+    return effect
+  }
 }
 
-/** Reset seq counter (call when run starts). */
+// ── Default singleton + backward-compatible exports ──────────────
+
+const _default = new EffectTracker()
+
 export function resetEffectSeq(runId: string): void {
-  _seqCounters.delete(runId)
+  _default.resetEffectSeq(runId)
 }
 
-/** Record that an effect was applied. */
 export function recordEffect(opts: {
   runId: string
   kind: EffectKind
@@ -149,58 +275,28 @@ export function recordEffect(opts: {
   postHash?: string | null
   metadata?: Record<string, unknown>
 }): Effect {
-  const now = new Date().toISOString()
-  const effect: Effect = {
-    id: randomUUID(),
-    runId: opts.runId,
-    seq: nextSeq(opts.runId),
-    kind: opts.kind,
-    tool: opts.tool,
-    target: opts.target,
-    preHash: opts.preHash ?? null,
-    postHash: opts.postHash ?? null,
-    status: "applied",
-    metadata: opts.metadata ?? {},
-    createdAt: now,
-  }
-
-  getDb().prepare(`
-    INSERT INTO effects (id, run_id, seq, kind, tool, target, pre_hash, post_hash, status, metadata, created_at)
-    VALUES (@id, @run_id, @seq, @kind, @tool, @target, @pre_hash, @post_hash, @status, @metadata, @created_at)
-  `).run({
-    ...effect,
-    run_id: effect.runId,
-    pre_hash: effect.preHash,
-    post_hash: effect.postHash,
-    metadata: JSON.stringify(effect.metadata),
-    created_at: effect.createdAt,
-  })
-
-  broadcast({
-    type: "effect.recorded",
-    data: {
-      id: effect.id,
-      runId: effect.runId,
-      kind: effect.kind,
-      tool: effect.tool,
-      target: effect.target,
-      status: effect.status,
-    },
-  })
-
-  return effect
+  return _default.recordEffect(opts)
 }
 
-// ── Core: file snapshots ─────────────────────────────────────────
+export async function recordFileWrite(opts: {
+  runId: string
+  tool: string
+  filePath: string
+  newContent: string
+}): Promise<Effect> {
+  return _default.recordFileWrite(opts)
+}
 
-/**
- * Capture a pre-write snapshot of a file.
- *
- * Call this BEFORE writing to a file. Captures the current content
- * and hash for later rollback.
- *
- * Returns the snapshot and file hash, or null if the file doesn't exist.
- */
+export async function recordFileDelete(opts: {
+  runId: string
+  tool: string
+  filePath: string
+}): Promise<Effect> {
+  return _default.recordFileDelete(opts)
+}
+
+// ── Snapshots (stateless — no seq counters) ──────────────────────
+
 export async function captureSnapshot(
   runId: string,
   effectId: string,
@@ -208,7 +304,6 @@ export async function captureSnapshot(
 ): Promise<FileSnapshot | null> {
   let content: string | null = null
   let hash: string | null = null
-
   let fileMode: number | null = null
 
   try {
@@ -219,7 +314,6 @@ export async function captureSnapshot(
       fileMode = fileStat.mode
     }
   } catch {
-    // File doesn't exist — that's fine, snapshot is null
     return null
   }
 
@@ -260,157 +354,24 @@ export async function captureSnapshot(
   return snapshot
 }
 
-/**
- * Record a file write effect with pre-write snapshot.
- *
- * This is the main integration point — called from the write_file tool wrapper.
- * Captures snapshot → records effect → returns the effect for the tool to proceed.
- */
-export async function recordFileWrite(opts: {
-  runId: string
-  tool: string
-  filePath: string
-  newContent: string
-}): Promise<Effect> {
-  // Check idempotency first: if the file already has this content, skip
-  const newHash = hashContent(opts.newContent)
-  try {
-    const existing = await readFile(opts.filePath, "utf-8")
-    const existingHash = hashContent(existing)
-    if (existingHash === newHash) {
-      // Idempotent: file already has this content
-      return recordEffect({
-        runId: opts.runId,
-        kind: "modify",
-        tool: opts.tool,
-        target: opts.filePath,
-        preHash: existingHash,
-        postHash: newHash,
-        metadata: { idempotent: true, skipped: true },
-      })
-    }
-  } catch {
-    // File doesn't exist yet — this will be a "create"
-  }
-
-  // Determine kind: create (file doesn't exist) or modify (file exists)
-  let kind: EffectKind = "create"
-  let preHash: string | null = null
-  try {
-    await stat(opts.filePath)
-    kind = "modify"
-    const existing = await readFile(opts.filePath, "utf-8")
-    preHash = hashContent(existing)
-  } catch {
-    // File doesn't exist
-  }
-
-  // Record effect first (for the snapshot foreign key)
-  const effect = recordEffect({
-    runId: opts.runId,
-    kind,
-    tool: opts.tool,
-    target: opts.filePath,
-    preHash,
-    postHash: newHash,
-  })
-
-  // Capture pre-write snapshot
-  await captureSnapshot(opts.runId, effect.id, opts.filePath)
-
-  return effect
-}
-
-/**
- * Record a file delete effect with pre-delete snapshot.
- *
- * Captures the file's full content and permissions before deletion
- * so it can be restored on rollback.
- */
-export async function recordFileDelete(opts: {
-  runId: string
-  tool: string
-  filePath: string
-}): Promise<Effect> {
-  let preHash: string | null = null
-  try {
-    const existing = await readFile(opts.filePath, "utf-8")
-    preHash = hashContent(existing)
-  } catch {
-    // File doesn't exist — record a no-op delete
-    return recordEffect({
-      runId: opts.runId,
-      kind: "delete",
-      tool: opts.tool,
-      target: opts.filePath,
-      preHash: null,
-      postHash: null,
-      metadata: { skipped: true, reason: "file did not exist" },
-    })
-  }
-
-  // Record effect first (for the snapshot foreign key)
-  const effect = recordEffect({
-    runId: opts.runId,
-    kind: "delete",
-    tool: opts.tool,
-    target: opts.filePath,
-    preHash,
-    postHash: null,
-  })
-
-  // Capture pre-delete snapshot (content + permissions)
-  await captureSnapshot(opts.runId, effect.id, opts.filePath)
-
-  return effect
-}
-
 // ── Idempotency detection ────────────────────────────────────────
 
-/**
- * Check if an effect is idempotent — i.e. the target is already
- * in the desired state.
- *
- * For file writes: compare the current file hash with the effect's postHash.
- * For commands: always returns false (commands aren't idempotent by nature).
- */
 export async function isIdempotent(effect: Effect): Promise<boolean> {
   if (effect.kind === "command" || effect.kind === "network") return false
-
   if (!effect.postHash) return false
-
   try {
     const content = await readFile(effect.target, "utf-8")
-    const currentHash = hashContent(content)
-    return currentHash === effect.postHash
+    return hashContent(content) === effect.postHash
   } catch {
-    // File doesn't exist — only idempotent if the effect was a delete
     return effect.kind === "delete"
   }
 }
 
 // ── Rollback / Compensation ──────────────────────────────────────
 
-/**
- * Roll back all file effects for a run.
- *
- * Walks through effects in reverse order and restores files to their
- * pre-write state using captured snapshots.
- *
- * Safety:
- *   - Compensates file create/modify/delete effects
- *   - Checks that the file hasn't been modified by another run/source
- *     since the effect was applied (using hash comparison)
- *   - Restores file permissions when captured in snapshots
- *   - Skips effects that were already compensated
- *   - Does NOT roll back commands or network requests
- *   - Atomic: validates ALL effects before applying ANY changes
- */
 export async function rollbackRun(runId: string): Promise<RollbackResult> {
-  // Phase 1: validate everything first (dry-run)
   const preview = await previewRollback(runId)
   if (preview.wouldFail.length > 0) {
-    // If any effect would fail, abort entirely — atomic guarantee
     return {
       total: preview.wouldCompensate.length + preview.wouldSkip.length + preview.wouldFail.length,
       compensated: 0,
@@ -423,7 +384,6 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
-  // Phase 2: apply all compensations (safe — we validated everything)
   const effects = getRunEffects(runId)
   const result: RollbackResult = {
     total: effects.length,
@@ -460,7 +420,6 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         const snapshotContent = snapshot?.content as string | null ?? null
         if (snapshotContent !== null) {
           await writeFile(effect.target, snapshotContent, "utf-8")
-          // Restore permissions if captured
           const fileMode = snapshot?.file_mode as number | null
           if (fileMode != null) {
             await chmod(effect.target, fileMode & 0o7777)
@@ -478,7 +437,6 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             const { mkdir } = await import("node:fs/promises")
             await mkdir(dirname(effect.target), { recursive: true })
             await writeFile(effect.target, snapshotContent, "utf-8")
-            // Restore permissions if captured
             const fileMode = snapshot.file_mode as number | null
             if (fileMode != null) {
               await chmod(effect.target, fileMode & 0o7777)
@@ -501,20 +459,10 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
-  const nonFileEffects = effects.filter(
-    (e) => e.kind === "command" || e.kind === "network",
-  )
-  result.skipped += nonFileEffects.length
-
+  result.skipped += effects.filter((e) => e.kind === "command" || e.kind === "network").length
   return result
 }
 
-/**
- * Preview what a rollback would do WITHOUT making any changes.
- *
- * Returns categorized lists of effects that would be compensated, skipped, or fail.
- * Use this to show the user a confirmation dialog before committing.
- */
 export async function previewRollback(runId: string): Promise<RollbackPreview> {
   const effects = getRunEffects(runId)
   const preview: RollbackPreview = {
@@ -571,10 +519,7 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
     }
   }
 
-  const nonFileEffects = effects.filter(
-    (e) => e.kind === "command" || e.kind === "network",
-  )
-  for (const e of nonFileEffects) {
+  for (const e of effects.filter((e) => e.kind === "command" || e.kind === "network")) {
     preview.wouldSkip.push({ effectId: e.id, target: e.target, reason: `${e.kind} effects cannot be rolled back` })
   }
 
@@ -583,7 +528,6 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
 
 // ── Queries ──────────────────────────────────────────────────────
 
-/** Get all effects for a run, ordered by sequence. */
 export function getRunEffects(runId: string): Effect[] {
   const rows = getDb()
     .prepare("SELECT * FROM effects WHERE run_id = ? ORDER BY seq")
@@ -591,7 +535,6 @@ export function getRunEffects(runId: string): Effect[] {
   return rows.map(rowToEffect)
 }
 
-/** Get all effects for a given file path across all runs. */
 export function getFileHistory(filePath: string): Effect[] {
   const rows = getDb()
     .prepare("SELECT * FROM effects WHERE target = ? ORDER BY created_at")
@@ -599,17 +542,13 @@ export function getFileHistory(filePath: string): Effect[] {
   return rows.map(rowToEffect)
 }
 
-/** Get the most recent snapshot for a file. */
 export function getLatestSnapshot(filePath: string): FileSnapshot | null {
   const row = getDb()
-    .prepare(
-      "SELECT * FROM file_snapshots WHERE file_path = ? ORDER BY created_at DESC LIMIT 1",
-    )
+    .prepare("SELECT * FROM file_snapshots WHERE file_path = ? ORDER BY created_at DESC LIMIT 1")
     .get(filePath) as Record<string, unknown> | undefined
   return row ? rowToSnapshot(row) : null
 }
 
-/** Get all snapshots for a run. */
 export function getRunSnapshots(runId: string): FileSnapshot[] {
   const rows = getDb()
     .prepare("SELECT * FROM file_snapshots WHERE run_id = ? ORDER BY created_at")
@@ -617,7 +556,6 @@ export function getRunSnapshots(runId: string): FileSnapshot[] {
   return rows.map(rowToSnapshot)
 }
 
-/** Get effect statistics for a run. */
 export function getEffectStats(runId: string): {
   total: number
   creates: number
