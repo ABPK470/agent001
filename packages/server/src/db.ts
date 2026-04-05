@@ -519,7 +519,11 @@ export function clearTransactionalData(): void {
     DELETE FROM token_usage;
     DELETE FROM trace_entries;
     DELETE FROM notifications;
+    DELETE FROM effects;
+    DELETE FROM file_snapshots;
   `)
+  // Also clear api_requests if the table exists
+  try { db.exec("DELETE FROM api_requests") } catch { /* table may not exist yet */ }
 }
 
 // ── LLM config ───────────────────────────────────────────────────
@@ -661,4 +665,260 @@ export function markAllNotificationsRead(): void {
 export function getUnreadNotificationCount(): number {
   const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as { count: number }
   return row.count
+}
+
+// ── API request log ──────────────────────────────────────────────
+
+export function migrateApiRequests(): void {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS api_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      method TEXT NOT NULL,
+      url TEXT NOT NULL,
+      status_code INTEGER NOT NULL,
+      duration_ms REAL NOT NULL,
+      request_body TEXT,
+      response_summary TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_requests_time ON api_requests(created_at DESC);
+  `)
+}
+
+export interface DbApiRequest {
+  id?: number
+  method: string
+  url: string
+  status_code: number
+  duration_ms: number
+  request_body: string | null
+  response_summary: string | null
+  created_at: string
+}
+
+export function saveApiRequest(entry: Omit<DbApiRequest, "id">): void {
+  getDb().prepare(`
+    INSERT INTO api_requests (method, url, status_code, duration_ms, request_body, response_summary, created_at)
+    VALUES (@method, @url, @status_code, @duration_ms, @request_body, @response_summary, @created_at)
+  `).run(entry)
+}
+
+export function listApiRequests(limit = 200): DbApiRequest[] {
+  return getDb()
+    .prepare("SELECT * FROM api_requests ORDER BY created_at DESC LIMIT ?")
+    .all(limit) as DbApiRequest[]
+}
+
+// ── Data lifecycle / pruning ─────────────────────────────────────
+
+/**
+ * Prune old data to keep the SQLite database from growing unbounded.
+ *
+ * Default retention: keeps the most recent `keepRuns` completed/failed runs
+ * and their associated data. Running/pending runs are never pruned.
+ * Also caps logs, api_requests, and notifications independently.
+ */
+export function pruneOldData(opts?: {
+  keepRuns?: number
+  keepApiRequests?: number
+  keepNotifications?: number
+  keepEvents?: number
+}): { prunedRuns: number; prunedApiRequests: number; prunedNotifications: number; prunedEvents: number; vacuumed: boolean } {
+  const db = getDb()
+  const keepRuns = opts?.keepRuns ?? 500
+  const keepApiRequests = opts?.keepApiRequests ?? 10_000
+  const keepNotifications = opts?.keepNotifications ?? 1000
+  const keepEvents = opts?.keepEvents ?? 50_000
+
+  // Find run IDs to prune (oldest completed/failed beyond retention limit)
+  const runsToPrune = db.prepare(`
+    SELECT id FROM runs
+    WHERE status IN ('completed', 'failed', 'cancelled')
+    ORDER BY created_at DESC
+    LIMIT -1 OFFSET ?
+  `).all(keepRuns) as { id: string }[]
+
+  let prunedRuns = 0
+  if (runsToPrune.length > 0) {
+    const ids = runsToPrune.map((r) => r.id)
+    const placeholders = ids.map(() => "?").join(",")
+
+    db.prepare(`DELETE FROM trace_entries WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM audit_log WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM logs WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM token_usage WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM checkpoints WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM file_snapshots WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM effects WHERE run_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM runs WHERE id IN (${placeholders})`).run(...ids)
+    prunedRuns = ids.length
+  }
+
+  // Cap api_requests
+  const apiResult = db.prepare(`
+    DELETE FROM api_requests WHERE id NOT IN (
+      SELECT id FROM api_requests ORDER BY created_at DESC LIMIT ?
+    )
+  `).run(keepApiRequests)
+  const prunedApiRequests = apiResult.changes
+
+  // Cap notifications
+  const notifResult = db.prepare(`
+    DELETE FROM notifications WHERE id NOT IN (
+      SELECT id FROM notifications ORDER BY created_at DESC LIMIT ?
+    )
+  `).run(keepNotifications)
+  const prunedNotifications = notifResult.changes
+
+  // Cap event_log
+  let prunedEvents = 0
+  try {
+    const evtResult = db.prepare(`
+      DELETE FROM event_log WHERE id NOT IN (
+        SELECT id FROM event_log ORDER BY created_at DESC LIMIT ?
+      )
+    `).run(keepEvents)
+    prunedEvents = evtResult.changes
+  } catch { /* table may not exist yet */ }
+
+  // Vacuum if we deleted a meaningful amount
+  let vacuumed = false
+  if (prunedRuns > 50 || prunedApiRequests > 1000 || prunedEvents > 5000) {
+    db.pragma("wal_checkpoint(TRUNCATE)")
+    vacuumed = true
+  }
+
+  return { prunedRuns, prunedApiRequests, prunedNotifications, prunedEvents, vacuumed }
+}
+
+/**
+ * Get DB size and row counts for monitoring.
+ */
+export function getDbStats(): Record<string, number> {
+  const db = getDb()
+  const tables = ["runs", "audit_log", "logs", "trace_entries", "token_usage", "checkpoints",
+    "effects", "file_snapshots", "notifications", "api_requests", "event_log", "webhook_drains"] as const
+  const stats: Record<string, number> = {}
+  for (const t of tables) {
+    try {
+      const row = db.prepare(`SELECT COUNT(*) as count FROM ${t}`).get() as { count: number }
+      stats[t] = row.count
+    } catch {
+      stats[t] = -1 // table doesn't exist yet
+    }
+  }
+  // DB file size — page_count * page_size
+  const pageCount = (db.pragma("page_count") as { page_count: number }[])[0]?.page_count ?? 0
+  const pageSize = (db.pragma("page_size") as { page_size: number }[])[0]?.page_size ?? 4096
+  stats["db_size_bytes"] = pageCount * pageSize
+  return stats
+}
+
+// ── Unified event log ────────────────────────────────────────────
+
+export function migrateEventLog(): void {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS event_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_log_time ON event_log(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(type);
+  `)
+}
+
+export interface DbEvent {
+  id: number
+  type: string
+  data: string
+  created_at: string
+}
+
+export function saveEvent(type: string, data: Record<string, unknown>, timestamp: string): void {
+  getDb().prepare(`
+    INSERT INTO event_log (type, data, created_at)
+    VALUES (?, ?, ?)
+  `).run(type, JSON.stringify(data), timestamp)
+}
+
+export function listEvents(opts?: {
+  limit?: number
+  before?: string
+  after?: string
+  types?: string[]
+}): DbEvent[] {
+  const limit = opts?.limit ?? 200
+  const conditions: string[] = []
+  const params: unknown[] = []
+
+  if (opts?.before) {
+    conditions.push("created_at < ?")
+    params.push(opts.before)
+  }
+  if (opts?.after) {
+    conditions.push("created_at > ?")
+    params.push(opts.after)
+  }
+  if (opts?.types && opts.types.length > 0) {
+    conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
+    params.push(...opts.types)
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+  params.push(limit)
+
+  return getDb()
+    .prepare(`SELECT * FROM event_log ${where} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params) as DbEvent[]
+}
+
+// ── Webhook drains ───────────────────────────────────────────────
+
+export function migrateWebhookDrains(): void {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS webhook_drains (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      secret TEXT NOT NULL DEFAULT '',
+      event_filters TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `)
+}
+
+export interface DbWebhookDrain {
+  id: string
+  url: string
+  secret: string
+  event_filters: string   // JSON array of type prefixes, e.g. ["run.", "audit"]
+  enabled: number         // 0 or 1
+  created_at: string
+  updated_at: string
+}
+
+export function listWebhookDrains(): DbWebhookDrain[] {
+  return getDb()
+    .prepare("SELECT * FROM webhook_drains ORDER BY created_at")
+    .all() as DbWebhookDrain[]
+}
+
+export function getWebhookDrain(id: string): DbWebhookDrain | undefined {
+  return getDb()
+    .prepare("SELECT * FROM webhook_drains WHERE id = ?")
+    .get(id) as DbWebhookDrain | undefined
+}
+
+export function saveWebhookDrain(drain: DbWebhookDrain): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO webhook_drains (id, url, secret, event_filters, enabled, created_at, updated_at)
+    VALUES (@id, @url, @secret, @event_filters, @enabled, @created_at, @updated_at)
+  `).run(drain)
+}
+
+export function deleteWebhookDrain(id: string): void {
+  getDb().prepare("DELETE FROM webhook_drains WHERE id = ?").run(id)
 }

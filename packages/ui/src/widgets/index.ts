@@ -12,6 +12,7 @@ import { CommandCenter } from "./CommandCenter"
 import { DebugInspector } from "./DebugInspector"
 import { LiveLogs } from "./LiveLogs"
 import { OperatorEnvironment } from "./OperatorEnvironment"
+import { PlatformDevLog } from "./PlatformDevLog"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
@@ -32,4 +33,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "trajectory-replay": TrajectoryReplay,
   "operator-env": OperatorEnvironment,
   "debug-inspector": DebugInspector,
+  "platform-dev-log": PlatformDevLog,
 }

@@ -19,6 +19,7 @@ import {
     MessageSquare,
     ScrollText,
     Shield,
+    Terminal,
     X,
 } from "lucide-react"
 import type { ComponentType } from "react"
@@ -44,6 +45,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "trajectory-replay", label: "Trajectory Replay", desc: "Step-through debugger for agent run trajectories", Icon: Film },
   { type: "operator-env", label: "Operator Environment", desc: "IDE-style integrated dashboard — all data, resizable panels, full control", Icon: LayoutDashboard },
   { type: "debug-inspector", label: "Debug Inspector", desc: "Deep-dive debugging: system prompts, tool resolution, LLM requests & responses", Icon: Bug },
+  { type: "platform-dev-log", label: "Platform Dev Log", desc: "Real-time firehose of every WebSocket event — every operation, every query", Icon: Terminal },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
@@ -74,7 +76,7 @@ export function WidgetCatalog({ onClose }: Props) {
         className={`bg-surface shadow-2xl ${
           isMobile
             ? "w-full h-full rounded-none flex flex-col"
-            : "rounded-2xl w-[520px] max-h-[85vh] flex flex-col"
+            : "rounded-2xl w-[820px] max-h-[85vh] flex flex-col"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -91,7 +93,7 @@ export function WidgetCatalog({ onClose }: Props) {
           </button>
         </div>
 
-        <div className={`grid gap-2.5 p-5 overflow-y-auto ${isMobile ? "grid-cols-1 flex-1" : "grid-cols-2"}`}>
+        <div className={`grid gap-2.5 p-5 overflow-y-auto ${isMobile ? "grid-cols-1 flex-1" : "grid-cols-3"}`}>
           {CATALOG.map((item) => {
             const isActive = activeTypes.has(item.type)
             return (

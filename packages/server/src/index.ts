@@ -47,10 +47,11 @@ import {
   listChannelConfigs,
   migrateChannels,
 } from "./channels/index.js"
-import { clearTransactionalData, getDb, getLlmConfig, migrateNotifications } from "./db.js"
+import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerAgentRoutes } from "./routes/agents.js"
+import { registerEventRoutes } from "./routes/events.js"
 import { registerLayoutRoutes } from "./routes/layouts.js"
 import { registerLlmRoutes } from "./routes/llm.js"
 import { registerMemoryRoutes } from "./routes/memory.js"
@@ -60,7 +61,7 @@ import { registerRunRoutes } from "./routes/runs.js"
 import { registerUsageRoutes } from "./routes/usage.js"
 import { registerWebhookRoutes } from "./routes/webhooks.js"
 import { initSandbox } from "./sandbox.js"
-import { addClient } from "./ws.js"
+import { addClient, broadcast } from "./ws.js"
 
 const PORT = Number(process.env["PORT"] ?? 3001)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -70,7 +71,16 @@ async function main() {
   getDb()
   migrateChannels()
   migrateNotifications()
+  migrateApiRequests()
+  migrateEventLog()
+  migrateWebhookDrains()
   console.log("📦 Database initialized (~/.agent001/agent001.db)")
+
+  // Auto-prune old data on startup
+  const pruneResult = pruneOldData()
+  if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
+    console.log(`🧹 Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
+  }
 
   // Set agent workspace — all file/shell operations are scoped here.
   // Default to monorepo root (walk up from server package to find .git),
@@ -215,6 +225,38 @@ async function main() {
   await app.register(cors, { origin: true })
   await app.register(websocket)
 
+  // ── REST API request logging (DB + WS broadcast) ───────────
+  app.addHook("onRequest", (req, _reply, done) => {
+    ;(req as any)._startTime = Date.now()
+    done()
+  })
+  app.addHook("onResponse", (req, reply, done) => {
+    // Skip WebSocket upgrade and static file requests
+    if (req.url.startsWith("/ws") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
+      done()
+      return
+    }
+    const duration = Date.now() - ((req as any)._startTime ?? Date.now())
+    const entry = {
+      method: req.method,
+      url: req.url,
+      status_code: reply.statusCode,
+      duration_ms: duration,
+      request_body: req.body ? JSON.stringify(req.body).slice(0, 2048) : null,
+      response_summary: null,
+      created_at: new Date().toISOString(),
+    }
+    // Persist + broadcast (fire-and-forget to avoid slowing responses)
+    try {
+      saveApiRequest(entry)
+      broadcast({
+        type: "api.request",
+        data: entry as unknown as Record<string, unknown>,
+      })
+    } catch { /* don't break responses if logging fails */ }
+    done()
+  })
+
   // Serve built UI — from dist/ui in package mode, packages/ui/dist in dev
   const uiDist = _pkgRoot
     ? resolve(_pkgRoot, "dist/ui")
@@ -246,6 +288,7 @@ async function main() {
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
+  registerEventRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)
   registerMemoryRoutes(app, orchestrator)
@@ -296,6 +339,18 @@ async function main() {
     clearTransactionalData()
     return { ok: true }
   })
+
+  // DB stats — row counts per table + file size
+  app.get("/api/db/stats", async () => getDbStats())
+
+  // Prune old data manually
+  app.post<{ Body: { keepRuns?: number; keepApiRequests?: number; keepNotifications?: number } }>(
+    "/api/db/prune",
+    async (req) => {
+      const result = pruneOldData(req.body ?? {})
+      return { ok: true, ...result }
+    },
+  )
 
   // Start
   await app.listen({ port: PORT, host: HOST })

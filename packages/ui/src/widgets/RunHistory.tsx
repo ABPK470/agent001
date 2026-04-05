@@ -16,7 +16,6 @@ export function RunHistory() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
-  const setRuns = useStore((s) => s.setRuns)
   const setSteps = useStore((s) => s.setSteps)
   const setAudit = useStore((s) => s.setAudit)
   const setLogs = useStore((s) => s.setLogs)
@@ -32,14 +31,6 @@ export function RunHistory() {
     if (!id) return null
     return agents.find((a) => a.id === id)?.name ?? null
   }
-
-  // Refresh run list periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      api.listRuns().then(setRuns).catch(() => {})
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [setRuns])
 
   async function handleSelect(runId: string) {
     setActiveRun(runId)

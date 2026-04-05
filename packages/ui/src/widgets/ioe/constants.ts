@@ -33,9 +33,9 @@ export const C = {
 
 // ── Layout types ─────────────────────────────────────────────────
 
-export type SidebarSection = "explorer" | "runs" | "agents" | "notifications"
-export type EditorTab = "trace" | "dag" | "timeline" | "details" | "map"
-export type BottomTab = "output" | "audit" | "feed" | "problems"
+export type SidebarSection = "runs" | "compare" | "details"
+export type EditorTab = "trace" | "llm-calls" | "map"
+export type BottomTab = "output" | "audit" | "problems"
 export type PanelSide = "left" | "right"
 
 // ── API data types ───────────────────────────────────────────────

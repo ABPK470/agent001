@@ -1,11 +1,14 @@
 /**
  * IOE Chat Panel — Copilot-style conversation view of agent trace.
+ * Supports simple mode (user goal → final answer) and detailed mode (full trace inline).
  */
 
 import { AlertCircle, HelpCircle, MessageSquare, Send, User, Wrench } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
+
+export type ChatMode = "simple" | "detailed"
 
 export function ChatPanel({
   messages,
@@ -28,6 +31,7 @@ export function ChatPanel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [responseInput, setResponseInput] = useState("")
+  const [chatMode, setChatMode] = useState<ChatMode>("simple")
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages.length, pendingInput])
@@ -40,18 +44,50 @@ export function ChatPanel({
     setResponseInput("")
   }
 
+  // In simple mode, show only user goals and final assistant answers
+  const visibleMessages = chatMode === "simple"
+    ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
+    : messages
+
   return (
     <div className="flex flex-col h-full" style={{ background: C.surface }}>
+      {/* Header with mode toggle */}
       <div
         className="shrink-0 px-3 py-2 text-[13px] font-semibold flex items-center gap-2"
         style={{ borderBottom: `1px solid ${C.borderSolid}`, color: C.text }}
       >
         <MessageSquare size={16} style={{ color: C.accent }} />
-        Chat
+        <span>Chat</span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            className="px-2 py-0.5 rounded text-[11px] cursor-pointer transition-colors"
+            style={{
+              background: chatMode === "simple" ? C.accent + "20" : "transparent",
+              color: chatMode === "simple" ? C.accent : C.dim,
+              border: `1px solid ${chatMode === "simple" ? C.accent + "40" : "transparent"}`,
+            }}
+            onClick={() => setChatMode("simple")}
+            title="Show only goals and answers"
+          >
+            Simple
+          </button>
+          <button
+            className="px-2 py-0.5 rounded text-[11px] cursor-pointer transition-colors"
+            style={{
+              background: chatMode === "detailed" ? C.accent + "20" : "transparent",
+              color: chatMode === "detailed" ? C.accent : C.dim,
+              border: `1px solid ${chatMode === "detailed" ? C.accent + "40" : "transparent"}`,
+            }}
+            onClick={() => setChatMode("detailed")}
+            title="Show full trace inline"
+          >
+            Detailed
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center h-full gap-2"
             style={{ color: C.dim }}
@@ -61,7 +97,7 @@ export function ChatPanel({
             <span className="text-[13px]">Start a run to see the agent&apos;s reasoning</span>
           </div>
         ) : (
-          messages.map((msg, i) => <ChatBubble key={i} message={msg} />)
+          visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)
         )}
       </div>
 
@@ -143,7 +179,7 @@ export function ChatPanel({
   )
 }
 
-function ChatBubble({ message: msg }: { message: ChatMessage }) {
+function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) {
   if (msg.role === "user") {
     return (
       <div className="flex items-start gap-2">

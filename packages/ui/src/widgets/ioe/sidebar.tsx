@@ -1,7 +1,8 @@
 /**
- * IOE sidebar panels — Explorer, Runs, Agents/Tools, Notifications.
+ * IOE sidebar panels — Runs, Compare, Details.
  */
 
+import { useState } from "react"
 import type {
     AgentDefinition,
     PolicyRule,
@@ -21,9 +22,9 @@ import {
 } from "./constants"
 import { Tip, TreeItem, TreeSection } from "./primitives"
 
-// ── Explorer ─────────────────────────────────────────────────────
+// ── Details — Active Run + System + Agents + Tools + Policies ────
 
-export function ExplorerPanel({
+export function DetailsPanel({
   run,
   agents,
   tools,
@@ -87,92 +88,6 @@ export function ExplorerPanel({
 
       <TreeSection title={`Agents (${agents.length})`} defaultOpen>
         {agents.map((a) => (
-          <TreeItem key={a.id} label={a.name} value={`${a.tools.length} tools`} />
-        ))}
-      </TreeSection>
-
-      <TreeSection title={`Tools (${tools.length})`} defaultOpen>
-        {tools.map((t) => (
-          <TreeItem key={t.name} label={t.name} value={t.description} />
-        ))}
-      </TreeSection>
-
-      <TreeSection title={`Policies (${policies.length})`} defaultOpen>
-        {policies.map((p) => (
-          <TreeItem
-            key={p.name}
-            label={p.name}
-            value={p.effect}
-            valueColor={
-              p.effect === "deny" ? C.error : p.effect === "require_approval" ? C.warning : C.success
-            }
-          />
-        ))}
-      </TreeSection>
-    </div>
-  )
-}
-
-// ── Runs ─────────────────────────────────────────────────────────
-
-export function RunsPanel({
-  runs,
-  activeRunId,
-  onSelect,
-}: {
-  runs: Run[]
-  activeRunId: string | null
-  onSelect: (id: string) => void
-}) {
-  return (
-    <div className="text-[13px]">
-      {runs.length === 0 ? (
-        <div className="px-4 py-3" style={{ color: C.dim }}>No runs yet</div>
-      ) : (
-        runs.map((r) => (
-          <button
-            key={r.id}
-            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.03] cursor-pointer"
-            style={{ background: r.id === activeRunId ? "rgba(123,111,199,0.08)" : "transparent" }}
-            onClick={() => onSelect(r.id)}
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full mt-1 shrink-0"
-              style={{ background: statusDot(r.status) }}
-            />
-            <div className="min-w-0 flex-1">
-              <Tip text={r.goal}>
-                <div className="truncate" style={{ color: C.text }}>{r.goal}</div>
-              </Tip>
-              <div className="flex items-center gap-2 mt-0.5" style={{ color: C.dim }}>
-                <span>{r.status}</span>
-                <span>{timeAgo(r.createdAt)}</span>
-                {r.stepCount > 0 && <span>{r.stepCount} steps</span>}
-                {r.totalTokens > 0 && <span>{fmtTokens(r.totalTokens)} tk</span>}
-              </div>
-            </div>
-          </button>
-        ))
-      )}
-    </div>
-  )
-}
-
-// ── Agents & Tools ───────────────────────────────────────────────
-
-export function AgentsToolsPanel({
-  agents,
-  tools,
-  policies,
-}: {
-  agents: AgentDefinition[]
-  tools: ToolInfo[]
-  policies: PolicyRule[]
-}) {
-  return (
-    <div className="text-[13px]">
-      <TreeSection title={`Agents (${agents.length})`} defaultOpen>
-        {agents.map((a) => (
           <div key={a.id} className="px-4 py-1 min-w-0">
             <div className="truncate" style={{ color: C.text }}>{a.name}</div>
             <Tip text={a.description}>
@@ -216,60 +131,117 @@ export function AgentsToolsPanel({
   )
 }
 
-// ── Notifications ────────────────────────────────────────────────
+// ── Compare — Trajectory comparison UI ───────────────────────────
 
-export function NotificationsPanel({
-  notifications,
-  onRead,
+export function ComparePanel({
+  runs,
+  onCompare,
 }: {
-  notifications: Array<{
-    id: string
-    type: string
-    title: string
-    message: string
-    read: boolean
-    createdAt: string
-  }>
-  onRead: (id: string) => void
+  runs: Run[]
+  onCompare: (idA: string, idB: string) => void
+}) {
+  const [runA, setRunA] = useState<string>("")
+  const [runB, setRunB] = useState<string>("")
+
+  const completedRuns = runs.filter((r) => r.status === "completed" || r.status === "failed")
+
+  return (
+    <div className="text-[13px] px-3 py-2 space-y-3">
+      <div className="uppercase tracking-wide text-[11px] font-semibold" style={{ color: C.muted }}>
+        Compare Runs
+      </div>
+      <div className="space-y-2">
+        <div>
+          <label className="block mb-1 text-[12px]" style={{ color: C.dim }}>Run A</label>
+          <select
+            className="w-full text-[13px] rounded px-2 py-1.5 outline-none cursor-pointer"
+            style={{ background: C.elevated, color: C.text, border: `1px solid ${C.border}` }}
+            value={runA}
+            onChange={(e) => setRunA(e.target.value)}
+          >
+            <option value="">Select run...</option>
+            {completedRuns.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.goal.slice(0, 50)} ({r.status})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1 text-[12px]" style={{ color: C.dim }}>Run B</label>
+          <select
+            className="w-full text-[13px] rounded px-2 py-1.5 outline-none cursor-pointer"
+            style={{ background: C.elevated, color: C.text, border: `1px solid ${C.border}` }}
+            value={runB}
+            onChange={(e) => setRunB(e.target.value)}
+          >
+            <option value="">Select run...</option>
+            {completedRuns.filter((r) => r.id !== runA).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.goal.slice(0, 50)} ({r.status})
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          className="w-full px-3 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer"
+          style={{
+            background: runA && runB ? C.accent + "20" : C.elevated,
+            color: runA && runB ? C.accent : C.dim,
+            border: `1px solid ${runA && runB ? C.accent + "40" : C.border}`,
+          }}
+          disabled={!runA || !runB}
+          onClick={() => { if (runA && runB) onCompare(runA, runB) }}
+        >
+          Compare
+        </button>
+      </div>
+      {completedRuns.length < 2 && (
+        <div style={{ color: C.dim }}>Need at least 2 completed runs to compare.</div>
+      )}
+    </div>
+  )
+}
+
+// ── Runs ─────────────────────────────────────────────────────────
+
+export function RunsPanel({
+  runs,
+  activeRunId,
+  onSelect,
+}: {
+  runs: Run[]
+  activeRunId: string | null
+  onSelect: (id: string) => void
 }) {
   return (
     <div className="text-[13px]">
-      {notifications.length === 0 ? (
-        <div className="px-4 py-3" style={{ color: C.dim }}>No notifications</div>
+      {runs.length === 0 ? (
+        <div className="px-4 py-3" style={{ color: C.dim }}>No runs yet</div>
       ) : (
-        notifications.slice(0, 50).map((n) => (
-          <div
-            key={n.id}
-            className="px-3 py-1.5 transition-colors hover:bg-white/[0.03] cursor-pointer"
-            style={{ opacity: n.read ? 0.5 : 1 }}
-            onClick={() => {
-              if (!n.read) onRead(n.id)
-            }}
+        runs.map((r) => (
+          <button
+            key={r.id}
+            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.03] cursor-pointer"
+            style={{ background: r.id === activeRunId ? "rgba(123,111,199,0.08)" : "transparent" }}
+            onClick={() => onSelect(r.id)}
           >
-            <div className="flex items-center gap-1.5">
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{
-                  background: n.read
-                    ? C.dim
-                    : n.type.includes("failed")
-                      ? C.error
-                      : n.type.includes("approval")
-                        ? C.warning
-                        : C.accent,
-                }}
-              />
-              <Tip text={n.title}>
-                <span className="truncate" style={{ color: C.text }}>{n.title}</span>
+            <span
+              className="inline-block w-2 h-2 rounded-full mt-1 shrink-0"
+              style={{ background: statusDot(r.status) }}
+            />
+            <div className="min-w-0 flex-1">
+              <Tip text={r.goal}>
+                <div className="truncate" style={{ color: C.text }}>{r.goal}</div>
               </Tip>
-              <span className="ml-auto shrink-0 text-[13px]" style={{ color: C.dim }}>
-                {timeAgo(n.createdAt)}
-              </span>
+              <div className="flex items-center gap-2 mt-0.5" style={{ color: C.dim }}>
+                <span>{r.status}</span>
+                <span>{timeAgo(r.createdAt)}</span>
+                {r.stepCount > 0 && <span>{r.stepCount} steps</span>}
+                {r.totalTokens > 0 && <span>{fmtTokens(r.totalTokens)} tk</span>}
+              </div>
             </div>
-            <Tip text={n.message}>
-              <div className="pl-3.5 truncate mt-0.5" style={{ color: C.muted }}>{n.message}</div>
-            </Tip>
-          </div>
+          </button>
         ))
       )}
     </div>

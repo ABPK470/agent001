@@ -1,10 +1,10 @@
 /**
- * IOE bottom panel components — Output, Audit, Feed, Problems.
+ * IOE bottom panel components — Output, Audit, Problems.
  */
 
 import { AlertTriangle } from "lucide-react"
 import type { AuditEntry, LogEntry } from "../../types"
-import { C, ts, type FeedItem, type Problem } from "./constants"
+import { C, ts, type Problem } from "./constants"
 
 // ── OutputPanel (logs) ───────────────────────────────────────────
 
@@ -55,21 +55,6 @@ export function AuditPanel({ audit }: { audit: AuditEntry[] }) {
           </div>
         )
       })}
-    </div>
-  )
-}
-
-// ── FeedPanel ────────────────────────────────────────────────────
-
-export function FeedPanel({ items }: { items: FeedItem[] }) {
-  if (items.length === 0) {
-    return <div className="px-3 py-1" style={{ color: C.dim }}>Awaiting activity</div>
-  }
-  return (
-    <div className="px-3 py-1">
-      {items.map((item, i) => (
-        <div key={i} style={{ color: item.color }}>{item.text}</div>
-      ))}
     </div>
   )
 }

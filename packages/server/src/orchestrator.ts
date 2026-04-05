@@ -11,29 +11,29 @@
  */
 
 import {
-    Agent,
-    askUserTool,
-    completeRun,
-    createDelegateTools,
-    createEngineServices,
-    createRun,
-    failRun,
-    getMssqlConfig,
-    governTool,
-    PolicyEffect,
-    runCompleted,
-    runFailed,
-    runStarted,
-    startPlanning,
-    startRunning,
-    type DelegateContext,
-    type DomainEvent,
-    type EngineServices,
-    type LLMClient,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
+  Agent,
+  askUserTool,
+  completeRun,
+  createDelegateTools,
+  createEngineServices,
+  createRun,
+  failRun,
+  getMssqlConfig,
+  governTool,
+  PolicyEffect,
+  runCompleted,
+  runFailed,
+  runStarted,
+  startPlanning,
+  startRunning,
+  type DelegateContext,
+  type DomainEvent,
+  type EngineServices,
+  type LLMClient,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { arch, homedir, platform } from "node:os"
@@ -639,7 +639,6 @@ export class AgentOrchestrator {
         `Workspace: ${this.workspace}`,
         wsContext,
         "",
-        "When the user references a path like /agent or /server, match it to the closest directory in the workspace structure above (e.g. packages/agent, packages/server). All tool paths are relative to the workspace root.",
       ].join("\n")
       systemMessages.push({
         role: "system",
@@ -779,6 +778,10 @@ export class AgentOrchestrator {
           step_counter: state.stepCounter,
           updated_at: new Date().toISOString(),
         })
+        broadcast({
+          type: "checkpoint.saved",
+          data: { runId, iteration, stepCounter: state.stepCounter },
+        })
 
         // Persist current run state
         this.persistRun(run, goal, agentId, resume?.parentRunId)
@@ -899,6 +902,10 @@ export class AgentOrchestrator {
           iteration: lastIteration,
           step_counter: state.stepCounter,
           updated_at: new Date().toISOString(),
+        })
+        broadcast({
+          type: "checkpoint.saved",
+          data: { runId, iteration: lastIteration, stepCounter: state.stepCounter },
         })
       }
 

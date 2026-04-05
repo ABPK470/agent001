@@ -25,6 +25,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "trajectory-replay": "Trajectory Replay",
   "operator-env": "Operator Environment",
   "debug-inspector": "Debug Inspector",
+  "platform-dev-log": "Platform Dev Log",
 }
 
 export function WidgetModal() {
@@ -58,7 +59,7 @@ export function WidgetModal() {
       />
 
       {/* Modal */}
-      <div className="relative w-[90vw] max-w-2xl h-[70vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-[90vw] max-w-5xl h-[80vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">

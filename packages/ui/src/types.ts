@@ -118,6 +118,7 @@ export type WidgetType =
   | "trajectory-replay"
   | "operator-env"
   | "debug-inspector"
+  | "platform-dev-log"
 
 export interface ViewConfig {
   id: string

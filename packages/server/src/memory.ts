@@ -27,6 +27,7 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import { getDb } from "./db.js"
+import { broadcast } from "./ws.js"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -457,6 +458,18 @@ export function ingestTurn(opts: {
   // Optionally embed (async, non-blocking)
   embedEntry(entry).catch(() => {})
 
+  broadcast({
+    type: "memory.ingested",
+    data: {
+      id: entry.id,
+      tier: entry.tier,
+      role: entry.role,
+      source: entry.source,
+      runId: entry.runId,
+      contentPreview: entry.content.slice(0, 200),
+    },
+  })
+
   return entry
 }
 
@@ -597,6 +610,16 @@ export function storeProcedural(opts: {
     run_id: proc.runId,
     created_at: proc.createdAt,
     updated_at: proc.updatedAt,
+  })
+
+  broadcast({
+    type: "procedural.stored",
+    data: {
+      id: proc.id,
+      trigger: proc.trigger,
+      toolCount: proc.toolSequence.length,
+      runId: proc.runId,
+    },
   })
 
   return proc

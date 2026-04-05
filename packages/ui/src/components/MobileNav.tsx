@@ -38,6 +38,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "trajectory-replay": Film,
   "operator-env": LayoutDashboard,
   "debug-inspector": Bug,
+  "platform-dev-log": ScrollText,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -54,6 +55,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "trajectory-replay": "Replay",
   "operator-env": "IOE",
   "debug-inspector": "Debug",
+  "platform-dev-log": "DevLog",
 }
 
 interface Props {

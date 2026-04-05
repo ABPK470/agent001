@@ -1,38 +1,31 @@
 /**
- * IOE editor-area panels — Trace, DAG, Timeline, Details, Map, EditorTabs.
+ * IOE editor-area panels — Trace (DAG-style), LLM Calls, Map, EditorTabs.
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
-import { truncate } from "../../util"
+import { ChevronDown, ChevronRight, Copy } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { AgentDefinition, Run, TraceEntry } from "../../types"
+import { fmtTokens, truncate } from "../../util"
 import {
-    C,
-    dur,
-    fmtK,
-    statusDot,
-    ts,
-    type DagNode,
-    type EditorTab,
-    type UsageData,
+  C,
+  fmtK,
+  statusDot,
+  type EditorTab,
 } from "./constants"
-import { KV } from "./primitives"
 
-// ── EditorTabs — tab bar for the editor area ─────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  EditorTabs — tab bar for the editor area
+// ═══════════════════════════════════════════════════════════════════
 
 export function EditorTabs({
   current,
   onChange,
   trace,
-  dagNodes,
-  steps,
 }: {
   current: EditorTab
   onChange: (tab: EditorTab) => void
   trace: TraceEntry[]
-  dagNodes: DagNode[]
-  steps: Step[]
 }) {
-  // Count only user-visible trace entries (exclude debug/internal ones)
   const visibleTraceCount = useMemo(() =>
     trace.filter((e) =>
       e.kind === "goal" || e.kind === "iteration" || e.kind === "thinking" ||
@@ -44,17 +37,14 @@ export function EditorTabs({
     [trace],
   )
 
-  // Count tool-call DAG nodes only (not thinking, not iterations)
-  const dagToolCount = useMemo(() =>
-    dagNodes.filter((n) => n.type === "tool-call").length,
-    [dagNodes],
+  const llmCallCount = useMemo(() =>
+    trace.filter((e) => e.kind === "llm-request").length,
+    [trace],
   )
 
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
     { id: "trace", label: "Trace", count: visibleTraceCount },
-    { id: "dag", label: "DAG", count: dagToolCount },
-    { id: "timeline", label: "Timeline", count: steps.length },
-    { id: "details", label: "Details" },
+    { id: "llm-calls", label: "LLM Calls", count: llmCallCount },
     { id: "map", label: "Map" },
   ]
 
@@ -84,7 +74,9 @@ export function EditorTabs({
   )
 }
 
-// ── TracePanel ───────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  TracePanel — DAG-style hierarchical trace view
+// ═══════════════════════════════════════════════════════════════════
 
 export function TracePanel({ trace }: { trace: TraceEntry[] }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -100,62 +92,186 @@ export function TracePanel({ trace }: { trace: TraceEntry[] }) {
     )
   }
 
+  // Group trace into iterations for DAG-like structure
+  const groups = groupTraceByIteration(trace)
+
   return (
     <div ref={ref} className="h-full overflow-y-auto px-3 py-2 font-mono text-[13px] leading-relaxed">
-      {trace.map((e, i) => (
-        <TraceRow key={i} entry={e} />
+      {groups.map((g, gi) => (
+        <TraceGroup key={gi} group={g} isLast={gi === groups.length - 1} />
       ))}
     </div>
   )
 }
 
-function TraceRow({ entry: e }: { entry: TraceEntry }) {
+interface TraceGroupData {
+  type: "goal" | "iteration" | "answer" | "error"
+  header: TraceEntry
+  children: TraceEntry[]
+  delegationDepth: number
+}
+
+function groupTraceByIteration(trace: TraceEntry[]): TraceGroupData[] {
+  const groups: TraceGroupData[] = []
+  let current: TraceGroupData | null = null
+  let delegDepth = 0
+
+  for (const e of trace) {
+    if (e.kind === "goal") {
+      current = { type: "goal", header: e, children: [], delegationDepth: 0 }
+      groups.push(current)
+    } else if (e.kind === "iteration") {
+      current = { type: "iteration", header: e, children: [], delegationDepth: delegDepth }
+      groups.push(current)
+    } else if (e.kind === "answer") {
+      groups.push({ type: "answer", header: e, children: [], delegationDepth: delegDepth })
+      current = null
+    } else if (e.kind === "error") {
+      groups.push({ type: "error", header: e, children: [], delegationDepth: delegDepth })
+      current = null
+    } else {
+      if (e.kind === "delegation-start") delegDepth++
+      if (e.kind === "delegation-end") delegDepth = Math.max(0, delegDepth - 1)
+      if (current) current.children.push(e)
+    }
+  }
+  return groups
+}
+
+function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boolean }) {
+  // Goal node
+  if (g.type === "goal") {
+    const goalEntry = g.header as Extract<TraceEntry, { kind: "goal" }>
+    return (
+      <div className="relative pl-6 pb-2">
+        {/* Vertical connector line */}
+        <div className="absolute left-[11px] top-5 bottom-0 w-px" style={{ background: C.accent + "30" }} />
+        {/* Node dot */}
+        <div className="absolute left-[7px] top-1.5 w-2.5 h-2.5 rounded-full" style={{ background: C.accent }} />
+        <div className="pb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.accent }}>Goal</span>
+          <span style={{ color: C.text }}>{goalEntry.text}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Answer node
+  if (g.type === "answer") {
+    const ansEntry = g.header as Extract<TraceEntry, { kind: "answer" }>
+    return (
+      <div className="relative pl-6 pt-1 pb-2">
+        <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.success }} />
+        <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
+          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.success }}>Completed</span>
+          <div className="whitespace-pre-wrap leading-relaxed mt-1" style={{ color: C.textSecondary }}>{ansEntry.text}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error node
+  if (g.type === "error") {
+    const errEntry = g.header as Extract<TraceEntry, { kind: "error" }>
+    return (
+      <div className="relative pl-6 pt-1 pb-2">
+        <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.coral }} />
+        <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
+          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.coral }}>Failed</span>
+          <span style={{ color: C.coral, opacity: 0.8 }}>{errEntry.text}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Iteration group — collapsible with children indented
+  return <IterationGroup group={g} isLast={isLast} />
+}
+
+function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boolean }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const iterEntry = g.header as Extract<TraceEntry, { kind: "iteration" }>
+  const indent = g.delegationDepth * 16
+
+  // Count children by type for summary
+  const toolCalls = g.children.filter((e) => e.kind === "tool-call").length
+  const hasErrors = g.children.some((e) => e.kind === "tool-error")
+  const usage = g.children.find((e) => e.kind === "usage") as Extract<TraceEntry, { kind: "usage" }> | undefined
+
+  return (
+    <div className="relative" style={{ marginLeft: indent }}>
+      {/* Vertical line */}
+      {!isLast && (
+        <div className="absolute left-[11px] top-5 bottom-0 w-px" style={{ background: C.accent + "20" }} />
+      )}
+
+      {/* Iteration header node */}
+      <div
+        className="relative pl-6 pb-0.5 flex items-center gap-2 cursor-pointer hover:bg-white/[0.02] rounded transition-colors"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <div
+          className="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
+          style={{ background: hasErrors ? C.coral + "20" : C.accent + "15", border: `1px solid ${hasErrors ? C.coral + "40" : C.accent + "30"}` }}
+        >
+          <span className="text-[9px] font-bold" style={{ color: hasErrors ? C.coral : C.accent }}>
+            {iterEntry.current}
+          </span>
+        </div>
+        <span className="text-[11px] uppercase tracking-wide" style={{ color: C.muted }}>
+          iter {iterEntry.current}/{iterEntry.max}
+        </span>
+        {toolCalls > 0 && (
+          <span className="text-[11px]" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
+        )}
+        {usage && (
+          <span className="text-[11px]" style={{ color: C.dim }}>+{fmtK(usage.iterationTokens)} tk</span>
+        )}
+        <span className="text-[10px] ml-auto" style={{ color: C.dim }}>
+          {collapsed ? "▸" : "▾"}
+        </span>
+      </div>
+
+      {/* Children — tool calls, thinking, results, delegation — indented under the iteration  */}
+      {!collapsed && (
+        <div className="pl-6 ml-0.5" style={{ borderLeft: `1px solid ${C.accent}15`, marginLeft: 10 }}>
+          {g.children.map((e, i) => (
+            <TraceChild key={i} entry={e} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TraceChild({ entry: e }: { entry: TraceEntry }) {
   const [expanded, setExpanded] = useState(false)
 
-  if (e.kind === "goal") {
-    return (
-      <div className="pt-2 pb-1">
-        <span className="text-[13px] font-semibold mr-2" style={{ color: C.accent }}>GOAL</span>
-        <span className="text-[13px]" style={{ color: C.text }}>{e.text}</span>
-      </div>
-    )
-  }
-  if (e.kind === "iteration") {
-    return (
-      <div
-        className="text-[13px] font-mono pt-3 pb-0.5 mt-2 flex items-center gap-2"
-        style={{ color: C.muted, borderTop: `1px solid ${C.border}` }}
-      >
-        <span style={{ opacity: 0.6 }}>──</span>
-        <span>iteration {e.current}/{e.max}</span>
-        <span style={{ opacity: 0.6 }}>──</span>
-      </div>
-    )
-  }
   if (e.kind === "thinking") {
     return (
-      <div className="py-0.5 pl-3" style={{ borderLeft: `2px solid ${C.accent}4d` }}>
-        <span className="text-[13px] font-medium mr-2" style={{ color: C.accent }}>THK</span>
-        <span className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>{e.text}</span>
+      <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.accent}30` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.accent }}>THK</span>
+        <span className="whitespace-pre-wrap" style={{ color: C.textSecondary, fontSize: 12 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "tool-call") {
     return (
-      <div className="py-1">
+      <div className="py-0.5">
         <div
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <span className="text-[13px] font-medium font-mono" style={{ color: C.warning }}>CALL</span>
-          <span className="text-[13px] font-medium font-mono" style={{ color: C.text }}>{e.tool}</span>
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.warning }} />
+          <span className="text-[12px] font-medium" style={{ color: C.warning }}>{e.tool}</span>
           {!expanded && e.argsSummary && (
-            <span className="text-[13px] font-mono truncate" style={{ color: C.muted }}>{e.argsSummary}</span>
+            <span className="text-[12px] truncate" style={{ color: C.dim }}>{e.argsSummary}</span>
           )}
+          <span className="text-[10px] ml-auto" style={{ color: C.dim }}>{expanded ? "▾" : "▸"}</span>
         </div>
         {expanded && (
           <pre
-            className="text-[13px] font-mono rounded-lg p-2 mt-1 max-h-40 overflow-auto whitespace-pre-wrap"
+            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.argsFormatted}
@@ -168,19 +284,20 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-3">
         <div
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <span className="text-[13px] font-medium font-mono" style={{ color: C.success }}>RSLT</span>
+          <span className="w-1 h-1 rounded-full shrink-0" style={{ background: C.success + "80" }} />
+          <span className="text-[11px]" style={{ color: C.success }}>result</span>
           {!expanded && (
-            <span className="text-[13px] font-mono truncate" style={{ color: C.muted }}>
-              {e.text.length > 120 ? e.text.slice(0, 120) + "..." : e.text}
+            <span className="text-[12px] truncate" style={{ color: C.muted }}>
+              {e.text.length > 100 ? e.text.slice(0, 100) + "..." : e.text}
             </span>
           )}
         </div>
         {expanded && (
           <pre
-            className="text-[13px] font-mono rounded-lg p-2 mt-1 max-h-40 overflow-auto whitespace-pre-wrap"
+            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.text}
@@ -192,53 +309,32 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "tool-error") {
     return (
       <div className="py-0.5 pl-3">
-        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: C.coral }}>ERR</span>
-        <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
-      </div>
-    )
-  }
-  if (e.kind === "answer") {
-    return (
-      <div className="pt-2 pb-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
-        <div className="text-[13px] font-semibold mb-1" style={{ color: C.success }}>COMPLETED</div>
-        <div className="text-[13px] whitespace-pre-wrap leading-relaxed" style={{ color: C.textSecondary }}>{e.text}</div>
-      </div>
-    )
-  }
-  if (e.kind === "error") {
-    return (
-      <div className="pt-2 pb-1 mt-1" style={{ borderTop: `1px solid ${C.border}` }}>
-        <span className="text-[13px] font-semibold mr-2" style={{ color: C.coral }}>FAILED</span>
-        <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
+        <span className="w-1 h-1 rounded-full inline-block mr-1.5" style={{ background: C.coral }} />
+        <span className="text-[11px] mr-1" style={{ color: C.coral }}>error</span>
+        <span className="text-[12px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "usage") {
     return (
-      <div className="flex items-center gap-3 py-0.5 text-[12px] font-mono" style={{ color: C.dim }}>
-        <span>+{fmtK(e.iterationTokens)} tk</span>
-        <span style={{ opacity: 0.3 }}>│</span>
-        <span>total {fmtK(e.totalTokens)}</span>
-        <span style={{ opacity: 0.3 }}>│</span>
+      <div className="flex items-center gap-3 py-0.5 text-[11px]" style={{ color: C.dim }}>
+        <span>+{fmtK(e.iterationTokens)} tk (total {fmtK(e.totalTokens)})</span>
         <span>{e.llmCalls} calls</span>
       </div>
     )
   }
   if (e.kind === "delegation-start") {
     return (
-      <div className="py-1 pl-3 mt-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium font-mono" style={{ color: "#6CB4EE" }}>DLGT</span>
-          <span className="text-[13px]" style={{ color: "#6CB4EE", opacity: 0.7 }}>▶</span>
-          {e.agentName && (
-            <span className="text-[13px] font-medium" style={{ color: C.textSecondary }}>[{e.agentName}]</span>
-          )}
-          <span className="text-[12px]" style={{ color: C.muted }}>depth {e.depth}</span>
+      <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium" style={{ color: "#6CB4EE" }}>DELEGATE ▶</span>
+          {e.agentName && <span className="text-[11px]" style={{ color: C.textSecondary }}>[{e.agentName}]</span>}
+          <span className="text-[11px]" style={{ color: C.dim }}>depth {e.depth}</span>
         </div>
-        <div className="text-[13px] mt-0.5 ml-5" style={{ color: C.textSecondary }}>
+        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
           {e.goal.length > 200 ? e.goal.slice(0, 200) + "..." : e.goal}
         </div>
-        <div className="text-[11px] font-mono mt-0.5 ml-5" style={{ color: C.dim, opacity: 0.5 }}>
+        <div className="text-[10px] mt-0.5 pl-2" style={{ color: C.dim }}>
           tools: {e.tools.slice(0, 6).join(", ")}{e.tools.length > 6 ? ` +${e.tools.length - 6}` : ""}
         </div>
       </div>
@@ -246,348 +342,346 @@ function TraceRow({ entry: e }: { entry: TraceEntry }) {
   }
   if (e.kind === "delegation-end") {
     return (
-      <div className="py-1 pl-3 mb-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium font-mono" style={{ color: "#6CB4EE" }}>DLGT</span>
-          <span className="text-[13px]" style={{ color: e.status === "done" ? C.success : C.coral }}>◀ {e.status}</span>
-          <span className="text-[12px]" style={{ color: C.muted }}>depth {e.depth}</span>
-        </div>
+      <div className="py-1 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>DELEGATE ◀</span>
+        <span className="text-[11px]" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
         {e.answer && (
-          <div
-            className="text-[13px] mt-0.5 ml-5 cursor-pointer"
-            style={{ color: C.textSecondary }}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? e.answer : (e.answer.length > 150 ? e.answer.slice(0, 150) + "..." : e.answer)}
+          <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
+            {e.answer.length > 150 ? e.answer.slice(0, 150) + "..." : e.answer}
           </div>
         )}
         {e.error && (
-          <div className="text-[13px] mt-0.5 ml-5" style={{ color: C.coral, opacity: 0.8 }}>{e.error}</div>
+          <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.coral }}>{e.error}</div>
         )}
       </div>
     )
   }
   if (e.kind === "delegation-iteration") {
     return (
-      <div className="text-[12px] font-mono pl-6 py-0.5" style={{ color: C.dim, opacity: 0.5 }}>
+      <div className="text-[11px] pl-4 py-0.5" style={{ color: C.dim }}>
         ↳ child iteration {e.iteration}/{e.maxIterations}
       </div>
     )
   }
   if (e.kind === "delegation-parallel-start") {
     return (
-      <div className="py-1 pl-3 mt-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
-        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: "#6CB4EE" }}>PAR▶</span>
-        <span className="text-[13px]" style={{ color: C.muted }}>{e.taskCount} tasks</span>
-        {e.goals.map((g, i) => (
-          <Fragment key={i}>
-            <br />
-            <span className="pl-6 text-[13px]" style={{ color: C.muted }}>• {truncate(g, 80)}</span>
-          </Fragment>
+      <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>PARALLEL ▶</span>
+        <span className="text-[11px]" style={{ color: C.muted }}>{e.taskCount} tasks</span>
+        {e.goals.map((goal, i) => (
+          <div key={i} className="pl-4 text-[12px]" style={{ color: C.muted }}>• {truncate(goal, 80)}</div>
         ))}
       </div>
     )
   }
   if (e.kind === "delegation-parallel-end") {
     return (
-      <div className="py-1 pl-3 mb-1" style={{ borderLeft: "2px solid #6CB4EE66" }}>
-        <span className="text-[13px] font-medium font-mono mr-2" style={{ color: "#6CB4EE" }}>PAR◀</span>
-        <span className="text-[13px]" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} fulfilled, {e.rejected} rejected</span>
+      <div className="py-0.5 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>PARALLEL ◀</span>
+        <span className="text-[11px]" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
+      </div>
+    )
+  }
+  if (e.kind === "user-input-request") {
+    return (
+      <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.warning }}>ASK</span>
+        <span className="text-[12px]" style={{ color: C.text }}>{e.question}</span>
+      </div>
+    )
+  }
+  if (e.kind === "user-input-response") {
+    return (
+      <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
+        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.success }}>REPLY</span>
+        <span className="text-[12px]" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
   }
   return null
 }
 
-// ── DagPanel ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  LlmCallsPanel — DebugInspector's LLM Calls view embedded
+// ═══════════════════════════════════════════════════════════════════
 
-export function DagPanel({
-  nodes,
-  expanded,
-  onToggle,
-}: {
-  nodes: DagNode[]
-  expanded: string | null
-  onToggle: (id: string | null) => void
-}) {
-  if (nodes.length === 0) {
+function copyText(text: string) {
+  navigator.clipboard.writeText(text)
+}
+
+export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
+  const systemPrompt = useMemo(
+    () => trace.find((e) => e.kind === "system-prompt") as Extract<TraceEntry, { kind: "system-prompt" }> | undefined,
+    [trace],
+  )
+  const toolsResolved = useMemo(
+    () => trace.find((e) => e.kind === "tools-resolved") as Extract<TraceEntry, { kind: "tools-resolved" }> | undefined,
+    [trace],
+  )
+  const llmCalls = useMemo(() => {
+    const requests = trace.filter((e) => e.kind === "llm-request") as Array<Extract<TraceEntry, { kind: "llm-request" }>>
+    const responses = trace.filter((e) => e.kind === "llm-response") as Array<Extract<TraceEntry, { kind: "llm-response" }>>
+    return requests.map((req, i) => ({ request: req, response: responses[i] ?? null }))
+  }, [trace])
+
+  if (llmCalls.length === 0 && !systemPrompt && !toolsResolved) {
     return (
       <div className="flex items-center justify-center h-full text-[13px]" style={{ color: C.dim }}>
-        No activity yet
+        No LLM call data — run may predate debug instrumentation
       </div>
     )
   }
 
-  const toolCalls = nodes.filter((n) => n.type === "tool-call").length
-  const doneCount = nodes.filter((n) => n.status === "done").length
-  const failCount = nodes.filter((n) => n.status === "error").length
-  const liveCount = nodes.filter((n) => n.status === "running").length
-
   return (
-    <div className="h-full overflow-y-auto px-3 py-2 font-mono text-[13px]">
-      <div className="flex items-center gap-3 mb-2 text-[13px]">
-        <span style={{ color: C.success }}>LIVE {liveCount}</span>
-        <span style={{ color: C.success }}>DONE {doneCount}</span>
-        <span style={{ color: failCount > 0 ? C.coral : C.dim }}>FAIL {failCount}</span>
-        <span style={{ color: C.dim }}>TOOLS {toolCalls}</span>
+    <div className="h-full overflow-y-auto px-3 py-2 space-y-2 text-[13px]">
+      {/* Stats summary */}
+      <div className="flex items-center gap-3 flex-wrap text-[12px] font-mono" style={{ color: C.muted }}>
+        {systemPrompt && (
+          <span><span style={{ color: C.accent }}>prompt</span> {(systemPrompt.text.length / 1000).toFixed(1)}k chars</span>
+        )}
+        {toolsResolved && (
+          <span><span style={{ color: C.warning }}>tools</span> {toolsResolved.tools.length}</span>
+        )}
+        <span>
+          <span style={{ color: "#6CB4EE" }}>calls</span> {llmCalls.length}
+          {llmCalls.length > 0 && ` · ${Math.round(llmCalls.reduce((s, c) => s + (c.response?.durationMs ?? 0), 0) / Math.max(1, llmCalls.filter(c => c.response).length))}ms avg`}
+        </span>
       </div>
 
-      {nodes.map((node, i) => {
-        const isExpanded = expanded === node.id
-        const dotColor =
-          node.status === "done"
-            ? C.success
-            : node.status === "error"
-              ? C.coral
-              : node.status === "partial"
-                ? C.peach
-                : C.accent
-        const nextNode = nodes[i + 1]
-        const isLast = !nextNode || nextNode.depth < node.depth
-        const connector = node.depth === 0 ? (i > 0 ? "│" : " ") : isLast ? "└─" : "├─"
-
-        return (
-          <div key={node.id}>
-            <div
-              className="flex items-center gap-1.5 leading-relaxed cursor-pointer rounded px-1 -mx-1 hover:bg-white/[0.03] transition-colors"
-              style={{ paddingLeft: node.depth * 16 }}
-              onClick={() => onToggle(isExpanded ? null : node.id)}
+      {/* System prompt section */}
+      {systemPrompt && (
+        <LlmSection label="System Prompt" badge={`${systemPrompt.text.length.toLocaleString()} chars`} badgeColor={C.accent}>
+          <div className="relative">
+            <button
+              className="absolute top-0 right-0 p-1 rounded opacity-30 hover:opacity-80 transition-opacity cursor-pointer"
+              style={{ color: C.muted }}
+              onClick={() => copyText(systemPrompt.text)}
+              title="Copy"
             >
-              <span className="inline-block w-4 text-right shrink-0" style={{ color: C.dim }}>
-                {connector}
-              </span>
-              <span
-                className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: dotColor }}
-              />
-              <span
-                className="shrink-0 w-5 text-center text-[13px]"
-                style={{
-                  color: node.label.startsWith("D") ? C.cyan : node.depth === 0 ? C.accent : C.muted,
-                }}
-              >
-                {node.label}
-              </span>
-              <span className="truncate flex-1" style={{ color: C.text }}>{node.detail}</span>
-              <span className="shrink-0 text-[13px]" style={{ color: dotColor }}>
-                {node.status === "running" ? "live" : node.status}
-              </span>
+              <Copy size={12} />
+            </button>
+            <pre className="text-[12px] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto pr-6" style={{ color: C.textSecondary }}>
+              {systemPrompt.text}
+            </pre>
+          </div>
+        </LlmSection>
+      )}
+
+      {/* Tools section */}
+      {toolsResolved && (
+        <LlmSection label="Tools Available" badge={`${toolsResolved.tools.length}`} badgeColor={C.warning}>
+          <div className="space-y-1">
+            {toolsResolved.tools.map((t) => (
+              <LlmToolDef key={t.name} tool={t} />
+            ))}
+          </div>
+        </LlmSection>
+      )}
+
+      {/* LLM Calls */}
+      {llmCalls.map((call, i) => (
+        <LlmCallCard key={i} index={i} request={call.request} response={call.response} />
+      ))}
+    </div>
+  )
+}
+
+function LlmSection({
+  label, badge, badgeColor, children, defaultOpen = false,
+}: {
+  label: string; badge?: string; badgeColor?: string; children: React.ReactNode; defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+      <button
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors cursor-pointer hover:bg-white/[0.03]"
+        style={{ background: C.elevated + "30" }}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <ChevronDown size={12} style={{ color: C.dim }} /> : <ChevronRight size={12} style={{ color: C.dim }} />}
+        <span className="text-[12px] font-medium" style={{ color: C.text }}>{label}</span>
+        {badge && <span className="text-[11px] font-mono ml-auto" style={{ color: badgeColor ?? C.dim }}>{badge}</span>}
+      </button>
+      {open && (
+        <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LlmToolDef({ tool }: { tool: { name: string; description: string; parameters?: Record<string, unknown> } }) {
+  const [showSchema, setShowSchema] = useState(false)
+  return (
+    <div className="py-0.5">
+      <div className="flex items-start gap-2">
+        <span className="text-[12px] font-mono font-semibold shrink-0" style={{ color: C.warning }}>{tool.name}</span>
+        <span className="text-[12px]" style={{ color: C.muted }}>{tool.description}</span>
+      </div>
+      {tool.parameters && (
+        <>
+          <button
+            className="text-[11px] mt-0.5 cursor-pointer"
+            style={{ color: C.accent + "60" }}
+            onClick={() => setShowSchema(!showSchema)}
+          >
+            {showSchema ? "hide schema" : "show schema"}
+          </button>
+          {showSchema && (
+            <pre className="text-[11px] font-mono whitespace-pre-wrap mt-1 max-h-[200px] overflow-y-auto" style={{ color: C.dim }}>
+              {JSON.stringify(tool.parameters, null, 2)}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const ROLE_COLORS: Record<string, string> = {
+  system: C.accent,
+  user: C.success,
+  assistant: C.warning,
+  tool: "#6CB4EE",
+}
+
+function LlmCallCard({
+  index, request: req, response: res,
+}: {
+  index: number
+  request: Extract<TraceEntry, { kind: "llm-request" }>
+  response: Extract<TraceEntry, { kind: "llm-response" }> | null
+}) {
+  const [showMessages, setShowMessages] = useState(false)
+
+  const durationColor = res
+    ? res.durationMs > 5000 ? C.coral : res.durationMs > 2000 ? C.warning : C.success
+    : C.dim
+
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+      {/* Header */}
+      <div
+        className="flex items-center gap-3 px-3 py-1.5 cursor-pointer hover:bg-white/[0.03] transition-colors"
+        style={{ background: C.elevated + "20" }}
+        onClick={() => setShowMessages(!showMessages)}
+      >
+        <span className="text-[13px] font-semibold" style={{ color: "#6CB4EE" }}>#{index + 1}</span>
+        <span className="text-[12px] font-mono" style={{ color: C.muted }}>
+          iter {req.iteration + 1}
+        </span>
+        <span className="text-[12px]" style={{ color: C.dim }}>
+          {req.messageCount} msgs → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text") : "pending..."}
+        </span>
+        {res && (
+          <span className="text-[12px] font-mono ml-auto" style={{ color: durationColor }}>{res.durationMs}ms</span>
+        )}
+        {res?.usage && (
+          <span className="text-[11px] font-mono" style={{ color: C.dim }}>
+            {fmtK(res.usage.totalTokens)} tk
+          </span>
+        )}
+      </div>
+
+      {showMessages && (
+        <>
+          {/* Request messages */}
+          <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}` }}>
+            <div className="text-[11px] uppercase tracking-wide mb-1" style={{ color: C.dim }}>
+              Request — {req.messageCount} messages, {req.toolCount} tools
             </div>
-            {isExpanded && (
-              <div
-                className="mb-1 px-2 py-1 rounded text-[13px] overflow-auto"
-                style={{
-                  marginLeft: node.depth * 16 + 24,
-                  background: C.surface,
-                  border: `1px solid ${C.border}`,
-                  maxHeight: 160,
-                }}
-              >
-                <pre className="whitespace-pre-wrap m-0" style={{ color: C.muted }}>
-                  {node.expanded}
-                </pre>
-                {node.resultText && (
-                  <div
-                    className="mt-1 pt-1"
-                    style={{
-                      borderTop: `1px solid ${C.border}`,
-                      color: node.status === "error" ? C.coral : C.success,
-                    }}
-                  >
-                    {node.resultText.slice(0, 400)}
-                  </div>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto">
+              {req.messages.map((msg, mi) => (
+                <LlmMessage key={mi} msg={msg} index={mi} />
+              ))}
+            </div>
+          </div>
+
+          {/* Response */}
+          {res && (
+            <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}`, background: C.elevated + "10" }}>
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-[11px] uppercase tracking-wide" style={{ color: C.dim }}>Response</span>
+                {res.usage && (
+                  <span className="text-[11px] font-mono" style={{ color: C.dim }}>
+                    {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} compl = {fmtTokens(res.usage.totalTokens)}
+                  </span>
                 )}
               </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── TimelinePanel ────────────────────────────────────────────────
-
-export function TimelinePanel({
-  steps,
-  expanded,
-  onToggle,
-}: {
-  steps: Step[]
-  expanded: Set<string>
-  onToggle: (id: string) => void
-}) {
-  if (steps.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-[13px]" style={{ color: C.dim }}>
-        No steps recorded
-      </div>
-    )
-  }
-
-  return (
-    <div className="h-full overflow-y-auto px-3 py-2 text-[13px]">
-      {steps.map((step, i) => {
-        const isOpen = expanded.has(step.id)
-        const dotColor = statusDot(step.status)
-        const duration = dur(step.startedAt, step.completedAt)
-
-        return (
-          <div key={step.id} className="relative pl-5 pb-2">
-            {i < steps.length - 1 && (
-              <div className="absolute left-2 top-3.5 bottom-0 w-px" style={{ background: C.borderSolid }} />
-            )}
-            <div
-              className="absolute left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2"
-              style={{
-                borderColor: dotColor,
-                background: step.status === "running" ? dotColor : C.base,
-              }}
-            />
-
-            <div
-              className="cursor-pointer hover:bg-white/[0.02] rounded px-2 py-1 transition-colors"
-              onClick={() => onToggle(step.id)}
-            >
-              <div className="flex items-center gap-2">
-                <span style={{ color: C.text }}>{step.name}</span>
-                {step.action !== step.name && <span style={{ color: C.dim }}>({step.action})</span>}
-                <span className="ml-auto text-[13px]" style={{ color: C.dim }}>{duration}</span>
-                <span className="text-[13px]" style={{ color: dotColor }}>{step.status}</span>
-              </div>
-              {step.error && (
-                <div className="mt-0.5" style={{ color: C.error }}>{truncate(step.error, 100)}</div>
+              {res.content && (
+                <pre className="text-[12px] whitespace-pre-wrap break-words leading-relaxed mb-1" style={{ color: C.textSecondary }}>
+                  {res.content}
+                </pre>
               )}
-
-              {isOpen && (
-                <div className="mt-1.5 space-y-1">
-                  {step.input && Object.keys(step.input).length > 0 && (
-                    <div>
-                      <span className="text-[13px] uppercase" style={{ color: C.dim }}>Input</span>
-                      <pre
-                        className="mt-0.5 p-2 rounded text-[13px] overflow-x-auto"
-                        style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
-                      >
-                        {JSON.stringify(step.input, null, 2)}
+              {res.toolCalls.length > 0 && (
+                <div className="space-y-1">
+                  {res.toolCalls.map((tc) => (
+                    <div key={tc.id} className="rounded px-2 py-1" style={{ background: C.warning + "08", border: `1px solid ${C.warning}15` }}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-mono font-semibold" style={{ color: C.warning }}>{tc.name}</span>
+                        <span className="text-[11px] font-mono" style={{ color: C.dim }}>{tc.id.slice(0, 12)}</span>
+                      </div>
+                      <pre className="text-[11px] font-mono whitespace-pre-wrap break-words mt-0.5" style={{ color: C.muted }}>
+                        {JSON.stringify(tc.arguments, null, 2)}
                       </pre>
                     </div>
-                  )}
-                  {step.output && Object.keys(step.output).length > 0 && (
-                    <div>
-                      <span className="text-[13px] uppercase" style={{ color: C.dim }}>Output</span>
-                      <pre
-                        className="mt-0.5 p-2 rounded text-[13px] overflow-x-auto"
-                        style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}
-                      >
-                        {JSON.stringify(step.output, null, 2)}
-                      </pre>
-                    </div>
-                  )}
+                  ))}
                 </div>
+              )}
+              {res.toolCalls.length === 0 && res.content && (
+                <div className="text-[11px] mt-1" style={{ color: C.success + "80" }}>↳ Final answer (no tool calls)</div>
               )}
             </div>
-          </div>
-        )
-      })}
+          )}
+        </>
+      )}
     </div>
   )
 }
 
-// ── DetailsPanel ─────────────────────────────────────────────────
-
-export function DetailsPanel({
-  run,
-  toolStats,
-  liveUsage,
-  usage,
-}: {
-  run: Run | undefined
-  toolStats: Map<string, { calls: number; errors: number; totalMs: number }>
-  liveUsage: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number }
-  usage: UsageData | null
+function LlmMessage({ msg, index }: {
+  msg: { role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }
+  index: number
 }) {
-  // For completed/failed runs, use the run's own token data; liveUsage is only valid while running
-  const runUsage = run && run.status !== "running" && run.status !== "pending"
-    ? { promptTokens: run.promptTokens, completionTokens: run.completionTokens, totalTokens: run.totalTokens, llmCalls: run.llmCalls }
-    : liveUsage
+  const [expanded, setExpanded] = useState(false)
+  const isLong = (msg.content?.length ?? 0) > 300
+  const displayContent = expanded || !isLong ? msg.content : msg.content!.slice(0, 300) + "..."
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-3 text-[13px] space-y-4">
-      <section>
-        <h3 className="text-[13px] uppercase tracking-wide mb-2" style={{ color: C.cyan }}>Run Usage</h3>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-          <KV label="Prompt Tokens" value={fmtK(runUsage.promptTokens)} />
-          <KV label="Completion Tokens" value={fmtK(runUsage.completionTokens)} />
-          <KV label="Total Tokens" value={fmtK(runUsage.totalTokens)} />
-          <KV label="LLM Calls" value={String(runUsage.llmCalls)} />
+    <div className="pl-2 py-0.5" style={{ borderLeft: `2px solid ${ROLE_COLORS[msg.role] ?? C.dim}` }}>
+      <div className="flex items-center gap-2 mb-0.5">
+        <span className="text-[11px] font-mono font-bold uppercase" style={{ color: ROLE_COLORS[msg.role] ?? C.dim }}>{msg.role}</span>
+        <span className="text-[10px]" style={{ color: C.dim }}>#{index}</span>
+        {msg.toolCallId && <span className="text-[10px] font-mono" style={{ color: C.dim }}>← {msg.toolCallId.slice(0, 12)}</span>}
+        {msg.content && <span className="text-[10px]" style={{ color: C.dim }}>{msg.content.length} chars</span>}
+      </div>
+      {displayContent && (
+        <pre
+          className="text-[12px] whitespace-pre-wrap break-words leading-relaxed cursor-pointer"
+          style={{ color: C.textSecondary }}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {displayContent}
+        </pre>
+      )}
+      {isLong && !expanded && (
+        <button className="text-[11px] mt-0.5 cursor-pointer" style={{ color: C.accent + "60" }} onClick={() => setExpanded(true)}>
+          show full ({msg.content!.length} chars)
+        </button>
+      )}
+      {msg.toolCalls.length > 0 && (
+        <div className="mt-1 space-y-1">
+          {msg.toolCalls.map((tc) => (
+            <div key={tc.id} className="rounded px-2 py-1" style={{ background: C.warning + "08", border: `1px solid ${C.warning}10` }}>
+              <span className="text-[11px] font-mono font-semibold" style={{ color: C.warning }}>{tc.name}</span>
+              <pre className="text-[11px] font-mono whitespace-pre-wrap break-words mt-0.5" style={{ color: C.muted }}>
+                {JSON.stringify(tc.arguments, null, 2)}
+              </pre>
+            </div>
+          ))}
         </div>
-      </section>
-
-      {usage && (
-        <section>
-          <h3 className="text-[13px] uppercase tracking-wide mb-2" style={{ color: C.cyan }}>
-            Overall Usage
-          </h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-            <KV label="Total Tokens" value={fmtK(usage.totals.totalTokens)} />
-            <KV label="Total Runs" value={String(usage.totals.runCount)} />
-            <KV label="LLM Calls" value={String(usage.totals.llmCalls)} />
-            <KV label="Prompt Tokens" value={fmtK(usage.totals.promptTokens)} />
-          </div>
-        </section>
-      )}
-
-      {toolStats.size > 0 && (
-        <section>
-          <h3 className="text-[13px] uppercase tracking-wide mb-2" style={{ color: C.cyan }}>
-            Tool Performance
-          </h3>
-          <div className="space-y-1.5">
-            {Array.from(toolStats.entries()).map(([name, s]) => {
-              const failRate = s.calls > 0 ? s.errors / s.calls : 0
-              const avgMs = s.calls > 0 ? Math.round(s.totalMs / s.calls) : 0
-              return (
-                <div key={name} className="flex items-center gap-2">
-                  <span className="w-24 truncate" style={{ color: C.accent }}>{name}</span>
-                  <div
-                    className="flex-1 h-1.5 rounded-full overflow-hidden"
-                    style={{ background: C.elevated }}
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.min(100, s.calls * 10)}%`,
-                        background: failRate > 0.3 ? C.coral : C.success,
-                      }}
-                    />
-                  </div>
-                  <span className="shrink-0 w-16 text-right" style={{ color: C.muted }}>
-                    {s.calls}× {avgMs > 0 ? `${avgMs}ms` : ""}
-                  </span>
-                  {s.errors > 0 && (
-                    <span className="shrink-0 text-[13px]" style={{ color: C.coral }}>{s.errors} err</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {run && (
-        <section>
-          <h3 className="text-[13px] uppercase tracking-wide mb-2" style={{ color: C.cyan }}>
-            Run Metadata
-          </h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-            <KV label="Run ID" value={run.id.slice(0, 12)} />
-            <KV label="Status" value={run.status} />
-            <KV label="Agent" value={run.agentId ?? "default"} />
-            <KV label="Created" value={ts(run.createdAt)} />
-            {run.completedAt && <KV label="Completed" value={ts(run.completedAt)} />}
-            {run.parentRunId && <KV label="Parent Run" value={run.parentRunId.slice(0, 8)} />}
-          </div>
-        </section>
       )}
     </div>
   )

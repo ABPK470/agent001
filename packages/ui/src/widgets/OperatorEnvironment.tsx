@@ -6,15 +6,13 @@
  */
 
 import {
-    Bell,
-    Bot,
     CircleDot,
     Columns2,
-    FolderTree,
+    GitCompareArrows,
     History,
+    Info,
     MessageSquare,
     PanelBottom,
-    Rows2,
     Search,
     Terminal,
     X,
@@ -25,16 +23,14 @@ import { api } from "../api"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
-import { AuditPanel, FeedPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
+import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel } from "./ioe/chat"
 import {
     C,
     buildChatMessages,
-    buildDagNodes,
-    buildFeedItems,
     buildProblems,
     buildSearchResults,
-    buildToolStats,
+    dur,
     fmtK,
     statusDot,
     type BottomTab,
@@ -44,12 +40,11 @@ import {
     type SidebarSection,
     type UsageData
 } from "./ioe/constants"
-import { DagPanel, DetailsPanel, EditorTabs, MapPanel, TimelinePanel, TracePanel } from "./ioe/editors"
+import { EditorTabs, LlmCallsPanel, MapPanel, TracePanel } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
-    AgentsToolsPanel,
-    ExplorerPanel,
-    NotificationsPanel,
+    ComparePanel,
+    DetailsPanel,
     RunsPanel,
     SearchResultsList,
 } from "./ioe/sidebar"
@@ -69,9 +64,6 @@ export function OperatorEnvironment() {
   const audit = useStore((s) => s.audit)
   const trace = useStore((s) => s.trace)
   const liveUsage = useStore((s) => s.liveUsage)
-  const notifications = useStore((s) => s.notifications)
-  const unreadCount = useStore((s) => s.unreadCount)
-  const markNotificationRead = useStore((s) => s.markNotificationRead)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setTrace = useStore((s) => s.setTrace)
@@ -89,23 +81,20 @@ export function OperatorEnvironment() {
   const [health, setHealth] = useState<HealthData | null>(null)
 
   // ── Layout state ──────────────────────────────────────────────
-  const [sidebarSection, setSidebarSection] = useState<SidebarSection>("explorer")
+  const [sidebarSection, setSidebarSection] = useState<SidebarSection>("runs")
   const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [sidebarSplit, setSidebarSplit] = useState(false)
-  const [sidebarBottomSection, setSidebarBottomSection] = useState<SidebarSection>("runs")
   const [bottomVisible, setBottomVisible] = useState(true)
   const [chatVisible, setChatVisible] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const [editorTab, setEditorTab] = useState<EditorTab>("trace")
   const [editorSplit, setEditorSplit] = useState(false)
-  const [editorRightTab, setEditorRightTab] = useState<EditorTab>("dag")
+  const [editorRightTab, setEditorRightTab] = useState<EditorTab>("llm-calls")
   const [bottomTab, setBottomTab] = useState<BottomTab>("output")
   const [bottomSplit, setBottomSplit] = useState(false)
   const [bottomRightTab, setBottomRightTab] = useState<BottomTab>("audit")
 
   // ── Resizable panels ──────────────────────────────────────────
   const sidebar = useResizable(260, "horizontal")
-  const sidebarV = useResizable(200, "vertical")
   const bottom = useResizable(200, "vertical", true)
   const chatR = useResizable(300, "horizontal", true)
 
@@ -113,9 +102,7 @@ export function OperatorEnvironment() {
   const [goalInput, setGoalInput] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
-  const [expandedDag, setExpandedDag] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -157,9 +144,6 @@ export function OperatorEnvironment() {
     return null
   }, [trace])
 
-  const toolStats = useMemo(() => buildToolStats(steps), [steps])
-  const dagNodes = useMemo(() => buildDagNodes(trace), [trace])
-  const feedItems = useMemo(() => buildFeedItems(trace), [trace])
   const problems = useMemo(() => buildProblems(trace, steps), [trace, steps])
   const searchResults = useMemo(
     () => buildSearchResults(searchQuery, runs, trace, audit),
@@ -231,52 +215,43 @@ export function OperatorEnvironment() {
 
   // ── Activity bar items ────────────────────────────────────────
   const activityItems: Array<{ id: SidebarSection; Icon: LucideIcon; label: string; badge?: number }> = [
-    { id: "explorer", Icon: FolderTree, label: "Explorer" },
-    { id: "runs", Icon: History, label: "Run History" },
-    { id: "agents", Icon: Bot, label: "Agents & Tools" },
-    { id: "notifications", Icon: Bell, label: "Notifications", badge: unreadCount },
+    { id: "runs", Icon: History, label: "Runs" },
+    { id: "compare", Icon: GitCompareArrows, label: "Compare Runs" },
+    { id: "details", Icon: Info, label: "Details" },
   ]
 
   // ═════════════════════════════════════════════════════════════════
   //  RENDER
   // ═════════════════════════════════════════════════════════════════
 
+  const handleCompare = useCallback(async (idA: string, idB: string) => {
+    // TODO: open comparison view in center panel
+    console.log("Compare", idA, idB)
+  }, [])
+
   const renderSidebarSection = (section: SidebarSection) => {
-    if (section === "explorer")
-      return (
-        <ExplorerPanel run={activeRun} agents={agents} tools={tools}
-          policies={policies} llm={llm} health={health} usage={usage} />
-      )
     if (section === "runs")
       return <RunsPanel runs={runs} activeRunId={activeRunId} onSelect={setActiveRun} />
-    if (section === "agents")
-      return <AgentsToolsPanel agents={agents} tools={tools} policies={policies} />
-    if (section === "notifications")
-      return <NotificationsPanel notifications={notifications} onRead={markNotificationRead} />
+    if (section === "compare")
+      return <ComparePanel runs={runs} onCompare={handleCompare} />
+    if (section === "details")
+      return (
+        <DetailsPanel run={activeRun} agents={agents} tools={tools}
+          policies={policies} llm={llm} health={health} usage={usage} />
+      )
     return null
   }
 
   const renderBottomContent = (tab: BottomTab) => {
     if (tab === "output") return <OutputPanel logs={logs} />
     if (tab === "audit") return <AuditPanel audit={audit} />
-    if (tab === "feed") return <FeedPanel items={feedItems} />
     if (tab === "problems") return <ProblemsPanel problems={problems} />
     return null
   }
 
   const renderEditorContent = (tab: EditorTab) => {
     if (tab === "trace") return <TracePanel trace={trace} />
-    if (tab === "dag")
-      return <DagPanel nodes={dagNodes} expanded={expandedDag} onToggle={setExpandedDag} />
-    if (tab === "timeline")
-      return (
-        <TimelinePanel steps={steps} expanded={expandedSteps}
-          onToggle={(id) => setExpandedSteps((prev) => {
-            const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
-          })} />
-      )
-    if (tab === "details")
-      return <DetailsPanel run={activeRun} toolStats={toolStats} liveUsage={liveUsage} usage={usage} />
+    if (tab === "llm-calls") return <LlmCallsPanel trace={trace} />
     if (tab === "map")
       return <MapPanel trace={trace} run={activeRun} agents={agents} />
     return null
@@ -399,54 +374,11 @@ export function OperatorEnvironment() {
               style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}
             >
               <span>{sidebarSection}</span>
-              <button
-                className="p-0.5 rounded hover:bg-white/5 transition-colors cursor-pointer"
-                style={{ color: sidebarSplit ? C.text : C.muted }}
-                onClick={() => setSidebarSplit((v) => !v)}
-                title="Toggle split sidebar"
-              >
-                <Rows2 size={14} />
-              </button>
             </div>
 
-            {sidebarSplit ? (
-              <>
-                <div style={{ height: sidebarV.size }} className="overflow-y-auto shrink-0 min-h-0">
-                  {renderSidebarSection(sidebarSection)}
-                </div>
-                <div
-                  className="h-1 cursor-row-resize shrink-0 hover:bg-accent/30 active:bg-accent/50 transition-colors"
-                  onMouseDown={sidebarV.onMouseDown}
-                />
-                <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                  <div
-                    className="flex items-center gap-0.5 px-2 py-1 shrink-0 select-none"
-                    style={{ borderTop: `1px solid ${C.border}` }}
-                  >
-                    {(["explorer", "runs", "agents", "notifications"] as SidebarSection[]).map((s) => (
-                      <button
-                        key={s}
-                        className="px-1.5 py-0.5 text-[13px] rounded capitalize cursor-pointer"
-                        style={{
-                          color: sidebarBottomSection === s ? C.text : C.dim,
-                          background: sidebarBottomSection === s ? C.elevated : "transparent",
-                        }}
-                        onClick={() => setSidebarBottomSection(s)}
-                      >
-                        {s === "notifications" ? "notif" : s}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex-1 overflow-y-auto min-h-0">
-                    {renderSidebarSection(sidebarBottomSection)}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 overflow-y-auto min-h-0">
-                {renderSidebarSection(sidebarSection)}
-              </div>
-            )}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {renderSidebarSection(sidebarSection)}
+            </div>
           </TipProvider>
           </div>
         )}
@@ -495,8 +427,6 @@ export function OperatorEnvironment() {
                   current={editorTab}
                   onChange={setEditorTab}
                   trace={trace}
-                  dagNodes={dagNodes}
-                  steps={steps}
                 />
                 <div className="flex-1" />
                 <button
@@ -525,8 +455,6 @@ export function OperatorEnvironment() {
                       current={editorRightTab}
                       onChange={setEditorRightTab}
                       trace={trace}
-                      dagNodes={dagNodes}
-                      steps={steps}
                     />
                   </div>
                   {/* Right content */}
@@ -553,7 +481,7 @@ export function OperatorEnvironment() {
               style={{ height: bottom.size, borderTop: `1px solid ${C.borderSolid}` }}
             >
               <div className="flex items-center shrink-0 select-none" style={{ borderBottom: `1px solid ${C.border}` }}>
-                {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
+                {(["output", "audit", "problems"] as BottomTab[]).map((tab) => (
                   <button
                     key={tab}
                     className="px-3 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"
@@ -577,7 +505,7 @@ export function OperatorEnvironment() {
                 <div className="flex-1" />
                 {bottomSplit && (
                   <>
-                    {(["output", "audit", "feed", "problems"] as BottomTab[]).map((tab) => (
+                    {(["output", "audit", "problems"] as BottomTab[]).map((tab) => (
                       <button
                         key={`r-${tab}`}
                         className="px-2 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"
@@ -698,7 +626,7 @@ export function OperatorEnvironment() {
             className="inline-block w-2 h-2 rounded-full"
             style={{ background: connected ? C.success : C.error }}
           />
-          {connected ? "connected" : "offline"}
+          {connected ? "WS" : "offline"}
         </span>
         {activeRun && (
           <>
@@ -707,16 +635,27 @@ export function OperatorEnvironment() {
           </>
         )}
         {llm && <span>{llm.provider}/{llm.model}</span>}
-        {health && <span>sys: {health.status}</span>}
+        {health && <span>sys:{health.status}</span>}
         <span className="opacity-60">│</span>
-        <span>tools: {tools.length}</span>
-        <span>agents: {agents.length}</span>
-        <span>policies: {policies.length}</span>
+        <span>T:{tools.length}</span>
+        <span>A:{agents.length}</span>
+        <span>P:{policies.length}</span>
+        {activeRun && (
+          <>
+            <span className="opacity-60">│</span>
+            <span>{fmtK(liveUsage.totalTokens)}tk</span>
+            <span>{liveUsage.llmCalls}calls</span>
+            <span>{steps.length}steps</span>
+            {activeRun.createdAt && (
+              <span>{dur(activeRun.createdAt, activeRun.completedAt)}</span>
+            )}
+          </>
+        )}
         {usage && (
           <>
             <span className="opacity-60">│</span>
-            <span>{fmtTokens(usage.totals.totalTokens)} tokens total</span>
-            <span>{usage.totals.runCount} runs</span>
+            <span>{fmtTokens(usage.totals.totalTokens)}tk total</span>
+            <span>{usage.totals.runCount}runs</span>
           </>
         )}
         <div className="flex-1" />

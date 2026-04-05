@@ -94,6 +94,10 @@ interface AppState {
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   clearPendingInput: () => void
 
+  // Raw WebSocket event log (platform dev)
+  wsEventLog: WsEvent[]
+  clearWsEventLog: () => void
+
   // WebSocket event handler
   handleWsEvent: (event: WsEvent) => void
 }
@@ -127,6 +131,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "trajectory-replay": { w: 8, h: 10, minW: 5, minH: 6 },
   "operator-env": { w: 12, h: 10, minW: 6, minH: 6 },
   "debug-inspector": { w: 6, h: 10, minW: 4, minH: 6 },
+  "platform-dev-log": { w: 8, h: 10, minW: 4, minH: 5 },
 }
 
 const GRID_COLS = 12
@@ -342,10 +347,17 @@ export const useStore = create<AppState>()(
       pendingInput: null,
       clearPendingInput: () => set({ pendingInput: null }),
 
+      // Raw WS event log
+      wsEventLog: [],
+      clearWsEventLog: () => set({ wsEventLog: [] }),
+
       // WebSocket event handler
       handleWsEvent: (event) => {
         const { type, data, timestamp } = event
         const store = get()
+
+        // Record raw event for PlatformDevLog
+        set({ wsEventLog: [...store.wsEventLog, event].slice(-2000) })
 
         // Log every event
         store.addLog({ level: "info", message: `[${type}] ${JSON.stringify(data)}`, timestamp })

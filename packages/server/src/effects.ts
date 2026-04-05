@@ -16,6 +16,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { chmod, readFile, stat, unlink, writeFile } from "node:fs/promises"
 import { getDb } from "./db.js"
+import { broadcast } from "./ws.js"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -175,6 +176,18 @@ export function recordEffect(opts: {
     created_at: effect.createdAt,
   })
 
+  broadcast({
+    type: "effect.recorded",
+    data: {
+      id: effect.id,
+      runId: effect.runId,
+      kind: effect.kind,
+      tool: effect.tool,
+      target: effect.target,
+      status: effect.status,
+    },
+  })
+
   return effect
 }
 
@@ -231,6 +244,17 @@ export async function captureSnapshot(
     file_path: snapshot.filePath,
     file_mode: fileMode,
     created_at: snapshot.createdAt,
+  })
+
+  broadcast({
+    type: "snapshot.captured",
+    data: {
+      id: snapshot.id,
+      effectId: snapshot.effectId,
+      runId: snapshot.runId,
+      filePath: snapshot.filePath,
+      hash: snapshot.hash,
+    },
   })
 
   return snapshot
