@@ -317,13 +317,23 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
   try {
     const answer = await child.run(spec.goal)
 
+    // Detect if the child hit its iteration limit without completing
+    const hitLimit = answer.startsWith("Agent stopped after")
+
     ctx.onChildUsage?.(child.usage, child.llmCalls)
     ctx.onChildTrace?.({
       kind: "delegation-end",
       depth: ctx.depth + 1,
-      status: "done",
+      status: hitLimit ? "error" : "done",
       answer: answer.slice(0, 500),
+      ...(hitLimit ? { error: "Child agent exhausted iteration budget" } : {}),
     })
+
+    if (hitLimit) {
+      return `⚠ DELEGATION INCOMPLETE — child agent used all ${maxIter} iterations without finishing.\n` +
+        `Child's last output: ${answer}\n` +
+        `You MUST either re-delegate with a simpler/clearer goal, or handle this task directly.`
+    }
 
     return answer
   } catch (err) {

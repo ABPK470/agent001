@@ -464,7 +464,7 @@ async function main() {
     browser = await puppeteer.launch({
       headless: true,
       executablePath: "/usr/bin/chromium",
-      args: ["--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
     });
     const page = await browser.newPage();
 

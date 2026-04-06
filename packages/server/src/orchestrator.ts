@@ -11,28 +11,28 @@
  */
 
 import {
-  Agent,
-  askUserTool,
-  completeRun,
-  createDelegateTools,
-  createEngineServices,
-  createRun,
-  failRun,
-  governTool,
-  PolicyEffect,
-  runCompleted,
-  runFailed,
-  runStarted,
-  startPlanning,
-  startRunning,
-  type DelegateContext,
-  type DomainEvent,
-  type EngineServices,
-  type LLMClient,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
+    Agent,
+    askUserTool,
+    completeRun,
+    createDelegateTools,
+    createEngineServices,
+    createRun,
+    failRun,
+    governTool,
+    PolicyEffect,
+    runCompleted,
+    runFailed,
+    runStarted,
+    startPlanning,
+    startRunning,
+    type DelegateContext,
+    type DomainEvent,
+    type EngineServices,
+    type LLMClient,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
@@ -652,7 +652,10 @@ export class AgentOrchestrator {
         // Fires right after LLM responds, BEFORE tool execution.
         // This ensures iteration + thinking appear before CALL/RSLT in the trace.
 
-        this.saveTrace(runId, { kind: "iteration", current: iteration + 1, max: 30 })
+        const iterEntry = { kind: "iteration" as const, current: iteration + 1, max: 30 }
+        this.saveTrace(runId, iterEntry)
+        broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry: iterEntry } })
+
         if (content) {
           this.saveTrace(runId, { kind: "thinking", text: content })
           broadcast({
@@ -666,14 +669,16 @@ export class AgentOrchestrator {
         prevTotalTokens = agent.usage.totalTokens
 
         // Save per-iteration token snapshot to trace
-        this.saveTrace(runId, {
-          kind: "usage",
+        const usageEntry = {
+          kind: "usage" as const,
           iterationTokens,
           totalTokens: agent.usage.totalTokens,
           promptTokens: agent.usage.promptTokens,
           completionTokens: agent.usage.completionTokens,
           llmCalls: agent.llmCalls,
-        })
+        }
+        this.saveTrace(runId, usageEntry)
+        broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry: usageEntry } })
 
         broadcast({
           type: "usage.updated",

@@ -200,8 +200,15 @@ export const browserCheckTool: Tool = {
       page.on("console", (msg) => {
         const type = msg.type()
         const text = msg.text()
-        if (type === "error") consoleErrors.push(text)
-        else if (type === "warn") consoleWarnings.push(text)
+        if (type === "error") {
+          // Enrich generic "Failed to load resource" with the actual URL
+          const location = msg.location()
+          if (text.includes("Failed to load resource") && location?.url) {
+            consoleErrors.push(`${text} — URL: ${location.url}`)
+          } else {
+            consoleErrors.push(text)
+          }
+        } else if (type === "warn") consoleWarnings.push(text)
       })
 
       // Collect uncaught exceptions
@@ -220,7 +227,7 @@ export const browserCheckTool: Tool = {
 
       if (!response || !response.ok()) {
         const status = response?.status() ?? "unknown"
-        return `Error: Page returned HTTP ${status}`
+        return `Error: Page returned HTTP ${status} for ${pageUrl}`
       }
 
       // Wait for any async errors

@@ -191,6 +191,10 @@ function findBestFit(
   return { i: widgetId, x: best.x, y: best.y, w: best.w, h: best.h, minW, minH }
 }
 
+// ── Trace batching buffer ────────────────────────────────────────
+const traceBuf: TraceEntry[] = []
+let traceFlushScheduled = false
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useStore = create<AppState>()(
@@ -310,10 +314,26 @@ export const useStore = create<AppState>()(
       liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 },
       resetLiveUsage: () => set({ liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 } }),
 
-      // Trace
+      // Trace — batched via microtask to avoid per-entry re-renders
       trace: [],
-      addTrace: (entry) => set((s) => ({ trace: [...s.trace, entry] })),
-      setTrace: (trace) => set({ trace }),
+      addTrace: (entry) => {
+        traceBuf.push(entry)
+        if (!traceFlushScheduled) {
+          traceFlushScheduled = true
+          queueMicrotask(() => {
+            const batch = traceBuf.splice(0)
+            traceFlushScheduled = false
+            if (batch.length > 0) {
+              set((s) => ({ trace: s.trace.concat(batch) }))
+            }
+          })
+        }
+      },
+      setTrace: (trace) => {
+        // When setTrace is called, discard any pending buffered entries
+        traceBuf.length = 0
+        set({ trace })
+      },
 
       // Notifications
       notifications: [],
@@ -493,10 +513,8 @@ export const useStore = create<AppState>()(
             break
 
           case "agent.thinking": {
-            const iteration = data["iteration"] as number | undefined
-            if (iteration !== undefined) {
-              store.addTrace({ kind: "iteration", current: iteration + 1, max: 30 })
-            }
+            // iteration + usage entries now arrive via debug.trace; this
+            // handler only adds the thinking content + log entry.
             const content = data["content"] as string
             if (content) {
               store.addTrace({ kind: "thinking", text: content })
@@ -579,6 +597,8 @@ export const useStore = create<AppState>()(
           }
 
           case "usage.updated": {
+            // Usage trace entry now arrives via debug.trace; this handler
+            // only updates the liveUsage summary counters.
             set({
               liveUsage: {
                 promptTokens: (data["promptTokens"] as number) ?? 0,

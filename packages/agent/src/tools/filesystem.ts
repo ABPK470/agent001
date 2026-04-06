@@ -15,7 +15,7 @@
  *   write_file only creates/overwrites — no unlink/rmdir.
  */
 
-import { lstat, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve, sep } from "node:path"
 import type { Tool } from "../types.js"
 
@@ -171,6 +171,8 @@ export const writeFileTool: Tool = {
     try {
       // Use safePathResolved to prevent writing through symlinks that point outside workspace
       const target = await safePathResolved(String(args.path))
+      // Auto-create parent directories (safe: target is already validated under _basePath)
+      await mkdir(dirname(target), { recursive: true })
       await writeFile(target, String(args.content), "utf-8")
       return `Successfully wrote to ${args.path}`
     } catch (err) {

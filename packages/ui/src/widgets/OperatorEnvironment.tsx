@@ -128,9 +128,16 @@ export function OperatorEnvironment() {
       if (detail.audit) setAudit(detail.audit)
       if (detail.logs) setLogs(detail.logs)
     }).catch(() => {})
-    api.getRunTrace(activeRunId).then((entries) => {
-      if (Array.isArray(entries) && entries.length > 0) setTrace(entries as unknown as TraceEntry[])
-    }).catch(() => {})
+    // Only fetch trace from DB for completed/historical runs.
+    // For running/pending runs, trace streams in live via WS — fetching
+    // from DB would clobber the live stream with a stale snapshot.
+    const run = useStore.getState().runs.find((r) => r.id === activeRunId)
+    const isLive = !run || run.status === "running" || run.status === "pending"
+    if (!isLive) {
+      api.getRunTrace(activeRunId).then((entries) => {
+        if (Array.isArray(entries) && entries.length > 0) setTrace(entries as unknown as TraceEntry[])
+      }).catch(() => {})
+    }
   }, [activeRunId, setSteps, setAudit, setLogs, setTrace])
   // ── Derived data ──────────────────────────────────────────────
   const activeRun = runs.find((r) => r.id === activeRunId)
