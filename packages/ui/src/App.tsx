@@ -30,6 +30,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "debug-inspector": "Debug Inspector",
   "platform-dev-log": "Platform Dev Log",
   "universe-viz": "Sequence",
+  "code-seq-diagram": "Code Seq",
 }
 
 const SYNC_CHANNEL = "agent001-active-run"

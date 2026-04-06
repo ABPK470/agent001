@@ -120,6 +120,7 @@ export type WidgetType =
   | "debug-inspector"
   | "platform-dev-log"
   | "universe-viz"
+  | "code-seq-diagram"
 
 export interface ViewConfig {
   id: string

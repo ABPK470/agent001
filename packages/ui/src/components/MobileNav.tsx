@@ -41,6 +41,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "debug-inspector": Bug,
   "platform-dev-log": ScrollText,
   "universe-viz": Globe,
+  "code-seq-diagram": GitBranch,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -59,6 +60,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "debug-inspector": "Debug",
   "platform-dev-log": "DevLog",
   "universe-viz": "Sequence",
+  "code-seq-diagram": "CodeSeq",
 }
 
 interface Props {

@@ -8,6 +8,7 @@ import { AgentChat } from "./AgentChat"
 import { AgentTrace } from "./AgentTrace"
 import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
+import { CodeSeqDiagram } from "./CodeSeqDiagram"
 import { CommandCenter } from "./CommandCenter"
 import { DebugInspector } from "./DebugInspector"
 import { LiveLogs } from "./LiveLogs"
@@ -36,4 +37,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "debug-inspector": DebugInspector,
   "platform-dev-log": PlatformDevLog,
   "universe-viz": UniverseViz,
+  "code-seq-diagram": CodeSeqDiagram,
 }
