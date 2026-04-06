@@ -90,6 +90,8 @@ interface Msg {
 function buildMessages(showPhase: Set<string>): Msg[] {
   const msgs: Msg[] = []
   const add = (m: Msg) => {
+    // Notes (phase headers) are always visible — they serve as toggle controls
+    if (m.kind === "note") { msgs.push(m); return }
     if (m.phase && !showPhase.has(m.phase)) return
     msgs.push(m)
   }
@@ -312,25 +314,24 @@ function buildMessages(showPhase: Set<string>): Msg[] {
 // ── All phases ───────────────────────────────────────────────────
 
 const ALL_PHASES = [
-  { id: "entry",      label: "1. Request Entry",        color: P.http },
-  { id: "init",       label: "2. Queue & Init",         color: P.queue },
-  { id: "prompt",     label: "3. Prompt Assembly",      color: P.prompt },
-  { id: "agent",      label: "4. Agent Loop",           color: P.agent },
-  { id: "delegation", label: "5. Delegation",           color: P.delegate },
-  { id: "completion", label: "6. Completion",           color: P.memory },
-  { id: "broadcast",  label: "7. WS Broadcast",        color: P.ws },
+  { id: "entry",      label: "1. Request Entry" },
+  { id: "init",       label: "2. Queue & Init" },
+  { id: "prompt",     label: "3. Prompt Assembly" },
+  { id: "agent",      label: "4. Agent Loop" },
+  { id: "delegation", label: "5. Delegation" },
+  { id: "completion", label: "6. Completion" },
+  { id: "broadcast",  label: "7. WS Broadcast" },
 ]
 
 // ── Geometry constants ───────────────────────────────────────────
 
-const HEADER_H = 56
-const ROW_H = 26
-const ARROW_HEAD = 6
-const NOTE_PAD = 6
+const NOTE_PAD = 8
+const HEADER_H = 40
+const ROW_H = 28
+const ARROW_HEAD = 7
 const ALT_PAD = 4
-const SELF_W = 28
-const MIN_LANE_W = 72
-const MAX_LANE_W = 130
+const SELF_W = 30
+const MIN_LANE_W = 80
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -377,19 +378,26 @@ export function CodeSeqDiagram() {
   // Build messages based on enabled phases
   const msgs = useMemo(() => buildMessages(enabledPhases), [enabledPhases])
 
-  // Calculate lane width
+  // Calculate lane width — fill full container, with a minimum per lane
   const laneW = useMemo(() => {
-    const ideal = (containerW - 32) / LIFELINES.length
-    return Math.max(MIN_LANE_W, Math.min(MAX_LANE_W, ideal))
+    return Math.max(MIN_LANE_W, (containerW) / LIFELINES.length)
   }, [containerW])
 
-  const totalW = LIFELINES.length * laneW
+  const totalW = Math.max(LIFELINES.length * laneW, containerW)
   const bodyH = msgs.length * ROW_H + 40
 
   // Lane center positions
   const laneX = useCallback((idx: number) => idx * laneW + laneW / 2, [laneW])
 
-  // Render sticky header (lifeline boxes)
+  // Map note labels back to phase ids for toggle
+  const phaseIdFromNote = useCallback((label: string): string | null => {
+    for (const ph of ALL_PHASES) {
+      if (label.includes(ph.label.replace(/^\d+\.\s*/, ""))) return ph.id
+    }
+    return null
+  }, [])
+
+  // Render sticky header (plain text column headers)
   const headerContent = useMemo(() => {
     const elements: JSX.Element[] = []
     for (let i = 0; i < LIFELINES.length; i++) {
@@ -397,42 +405,35 @@ export function CodeSeqDiagram() {
       const cx = laneX(i)
       elements.push(
         <g key={`hdr-${ll.id}`}>
-          <rect
-            x={cx - laneW / 2 + 6}
-            y={6}
-            width={laneW - 12}
-            height={HEADER_H - 12}
-            rx={3}
-            fill={ll.color + "08"}
-            stroke={ll.color + "40"}
-            strokeWidth={1}
-          />
           <text
             x={cx}
-            y={23}
+            y={16}
             textAnchor="middle"
-            fill={ll.color}
-            fontSize={11}
+            fill={P.text}
+            fontSize={13}
             fontWeight={600}
             fontFamily="monospace"
-            opacity={0.9}
           >
             {ll.label}
           </text>
           <text
             x={cx}
-            y={37}
+            y={31}
             textAnchor="middle"
-            fill={P.text}
-            fontSize={8.5}
+            fill={P.dim}
+            fontSize={9}
             fontFamily="monospace"
-            opacity={0.45}
           >
             {ll.file}
           </text>
         </g>
       )
     }
+    // Bottom separator line
+    elements.push(
+      <line key="hdr-sep" x1={0} y1={HEADER_H - 1} x2={LIFELINES.length * laneW} y2={HEADER_H - 1}
+        stroke={P.dimmer} strokeWidth={1} />
+    )
     return elements
   }, [laneW, laneX])
 
@@ -464,7 +465,10 @@ export function CodeSeqDiagram() {
       const ti = laneIdx(m.to)
       const fromX = laneX(fi)
       const toX = laneX(ti)
-      const arrowColor = m.color ?? P.arrow
+      // Color: explicit override > source lifeline color for calls > gray for returns
+      const fromLL = LIFELINES[fi]
+      const arrowColor = m.color
+        ?? (m.kind === "call" || m.kind === "self" ? fromLL?.color ?? P.arrow : P.arrow)
 
       // Clickable background
       elements.push(
@@ -481,19 +485,26 @@ export function CodeSeqDiagram() {
       )
 
       if (m.kind === "note") {
-        // Phase header note
-        const textLen = m.label.length * 6.5
+        // Phase header note — clickable toggle
+        const phaseId = phaseIdFromNote(m.label)
+        const isOn = phaseId ? enabledPhases.has(phaseId) : true
+        const textLen = m.label.length * 7
         const noteX = totalW / 2 - textLen / 2 - NOTE_PAD
         elements.push(
-          <g key={`note-${r}`}>
+          <g
+            key={`note-${r}`}
+            style={{ cursor: phaseId ? "pointer" : undefined }}
+            opacity={isOn ? 1 : 0.35}
+            onClick={phaseId ? () => togglePhase(phaseId) : undefined}
+          >
             <rect
               x={noteX}
-              y={y - 9}
+              y={y - 10}
               width={textLen + NOTE_PAD * 2}
-              height={18}
+              height={20}
               rx={3}
               fill={P.noteB}
-              stroke={P.dim}
+              stroke={isOn ? P.dim : P.dimmer}
               strokeWidth={0.5}
             />
             <text
@@ -501,9 +512,10 @@ export function CodeSeqDiagram() {
               y={y + 4}
               textAnchor="middle"
               fill={P.text}
-              fontSize={10}
+              fontSize={11}
               fontWeight={700}
               fontFamily="monospace"
+              textDecoration={isOn ? "none" : "line-through"}
             >
               {m.label}
             </text>
@@ -536,17 +548,17 @@ export function CodeSeqDiagram() {
             <rect
               x={indent + 4}
               y={y - ROW_H / 2}
-              width={Math.min(m.label.length * 6 + 12, 280)}
-              height={16}
+              width={Math.min(m.label.length * 6.5 + 14, 300)}
+              height={18}
               fill={P.note}
               stroke={P.dim}
               strokeWidth={0.5}
             />
             <text
               x={indent + 12}
-              y={y + 3}
+              y={y + 4}
               fill={P.text}
-              fontSize={9}
+              fontSize={10}
               fontWeight={600}
               fontFamily="monospace"
             >
@@ -570,7 +582,7 @@ export function CodeSeqDiagram() {
               x={(altDepth - 1) * ALT_PAD + 12}
               y={y - 3}
               fill={P.text}
-              fontSize={9}
+              fontSize={10}
               fontFamily="monospace"
               opacity={0.8}
             >
@@ -600,22 +612,22 @@ export function CodeSeqDiagram() {
               x={cx + SELF_W + 4}
               y={y}
               fill={arrowColor}
-              fontSize={9}
+              fontSize={11}
               fontFamily="monospace"
               fontWeight={600}
             >
-              {trunc(m.label, Math.floor((totalW - cx - SELF_W - 12) / 5.5))}
+              {trunc(m.label, Math.floor((totalW - cx - SELF_W - 12) / 6.5))}
             </text>
             {m.detail && (
               <text
                 x={cx + SELF_W + 4}
-                y={y + 10}
+                y={y + 12}
                 fill={P.text}
-                fontSize={8}
+                fontSize={9}
                 fontFamily="monospace"
                 opacity={0.6}
               >
-                {trunc(m.detail, Math.floor((totalW - cx - SELF_W - 12) / 5))}
+                {trunc(m.detail, Math.floor((totalW - cx - SELF_W - 12) / 5.5))}
               </text>
             )}
           </g>
@@ -652,26 +664,26 @@ export function CodeSeqDiagram() {
             )}
             <text
               x={(left + right) / 2}
-              y={y - 4}
+              y={y - 5}
               textAnchor="middle"
               fill={m.dashed ? P.text : arrowColor}
-              fontSize={9}
+              fontSize={11}
               fontWeight={m.dashed ? 400 : 600}
               fontFamily="monospace"
             >
-              {trunc(m.label, Math.floor((right - left) / 5.5))}
+              {trunc(m.label, Math.floor((right - left) / 6.5))}
             </text>
             {m.detail && selectedRow === r && (
               <text
                 x={(left + right) / 2}
-                y={y + 11}
+                y={y + 12}
                 textAnchor="middle"
                 fill={P.text}
-                fontSize={8}
+                fontSize={9}
                 fontFamily="monospace"
                 opacity={0.7}
               >
-                {trunc(m.detail, Math.floor((right - left) / 4.5))}
+                {trunc(m.detail, Math.floor((right - left) / 5.5))}
               </text>
             )}
           </g>
@@ -680,62 +692,27 @@ export function CodeSeqDiagram() {
     }
 
     return elements
-  }, [msgs, laneW, laneX, totalW, bodyH, selectedRow])
+  }, [msgs, laneW, laneX, totalW, bodyH, selectedRow, enabledPhases, togglePhase, phaseIdFromNote])
 
   // ── Detail panel for selected row ──
   const selectedMsg = selectedRow !== null ? msgs[selectedRow] : null
 
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-zinc-950 text-zinc-300 overflow-hidden">
-      {/* SVG diagram with sticky header */}
+      {/* Scrollable area: sticky lifeline headers + diagram body */}
       <div className="flex-1 overflow-auto">
         <div style={{ width: totalW, minWidth: totalW, position: "relative" }}>
-          {/* Sticky zone: phase toggles + lifeline headers */}
-          <div style={{ position: "sticky", top: 0, zIndex: 10, background: P.bg }}>
-            {/* Phase toggles — minimal inline row */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "4px 8px", borderBottom: `1px solid ${P.dimmer}`,
-            }}>
-              {ALL_PHASES.map((ph) => {
-                const on = enabledPhases.has(ph.id)
-                return (
-                  <button
-                    key={ph.id}
-                    onClick={() => togglePhase(ph.id)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 3,
-                      background: "none", border: "none", cursor: "pointer",
-                      padding: "1px 0", fontFamily: "monospace", fontSize: 10,
-                      color: on ? ph.color : P.dim,
-                      opacity: on ? 1 : 0.5,
-                      transition: "opacity 0.15s, color 0.15s",
-                    }}
-                  >
-                    <span style={{
-                      width: 5, height: 5, borderRadius: "50%",
-                      background: on ? ph.color : P.dim,
-                      display: "inline-block", flexShrink: 0,
-                    }} />
-                    {ph.label}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Lifeline headers */}
-            <svg
-              width={totalW}
-              height={HEADER_H}
-              viewBox={`0 0 ${totalW} ${HEADER_H}`}
-              className="font-mono"
-              style={{ display: "block" }}
-            >
-              <rect width={totalW} height={HEADER_H} fill={P.bg} />
-              {/* Subtle bottom fade line */}
-              <line x1={0} y1={HEADER_H - 0.5} x2={totalW} y2={HEADER_H - 0.5} stroke={P.dimmer} strokeWidth={1} />
-              {headerContent}
-            </svg>
-          </div>
+          {/* Sticky lifeline headers only */}
+          <svg
+            width={totalW}
+            height={HEADER_H}
+            viewBox={`0 0 ${totalW} ${HEADER_H}`}
+            className="font-mono"
+            style={{ position: "sticky", top: 0, zIndex: 10, display: "block", background: P.bg }}
+          >
+            <rect width={totalW} height={HEADER_H} fill={P.bg} />
+            {headerContent}
+          </svg>
           <svg
             ref={svgRef}
             width={totalW}
