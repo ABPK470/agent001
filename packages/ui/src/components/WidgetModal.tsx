@@ -26,6 +26,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "operator-env": "Operator Environment",
   "debug-inspector": "Debug Inspector",
   "platform-dev-log": "Platform Dev Log",
+  "universe-viz": "Sequence",
 }
 
 export function WidgetModal() {

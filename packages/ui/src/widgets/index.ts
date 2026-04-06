@@ -18,6 +18,7 @@ import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
 import { ToolStats } from "./ToolStats"
 import { TrajectoryReplay } from "./TrajectoryReplay"
+import { UniverseViz } from "./UniverseViz"
 
 export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "agent-chat": AgentChat,
@@ -34,4 +35,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "operator-env": OperatorEnvironment,
   "debug-inspector": DebugInspector,
   "platform-dev-log": PlatformDevLog,
+  "universe-viz": UniverseViz,
 }

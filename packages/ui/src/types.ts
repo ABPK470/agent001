@@ -119,6 +119,7 @@ export type WidgetType =
   | "operator-env"
   | "debug-inspector"
   | "platform-dev-log"
+  | "universe-viz"
 
 export interface ViewConfig {
   id: string

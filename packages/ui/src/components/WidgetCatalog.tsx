@@ -12,6 +12,7 @@ import {
     Clock,
     Eye,
     Film,
+    Globe,
     History,
     LayoutDashboard,
     LayoutGrid,
@@ -46,6 +47,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "operator-env", label: "Operator Environment", desc: "IDE-style integrated dashboard — all data, resizable panels, full control", Icon: LayoutDashboard },
   { type: "debug-inspector", label: "Debug Inspector", desc: "Deep-dive debugging: system prompts, tool resolution, LLM requests & responses", Icon: Bug },
   { type: "platform-dev-log", label: "Platform Dev Log", desc: "Real-time firehose of every WebSocket event — every operation, every query", Icon: Terminal },
+  { type: "universe-viz", label: "Sequence Diagram", desc: "Real-time UML sequence diagram of all platform events with lifelines, arrows, and activation boxes", Icon: Globe },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

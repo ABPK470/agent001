@@ -132,6 +132,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "operator-env": { w: 12, h: 10, minW: 6, minH: 6 },
   "debug-inspector": { w: 6, h: 10, minW: 4, minH: 6 },
   "platform-dev-log": { w: 8, h: 10, minW: 4, minH: 5 },
+  "universe-viz": { w: 8, h: 10, minW: 5, minH: 6 },
 }
 
 const GRID_COLS = 12

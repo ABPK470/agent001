@@ -1,0 +1,662 @@
+/**
+ * UniverseViz — Real-time Sequence Diagram
+ *
+ * Renders ALL WebSocket events as a UML-style sequence diagram
+ * with five participant lifelines: Agent, LLM, Tools, Delegates,
+ * and System.
+ *
+ * Visual elements:
+ *   - Dashed vertical lifelines per participant
+ *   - Activation boxes showing active periods (tool execution,
+ *     LLM processing, run lifetime, delegation)
+ *   - Directed horizontal arrows between lifelines for interactions
+ *   - Small circle markers for single-lane events
+ *   - Monospace labels with adaptive truncation
+ *
+ * Data source: wsEventLog (every WS event, up to 2000)
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useStore } from "../store"
+import type { WsEvent } from "../types"
+
+// ── Palette ──────────────────────────────────────────────────────
+
+const P = {
+  agent:    "#7B6FC7",
+  llm:      "#D17877",
+  tools:    "#E09145",
+  delegate: "#5B98D1",
+  system:   "#6B7280",
+  ok:       "#5DB078",
+  err:      "#E05252",
+  warn:     "#D4A64A",
+  text:     "#a1a1aa",
+  dim:      "#3f3f46",
+  dimmer:   "#27272a",
+  bg:       "#09090b",
+}
+
+// ── Lane definitions ─────────────────────────────────────────────
+
+const LANES = [
+  { id: "agent",    label: "Agent",     color: P.agent },
+  { id: "llm",      label: "LLM",       color: P.llm },
+  { id: "tools",    label: "Tools",     color: P.tools },
+  { id: "delegate", label: "Delegates", color: P.delegate },
+  { id: "system",   label: "System",    color: P.system },
+] as const
+
+const LANE_N = LANES.length
+const ROW_H  = 26
+const TIME_W = 58
+
+// ── Scoped CSS ───────────────────────────────────────────────────
+
+const CSS = `
+.uv-row .uv-hit { fill: transparent }
+.uv-row:hover .uv-hit { fill: rgba(255,255,255,0.025) }
+.uv-row.uv-sel .uv-hit { fill: rgba(255,255,255,0.05) }
+`
+
+// ── Diagram row type ─────────────────────────────────────────────
+
+interface DRow {
+  time:  string        // formatted HH:MM:SS
+  lane:  number        // 0–4 (index into LANES)
+  label: string        // short text
+  color: string        // marker / arrow color
+  arrow?: number       // target lane index (absent = no arrow)
+  raw:   WsEvent       // original event for detail panel
+}
+
+// ── Activation box type ──────────────────────────────────────────
+
+interface Activation {
+  lane:     number
+  startIdx: number
+  endIdx:   number
+  color:    string
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function fmtTok(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+}
+
+function fmtMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`
+}
+
+function trunc(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) + "..." : s
+}
+
+function ts(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    })
+  } catch {
+    return ""
+  }
+}
+
+function arrowHeadPts(tipX: number, tipY: number, right: boolean): string {
+  const dx = right ? -5 : 5
+  return `${tipX},${tipY} ${tipX + dx},${tipY - 3} ${tipX + dx},${tipY + 3}`
+}
+
+// ── Event classifier ─────────────────────────────────────────────
+//    Maps every WsEvent type to a lane, label, color, and optional
+//    arrow target. Handles all known event types; unknown events
+//    fall through to the System lane.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function classify(ev: WsEvent): DRow {
+  const base = { raw: ev, time: ts(ev.timestamp) }
+  const t = ev.type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = ev.data as Record<string, any>
+
+  // ── Run lifecycle ──────────────────────────────────────────────
+  if (t === "run.queued") {
+    const goal = d.goal ? `: ${trunc(String(d.goal), 40)}` : ""
+    return { ...base, lane: 0, label: `queued${goal}`, color: P.agent }
+  }
+  if (t === "run.started")
+    return { ...base, lane: 0, label: "run started", color: P.agent }
+  if (t === "run.completed")
+    return { ...base, lane: 0, label: `completed (${fmtTok(d.totalTokens ?? 0)} tok, ${d.stepCount ?? 0} steps)`, color: P.ok }
+  if (t === "run.failed")
+    return { ...base, lane: 0, label: `failed: ${trunc(String(d.error ?? ""), 50)}`, color: P.err }
+  if (t === "run.cancelled")
+    return { ...base, lane: 0, label: "cancelled", color: P.warn }
+
+  // ── Agent thinking ─────────────────────────────────────────────
+  if (t === "agent.thinking")
+    return { ...base, lane: 0, label: "thinking", color: P.agent, arrow: 1 }
+
+  // ── Steps (tool execution) ─────────────────────────────────────
+  if (t === "step.started")
+    return { ...base, lane: 0, label: String(d.action ?? d.name ?? "tool"), color: P.tools, arrow: 2 }
+  if (t === "step.completed")
+    return { ...base, lane: 2, label: "result", color: P.ok, arrow: 0 }
+  if (t === "step.failed")
+    return { ...base, lane: 2, label: `error: ${trunc(String(d.error ?? ""), 40)}`, color: P.err, arrow: 0 }
+
+  // ── Token usage ────────────────────────────────────────────────
+  if (t === "usage.updated")
+    return { ...base, lane: 1, label: `${fmtTok(d.totalTokens ?? 0)} tok / ${d.llmCalls ?? 0} calls`, color: P.llm }
+
+  // ── Debug trace (rich trace entries) ───────────────────────────
+  if (t === "debug.trace") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const entry = d.entry as Record<string, any> | undefined
+    const kind = entry?.kind as string | undefined
+
+    if (kind === "goal")
+      return { ...base, lane: 0, label: `goal: ${trunc(String(entry?.text ?? ""), 50)}`, color: P.agent }
+    if (kind === "iteration")
+      return { ...base, lane: 0, label: `iteration ${entry?.current}/${entry?.max}`, color: P.agent }
+    if (kind === "thinking")
+      return { ...base, lane: 0, label: `thinking: ${trunc(String(entry?.text ?? ""), 50)}`, color: P.agent }
+    if (kind === "tool-call")
+      return { ...base, lane: 0, label: `${entry?.tool}(${trunc(String(entry?.argsSummary ?? ""), 30)})`, color: P.tools, arrow: 2 }
+    if (kind === "tool-result")
+      return { ...base, lane: 2, label: trunc(String(entry?.text ?? "result"), 50), color: P.ok, arrow: 0 }
+    if (kind === "tool-error")
+      return { ...base, lane: 2, label: trunc(String(entry?.text ?? "error"), 50), color: P.err, arrow: 0 }
+    if (kind === "answer")
+      return { ...base, lane: 0, label: `answer: ${trunc(String(entry?.text ?? ""), 60)}`, color: P.ok }
+    if (kind === "error")
+      return { ...base, lane: 0, label: `error: ${trunc(String(entry?.text ?? ""), 60)}`, color: P.err }
+    if (kind === "usage")
+      return { ...base, lane: 1, label: `${fmtTok(entry?.iterationTokens ?? 0)} iter / ${fmtTok(entry?.totalTokens ?? 0)} total`, color: P.llm }
+
+    // LLM request / response
+    if (kind === "llm-request")
+      return { ...base, lane: 0, label: `llm-req (${entry?.messageCount ?? 0} msgs, ${entry?.toolCount ?? 0} tools)`, color: P.llm, arrow: 1 }
+    if (kind === "llm-response") {
+      const dur = entry?.durationMs ? fmtMs(entry.durationMs) : ""
+      const tok = entry?.usage?.totalTokens ? fmtTok(entry.usage.totalTokens) + " tok" : ""
+      const tc = entry?.toolCalls?.length ? `${entry.toolCalls.length} calls` : ""
+      const parts = [dur, tok, tc].filter(Boolean).join(", ")
+      return { ...base, lane: 1, label: `llm-resp (${parts})`, color: P.llm, arrow: 0 }
+    }
+
+    // Delegation (sequential)
+    if (kind === "delegation-start") {
+      const agent = entry?.agentName ? ` [${entry.agentName}]` : entry?.agentId ? ` [${entry.agentId}]` : ""
+      return { ...base, lane: 0, label: `delegate${agent}: ${trunc(String(entry?.goal ?? ""), 35)}`, color: P.delegate, arrow: 3 }
+    }
+    if (kind === "delegation-end") {
+      const ok = entry?.status === "done"
+      return { ...base, lane: 3, label: `delegate ${entry?.status}${entry?.answer ? ": " + trunc(String(entry.answer), 30) : ""}`, color: ok ? P.ok : P.err, arrow: 0 }
+    }
+    if (kind === "delegation-iteration")
+      return { ...base, lane: 3, label: `sub-iter ${entry?.iteration}/${entry?.maxIterations}`, color: P.delegate }
+
+    // Delegation (parallel)
+    if (kind === "delegation-parallel-start")
+      return { ...base, lane: 0, label: `parallel (${entry?.taskCount} tasks)`, color: P.delegate, arrow: 3 }
+    if (kind === "delegation-parallel-end")
+      return { ...base, lane: 3, label: `parallel: ${entry?.fulfilled}/${entry?.taskCount} ok`, color: (entry?.rejected ?? 0) > 0 ? P.warn : P.ok, arrow: 0 }
+
+    // User input
+    if (kind === "user-input-request")
+      return { ...base, lane: 0, label: `input: ${trunc(String(entry?.question ?? ""), 40)}`, color: P.warn }
+    if (kind === "user-input-response")
+      return { ...base, lane: 0, label: `response: ${trunc(String(entry?.text ?? ""), 40)}`, color: P.agent }
+
+    // Debug / inspector
+    if (kind === "system-prompt")
+      return { ...base, lane: 4, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.system }
+    if (kind === "tools-resolved") {
+      const names = (entry?.tools as { name: string }[])?.map((x) => x.name).join(", ") ?? ""
+      return { ...base, lane: 4, label: `${entry?.tools?.length ?? 0} tools: ${trunc(names, 50)}`, color: P.system }
+    }
+
+    return { ...base, lane: 4, label: `trace: ${kind ?? "unknown"}`, color: P.dim }
+  }
+
+  // ── Delegation events (non-trace) ──────────────────────────────
+  if (t === "delegation.started") {
+    const agent = d.agentName ? ` [${d.agentName}]` : d.agentId ? ` [${d.agentId}]` : ""
+    return { ...base, lane: 0, label: `delegate${agent}: ${trunc(String(d.goal ?? ""), 30)}`, color: P.delegate, arrow: 3 }
+  }
+  if (t === "delegation.ended")
+    return { ...base, lane: 3, label: `delegate ${d.status}`, color: d.status === "done" ? P.ok : P.err, arrow: 0 }
+  if (t === "delegation.iteration")
+    return { ...base, lane: 3, label: `sub-iter ${d.iteration}/${d.maxIterations}`, color: P.delegate }
+  if (t === "delegation.parallel-started")
+    return { ...base, lane: 0, label: `parallel (${d.taskCount} tasks)`, color: P.delegate, arrow: 3 }
+  if (t === "delegation.parallel-ended")
+    return { ...base, lane: 3, label: `parallel done (${d.fulfilled}/${d.taskCount})`, color: (d.rejected ?? 0) > 0 ? P.warn : P.ok, arrow: 0 }
+
+  // ── User input ─────────────────────────────────────────────────
+  if (t === "user_input.required")
+    return { ...base, lane: 0, label: `input: ${trunc(String(d.question ?? ""), 40)}`, color: P.warn }
+  if (t === "user_input.response")
+    return { ...base, lane: 0, label: "user responded", color: P.agent }
+
+  // ── System events ──────────────────────────────────────────────
+  if (t === "ws.connected")
+    return { ...base, lane: 4, label: `connected (v${d.version ?? "?"}, ${d.clients ?? 0} clients)`, color: P.system }
+  if (t === "audit")
+    return { ...base, lane: 4, label: `audit: ${d.action}`, color: P.system }
+  if (t === "notification")
+    return { ...base, lane: 4, label: `notify: ${trunc(String(d.title ?? ""), 40)}`, color: P.warn }
+  if (t === "approval.required")
+    return { ...base, lane: 4, label: `approval: ${d.toolName}`, color: P.warn }
+  if (t === "checkpoint.saved")
+    return { ...base, lane: 4, label: `checkpoint (iter ${d.iteration})`, color: P.system }
+
+  // ── Catch-all categories ───────────────────────────────────────
+  if (t.startsWith("memory.") || t.startsWith("procedural."))
+    return { ...base, lane: 4, label: t, color: P.system }
+  if (t.startsWith("effect."))
+    return { ...base, lane: 4, label: t, color: P.system }
+  if (t.startsWith("conversation."))
+    return { ...base, lane: 4, label: t, color: P.system }
+
+  // ── Unknown ────────────────────────────────────────────────────
+  return { ...base, lane: 4, label: t, color: P.dim }
+}
+
+// ── Activation box builder ───────────────────────────────────────
+//    Scans classified rows to find paired start/end events and
+//    produces activation rectangles on the appropriate lifelines.
+
+function buildActivations(rows: DRow[]): Activation[] {
+  const result: Activation[] = []
+  const openSteps = new Map<string, number>()
+  const openLlm: number[] = []
+  let runStart: number | null = null
+  let delegStart: number | null = null
+
+  for (let i = 0; i < rows.length; i++) {
+    const ev = rows[i].raw
+    const t = ev.type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = ev.data as Record<string, any>
+
+    // Run activation on Agent lane
+    if (t === "run.started") runStart = i
+    if ((t === "run.completed" || t === "run.failed" || t === "run.cancelled") && runStart != null) {
+      result.push({ lane: 0, startIdx: runStart, endIdx: i, color: P.agent })
+      runStart = null
+    }
+
+    // Step activation on Tools lane
+    if (t === "step.started" && d.stepId) openSteps.set(String(d.stepId), i)
+    if ((t === "step.completed" || t === "step.failed") && d.stepId) {
+      const start = openSteps.get(String(d.stepId))
+      if (start != null) {
+        result.push({ lane: 2, startIdx: start, endIdx: i, color: t === "step.failed" ? P.err : P.tools })
+        openSteps.delete(String(d.stepId))
+      }
+    }
+
+    // LLM activation on LLM lane
+    if (t === "debug.trace") {
+      const kind = (d.entry as { kind?: string } | undefined)?.kind
+      if (kind === "llm-request") openLlm.push(i)
+      if (kind === "llm-response" && openLlm.length > 0) {
+        const start = openLlm.pop()!
+        result.push({ lane: 1, startIdx: start, endIdx: i, color: P.llm })
+      }
+    }
+
+    // Delegation activation on Delegates lane
+    if (t === "delegation.started" || (t === "debug.trace" && (d.entry as { kind?: string } | undefined)?.kind === "delegation-start"))
+      delegStart = i
+    if (
+      (t === "delegation.ended" || (t === "debug.trace" && (d.entry as { kind?: string } | undefined)?.kind === "delegation-end"))
+      && delegStart != null
+    ) {
+      result.push({ lane: 3, startIdx: delegStart, endIdx: i, color: P.delegate })
+      delegStart = null
+    }
+  }
+
+  // Close open activations at the end (still running)
+  const last = rows.length - 1
+  if (runStart != null) result.push({ lane: 0, startIdx: runStart, endIdx: last, color: P.agent })
+  for (const [, start] of openSteps) result.push({ lane: 2, startIdx: start, endIdx: last, color: P.tools })
+  for (const start of openLlm) result.push({ lane: 1, startIdx: start, endIdx: last, color: P.llm })
+  if (delegStart != null) result.push({ lane: 3, startIdx: delegStart, endIdx: last, color: P.delegate })
+
+  return result
+}
+
+// ── Component ────────────────────────────────────────────────────
+
+export function UniverseViz() {
+  const wsEventLog = useStore((s) => s.wsEventLog)
+
+  // ── Lane visibility toggles ──────────────────────────────────
+
+  const [visibility, setVisibility] = useState(() => LANES.map(() => true))
+  const toggleLane = useCallback(
+    (i: number) => setVisibility((prev) => prev.map((v, j) => (j === i ? !v : v))),
+    [],
+  )
+
+  // ── Container width tracking ─────────────────────────────────
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollRef    = useRef<HTMLDivElement>(null)
+  const [svgW, setSvgW]           = useState(600)
+  const [showLabels, setShowLabels] = useState(true)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => {
+      const w = e.contentRect.width
+      setSvgW(w)
+      setShowLabels(w >= 400)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // ── Auto-scroll ──────────────────────────────────────────────
+
+  const [autoScroll, setAutoScroll] = useState(true)
+  const userScrolledRef = useRef(false)
+
+  useEffect(() => {
+    if (!autoScroll || !scrollRef.current) return
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [wsEventLog.length, autoScroll])
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    if (!atBottom && !userScrolledRef.current) {
+      userScrolledRef.current = true
+      setAutoScroll(false)
+    }
+    if (atBottom && userScrolledRef.current) {
+      userScrolledRef.current = false
+      setAutoScroll(true)
+    }
+  }, [])
+
+  // ── Classify all events ──────────────────────────────────────
+
+  const allRows = useMemo(() => wsEventLog.map(classify), [wsEventLog])
+
+  // ── Filter by lane visibility ────────────────────────────────
+
+  const visibleRows = useMemo(
+    () => allRows.filter((r) => visibility[r.lane]),
+    [allRows, visibility],
+  )
+
+  // ── Activation boxes ─────────────────────────────────────────
+
+  const activations = useMemo(
+    () => buildActivations(visibleRows),
+    [visibleRows],
+  )
+
+  // ── Selected row for detail panel ────────────────────────────
+
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+
+  // clear selection if it becomes out of range
+  useEffect(() => {
+    if (selectedIdx != null && selectedIdx >= visibleRows.length)
+      setSelectedIdx(null)
+  }, [selectedIdx, visibleRows.length])
+
+  // ── Lane geometry ────────────────────────────────────────────
+
+  const laneW = (svgW - TIME_W) / LANE_N
+  const laneCenters = useMemo(
+    () => LANES.map((_, i) => TIME_W + laneW * i + laneW / 2),
+    [laneW],
+  )
+
+  const svgH = visibleRows.length * ROW_H + 10
+
+  // ── Render ───────────────────────────────────────────────────
+
+  return (
+    <div ref={containerRef} className="flex flex-col h-full overflow-hidden bg-zinc-950">
+      <style>{CSS}</style>
+
+      {/* ── Controls ── */}
+      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800 shrink-0 text-[11px]">
+        <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">
+          Sequence
+        </span>
+        <span className="text-zinc-600 font-mono">{visibleRows.length}</span>
+        <div className="flex-1" />
+        {/* Lane filters */}
+        <div className="flex items-center gap-1">
+          {LANES.map((l, i) => (
+            <button
+              key={l.id}
+              onClick={() => toggleLane(i)}
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium transition-opacity"
+              style={{
+                color: visibility[i] ? l.color : "#52525b",
+                background: visibility[i] ? `${l.color}18` : "transparent",
+                opacity: visibility[i] ? 1 : 0.5,
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        {/* Auto-scroll toggle */}
+        <button
+          onClick={() => {
+            setAutoScroll(true)
+            userScrolledRef.current = false
+            if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+          }}
+          className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+          style={{
+            color: autoScroll ? P.ok : "#52525b",
+            background: autoScroll ? `${P.ok}18` : "transparent",
+          }}
+        >
+          Auto
+        </button>
+      </div>
+
+      {/* ── Lane headers (sticky) ── */}
+      <div className="flex shrink-0 border-b border-zinc-800/60">
+        <div
+          className="shrink-0 px-2 py-1 text-[10px] text-zinc-600 font-medium"
+          style={{ width: TIME_W }}
+        >
+          Time
+        </div>
+        {LANES.map((l, i) => (
+          <div
+            key={l.id}
+            className="flex-1 text-center py-1 text-[10px] font-semibold tracking-wide"
+            style={{
+              color: visibility[i] ? l.color : P.dim,
+              opacity: visibility[i] ? 0.8 : 0.3,
+            }}
+          >
+            {l.label}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Scrollable diagram ── */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        onScroll={handleScroll}
+      >
+        {visibleRows.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
+            Awaiting events...
+          </div>
+        ) : (
+          <svg
+            width={svgW}
+            height={svgH}
+            className="block"
+            style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace" }}
+          >
+            {/* ── Lifeline dashes ── */}
+            {LANES.map(
+              (l, i) =>
+                visibility[i] && (
+                  <line
+                    key={l.id}
+                    x1={laneCenters[i]}
+                    y1={0}
+                    x2={laneCenters[i]}
+                    y2={svgH}
+                    stroke={P.dimmer}
+                    strokeWidth={1}
+                    strokeDasharray="2 4"
+                  />
+                ),
+            )}
+
+            {/* ── Activation boxes ── */}
+            {activations.map((a, i) => (
+              <rect
+                key={`act-${i}`}
+                x={laneCenters[a.lane] - 4}
+                y={a.startIdx * ROW_H + 2}
+                width={8}
+                height={(a.endIdx - a.startIdx) * ROW_H + ROW_H - 4}
+                rx={1.5}
+                fill={a.color}
+                opacity={0.10}
+              />
+            ))}
+
+            {/* ── Event rows ── */}
+            {visibleRows.map((row, idx) => {
+              const y = idx * ROW_H + ROW_H / 2
+              const cx = laneCenters[row.lane]
+              const isSelected = selectedIdx === idx
+              const hasArrow = row.arrow != null
+
+              // Adaptive label truncation based on available space
+              const maxLabelLen = hasArrow
+                ? Math.max(10, Math.floor(Math.abs(laneCenters[row.arrow!] - cx) / 5.5))
+                : 60
+
+              return (
+                <g
+                  key={idx}
+                  className={`uv-row${isSelected ? " uv-sel" : ""}`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setSelectedIdx(isSelected ? null : idx)}
+                >
+                  {/* Hit area + selection/hover highlight */}
+                  <rect
+                    className="uv-hit"
+                    x={0}
+                    y={idx * ROW_H}
+                    width={svgW}
+                    height={ROW_H}
+                  />
+
+                  {/* Timestamp */}
+                  <text
+                    x={TIME_W - 6}
+                    y={y + 3.5}
+                    textAnchor="end"
+                    fontSize={9.5}
+                    fill="#52525b"
+                  >
+                    {row.time}
+                  </text>
+
+                  {/* Arrow line + arrowhead */}
+                  {hasArrow && (
+                    <>
+                      <line
+                        x1={cx}
+                        y1={y}
+                        x2={laneCenters[row.arrow!]}
+                        y2={y}
+                        stroke={row.color}
+                        strokeWidth={1.2}
+                        opacity={0.65}
+                      />
+                      <polygon
+                        points={arrowHeadPts(
+                          laneCenters[row.arrow!],
+                          y,
+                          row.arrow! > row.lane,
+                        )}
+                        fill={row.color}
+                        opacity={0.65}
+                      />
+                    </>
+                  )}
+
+                  {/* Marker circle */}
+                  <circle cx={cx} cy={y} r={3} fill={row.color} />
+
+                  {/* Label */}
+                  {showLabels && (
+                    <text
+                      x={
+                        hasArrow
+                          ? (cx + laneCenters[row.arrow!]) / 2
+                          : cx + 8
+                      }
+                      y={hasArrow ? y - 7 : y + 3.5}
+                      textAnchor={hasArrow ? "middle" : "start"}
+                      fontSize={9.5}
+                      fill={isSelected ? "#d4d4d8" : "#71717a"}
+                    >
+                      {trunc(row.label, maxLabelLen)}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+          </svg>
+        )}
+      </div>
+
+      {/* ── Detail panel ── */}
+      {selectedIdx != null && visibleRows[selectedIdx] && (
+        <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/80 px-3 py-2 max-h-40 overflow-y-auto">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="text-[11px] font-semibold font-mono"
+              style={{ color: visibleRows[selectedIdx].color }}
+            >
+              {visibleRows[selectedIdx].raw.type}
+            </span>
+            <span className="text-[10px] text-zinc-600">
+              {visibleRows[selectedIdx].raw.timestamp}
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={() => setSelectedIdx(null)}
+              className="text-zinc-600 hover:text-zinc-400 text-[10px] font-medium"
+            >
+              close
+            </button>
+          </div>
+          <pre className="text-[10px] text-zinc-500 font-mono whitespace-pre-wrap break-all leading-relaxed">
+            {JSON.stringify(visibleRows[selectedIdx].raw.data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}

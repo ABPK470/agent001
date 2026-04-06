@@ -12,6 +12,7 @@ import {
     Clock,
     Film,
     GitBranch,
+    Globe,
     History,
     LayoutDashboard,
     LayoutGrid,
@@ -39,6 +40,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "operator-env": LayoutDashboard,
   "debug-inspector": Bug,
   "platform-dev-log": ScrollText,
+  "universe-viz": Globe,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
@@ -56,6 +58,7 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "operator-env": "IOE",
   "debug-inspector": "Debug",
   "platform-dev-log": "DevLog",
+  "universe-viz": "Sequence",
 }
 
 interface Props {
