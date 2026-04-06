@@ -319,7 +319,7 @@ export function buildSearchResults(
 // ── Chat message types ───────────────────────────────────────────
 
 export interface ChatMessage {
-  role: "user" | "assistant" | "tool" | "system" | "input-request"
+  role: "user" | "assistant" | "thinking" | "tool" | "system" | "input-request"
   content: string
   toolName?: string
   options?: string[]
@@ -330,7 +330,7 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
   const msgs: ChatMessage[] = []
   for (const e of trace) {
     if (e.kind === "goal") msgs.push({ role: "user", content: e.text ?? "" })
-    else if (e.kind === "thinking") msgs.push({ role: "assistant", content: e.text })
+    else if (e.kind === "thinking") msgs.push({ role: "thinking", content: e.text })
     else if (e.kind === "tool-call")
       msgs.push({ role: "tool", content: `${e.tool}(${e.argsSummary || "..."})`, toolName: e.tool })
     else if (e.kind === "tool-result") msgs.push({ role: "tool", content: e.text })

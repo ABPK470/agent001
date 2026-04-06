@@ -3,7 +3,7 @@
  * Supports simple mode (user goal → final answer) and detailed mode (full trace inline).
  */
 
-import { AlertCircle, HelpCircle, MessageSquare, Send, User, Wrench } from "lucide-react"
+import { AlertCircle, Brain, HelpCircle, MessageSquare, Send, User, Wrench } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
@@ -192,6 +192,24 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
         <div
           className="flex-1 rounded-lg px-3 py-2 text-[13px]"
           style={{ background: C.elevated, color: C.text }}
+        >
+          {msg.content}
+        </div>
+      </div>
+    )
+  }
+  if (msg.role === "thinking") {
+    return (
+      <div className="flex items-start gap-2">
+        <div
+          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+          style={{ background: C.accent + "20" }}
+        >
+          <Brain size={14} style={{ color: C.accent }} />
+        </div>
+        <div
+          className="flex-1 rounded-lg px-3 py-2 text-[13px] whitespace-pre-wrap"
+          style={{ background: C.accent + "08", color: C.muted, border: `1px solid ${C.accent}20` }}
         >
           {msg.content}
         </div>

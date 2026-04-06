@@ -213,6 +213,19 @@ export function OperatorEnvironment() {
     }
   }, [activeRun])
 
+  // ── Comparison state ───────────────────────────────────────────
+  const [compareResult, setCompareResult] = useState<{
+    sameGoal: boolean
+    toolOverlap: number
+    toolCallDelta: number
+    iterationDelta: number
+    errorRateDelta: number
+    moreEfficient: "a" | "b" | "equal"
+    summary: string
+  } | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState<string | null>(null)
+
   // ── Activity bar items ────────────────────────────────────────
   const activityItems: Array<{ id: SidebarSection; Icon: LucideIcon; label: string; badge?: number }> = [
     { id: "runs", Icon: History, label: "Runs" },
@@ -225,15 +238,24 @@ export function OperatorEnvironment() {
   // ═════════════════════════════════════════════════════════════════
 
   const handleCompare = useCallback(async (idA: string, idB: string) => {
-    // TODO: open comparison view in center panel
-    console.log("Compare", idA, idB)
+    setCompareResult(null)
+    setCompareError(null)
+    setCompareLoading(true)
+    try {
+      const result = await api.compareTrajectories(idA, idB)
+      setCompareResult(result)
+    } catch (err) {
+      setCompareError(err instanceof Error ? err.message : "Comparison failed")
+    }
+    setCompareLoading(false)
   }, [])
 
   const renderSidebarSection = (section: SidebarSection) => {
     if (section === "runs")
       return <RunsPanel runs={runs} activeRunId={activeRunId} onSelect={setActiveRun} />
     if (section === "compare")
-      return <ComparePanel runs={runs} onCompare={handleCompare} />
+      return <ComparePanel runs={runs} onCompare={handleCompare}
+        result={compareResult} loading={compareLoading} error={compareError} />
     if (section === "details")
       return (
         <DetailsPanel run={activeRun} agents={agents} tools={tools}

@@ -14,6 +14,8 @@
 
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useStore } from "../store"
+import type { TraceEntry } from "../types"
 
 // ── Palette ──────────────────────────────────────────────────────
 
@@ -41,6 +43,7 @@ const P = {
   self:    "#52525b",
   note:    "#1c1c20",
   noteB:   "#2a2a30",
+  accent:  "#7B6FC7",
 }
 
 // ── Lifeline definitions ─────────────────────────────────────────
@@ -323,6 +326,79 @@ const ALL_PHASES = [
   { id: "broadcast",  label: "7. WS Broadcast" },
 ]
 
+// ── Trace → Phase mapping ────────────────────────────────────────
+
+/** Map the latest trace entry to which diagram phase is currently active */
+function traceToPhase(trace: TraceEntry[]): {
+  activePhase: string | null
+  completedPhases: Set<string>
+  activeLifelines: Set<string>
+} {
+  const completedPhases = new Set<string>()
+  let activePhase: string | null = null
+  const activeLifelines = new Set<string>()
+
+  // Phase ordering for completion tracking
+  const phaseOrder = ["entry", "init", "prompt", "agent", "delegation", "completion", "broadcast"]
+
+  for (const e of trace) {
+    switch (e.kind) {
+      case "goal":
+        activePhase = "entry"
+        activeLifelines.add("http").add("orch").add("db")
+        break
+      case "iteration":
+        // Mark earlier phases as completed
+        for (const p of phaseOrder) {
+          if (p === "agent") break
+          completedPhases.add(p)
+        }
+        activePhase = "agent"
+        activeLifelines.add("agent").add("orch")
+        break
+      case "thinking":
+        activePhase = "agent"
+        activeLifelines.add("agent").add("llm")
+        break
+      case "tool-call":
+        activePhase = "agent"
+        activeLifelines.add("agent").add("tools").add("govern").add("effects")
+        break
+      case "tool-result":
+        activePhase = "agent"
+        activeLifelines.add("tools").add("agent")
+        break
+      case "tool-error":
+        activePhase = "agent"
+        activeLifelines.add("tools").add("agent")
+        break
+      case "delegation-start":
+        activePhase = "delegation"
+        activeLifelines.add("delegate").add("agent").add("queue")
+        break
+      case "delegation-end":
+        activePhase = "delegation"
+        activeLifelines.add("delegate").add("agent")
+        break
+      case "answer":
+        for (const p of phaseOrder) {
+          if (p === "completion") break
+          completedPhases.add(p)
+        }
+        activePhase = "completion"
+        activeLifelines.add("orch").add("memory").add("db").add("ws")
+        break
+      case "error":
+        // Keep current phase
+        break
+    }
+  }
+
+  if (activePhase) completedPhases.delete(activePhase)
+
+  return { activePhase, completedPhases, activeLifelines }
+}
+
 // ── Geometry constants ───────────────────────────────────────────
 
 const NOTE_PAD = 8
@@ -348,11 +424,43 @@ function trunc(s: string, max: number): string {
 export function CodeSeqDiagram() {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [containerW, setContainerW] = useState(1200)
   const [selectedRow, setSelectedRow] = useState<number | null>(null)
   const [enabledPhases, setEnabledPhases] = useState<Set<string>>(
     () => new Set(ALL_PHASES.map((p) => p.id))
   )
+
+  // ── Subscribe to store ──
+  const trace = useStore((s) => s.trace)
+  const runs = useStore((s) => s.runs)
+  const isRunning = runs.some((r) => r.status === "running" || r.status === "queued")
+
+  // Compute active phase/lifelines from trace
+  const { activePhase, completedPhases, activeLifelines } = useMemo(
+    () => traceToPhase(trace),
+    [trace]
+  )
+
+  // Map each message row to a phase id (for highlighting)
+  const getMsgPhase = useCallback((msgs: Msg[]): Map<number, string> => {
+    const map = new Map<number, string>()
+    let currentPhase: string | null = null
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i]
+      if (m.kind === "note") {
+        // Phase header note — extract phase id
+        for (const ph of ALL_PHASES) {
+          if (m.label.includes(ph.label.replace(/^\d+\.\s*/, ""))) {
+            currentPhase = ph.id
+            break
+          }
+        }
+      }
+      if (currentPhase) map.set(i, currentPhase)
+    }
+    return map
+  }, [])
 
   // Responsive width
   useEffect(() => {
@@ -377,6 +485,7 @@ export function CodeSeqDiagram() {
 
   // Build messages based on enabled phases
   const msgs = useMemo(() => buildMessages(enabledPhases), [enabledPhases])
+  const msgPhaseMap = useMemo(() => getMsgPhase(msgs), [getMsgPhase, msgs])
 
   // Calculate lane width — fill full container, with a minimum per lane
   const laneW = useMemo(() => {
@@ -403,13 +512,17 @@ export function CodeSeqDiagram() {
     for (let i = 0; i < LIFELINES.length; i++) {
       const ll = LIFELINES[i]
       const cx = laneX(i)
+      const isActive = isRunning && activeLifelines.has(ll.id)
       elements.push(
         <g key={`hdr-${ll.id}`}>
+          {isActive && (
+            <circle cx={cx} cy={24} r={20} fill={ll.color + "15"} />
+          )}
           <text
             x={cx}
             y={24}
             textAnchor="middle"
-            fill={P.text}
+            fill={isActive ? ll.color : P.text}
             fontSize={13}
             fontWeight={600}
             fontFamily="monospace"
@@ -435,7 +548,7 @@ export function CodeSeqDiagram() {
         stroke={P.dimmer} strokeWidth={1} />
     )
     return elements
-  }, [laneW, laneX, totalW])
+  }, [laneW, laneX, totalW, isRunning, activeLifelines])
 
   // Render body (lifelines + messages)
   const bodyContent = useMemo(() => {
@@ -470,6 +583,12 @@ export function CodeSeqDiagram() {
       const arrowColor = m.color
         ?? (m.kind === "call" || m.kind === "self" ? fromLL?.color ?? P.arrow : P.arrow)
 
+      // Phase-based opacity when a run is active
+      const rowPhase = msgPhaseMap.get(r)
+      const isRowActive = isRunning && rowPhase === activePhase
+      const isRowCompleted = isRunning && rowPhase != null && completedPhases.has(rowPhase)
+      const rowOpacity = !isRunning ? 1 : isRowActive ? 1 : isRowCompleted ? 0.5 : 0.2
+
       // Clickable background
       elements.push(
         <rect
@@ -478,8 +597,9 @@ export function CodeSeqDiagram() {
           y={y - ROW_H / 2}
           width={totalW}
           height={ROW_H}
-          fill={selectedRow === r ? "rgba(255,255,255,0.04)" : "transparent"}
+          fill={isRowActive ? "rgba(123,111,199,0.06)" : selectedRow === r ? "rgba(255,255,255,0.04)" : "transparent"}
           style={{ cursor: "pointer" }}
+          opacity={rowOpacity}
           onClick={() => setSelectedRow(selectedRow === r ? null : r)}
         />
       )
@@ -691,16 +811,79 @@ export function CodeSeqDiagram() {
       }
     }
 
+    // ── Active phase progress indicator ──
+    if (isRunning && activePhase) {
+      // Find the last row in the active phase
+      let lastActiveRow = -1
+      for (let r = 0; r < msgs.length; r++) {
+        if (msgPhaseMap.get(r) === activePhase) lastActiveRow = r
+      }
+      if (lastActiveRow >= 0) {
+        const markerY = lastActiveRow * ROW_H + ROW_H
+        elements.push(
+          <line
+            key="progress-line"
+            x1={0}
+            y1={markerY}
+            x2={totalW}
+            y2={markerY}
+            stroke={P.accent}
+            strokeWidth={1.5}
+            opacity={0.6}
+            strokeDasharray="6 3"
+          />
+        )
+        elements.push(
+          <text
+            key="progress-label"
+            x={8}
+            y={markerY - 4}
+            fill={P.accent}
+            fontSize={9}
+            fontWeight={700}
+            fontFamily="monospace"
+          >
+            ▶ ACTIVE
+          </text>
+        )
+      }
+    }
+
     return elements
-  }, [msgs, laneW, laneX, totalW, bodyH, selectedRow, enabledPhases, togglePhase, phaseIdFromNote])
+  }, [msgs, msgPhaseMap, laneW, laneX, totalW, bodyH, selectedRow, enabledPhases, togglePhase, phaseIdFromNote, isRunning, activePhase, completedPhases])
 
   // ── Detail panel for selected row ──
   const selectedMsg = selectedRow !== null ? msgs[selectedRow] : null
 
+  // ── Auto-scroll to active phase ──
+  useEffect(() => {
+    if (!isRunning || !activePhase || !scrollRef.current) return
+    // Find first row in the active phase
+    for (let r = 0; r < msgs.length; r++) {
+      if (msgPhaseMap.get(r) === activePhase) {
+        const targetY = r * ROW_H + HEADER_H - 40
+        scrollRef.current.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" })
+        break
+      }
+    }
+  }, [activePhase, isRunning, msgs, msgPhaseMap])
+
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-zinc-950 text-zinc-300 overflow-hidden">
+      {/* LIVE indicator */}
+      {isRunning && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-1.5" style={{ background: "rgba(123,111,199,0.08)", borderBottom: `1px solid ${P.accent}30` }}>
+          <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: P.accent }} />
+          <span className="text-[11px] font-mono font-semibold tracking-wide" style={{ color: P.accent }}>
+            LIVE — {activePhase ? ALL_PHASES.find(p => p.id === activePhase)?.label ?? activePhase : "starting"}
+          </span>
+          <span className="text-[10px] font-mono" style={{ color: P.dim }}>
+            {trace.length} event{trace.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
       {/* Scrollable area: sticky lifeline headers + diagram body */}
-      <div className="flex-1 overflow-auto">
+      <div ref={scrollRef} className="flex-1 overflow-auto">
         <div style={{ width: totalW, minWidth: totalW, position: "relative" }}>
           {/* Sticky lifeline headers only */}
           <svg

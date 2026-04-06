@@ -2,15 +2,15 @@
  * IOE editor-area panels — Trace (DAG-style), LLM Calls, Map, EditorTabs.
  */
 
-import { ChevronDown, ChevronRight, Copy } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-  C,
-  fmtK,
-  statusDot,
-  type EditorTab,
+    C,
+    fmtK,
+    statusDot,
+    type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -44,7 +44,7 @@ export function EditorTabs({
 
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
     { id: "trace", label: "Trace", count: visibleTraceCount },
-    { id: "llm-calls", label: "LLM Calls", count: llmCallCount },
+    { id: "llm-calls", label: "Agent Loop", count: llmCallCount },
     { id: "map", label: "Map" },
   ]
 
@@ -149,8 +149,8 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
         {/* Node dot */}
         <div className="absolute left-[7px] top-1.5 w-2.5 h-2.5 rounded-full" style={{ background: C.accent }} />
         <div className="pb-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.accent }}>Goal</span>
-          <span style={{ color: C.text }}>{goalEntry.text}</span>
+          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.accent }}>GOAL</span>
+          <span className="text-[13px]" style={{ color: C.text }}>{goalEntry.text}</span>
         </div>
       </div>
     )
@@ -163,8 +163,8 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
       <div className="relative pl-6 pt-1 pb-2">
         <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.success }} />
         <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
-          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.success }}>Completed</span>
-          <div className="whitespace-pre-wrap leading-relaxed mt-1" style={{ color: C.textSecondary }}>{ansEntry.text}</div>
+          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.success }}>DONE</span>
+          <div className="text-[13px] whitespace-pre-wrap leading-relaxed mt-1" style={{ color: C.textSecondary }}>{ansEntry.text}</div>
         </div>
       </div>
     )
@@ -177,8 +177,8 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
       <div className="relative pl-6 pt-1 pb-2">
         <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.coral }} />
         <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
-          <span className="text-[11px] font-semibold uppercase tracking-wide mr-2" style={{ color: C.coral }}>Failed</span>
-          <span style={{ color: C.coral, opacity: 0.8 }}>{errEntry.text}</span>
+          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.coral }}>FAIL</span>
+          <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{errEntry.text}</span>
         </div>
       </div>
     )
@@ -218,14 +218,14 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
             {iterEntry.current}
           </span>
         </div>
-        <span className="text-[11px] uppercase tracking-wide" style={{ color: C.muted }}>
-          iter {iterEntry.current}/{iterEntry.max}
+        <span className="text-[12px] font-mono" style={{ color: C.muted }}>
+          ITER {iterEntry.current}/{iterEntry.max}
         </span>
         {toolCalls > 0 && (
-          <span className="text-[11px]" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
+          <span className="text-[12px] font-mono" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
         )}
         {usage && (
-          <span className="text-[11px]" style={{ color: C.dim }}>+{fmtK(usage.iterationTokens)} tk</span>
+          <span className="text-[12px] font-mono" style={{ color: C.dim }}>+{fmtK(usage.iterationTokens)} tk</span>
         )}
         <span className="text-[10px] ml-auto" style={{ color: C.dim }}>
           {collapsed ? "▸" : "▾"}
@@ -250,8 +250,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "thinking") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.accent}30` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.accent }}>THK</span>
-        <span className="whitespace-pre-wrap" style={{ color: C.textSecondary, fontSize: 12 }}>{e.text}</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.accent }}>THK</span>
+        <span className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
   }
@@ -263,9 +263,10 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.warning }} />
-          <span className="text-[12px] font-medium" style={{ color: C.warning }}>{e.tool}</span>
+          <span className="text-[12px] font-mono font-semibold" style={{ color: C.warning }}>CALL</span>
+          <span className="text-[13px] font-mono" style={{ color: C.warning }}>{e.tool}</span>
           {!expanded && e.argsSummary && (
-            <span className="text-[12px] truncate" style={{ color: C.dim }}>{e.argsSummary}</span>
+            <span className="text-[13px] truncate" style={{ color: C.dim }}>{e.argsSummary}</span>
           )}
           <span className="text-[10px] ml-auto" style={{ color: C.dim }}>{expanded ? "▾" : "▸"}</span>
         </div>
@@ -288,9 +289,9 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1 h-1 rounded-full shrink-0" style={{ background: C.success + "80" }} />
-          <span className="text-[11px]" style={{ color: C.success }}>result</span>
+          <span className="text-[12px] font-mono font-semibold" style={{ color: C.success }}>RSLT</span>
           {!expanded && (
-            <span className="text-[12px] truncate" style={{ color: C.muted }}>
+            <span className="text-[13px] truncate" style={{ color: C.muted }}>
               {e.text.length > 100 ? e.text.slice(0, 100) + "..." : e.text}
             </span>
           )}
@@ -310,14 +311,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-3">
         <span className="w-1 h-1 rounded-full inline-block mr-1.5" style={{ background: C.coral }} />
-        <span className="text-[11px] mr-1" style={{ color: C.coral }}>error</span>
-        <span className="text-[12px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
+        <span className="text-[12px] font-mono font-semibold mr-1" style={{ color: C.coral }}>ERR</span>
+        <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "usage") {
     return (
-      <div className="flex items-center gap-3 py-0.5 text-[11px]" style={{ color: C.dim }}>
+      <div className="flex items-center gap-3 py-0.5 text-[12px] font-mono" style={{ color: C.dim }}>
         <span>+{fmtK(e.iterationTokens)} tk (total {fmtK(e.totalTokens)})</span>
         <span>{e.llmCalls} calls</span>
       </div>
@@ -327,14 +328,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-medium" style={{ color: "#6CB4EE" }}>DELEGATE ▶</span>
-          {e.agentName && <span className="text-[11px]" style={{ color: C.textSecondary }}>[{e.agentName}]</span>}
-          <span className="text-[11px]" style={{ color: C.dim }}>depth {e.depth}</span>
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#6CB4EE" }}>DELEG ▶</span>
+          {e.agentName && <span className="text-[13px]" style={{ color: C.textSecondary }}>[{e.agentName}]</span>}
+          <span className="text-[12px] font-mono" style={{ color: C.dim }}>d{e.depth}</span>
         </div>
-        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
           {e.goal.length > 200 ? e.goal.slice(0, 200) + "..." : e.goal}
         </div>
-        <div className="text-[10px] mt-0.5 pl-2" style={{ color: C.dim }}>
+        <div className="text-[12px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
           tools: {e.tools.slice(0, 6).join(", ")}{e.tools.length > 6 ? ` +${e.tools.length - 6}` : ""}
         </div>
       </div>
@@ -343,33 +344,33 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-end") {
     return (
       <div className="py-1 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>DELEGATE ◀</span>
-        <span className="text-[11px]" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>DELEG ◀</span>
+        <span className="text-[12px] font-mono" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
         {e.answer && (
-          <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
+          <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
             {e.answer.length > 150 ? e.answer.slice(0, 150) + "..." : e.answer}
           </div>
         )}
         {e.error && (
-          <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.coral }}>{e.error}</div>
+          <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.coral }}>{e.error}</div>
         )}
       </div>
     )
   }
   if (e.kind === "delegation-iteration") {
     return (
-      <div className="text-[11px] pl-4 py-0.5" style={{ color: C.dim }}>
-        ↳ child iteration {e.iteration}/{e.maxIterations}
+      <div className="text-[12px] font-mono pl-4 py-0.5" style={{ color: C.dim }}>
+        ↳ ITER {e.iteration}/{e.maxIterations}
       </div>
     )
   }
   if (e.kind === "delegation-parallel-start") {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>PARALLEL ▶</span>
-        <span className="text-[11px]" style={{ color: C.muted }}>{e.taskCount} tasks</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ▶</span>
+        <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.taskCount} tasks</span>
         {e.goals.map((goal, i) => (
-          <div key={i} className="pl-4 text-[12px]" style={{ color: C.muted }}>• {truncate(goal, 80)}</div>
+          <div key={i} className="pl-4 text-[13px]" style={{ color: C.muted }}>• {truncate(goal, 80)}</div>
         ))}
       </div>
     )
@@ -377,24 +378,24 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-end") {
     return (
       <div className="py-0.5 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: "#6CB4EE" }}>PARALLEL ◀</span>
-        <span className="text-[11px]" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ◀</span>
+        <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
       </div>
     )
   }
   if (e.kind === "user-input-request") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.warning }}>ASK</span>
-        <span className="text-[12px]" style={{ color: C.text }}>{e.question}</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.warning }}>ASK</span>
+        <span className="text-[13px]" style={{ color: C.text }}>{e.question}</span>
       </div>
     )
   }
   if (e.kind === "user-input-response") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
-        <span className="text-[11px] font-medium mr-1.5" style={{ color: C.success }}>REPLY</span>
-        <span className="text-[12px]" style={{ color: C.textSecondary }}>{e.text}</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>REPLY</span>
+        <span className="text-[13px]" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
   }
@@ -410,24 +411,16 @@ function copyText(text: string) {
 }
 
 export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
-  const systemPrompt = useMemo(
-    () => trace.find((e) => e.kind === "system-prompt") as Extract<TraceEntry, { kind: "system-prompt" }> | undefined,
-    [trace],
-  )
-  const toolsResolved = useMemo(
-    () => trace.find((e) => e.kind === "tools-resolved") as Extract<TraceEntry, { kind: "tools-resolved" }> | undefined,
-    [trace],
-  )
   const llmCalls = useMemo(() => {
     const requests = trace.filter((e) => e.kind === "llm-request") as Array<Extract<TraceEntry, { kind: "llm-request" }>>
     const responses = trace.filter((e) => e.kind === "llm-response") as Array<Extract<TraceEntry, { kind: "llm-response" }>>
     return requests.map((req, i) => ({ request: req, response: responses[i] ?? null }))
   }, [trace])
 
-  if (llmCalls.length === 0 && !systemPrompt && !toolsResolved) {
+  if (llmCalls.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-[13px]" style={{ color: C.dim }}>
-        No LLM call data — run may predate debug instrumentation
+        No iteration data yet — start a run
       </div>
     )
   }
@@ -436,47 +429,11 @@ export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
     <div className="h-full overflow-y-auto px-3 py-2 space-y-2 text-[13px]">
       {/* Stats summary */}
       <div className="flex items-center gap-3 flex-wrap text-[12px] font-mono" style={{ color: C.muted }}>
-        {systemPrompt && (
-          <span><span style={{ color: C.accent }}>prompt</span> {(systemPrompt.text.length / 1000).toFixed(1)}k chars</span>
-        )}
-        {toolsResolved && (
-          <span><span style={{ color: C.warning }}>tools</span> {toolsResolved.tools.length}</span>
-        )}
         <span>
-          <span style={{ color: "#6CB4EE" }}>calls</span> {llmCalls.length}
+          <span style={{ color: "#6CB4EE" }}>iterations</span> {llmCalls.length}
           {llmCalls.length > 0 && ` · ${Math.round(llmCalls.reduce((s, c) => s + (c.response?.durationMs ?? 0), 0) / Math.max(1, llmCalls.filter(c => c.response).length))}ms avg`}
         </span>
       </div>
-
-      {/* System prompt section */}
-      {systemPrompt && (
-        <LlmSection label="System Prompt" badge={`${systemPrompt.text.length.toLocaleString()} chars`} badgeColor={C.accent}>
-          <div className="relative">
-            <button
-              className="absolute top-0 right-0 p-1 rounded opacity-30 hover:opacity-80 transition-opacity cursor-pointer"
-              style={{ color: C.muted }}
-              onClick={() => copyText(systemPrompt.text)}
-              title="Copy"
-            >
-              <Copy size={12} />
-            </button>
-            <pre className="text-[12px] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto pr-6" style={{ color: C.textSecondary }}>
-              {systemPrompt.text}
-            </pre>
-          </div>
-        </LlmSection>
-      )}
-
-      {/* Tools section */}
-      {toolsResolved && (
-        <LlmSection label="Tools Available" badge={`${toolsResolved.tools.length}`} badgeColor={C.warning}>
-          <div className="space-y-1">
-            {toolsResolved.tools.map((t) => (
-              <LlmToolDef key={t.name} tool={t} />
-            ))}
-          </div>
-        </LlmSection>
-      )}
 
       {/* LLM Calls */}
       {llmCalls.map((call, i) => (

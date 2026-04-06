@@ -136,9 +136,23 @@ export function DetailsPanel({
 export function ComparePanel({
   runs,
   onCompare,
+  result,
+  loading,
+  error,
 }: {
   runs: Run[]
   onCompare: (idA: string, idB: string) => void
+  result?: {
+    sameGoal: boolean
+    toolOverlap: number
+    toolCallDelta: number
+    iterationDelta: number
+    errorRateDelta: number
+    moreEfficient: "a" | "b" | "equal"
+    summary: string
+  } | null
+  loading?: boolean
+  error?: string | null
 }) {
   const [runA, setRunA] = useState<string>("")
   const [runB, setRunB] = useState<string>("")
@@ -190,14 +204,61 @@ export function ComparePanel({
             color: runA && runB ? C.accent : C.dim,
             border: `1px solid ${runA && runB ? C.accent + "40" : C.border}`,
           }}
-          disabled={!runA || !runB}
+          disabled={!runA || !runB || loading}
           onClick={() => { if (runA && runB) onCompare(runA, runB) }}
         >
-          Compare
+          {loading ? "Comparing..." : "Compare"}
         </button>
       </div>
       {completedRuns.length < 2 && (
         <div style={{ color: C.dim }}>Need at least 2 completed runs to compare.</div>
+      )}
+      {error && (
+        <div className="rounded px-2 py-1.5 text-[12px]" style={{ background: C.coral + "15", color: C.coral, border: `1px solid ${C.coral}30` }}>
+          {error}
+        </div>
+      )}
+      {result && (
+        <div className="space-y-2 pt-1" style={{ borderTop: `1px solid ${C.border}` }}>
+          <div className="text-[11px] uppercase tracking-wide font-semibold" style={{ color: C.muted }}>Results</div>
+          <div className="space-y-1.5 text-[12px]">
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Same goal</span>
+              <span style={{ color: result.sameGoal ? C.success : C.warning }}>{result.sameGoal ? "Yes" : "No"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Tool overlap</span>
+              <span style={{ color: C.text }}>{Math.round(result.toolOverlap * 100)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Tool call Δ</span>
+              <span style={{ color: result.toolCallDelta > 0 ? C.coral : result.toolCallDelta < 0 ? C.success : C.muted }}>
+                {result.toolCallDelta > 0 ? "+" : ""}{result.toolCallDelta}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Iteration Δ</span>
+              <span style={{ color: result.iterationDelta > 0 ? C.coral : result.iterationDelta < 0 ? C.success : C.muted }}>
+                {result.iterationDelta > 0 ? "+" : ""}{result.iterationDelta}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Error rate Δ</span>
+              <span style={{ color: result.errorRateDelta > 0 ? C.coral : result.errorRateDelta < 0 ? C.success : C.muted }}>
+                {result.errorRateDelta > 0 ? "+" : ""}{(result.errorRateDelta * 100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>More efficient</span>
+              <span style={{ color: C.accent }}>
+                {result.moreEfficient === "a" ? "Run A" : result.moreEfficient === "b" ? "Run B" : "Equal"}
+              </span>
+            </div>
+          </div>
+          <div className="rounded px-2 py-1.5 text-[12px] whitespace-pre-wrap" style={{ background: C.elevated, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+            {result.summary}
+          </div>
+        </div>
       )}
     </div>
   )
