@@ -398,34 +398,35 @@ export function CodeSeqDiagram() {
       elements.push(
         <g key={`hdr-${ll.id}`}>
           <rect
-            x={cx - laneW / 2 + 4}
-            y={4}
-            width={laneW - 8}
-            height={HEADER_H - 8}
-            rx={4}
-            fill={P.note}
-            stroke={ll.color}
-            strokeWidth={1.5}
+            x={cx - laneW / 2 + 6}
+            y={6}
+            width={laneW - 12}
+            height={HEADER_H - 12}
+            rx={3}
+            fill={ll.color + "08"}
+            stroke={ll.color + "40"}
+            strokeWidth={1}
           />
           <text
             x={cx}
-            y={24}
+            y={23}
             textAnchor="middle"
             fill={ll.color}
-            fontSize={12}
-            fontWeight={700}
+            fontSize={11}
+            fontWeight={600}
             fontFamily="monospace"
+            opacity={0.9}
           >
             {ll.label}
           </text>
           <text
             x={cx}
-            y={40}
+            y={37}
             textAnchor="middle"
             fill={P.text}
-            fontSize={9}
+            fontSize={8.5}
             fontFamily="monospace"
-            opacity={0.7}
+            opacity={0.45}
           >
             {ll.file}
           </text>
@@ -686,42 +687,55 @@ export function CodeSeqDiagram() {
 
   return (
     <div ref={containerRef} className="flex flex-col h-full bg-zinc-950 text-zinc-300 overflow-hidden">
-      {/* Phase filter controls */}
-      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-zinc-800 bg-zinc-950/80 shrink-0">
-        <span className="text-[10px] text-zinc-500 font-mono mr-1 uppercase tracking-wider">Phases:</span>
-        {ALL_PHASES.map((ph) => (
-          <button
-            key={ph.id}
-            onClick={() => togglePhase(ph.id)}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors border ${
-              enabledPhases.has(ph.id)
-                ? "border-zinc-600 text-zinc-200"
-                : "border-zinc-800 text-zinc-600"
-            }`}
-            style={{
-              backgroundColor: enabledPhases.has(ph.id) ? ph.color + "18" : "transparent",
-              borderColor: enabledPhases.has(ph.id) ? ph.color + "60" : undefined,
-              color: enabledPhases.has(ph.id) ? ph.color : undefined,
-            }}
-          >
-            {ph.label}
-          </button>
-        ))}
-      </div>
-
       {/* SVG diagram with sticky header */}
       <div className="flex-1 overflow-auto">
         <div style={{ width: totalW, minWidth: totalW, position: "relative" }}>
-          <svg
-            width={totalW}
-            height={HEADER_H}
-            viewBox={`0 0 ${totalW} ${HEADER_H}`}
-            className="font-mono"
-            style={{ position: "sticky", top: 0, zIndex: 10, display: "block", background: P.bg }}
-          >
-            <rect width={totalW} height={HEADER_H} fill={P.bg} />
-            {headerContent}
-          </svg>
+          {/* Sticky zone: phase toggles + lifeline headers */}
+          <div style={{ position: "sticky", top: 0, zIndex: 10, background: P.bg }}>
+            {/* Phase toggles — minimal inline row */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 8px", borderBottom: `1px solid ${P.dimmer}`,
+            }}>
+              {ALL_PHASES.map((ph) => {
+                const on = enabledPhases.has(ph.id)
+                return (
+                  <button
+                    key={ph.id}
+                    onClick={() => togglePhase(ph.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 3,
+                      background: "none", border: "none", cursor: "pointer",
+                      padding: "1px 0", fontFamily: "monospace", fontSize: 10,
+                      color: on ? ph.color : P.dim,
+                      opacity: on ? 1 : 0.5,
+                      transition: "opacity 0.15s, color 0.15s",
+                    }}
+                  >
+                    <span style={{
+                      width: 5, height: 5, borderRadius: "50%",
+                      background: on ? ph.color : P.dim,
+                      display: "inline-block", flexShrink: 0,
+                    }} />
+                    {ph.label}
+                  </button>
+                )
+              })}
+            </div>
+            {/* Lifeline headers */}
+            <svg
+              width={totalW}
+              height={HEADER_H}
+              viewBox={`0 0 ${totalW} ${HEADER_H}`}
+              className="font-mono"
+              style={{ display: "block" }}
+            >
+              <rect width={totalW} height={HEADER_H} fill={P.bg} />
+              {/* Subtle bottom fade line */}
+              <line x1={0} y1={HEADER_H - 0.5} x2={totalW} y2={HEADER_H - 0.5} stroke={P.dimmer} strokeWidth={1} />
+              {headerContent}
+            </svg>
+          </div>
           <svg
             ref={svgRef}
             width={totalW}
@@ -736,27 +750,22 @@ export function CodeSeqDiagram() {
         </div>
       </div>
 
-      {/* Detail panel */}
+      {/* Detail panel — no top border */}
       {selectedMsg && selectedMsg.kind !== "note" && selectedMsg.kind !== "alt-start" && selectedMsg.kind !== "alt-end" && selectedMsg.kind !== "alt-else" && (
-        <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/80 px-3 py-2 max-h-32 overflow-auto">
+        <div className="shrink-0 bg-zinc-900/60 px-3 py-2 max-h-28 overflow-auto">
           <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-zinc-500">{selectedMsg.kind.toUpperCase()}</span>
+            <span className="text-zinc-600 text-[10px]">{selectedMsg.kind.toUpperCase()}</span>
             <span style={{ color: LIFELINES[laneIdx(selectedMsg.from)]?.color }}>
               {LIFELINES[laneIdx(selectedMsg.from)]?.label ?? selectedMsg.from}
             </span>
-            <span className="text-zinc-600">→</span>
+            <span className="text-zinc-700">→</span>
             <span style={{ color: LIFELINES[laneIdx(selectedMsg.to)]?.color }}>
               {LIFELINES[laneIdx(selectedMsg.to)]?.label ?? selectedMsg.to}
             </span>
           </div>
-          <div className="text-xs font-mono text-zinc-200 mt-1">{selectedMsg.label}</div>
+          <div className="text-xs font-mono text-zinc-200 mt-0.5">{selectedMsg.label}</div>
           {selectedMsg.detail && (
             <div className="text-[10px] font-mono text-zinc-500 mt-0.5">{selectedMsg.detail}</div>
-          )}
-          {selectedMsg.phase && (
-            <div className="text-[10px] font-mono text-zinc-600 mt-0.5">
-              Phase: {ALL_PHASES.find((p) => p.id === selectedMsg.phase)?.label ?? selectedMsg.phase}
-            </div>
           )}
         </div>
       )}
