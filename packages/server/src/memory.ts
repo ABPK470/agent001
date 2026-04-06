@@ -400,7 +400,20 @@ export function ingestTurn(opts: {
 }): MemoryEntry | null {
   const salience = computeSalience(opts.content, opts.role)
 
-  if (salience < SALIENCE_THRESHOLD && opts.role !== "system") return null
+  if (salience < SALIENCE_THRESHOLD && opts.role !== "system") {
+    broadcast({
+      type: "memory.filtered",
+      data: {
+        reason: "low-salience",
+        salience,
+        threshold: SALIENCE_THRESHOLD,
+        tier: opts.tier,
+        role: opts.role,
+        contentPreview: opts.content.slice(0, 80),
+      },
+    })
+    return null
+  }
 
   // Dedup: check against recent entries (same session/run)
   const recentRows = getDb().prepare(`
@@ -409,7 +422,18 @@ export function ingestTurn(opts: {
     ORDER BY created_at DESC LIMIT 20
   `).all(opts.sessionId ?? "", opts.runId ?? "") as Array<{ content: string }>
 
-  if (isDuplicate(opts.content, recentRows.map((r) => r.content))) return null
+  if (isDuplicate(opts.content, recentRows.map((r) => r.content))) {
+    broadcast({
+      type: "memory.filtered",
+      data: {
+        reason: "duplicate",
+        tier: opts.tier,
+        role: opts.role,
+        contentPreview: opts.content.slice(0, 80),
+      },
+    })
+    return null
+  }
 
   const now = new Date().toISOString()
   const entry: MemoryEntry = {
@@ -625,6 +649,11 @@ export function markProceduralFailed(id: string): void {
     SET failure_count = failure_count + 1, updated_at = ?
     WHERE id = ?
   `).run(new Date().toISOString(), id)
+
+  broadcast({
+    type: "procedural.failed",
+    data: { id },
+  })
 }
 
 export function extractProcedural(run: {
@@ -758,6 +787,18 @@ export async function retrieveContext(
       ? semanticItems.map((r) => r.entry.content).join("\n")
       : "",
   }
+
+  broadcast({
+    type: "memory.retrieved",
+    data: {
+      total: packed.length,
+      working: workingItems.length,
+      episodic: episodicItems.length,
+      semantic: semanticItems.length,
+      procedural: procedures.length,
+      runId: opts?.runId ?? null,
+    },
+  })
 
   return { context, results: packed, perTier }
 }
@@ -1177,6 +1218,13 @@ export function consolidate(opts?: {
     "DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'"
   ).run()
   pruned += deleted.changes ?? 0
+
+  if (promoted > 0 || pruned > 0) {
+    broadcast({
+      type: "memory.consolidated",
+      data: { promoted, pruned },
+    })
+  }
 
   return { promoted, pruned }
 }

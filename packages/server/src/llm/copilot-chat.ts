@@ -19,6 +19,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
+function safeParseArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return { __raw: raw, __parseError: true }
+  }
+}
+
 /**
  * VS Code Copilot extension's public OAuth client ID.
  * This is the only client ID whose tokens the copilot_internal endpoints accept.
@@ -254,7 +262,7 @@ export class CopilotChatClient implements LLMClient {
         (tc): ToolCall => ({
           id: tc.id,
           name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+          arguments: safeParseArgs(tc.function.arguments),
         }),
       ),
       usage: data.usage

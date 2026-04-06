@@ -2,8 +2,8 @@
  * UniverseViz — Real-time Sequence Diagram
  *
  * Renders ALL WebSocket events as a UML-style sequence diagram
- * with five participant lifelines: Agent, LLM, Tools, Delegates,
- * and System.
+ * with nine participant lifelines: Agent, LLM, Tools, Delegates,
+ * Memory, Checkpoint, API/Channels, Database, and System.
  *
  * Visual elements:
  *   - Dashed vertical lifelines per participant
@@ -27,6 +27,10 @@ const P = {
   llm:      "#D17877",
   tools:    "#E09145",
   delegate: "#5B98D1",
+  memory:   "#4DB6AC",
+  ckpt:     "#D4A64A",
+  api:      "#4DD0E1",
+  db:       "#AB7DDB",
   system:   "#6B7280",
   ok:       "#5DB078",
   err:      "#E05252",
@@ -40,11 +44,15 @@ const P = {
 // ── Lane definitions ─────────────────────────────────────────────
 
 const LANES = [
-  { id: "agent",    label: "Agent",     color: P.agent },
-  { id: "llm",      label: "LLM",       color: P.llm },
-  { id: "tools",    label: "Tools",     color: P.tools },
-  { id: "delegate", label: "Delegates", color: P.delegate },
-  { id: "system",   label: "System",    color: P.system },
+  { id: "agent",    label: "Agent",      color: P.agent },
+  { id: "llm",      label: "LLM",        color: P.llm },
+  { id: "tools",    label: "Tools",      color: P.tools },
+  { id: "delegate", label: "Delegates",  color: P.delegate },
+  { id: "memory",   label: "Memory",     color: P.memory },
+  { id: "ckpt",     label: "Checkpoint", color: P.ckpt },
+  { id: "api",      label: "API",        color: P.api },
+  { id: "db",       label: "Database",   color: P.db },
+  { id: "system",   label: "System",     color: P.system },
 ] as const
 
 const LANE_N = LANES.length
@@ -63,7 +71,7 @@ const CSS = `
 
 interface DRow {
   time:  string        // formatted HH:MM:SS
-  lane:  number        // 0–4 (index into LANES)
+  lane:  number        // 0–8 (index into LANES)
   label: string        // short text
   color: string        // marker / arrow color
   arrow?: number       // target lane index (absent = no arrow)
@@ -126,9 +134,9 @@ function classify(ev: WsEvent): DRow {
     return { ...base, lane: 0, label: `queued${goal}`, color: P.agent }
   }
   if (t === "run.started")
-    return { ...base, lane: 0, label: "run started", color: P.agent }
+    return { ...base, lane: 0, label: "run started", color: P.agent, arrow: 4 }
   if (t === "run.completed")
-    return { ...base, lane: 0, label: `completed (${fmtTok(d.totalTokens ?? 0)} tok, ${d.stepCount ?? 0} steps)`, color: P.ok }
+    return { ...base, lane: 0, label: `completed (${fmtTok(d.totalTokens ?? 0)} tok, ${d.stepCount ?? 0} steps)`, color: P.ok, arrow: 4 }
   if (t === "run.failed")
     return { ...base, lane: 0, label: `failed: ${trunc(String(d.error ?? ""), 50)}`, color: P.err }
   if (t === "run.cancelled")
@@ -148,7 +156,7 @@ function classify(ev: WsEvent): DRow {
 
   // ── Token usage ────────────────────────────────────────────────
   if (t === "usage.updated")
-    return { ...base, lane: 1, label: `${fmtTok(d.totalTokens ?? 0)} tok / ${d.llmCalls ?? 0} calls`, color: P.llm }
+    return { ...base, lane: 1, label: `${fmtTok(d.totalTokens ?? 0)} tok / ${d.llmCalls ?? 0} calls`, color: P.llm, arrow: 0 }
 
   // ── Debug trace (rich trace entries) ───────────────────────────
   if (t === "debug.trace") {
@@ -157,7 +165,7 @@ function classify(ev: WsEvent): DRow {
     const kind = entry?.kind as string | undefined
 
     if (kind === "goal")
-      return { ...base, lane: 0, label: `goal: ${trunc(String(entry?.text ?? ""), 50)}`, color: P.agent }
+      return { ...base, lane: 0, label: `goal: ${trunc(String(entry?.text ?? ""), 50)}`, color: P.agent, arrow: 4 }
     if (kind === "iteration")
       return { ...base, lane: 0, label: `iteration ${entry?.current}/${entry?.max}`, color: P.agent }
     if (kind === "thinking")
@@ -173,7 +181,7 @@ function classify(ev: WsEvent): DRow {
     if (kind === "error")
       return { ...base, lane: 0, label: `error: ${trunc(String(entry?.text ?? ""), 60)}`, color: P.err }
     if (kind === "usage")
-      return { ...base, lane: 1, label: `${fmtTok(entry?.iterationTokens ?? 0)} iter / ${fmtTok(entry?.totalTokens ?? 0)} total`, color: P.llm }
+      return { ...base, lane: 1, label: `${fmtTok(entry?.iterationTokens ?? 0)} iter / ${fmtTok(entry?.totalTokens ?? 0)} total`, color: P.llm, arrow: 0 }
 
     // LLM request / response
     if (kind === "llm-request")
@@ -196,7 +204,7 @@ function classify(ev: WsEvent): DRow {
       return { ...base, lane: 3, label: `delegate ${entry?.status}${entry?.answer ? ": " + trunc(String(entry.answer), 30) : ""}`, color: ok ? P.ok : P.err, arrow: 0 }
     }
     if (kind === "delegation-iteration")
-      return { ...base, lane: 3, label: `sub-iter ${entry?.iteration}/${entry?.maxIterations}`, color: P.delegate }
+      return { ...base, lane: 3, label: `sub-iter ${entry?.iteration}/${entry?.maxIterations}`, color: P.delegate, arrow: 0 }
 
     // Delegation (parallel)
     if (kind === "delegation-parallel-start")
@@ -212,13 +220,13 @@ function classify(ev: WsEvent): DRow {
 
     // Debug / inspector
     if (kind === "system-prompt")
-      return { ...base, lane: 4, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.system }
+      return { ...base, lane: 8, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.system, arrow: 0 }
     if (kind === "tools-resolved") {
       const names = (entry?.tools as { name: string }[])?.map((x) => x.name).join(", ") ?? ""
-      return { ...base, lane: 4, label: `${entry?.tools?.length ?? 0} tools: ${trunc(names, 50)}`, color: P.system }
+      return { ...base, lane: 8, label: `${entry?.tools?.length ?? 0} tools: ${trunc(names, 50)}`, color: P.system, arrow: 0 }
     }
 
-    return { ...base, lane: 4, label: `trace: ${kind ?? "unknown"}`, color: P.dim }
+    return { ...base, lane: 8, label: `trace: ${kind ?? "unknown"}`, color: P.dim }
   }
 
   // ── Delegation events (non-trace) ──────────────────────────────
@@ -229,7 +237,7 @@ function classify(ev: WsEvent): DRow {
   if (t === "delegation.ended")
     return { ...base, lane: 3, label: `delegate ${d.status}`, color: d.status === "done" ? P.ok : P.err, arrow: 0 }
   if (t === "delegation.iteration")
-    return { ...base, lane: 3, label: `sub-iter ${d.iteration}/${d.maxIterations}`, color: P.delegate }
+    return { ...base, lane: 3, label: `sub-iter ${d.iteration}/${d.maxIterations}`, color: P.delegate, arrow: 0 }
   if (t === "delegation.parallel-started")
     return { ...base, lane: 0, label: `parallel (${d.taskCount} tasks)`, color: P.delegate, arrow: 3 }
   if (t === "delegation.parallel-ended")
@@ -243,26 +251,94 @@ function classify(ev: WsEvent): DRow {
 
   // ── System events ──────────────────────────────────────────────
   if (t === "ws.connected")
-    return { ...base, lane: 4, label: `connected (v${d.version ?? "?"}, ${d.clients ?? 0} clients)`, color: P.system }
-  if (t === "audit")
-    return { ...base, lane: 4, label: `audit: ${d.action}`, color: P.system }
+    return { ...base, lane: 8, label: `connected (v${d.version ?? "?"}, ${d.clients ?? 0} clients)`, color: P.system }
+  if (t === "audit") {
+    const action = String(d.action ?? "")
+    if (action.startsWith("tool."))
+      return { ...base, lane: 2, label: `audit: ${action}`, color: P.system, arrow: 8 }
+    if (action.startsWith("agent.") || action.startsWith("delegation."))
+      return { ...base, lane: 0, label: `audit: ${action}`, color: P.system, arrow: 8 }
+    return { ...base, lane: 8, label: `audit: ${action}`, color: P.system }
+  }
   if (t === "notification")
-    return { ...base, lane: 4, label: `notify: ${trunc(String(d.title ?? ""), 40)}`, color: P.warn }
+    return { ...base, lane: 8, label: `notify: ${trunc(String(d.title ?? ""), 40)}`, color: P.warn, arrow: 6 }
   if (t === "approval.required")
-    return { ...base, lane: 4, label: `approval: ${d.toolName}`, color: P.warn }
+    return { ...base, lane: 8, label: `approval: ${d.toolName}`, color: P.warn, arrow: 0 }
   if (t === "checkpoint.saved")
-    return { ...base, lane: 4, label: `checkpoint (iter ${d.iteration})`, color: P.system }
+    return { ...base, lane: 0, label: `checkpoint (iter ${d.iteration})`, color: P.ckpt, arrow: 5 }
 
-  // ── Catch-all categories ───────────────────────────────────────
-  if (t.startsWith("memory.") || t.startsWith("procedural."))
-    return { ...base, lane: 4, label: t, color: P.system }
-  if (t.startsWith("effect."))
-    return { ...base, lane: 4, label: t, color: P.system }
-  if (t.startsWith("conversation."))
-    return { ...base, lane: 4, label: t, color: P.system }
+  // ── Database / API request logging ─────────────────────────────
+  if (t === "api.request") {
+    const method = d.method ?? "?"
+    const url = d.url ? trunc(String(d.url), 30) : "?"
+    const status = d.status_code ?? "?"
+    const dur = d.duration_ms != null ? ` ${fmtMs(Number(d.duration_ms))}` : ""
+    return { ...base, lane: 6, label: `${method} ${url} ${status}${dur}`, color: P.api, arrow: 7 }
+  }
+
+  // ── Memory events ──────────────────────────────────────────────
+  if (t.startsWith("memory.") || t.startsWith("procedural.")) {
+    const action = t.split(".")[1] ?? t
+    // ingested/stored/updated: Agent writes to Memory
+    if (action === "ingested" || action === "stored" || action === "updated" || action === "created") {
+      const tier = d.tier ? ` [${d.tier}]` : ""
+      const preview = d.contentPreview ? `: ${trunc(String(d.contentPreview), 30)}` : ""
+      return { ...base, lane: 0, label: `mem.${action}${tier}${preview}`, color: P.memory, arrow: 4 }
+    }
+    // retrieved: Memory context loaded for a run (summary of all tiers)
+    if (action === "retrieved") {
+      const w = d.working ?? 0; const e = d.episodic ?? 0; const s = d.semantic ?? 0; const p = d.procedural ?? 0
+      return { ...base, lane: 4, label: `mem.retrieved w:${w} e:${e} s:${s} p:${p}`, color: P.memory, arrow: 0 }
+    }
+    // queried/matched/loaded: Memory feeds context to Agent
+    if (action === "queried" || action === "matched" || action === "loaded") {
+      const detail = d.key ? `: ${trunc(String(d.key), 30)}` : d.type ? `: ${d.type}` : ""
+      return { ...base, lane: 4, label: `mem.${action}${detail}`, color: P.memory, arrow: 0 }
+    }
+    // filtered: entry rejected by salience or dedup
+    if (action === "filtered") {
+      const reason = d.reason ?? "unknown"
+      const preview = d.contentPreview ? `: ${trunc(String(d.contentPreview), 25)}` : ""
+      return { ...base, lane: 4, label: `mem.skip(${reason})${preview}`, color: P.warn }
+    }
+    // consolidated: episodic→semantic promotion
+    if (action === "consolidated") {
+      return { ...base, lane: 4, label: `mem.consolidate +${d.promoted ?? 0} -${d.pruned ?? 0}`, color: P.memory, arrow: 7 }
+    }
+    // deleted/pruned/decayed: Memory self-cleanup
+    if (action === "deleted" || action === "pruned" || action === "decayed")
+      return { ...base, lane: 4, label: `mem.${action}`, color: P.warn }
+    return { ...base, lane: 4, label: `mem.${action}`, color: P.memory, arrow: 0 }
+  }
+
+  // ── Effect events ──────────────────────────────────────────────
+  if (t.startsWith("effect.")) {
+    const action = t.split(".")[1] ?? t
+    const detail = d.kind ? ` (${d.kind})` : d.path ? `: ${trunc(String(d.path), 30)}` : ""
+    // Effects are recorded by tool execution → Tools lane arrows to Checkpoint
+    return { ...base, lane: 2, label: `effect.${action}${detail}`, color: P.ckpt, arrow: 5 }
+  }
+
+  // ── Conversation / Channels ────────────────────────────────────
+  if (t.startsWith("conversation.")) {
+    const action = t.split(".")[1] ?? t
+    // Inbound message: API→Agent
+    if (action === "message" || action === "started")
+      return { ...base, lane: 6, label: `conversation.${action}`, color: P.api, arrow: 0 }
+    return { ...base, lane: 6, label: `conversation.${action}`, color: P.api }
+  }
+  if (t.startsWith("message.")) {
+    const action = t.split(".")[1] ?? t
+    // Outbound message: Agent→API
+    if (action === "queued" || action === "sent")
+      return { ...base, lane: 0, label: `msg.${action}`, color: P.api, arrow: 6 }
+    if (action === "failed")
+      return { ...base, lane: 6, label: `msg.${action}`, color: P.err }
+    return { ...base, lane: 6, label: `msg.${action}`, color: P.api }
+  }
 
   // ── Unknown ────────────────────────────────────────────────────
-  return { ...base, lane: 4, label: t, color: P.dim }
+  return { ...base, lane: 8, label: t, color: P.dim }
 }
 
 // ── Activation box builder ───────────────────────────────────────
@@ -432,14 +508,14 @@ export function UniverseViz() {
       <style>{CSS}</style>
 
       {/* ── Controls ── */}
-      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800 shrink-0 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 border-b border-zinc-800 shrink-0 text-[11px]">
         <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">
           Sequence
         </span>
         <span className="text-zinc-600 font-mono">{visibleRows.length}</span>
-        <div className="flex-1" />
+        <div className="flex-1 min-w-[20px]" />
         {/* Lane filters */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {LANES.map((l, i) => (
             <button
               key={l.id}
@@ -473,9 +549,9 @@ export function UniverseViz() {
       </div>
 
       {/* ── Lane headers (sticky) ── */}
-      <div className="flex shrink-0 border-b border-zinc-800/60">
+      <div className="flex shrink-0 border-b border-zinc-800/60 overflow-hidden">
         <div
-          className="shrink-0 px-2 py-1 text-[10px] text-zinc-600 font-medium"
+          className="shrink-0 px-1 py-1 text-[9px] text-zinc-600 font-medium"
           style={{ width: TIME_W }}
         >
           Time
@@ -483,7 +559,7 @@ export function UniverseViz() {
         {LANES.map((l, i) => (
           <div
             key={l.id}
-            className="flex-1 text-center py-1 text-[10px] font-semibold tracking-wide"
+            className="flex-1 min-w-0 text-center py-1 text-[9px] font-semibold truncate"
             style={{
               color: visibility[i] ? l.color : P.dim,
               opacity: visibility[i] ? 0.8 : 0.3,

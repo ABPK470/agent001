@@ -11,6 +11,14 @@
 
 import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
 
+function safeParseArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return { __raw: raw, __parseError: true }
+  }
+}
+
 interface OpenAIMessage {
   role: string
   content: string | null
@@ -105,7 +113,7 @@ export class OpenAIClient implements LLMClient {
         (tc): ToolCall => ({
           id: tc.id,
           name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+          arguments: safeParseArgs(tc.function.arguments),
         }),
       ),
       usage: data.usage ? {
