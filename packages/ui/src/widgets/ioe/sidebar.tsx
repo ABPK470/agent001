@@ -144,11 +144,14 @@ export function ComparePanel({
   onCompare: (idA: string, idB: string) => void
   result?: {
     sameGoal: boolean
+    goalSimilarity: number
     toolOverlap: number
     toolCallDelta: number
     iterationDelta: number
     errorRateDelta: number
     moreEfficient: "a" | "b" | "equal"
+    outcomeA: "answer" | "error" | "incomplete"
+    outcomeB: "answer" | "error" | "incomplete"
     summary: string
   } | null
   loading?: boolean
@@ -224,7 +227,9 @@ export function ComparePanel({
           <div className="space-y-1.5 text-[12px]">
             <div className="flex justify-between">
               <span style={{ color: C.dim }}>Same goal</span>
-              <span style={{ color: result.sameGoal ? C.success : C.warning }}>{result.sameGoal ? "Yes" : "No"}</span>
+              <span style={{ color: result.sameGoal ? C.success : result.goalSimilarity > 0.6 ? C.warning : C.coral }}>
+                {result.sameGoal ? "Yes" : result.goalSimilarity > 0.6 ? `~${Math.round(result.goalSimilarity * 100)}%` : "No"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span style={{ color: C.dim }}>Tool overlap</span>
@@ -246,6 +251,18 @@ export function ComparePanel({
               <span style={{ color: C.dim }}>Error rate Δ</span>
               <span style={{ color: result.errorRateDelta > 0 ? C.coral : result.errorRateDelta < 0 ? C.success : C.muted }}>
                 {result.errorRateDelta > 0 ? "+" : ""}{(result.errorRateDelta * 100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Outcome A</span>
+              <span style={{ color: result.outcomeA === "answer" ? C.success : result.outcomeA === "error" ? C.coral : C.warning }}>
+                {result.outcomeA}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span style={{ color: C.dim }}>Outcome B</span>
+              <span style={{ color: result.outcomeB === "answer" ? C.success : result.outcomeB === "error" ? C.coral : C.warning }}>
+                {result.outcomeB}
               </span>
             </div>
             <div className="flex justify-between">

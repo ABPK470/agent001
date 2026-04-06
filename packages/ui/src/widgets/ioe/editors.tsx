@@ -2,7 +2,6 @@
  * IOE editor-area panels — Trace (DAG-style), LLM Calls, Map, EditorTabs.
  */
 
-import { ChevronDown, ChevronRight } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
@@ -250,7 +249,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "thinking") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.accent}30` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.accent }}>THK</span>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.accent }}>LLM</span>
         <span className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
@@ -406,10 +405,6 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
 //  LlmCallsPanel — DebugInspector's LLM Calls view embedded
 // ═══════════════════════════════════════════════════════════════════
 
-function copyText(text: string) {
-  navigator.clipboard.writeText(text)
-}
-
 export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
   const llmCalls = useMemo(() => {
     const requests = trace.filter((e) => e.kind === "llm-request") as Array<Extract<TraceEntry, { kind: "llm-request" }>>
@@ -439,60 +434,6 @@ export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
       {llmCalls.map((call, i) => (
         <LlmCallCard key={i} index={i} request={call.request} response={call.response} />
       ))}
-    </div>
-  )
-}
-
-function LlmSection({
-  label, badge, badgeColor, children, defaultOpen = false,
-}: {
-  label: string; badge?: string; badgeColor?: string; children: React.ReactNode; defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
-      <button
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors cursor-pointer hover:bg-white/[0.03]"
-        style={{ background: C.elevated + "30" }}
-        onClick={() => setOpen(!open)}
-      >
-        {open ? <ChevronDown size={12} style={{ color: C.dim }} /> : <ChevronRight size={12} style={{ color: C.dim }} />}
-        <span className="text-[12px] font-medium" style={{ color: C.text }}>{label}</span>
-        {badge && <span className="text-[11px] font-mono ml-auto" style={{ color: badgeColor ?? C.dim }}>{badge}</span>}
-      </button>
-      {open && (
-        <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}` }}>
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function LlmToolDef({ tool }: { tool: { name: string; description: string; parameters?: Record<string, unknown> } }) {
-  const [showSchema, setShowSchema] = useState(false)
-  return (
-    <div className="py-0.5">
-      <div className="flex items-start gap-2">
-        <span className="text-[12px] font-mono font-semibold shrink-0" style={{ color: C.warning }}>{tool.name}</span>
-        <span className="text-[12px]" style={{ color: C.muted }}>{tool.description}</span>
-      </div>
-      {tool.parameters && (
-        <>
-          <button
-            className="text-[11px] mt-0.5 cursor-pointer"
-            style={{ color: C.accent + "60" }}
-            onClick={() => setShowSchema(!showSchema)}
-          >
-            {showSchema ? "hide schema" : "show schema"}
-          </button>
-          {showSchema && (
-            <pre className="text-[11px] font-mono whitespace-pre-wrap mt-1 max-h-[200px] overflow-y-auto" style={{ color: C.dim }}>
-              {JSON.stringify(tool.parameters, null, 2)}
-            </pre>
-          )}
-        </>
-      )}
     </div>
   )
 }

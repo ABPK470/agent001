@@ -216,11 +216,14 @@ export function OperatorEnvironment() {
   // ── Comparison state ───────────────────────────────────────────
   const [compareResult, setCompareResult] = useState<{
     sameGoal: boolean
+    goalSimilarity: number
     toolOverlap: number
     toolCallDelta: number
     iterationDelta: number
     errorRateDelta: number
     moreEfficient: "a" | "b" | "equal"
+    outcomeA: "answer" | "error" | "incomplete"
+    outcomeB: "answer" | "error" | "incomplete"
     summary: string
   } | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)

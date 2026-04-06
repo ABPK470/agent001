@@ -162,11 +162,14 @@ export const api = {
   compareTrajectories: (runIdA: string, runIdB: string) =>
     json<{
       sameGoal: boolean
+      goalSimilarity: number
       toolOverlap: number
       toolCallDelta: number
       iterationDelta: number
       errorRateDelta: number
       moreEfficient: "a" | "b" | "equal"
+      outcomeA: "answer" | "error" | "incomplete"
+      outcomeB: "answer" | "error" | "incomplete"
       summary: string
     }>("/api/trajectory/compare", {
       method: "POST",
