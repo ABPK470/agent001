@@ -181,6 +181,7 @@ Delegation:
 
 Verification:
 - After creating or modifying web projects (HTML/JS/CSS), ALWAYS use browser_check to open the page and verify it loads without errors.
+- browser_check only tests if the page LOADS — it does NOT verify correctness or completeness. ALWAYS also read_file the main code files to verify real logic exists (no stubs, no \`return true\`, no TODO comments).
 - If browser_check reports errors, fix them yourself or re-delegate with the specific error details.
 - After creating code that can be tested (scripts, modules), run it with run_command to verify it works.
 - Never mark a task as done without verifying the output actually works end-to-end.
@@ -259,14 +260,25 @@ export class Agent {
 
     const messages: Message[] = resume?.messages ?? this.buildInitialMessages(goal)
 
-    // Stuck detection state (agenc-core pattern):
+    // Stuck detection state (agent-core pattern):
     // Track recent failing tool calls to detect loops.
     const recentFailures: Array<{ name: string; argsKey: string }> = []
     const MAX_IDENTICAL_FAILURES = 3
 
+    // Track recent *successful* tool results to detect tool-success loops
+    // (e.g., browser_check returning the same errors each time).
+    const recentResults: Array<{ name: string; argsKey: string; resultKey: string }> = []
+    const MAX_IDENTICAL_RESULTS = 3
+
     // Track whether the last tool round included a delegation call.
     // Used for post-delegation verification enforcement.
     let lastRoundHadDelegation = false
+    // Track if the agent is in the "post-delegation verification" phase.
+    // Set true when the verification guard fires, cleared after the verification round.
+    let inPostDelegationVerification = false
+    // Track if the last round was a post-delegation verification that found issues.
+    // When true, the agent must act on those issues (re-delegate or fix) — not just finish.
+    let verificationFoundIssues = false
     // Track if we already nudged for early exit (only once per run).
     let earlyExitNudged = false
 
@@ -357,6 +369,7 @@ export class Agent {
         // verify the result with a tool call before finishing.
         if (lastRoundHadDelegation) {
           lastRoundHadDelegation = false
+          inPostDelegationVerification = true
           messages.push({
             role: "assistant",
             content: response.content,
@@ -366,11 +379,34 @@ export class Agent {
             role: "system",
             content:
               "VERIFICATION REQUIRED: You just received a delegation result but attempted to " +
-              "finish without verifying. You MUST call a verification tool now:\n" +
-              "- For web projects → browser_check on the main HTML file\n" +
-              "- For code → run_command to compile/test\n" +
-              "- For files → list_directory or read_file to confirm\n" +
+              "finish without verifying. You MUST verify with MULTIPLE tools now:\n" +
+              "- For web projects → BOTH browser_check on the main HTML file AND read_file on the key JS/code files to check for stubs, TODO comments, or placeholder logic\n" +
+              "- For code → run_command to compile/test AND read_file to review implementation quality\n" +
+              "- For files → list_directory AND read_file to confirm content and completeness\n" +
+              "A page loading without errors does NOT mean it works correctly. You must review the actual code.\n" +
               "Do NOT provide a final answer until you have independently verified the output.",
+            section: "history",
+          })
+          continue
+        }
+
+        // Guard: if verification just found issues, the agent must fix them,
+        // not just describe the problem and finish.
+        if (verificationFoundIssues) {
+          verificationFoundIssues = false
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            section: "history",
+          })
+          messages.push({
+            role: "system",
+            content:
+              "VERIFICATION FAILED: Your verification step revealed errors, but you attempted " +
+              "to finish without fixing them. You MUST either:\n" +
+              "1. Fix the issues directly (edit files, run commands)\n" +
+              "2. Re-delegate the task with specific error details\n" +
+              "Do NOT suggest manual workarounds (like 'start an HTTP server'). Fix the actual problem.",
             section: "history",
           })
           continue
@@ -426,6 +462,30 @@ export class Agent {
           if (call.name === "delegate" || call.name === "delegate_parallel") {
             delegationThisRound = true
           }
+
+          // Stuck detection for successful-but-identical results (e.g., browser_check
+          // returning the same "1 error" report every time without the agent fixing it).
+          const argsKey = JSON.stringify(call.arguments)
+          const resultKey = result.slice(0, 500) // compare first 500 chars
+          recentResults.push({ name: call.name, argsKey, resultKey })
+          if (recentResults.length > 10) recentResults.shift()
+          const identicalResultCount = recentResults.filter(
+            (r) => r.name === call.name && r.argsKey === argsKey && r.resultKey === resultKey,
+          ).length
+          if (identicalResultCount >= MAX_IDENTICAL_RESULTS) {
+            messages.push({
+              role: "system",
+              content:
+                `STUCK DETECTION: Tool "${call.name}" returned the same result ${identicalResultCount} times ` +
+                `with identical arguments. The approach you are taking is not working. ` +
+                `Do NOT call this tool again with the same arguments. ` +
+                `Either fix the underlying issue first with a DIFFERENT tool, or move on.`,
+              section: "history",
+            })
+            if (this.config.verbose) {
+              log.logError(`Stuck: ${call.name} returned identical result ${identicalResultCount}x`)
+            }
+          }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err)
           if (this.config.verbose) log.logToolError(errMsg)
@@ -458,6 +518,49 @@ export class Agent {
 
       // Checkpoint after tool execution round
       lastRoundHadDelegation = delegationThisRound
+
+      // After a post-delegation verification round, check if the verification
+      // tools reported problems (errors, failures) or if the verification was 
+      // superficial (no code review). If so, the agent must act.
+      if (inPostDelegationVerification) {
+        inPostDelegationVerification = false
+        // Scan tool results from this round for error signals
+        const roundToolResults = messages
+          .slice(-response.toolCalls.length * 2) // tool results are the last N messages
+          .filter((m) => m.role === "tool")
+          .map((m) => m.content ?? "")
+        const hasErrors = roundToolResults.some((r) =>
+          /error|fail|exception|not found/i.test(r) && !/no errors/i.test(r),
+        )
+        // Check if the agent did a code review (read_file) during verification
+        const toolNamesUsed = response.toolCalls.map((c) => c.name)
+        const didCodeReview = toolNamesUsed.includes("read_file")
+        const didOnlySurfaceCheck = !didCodeReview && (
+          toolNamesUsed.includes("browser_check") || toolNamesUsed.includes("list_directory")
+        )
+        if (hasErrors || failuresThisRound > 0) {
+          verificationFoundIssues = true
+        } else if (didOnlySurfaceCheck) {
+          // Surface checks passed but no code was actually reviewed.
+          // Nudge the agent to also read the code.
+          // Keep inPostDelegationVerification active for the next round
+          // so we can check the read_file results.
+          inPostDelegationVerification = true
+          messages.push({
+            role: "system",
+            content:
+              "INCOMPLETE VERIFICATION: You ran browser_check or list_directory but did NOT review " +
+              "the actual code with read_file. A page loading without JS errors does NOT mean the logic is correct. " +
+              "You MUST now use read_file on the main code files (JS/TS) to verify that:\n" +
+              "- All functions contain REAL logic (not stubs like `return true`)\n" +
+              "- All required features exist (not just a skeleton)\n" +
+              "- There are no TODO comments or placeholder implementations\n" +
+              "If you find issues, fix them directly or re-delegate.",
+            section: "history",
+          })
+        }
+      }
+
       this.config.onStep?.(messages, i)
     }
 

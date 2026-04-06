@@ -23,29 +23,29 @@ config({
 })
 
 import {
-  closeMssqlPool,
-  setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setMssqlConfig,
-  setMssqlWriteEnabled,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
+    closeMssqlPool,
+    setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setMssqlConfig,
+    setMssqlWriteEnabled,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-  MessageQueue,
-  MessageRouter,
-  MessengerChannel,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  WhatsAppChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    MessengerChannel,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    WhatsAppChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -469,12 +469,26 @@ async function main() {
     const page = await browser.newPage();
 
     page.on("console", (msg) => {
-      if (msg.type() === "error") consoleErrors.push(msg.text());
-      else if (msg.type() === "warn") consoleWarnings.push(msg.text());
+      const type = msg.type();
+      const text = msg.text();
+      if (type === "error") {
+        const loc = msg.location();
+        const errUrl = loc?.url || "";
+        if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
+          // skip non-critical
+        } else if (text.includes("Failed to load resource") && errUrl) {
+          consoleErrors.push(text + " — URL: " + errUrl);
+        } else {
+          consoleErrors.push(text);
+        }
+      }
+      else if (type === "warn") consoleWarnings.push(text);
     });
     page.on("pageerror", (err) => uncaughtErrors.push(String(err)));
     page.on("requestfailed", (req) => {
-      networkErrors.push((req.failure()?.errorText || "failed") + ": " + req.url());
+      const reqUrl = req.url();
+      if (/favicon|apple-touch-icon/i.test(reqUrl)) return;
+      networkErrors.push((req.failure()?.errorText || "failed") + ": " + reqUrl);
     });
 
     await page.goto("http://127.0.0.1:" + port + "/" + fileName, {

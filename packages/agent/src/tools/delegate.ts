@@ -45,10 +45,12 @@ const CHILD_SYSTEM_PROMPT = `You are an autonomous worker agent. You receive a g
 Critical rules:
 - You are NOT in a conversation. There is no human to talk to. NEVER say "let me know", "shall I proceed", "would you like me to", or any similar conversational phrase. These are FORBIDDEN.
 - Work until the goal is COMPLETELY done — not scaffolded, not "foundational", not a skeleton. If the goal says "build a game", the game must be playable. If it says "implement a feature", the feature must work end-to-end.
+- NEVER leave stub functions, TODO comments, or placeholder logic (e.g. \`return true\`, \`// implement later\`). Every function you write must contain REAL, COMPLETE logic. If a function is too complex to write at once, break it into smaller helper functions — but each one must be fully implemented.
 - After creating web content (HTML/JS/CSS), ALWAYS use browser_check to verify it loads and works. Fix any errors before finishing.
 - After writing code that can be tested, run it with run_command to verify correctness.
-- You have a generous iteration budget. Use it to produce thorough, polished, COMPLETE work.
+- You have a generous iteration budget. Use it ALL to produce thorough, polished, COMPLETE work. If you finish early, review your work — read the files you wrote and verify completeness.
 - Quality matters more than speed. A working result in 10 iterations beats a broken skeleton in 2.
+- Before finishing, use read_file to review your own code. Look for stubs, missing logic, hardcoded returns, and incomplete implementations. Fix anything you find.
 
 Efficiency:
 - Act directly. Use the right tool immediately.
@@ -320,9 +322,21 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
     releaseSlot = await ctx.acquireSlot(childRunId)
   }
 
+  // Always use CHILD_SYSTEM_PROMPT as the behavioral base.
+  // Named-agent prompts are prepended to it; ad-hoc instructions go into the goal.
+  const effectivePrompt = childPrompt
+    ? `${CHILD_SYSTEM_PROMPT}\n\n--- Agent-specific instructions ---\n${childPrompt}`
+    : CHILD_SYSTEM_PROMPT
+
+  // If the parent provided ad-hoc instructions, fold them into the goal so
+  // the child sees them as task context, not as a system-prompt replacement.
+  const effectiveGoal = spec.instructions
+    ? `${spec.goal}\n\nAdditional instructions:\n${spec.instructions}`
+    : spec.goal
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
-    systemPrompt: childPrompt ?? spec.instructions ?? CHILD_SYSTEM_PROMPT,
+    systemPrompt: effectivePrompt,
     verbose: false,
     signal: ctx.signal,
     onThinking: (content, _toolCalls, iteration) => {
@@ -346,7 +360,7 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
   })
 
   try {
-    const answer = await child.run(spec.goal)
+    const answer = await child.run(effectiveGoal)
 
     // Detect if the child hit its iteration limit without completing
     const hitLimit = answer.startsWith("Agent stopped after")

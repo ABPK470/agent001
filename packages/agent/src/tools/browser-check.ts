@@ -203,8 +203,12 @@ export const browserCheckTool: Tool = {
         if (type === "error") {
           // Enrich generic "Failed to load resource" with the actual URL
           const location = msg.location()
-          if (text.includes("Failed to load resource") && location?.url) {
-            consoleErrors.push(`${text} — URL: ${location.url}`)
+          const errUrl = location?.url ?? ""
+          // Skip non-critical missing resources (favicon, apple-touch-icon, etc.)
+          if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
+            // Ignore — these are browser-initiated requests, not project bugs
+          } else if (text.includes("Failed to load resource") && errUrl) {
+            consoleErrors.push(`${text} — URL: ${errUrl}`)
           } else {
             consoleErrors.push(text)
           }
@@ -216,9 +220,11 @@ export const browserCheckTool: Tool = {
         uncaughtErrors.push(err instanceof Error ? err.message : String(err))
       })
 
-      // Collect failed network requests
+      // Collect failed network requests (skip non-critical assets)
       page.on("requestfailed", (req) => {
-        networkErrors.push(`${req.failure()?.errorText ?? "failed"}: ${req.url()}`)
+        const reqUrl = req.url()
+        if (/favicon|apple-touch-icon/i.test(reqUrl)) return
+        networkErrors.push(`${req.failure()?.errorText ?? "failed"}: ${reqUrl}`)
       })
 
       // Navigate to the page
