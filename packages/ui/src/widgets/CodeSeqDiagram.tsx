@@ -326,7 +326,7 @@ const ALL_PHASES = [
 // ── Geometry constants ───────────────────────────────────────────
 
 const NOTE_PAD = 8
-const HEADER_H = 40
+const HEADER_H = 52
 const ROW_H = 28
 const ARROW_HEAD = 7
 const ALT_PAD = 4
@@ -407,7 +407,7 @@ export function CodeSeqDiagram() {
         <g key={`hdr-${ll.id}`}>
           <text
             x={cx}
-            y={16}
+            y={24}
             textAnchor="middle"
             fill={P.text}
             fontSize={13}
@@ -418,7 +418,7 @@ export function CodeSeqDiagram() {
           </text>
           <text
             x={cx}
-            y={31}
+            y={40}
             textAnchor="middle"
             fill={P.dim}
             fontSize={9}
@@ -431,11 +431,11 @@ export function CodeSeqDiagram() {
     }
     // Bottom separator line
     elements.push(
-      <line key="hdr-sep" x1={0} y1={HEADER_H - 1} x2={LIFELINES.length * laneW} y2={HEADER_H - 1}
+      <line key="hdr-sep" x1={0} y1={HEADER_H - 1} x2={totalW} y2={HEADER_H - 1}
         stroke={P.dimmer} strokeWidth={1} />
     )
     return elements
-  }, [laneW, laneX])
+  }, [laneW, laneX, totalW])
 
   // Render body (lifelines + messages)
   const bodyContent = useMemo(() => {
@@ -549,14 +549,14 @@ export function CodeSeqDiagram() {
               x={indent + 4}
               y={y - ROW_H / 2}
               width={Math.min(m.label.length * 6.5 + 14, 300)}
-              height={18}
+              height={22}
               fill={P.note}
               stroke={P.dim}
               strokeWidth={0.5}
             />
             <text
               x={indent + 12}
-              y={y + 4}
+              y={y + 2}
               fill={P.text}
               fontSize={10}
               fontWeight={600}

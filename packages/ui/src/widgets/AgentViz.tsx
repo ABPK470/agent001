@@ -924,7 +924,7 @@ export function AgentViz() {
 
 
         {/* Feed items — scrollable log, newest at bottom */}
-        <div ref={feedRef} className="flex-1 overflow-y-auto px-3 pb-2 pt-2 flex flex-col gap-0.5 relative pointer-events-auto">
+        <div ref={feedRef} className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 pt-2 flex flex-col gap-0.5 relative pointer-events-auto">
           {recentActivity.length === 0 ? (
             <div className="text-xs" style={{ color: C.mid }}>
               {mode === "reflect" && !reflectRunId ? "Select a past run to review"
