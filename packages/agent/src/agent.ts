@@ -23,6 +23,8 @@
  */
 
 import * as log from "./logger.js"
+import type { PlannerContext } from "./planner/index.js"
+import { executePlannerPath } from "./planner/index.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
 
@@ -213,6 +215,10 @@ export class Agent {
     onStep: AgentConfig["onStep"]
     onLlmCall: AgentConfig["onLlmCall"]
     signal: AgentConfig["signal"]
+    enablePlanner: boolean
+    workspaceRoot: string
+    onPlannerTrace: AgentConfig["onPlannerTrace"]
+    plannerDelegateFn: AgentConfig["plannerDelegateFn"]
   }
 
   /** Cumulative token usage across all LLM calls in this agent's run. */
@@ -233,6 +239,10 @@ export class Agent {
       onStep: config.onStep,
       onLlmCall: config.onLlmCall,
       signal: config.signal,
+      enablePlanner: config.enablePlanner ?? false,
+      workspaceRoot: config.workspaceRoot ?? ".",
+      onPlannerTrace: config.onPlannerTrace,
+      plannerDelegateFn: config.plannerDelegateFn,
     }
   }
 
@@ -259,6 +269,40 @@ export class Agent {
     if (this.config.verbose) log.logGoal(goal)
 
     const messages: Message[] = resume?.messages ?? this.buildInitialMessages(goal)
+
+    // ── Planner-first routing (agenc-core pattern) ──────────────
+    // For complex tasks (score >= 3), try the planner path BEFORE falling
+    // through to the direct tool loop. This produces structured plans with
+    // typed execution envelopes for higher delegation quality.
+    if (this.config.enablePlanner && !resume && this.config.plannerDelegateFn) {
+      const plannerCtx: PlannerContext = {
+        llm: this.llm,
+        tools: this.toolList,
+        workspaceRoot: this.config.workspaceRoot,
+        history: messages,
+        signal: this.config.signal,
+        onTrace: this.config.onPlannerTrace,
+      }
+
+      const plannerResult = await executePlannerPath(
+        goal,
+        plannerCtx,
+        this.config.plannerDelegateFn,
+      )
+
+      if (plannerResult.handled) {
+        const answer = plannerResult.answer ?? "(planner produced no answer)"
+        if (this.config.verbose) log.logFinalAnswer(answer)
+        return answer
+      }
+
+      // Planner declined — fall through to direct tool loop
+      if (this.config.verbose && plannerResult.skipReason) {
+        log.logError(`Planner skipped: ${plannerResult.skipReason}`)
+      }
+    }
+
+    // ── Direct tool loop ────────────────────────────────────────
 
     // Stuck detection state (agent-core pattern):
     // Track recent failing tool calls to detect loops.

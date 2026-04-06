@@ -26,6 +26,7 @@
  */
 
 import { Agent } from "../agent.js"
+import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
 /** Default iteration budget for a child agent. */
@@ -391,6 +392,157 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
       error: errMsg,
     })
 
+    return `Delegation failed: ${errMsg}`
+  } finally {
+    releaseSlot?.()
+  }
+}
+
+// ── Planner-initiated delegation (typed execution envelope) ─────
+
+/**
+ * Spawn a child agent for a planner-generated subagent_task step.
+ *
+ * Unlike ad-hoc delegation, this uses the ExecutionEnvelope to:
+ *   - Build a rich prompt with objective, acceptance criteria, and context
+ *   - Scope the child's tool access to requiredToolCapabilities
+ *   - Pass workspace and artifact constraints
+ */
+export async function spawnChildForPlan(
+  ctx: DelegateContext,
+  step: SubagentTaskStep,
+  envelope: ExecutionEnvelope,
+): Promise<string> {
+  // Build the child's goal from the step's contract
+  const goalParts: string[] = [
+    `## Objective\n${step.objective}`,
+  ]
+
+  if (step.inputContract) {
+    goalParts.push(`## Input Context\n${step.inputContract}`)
+  }
+
+  if (step.acceptanceCriteria.length > 0) {
+    goalParts.push(
+      `## Acceptance Criteria (ALL must be met)\n${step.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`,
+    )
+  }
+
+  if (envelope.targetArtifacts.length > 0) {
+    goalParts.push(
+      `## Target Files\nYou are responsible for creating/modifying:\n${envelope.targetArtifacts.map(a => `- ${a}`).join("\n")}`,
+    )
+  }
+
+  if (envelope.requiredSourceArtifacts.length > 0) {
+    goalParts.push(
+      `## Source Files (read these first)\n${envelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
+    )
+  }
+
+  goalParts.push(
+    `## Workspace\nRoot: ${envelope.workspaceRoot}\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}`,
+  )
+
+  const goal = goalParts.join("\n\n")
+
+  // Filter tools based on the envelope's allowedTools / requiredToolCapabilities
+  let childTools: Tool[]
+  const allowedToolNames = new Set([
+    ...envelope.allowedTools,
+    ...step.requiredToolCapabilities,
+  ])
+
+  if (allowedToolNames.size > 0) {
+    childTools = ctx.availableTools.filter(t =>
+      allowedToolNames.has(t.name) && t.name !== "delegate" && t.name !== "delegate_parallel",
+    )
+  } else {
+    childTools = ctx.availableTools.filter(t =>
+      t.name !== "delegate" && t.name !== "delegate_parallel",
+    )
+  }
+
+  // Inject extra tools
+  if (ctx.extraChildTools) {
+    const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
+    childTools = [
+      ...childTools.filter(t => !extraNames.has(t.name)),
+      ...ctx.extraChildTools,
+    ]
+  }
+
+  // Parse max iterations from budget hint
+  const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
+  const maxIter = Math.min(budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS, 25)
+
+  ctx.onChildTrace?.({
+    kind: "planner-delegation-start",
+    goal: step.objective,
+    stepName: step.name,
+    depth: ctx.depth + 1,
+    tools: childTools.map(t => t.name),
+    envelope: {
+      workspaceRoot: envelope.workspaceRoot,
+      effectClass: envelope.effectClass,
+      verificationMode: envelope.verificationMode,
+      targetArtifacts: envelope.targetArtifacts,
+    },
+  })
+
+  let releaseSlot: (() => void) | undefined
+  if (ctx.acquireSlot) {
+    const childRunId = `plan-${step.name}-${Date.now()}`
+    releaseSlot = await ctx.acquireSlot(childRunId)
+  }
+
+  const child = new Agent(ctx.llm, childTools, {
+    maxIterations: maxIter,
+    systemPrompt: CHILD_SYSTEM_PROMPT,
+    verbose: false,
+    signal: ctx.signal,
+    onThinking: (_content, _toolCalls, iteration) => {
+      ctx.onChildTrace?.({
+        kind: "planner-delegation-iteration",
+        stepName: step.name,
+        depth: ctx.depth + 1,
+        iteration: iteration + 1,
+        maxIterations: maxIter,
+      })
+      ctx.onChildUsage?.(child.usage, child.llmCalls)
+    },
+    onStep: () => {
+      ctx.onChildUsage?.(child.usage, child.llmCalls)
+    },
+  })
+
+  try {
+    const answer = await child.run(goal)
+    const hitLimit = answer.startsWith("Agent stopped after")
+
+    ctx.onChildUsage?.(child.usage, child.llmCalls)
+    ctx.onChildTrace?.({
+      kind: "planner-delegation-end",
+      stepName: step.name,
+      depth: ctx.depth + 1,
+      status: hitLimit ? "error" : "done",
+      answer: answer.slice(0, 500),
+    })
+
+    if (hitLimit) {
+      return `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`
+    }
+
+    return answer
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    ctx.onChildTrace?.({
+      kind: "planner-delegation-end",
+      stepName: step.name,
+      depth: ctx.depth + 1,
+      status: "error",
+      error: errMsg,
+    })
     return `Delegation failed: ${errMsg}`
   } finally {
     releaseSlot?.()

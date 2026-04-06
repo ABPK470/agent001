@@ -143,4 +143,15 @@ export interface AgentConfig {
   onLlmCall?: (data: { phase: "request"; messages: Message[]; tools: Tool[]; iteration: number } | { phase: "response"; response: LLMResponse; iteration: number; durationMs: number }) => void
   /** AbortSignal for external cancellation. */
   signal?: AbortSignal
+
+  // ── Planner options (agenc-core pattern) ──────────────────────
+
+  /** Enable planner-first routing for complex tasks. Default: false */
+  enablePlanner?: boolean
+  /** Workspace root path (used by planner for child scoping). */
+  workspaceRoot?: string
+  /** Called with planner/pipeline trace events for UI. */
+  onPlannerTrace?: (entry: Record<string, unknown>) => void
+  /** Delegation function for planner-spawned children (injected by server). */
+  plannerDelegateFn?: (step: import("./planner/types.js").SubagentTaskStep, envelope: import("./planner/types.js").ExecutionEnvelope) => Promise<string>
 }
