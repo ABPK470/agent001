@@ -31,7 +31,11 @@ export function EditorTabs({
       e.kind === "tool-call" || e.kind === "tool-result" || e.kind === "tool-error" ||
       e.kind === "answer" || e.kind === "error" || e.kind === "usage" ||
       e.kind === "delegation-start" || e.kind === "delegation-end" || e.kind === "delegation-iteration" ||
-      e.kind === "delegation-parallel-start" || e.kind === "delegation-parallel-end"
+      e.kind === "delegation-parallel-start" || e.kind === "delegation-parallel-end" ||
+      e.kind === "planner-decision" || e.kind === "planner-plan-generated" ||
+      e.kind === "planner-step-start" || e.kind === "planner-step-end" ||
+      e.kind === "planner-pipeline-start" || e.kind === "planner-pipeline-end" ||
+      e.kind === "planner-verification" || e.kind === "planner-retry"
     ).length,
     [trace],
   )

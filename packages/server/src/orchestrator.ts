@@ -25,6 +25,7 @@ import {
     runFailed,
     runStarted,
     setShellSignal,
+    spawnChildForPlan,
     startPlanning,
     startRunning,
     type DelegateContext,
@@ -479,6 +480,9 @@ export class AgentOrchestrator {
         } else if (entry.kind === "thinking") {
           // Child agent thinking — forward to trace
           broadcast({ type: "agent.thinking", data: { runId, content: entry.text } })
+        } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
+          // Planner delegation events (planner-delegation-start/iteration/end)
+          broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
         }
       },
       onChildUsage: (childUsage) => {
@@ -620,6 +624,44 @@ export class AgentOrchestrator {
       verbose: true,
       signal: controller.signal,
       systemMessages,
+      // ── Planner-first routing ──────────────────────────────────
+      enablePlanner: true,
+      workspaceRoot: this.workspace ?? process.cwd(),
+      onPlannerTrace: (entry) => {
+        this.saveTrace(runId, entry)
+        broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry } })
+
+        // Key lifecycle events get dedicated WS types for audit/status widgets
+        if (entry.kind === "planner-decision" && entry.shouldPlan) {
+          broadcast({ type: "planner.started", data: { runId, score: entry.score, reason: entry.reason } })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.started",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { score: entry.score, reason: entry.reason },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-pipeline-end") {
+          broadcast({ type: "planner.completed", data: { runId, status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps } })
+          services.auditService.log({
+            actor: "agent",
+            action: entry.status === "done" ? "planner.completed" : "planner.failed",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-verification") {
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.verified",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { overall: entry.overall, confidence: entry.confidence },
+          }).catch(() => {})
+        }
+      },
+      plannerDelegateFn: (step, envelope) =>
+        spawnChildForPlan(delegateCtx, step, envelope),
       onLlmCall: (data) => {
         if (data.phase === "request") {
           const entry = {

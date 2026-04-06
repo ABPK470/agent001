@@ -50,10 +50,16 @@ const SPINE_COLORS: Record<string, string> = {
   iteration:          C.mid,
   "delegation-start": C.plum,
   "delegation-end":   C.plum,
+  "planner-decision": "#C084FC",
+  "planner-plan-generated": "#C084FC",
+  "planner-step-start": "#C084FC",
+  "planner-step-end": "#C084FC",
+  "planner-pipeline-end": "#C084FC",
+  "planner-verification": "#C084FC",
   answer:             C.success,
   error:              C.coral,
 }
-const SPINE_PRIMARY = new Set(["goal", "tool-call", "delegation-start", "error", "tool-error", "answer"])
+const SPINE_PRIMARY = new Set(["goal", "tool-call", "delegation-start", "planner-decision", "planner-plan-generated", "planner-pipeline-end", "error", "tool-error", "answer"])
 
 // ── Tool label mapping ───────────────────────────────────────────
 
@@ -304,6 +310,33 @@ export function AgentViz() {
     return all
   }, [trace])
 
+  // Track planner pipeline steps from trace
+  const prevPlanStepsRef = useRef<Array<{ key: string; name: string; type: string; status: "active" | "done" | "error" }>>([])
+  const tracePlanSteps = useMemo(() => {
+    const all: Array<{ key: string; name: string; type: string; status: "active" | "done" | "error" }> = []
+    for (const e of trace) {
+      if (e.kind === "planner-step-start") {
+        all.push({ key: `ps${all.length}`, name: e.stepName, type: e.stepType, status: "active" })
+      } else if (e.kind === "planner-step-end") {
+        for (let j = all.length - 1; j >= 0; j--) {
+          if (all[j].name === e.stepName && all[j].status === "active") {
+            all[j].status = e.status === "done" ? "done" : "error"
+            break
+          }
+        }
+      }
+    }
+    const prev = prevPlanStepsRef.current
+    if (
+      prev.length === all.length &&
+      prev.every((s, i) => s.key === all[i].key && s.status === all[i].status)
+    ) {
+      return prev
+    }
+    prevPlanStepsRef.current = all
+    return all
+  }, [trace])
+
   // Build graph data from agents + active delegations
   // Stabilised: returns previous reference when topology is unchanged,
   // preventing force-graph from reheating the d3 simulation (alpha=1 restart).
@@ -430,6 +463,31 @@ export function AgentViz() {
       }
     }
 
+    // Add planner step nodes
+    for (const ps of tracePlanSteps) {
+      const psId = `planstep:${ps.key}`
+      const color = ps.status === "active" ? "#C084FC" : ps.status === "error" ? C.coral : "#C084FC"
+      nodes.push({
+        id: psId,
+        type: "delegate",
+        label: ps.name.slice(0, 6),
+        color,
+        delegateDepth: 1,
+        delegateStatus: ps.status,
+        val: 3,
+        x: -30,
+        y: (agents.length + traceDelegations.length + tracePlanSteps.indexOf(ps)) * 50,
+      })
+      if (activeAgentId) {
+        links.push({
+          source: `agent:${activeAgentId}`,
+          target: psId,
+          agentId: activeAgentId,
+          color: color + "60",
+        })
+      }
+    }
+
     // Structural comparison — only return new reference when topology changes
     const prev = prevGraphRef.current
     const nodesKey = nodes.map(n => n.id).join("\0")
@@ -446,7 +504,7 @@ export function AgentViz() {
     }
     prevGraphRef.current = { nodes, links }
     return { nodes, links }
-  }, [agents, traceDelegations, activeAgentId, involvedToolIds])
+  }, [agents, traceDelegations, tracePlanSteps, activeAgentId, involvedToolIds])
 
   // Emit particles when new tool calls arrive (live mode only)
   useEffect(() => {

@@ -82,6 +82,18 @@ export type TraceEntry =
   | { kind: "delegation-parallel-end"; depth: number; taskCount: number; fulfilled: number; rejected: number }
   | { kind: "user-input-request"; question: string; options?: string[]; sensitive?: boolean }
   | { kind: "user-input-response"; text: string }
+  // Planner entries (agenc-core planner-first routing)
+  | { kind: "planner-decision"; score: number; shouldPlan: boolean; reason: string }
+  | { kind: "planner-generating" }
+  | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string }> }
+  | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
+  | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
+  | { kind: "planner-step-start"; stepName: string; stepType: string }
+  | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number }
+  | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
+  | { kind: "planner-retry"; attempt: number; reason: string }
   // Debug/inspector entries
   | { kind: "system-prompt"; text: string }
   | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }

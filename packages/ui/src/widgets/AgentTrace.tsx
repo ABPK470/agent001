@@ -167,6 +167,120 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         </div>
       )
 
+    // ── Planner events ───────────────────────────────────────────
+    case "planner-decision":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">PLAN</span>
+            <span className={`text-[13px] ${entry.shouldPlan ? "text-[#C084FC]" : "text-text-muted"}`}>
+              {entry.shouldPlan ? "▶ activating planner" : "▷ skipped"}
+            </span>
+            <span className="text-text-muted text-[11px] font-mono">score {entry.score.toFixed(2)}</span>
+          </div>
+          <div className="text-text-muted text-[12px] mt-0.5 ml-5">{entry.reason}</div>
+        </div>
+      )
+
+    case "planner-generating":
+      return (
+        <div className="text-[#C084FC]/60 text-[12px] font-mono pl-6 py-0.5">
+          ⟳ generating plan…
+        </div>
+      )
+
+    case "planner-plan-generated":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">PLAN</span>
+            <span className="text-[#C084FC]/70 text-[13px]">✓ {entry.stepCount} steps</span>
+          </div>
+          <div className="text-text-muted text-[12px] mt-0.5 ml-5">{entry.reason}</div>
+          <div className="text-text-muted/50 text-[11px] font-mono mt-0.5 ml-5">
+            {entry.steps.map(s => s.name).join(" → ")}
+          </div>
+        </div>
+      )
+
+    case "planner-generation-failed":
+    case "planner-validation-failed":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-error/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">PLAN</span>
+            <span className="text-error text-[13px]">✗ {entry.kind === "planner-generation-failed" ? "generation" : "validation"} failed</span>
+          </div>
+          {entry.diagnostics.map((d, i) => (
+            <div key={i} className="text-error/70 text-[12px] ml-5 mt-0.5">
+              [{d.code}] {d.message}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-pipeline-start":
+      return (
+        <div className="text-[#C084FC]/70 text-[12px] font-mono pl-6 py-0.5 border-t border-[#C084FC]/10 mt-1">
+          ▶ pipeline attempt {entry.attempt}/{entry.maxRetries}
+        </div>
+      )
+
+    case "planner-step-start":
+      return (
+        <div className="text-text-muted text-[12px] font-mono pl-6 py-0.5">
+          ⟩ {entry.stepName} <span className="text-text-muted/50">({entry.stepType})</span>
+        </div>
+      )
+
+    case "planner-step-end":
+      return (
+        <div className="text-[12px] font-mono pl-6 py-0.5">
+          <span className={entry.status === "done" ? "text-success" : "text-error"}>
+            {entry.status === "done" ? "✓" : "✗"} {entry.stepName}
+          </span>
+          <span className="text-text-muted/50 ml-2">{entry.durationMs}ms</span>
+        </div>
+      )
+
+    case "planner-pipeline-end":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40 mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">PIPE</span>
+            <span className={`text-[13px] ${entry.status === "done" ? "text-success" : "text-error"}`}>
+              ◀ {entry.status}
+            </span>
+            <span className="text-text-muted text-[12px]">{entry.completedSteps}/{entry.totalSteps} steps</span>
+          </div>
+        </div>
+      )
+
+    case "planner-verification":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">VRFY</span>
+            <span className={`text-[13px] ${entry.overall === "pass" ? "text-success" : entry.overall === "partial" ? "text-warning" : "text-error"}`}>
+              {entry.overall}
+            </span>
+            <span className="text-text-muted text-[11px] font-mono">confidence {(entry.confidence * 100).toFixed(0)}%</span>
+          </div>
+          {entry.steps.filter(s => s.issues.length > 0).map((s, i) => (
+            <div key={i} className="text-text-muted/60 text-[11px] ml-5 mt-0.5">
+              {s.stepName}: {s.issues.join("; ")}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-retry":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          ↻ retry attempt {entry.attempt}: {entry.reason}
+        </div>
+      )
+
     default:
       return null
   }

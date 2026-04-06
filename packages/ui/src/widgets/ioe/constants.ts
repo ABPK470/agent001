@@ -170,6 +170,79 @@ export function buildDagNodes(trace: TraceEntry[]): DagNode[] {
     }
     if (e.kind === "delegation-iteration") continue
 
+    // Planner events → DAG nodes
+    if (e.kind === "planner-decision" && e.shouldPlan) {
+      nodes.push({
+        id: `plan-decision-${i}`,
+        type: "iteration",
+        label: "P",
+        detail: `Planner activated (score ${e.score.toFixed(2)})`,
+        expanded: `Planner decision: ${e.reason}\nScore: ${e.score}`,
+        status: "done",
+        depth: delegationDepth,
+      })
+      continue
+    }
+    if (e.kind === "planner-plan-generated") {
+      nodes.push({
+        id: `plan-gen-${i}`,
+        type: "iteration",
+        label: `${e.stepCount}P`,
+        detail: `Plan: ${e.steps.map(s => s.name).join(" → ")}`,
+        expanded: `${e.reason}\n\nSteps:\n${e.steps.map(s => `- ${s.name} (${s.type})`).join("\n")}`,
+        status: "done",
+        depth: delegationDepth,
+      })
+      continue
+    }
+    if (e.kind === "planner-step-start") {
+      nodes.push({
+        id: `plan-step-${i}`,
+        type: "tool-call",
+        label: `${e.stepName}`,
+        detail: `${e.stepType}: ${e.stepName}`,
+        expanded: `Plan step: ${e.stepName} (${e.stepType})`,
+        status: "running",
+        depth: delegationDepth + 1,
+      })
+      continue
+    }
+    if (e.kind === "planner-step-end") {
+      for (let j = nodes.length - 1; j >= 0; j--) {
+        if (nodes[j].id.startsWith("plan-step-") && nodes[j].status === "running") {
+          nodes[j].status = e.status === "done" ? "done" : "error"
+          nodes[j].resultText = `${e.durationMs}ms`
+          break
+        }
+      }
+      continue
+    }
+    if (e.kind === "planner-pipeline-end") {
+      nodes.push({
+        id: `plan-pipe-${i}`,
+        type: "answer",
+        label: "PE",
+        detail: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps}`,
+        expanded: `Pipeline ${e.status}\nCompleted: ${e.completedSteps}/${e.totalSteps} steps`,
+        status: e.status === "done" ? "done" : "error",
+        depth: delegationDepth,
+      })
+      continue
+    }
+    if (e.kind === "planner-verification") {
+      nodes.push({
+        id: `plan-verify-${i}`,
+        type: "answer",
+        label: "V",
+        detail: `Verified: ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`,
+        expanded: `Verification: ${e.overall}\nConfidence: ${(e.confidence * 100).toFixed(0)}%\n${e.steps.map(s => `${s.stepName}: ${s.outcome}${s.issues.length ? ` — ${s.issues.join("; ")}` : ""}`).join("\n")}`,
+        status: e.overall === "pass" ? "done" : e.overall === "partial" ? "done" : "error",
+        depth: delegationDepth,
+      })
+      continue
+    }
+    if (typeof e.kind === "string" && e.kind.startsWith("planner-")) continue
+
     if (e.kind === "iteration") {
       iterIdx++
       let hasError = false
@@ -258,6 +331,12 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "goal") items.push({ text: `GOAL ${e.text ?? ""}`, color: C.accent })
     else if (e.kind === "delegation-start") items.push({ text: `DELEG ▶ ${e.agentName ? `[${e.agentName}] ` : ""}${e.goal}`, color: C.plum })
     else if (e.kind === "delegation-end") items.push({ text: `DELEG ◀ ${e.status}`, color: e.status === "done" ? C.success : C.coral })
+    else if (e.kind === "planner-decision" && e.shouldPlan) items.push({ text: `PLAN ▶ score ${e.score.toFixed(2)}`, color: C.plum })
+    else if (e.kind === "planner-plan-generated") items.push({ text: `PLAN ✓ ${e.stepCount} steps: ${e.steps.map(s => s.name).join(" → ")}`, color: C.plum })
+    else if (e.kind === "planner-step-start") items.push({ text: `STEP ⟩ ${e.stepName}`, color: C.dim })
+    else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "done" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "done" ? C.success : C.coral })
+    else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "done" ? C.success : C.coral })
+    else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
   }
   return items
 }
@@ -341,6 +420,16 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
       msgs.push({ role: "system", content: `Delegating to ${e.agentName ?? "sub-agent"}: ${e.goal}` })
     else if (e.kind === "delegation-end")
       msgs.push({ role: "system", content: `Delegation ${e.status}${e.answer ? `: ${e.answer}` : ""}` })
+    else if (e.kind === "planner-decision" && e.shouldPlan)
+      msgs.push({ role: "system", content: `Planner activated (score ${e.score.toFixed(2)}): ${e.reason}` })
+    else if (e.kind === "planner-plan-generated")
+      msgs.push({ role: "system", content: `Plan generated (${e.stepCount} steps): ${e.steps.map(s => s.name).join(" → ")}` })
+    else if (e.kind === "planner-pipeline-end")
+      msgs.push({ role: "system", content: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed` })
+    else if (e.kind === "planner-verification")
+      msgs.push({ role: "system", content: `Verification: ${e.overall} (confidence ${(e.confidence * 100).toFixed(0)}%)` })
+    else if (e.kind === "planner-step-end" && e.status !== "done")
+      msgs.push({ role: "system", content: `Plan step failed: ${e.stepName}` })
     else if (e.kind === "user-input-request")
       msgs.push({ role: "input-request", content: e.question, options: e.options, sensitive: e.sensitive })
     else if (e.kind === "user-input-response")

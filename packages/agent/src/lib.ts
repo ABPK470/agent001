@@ -87,7 +87,7 @@ export type { AskUserResolver } from "./tools/ask-user.js"
 export { browseWebTool, closeAllBrowserSessions } from "./tools/browse-web.js"
 export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
 export type { BrowserCheckResult } from "./tools/browser-check.js"
-export { createDelegateTool, createDelegateTools } from "./tools/delegate.js"
+export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./tools/delegate.js"
 export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
 export { fetchUrlTool } from "./tools/fetch-url.js"
 export {

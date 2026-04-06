@@ -637,6 +637,28 @@ export const useStore = create<AppState>()(
             break
           }
 
+          case "planner.started": {
+            store.addTrace({
+              kind: "planner-decision",
+              score: data["score"] as number,
+              shouldPlan: true,
+              reason: data["reason"] as string,
+            })
+            break
+          }
+
+          case "planner.completed": {
+            // Pipeline result summary — consumed by audit/status widgets.
+            // Detailed step events already arrive via debug.trace.
+            store.addTrace({
+              kind: "planner-pipeline-end",
+              status: data["status"] as string,
+              completedSteps: data["completedSteps"] as number,
+              totalSteps: data["totalSteps"] as number,
+            })
+            break
+          }
+
           case "usage.updated": {
             // Usage trace entry now arrives via debug.trace; this handler
             // only updates the liveUsage summary counters.
