@@ -51,6 +51,7 @@ export {
     RunStatus,
     StepStatus,
     approvalRequired,
+    cancelRun,
     completeRun,
     completeStep,
     createRun,
@@ -95,7 +96,7 @@ export {
 export {
     closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled
 } from "./tools/mssql.js"
-export { setShellCwd, setShellExecutor, setShellSandboxStrict, shellTool } from "./tools/shell.js"
+export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"
 export type { ShellExecResult } from "./tools/shell.js"
 export { thinkTool } from "./tools/think.js"
 

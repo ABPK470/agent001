@@ -56,6 +56,7 @@ export class OpenAIClient implements LLMClient {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
+      max_completion_tokens: 16384,
     }
 
     if (tools.length > 0) {
@@ -97,12 +98,22 @@ export class OpenAIClient implements LLMClient {
           content: string | null
           tool_calls?: OpenAIToolCall[]
         }
+        finish_reason: string | null
       }>
       usage?: {
         prompt_tokens: number
         completion_tokens: number
         total_tokens: number
       }
+    }
+
+    const finish = data.choices[0].finish_reason
+    if (finish === "length") {
+      throw new Error(
+        "LLM response truncated (finish_reason=length). " +
+        "The model hit its completion token limit before finishing. " +
+        "This usually means a tool call argument (like file content) was too large."
+      )
     }
 
     const choice = data.choices[0].message

@@ -98,8 +98,45 @@ interface AppState {
   wsEventLog: WsEvent[]
   clearWsEventLog: () => void
 
+  // IOE layout persistence (survives view switches + page reload)
+  ioeLayout: IoeLayout
+  setIoeLayout: (patch: Partial<IoeLayout>) => void
+
   // WebSocket event handler
   handleWsEvent: (event: WsEvent) => void
+}
+
+/** Persisted IOE panel layout. */
+export interface IoeLayout {
+  sidebarSection: string
+  sidebarVisible: boolean
+  bottomVisible: boolean
+  chatVisible: boolean
+  editorTab: string
+  editorSplit: boolean
+  editorRightTab: string
+  bottomTab: string
+  bottomSplit: boolean
+  bottomRightTab: string
+  sidebarWidth: number
+  bottomHeight: number
+  chatWidth: number
+}
+
+const DEFAULT_IOE_LAYOUT: IoeLayout = {
+  sidebarSection: "runs",
+  sidebarVisible: true,
+  bottomVisible: true,
+  chatVisible: true,
+  editorTab: "trace",
+  editorSplit: false,
+  editorRightTab: "llm-calls",
+  bottomTab: "output",
+  bottomSplit: false,
+  bottomRightTab: "audit",
+  sidebarWidth: 260,
+  bottomHeight: 200,
+  chatWidth: 300,
 }
 
 // ── Default view ─────────────────────────────────────────────────
@@ -372,6 +409,10 @@ export const useStore = create<AppState>()(
       // Raw WS event log
       wsEventLog: [],
       clearWsEventLog: () => set({ wsEventLog: [] }),
+
+      // IOE layout
+      ioeLayout: { ...DEFAULT_IOE_LAYOUT },
+      setIoeLayout: (patch) => set((s) => ({ ioeLayout: { ...s.ioeLayout, ...patch } })),
 
       // WebSocket event handler
       handleWsEvent: (event) => {
@@ -647,6 +688,7 @@ export const useStore = create<AppState>()(
         views: state.views,
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
+        ioeLayout: state.ioeLayout,
       }),
     },
   ),

@@ -13,6 +13,7 @@
 import {
     Agent,
     askUserTool,
+    cancelRun,
     completeRun,
     createDelegateTools,
     createEngineServices,
@@ -23,6 +24,7 @@ import {
     runCompleted,
     runFailed,
     runStarted,
+    setShellSignal,
     startPlanning,
     startRunning,
     type DelegateContext,
@@ -715,7 +717,55 @@ export class AgentOrchestrator {
     })
 
     try {
+      setShellSignal(controller.signal)
       const answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
+
+      // Check if the run was cancelled (agent returns gracefully with cancel message)
+      if (controller.signal.aborted) {
+        cancelRun(run)
+
+        await services.auditService.log({
+          actor,
+          action: "agent.cancelled",
+          resourceType: "AgentRun",
+          resourceId: run.id,
+          detail: {
+            goal,
+            totalTokens: agent.usage.totalTokens,
+            llmCalls: agent.llmCalls,
+          },
+        })
+
+        this.persistRun(run, goal, agentId, resume?.parentRunId)
+        this.persistAuditLog(services, runId)
+        this.persistTokenUsage(runId, agent)
+
+        broadcast({
+          type: "run.cancelled",
+          data: {
+            runId,
+            status: "cancelled",
+            stepCount: run.steps.length,
+            totalTokens: agent.usage.totalTokens,
+            promptTokens: agent.usage.promptTokens,
+            completionTokens: agent.usage.completionTokens,
+            llmCalls: agent.llmCalls,
+          },
+        })
+
+        this.createNotification({
+          type: "run.cancelled",
+          title: "Run cancelled",
+          message: `"${goal.slice(0, 80)}" was cancelled after ${run.steps.length} steps.`,
+          runId,
+          actions: [
+            { label: "View", action: "view-run", data: { runId } },
+            { label: "Rollback", action: "rollback-run", data: { runId } },
+          ],
+        })
+
+        return
+      }
 
       // Complete the run
       completeRun(run)
@@ -888,6 +938,7 @@ export class AgentOrchestrator {
         ],
       })
     } finally {
+      setShellSignal(null)
       releaseSlot()
       bus.dispose()
       this.pendingInputs.delete(runId)

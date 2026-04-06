@@ -80,23 +80,41 @@ export function OperatorEnvironment() {
   const [llm, setLlm] = useState<LlmConfig | null>(null)
   const [health, setHealth] = useState<HealthData | null>(null)
 
-  // ── Layout state ──────────────────────────────────────────────
-  const [sidebarSection, setSidebarSection] = useState<SidebarSection>("runs")
-  const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [bottomVisible, setBottomVisible] = useState(true)
-  const [chatVisible, setChatVisible] = useState(true)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [editorTab, setEditorTab] = useState<EditorTab>("trace")
-  const [editorSplit, setEditorSplit] = useState(false)
-  const [editorRightTab, setEditorRightTab] = useState<EditorTab>("llm-calls")
-  const [bottomTab, setBottomTab] = useState<BottomTab>("output")
-  const [bottomSplit, setBottomSplit] = useState(false)
-  const [bottomRightTab, setBottomRightTab] = useState<BottomTab>("audit")
+  // ── Layout state (persisted in store — survives view switches + reload) ──
+  const ioeLayout = useStore((s) => s.ioeLayout)
+  const setIoeLayout = useStore((s) => s.setIoeLayout)
 
-  // ── Resizable panels ──────────────────────────────────────────
-  const sidebar = useResizable(260, "horizontal")
-  const bottom = useResizable(200, "vertical", true)
-  const chatR = useResizable(300, "horizontal", true)
+  const sidebarSection = ioeLayout.sidebarSection as SidebarSection
+  const setSidebarSection = useCallback((v: SidebarSection) => setIoeLayout({ sidebarSection: v }), [setIoeLayout])
+  const sidebarVisible = ioeLayout.sidebarVisible
+  const setSidebarVisible = useCallback((v: boolean) => setIoeLayout({ sidebarVisible: v }), [setIoeLayout])
+  const bottomVisible = ioeLayout.bottomVisible
+  const setBottomVisible = useCallback((v: boolean) => setIoeLayout({ bottomVisible: v }), [setIoeLayout])
+  const chatVisible = ioeLayout.chatVisible
+  const setChatVisible = useCallback((v: boolean) => setIoeLayout({ chatVisible: v }), [setIoeLayout])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const editorTab = ioeLayout.editorTab as EditorTab
+  const setEditorTab = useCallback((v: EditorTab) => setIoeLayout({ editorTab: v }), [setIoeLayout])
+  const editorSplit = ioeLayout.editorSplit
+  const setEditorSplit = useCallback((v: boolean) => setIoeLayout({ editorSplit: v }), [setIoeLayout])
+  const editorRightTab = ioeLayout.editorRightTab as EditorTab
+  const setEditorRightTab = useCallback((v: EditorTab) => setIoeLayout({ editorRightTab: v }), [setIoeLayout])
+  const bottomTab = ioeLayout.bottomTab as BottomTab
+  const setBottomTab = useCallback((v: BottomTab) => setIoeLayout({ bottomTab: v }), [setIoeLayout])
+  const bottomSplit = ioeLayout.bottomSplit
+  const setBottomSplit = useCallback((v: boolean) => setIoeLayout({ bottomSplit: v }), [setIoeLayout])
+  const bottomRightTab = ioeLayout.bottomRightTab as BottomTab
+  const setBottomRightTab = useCallback((v: BottomTab) => setIoeLayout({ bottomRightTab: v }), [setIoeLayout])
+
+  // ── Resizable panels (init from persisted layout, sync back on change) ──
+  const sidebar = useResizable(ioeLayout.sidebarWidth, "horizontal")
+  const bottom = useResizable(ioeLayout.bottomHeight, "vertical", true)
+  const chatR = useResizable(ioeLayout.chatWidth, "horizontal", true)
+
+  // Persist panel sizes back to store (debounced — only on actual changes)
+  useEffect(() => { setIoeLayout({ sidebarWidth: sidebar.size }) }, [sidebar.size, setIoeLayout])
+  useEffect(() => { setIoeLayout({ bottomHeight: bottom.size }) }, [bottom.size, setIoeLayout])
+  useEffect(() => { setIoeLayout({ chatWidth: chatR.size }) }, [chatR.size, setIoeLayout])
 
   // ── Operational state ─────────────────────────────────────────
   const [goalInput, setGoalInput] = useState("")
@@ -191,6 +209,19 @@ export function OperatorEnvironment() {
     if (!activeRun) return
     try {
       const { runId } = await api.resumeRun(activeRun.id)
+      if (runId) {
+        setTrace([])
+        setActiveRun(runId)
+      }
+    } catch {
+      /* swallow */
+    }
+  }, [activeRun, setActiveRun, setTrace])
+
+  const handleRerun = useCallback(async () => {
+    if (!activeRun) return
+    try {
+      const { runId } = await api.rerunRun(activeRun.id)
       if (runId) {
         setTrace([])
         setActiveRun(runId)
@@ -378,7 +409,7 @@ export function OperatorEnvironment() {
           <button
             className="flex items-center justify-center w-12 h-9 cursor-pointer group"
             style={{ color: bottomVisible ? C.text : C.muted }}
-            onClick={() => setBottomVisible((v) => !v)}
+            onClick={() => setBottomVisible(!bottomVisible)}
             title="Toggle bottom panel"
           >
             <PanelBottom size={20} className="transition-[filter] duration-150 group-hover:brightness-150" />
@@ -386,7 +417,7 @@ export function OperatorEnvironment() {
           <button
             className="flex items-center justify-center w-12 h-9 cursor-pointer group"
             style={{ color: chatVisible ? C.text : C.muted }}
-            onClick={() => setChatVisible((v) => !v)}
+            onClick={() => setChatVisible(!chatVisible)}
             title="Toggle Copilot chat"
           >
             <MessageSquare size={20} className="transition-[filter] duration-150 group-hover:brightness-150" />
@@ -441,6 +472,9 @@ export function OperatorEnvironment() {
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
               {isFailed && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
               {(activeRun?.status === "completed" || isFailed) && (
+                <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
+              )}
+              {(activeRun?.status === "completed" || isFailed) && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (
@@ -464,7 +498,7 @@ export function OperatorEnvironment() {
                 <button
                   className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
                   style={{ color: editorSplit ? C.text : C.dim }}
-                  onClick={() => setEditorSplit((v) => !v)}
+                  onClick={() => setEditorSplit(!editorSplit)}
                   title="Split editor"
                 >
                   <Columns2 size={14} />
@@ -555,7 +589,7 @@ export function OperatorEnvironment() {
                 <button
                   className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
                   style={{ color: bottomSplit ? C.text : C.dim }}
-                  onClick={() => setBottomSplit((v) => !v)}
+                  onClick={() => setBottomSplit(!bottomSplit)}
                   title="Split bottom panel"
                 >
                   <Columns2 size={13} />

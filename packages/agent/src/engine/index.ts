@@ -19,6 +19,7 @@ export { DomainError, InvalidTransitionError, PolicyViolationError } from "./err
 
 // Models
 export {
+    cancelRun,
     completeRun,
     completeStep,
     createAuditEntry,

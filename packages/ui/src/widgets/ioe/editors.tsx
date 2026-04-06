@@ -777,8 +777,9 @@ export function MapPanel({
       const delegId = `delegate:${deleg.key}`
       const baseColor = AGENT_COLORS[(agents.length + deleg.depth) % AGENT_COLORS.length]
       const color = deleg.status === "error" ? C.coral : baseColor
+      const delegIndex = traceDelegations.indexOf(deleg)
       nodes.push({
-        id: delegId, type: "delegate", label: `D${deleg.depth}`, color,
+        id: delegId, type: "delegate", label: `D${delegIndex + 1}`, color,
         delegateDepth: deleg.depth, delegateStatus: deleg.status,
         val: 4, x: -30, y: (agents.length + deleg.depth - 1) * 50,
       })

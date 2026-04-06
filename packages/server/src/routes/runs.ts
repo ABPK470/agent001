@@ -130,6 +130,36 @@ export function registerRunRoutes(
     return { runId: newRunId }
   })
 
+  // Re-run: start a fresh run with the same goal and agent as a previous run
+  app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", async (req, reply) => {
+    const original = db.getRun(req.params.id)
+    if (!original) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+
+    if (original.agent_id) {
+      const agent = db.getAgentDefinition(original.agent_id)
+      if (!agent) {
+        reply.code(400)
+        return { error: `Agent definition not found: ${original.agent_id}` }
+      }
+      const toolNames = JSON.parse(agent.tools) as string[]
+      const tools = resolveTools(toolNames)
+      const runId = orchestrator.startRun(original.goal, {
+        agentId: agent.id,
+        tools,
+        systemPrompt: agent.system_prompt,
+      })
+      reply.code(201)
+      return { runId, agentId: agent.id }
+    }
+
+    const runId = orchestrator.startRun(original.goal)
+    reply.code(201)
+    return { runId }
+  })
+
   // Respond to a pending ask_user request
   app.post<{ Params: { id: string }; Body: { response: string } }>("/api/runs/:id/respond", async (req, reply) => {
     const { response } = req.body

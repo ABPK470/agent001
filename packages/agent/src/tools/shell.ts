@@ -57,6 +57,14 @@ export function setShellSandboxStrict(strict: boolean): void {
   _sandboxStrict = strict
 }
 
+/** Abort signal — set per-run so child processes can be killed on cancel. */
+let _signal: AbortSignal | null = null
+
+/** Inject the run's AbortSignal so child processes are killed on cancel. */
+export function setShellSignal(signal: AbortSignal | null): void {
+  _signal = signal
+}
+
 /** Safe environment variables — the ONLY keys forwarded to child processes. */
 const SAFE_ENV_KEYS = new Set([
   "PATH",
@@ -293,6 +301,7 @@ export const shellTool: Tool = {
           maxBuffer: 1024 * 1024, // 1MB
           cwd: _shellCwd,
           env: safeEnv(),
+          ...(_signal ? { signal: _signal } : {}),
         },
         (error, stdout, stderr) => {
           const parts: string[] = []         
@@ -300,6 +309,8 @@ export const shellTool: Tool = {
           if (stderr) parts.push(`[stderr] ${stderr}`)
           if (error && error.killed) {
             parts.push("[command timed out after 30s]")
+          } else if (error && (error as NodeJS.ErrnoException).code === "ABORT_ERR") {
+            parts.push("[command cancelled]")
           } else if (error && !stdout && !stderr) {
             const code = (error as { code?: number }).code
             parts.push(`Command exited with code ${code ?? "non-zero"} and produced no output.`)

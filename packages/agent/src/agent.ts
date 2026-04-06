@@ -171,16 +171,20 @@ Principles:
 
 Delegation:
 - When splitting work across child agents, prefer delegate_parallel for independent tasks rather than chaining sequential delegates.
-- Each child is a focused worker — give it a precise, self-contained goal with all necessary context.
-- ALWAYS verify delegation results before considering the task done. Check that files were created, code compiles, output matches expectations, etc.
-- If a child's output is wrong or incomplete, re-delegate that specific task with feedback describing what was wrong and what needs to change. Max 2 rework attempts per task.
-- You are the orchestrator: decompose, delegate, verify, and only then synthesize the final answer.
+- Each child is a focused worker — give it a precise, self-contained goal with ALL necessary context (requirements, file paths, expected behavior). Do not assume the child knows anything.
+- AFTER EVERY delegation result, your VERY NEXT action MUST be a verification tool call — NEVER respond with text immediately after a delegation returns. Always verify first.
+  • Web projects → call browser_check on the main HTML file
+  • Code/scripts → call run_command to compile, run, or test
+  • File creation → call list_directory or read_file to confirm content and quality
+- If verification reveals issues (errors, missing features, incomplete work), re-delegate that specific task with corrective feedback describing EXACTLY what is wrong. Max 2 rework attempts per task.
+- You are the orchestrator: decompose → delegate → VERIFY → (rework if needed) → synthesize.
 
 Verification:
 - After creating or modifying web projects (HTML/JS/CSS), ALWAYS use browser_check to open the page and verify it loads without errors.
 - If browser_check reports errors, fix them yourself or re-delegate with the specific error details.
 - After creating code that can be tested (scripts, modules), run it with run_command to verify it works.
 - Never mark a task as done without verifying the output actually works end-to-end.
+- NEVER provide a final answer based solely on a delegation summary. You must independently verify the result.
 
 Failure recovery:
 - NEVER repeat the same command (or a trivially similar variant) after it fails. If a command fails, read the error, understand why, and try a fundamentally different approach.
@@ -260,6 +264,12 @@ export class Agent {
     const recentFailures: Array<{ name: string; argsKey: string }> = []
     const MAX_IDENTICAL_FAILURES = 3
 
+    // Track whether the last tool round included a delegation call.
+    // Used for post-delegation verification enforcement.
+    let lastRoundHadDelegation = false
+    // Track if we already nudged for early exit (only once per run).
+    let earlyExitNudged = false
+
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
         return "Agent was cancelled."
@@ -279,7 +289,24 @@ export class Agent {
 
       // Ask the LLM what to do next
       const t0 = Date.now()
-      const response = await this.llm.chat(chatMessages, this.toolList, { signal: this.config.signal })
+      let response
+      try {
+        response = await this.llm.chat(chatMessages, this.toolList, { signal: this.config.signal })
+      } catch (err) {
+        // Recover from truncated responses — nudge the LLM to break work into smaller pieces
+        if (err instanceof Error && err.message.includes("finish_reason=length")) {
+          messages.push({
+            role: "system",
+            content:
+              "⚠ OUTPUT TRUNCATED: Your last response was cut off because it exceeded the completion token limit. " +
+              "You MUST break your work into smaller pieces. When writing files, split them into multiple smaller write_file calls " +
+              "(e.g. write a skeleton first, then append sections). Do NOT put an entire large file in a single write_file call.",
+            section: "history",
+          })
+          continue
+        }
+        throw err
+      }
       const durationMs = Date.now() - t0
       this.llmCalls++
 
@@ -306,6 +333,49 @@ export class Agent {
 
       // No tool calls → the agent is done, return the final answer
       if (response.toolCalls.length === 0) {
+        // Guard: if this is iteration 0 and the agent has tools, it likely
+        // bailed without doing any work. Nudge it once to actually act.
+        if (i === 0 && this.toolList.length > 0 && !earlyExitNudged) {
+          earlyExitNudged = true
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            section: "history",
+          })
+          messages.push({
+            role: "system",
+            content:
+              "You returned a text response without using any tools. " +
+              "You MUST use your tools to accomplish the goal — do not just describe a plan. " +
+              "Start working now by calling the appropriate tools.",
+            section: "history",
+          })
+          continue
+        }
+
+        // Guard: if the previous round had a delegation, the agent must
+        // verify the result with a tool call before finishing.
+        if (lastRoundHadDelegation) {
+          lastRoundHadDelegation = false
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            section: "history",
+          })
+          messages.push({
+            role: "system",
+            content:
+              "VERIFICATION REQUIRED: You just received a delegation result but attempted to " +
+              "finish without verifying. You MUST call a verification tool now:\n" +
+              "- For web projects → browser_check on the main HTML file\n" +
+              "- For code → run_command to compile/test\n" +
+              "- For files → list_directory or read_file to confirm\n" +
+              "Do NOT provide a final answer until you have independently verified the output.",
+            section: "history",
+          })
+          continue
+        }
+
         const answer = response.content ?? "(no response)"
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
@@ -321,6 +391,7 @@ export class Agent {
 
       // Execute each tool the LLM requested
       let failuresThisRound = 0
+      let delegationThisRound = false
       for (const call of response.toolCalls) {
         if (this.config.signal?.aborted) {
           return "Agent was cancelled."
@@ -336,10 +407,25 @@ export class Agent {
           continue
         }
 
+        // Guard: if the LLM's tool call arguments failed to parse, report back instead of executing with garbage
+        if (call.arguments.__parseError) {
+          const errMsg = `Tool call "${call.name}" failed: the model produced malformed arguments that could not be parsed as JSON. ` +
+            `This usually means your output was too large and got cut off. ` +
+            `Break the work into smaller pieces — use multiple write_file calls instead of one large one. ` +
+            `Raw (truncated): ${String(call.arguments.__raw).slice(0, 200)}...`
+          if (this.config.verbose) log.logToolError(errMsg)
+          messages.push({ role: "tool", toolCallId: call.id, content: errMsg, section: "history" })
+          failuresThisRound++
+          continue
+        }
+
         try {
           const result = await tool.execute(call.arguments)
           if (this.config.verbose) log.logToolResult(result)
           messages.push({ role: "tool", toolCallId: call.id, content: result, section: "history" })
+          if (call.name === "delegate" || call.name === "delegate_parallel") {
+            delegationThisRound = true
+          }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err)
           if (this.config.verbose) log.logToolError(errMsg)
@@ -371,6 +457,7 @@ export class Agent {
       }
 
       // Checkpoint after tool execution round
+      lastRoundHadDelegation = delegationThisRound
       this.config.onStep?.(messages, i)
     }
 

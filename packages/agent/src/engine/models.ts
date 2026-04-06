@@ -116,6 +116,11 @@ export function failRun(run: AgentRun): void {
   run.completedAt = new Date()
 }
 
+export function cancelRun(run: AgentRun): void {
+  transitionRun(run, RunStatus.Cancelled)
+  run.completedAt = new Date()
+}
+
 // ── Policy Rule ──────────────────────────────────────────────────
 
 export interface PolicyRule {

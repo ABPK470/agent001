@@ -391,10 +391,12 @@ export function AgentViz() {
       const delegId = `delegate:${deleg.key}`
       const baseColor = AGENT_COLORS[(agents.length + deleg.depth) % AGENT_COLORS.length]
       const color = deleg.status === "active" ? baseColor : deleg.status === "error" ? C.coral : baseColor
+      // Sequential label: D1, D2, D3… (index-based, not depth-based)
+      const delegIndex = traceDelegations.indexOf(deleg)
       nodes.push({
         id: delegId,
         type: "delegate",
-        label: `D${deleg.depth}`,
+        label: `D${delegIndex + 1}`,
         color,
         delegateDepth: deleg.depth,
         delegateStatus: deleg.status,

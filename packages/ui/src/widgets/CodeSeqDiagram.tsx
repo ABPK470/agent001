@@ -434,7 +434,7 @@ export function CodeSeqDiagram() {
   // ── Subscribe to store ──
   const trace = useStore((s) => s.trace)
   const runs = useStore((s) => s.runs)
-  const isRunning = runs.some((r) => r.status === "running" || r.status === "queued")
+  const isRunning = runs.some((r) => r.status === "running" || r.status === "pending")
 
   // Compute active phase/lifelines from trace
   const { activePhase, completedPhases, activeLifelines } = useMemo(

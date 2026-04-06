@@ -5,7 +5,7 @@
  * Shows status, goal, time, step count, and inline actions.
  */
 
-import { GitBranch, RotateCcw, Square, Undo2 } from "lucide-react"
+import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -131,6 +131,20 @@ export function RunHistory() {
                 title="Resume from checkpoint"
               >
                 <RotateCcw size={13} />
+              </button>
+            )}
+            {(run.status === "completed" || run.status === "failed") && (
+              <button
+                className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  api.rerunRun(run.id).then((r) => {
+                    if (r.runId) setActiveRun(r.runId)
+                  }).catch(() => {})
+                }}
+                title="Re-run with same goal"
+              >
+                <Play size={13} />
               </button>
             )}
             {(run.status === "completed" || run.status === "failed") && (
