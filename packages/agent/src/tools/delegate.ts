@@ -30,7 +30,7 @@ import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
 /** Default iteration budget for a child agent. */
-const DEFAULT_CHILD_ITERATIONS = 15
+const DEFAULT_CHILD_ITERATIONS = 20
 
 /**
  * Dedicated system prompt for child worker agents.
@@ -49,9 +49,17 @@ Critical rules:
 - NEVER leave stub functions, TODO comments, or placeholder logic (e.g. \`return true\`, \`// implement later\`). Every function you write must contain REAL, COMPLETE logic. If a function is too complex to write at once, break it into smaller helper functions — but each one must be fully implemented.
 - After creating web content (HTML/JS/CSS), ALWAYS use browser_check to verify it loads and works. Fix any errors before finishing.
 - After writing code that can be tested, run it with run_command to verify correctness.
-- You have a generous iteration budget. Use it ALL to produce thorough, polished, COMPLETE work. If you finish early, review your work — read the files you wrote and verify completeness.
 - Quality matters more than speed. A working result in 10 iterations beats a broken skeleton in 2.
 - Before finishing, use read_file to review your own code. Look for stubs, missing logic, hardcoded returns, and incomplete implementations. Fix anything you find.
+
+Writing strategy — INCREMENTAL, NOT BIG-BANG:
+- Do NOT try to write an entire complex file in one write_file call. If the file will be >150 lines, write it in stages:
+  1. Write the core structure + first set of functions
+  2. Run/test to verify what you have so far works
+  3. Append or extend with the next set of functions
+  4. Run/test again
+- This incremental approach catches bugs early and prevents wasted iterations rewriting from scratch.
+- If your first write_file attempt gets errors on run_command, FIX the specific errors — do NOT delete everything and start over. Targeted fixes are faster than full rewrites.
 
 Efficiency:
 - Act directly. Use the right tool immediately.
@@ -62,6 +70,7 @@ Efficiency:
 Failure recovery:
 - NEVER repeat the same command after it fails. Read the error and try a different approach.
 - After 2 failed attempts at the same task, stop and re-assess entirely.
+- NEVER rewrite an entire file from scratch just because one function has a bug. Fix the bug.
 
 When the goal is fully achieved and verified, provide a concise summary of what you built or changed.`
 

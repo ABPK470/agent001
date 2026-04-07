@@ -325,11 +325,29 @@ export class Agent {
     let verificationFoundIssues = false
     // Track if we already nudged for early exit (only once per run).
     let earlyExitNudged = false
+    // Track if we already nudged for budget awareness (only once per run).
+    let budgetNudged = false
 
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
         return "Agent was cancelled."
       }
+
+      // Budget awareness: when 80% of iterations used, nudge once to wrap up
+      const remaining = this.config.maxIterations - i
+      if (!budgetNudged && remaining <= Math.max(Math.ceil(this.config.maxIterations * 0.2), 2)) {
+        budgetNudged = true
+        messages.push({
+          role: "system",
+          content:
+            `⚠ ITERATION BUDGET: You have ${remaining} iteration(s) remaining out of ${this.config.maxIterations}. ` +
+            `Prioritize COMPLETING your current work over perfecting it. ` +
+            `Finish writing any pending files, run a quick verification, and wrap up. ` +
+            `Do NOT start new refactors or rewrites — finalize what you have.`,
+          section: "history",
+        })
+      }
+
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
       // Truncate context if approaching token budget

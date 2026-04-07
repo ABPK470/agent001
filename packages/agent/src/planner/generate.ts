@@ -88,12 +88,13 @@ You MUST respond with valid JSON matching this schema:
 2. Each subagent_task MUST declare which tools it needs in requiredToolCapabilities  
 3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes. If step B writes to a file that step A created, only step B should be write_owner and step A should either not list that artifact or use "read_dependency"
 4. Steps that can run independently SHOULD have canRunParallel: true
-5. Keep the plan flat — prefer 2-5 steps. Over-decomposition wastes resources.
+5. SCOPE EACH STEP TO BE COMPLETABLE IN ITS BUDGET. A child agent gets ~20 iterations (tool calls). Each step should be scoped so a competent developer could complete it in that many actions. If a task is too complex for one step (e.g. "build a full chess engine"), split it into focused sub-steps — e.g. one step for core move logic, another for check/checkmate detection, another for the UI. Prefer 3-7 steps. Under-decomposition is worse than over-decomposition.
 6. For web projects: include verification steps (browser_check, test runs)
 7. workspaceRoot should match the actual working directory
 8. DO NOT produce plans with only read/analysis steps — if the task asks to BUILD something, include write steps
 9. Each step name must be unique across the plan
 10. VERIFICATION REQUIRED: If ANY step writes files (effectClass != "readonly"), at least ONE subagent_task step MUST have verificationMode set to "browser_check", "run_tests", or "deterministic_followup" — never leave ALL steps with verificationMode: "none" when there are writes
+11. A step that writes >200 lines of logic is TOO BIG. Break it down further. Each step's targetArtifacts should be either a single complex file or 2-3 simple files, not more.
 
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
 
@@ -454,7 +455,7 @@ function parseSubagentStep(
     requiredToolCapabilities: safeStringArray(raw.requiredToolCapabilities),
     contextRequirements: safeStringArray(raw.contextRequirements),
     executionContext,
-    maxBudgetHint: String(raw.maxBudgetHint ?? "15 iterations"),
+    maxBudgetHint: String(raw.maxBudgetHint ?? "20 iterations"),
     canRunParallel: Boolean(raw.canRunParallel),
     workflowStep: ws ? {
       role: parseStepRole(ws.role),
