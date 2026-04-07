@@ -22,6 +22,7 @@ export function RunStatus() {
   const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackResult, setRollbackResult] = useState<string | null>(null)
+  const [rolledBack, setRolledBack] = useState(false)
 
   const run = runs.find((r) => r.id === activeRunId)
   const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
@@ -54,7 +55,18 @@ export function RunStatus() {
     }
     setRollbackPreview(null)
     setRollbackLoading(false)
+    setRolledBack(true)
   }, [run])
+
+  // Reset rolledBack state when switching runs
+  useEffect(() => { setRolledBack(false) }, [activeRunId])
+
+  // Auto-dismiss rollback result after 8 seconds
+  useEffect(() => {
+    if (!rollbackResult) return
+    const timer = setTimeout(() => setRollbackResult(null), 8000)
+    return () => clearTimeout(timer)
+  }, [rollbackResult])
 
   if (!run) {
     return (
@@ -162,7 +174,7 @@ export function RunStatus() {
             Cancel
           </button>
         )}
-        {run.status === "failed" && (
+        {(run.status === "failed" || run.status === "cancelled") && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
             onClick={handleResume}
@@ -171,7 +183,7 @@ export function RunStatus() {
             Resume
           </button>
         )}
-        {(run.status === "completed" || run.status === "failed") && (
+        {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && !rolledBack && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
             onClick={handleRollbackPreview}

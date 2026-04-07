@@ -134,6 +134,8 @@ export interface GovernToolOptions {
   retryPolicy?: ToolRetryPolicy
   /** Timeout in ms for tool execution (default: 60s). */
   timeoutMs?: number
+  /** AbortSignal — when fired, tool execution terminates immediately. */
+  signal?: AbortSignal
 }
 
 // ── Wrap a tool with governance ──────────────────────────────────
@@ -210,19 +212,35 @@ export function governTool(
         detail: { tool: tool.name, args, stepId: step.id },
       })
 
-      // 4. Execute the tool — with timeout + retry on transient errors
+      // 4. Execute the tool — with timeout + abort + retry on transient errors
       const startTime = performance.now()
+      const abortSignal = options?.signal
       try {
         const retryResult = await withToolRetry(async () => {
-          // Wrap execution with a timeout
-          const result = await Promise.race([
+          // Race: tool execution vs timeout vs abort
+          const racers: Promise<string>[] = [
             tool.execute(args),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ])
-          return result
-        }, retryPolicy)
+            new Promise<never>((_, reject) => {
+              const id = setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
+              // If tool finishes first, prevent dangling timer
+              if (typeof id === "object" && "unref" in id) (id as NodeJS.Timeout).unref()
+            }),
+          ]
+
+          // If we have an abort signal, add it to the race
+          if (abortSignal) {
+            racers.push(new Promise<never>((_, reject) => {
+              if (abortSignal.aborted) {
+                reject(new Error(`Tool "${tool.name}" cancelled`))
+                return
+              }
+              const onAbort = () => reject(new Error(`Tool "${tool.name}" cancelled`))
+              abortSignal.addEventListener("abort", onAbort, { once: true })
+            }))
+          }
+
+          return Promise.race(racers)
+        }, retryPolicy, abortSignal)
 
         const durationMs = Math.round(performance.now() - startTime)
 

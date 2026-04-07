@@ -85,15 +85,26 @@ export interface ToolRetryResult {
 export async function withToolRetry(
   fn: () => Promise<string>,
   policy: ToolRetryPolicy = TOOL_RETRY_POLICY,
+  signal?: AbortSignal,
 ): Promise<ToolRetryResult> {
   let lastError: Error | undefined
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
+    // Bail immediately if already aborted
+    if (signal?.aborted) {
+      return { success: false, attempts: attempt, lastError: lastError ?? new Error("Cancelled") }
+    }
+
     try {
       const value = await fn()
       return { success: true, value, attempts: attempt + 1 }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
+
+      // Don't retry cancellations
+      if (signal?.aborted || lastError.message.includes("cancelled")) {
+        return { success: false, attempts: attempt + 1, lastError }
+      }
 
       // Don't retry non-transient errors
       if (!isRetryableError(err)) {

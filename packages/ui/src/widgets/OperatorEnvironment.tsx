@@ -120,6 +120,7 @@ export function OperatorEnvironment() {
   const [goalInput, setGoalInput] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
+  const [rolledBack, setRolledBack] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
   const logRef = useRef<HTMLDivElement>(null)
@@ -161,6 +162,7 @@ export function OperatorEnvironment() {
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "running"
   const isFailed = activeRun?.status === "failed"
+  const isCancelled = activeRun?.status === "cancelled"
 
   const currentIteration = useMemo(() => {
     for (let i = trace.length - 1; i >= 0; i--) {
@@ -238,6 +240,7 @@ export function OperatorEnvironment() {
       const preview = await api.previewRollback(activeRun.id)
       if (preview.wouldCompensate.length === 0) {
         setRollbackMsg("nothing to rollback")
+        setRolledBack(true)
         return
       }
       if (preview.wouldFail.length > 0) {
@@ -246,10 +249,21 @@ export function OperatorEnvironment() {
       }
       const result = await api.rollbackRun(activeRun.id)
       setRollbackMsg(`rolled back ${result.compensated} effects`)
+      setRolledBack(true)
     } catch {
       setRollbackMsg("rollback failed")
     }
   }, [activeRun])
+
+  // Reset rolledBack state when switching runs
+  useEffect(() => { setRolledBack(false) }, [activeRunId])
+
+  // Auto-dismiss rollback message after 8 seconds
+  useEffect(() => {
+    if (!rollbackMsg) return
+    const timer = setTimeout(() => setRollbackMsg(null), 8000)
+    return () => clearTimeout(timer)
+  }, [rollbackMsg])
 
   // ── Comparison state ───────────────────────────────────────────
   const [compareResult, setCompareResult] = useState<{
@@ -470,11 +484,11 @@ export function OperatorEnvironment() {
             )}
             <div className="flex items-center gap-1 shrink-0">
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
-              {isFailed && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
-              {(activeRun?.status === "completed" || isFailed) && (
+              {(isFailed || isCancelled) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
+              {(activeRun?.status === "completed" || isFailed || isCancelled) && (
                 <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
               )}
-              {(activeRun?.status === "completed" || isFailed) && (
+              {(activeRun?.status === "completed" || isFailed || isCancelled) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (

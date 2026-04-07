@@ -21,7 +21,7 @@ export function RunHistory() {
   const setLogs = useStore((s) => s.setLogs)
   const setTrace = useStore((s) => s.setTrace)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
-
+  const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
   // Load agents
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => {})
@@ -119,7 +119,7 @@ export function RunHistory() {
                 <Square size={13} />
               </button>
             )}
-            {run.status === "failed" && (
+            {(run.status === "failed" || run.status === "cancelled") && (
               <button
                 className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
                 onClick={(e) => {
@@ -133,7 +133,7 @@ export function RunHistory() {
                 <RotateCcw size={13} />
               </button>
             )}
-            {(run.status === "completed" || run.status === "failed") && (
+            {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
               <button
                 className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
                 onClick={(e) => {
@@ -147,13 +147,15 @@ export function RunHistory() {
                 <Play size={13} />
               </button>
             )}
-            {(run.status === "completed" || run.status === "failed") && (
+            {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && !rolledBackIds.has(run.id) && (
               <button
                 className="p-1.5 text-warning/70 hover:text-warning rounded transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   if (confirm("Rollback all file changes from this run?")) {
-                    api.rollbackRun(run.id).catch(() => {})
+                    api.rollbackRun(run.id).then(() => {
+                      setRolledBackIds((prev) => new Set(prev).add(run.id))
+                    }).catch(() => {})
                   }
                 }}
                 title="Rollback file changes"

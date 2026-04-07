@@ -372,6 +372,10 @@ export async function isIdempotent(effect: Effect): Promise<boolean> {
 export async function rollbackRun(runId: string): Promise<RollbackResult> {
   const preview = await previewRollback(runId)
   if (preview.wouldFail.length > 0) {
+    broadcast({
+      type: "rollback.blocked",
+      data: { runId, failCount: preview.wouldFail.length, targets: preview.wouldFail.map(f => f.target) },
+    })
     return {
       total: preview.wouldCompensate.length + preview.wouldSkip.length + preview.wouldFail.length,
       compensated: 0,
@@ -384,6 +388,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
+  broadcast({ type: "rollback.started", data: { runId, effectCount: getRunEffects(runId).length } })
+
   const effects = getRunEffects(runId)
   const result: RollbackResult = {
     total: effects.length,
@@ -391,6 +397,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     skipped: 0,
     failed: [],
   }
+
+  const compensatedTargets: string[] = []
 
   const fileEffects = effects
     .filter((e) => e.kind === "create" || e.kind === "modify" || e.kind === "delete")
@@ -413,6 +421,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
           await unlink(effect.target)
           markCompensated(effect.id)
           result.compensated++
+          compensatedTargets.push(effect.target)
+          broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "deleted" } })
         } else if (currentHash === null) {
           result.skipped++
         }
@@ -429,6 +439,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         }
         markCompensated(effect.id)
         result.compensated++
+        compensatedTargets.push(effect.target)
+        broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "restored" } })
       } else if (effect.kind === "delete") {
         if (snapshot) {
           const snapshotContent = snapshot.content as string | null
@@ -443,6 +455,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             }
             markCompensated(effect.id)
             result.compensated++
+            compensatedTargets.push(effect.target)
+            broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "recreated" } })
           } else {
             result.skipped++
           }
@@ -460,6 +474,42 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   }
 
   result.skipped += effects.filter((e) => e.kind === "command" || e.kind === "network").length
+
+  // Broadcast summary + audit
+  broadcast({
+    type: "rollback.completed",
+    data: {
+      runId,
+      total: result.total,
+      compensated: result.compensated,
+      skipped: result.skipped,
+      failedCount: result.failed.length,
+      targets: compensatedTargets,
+    },
+  })
+
+  // Persist audit record in the effects DB
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
+         VALUES (?, 'operator', 'rollback.executed', ?, ?)`,
+      )
+      .run(
+        runId,
+        JSON.stringify({
+          total: result.total,
+          compensated: result.compensated,
+          skipped: result.skipped,
+          failed: result.failed.length,
+          targets: compensatedTargets,
+        }),
+        new Date().toISOString(),
+      )
+  } catch {
+    // Audit insert is best-effort — don't fail the rollback
+  }
+
   return result
 }
 

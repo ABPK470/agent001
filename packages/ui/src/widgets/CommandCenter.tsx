@@ -109,6 +109,7 @@ export function CommandCenter() {
   const [expandedDag, setExpandedDag] = useState<string | null>(null)
   const [resumeError, setResumeError] = useState<string | null>(null)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
+  const [rolledBack, setRolledBack] = useState(false)
 
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -136,6 +137,7 @@ export function CommandCenter() {
   const failedRuns = runs.filter((r) => r.status === "failed")
   const isRunning = activeRun?.status === "running"
   const isFailed = activeRun?.status === "failed"
+  const isCancelled = activeRun?.status === "cancelled"
 
   const activeAgent = activeRun?.agentId ? agents.find((a) => a.id === activeRun.agentId) : null
 
@@ -181,6 +183,7 @@ export function CommandCenter() {
       const preview = await api.previewRollback(activeRun.id)
       if (preview.wouldCompensate.length === 0) {
         setRollbackMsg("nothing to rollback")
+        setRolledBack(true)
         return
       }
       if (preview.wouldFail.length > 0) {
@@ -189,10 +192,21 @@ export function CommandCenter() {
       }
       const result = await api.rollbackRun(activeRun.id)
       setRollbackMsg(`rolled back ${result.compensated} effects`)
+      setRolledBack(true)
     } catch {
       setRollbackMsg("rollback failed")
     }
   }, [activeRun])
+
+  // Reset rolledBack state when switching runs
+  useEffect(() => { setRolledBack(false) }, [activeRunId])
+
+  // Auto-dismiss rollback message after 8 seconds
+  useEffect(() => {
+    if (!rollbackMsg) return
+    const timer = setTimeout(() => setRollbackMsg(null), 8000)
+    return () => clearTimeout(timer)
+  }, [rollbackMsg])
 
   // ── LIVE DAG ────────────────────────────────────────────────────
 
@@ -450,7 +464,7 @@ export function CommandCenter() {
                 CANCEL
               </button>
             )}
-            {isFailed && (
+            {(isFailed || isCancelled) && (
               <button
                 onClick={handleResume}
                 className="px-2 py-0.5 rounded text-[10px] transition-colors"
@@ -461,7 +475,7 @@ export function CommandCenter() {
                 RESUME
               </button>
             )}
-            {(activeRun.status === "completed" || isFailed) && (
+            {(activeRun.status === "completed" || isFailed || isCancelled) && !rolledBack && (
               <button
                 onClick={handleRollback}
                 className="px-2 py-0.5 rounded text-[10px] transition-colors"

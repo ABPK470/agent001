@@ -249,7 +249,9 @@ function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagnostic[]
     for (const rel of relations) {
       if (rel.relationType === "write_owner") {
         const owners = writeOwners.get(rel.artifactPath) ?? []
-        owners.push(step.name)
+        if (!owners.includes(step.name)) {
+          owners.push(step.name)
+        }
         writeOwners.set(rel.artifactPath, owners)
       }
     }

@@ -60,6 +60,10 @@ export interface PipelineExecutorOptions {
   onStepStart?: (step: PlanStep) => void
   /** Called when a step finishes. */
   onStepEnd?: (step: PlanStep, result: PipelineStepResult) => void
+  /** Steps that passed verification — reuse their results instead of re-running. */
+  priorResults?: ReadonlyMap<string, PipelineStepResult>
+  /** Per-step feedback from verifier to inject into retry attempts. */
+  retryFeedback?: ReadonlyMap<string, readonly string[]>
 }
 
 /**
@@ -89,10 +93,23 @@ export async function executePipeline(
   // Build adjacency and in-degree
   const { adj, inDegree, stepMap } = buildGraph(plan)
 
-  // BFS-style execution: process ready steps (in-degree 0)
+  // Seed with prior results (verified-pass steps from a previous attempt)
   const completed = new Set<string>()
   const failed = new Set<string>()
+  if (opts?.priorResults) {
+    for (const [name, prior] of opts.priorResults) {
+      if (prior.status === "completed" && stepMap.has(name)) {
+        stepResults.set(name, prior)
+        completed.add(name)
+        // Decrement in-degree of downstream
+        for (const downstream of adj.get(name) ?? []) {
+          inDegree.set(downstream, (inDegree.get(downstream) ?? 1) - 1)
+        }
+      }
+    }
+  }
 
+  // BFS-style execution: process ready steps (in-degree 0)
   while (completed.size + failed.size < plan.steps.length) {
     if (opts?.signal?.aborted) {
       return buildResult(stepResults, plan.steps.length, "failed", "Pipeline aborted")
@@ -128,7 +145,18 @@ export async function executePipeline(
       const step = stepMap.get(name)!
       opts?.onStepStart?.(step)
 
-      const result = await executeStep(step, toolExecFn, delegateFn, opts?.signal)
+      // Inject verifier feedback into subagent steps on retry
+      let effectiveStep = step
+      const feedback = opts?.retryFeedback?.get(name)
+      if (feedback && feedback.length > 0 && step.stepType === "subagent_task") {
+        const sa = step as SubagentTaskStep
+        effectiveStep = {
+          ...sa,
+          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}`,
+        }
+      }
+
+      const result = await executeStep(effectiveStep, toolExecFn, delegateFn, opts?.signal)
       stepResults.set(name, result)
       opts?.onStepEnd?.(step, result)
 

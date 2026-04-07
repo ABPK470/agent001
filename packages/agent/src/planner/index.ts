@@ -150,6 +150,10 @@ export async function executePlannerPath(
   // Step 4: Execute pipeline (with retry)
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined
+  let retryOpts: {
+    priorResults?: Map<string, import("./types.js").PipelineStepResult>
+    retryFeedback?: Map<string, string[]>
+  } = {}
 
   for (let attempt = 0; attempt <= MAX_PIPELINE_RETRIES; attempt++) {
     if (ctx.signal?.aborted) {
@@ -168,6 +172,8 @@ export async function executePlannerPath(
       delegateFn,
       {
         maxParallel: 4,
+        priorResults: retryOpts.priorResults,
+        retryFeedback: retryOpts.retryFeedback,
         signal: ctx.signal,
         onStepStart: (step) => ctx.onTrace?.({
           kind: "planner-step-start",
@@ -214,17 +220,46 @@ export async function executePlannerPath(
       break
     }
 
+    // Accept "retry" with high confidence — the pipeline completed and issues are minor
+    if (verifierDecision.overall === "retry"
+      && verifierDecision.confidence >= 0.75
+      && pipelineResult.status === "completed") {
+      ctx.onTrace?.({
+        kind: "planner-retry-skipped",
+        reason: `confidence ${verifierDecision.confidence.toFixed(2)} >= 0.75 with completed pipeline — accepting`,
+      })
+      break
+    }
+
     if (verifierDecision.overall === "fail" || attempt === MAX_PIPELINE_RETRIES) {
       // Can't recover
       break
     }
 
-    // Retry: inject verification feedback and re-run
+    // Build targeted retry context from verifier feedback
+    const priorResults = new Map<string, import("./types.js").PipelineStepResult>()
+    const retryFeedback = new Map<string, string[]>()
+    for (const stepAssessment of verifierDecision.steps) {
+      const stepResult = pipelineResult.stepResults.get(stepAssessment.stepName)
+      if (stepAssessment.outcome === "pass" && stepResult) {
+        // Reuse verified-pass step results — don't re-run them
+        priorResults.set(stepAssessment.stepName, stepResult)
+      } else if (stepAssessment.issues.length > 0) {
+        // Send verifier feedback to steps that need retry
+        retryFeedback.set(stepAssessment.stepName, [...stepAssessment.issues])
+      }
+    }
+
     ctx.onTrace?.({
       kind: "planner-retry",
       attempt: attempt + 1,
       reason: verifierDecision.unresolvedItems.join("; "),
+      skippedSteps: priorResults.size,
+      retrySteps: retryFeedback.size,
     })
+
+    // Store retry context for next iteration
+    retryOpts = { priorResults, retryFeedback }
   }
 
   // Step 6: Synthesize final answer

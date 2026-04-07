@@ -320,7 +320,7 @@ export function AgentViz() {
       } else if (e.kind === "planner-step-end") {
         for (let j = all.length - 1; j >= 0; j--) {
           if (all[j].name === e.stepName && all[j].status === "active") {
-            all[j].status = e.status === "done" ? "done" : "error"
+            all[j].status = e.status === "completed" ? "done" : "error"
             break
           }
         }
@@ -855,8 +855,24 @@ export function AgentViz() {
         ],
       }
     }
+    if (selectedNode.startsWith("planstep:")) {
+      const key = selectedNode.slice(9)
+      const ps = tracePlanSteps.find((s) => s.key === key)
+      if (!ps) return null
+      const endEvt = trace.find((e) => e.kind === "planner-step-end" && e.stepName === ps.name) as
+        | { durationMs?: number }
+        | undefined
+      return {
+        title: `Plan Step: ${ps.name}`,
+        lines: [
+          { label: "Type", value: ps.type },
+          { label: "Status", value: ps.status === "done" ? "completed" : ps.status },
+          ...(endEvt?.durationMs != null ? [{ label: "Duration", value: `${endEvt.durationMs}ms` }] : []),
+        ],
+      }
+    }
     return null
-  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, traceDelegations, trace])
+  }, [selectedNode, agents, runs, displayRun, currentIteration, toolStats, traceDelegations, tracePlanSteps, trace])
 
   // Activity feed
   const recentActivity = useMemo(() => {

@@ -236,8 +236,8 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
     case "planner-step-end":
       return (
         <div className="text-[12px] font-mono pl-6 py-0.5">
-          <span className={entry.status === "done" ? "text-success" : "text-error"}>
-            {entry.status === "done" ? "✓" : "✗"} {entry.stepName}
+          <span className={entry.status === "completed" ? "text-success" : "text-error"}>
+            {entry.status === "completed" ? "✓" : "✗"} {entry.stepName}
           </span>
           <span className="text-text-muted/50 ml-2">{entry.durationMs}ms</span>
         </div>
@@ -248,7 +248,7 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40 mb-1">
           <div className="flex items-center gap-2">
             <span className="text-[#C084FC] text-[13px] font-medium font-mono">PIPE</span>
-            <span className={`text-[13px] ${entry.status === "done" ? "text-success" : "text-error"}`}>
+            <span className={`text-[13px] ${entry.status === "completed" ? "text-success" : "text-error"}`}>
               ◀ {entry.status}
             </span>
             <span className="text-text-muted text-[12px]">{entry.completedSteps}/{entry.totalSteps} steps</span>

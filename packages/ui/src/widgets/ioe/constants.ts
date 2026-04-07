@@ -210,7 +210,7 @@ export function buildDagNodes(trace: TraceEntry[]): DagNode[] {
     if (e.kind === "planner-step-end") {
       for (let j = nodes.length - 1; j >= 0; j--) {
         if (nodes[j].id.startsWith("plan-step-") && nodes[j].status === "running") {
-          nodes[j].status = e.status === "done" ? "done" : "error"
+          nodes[j].status = e.status === "completed" ? "done" : "error"
           nodes[j].resultText = `${e.durationMs}ms`
           break
         }
@@ -224,7 +224,7 @@ export function buildDagNodes(trace: TraceEntry[]): DagNode[] {
         label: "PE",
         detail: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps}`,
         expanded: `Pipeline ${e.status}\nCompleted: ${e.completedSteps}/${e.totalSteps} steps`,
-        status: e.status === "done" ? "done" : "error",
+        status: e.status === "completed" ? "done" : "error",
         depth: delegationDepth,
       })
       continue
@@ -334,8 +334,8 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-decision" && e.shouldPlan) items.push({ text: `PLAN ▶ score ${e.score.toFixed(2)}`, color: C.plum })
     else if (e.kind === "planner-plan-generated") items.push({ text: `PLAN ✓ ${e.stepCount} steps: ${e.steps.map(s => s.name).join(" → ")}`, color: C.plum })
     else if (e.kind === "planner-step-start") items.push({ text: `STEP ⟩ ${e.stepName}`, color: C.dim })
-    else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "done" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "done" ? C.success : C.coral })
-    else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "done" ? C.success : C.coral })
+    else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "completed" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "completed" ? C.success : C.coral })
+    else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
   }
   return items
@@ -346,6 +346,13 @@ export function buildProblems(trace: TraceEntry[], steps: Step[]): Problem[] {
   for (const e of trace) {
     if (e.kind === "error") items.push({ text: e.text, source: "run" })
     else if (e.kind === "tool-error") items.push({ text: e.text.slice(0, 200), source: "tool" })
+    else if (e.kind === "planner-generation-failed") {
+      for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
+    } else if (e.kind === "planner-validation-failed") {
+      for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
+    } else if (e.kind === "planner-pipeline-end" && e.status === "failed") {
+      items.push({ text: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed`, source: "planner" })
+    }
   }
   for (const s of steps) {
     if (s.status === "failed" && s.error) items.push({ text: s.error, source: s.name, time: s.completedAt ?? undefined })
@@ -428,7 +435,7 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
       msgs.push({ role: "system", content: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed` })
     else if (e.kind === "planner-verification")
       msgs.push({ role: "system", content: `Verification: ${e.overall} (confidence ${(e.confidence * 100).toFixed(0)}%)` })
-    else if (e.kind === "planner-step-end" && e.status !== "done")
+    else if (e.kind === "planner-step-end" && e.status !== "completed")
       msgs.push({ role: "system", content: `Plan step failed: ${e.stepName}` })
     else if (e.kind === "user-input-request")
       msgs.push({ role: "input-request", content: e.question, options: e.options, sensitive: e.sensitive })

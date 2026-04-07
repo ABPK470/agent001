@@ -29,43 +29,34 @@ export {
     createEngineServices, createToolStep, governTool, printGovernanceReport,
     runGoverned
 } from "./governance.js"
-export type { EngineServices, GovernToolOptions, GovernedResult, RunState } from "./governance.js"
+export type { EngineServices, GovernedResult, GovernToolOptions, RunState } from "./governance.js"
 
 // Retry
-export {
-    TOOL_RETRY_POLICY, isRetryableError, withToolRetry
-} from "./retry.js"
+export { isRetryableError, TOOL_RETRY_POLICY, withToolRetry } from "./retry.js"
 export type { ToolRetryPolicy, ToolRetryResult } from "./retry.js"
 
 // Engine (re-export governance infrastructure for server)
 export {
-    AuditService,
-    Learner,
+    approvalRequired, AuditService, cancelRun,
+    completeRun,
+    completeStep,
+    createRun,
+    failRun,
+    failStep, Learner,
     MemoryAuditRepository,
     MemoryEventBus,
     MemoryExecutionRecordRepository,
     MemoryRunRepository,
     PolicyEffect,
     PolicyViolationError,
-    RulePolicyEvaluator,
-    RunStatus,
-    StepStatus,
-    approvalRequired,
-    cancelRun,
-    completeRun,
-    completeStep,
-    createRun,
-    failRun,
-    failStep,
-    runCompleted,
+    RulePolicyEvaluator, runCompleted,
     runFailed,
-    runStarted,
-    startPlanning,
+    runStarted, RunStatus, startPlanning,
     startRunning,
     startStep,
     stepCompleted,
     stepFailed,
-    stepStarted
+    stepStarted, StepStatus
 } from "./engine/index.js"
 export type {
     AgentRun,

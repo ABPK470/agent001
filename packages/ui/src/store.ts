@@ -638,24 +638,14 @@ export const useStore = create<AppState>()(
           }
 
           case "planner.started": {
-            store.addTrace({
-              kind: "planner-decision",
-              score: data["score"] as number,
-              shouldPlan: true,
-              reason: data["reason"] as string,
-            })
+            // Decision trace already arrives via debug.trace; this event is
+            // only used for audit/status widgets — do NOT add a second trace.
             break
           }
 
           case "planner.completed": {
-            // Pipeline result summary — consumed by audit/status widgets.
-            // Detailed step events already arrive via debug.trace.
-            store.addTrace({
-              kind: "planner-pipeline-end",
-              status: data["status"] as string,
-              completedSteps: data["completedSteps"] as number,
-              totalSteps: data["totalSteps"] as number,
-            })
+            // Pipeline result already arrives via debug.trace; this event is
+            // only used for audit/status widgets — do NOT add a second trace.
             break
           }
 

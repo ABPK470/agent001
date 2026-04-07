@@ -418,7 +418,7 @@ export class AgentOrchestrator {
 
     // Wrap write_file with effect tracking (pre-write snapshots)
     const trackedTools = tools.map((t) => this.wrapWithEffects(t, runId))
-    const governedTools = trackedTools.map((t) => governTool(t, services, state))
+    const governedTools = trackedTools.map((t) => governTool(t, services, state, { signal: controller.signal }))
 
     // Create delegate tools for sub-agent spawning (sequential + parallel)
     const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
@@ -442,7 +442,7 @@ export class AgentOrchestrator {
         const def = db.getAgentDefinition(agentId)
         if (!def) return null
         const toolNames = JSON.parse(def.tools) as string[]
-        const agentTools = resolveTools(toolNames).map((t) => governTool(t, services, state))
+        const agentTools = resolveTools(toolNames).map((t) => governTool(t, services, state, { signal: controller.signal }))
         return {
           id: def.id,
           name: def.name,
@@ -485,18 +485,38 @@ export class AgentOrchestrator {
           broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
         }
       },
-      onChildUsage: (childUsage) => {
-        broadcast({
-          type: "usage.updated",
-          data: {
-            runId,
-            promptTokens: childUsage.promptTokens,
-            completionTokens: childUsage.completionTokens,
-            totalTokens: childUsage.totalTokens,
-            llmCalls: 0,
-          },
-        })
-      },
+      onChildUsage: (() => {
+        // Track cumulative usage across all child agents (planner + delegation).
+        // Each child reports its own running total, so we delta-accumulate.
+        const lastSeen = new WeakMap<object, { p: number; c: number; t: number; l: number }>()
+        let totalPrompt = 0, totalCompletion = 0, totalTokens = 0, totalLlmCalls = 0
+
+        return (childUsage: { promptTokens: number; completionTokens: number; totalTokens: number }, childLlmCalls: number) => {
+          const prev = lastSeen.get(childUsage) ?? { p: 0, c: 0, t: 0, l: 0 }
+          totalPrompt += childUsage.promptTokens - prev.p
+          totalCompletion += childUsage.completionTokens - prev.c
+          totalTokens += childUsage.totalTokens - prev.t
+          totalLlmCalls += childLlmCalls - prev.l
+          lastSeen.set(childUsage, { p: childUsage.promptTokens, c: childUsage.completionTokens, t: childUsage.totalTokens, l: childLlmCalls })
+
+          // Sync to parent agent so persistTokenUsage captures planner-path totals
+          agent.usage.promptTokens = totalPrompt
+          agent.usage.completionTokens = totalCompletion
+          agent.usage.totalTokens = totalTokens
+          agent.llmCalls = totalLlmCalls
+
+          broadcast({
+            type: "usage.updated",
+            data: {
+              runId,
+              promptTokens: totalPrompt,
+              completionTokens: totalCompletion,
+              totalTokens,
+              llmCalls: totalLlmCalls,
+            },
+          })
+        }
+      })(),
     }
     const delegateTools = createDelegateTools(delegateCtx)
 
@@ -645,7 +665,7 @@ export class AgentOrchestrator {
           broadcast({ type: "planner.completed", data: { runId, status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps } })
           services.auditService.log({
             actor: "agent",
-            action: entry.status === "done" ? "planner.completed" : "planner.failed",
+            action: entry.status === "completed" ? "planner.completed" : "planner.failed",
             resourceType: "AgentRun",
             resourceId: runId,
             detail: { status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps },

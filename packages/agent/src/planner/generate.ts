@@ -60,11 +60,11 @@ You MUST respond with valid JSON matching this schema:
     "allowedWriteRoots": ["/path/to/workspace"],
     "allowedTools": ["write_file", "read_file", "run_command", "browser_check"],
     "requiredSourceArtifacts": [],
-    "targetArtifacts": ["index.html", "game.js"],
+    "targetArtifacts": ["index.html", "styles.css"],
     "effectClass": "filesystem_write",
     "verificationMode": "browser_check",
     "artifactRelations": [
-      { "relationType": "write_owner", "artifactPath": "game.js" }
+      { "relationType": "write_owner", "artifactPath": "styles.css" }
     ]
   },
   "maxBudgetHint": "20 iterations",
@@ -72,7 +72,7 @@ You MUST respond with valid JSON matching this schema:
   "workflowStep": {
     "role": "writer",
     "artifactRelations": [
-      { "relationType": "write_owner", "artifactPath": "game.js" }
+      { "relationType": "write_owner", "artifactPath": "styles.css" }
     ]
   }
 }
@@ -86,13 +86,14 @@ You MUST respond with valid JSON matching this schema:
 ## Rules
 1. Every subagent_task MUST have specific, measurable acceptanceCriteria — never vague
 2. Each subagent_task MUST declare which tools it needs in requiredToolCapabilities  
-3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes
+3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes. If step B writes to a file that step A created, only step B should be write_owner and step A should either not list that artifact or use "read_dependency"
 4. Steps that can run independently SHOULD have canRunParallel: true
 5. Keep the plan flat — prefer 2-5 steps. Over-decomposition wastes resources.
 6. For web projects: include verification steps (browser_check, test runs)
 7. workspaceRoot should match the actual working directory
 8. DO NOT produce plans with only read/analysis steps — if the task asks to BUILD something, include write steps
 9. Each step name must be unique across the plan
+10. VERIFICATION REQUIRED: If ANY step writes files (effectClass != "readonly"), at least ONE subagent_task step MUST have verificationMode set to "browser_check", "run_tests", or "deterministic_followup" — never leave ALL steps with verificationMode: "none" when there are writes
 
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
 
@@ -194,14 +195,26 @@ export async function generatePlan(
 
       return { plan: parsed.plan, diagnostics, rawResponse }
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
       diagnostics.push({
         category: "parse",
         code: "llm_error",
-        message: `LLM call failed: ${err instanceof Error ? err.message : String(err)}`,
+        message: `LLM call failed: ${errMsg}`,
         details: { attempt },
       })
-      // Don't retry on LLM errors — they're usually transient
-      return { plan: null, diagnostics, rawResponse }
+
+      // Abort errors should not be retried
+      if (opts?.signal?.aborted || errMsg.includes("abort")) {
+        return { plan: null, diagnostics, rawResponse }
+      }
+
+      // Transient network errors (fetch failed, timeout, etc.) — retry
+      const isTransient = /fetch failed|timeout|timed out|econnreset|econnrefused|socket hang up|network|429|502|503/i.test(errMsg)
+      if (!isTransient) {
+        return { plan: null, diagnostics, rawResponse }
+      }
+      // Let loop continue to next attempt
+      refinementHint = null
     }
   }
 
@@ -347,6 +360,12 @@ function parsePlanFromResponse(raw: string): {
     }
   }
 
+  // Auto-fix: ensure verification coverage on write plans
+  ensureVerificationCoverage(steps)
+
+  // Auto-fix: deduplicate write ownership per artifact
+  deduplicateWriteOwnership(steps)
+
   const plan: Plan = {
     reason: String(data.reason ?? "planner_generated"),
     confidence: typeof data.confidence === "number" ? data.confidence : undefined,
@@ -488,4 +507,98 @@ function parseArtifactRelations(value: unknown): Array<{ relationType: "read_dep
       artifactPath: String(v.artifactPath ?? ""),
     }))
     .filter(r => r.artifactPath.length > 0)
+}
+
+// ============================================================================
+// Auto-fix: deduplicate write ownership
+// ============================================================================
+
+/**
+ * If multiple steps claim write_owner on the same artifact, keep only the
+ * last one in step order (the downstream implementor) and downgrade earlier
+ * ones to read_dependency. This prevents the multiple_write_owners
+ * validation failure when the LLM duplicates ownership.
+ */
+function deduplicateWriteOwnership(steps: PlanStep[]): void {
+  const subagentSteps = steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  // Collect all write_owner claims per artifact → ordered list of step names
+  const ownersByArtifact = new Map<string, string[]>()
+  for (const s of subagentSteps) {
+    const relations = [
+      ...(s.executionContext?.artifactRelations ?? []),
+      ...(s.workflowStep?.artifactRelations ?? []),
+    ]
+    for (const rel of relations) {
+      if (rel.relationType === "write_owner") {
+        const list = ownersByArtifact.get(rel.artifactPath) ?? []
+        if (!list.includes(s.name)) list.push(s.name)
+        ownersByArtifact.set(rel.artifactPath, list)
+      }
+    }
+  }
+
+  // For each artifact with multiple owners, keep only the last and downgrade others
+  for (const [artifact, owners] of ownersByArtifact) {
+    if (owners.length <= 1) continue
+    const downgradeSet = new Set(owners.slice(0, -1))
+
+    for (const s of subagentSteps) {
+      if (!downgradeSet.has(s.name)) continue
+      const downgrade = (rels: readonly { relationType: string; artifactPath: string }[]) => {
+        for (const rel of rels) {
+          if (rel.artifactPath === artifact && rel.relationType === "write_owner") {
+            ;(rel as { relationType: string }).relationType = "read_dependency"
+          }
+        }
+      }
+      if (s.executionContext?.artifactRelations) downgrade(s.executionContext.artifactRelations)
+      if (s.workflowStep?.artifactRelations) downgrade(s.workflowStep.artifactRelations)
+    }
+  }
+}
+
+// ============================================================================
+// Auto-fix: verification coverage
+// ============================================================================
+
+/**
+ * If the plan has write steps but no verification step, upgrade the last
+ * write step's verificationMode to "run_tests". This prevents the
+ * no_verification_steps validation failure when the LLM omits it.
+ */
+function ensureVerificationCoverage(steps: PlanStep[]): void {
+  const subagentSteps = steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  if (subagentSteps.length <= 1) return
+
+  const hasWriters = subagentSteps.some(
+    s => s.executionContext?.effectClass !== "readonly",
+  )
+  const hasVerification = subagentSteps.some(
+    s => s.executionContext?.verificationMode !== "none",
+  )
+
+  if (hasWriters && !hasVerification) {
+    // Find the last write step and upgrade its verification mode
+    for (let i = subagentSteps.length - 1; i >= 0; i--) {
+      const s = subagentSteps[i]
+      if (s.executionContext && s.executionContext.effectClass !== "readonly") {
+        // Pick verification mode based on tool capabilities
+        const tools = s.requiredToolCapabilities ?? []
+        const ctx = s.executionContext as { verificationMode: string }
+        if (tools.includes("browser_check")) {
+          ctx.verificationMode = "browser_check"
+        } else if (tools.includes("run_command")) {
+          ctx.verificationMode = "run_tests"
+        } else {
+          ctx.verificationMode = "deterministic_followup"
+        }
+        break
+      }
+    }
+  }
 }

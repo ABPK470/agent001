@@ -35,6 +35,7 @@ const P = {
   queue:   "#8D6E63",
   delegate:"#5B98D1",
   audit:   "#78909C",
+  planner: "#C084FC",
   text:    "#a1a1aa",
   dim:     "#3f3f46",
   dimmer:  "#27272a",
@@ -67,6 +68,7 @@ const LIFELINES: Lifeline[] = [
   { id: "govern",   label: "Governance",     file: "governance.ts",       color: P.govern },
   { id: "effects",  label: "Effects",        file: "effects.ts",          color: P.effects },
   { id: "delegate", label: "Delegate",       file: "delegate.ts",         color: P.delegate },
+  { id: "planner",  label: "Planner",        file: "planner/*.ts",        color: P.planner },
   { id: "db",       label: "SQLite",         file: "db/*.ts",             color: P.db },
   { id: "ws",       label: "WS Broadcast",   file: "ws.ts",              color: P.ws },
   { id: "audit",    label: "Audit",          file: "audit.ts",            color: P.audit },
@@ -251,6 +253,58 @@ function buildMessages(showPhase: Set<string>): Msg[] {
   add({ kind: "return", from: "delegate", to: "agent", label: "delegatedAnswer", dashed: true, color: P.delegate, phase: "delegation" })
 
   // ─────────────────────────────────────────
+  // PHASE 5b: Planner Path (agenc-core)
+  // ─────────────────────────────────────────
+  add({ kind: "note", from: "http", to: "http", label: "── Phase 5b: Planner Path ──", phase: "planner" })
+
+  add({ kind: "call", from: "agent", to: "planner", label: "executePlannerPath(goal, ctx, delegateFn)", detail: "planner/index.ts:50 — entry point", color: P.planner, phase: "planner" })
+
+  // Decision
+  add({ kind: "self", from: "planner", to: "planner", label: "assessPlannerDecision(goal, tools)", detail: "planner/decision.ts — 6-signal scoring", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-decision')", detail: "score, shouldPlan, reason", phase: "planner" })
+
+  // Plan generation
+  add({ kind: "call", from: "planner", to: "llm", label: "generatePlan(goal, tools, history)", detail: "planner/generate.ts — structured JSON output", color: P.llm, phase: "planner" })
+  add({ kind: "return", from: "llm", to: "planner", label: "Plan { reason, steps[] }", dashed: true, color: P.llm, phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-plan-generated')", detail: "reason, stepCount, steps", phase: "planner" })
+
+  // Validation
+  add({ kind: "self", from: "planner", to: "planner", label: "validatePlan(plan, tools)", detail: "planner/validate.ts — 5-pass validation", phase: "planner" })
+  add({ kind: "alt-start", from: "planner", to: "planner", label: "alt [validation.valid]", altLabel: "Plan Validation", phase: "planner" })
+
+  // Pipeline execution
+  add({ kind: "self", from: "planner", to: "planner", label: "topologicalSort(plan.steps)", detail: "planner/pipeline.ts — DAG BFS", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-pipeline-start')", detail: "attempt, maxRetries", phase: "planner" })
+
+  add({ kind: "alt-start", from: "planner", to: "planner", label: "loop [for each DAG batch]", altLabel: "Pipeline Execution", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-step-start')", detail: "stepName, stepType", phase: "planner" })
+
+  // Subagent delegation per step
+  add({ kind: "call", from: "planner", to: "delegate", label: "spawnChildForPlan(ctx, step, envelope)", detail: "delegate.ts:411 — typed envelope", color: P.delegate, phase: "planner" })
+  add({ kind: "call", from: "delegate", to: "agent", label: "childAgent.run(goal)", detail: "agent.ts:260 — sub-agent", phase: "planner" })
+  add({ kind: "return", from: "agent", to: "delegate", label: "stepAnswer", dashed: true, phase: "planner" })
+  add({ kind: "return", from: "delegate", to: "planner", label: "result string", dashed: true, color: P.delegate, phase: "planner" })
+
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-step-end')", detail: "stepName, status, durationMs", phase: "planner" })
+  add({ kind: "alt-end", from: "planner", to: "planner", label: "", phase: "planner" })
+
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-pipeline-end')", detail: "status, completedSteps, totalSteps", phase: "planner" })
+
+  // Verification
+  add({ kind: "call", from: "planner", to: "llm", label: "verify(plan, results)", detail: "planner/verifier.ts — 2-phase check", color: P.llm, phase: "planner" })
+  add({ kind: "return", from: "llm", to: "planner", label: "VerifierDecision { overall, confidence }", dashed: true, color: P.llm, phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-verification')", detail: "overall, confidence, steps", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "audit", label: "auditService.log('planner.verified')", detail: "audit.ts → INSERT audit_log", phase: "planner" })
+
+  add({ kind: "alt-else", from: "planner", to: "planner", label: "else [validation failed → fallback]", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-validation-failed')", detail: "diagnostics[]", phase: "planner" })
+  add({ kind: "return", from: "planner", to: "agent", label: "{ handled: false, skipReason }", dashed: true, color: P.planner, phase: "planner" })
+  add({ kind: "self", from: "agent", to: "agent", label: "fall through to direct tool loop", detail: "agent.ts:300 — standard path", phase: "planner" })
+  add({ kind: "alt-end", from: "planner", to: "planner", label: "", phase: "planner" })
+
+  add({ kind: "return", from: "planner", to: "agent", label: "PlannerPathResult", dashed: true, color: P.planner, phase: "planner" })
+
+  // ─────────────────────────────────────────
   // PHASE 6: Run Completion & Memory Ingestion
   // ─────────────────────────────────────────
   add({ kind: "note", from: "http", to: "http", label: "── Phase 6: Completion & Ingestion ──", phase: "completion" })
@@ -321,7 +375,8 @@ const ALL_PHASES = [
   { id: "init",       label: "2. Queue & Init" },
   { id: "prompt",     label: "3. Prompt Assembly" },
   { id: "agent",      label: "4. Agent Loop" },
-  { id: "delegation", label: "5. Delegation" },
+  { id: "delegation", label: "5a. Delegation" },
+  { id: "planner",    label: "5b. Planner Path" },
   { id: "completion", label: "6. Completion" },
   { id: "broadcast",  label: "7. WS Broadcast" },
 ]
@@ -339,7 +394,7 @@ function traceToPhase(trace: TraceEntry[]): {
   const activeLifelines = new Set<string>()
 
   // Phase ordering for completion tracking
-  const phaseOrder = ["entry", "init", "prompt", "agent", "delegation", "completion", "broadcast"]
+  const phaseOrder = ["entry", "init", "prompt", "agent", "planner", "delegation", "completion", "broadcast"]
 
   for (const e of trace) {
     switch (e.kind) {
@@ -379,6 +434,32 @@ function traceToPhase(trace: TraceEntry[]): {
       case "delegation-end":
         activePhase = "delegation"
         activeLifelines.add("delegate").add("agent")
+        break
+      case "planner-decision":
+        activePhase = "planner"
+        activeLifelines.add("agent").add("planner")
+        break
+      case "planner-generating":
+      case "planner-plan-generated":
+      case "planner-generation-failed":
+      case "planner-validation-failed":
+        activePhase = "planner"
+        activeLifelines.add("planner").add("llm")
+        break
+      case "planner-pipeline-start":
+      case "planner-step-start":
+      case "planner-step-end":
+      case "planner-pipeline-end":
+        activePhase = "planner"
+        activeLifelines.add("planner").add("delegate").add("agent")
+        break
+      case "planner-verification":
+        activePhase = "planner"
+        activeLifelines.add("planner").add("llm").add("audit")
+        break
+      case "planner-retry":
+        activePhase = "planner"
+        activeLifelines.add("planner")
         break
       case "answer":
         for (const p of phaseOrder) {

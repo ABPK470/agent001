@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-    C,
-    fmtK,
-    statusDot,
-    type EditorTab,
+  C,
+  fmtK,
+  statusDot,
+  type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -132,10 +132,19 @@ function groupTraceByIteration(trace: TraceEntry[]): TraceGroupData[] {
     } else if (e.kind === "error") {
       groups.push({ type: "error", header: e, children: [], delegationDepth: delegDepth })
       current = null
+    } else if (e.kind === "planner-decision" || e.kind === "planner-pipeline-start") {
+      // Planner phases get their own group so they appear at top level
+      current = { type: "iteration", header: e, children: [], delegationDepth: 0 }
+      groups.push(current)
     } else {
       if (e.kind === "delegation-start") delegDepth++
       if (e.kind === "delegation-end") delegDepth = Math.max(0, delegDepth - 1)
       if (current) current.children.push(e)
+      // If no current group (orphan planner events before first iteration), create one
+      else {
+        current = { type: "iteration", header: e, children: [], delegationDepth: 0 }
+        groups.push(current)
+      }
     }
   }
   return groups
@@ -193,19 +202,41 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
 
 function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boolean }) {
   const [collapsed, setCollapsed] = useState(false)
-  const iterEntry = g.header as Extract<TraceEntry, { kind: "iteration" }>
   const indent = g.delegationDepth * 16
+
+  // Determine header text based on entry kind
+  const isPlannerHeader = g.header.kind === "planner-decision" || g.header.kind === "planner-pipeline-start"
+  const headerColor = isPlannerHeader ? "#C084FC" : C.accent
+
+  let headerLabel: string
+  let headerBadge: string
+  if (g.header.kind === "planner-decision") {
+    const pd = g.header as Extract<TraceEntry, { kind: "planner-decision" }>
+    headerLabel = pd.shouldPlan ? `PLAN ▶ score ${pd.score.toFixed(2)}` : `PLAN ▷ skipped`
+    headerBadge = "P"
+  } else if (g.header.kind === "planner-pipeline-start") {
+    const ps = g.header as Extract<TraceEntry, { kind: "planner-pipeline-start" }>
+    headerLabel = `PIPELINE attempt ${ps.attempt}/${ps.maxRetries}`
+    headerBadge = "⚙"
+  } else if (g.header.kind === "iteration") {
+    const iterEntry = g.header as Extract<TraceEntry, { kind: "iteration" }>
+    headerLabel = `ITER ${iterEntry.current}/${iterEntry.max}`
+    headerBadge = String(iterEntry.current)
+  } else {
+    headerLabel = g.header.kind
+    headerBadge = "?"
+  }
 
   // Count children by type for summary
   const toolCalls = g.children.filter((e) => e.kind === "tool-call").length
-  const hasErrors = g.children.some((e) => e.kind === "tool-error")
+  const hasErrors = g.children.some((e) => e.kind === "tool-error" || e.kind === "planner-validation-failed" || e.kind === "planner-generation-failed")
   const usage = g.children.find((e) => e.kind === "usage") as Extract<TraceEntry, { kind: "usage" }> | undefined
 
   return (
     <div className="relative" style={{ marginLeft: indent }}>
       {/* Vertical line */}
       {!isLast && (
-        <div className="absolute left-[11px] top-5 bottom-0 w-px" style={{ background: C.accent + "20" }} />
+        <div className="absolute left-[11px] top-5 bottom-0 w-px" style={{ background: headerColor + "20" }} />
       )}
 
       {/* Iteration header node */}
@@ -215,14 +246,14 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
       >
         <div
           className="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
-          style={{ background: hasErrors ? C.coral + "20" : C.accent + "15", border: `1px solid ${hasErrors ? C.coral + "40" : C.accent + "30"}` }}
+          style={{ background: hasErrors ? C.coral + "20" : headerColor + "15", border: `1px solid ${hasErrors ? C.coral + "40" : headerColor + "30"}` }}
         >
-          <span className="text-[9px] font-bold" style={{ color: hasErrors ? C.coral : C.accent }}>
-            {iterEntry.current}
+          <span className="text-[9px] font-bold" style={{ color: hasErrors ? C.coral : headerColor }}>
+            {headerBadge}
           </span>
         </div>
         <span className="text-[12px] font-mono" style={{ color: C.muted }}>
-          ITER {iterEntry.current}/{iterEntry.max}
+          {headerLabel}
         </span>
         {toolCalls > 0 && (
           <span className="text-[12px] font-mono" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
@@ -399,6 +430,150 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
         <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>REPLY</span>
         <span className="text-[13px]" style={{ color: C.textSecondary }}>{e.text}</span>
+      </div>
+    )
+  }
+  // ── System prompt ──
+  if (e.kind === "system-prompt") {
+    return (
+      <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.dim}30` }}>
+        <div
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="text-[12px] font-mono font-semibold" style={{ color: C.dim }}>?</span>
+          <span className="text-[12px] font-mono" style={{ color: C.muted }}>system-prompt</span>
+          {!expanded && (
+            <span className="text-[12px] truncate" style={{ color: C.dim }}>
+              {e.text.length > 80 ? e.text.slice(0, 80) + "…" : e.text}
+            </span>
+          )}
+          <span className="text-[10px] ml-auto" style={{ color: C.dim }}>{expanded ? "▾" : "▸"}</span>
+        </div>
+        {expanded && (
+          <pre
+            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-60 overflow-auto whitespace-pre-wrap"
+            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+          >
+            {e.text}
+          </pre>
+        )}
+      </div>
+    )
+  }
+  // ── Planner events ──
+  if (e.kind === "planner-decision") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[12px] font-mono" style={{ color: e.shouldPlan ? "#C084FC" : C.dim }}>
+            {e.shouldPlan ? "▶ activated" : "▷ skipped"}
+          </span>
+          <span className="text-[11px] font-mono" style={{ color: C.dim }}>score {e.score.toFixed(2)}</span>
+        </div>
+        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
+      </div>
+    )
+  }
+  if (e.kind === "planner-generating") {
+    return (
+      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: "#C084FC80" }}>
+        ⟳ generating plan…
+      </div>
+    )
+  }
+  if (e.kind === "planner-plan-generated") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[12px] font-mono" style={{ color: "#C084FC" }}>✓ {e.stepCount} steps</span>
+        </div>
+        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
+        <div className="text-[11px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
+          {e.steps.map(s => s.name).join(" → ")}
+        </div>
+      </div>
+    )
+  }
+  if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.coral}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[12px] font-mono" style={{ color: C.coral }}>
+            ✗ {e.kind === "planner-generation-failed" ? "generation" : "validation"} failed
+          </span>
+        </div>
+        {e.diagnostics.map((d, i) => (
+          <div key={i} className="text-[12px] mt-0.5 pl-2" style={{ color: C.coral + "B0" }}>
+            [{d.code}] {d.message}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-pipeline-start") {
+    return (
+      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: "#C084FC80" }}>
+        ▶ pipeline attempt {e.attempt}/{e.maxRetries}
+      </div>
+    )
+  }
+  if (e.kind === "planner-step-start") {
+    return (
+      <div className="py-0.5 pl-4">
+        <span className="text-[12px] font-mono" style={{ color: C.muted }}>⟩ {e.stepName}</span>
+        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>({e.stepType})</span>
+      </div>
+    )
+  }
+  if (e.kind === "planner-step-end") {
+    return (
+      <div className="py-0.5 pl-4">
+        <span className="text-[12px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
+          {e.status === "completed" ? "✓" : "✗"} {e.stepName}
+        </span>
+        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms</span>
+      </div>
+    )
+  }
+  if (e.kind === "planner-pipeline-end") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#C084FC" }}>PIPE</span>
+        <span className="text-[12px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
+          ◀ {e.status}
+        </span>
+        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>
+          {e.completedSteps}/{e.totalSteps} steps
+        </span>
+      </div>
+    )
+  }
+  if (e.kind === "planner-verification") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>VRFY</span>
+          <span className="text-[12px] font-mono" style={{ color: e.overall === "pass" ? C.success : e.overall === "partial" ? C.warning : C.coral }}>
+            {e.overall}
+          </span>
+          <span className="text-[11px] font-mono" style={{ color: C.dim }}>{(e.confidence * 100).toFixed(0)}%</span>
+        </div>
+        {e.steps.filter(s => s.issues.length > 0).map((s, i) => (
+          <div key={i} className="text-[11px] mt-0.5 pl-2" style={{ color: C.dim }}>
+            {s.stepName}: {s.issues.join("; ")}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-retry") {
+    return (
+      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: C.warning }}>
+        ↻ retry attempt {e.attempt}: {e.reason}
       </div>
     )
   }
@@ -613,13 +788,14 @@ function mapToolLabel(id: string): string {
 
 interface MapNode {
   id: string
-  type: "agent" | "tool" | "delegate"
+  type: "agent" | "tool" | "delegate" | "planstep"
   label: string
   color: string
   agentId?: string
   toolId?: string
   delegateDepth?: number
   delegateStatus?: "active" | "done" | "error"
+  planStepType?: string
   val?: number
   x?: number
   y?: number
@@ -728,6 +904,28 @@ export function MapPanel({
     return all
   }, [trace])
 
+  // Stabilised planner step nodes
+  const prevPlanStepsRef = useRef<Array<{ key: string; name: string; type: string; status: "active" | "done" | "error" }>>([])
+  const tracePlanSteps = useMemo(() => {
+    const all: Array<{ key: string; name: string; type: string; status: "active" | "done" | "error" }> = []
+    for (const e of trace) {
+      if (e.kind === "planner-step-start") {
+        all.push({ key: `ps${all.length}`, name: e.stepName, type: e.stepType, status: "active" })
+      } else if (e.kind === "planner-step-end") {
+        for (let j = all.length - 1; j >= 0; j--) {
+          if (all[j].name === e.stepName && all[j].status === "active") {
+            all[j].status = e.status === "completed" ? "done" : "error"
+            break
+          }
+        }
+      }
+    }
+    const prev = prevPlanStepsRef.current
+    if (prev.length === all.length && prev.every((s, i) => s.key === all[i].key && s.status === all[i].status)) return prev
+    prevPlanStepsRef.current = all
+    return all
+  }, [trace])
+
   const hasRunContext = activeAgentId != null && trace.length > 0
 
   // Build graph — stabilised topology
@@ -799,6 +997,20 @@ export function MapPanel({
       }
     }
 
+    // Planner step nodes
+    for (const ps of tracePlanSteps) {
+      const psId = `planstep:${ps.key}`
+      const color = ps.status === "active" ? "#C084FC" : ps.status === "error" ? C.coral : "#C084FC"
+      nodes.push({
+        id: psId, type: "planstep", label: ps.name.slice(0, 8), color,
+        delegateDepth: 1, delegateStatus: ps.status, planStepType: ps.type,
+        val: 3, x: -30, y: (agents.length + traceDelegations.length + tracePlanSteps.indexOf(ps)) * 50,
+      })
+      if (activeAgentId) {
+        links.push({ source: `agent:${activeAgentId}`, target: psId, agentId: activeAgentId, color: color + "60" })
+      }
+    }
+
     // Structural comparison
     const prev = prevGraphRef.current
     const nk = nodes.map(n => n.id).join("\0")
@@ -812,7 +1024,7 @@ export function MapPanel({
     if (nk === pnk && lk === plk) return prev
     prevGraphRef.current = { nodes, links }
     return { nodes, links }
-  }, [agents, traceDelegations, activeAgentId, involvedToolIds])
+  }, [agents, traceDelegations, tracePlanSteps, activeAgentId, involvedToolIds])
 
   // Set of currently-running tool IDs (for highlighting)
   const activeToolSet = useMemo(() => {
@@ -889,7 +1101,7 @@ export function MapPanel({
   const paintNode = useCallback((node: NodeObject<MapNode>, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const x = node.x ?? 0
     const y = node.y ?? 0
-    const r = node.type === "agent" ? 10 : node.type === "delegate" ? 8 : 7
+    const r = node.type === "agent" ? 10 : node.type === "delegate" || node.type === "planstep" ? 8 : 7
 
     if (node.type === "delegate") {
       const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
@@ -912,6 +1124,38 @@ export function MapPanel({
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
       ctx.fillStyle = node.color; ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 3)
+      return
+    }
+
+    if (node.type === "planstep") {
+      const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
+      const opacity = isDone ? "66" : "cc"
+      const w = r * 1.6, h = r * 1.2, rad = 2
+      ctx.beginPath()
+      ctx.moveTo(x - w + rad, y - h)
+      ctx.lineTo(x + w - rad, y - h)
+      ctx.arcTo(x + w, y - h, x + w, y - h + rad, rad)
+      ctx.lineTo(x + w, y + h - rad)
+      ctx.arcTo(x + w, y + h, x + w - rad, y + h, rad)
+      ctx.lineTo(x - w + rad, y + h)
+      ctx.arcTo(x - w, y + h, x - w, y + h - rad, rad)
+      ctx.lineTo(x - w, y - h + rad)
+      ctx.arcTo(x - w, y - h, x - w + rad, y - h, rad)
+      ctx.closePath()
+      ctx.fillStyle = "#342F57" + opacity
+      ctx.fill()
+      ctx.strokeStyle = node.color + (isDone ? "55" : "bb")
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+      if (isDone) {
+        ctx.font = `${Math.max(4, 10 / globalScale)}px sans-serif`
+        ctx.fillStyle = (node.delegateStatus === "error" ? C.coral : C.success) + "aa"
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"
+        ctx.fillText(node.delegateStatus === "error" ? "✗" : "✓", x, y)
+      }
+      ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
+      ctx.fillStyle = node.color; ctx.textAlign = "center"; ctx.textBaseline = "top"
+      ctx.fillText(node.label, x, y + h + 3)
       return
     }
 
@@ -975,7 +1219,7 @@ export function MapPanel({
 
   // Node hit area
   const paintNodeArea = useCallback((node: NodeObject<MapNode>, color: string, ctx: CanvasRenderingContext2D) => {
-    const r = node.type === "agent" ? 12 : node.type === "delegate" ? 10 : 9
+    const r = node.type === "agent" ? 12 : node.type === "delegate" || node.type === "planstep" ? 10 : 9
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, Math.PI * 2); ctx.fill()
   }, [])
 
@@ -1075,8 +1319,23 @@ export function MapPanel({
         ],
       }
     }
+    if (selectedNode.startsWith("planstep:")) {
+      const key = selectedNode.slice(9)
+      const ps = tracePlanSteps.find((s) => s.key === key)
+      if (!ps) return null
+      const endEvt = trace.find((e) => e.kind === "planner-step-end" && e.stepName === ps.name) as
+        | { durationMs?: number }
+        | undefined
+      return {
+        title: `Plan Step: ${ps.name}`, lines: [
+          { label: "Type", value: ps.type },
+          { label: "Status", value: ps.status === "done" ? "completed" : ps.status },
+          ...(endEvt?.durationMs != null ? [{ label: "Duration", value: `${endEvt.durationMs}ms` }] : []),
+        ],
+      }
+    }
     return null
-  }, [selectedNode, agents, run, toolStats, traceDelegations, trace])
+  }, [selectedNode, agents, run, toolStats, traceDelegations, tracePlanSteps, trace])
 
   if (agents.length === 0) {
     return (

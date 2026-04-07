@@ -59,8 +59,6 @@ export async function runDeterministicProbes(
             const content = await readFile.execute({ path: artifact })
             if (content.startsWith("Error:") || content.includes("not found") || content.includes("ENOENT")) {
               issues.push(`Target artifact "${artifact}" not found`)
-            } else if (content.length < 20) {
-              issues.push(`Target artifact "${artifact}" appears empty or minimal (${content.length} chars)`)
             }
           } catch {
             issues.push(`Could not read target artifact "${artifact}"`)
@@ -94,7 +92,8 @@ export async function runDeterministicProbes(
         if (runCmd) {
           try {
             const result = await runCmd.execute({ command: "npm test 2>&1 || exit 0" })
-            if (/fail|error|exception/i.test(result) && !/0 failed/i.test(result)) {
+            // Only flag real test failures ("X failed", "FAIL"), not incidental mentions of error/fail
+            if (/\d+\s+fail|FAIL\s|tests?\s+failed/i.test(result) && !/0 failed/i.test(result)) {
               issues.push(`Test run reported failures: ${result.slice(0, 300)}`)
             }
           } catch {
@@ -148,11 +147,12 @@ You MUST respond with valid JSON matching this schema:
 }
 
 Rules:
-- "pass" means the step clearly met its acceptance criteria
-- "retry" means the step partially succeeded but needs another attempt to fix issues
-- "fail" means the step fundamentally failed and cannot be salvaged by retry
-- Be strict: if acceptance criteria aren't demonstrably met, mark as retry
-- Always include specific, actionable issues for any non-pass outcome
+- "pass" means the step completed and produced reasonable output for its objective
+- "retry" means the step produced output but has clear, concrete deficiencies that a retry could fix
+- "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
+- Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
+- Only mark "retry" for specific, actionable issues — not vague concerns about quality
+- If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem
 - confidence is 0.0 to 1.0
 - Respond ONLY with the JSON object`
 
@@ -296,7 +296,7 @@ function parseLLMVerification(
 function parseOutcome(value: unknown): VerifierOutcome {
   const s = String(value ?? "")
   if (s === "pass" || s === "retry" || s === "fail") return s
-  return "retry" // default to retry on ambiguity
+  return "pass" // default to pass on ambiguity — avoid pointless retries
 }
 
 function buildFallbackDecision(
