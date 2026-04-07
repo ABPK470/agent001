@@ -682,6 +682,16 @@ export class AgentOrchestrator {
       },
       plannerDelegateFn: (step, envelope) =>
         spawnChildForPlan(delegateCtx, step, envelope),
+      onNudge: (data) => {
+        const entry = {
+          kind: "nudge" as const,
+          tag: data.tag,
+          message: data.message,
+          iteration: data.iteration,
+        }
+        this.saveTrace(runId, entry)
+        broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry } })
+      },
       onLlmCall: (data) => {
         if (data.phase === "request") {
           const entry = {

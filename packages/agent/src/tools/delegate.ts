@@ -348,6 +348,10 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
     ? `${spec.goal}\n\nAdditional instructions:\n${spec.instructions}`
     : spec.goal
 
+  // Buffer LLM request/response events so they emit AFTER the iteration marker
+  // (onLlmCall fires before onThinking, but the iteration marker is in onThinking)
+  let pendingLlmEvents: Record<string, unknown>[] = []
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: effectivePrompt,
@@ -360,6 +364,9 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
         iteration: iteration + 1,
         maxIterations: maxIter,
       })
+      // Flush buffered LLM events after the iteration marker
+      for (const ev of pendingLlmEvents) ctx.onChildTrace?.(ev)
+      pendingLlmEvents = []
       if (content) {
         ctx.onChildTrace?.({
           kind: "thinking",
@@ -370,6 +377,39 @@ async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string
     },
     onStep: (_messages, _iteration) => {
       ctx.onChildUsage?.(child.usage, child.llmCalls)
+    },
+    onNudge: (data) => {
+      ctx.onChildTrace?.({
+        kind: "nudge",
+        tag: `[D${ctx.depth + 1}] ${data.tag}`,
+        message: data.message,
+        iteration: data.iteration,
+      })
+    },
+    onLlmCall: (data) => {
+      if (data.phase === "request") {
+        pendingLlmEvents.push({
+          kind: "llm-request",
+          iteration: data.iteration,
+          messageCount: data.messages.length,
+          toolCount: data.tools.length,
+          messages: data.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            toolCalls: m.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+            toolCallId: m.toolCallId ?? null,
+          })),
+        })
+      } else {
+        pendingLlmEvents.push({
+          kind: "llm-response",
+          iteration: data.iteration,
+          durationMs: data.durationMs,
+          content: data.response.content,
+          toolCalls: data.response.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+          usage: data.response.usage ?? null,
+        })
+      }
     },
   })
 
@@ -509,6 +549,9 @@ export async function spawnChildForPlan(
     releaseSlot = await ctx.acquireSlot(childRunId)
   }
 
+  // Buffer LLM request/response events so they emit AFTER the iteration marker
+  let pendingPlannerLlmEvents: Record<string, unknown>[] = []
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: CHILD_SYSTEM_PROMPT,
@@ -522,10 +565,46 @@ export async function spawnChildForPlan(
         iteration: iteration + 1,
         maxIterations: maxIter,
       })
+      // Flush buffered LLM events after the iteration marker
+      for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
+      pendingPlannerLlmEvents = []
       ctx.onChildUsage?.(child.usage, child.llmCalls)
     },
     onStep: () => {
       ctx.onChildUsage?.(child.usage, child.llmCalls)
+    },
+    onNudge: (data) => {
+      ctx.onChildTrace?.({
+        kind: "nudge",
+        tag: `[${step.name}] ${data.tag}`,
+        message: data.message,
+        iteration: data.iteration,
+      })
+    },
+    onLlmCall: (data) => {
+      if (data.phase === "request") {
+        pendingPlannerLlmEvents.push({
+          kind: "llm-request",
+          iteration: data.iteration,
+          messageCount: data.messages.length,
+          toolCount: data.tools.length,
+          messages: data.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            toolCalls: m.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+            toolCallId: m.toolCallId ?? null,
+          })),
+        })
+      } else {
+        pendingPlannerLlmEvents.push({
+          kind: "llm-response",
+          iteration: data.iteration,
+          durationMs: data.durationMs,
+          content: data.response.content,
+          toolCalls: data.response.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+          usage: data.response.usage ?? null,
+        })
+      }
     },
   })
 

@@ -180,6 +180,8 @@ export interface AgentConfig {
   onStep?: (messages: Message[], iteration: number) => void
   /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */
   onLlmCall?: (data: { phase: "request"; messages: Message[]; tools: Tool[]; iteration: number } | { phase: "response"; response: LLMResponse; iteration: number; durationMs: number }) => void
+  /** Called when the agent loop injects a system nudge/guard message. */
+  onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /** AbortSignal for external cancellation. */
   signal?: AbortSignal
 

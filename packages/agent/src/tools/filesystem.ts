@@ -193,8 +193,10 @@ export const writeFileTool: Tool = {
         await mkdir(parentDir, { recursive: true })
       } catch (mkdirErr) {
         // ENOTDIR: a parent component exists as a regular file, not a directory.
-        // Remove the blocking file so mkdir can create the directory tree.
-        if ((mkdirErr as NodeJS.ErrnoException).code === "ENOTDIR") {
+        // EEXIST: parentDir itself exists as a regular file (mkdir -p on a file path).
+        // In both cases, remove the blocking file so mkdir can create the directory tree.
+        const mkdirCode = (mkdirErr as NodeJS.ErrnoException).code
+        if (mkdirCode === "ENOTDIR" || mkdirCode === "EEXIST") {
           // Walk up to find the file blocking directory creation
           const parts = parentDir.slice(_basePath.length + 1).split("/")
           let cur = _basePath

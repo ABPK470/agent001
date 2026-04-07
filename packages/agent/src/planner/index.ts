@@ -32,12 +32,57 @@ export type {
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
-import type { LLMClient, Message, Tool } from "../types.js"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
 import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
 import type { PipelineResult, Plan, VerifierDecision } from "./types.js"
+
+/** Wrap an LLMClient to emit llm-request / llm-response trace entries. */
+function tracingLlm(
+  llm: LLMClient,
+  onTrace: (entry: Record<string, unknown>) => void,
+  label: string,
+): LLMClient {
+  let callCounter = 0
+  return {
+    async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse> {
+      const iteration = ++callCounter
+      const serMessages = messages.map(m => ({
+        role: m.role,
+        content: m.content ?? null,
+        toolCalls: (m.toolCalls ?? []).map((tc: ToolCall) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
+        toolCallId: m.toolCallId ?? null,
+      }))
+
+      onTrace({
+        kind: "llm-request",
+        iteration,
+        messageCount: messages.length,
+        toolCount: tools.length,
+        messages: serMessages,
+        label,
+      })
+
+      const start = Date.now()
+      const response = await llm.chat(messages, tools, opts)
+      const durationMs = Date.now() - start
+
+      onTrace({
+        kind: "llm-response",
+        iteration,
+        durationMs,
+        content: response.content,
+        toolCalls: response.toolCalls.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
+        usage: response.usage ?? null,
+        label,
+      })
+
+      return response
+    },
+  }
+}
 import { validatePlan } from "./validate.js"
 import { verify } from "./verifier.js"
 

@@ -30,17 +30,17 @@ import { applyPromptBudget } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
-  RoundStuckState,
-  ToolLoopState,
-  ToolRoundProgressSummary,
+    RoundStuckState,
+    ToolLoopState,
+    ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-  checkToolLoopStuckDetection,
-  enrichToolResultMetadata as enrichResult,
-  evaluateToolRoundBudgetExtension,
-  executeToolWithTimeout,
-  summarizeToolRoundProgress,
-  trackToolCallFailureState,
+    checkToolLoopStuckDetection,
+    enrichToolResultMetadata as enrichResult,
+    evaluateToolRoundBudgetExtension,
+    executeToolWithTimeout,
+    summarizeToolRoundProgress,
+    trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -243,6 +243,7 @@ export class Agent {
     onThinking: AgentConfig["onThinking"]
     onStep: AgentConfig["onStep"]
     onLlmCall: AgentConfig["onLlmCall"]
+    onNudge: AgentConfig["onNudge"]
     signal: AgentConfig["signal"]
     enablePlanner: boolean
     workspaceRoot: string
@@ -267,6 +268,7 @@ export class Agent {
       onThinking: config.onThinking,
       onStep: config.onStep,
       onLlmCall: config.onLlmCall,
+      onNudge: config.onNudge,
       signal: config.signal,
       enablePlanner: config.enablePlanner ?? false,
       workspaceRoot: config.workspaceRoot ?? ".",
@@ -379,15 +381,13 @@ export class Agent {
       const remaining = this.config.maxIterations - i
       if (!budgetNudged && remaining <= Math.max(Math.ceil(this.config.maxIterations * 0.2), 2)) {
         budgetNudged = true
-        messages.push({
-          role: "system",
-          content:
+        const budgetMsg =
             `⚠ ITERATION BUDGET: You have ${remaining} iteration(s) remaining out of ${this.config.maxIterations}. ` +
             `Prioritize COMPLETING your current work over perfecting it. ` +
             `Finish writing any pending files, run a quick verification, and wrap up. ` +
-            `Do NOT start new refactors or rewrites — finalize what you have.`,
-          section: "history",
-        })
+            `Do NOT start new refactors or rewrites — finalize what you have.`
+        messages.push({ role: "system", content: budgetMsg, section: "history" })
+        this.config.onNudge?.({ tag: "budget-warning", message: budgetMsg, iteration: i })
       }
 
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
@@ -411,14 +411,12 @@ export class Agent {
       } catch (err) {
         // Recover from truncated responses — nudge the LLM to break work into smaller pieces
         if (err instanceof Error && err.message.includes("finish_reason=length")) {
-          messages.push({
-            role: "system",
-            content:
+          const truncMsg =
               "⚠ OUTPUT TRUNCATED: Your last response was cut off because it exceeded the completion token limit. " +
               "You MUST break your work into smaller pieces. When writing files, split them into multiple smaller write_file calls " +
-              "(e.g. write a skeleton first, then append sections). Do NOT put an entire large file in a single write_file call.",
-            section: "history",
-          })
+              "(e.g. write a skeleton first, then append sections). Do NOT put an entire large file in a single write_file call."
+          messages.push({ role: "system", content: truncMsg, section: "history" })
+          this.config.onNudge?.({ tag: "output-truncated", message: truncMsg, iteration: i })
           continue
         }
         throw err
@@ -458,14 +456,12 @@ export class Agent {
             content: response.content,
             section: "history",
           })
-          messages.push({
-            role: "system",
-            content:
+          const earlyMsg =
               "You returned a text response without using any tools. " +
               "You MUST use your tools to accomplish the goal — do not just describe a plan. " +
-              "Start working now by calling the appropriate tools.",
-            section: "history",
-          })
+              "Start working now by calling the appropriate tools."
+          messages.push({ role: "system", content: earlyMsg, section: "history" })
+          this.config.onNudge?.({ tag: "early-exit-nudge", message: earlyMsg, iteration: i })
           continue
         }
 
@@ -479,18 +475,16 @@ export class Agent {
             content: response.content,
             section: "history",
           })
-          messages.push({
-            role: "system",
-            content:
+          const verifyMsg =
               "VERIFICATION REQUIRED: You just received a delegation result but attempted to " +
               "finish without verifying. You MUST verify with MULTIPLE tools now:\n" +
               "- For web projects → BOTH browser_check on the main HTML file AND read_file on the key JS/code files to check for stubs, TODO comments, or placeholder logic\n" +
               "- For code → run_command to compile/test AND read_file to review implementation quality\n" +
               "- For files → list_directory AND read_file to confirm content and completeness\n" +
               "A page loading without errors does NOT mean it works correctly. You must review the actual code.\n" +
-              "Do NOT provide a final answer until you have independently verified the output.",
-            section: "history",
-          })
+              "Do NOT provide a final answer until you have independently verified the output."
+          messages.push({ role: "system", content: verifyMsg, section: "history" })
+          this.config.onNudge?.({ tag: "verification-required", message: verifyMsg, iteration: i })
           continue
         }
 
@@ -503,16 +497,14 @@ export class Agent {
             content: response.content,
             section: "history",
           })
-          messages.push({
-            role: "system",
-            content:
+          const vfailMsg =
               "VERIFICATION FAILED: Your verification step revealed errors, but you attempted " +
               "to finish without fixing them. You MUST either:\n" +
               "1. Fix the issues directly (edit files, run commands)\n" +
               "2. Re-delegate the task with specific error details\n" +
-              "Do NOT suggest manual workarounds (like 'start an HTTP server'). Fix the actual problem.",
-            section: "history",
-          })
+              "Do NOT suggest manual workarounds (like 'start an HTTP server'). Fix the actual problem."
+          messages.push({ role: "system", content: vfailMsg, section: "history" })
+          this.config.onNudge?.({ tag: "verification-failed", message: vfailMsg, iteration: i })
           continue
         }
 
@@ -537,11 +529,9 @@ export class Agent {
       // Circuit breaker check — stop retrying if breaker is open
       const circuitStatus = circuitBreaker.getActiveCircuit()
       if (circuitStatus) {
-        messages.push({
-          role: "system",
-          content: `CIRCUIT BREAKER: ${circuitStatus.reason} — change your approach.`,
-          section: "history",
-        })
+        const cbMsg = `CIRCUIT BREAKER: ${circuitStatus.reason} — change your approach.`
+        messages.push({ role: "system", content: cbMsg, section: "history" })
+        this.config.onNudge?.({ tag: "circuit-breaker", message: cbMsg, iteration: i })
         if (this.config.verbose) log.logError(`Circuit breaker open: ${circuitStatus.reason}`)
         continue
       }
@@ -558,6 +548,7 @@ export class Agent {
           const errMsg = `Unknown tool "${call.name}". Available: ${[...this.tools.keys()].join(", ")}`
           if (this.config.verbose) log.logToolError(errMsg)
           messages.push({ role: "tool", toolCallId: call.id, content: errMsg, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: errMsg, isError: true })
           failuresThisRound++
           continue
         }
@@ -570,6 +561,7 @@ export class Agent {
             `Raw (truncated): ${String(call.arguments.__raw).slice(0, 200)}...`
           if (this.config.verbose) log.logToolError(errMsg)
           messages.push({ role: "tool", toolCallId: call.id, content: errMsg, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: errMsg, isError: true })
           failuresThisRound++
           continue
         }
@@ -621,11 +613,9 @@ export class Agent {
         roundStuckState,
       )
       if (stuckResult.shouldBreak) {
-        messages.push({
-          role: "system",
-          content: `STUCK DETECTION: ${stuckResult.reason ?? "Tool loop is stuck."}`,
-          section: "history",
-        })
+        const stuckMsg = `STUCK DETECTION: ${stuckResult.reason ?? "Tool loop is stuck."}`
+        messages.push({ role: "system", content: stuckMsg, section: "history" })
+        this.config.onNudge?.({ tag: "stuck-detection", message: stuckMsg, iteration: i })
         if (this.config.verbose) log.logError(`Stuck: ${stuckResult.reason}`)
 
         // Hard break — stop the loop
@@ -667,11 +657,9 @@ export class Agent {
       // Recovery hints: scan for known failure patterns and inject targeted advice
       const recoveryHints = buildRecoveryHints(roundToolCalls, emittedRecoveryHints)
       for (const hint of recoveryHints) {
-        messages.push({
-          role: "system",
-          content: `RECOVERY HINT: ${hint.message}`,
-          section: "history",
-        })
+        const hintMsg = `RECOVERY HINT: ${hint.message}`
+        messages.push({ role: "system", content: hintMsg, section: "history" })
+        this.config.onNudge?.({ tag: `recovery-hint:${hint.key}`, message: hintMsg, iteration: i })
         if (this.config.verbose) {
           log.logError(`Recovery hint [${hint.key}]: ${hint.message.slice(0, 100)}`)
         }
@@ -699,23 +687,17 @@ export class Agent {
         if (hasErrors || failuresThisRound > 0) {
           verificationFoundIssues = true
         } else if (didOnlySurfaceCheck) {
-          // Surface checks passed but no code was actually reviewed.
-          // Nudge the agent to also read the code.
-          // Keep inPostDelegationVerification active for the next round
-          // so we can check the read_file results.
           inPostDelegationVerification = true
-          messages.push({
-            role: "system",
-            content:
+          const incompleteMsg =
               "INCOMPLETE VERIFICATION: You ran browser_check or list_directory but did NOT review " +
               "the actual code with read_file. A page loading without JS errors does NOT mean the logic is correct. " +
               "You MUST now use read_file on the main code files (JS/TS) to verify that:\n" +
               "- All functions contain REAL logic (not stubs like `return true`)\n" +
               "- All required features exist (not just a skeleton)\n" +
               "- There are no TODO comments or placeholder implementations\n" +
-              "If you find issues, fix them directly or re-delegate.",
-            section: "history",
-          })
+              "If you find issues, fix them directly or re-delegate."
+          messages.push({ role: "system", content: incompleteMsg, section: "history" })
+          this.config.onNudge?.({ tag: "incomplete-verification", message: incompleteMsg, iteration: i })
         }
       }
 

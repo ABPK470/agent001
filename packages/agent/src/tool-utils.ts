@@ -347,7 +347,9 @@ export function checkToolLoopStuckDetection(
     }
   }
 
-  if (roundCalls.length === 0) return { shouldBreak: false }
+  if (roundCalls.length === 0) {
+    return { shouldBreak: false }
+  }
 
   // Level 2: all-failed rounds
   const roundFailures = roundCalls.filter(c => didToolCallFail(c.isError, c.result)).length

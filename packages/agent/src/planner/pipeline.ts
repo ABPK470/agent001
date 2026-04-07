@@ -187,7 +187,18 @@ export async function executePipeline(
           }
         } else if (onError === "abort") {
           failed.add(name)
-          // Don't decrement downstream — they'll be skipped
+          // Halt entire pipeline: mark ALL remaining steps as skipped
+          for (const s of plan.steps) {
+            if (!stepResults.has(s.name)) {
+              stepResults.set(s.name, {
+                name: s.name,
+                status: "skipped",
+                error: `Pipeline aborted: step "${name}" failed`,
+                durationMs: 0,
+              })
+              failed.add(s.name)
+            }
+          }
         } else {
           // Already retried in executeStep — mark as failed
           failed.add(name)
@@ -281,7 +292,11 @@ async function executeSubagentStep(
     const output = await delegateFn(step, step.executionContext)
 
     // Check for delegation failure markers
-    if (output.startsWith("Delegation failed:") || output.includes("DELEGATION INCOMPLETE")) {
+    if (
+      output.startsWith("Delegation failed:") ||
+      output.includes("DELEGATION INCOMPLETE") ||
+      output.includes("stuck in a tool loop")
+    ) {
       return {
         name: step.name,
         status: "failed",

@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-    C,
-    fmtK,
-    statusDot,
-    type EditorTab,
+  C,
+  fmtK,
+  statusDot,
+  type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -71,7 +71,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "usage": return `${p}USAGE  +${fmtK(e.iterationTokens)} tk · total ${fmtK(e.totalTokens)} · ${e.llmCalls} calls`
 
     case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}`
-    case "planner-generating": return `${p}GENERATING PLAN`
+    case "planner-generating": return `${p}GENERATING PLAN...`
     case "planner-plan-generated":
       return `${p}PLAN  ${e.stepCount} steps\n${p}  ${e.reason}\n` +
         e.steps.map((s, i) => `${p}  ${i + 1}. ${s.name} (${s.type})`).join("\n")
@@ -105,6 +105,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
       const tc = e.toolCalls?.length ?? 0
       return `${p}LLM RESPONSE  ${tc} tool call${tc !== 1 ? "s" : ""} · ${e.durationMs}ms`
     }
+    case "nudge": return `${p}NUDGE [${e.tag}]  ${e.message}`
     default: return `${p}${(e as { kind: string }).kind}`
   }
 }
@@ -748,6 +749,33 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       </div>
     )
   }
+  if (e.kind === "nudge") {
+    return (
+      <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid #FF6B6B40` }}>
+        <div
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
+          <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.tag}</span>
+          {!expanded && (
+            <span className="text-[12px] truncate" style={{ color: C.dim }}>
+              {e.message.length > 80 ? e.message.slice(0, 80) + "…" : e.message}
+            </span>
+          )}
+          <span className="text-[10px] ml-auto" style={{ color: C.dim }}>{expanded ? "▾" : "▸"}</span>
+        </div>
+        {expanded && (
+          <pre
+            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
+            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+          >
+            {e.message}
+          </pre>
+        )}
+      </div>
+    )
+  }
   return null
 }
 // ═══════════════════════════════════════════════════════════════════
@@ -796,7 +824,7 @@ interface GroupedTrace {
 /* ── Grouping logic ──────────────────────────────────────────────── */
 
 function isToolExecution(kind: string): boolean {
-  return kind === "tool-call" || kind === "tool-result" || kind === "tool-error" || kind === "thinking"
+  return kind === "tool-call" || kind === "tool-result" || kind === "tool-error" || kind === "thinking" || kind === "nudge"
 }
 
 function groupTraceIntoLlmCalls(trace: TraceEntry[]): GroupedTrace {
@@ -1373,6 +1401,18 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return <FlatRow label="USER REPLY" labelColor={C.success} detail={e.text} />
   }
 
+  if (e.kind === "nudge") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`NUDGE · ${e.tag}`} labelColor="#FF6B6B"
+          detail={!open ? truncate(e.message, 100) : `iter ${e.iteration}`}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.message} maxH={300} /></div>}
+      </div>
+    )
+  }
+
   // iteration — skip (shown in header), but keep for completeness
   if (e.kind === "iteration") {
     return null
@@ -1413,12 +1453,13 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "llm-request") {
-    return <FlatRow label="LLM REQUEST" labelColor={C.accent} detail={`${e.messageCount} msgs · ${e.toolCount} tools`} />
+    const req = e as Extract<TraceEntry, { kind: "llm-request" }>
+    return <RequestSection2 messages={req.messages} toolCount={req.toolCount} />
   }
 
   if (e.kind === "llm-response") {
-    const tools = e.toolCalls?.length ?? 0
-    return <FlatRow label="LLM RESPONSE" labelColor={C.success} detail={`${tools} tool call${tools !== 1 ? "s" : ""} · ${e.durationMs}ms`} />
+    const resp = e as Extract<TraceEntry, { kind: "llm-response" }>
+    return <ResponseSection2 response={resp} />
   }
 
   // Catch-all
@@ -1604,11 +1645,14 @@ function PlannerIterBlock({ iter }: { iter: IterGroup }) {
   const [open, setOpen] = useState(false)
   const m = iter.marker
   const toolCalls = iter.events.filter((e) => e.kind === "tool-call").length
-  const detail = toolCalls > 0
-    ? `${toolCalls} tool call${toolCalls > 1 ? "s" : ""}`
-    : iter.events.length > 0
-      ? `${iter.events.length} event${iter.events.length > 1 ? "s" : ""}`
-      : "(no tools)"
+  const nudges = iter.events.filter((e) => e.kind === "nudge").length
+  const hasLlmReq = iter.events.some((e) => e.kind === "llm-request")
+  const detail = [
+    toolCalls > 0 ? `${toolCalls} tool call${toolCalls > 1 ? "s" : ""}` : null,
+    nudges > 0 ? `${nudges} nudge${nudges > 1 ? "s" : ""}` : null,
+    !toolCalls && !hasLlmReq && iter.events.length === 0 ? "(no tools)" : null,
+    !toolCalls && iter.events.length > 0 && !hasLlmReq ? `${iter.events.length} event${iter.events.length > 1 ? "s" : ""}` : null,
+  ].filter(Boolean).join(" · ")
 
   // Color red for empty iterations (agent spun without acting)
   const iterColor = iter.events.length === 0 ? C.warning : "#E879A8"
@@ -1637,13 +1681,16 @@ function IterEventRow({ entry: e }: { entry: TraceEntry }) {
 
   if (e.kind === "llm-request") {
     const req = e as Extract<TraceEntry, { kind: "llm-request" }>
-    return <FlatRow label="LLM REQUEST" labelColor={C.accent} detail={`${req.messageCount} msgs · ${req.toolCount} tools`} />
+    return <RequestSection2 messages={req.messages} toolCount={req.toolCount} />
   }
 
   if (e.kind === "llm-response") {
     const resp = e as Extract<TraceEntry, { kind: "llm-response" }>
-    const tools = resp.toolCalls?.length ?? 0
-    return <FlatRow label="LLM RESPONSE" labelColor={C.success} detail={`${tools} tool call${tools !== 1 ? "s" : ""} · ${resp.durationMs}ms`} />
+    return <ResponseSection2 response={resp} />
+  }
+
+  if (e.kind === "nudge") {
+    return <ExecutionRow entry={e} />
   }
 
   if (e.kind === "usage") {
@@ -1730,8 +1777,8 @@ function ResponseSection2({ response: resp }: {
           {resp.toolCalls.length > 0 && (
             <div className="px-2">
               <div style={{ color: C.dim }} className="mb-0.5">tool_calls:</div>
-              {resp.toolCalls.map((tc) => (
-                <ToolCallInline key={tc.id} tc={tc} />
+              {resp.toolCalls.map((tc, tci) => (
+                <ToolCallInline key={tc.id || `tc-${tci}`} tc={tc} />
               ))}
             </div>
           )}
@@ -1747,6 +1794,7 @@ function ExecutionSection({ events }: { events: TraceEntry[] }) {
   const [open, setOpen] = useState(false)
   const calls = events.filter((e) => e.kind === "tool-call").length
   const errors = events.filter((e) => e.kind === "tool-error").length
+  const nudges = events.filter((e) => e.kind === "nudge").length
 
   return (
     <div>
@@ -1765,6 +1813,7 @@ function ExecutionSection({ events }: { events: TraceEntry[] }) {
         <span style={{ color: C.dim }}>
           {calls} tool call{calls !== 1 ? "s" : ""}
           {errors > 0 && <span style={{ color: C.coral }}> · {errors} error{errors !== 1 ? "s" : ""}</span>}
+          {nudges > 0 && <span style={{ color: "#FF6B6B" }}> · {nudges} nudge{nudges !== 1 ? "s" : ""}</span>}
         </span>
       </div>
       {open && (
@@ -1882,8 +1931,8 @@ function MessageRow2({ msg, index }: {
       {open && (
         <div className="ml-5 space-y-1 py-0.5">
           {msg.content && <Pane text={msg.content} />}
-          {msg.toolCalls.map((tc) => (
-            <ToolCallInline key={tc.id} tc={tc} />
+          {msg.toolCalls.map((tc, tci) => (
+            <ToolCallInline key={tc.id || `tc-${tci}`} tc={tc} />
           ))}
         </div>
       )}
@@ -1998,6 +2047,25 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
           {open && <span style={{ color: C.dim }}>{e.text.length} chars</span>}
         </div>
         {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "nudge") {
+    return (
+      <div className="px-1">
+        <div
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          onClick={() => setOpen(!open)}
+        >
+          <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
+          <span style={{ color: "#FF6B6B", opacity: 0.7 }}>{e.tag}</span>
+          {!open && <span className="truncate" style={{ color: C.dim }}>{truncate(e.message, 80)}</span>}
+        </div>
+        {open && <div className="ml-5 py-0.5"><Pane text={e.message} color="#FF6B6B" /></div>}
       </div>
     )
   }
