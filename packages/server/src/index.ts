@@ -29,6 +29,7 @@ import {
     setBrowserCheckExecutor,
     setMssqlConfig,
     setMssqlWriteEnabled,
+    setSearchBasePath,
     setShellCwd,
     setShellExecutor,
     setShellSandboxStrict,
@@ -95,6 +96,7 @@ async function main() {
   }
   let currentWorkspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
   setBasePath(currentWorkspace)
+  setSearchBasePath(currentWorkspace)
   setShellCwd(currentWorkspace)
   setBrowserCheckCwd(currentWorkspace)
   console.log(`📂 Agent workspace: ${currentWorkspace}`)
@@ -334,6 +336,7 @@ async function main() {
 
     currentWorkspace = resolved
     setBasePath(resolved)
+    setSearchBasePath(resolved)
     setShellCwd(resolved)
     setBrowserCheckCwd(resolved)
     orchestrator.setWorkspace(resolved)

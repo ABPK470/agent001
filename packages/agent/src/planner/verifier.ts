@@ -19,6 +19,28 @@ import type {
 } from "./types.js"
 
 // ============================================================================
+// Constants (ported from agenc-core chat-executor-verifier.ts)
+// ============================================================================
+
+/** Min verifier confidence for accepting subagent outputs. */
+const DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE = 0.65
+/** Max chars retained from one subagent output in verifier prompts. */
+// const MAX_SUBAGENT_VERIFIER_OUTPUT_CHARS = 3_000
+
+/** Evidence density indicators — output that contains these is more trustworthy. */
+const EVIDENCE_DENSITY_RE = /(line|file|log|trace|stderr|stdout|stack|error|\d)/i
+/** Hallucination risk: phrases suggesting the model is referencing artifacts without evidence. */
+const HALLUCINATION_CLAIM_RE = /(according to|as seen in|from the logs|based on)/i
+/** Source-like file paths that indicate real implementation work. */
+const SOURCE_LIKE_PATH_RE =
+  /(?:^|\/)(?:src|lib|app|server|client|cmd|pkg|include|internal|tests?|spec)(?:\/|$)|\.(?:c|cc|cpp|cxx|h|hpp|rs|go|py|rb|php|java|kt|swift|cs|js|jsx|ts|tsx|json|toml|yaml|yml|xml|sh|zsh|bash)$/i
+/** Shell mutation pattern — commands that indicate workspace modifications. */
+// const SHELL_MUTATION_RE =
+//   /(?:^|[;&|]\s*|\n)\s*(?:cp|mv|rm|mkdir|touch|tee|sed|perl|python|node|ruby|go|cargo|npm|pnpm|yarn|make|cmake)\b|>>?/i
+/** Direct mutation tool names. */
+// const DIRECT_MUTATION_TOOLS = new Set(["write_file", "delete"])
+
+// ============================================================================
 // Deterministic probes
 // ============================================================================
 
@@ -102,10 +124,70 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Evidence density scoring (agenc-core pattern) ──
+      const outputText = (stepResult.output ?? "").trim()
+      const outputLower = outputText.toLowerCase()
+
+      if (outputText.length > 0 && !EVIDENCE_DENSITY_RE.test(outputLower)) {
+        issues.push("Weak evidence density: output lacks concrete indicators (file paths, line numbers, errors, data)")
+      }
+
+      // ── Hallucination detection (agenc-core pattern) ──
+      if (
+        outputText.length > 0 &&
+        HALLUCINATION_CLAIM_RE.test(outputLower) &&
+        !outputIntersectsArtifacts(outputLower, sa.executionContext.targetArtifacts)
+      ) {
+        issues.push("Hallucination risk: output references artifacts/logs but claims don't match known targets")
+      }
+
+      // ── Tool-call consistency check (agenc-core pattern) ──
+      // If the step required tool capabilities but the child reported no tool usage,
+      // it likely hallucinated or skipped actual execution.
+      if (stepResult.output) {
+        const parsedOutput = safeParseJson(stepResult.output)
+        if (parsedOutput) {
+          const toolCallCount = typeof parsedOutput.toolCalls === "number"
+            ? parsedOutput.toolCalls
+            : Array.isArray(parsedOutput.toolCalls) ? parsedOutput.toolCalls.length : -1
+          const failedToolCallCount = typeof parsedOutput.failedToolCalls === "number"
+            ? parsedOutput.failedToolCalls : 0
+
+          if (toolCallCount === 0 && sa.executionContext.targetArtifacts.length > 0) {
+            issues.push("Missing tool evidence: step required tool capabilities but reported zero tool calls")
+          }
+          if (toolCallCount > 0 && failedToolCallCount >= toolCallCount) {
+            issues.push("All tool calls failed: child agent reported no successful tool executions")
+          }
+          if (parsedOutput.success === false || String(parsedOutput.status).toLowerCase() === "failed") {
+            issues.push("Child agent reported explicit failure")
+          }
+        }
+      }
+
+      // ── Role-specific validation (agenc-core pattern) ──
+      const role = sa.executionContext.role ?? "writer"
+      if (role === "writer") {
+        // Writer steps must produce mutations — not just findings
+        const hasMutationEvidence = sa.executionContext.targetArtifacts.some(a => SOURCE_LIKE_PATH_RE.test(a))
+        if (!hasMutationEvidence && outputText.length > 0 && !outputText.includes("write_file") && !outputText.includes("wrote")) {
+          // Don't hard-fail, but note the concern
+          if (!issues.some(i => i.includes("mutation"))) {
+            issues.push("Writer step may lack mutation evidence — verify files were actually created/modified")
+          }
+        }
+      }
+
+      // ── Confidence from issue count (agenc-core formula) ──
+      const confidence = Math.max(0, 1 - Math.min(0.9, issues.length * 0.18))
+      const outcome: VerifierOutcome = issues.length > 0
+        ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" : "retry")
+        : "pass"
+
       assessments.push({
         stepName: step.name,
-        outcome: issues.length > 0 ? "retry" : "pass",
-        confidence: issues.length > 0 ? 0.3 : 0.8,
+        outcome,
+        confidence,
         issues,
         retryable: true,
       })
@@ -128,7 +210,14 @@ export async function runDeterministicProbes(
 // LLM-based verification
 // ============================================================================
 
-const VERIFIER_SYSTEM_PROMPT = `You are a verification agent. You review the results of a multi-step execution plan and assess whether each step's acceptance criteria were met.
+const VERIFIER_SYSTEM_PROMPT = `You are a strict verifier for delegated outputs and implementation runs.
+
+Grade steps by role:
+- Reviewer steps: pass when they produce grounded findings backed by reads/workspace inspection. Do NOT require file mutation from reviewers.
+- Writer steps: pass ONLY when they mutate owned target artifacts or explicitly report a grounded no-op with current target-artifact evidence. Findings alone are insufficient for writers.
+- Validator steps: must enforce implementation completion and reviewer-child completion before marking the workflow complete.
+
+Assess: contract adherence, evidence quality, hallucination risk against provided artifacts, and whether work is complete.
 
 You MUST respond with valid JSON matching this schema:
 {
@@ -153,6 +242,8 @@ Rules:
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem
+- Evidence quality: outputs with concrete indicators (file paths, line numbers, error messages, data) are more trustworthy than vague summaries
+- Hallucination check: if output claims "according to logs" or "as seen in" but doesn't match known artifacts, flag it
 - confidence is 0.0 to 1.0
 - Respond ONLY with the JSON object`
 
@@ -311,5 +402,35 @@ function buildFallbackDecision(
     confidence: Math.min(1.0, ...assessments.map(a => a.confidence)),
     steps: [...assessments],
     unresolvedItems: allIssues,
+  }
+}
+
+// ============================================================================
+// Evidence & hallucination helpers (ported from agenc-core)
+// ============================================================================
+
+/**
+ * Check if output text intersects with known artifact paths.
+ * If the output references things not in the artifact list, it may be hallucinated.
+ */
+function outputIntersectsArtifacts(outputLower: string, artifacts: readonly string[]): boolean {
+  if (artifacts.length === 0) return true // no artifacts to check against
+  return artifacts.some(artifact => {
+    const normalizedArtifact = artifact.toLowerCase().replace(/^\.\//, "")
+    // Check if any basename or partial path from the artifact appears in output
+    const basename = normalizedArtifact.split("/").pop() ?? normalizedArtifact
+    return outputLower.includes(basename) || outputLower.includes(normalizedArtifact)
+  })
+}
+
+function safeParseJson(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return null
+  } catch {
+    return null
   }
 }

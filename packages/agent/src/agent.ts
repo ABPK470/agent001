@@ -22,11 +22,26 @@
  *   - The accumulated message history (the agent "remembers" what it did)
  */
 
+import { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
 import * as log from "./logger.js"
 import type { PlannerContext } from "./planner/index.js"
 import { executePlannerPath } from "./planner/index.js"
+import { applyPromptBudget } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
-import { buildRecoveryHints } from "./recovery.js"
+import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
+import type {
+  RoundStuckState,
+  ToolLoopState,
+  ToolRoundProgressSummary,
+} from "./tool-utils.js"
+import {
+  checkToolLoopStuckDetection,
+  enrichToolResultMetadata as enrichResult,
+  evaluateToolRoundBudgetExtension,
+  executeToolWithTimeout,
+  summarizeToolRoundProgress,
+  trackToolCallFailureState,
+} from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
 
@@ -73,10 +88,22 @@ function truncateMessages(messages: Message[]): Message[] {
   if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return trimmed
   if (trimmed.length <= 4) return trimmed
 
-  // Check if any messages have section tags (new structured prompt)
+  // Check if any messages have section tags (structured prompt)
   const hasStructuredPrompt = trimmed.some((m) => m.section != null)
 
   if (hasStructuredPrompt) {
+    // Use the full prompt budget system (ported from agenc-core) for section-aware allocation
+    const budgetResult = applyPromptBudget(trimmed, {
+      contextWindowTokens: MAX_CONTEXT_TOKENS,
+      maxOutputTokens: 4096,
+      charPerToken: 4,
+      hardMaxPromptChars: MAX_CONTEXT_TOKENS * 4,
+    })
+    if (budgetResult.messages.length > 0) {
+      return budgetResult.messages
+    }
+    // Fallback to legacy if budget system produced empty
+    console
     return truncateBySection(trimmed)
   }
 
@@ -306,18 +333,28 @@ export class Agent {
 
     // ── Direct tool loop ────────────────────────────────────────
 
-    // Stuck detection state (agent-core pattern):
-    // Track recent failing tool calls to detect loops.
-    const recentFailures: Array<{ name: string; argsKey: string }> = []
-    const MAX_IDENTICAL_FAILURES = 3
-
-    // Track recent *successful* tool results to detect tool-success loops
-    // (e.g., browser_check returning the same errors each time).
-    const recentResults: Array<{ name: string; argsKey: string; resultKey: string }> = []
-    const MAX_IDENTICAL_RESULTS = 3
+    // Structured tool loop state (agenc-core pattern):
+    // Tracks per-call failures, all-fail rounds, and semantic duplicates
+    // for 3-level stuck detection.
+    const toolLoopState: ToolLoopState = {
+      lastFailKey: "",
+      consecutiveFailCount: 0,
+    }
+    const roundStuckState: RoundStuckState = {
+      consecutiveAllFailedRounds: 0,
+      lastRoundSemanticKey: "",
+      consecutiveSemanticDuplicateRounds: 0,
+    }
+    // Track seen semantic keys for round progress summary
+    const seenSuccessfulSemanticKeys = new Set<string>()
+    const seenVerificationFailureDiagKeys = new Set<string>()
+    const recentRoundSummaries: ToolRoundProgressSummary[] = []
 
     // Recovery hint dedup — each hint key emitted at most once per run
     const emittedRecoveryHints = new Set<string>()
+
+    // Circuit breaker — prevent infinite tool failure loops (ported from agenc-core)
+    const circuitBreaker = new ToolFailureCircuitBreaker()
 
     // Track whether the last tool round included a delegation call.
     // Used for post-delegation verification enforcement.
@@ -496,12 +533,26 @@ export class Agent {
       let failuresThisRound = 0
       let delegationThisRound = false
       const roundToolCalls: ToolCallRecord[] = []
+
+      // Circuit breaker check — stop retrying if breaker is open
+      const circuitStatus = circuitBreaker.getActiveCircuit()
+      if (circuitStatus) {
+        messages.push({
+          role: "system",
+          content: `CIRCUIT BREAKER: ${circuitStatus.reason} — change your approach.`,
+          section: "history",
+        })
+        if (this.config.verbose) log.logError(`Circuit breaker open: ${circuitStatus.reason}`)
+        continue
+      }
+
       for (const call of response.toolCalls) {
         if (this.config.signal?.aborted) {
           return "Agent was cancelled."
         }
         if (this.config.verbose) log.logToolCall(call.name, call.arguments)
 
+        const semanticKey = buildSemanticToolCallKey(call.name, call.arguments as Record<string, unknown>)
         const tool = this.tools.get(call.name)
         if (!tool) {
           const errMsg = `Unknown tool "${call.name}". Available: ${[...this.tools.keys()].join(", ")}`
@@ -523,66 +574,90 @@ export class Agent {
           continue
         }
 
-        try {
-          const result = await tool.execute(call.arguments)
-          if (this.config.verbose) log.logToolResult(result)
-          messages.push({ role: "tool", toolCallId: call.id, content: result, section: "history" })
-          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result, isError: false })
+        // Execute with timeout racing + transport-failure retry (agenc-core pattern)
+        const execResult = await executeToolWithTimeout(
+          call.name,
+          call.arguments as Record<string, unknown>,
+          (a) => tool.execute(a),
+          {
+            toolCallTimeoutMs: 0, // 0 = no timeout (respects agent-level signal)
+            maxRetries: 1,
+            signal: this.config.signal,
+          },
+        )
+
+        if (execResult.isError) {
+          if (this.config.verbose) log.logToolError(execResult.result)
+          messages.push({ role: "tool", toolCallId: call.id, content: execResult.result, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: execResult.result, isError: true })
+          failuresThisRound++
+          circuitBreaker.recordFailure(semanticKey, call.name)
+          trackToolCallFailureState(true, semanticKey, toolLoopState)
+        } else {
+          const enriched = enrichResult(execResult.result, {})
+          if (this.config.verbose) log.logToolResult(enriched)
+          messages.push({ role: "tool", toolCallId: call.id, content: enriched, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: enriched, isError: false })
+
+          // Circuit breaker: clear on success, record if "success" is a semantic failure
+          if (didToolCallFail(false, enriched)) {
+            circuitBreaker.recordFailure(semanticKey, call.name)
+            trackToolCallFailureState(true, semanticKey, toolLoopState)
+          } else {
+            circuitBreaker.clearPattern(semanticKey)
+            trackToolCallFailureState(false, semanticKey, toolLoopState)
+          }
+
           if (call.name === "delegate" || call.name === "delegate_parallel") {
             delegationThisRound = true
           }
+        }
+      }
 
-          // Stuck detection for successful-but-identical results (e.g., browser_check
-          // returning the same "1 error" report every time without the agent fixing it).
-          const argsKey = JSON.stringify(call.arguments)
-          const resultKey = result.slice(0, 500) // compare first 500 chars
-          recentResults.push({ name: call.name, argsKey, resultKey })
-          if (recentResults.length > 10) recentResults.shift()
-          const identicalResultCount = recentResults.filter(
-            (r) => r.name === call.name && r.argsKey === argsKey && r.resultKey === resultKey,
-          ).length
-          if (identicalResultCount >= MAX_IDENTICAL_RESULTS) {
-            messages.push({
-              role: "system",
-              content:
-                `STUCK DETECTION: Tool "${call.name}" returned the same result ${identicalResultCount} times ` +
-                `with identical arguments. The approach you are taking is not working. ` +
-                `Do NOT call this tool again with the same arguments. ` +
-                `Either fix the underlying issue first with a DIFFERENT tool, or move on.`,
-              section: "history",
-            })
-            if (this.config.verbose) {
-              log.logError(`Stuck: ${call.name} returned identical result ${identicalResultCount}x`)
-            }
+      // ── Structured stuck detection (3-level, agenc-core pattern) ──
+      const stuckResult = checkToolLoopStuckDetection(
+        roundToolCalls,
+        toolLoopState,
+        roundStuckState,
+      )
+      if (stuckResult.shouldBreak) {
+        messages.push({
+          role: "system",
+          content: `STUCK DETECTION: ${stuckResult.reason ?? "Tool loop is stuck."}`,
+          section: "history",
+        })
+        if (this.config.verbose) log.logError(`Stuck: ${stuckResult.reason}`)
+
+        // Hard break — stop the loop
+        const answer = response.content ?? "(Agent stuck in a tool loop — terminating.)"
+        if (this.config.verbose) log.logFinalAnswer(answer)
+        return answer
+      }
+
+      // ── Round progress summary + adaptive budget extension (agenc-core pattern) ──
+      const roundStartMs = Date.now()
+      const roundProgress = summarizeToolRoundProgress(
+        roundToolCalls,
+        Date.now() - roundStartMs,
+        seenSuccessfulSemanticKeys,
+        seenVerificationFailureDiagKeys,
+      )
+      recentRoundSummaries.push(roundProgress)
+      // Keep only last 5 round summaries for extension evaluation
+      if (recentRoundSummaries.length > 5) recentRoundSummaries.shift()
+
+      if (roundProgress.hadVerificationCall || roundProgress.hadSuccessfulMutation) {
+        const budgetExt = evaluateToolRoundBudgetExtension({
+          currentLimit: this.config.maxIterations,
+          maxAbsoluteLimit: this.config.maxIterations + 10,
+          recentRounds: recentRoundSummaries,
+          remainingToolBudget: this.config.maxIterations - i,
+        })
+        if (budgetExt.decision === "extended" && budgetExt.newLimit > this.config.maxIterations) {
+          if (this.config.verbose) {
+            log.logError(`Budget extension: ${this.config.maxIterations} → ${budgetExt.newLimit} (${budgetExt.extensionReason})`)
           }
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err)
-          if (this.config.verbose) log.logToolError(errMsg)
-          messages.push({ role: "tool", toolCallId: call.id, content: `Error: ${errMsg}`, section: "history" })
-          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: `Error: ${errMsg}`, isError: true })
-          failuresThisRound++
-
-          // Stuck detection: track this failure
-          const argsKey = JSON.stringify(call.arguments)
-          recentFailures.push({ name: call.name, argsKey })
-          // Keep only last 10 failures
-          if (recentFailures.length > 10) recentFailures.shift()
-
-          // Check for identical repeated failures
-          const identicalCount = recentFailures.filter(
-            (f) => f.name === call.name && f.argsKey === argsKey,
-          ).length
-          if (identicalCount >= MAX_IDENTICAL_FAILURES) {
-            // Inject a recovery hint so the LLM tries a different approach
-            messages.push({
-              role: "system",
-              content: `STUCK DETECTION: Tool "${call.name}" has failed ${identicalCount} times with identical arguments. You MUST try a fundamentally different approach. Do NOT retry the same call.`,
-              section: "history",
-            })
-            if (this.config.verbose) {
-              log.logError(`Stuck: ${call.name} failed ${identicalCount}x with same args`)
-            }
-          }
+          this.config.maxIterations = budgetExt.newLimit
         }
       }
 

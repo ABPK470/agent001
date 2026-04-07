@@ -114,8 +114,20 @@ async function safePathResolved(p: string): Promise<string> {
         current = real
       }
     } catch (err) {
-      // ENOENT: path doesn't exist yet (for writes) — stop walking
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") break
+      // ENOENT: path doesn't exist yet (for writes)
+      // ENOTDIR: a parent component is a file, not a directory
+      //   (write_file will handle replacing it with a directory)
+      // In both cases, stop symlink checking but append ALL remaining
+      // segments so we return the complete target path.
+      if ((err as NodeJS.ErrnoException).code === "ENOENT" ||
+          (err as NodeJS.ErrnoException).code === "ENOTDIR") {
+        // current already includes this segment; append the rest
+        const remaining = segments.slice(segments.indexOf(segment) + 1)
+        for (const rest of remaining) {
+          current = resolve(current, rest)
+        }
+        break
+      }
       // Re-throw our own symlink/validation errors
       if (err instanceof Error && err.message.includes("outside the allowed directory")) throw err
       // Other errors (EACCES etc.) — propagate
@@ -146,6 +158,10 @@ export const readFileTool: Tool = {
       const content = await readFile(await safePathResolved(String(args.path)), "utf-8")
       return content
     } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === "ENOTDIR") {
+        return `Error: A parent directory in the path "${String(args.path)}" is a regular file, not a directory. Use write_file to the intended path first (it will fix the directory structure), then retry the read.`
+      }
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
@@ -172,7 +188,35 @@ export const writeFileTool: Tool = {
       // Use safePathResolved to prevent writing through symlinks that point outside workspace
       const target = await safePathResolved(String(args.path))
       // Auto-create parent directories (safe: target is already validated under _basePath)
-      await mkdir(dirname(target), { recursive: true })
+      const parentDir = dirname(target)
+      try {
+        await mkdir(parentDir, { recursive: true })
+      } catch (mkdirErr) {
+        // ENOTDIR: a parent component exists as a regular file, not a directory.
+        // Remove the blocking file so mkdir can create the directory tree.
+        if ((mkdirErr as NodeJS.ErrnoException).code === "ENOTDIR") {
+          // Walk up to find the file blocking directory creation
+          const parts = parentDir.slice(_basePath.length + 1).split("/")
+          let cur = _basePath
+          for (const part of parts) {
+            cur = resolve(cur, part)
+            try {
+              const info = await lstat(cur)
+              if (info.isFile()) {
+                const { unlink } = await import("node:fs/promises")
+                await unlink(cur)
+                break
+              }
+            } catch {
+              break
+            }
+          }
+          // Retry mkdir after removing the blocking file
+          await mkdir(parentDir, { recursive: true })
+        } else {
+          throw mkdirErr
+        }
+      }
       await writeFile(target, String(args.content), "utf-8")
       return `Successfully wrote to ${args.path}`
     } catch (err) {

@@ -6,11 +6,182 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-  C,
-  fmtK,
-  statusDot,
-  type EditorTab,
+    C,
+    fmtK,
+    statusDot,
+    type EditorTab,
 } from "./constants"
+
+// ═══════════════════════════════════════════════════════════════════
+//  Export: format Agent Loop trace as plain text
+// ═══════════════════════════════════════════════════════════════════
+
+/** Format the entire Agent Loop trace as nicely-indented plain text. */
+export function formatTraceAsText(trace: TraceEntry[]): string {
+  if (trace.length === 0) return "(empty trace)"
+
+  if (isPlannerRun(trace)) {
+    const g = groupTraceForPlanner(trace)
+    const lines: string[] = []
+    for (const e of g.preamble) lines.push(fmtEvent(e, 0))
+    for (const p of g.pipelines) fmtPipeline(p, lines)
+    for (const e of g.trailing) lines.push(fmtEvent(e, 0))
+    return lines.join("\n")
+  }
+
+  // Chat mode
+  const g = groupTraceIntoLlmCalls(trace)
+  const lines: string[] = []
+  for (const call of g.calls) fmtLlmCall(call, lines)
+  for (const e of g.trailing.events) lines.push(fmtEvent(e, 0))
+  return lines.join("\n")
+}
+
+/** Trigger a file download in the browser. */
+export function exportAgentLoop(trace: TraceEntry[]): void {
+  const text = formatTraceAsText(trace)
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `agent-loop-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/* ── Text formatting helpers ─────────────────────────────────────── */
+
+const INDENT = "  "
+
+function indent(depth: number): string { return INDENT.repeat(depth) }
+
+function fmtEvent(e: TraceEntry, depth: number): string {
+  const p = indent(depth)
+  switch (e.kind) {
+    case "goal": return `${p}GOAL  ${e.text}`
+    case "system-prompt": return `${p}SYSTEM PROMPT\n${p}${e.text}`
+    case "tools-resolved": return `${p}TOOLS  ${e.tools.length}: ${e.tools.map(t => t.name).join(", ")}`
+    case "iteration": return `${p}ITERATION ${e.current}/${e.max}`
+    case "tool-call": return `${p}TOOL CALL  ${e.tool}  ${e.argsSummary}\n${p}${e.argsFormatted}`
+    case "tool-result": return `${p}TOOL RESULT\n${p}${e.text}`
+    case "tool-error": return `${p}TOOL ERROR\n${p}${e.text}`
+    case "thinking": return `${p}THINKING\n${p}${e.text}`
+    case "answer": return `${p}ANSWER\n${p}${e.text}`
+    case "error": return `${p}ERROR\n${p}${e.text}`
+    case "usage": return `${p}USAGE  +${fmtK(e.iterationTokens)} tk · total ${fmtK(e.totalTokens)} · ${e.llmCalls} calls`
+
+    case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}`
+    case "planner-generating": return `${p}GENERATING PLAN`
+    case "planner-plan-generated":
+      return `${p}PLAN  ${e.stepCount} steps\n${p}  ${e.reason}\n` +
+        e.steps.map((s, i) => `${p}  ${i + 1}. ${s.name} (${s.type})`).join("\n")
+    case "planner-generation-failed": return `${p}GENERATION FAILED`
+    case "planner-validation-failed": return `${p}VALIDATION FAILED`
+    case "planner-pipeline-start": return `${p}PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`
+    case "planner-pipeline-end": return `${p}PIPELINE END  ${e.status}  ${e.completedSteps}/${e.totalSteps} steps`
+    case "planner-step-start": return `${p}STEP  ${e.stepName}  ${e.stepType}`
+    case "planner-step-end": return `${p}STEP END  ${e.stepName}  ${e.status}  ${e.durationMs}ms`
+    case "planner-verification":
+      return `${p}VERIFY  ${e.overall}  ${(e.confidence * 100).toFixed(0)}% confidence\n` +
+        e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
+    case "planner-retry": return `${p}RETRY  attempt ${e.attempt}  ${e.reason}`
+    case "planner-retry-skipped": return `${p}RETRY SKIPPED  ${e.reason}`
+
+    case "planner-delegation-start": return `${p}CHILD AGENT  ${e.stepName}\n${p}  ${e.goal}`
+    case "planner-delegation-iteration": return `${p}${e.stepName}  ITER ${e.iteration}/${e.maxIterations}`
+    case "planner-delegation-end": return `${p}CHILD DONE  ${e.stepName}  ${e.status}\n${p}  ${e.answer || e.error || ""}`
+
+    case "delegation-start": return `${p}DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}\n${p}  ${e.goal}`
+    case "delegation-iteration": return `${p}DELEGATE ITER ${e.iteration}/${e.maxIterations}`
+    case "delegation-end": return `${p}DELEGATE END  ${e.status}\n${p}  ${e.answer || e.error || ""}`
+    case "delegation-parallel-start": return `${p}PARALLEL  ${e.taskCount} tasks`
+    case "delegation-parallel-end": return `${p}PARALLEL END  ${e.fulfilled}/${e.taskCount} ok`
+
+    case "user-input-request": return `${p}ASK USER  ${e.question}`
+    case "user-input-response": return `${p}USER REPLY  ${e.text}`
+
+    case "llm-request": return `${p}LLM REQUEST  ${e.messageCount} msgs · ${e.toolCount} tools`
+    case "llm-response": {
+      const tc = e.toolCalls?.length ?? 0
+      return `${p}LLM RESPONSE  ${tc} tool call${tc !== 1 ? "s" : ""} · ${e.durationMs}ms`
+    }
+    default: return `${p}${(e as { kind: string }).kind}`
+  }
+}
+
+function fmtLlmCall(call: LlmCall, lines: string[]): void {
+  const { callNumber, iteration, request: req, response: resp, execution, usage } = call
+
+  const parts: string[] = [`LLM Call #${callNumber}`]
+  if (iteration) parts.push(`iteration ${iteration.current}/${iteration.max}`)
+  parts.push(`${req.messageCount} msgs`)
+  const tc = resp?.toolCalls.length ?? 0
+  parts.push(`→ ${tc} tool call${tc !== 1 ? "s" : ""}`)
+  if (resp?.durationMs != null) parts.push(`${resp.durationMs}ms`)
+  lines.push(parts.join("  "))
+
+  // Preamble
+  for (const p of call.preamble) lines.push(fmtEvent(p.entry, 1))
+
+  // Request messages
+  for (const msg of req.messages) {
+    const role = msg.role.toUpperCase()
+    const charCount = msg.content?.length ?? 0
+    lines.push(`${INDENT}[${role}] ${charCount} chars${msg.toolCallId ? ` ← ${msg.toolCallId}` : ""}`)
+    if (msg.content) lines.push(`${INDENT}${INDENT}${msg.content}`)
+    for (const t of msg.toolCalls) {
+      lines.push(`${INDENT}${INDENT}tool_call: ${t.name}(${JSON.stringify(t.arguments)})`)
+    }
+  }
+
+  // Response
+  if (resp) {
+    const u = resp.usage
+    lines.push(`${INDENT}RESPONSE  ${resp.durationMs}ms${u ? `  ${u.promptTokens}+${u.completionTokens}=${u.totalTokens} tk` : ""}`)
+    if (resp.content) lines.push(`${INDENT}${INDENT}${resp.content}`)
+    for (const t of resp.toolCalls) {
+      lines.push(`${INDENT}${INDENT}tool_call: ${t.name}(${JSON.stringify(t.arguments)})`)
+    }
+  }
+
+  // Execution
+  for (const ev of execution) lines.push(fmtEvent(ev, 1))
+
+  // Usage
+  if (usage) lines.push(fmtEvent(usage, 1))
+  lines.push("")
+}
+
+function fmtPipeline(p: PipelineGroup, lines: string[]): void {
+  lines.push(`PIPELINE  attempt ${p.start.attempt}/${p.start.maxRetries}`)
+  for (const [si, step] of p.steps.entries()) fmtStep(step, si + 1, lines)
+  if (p.end) lines.push(`${INDENT}${p.end.status}  ${p.end.completedSteps}/${p.end.totalSteps} steps`)
+  if (p.verification) {
+    lines.push(`${INDENT}VERIFICATION`)
+    for (const e of p.verification.probes) lines.push(fmtEvent(e, 2))
+    if (p.verification.result) lines.push(fmtEvent(p.verification.result, 2))
+  }
+  for (const e of p.aftermath) lines.push(fmtEvent(e, 1))
+  lines.push("")
+}
+
+function fmtStep(s: StepGroup, idx: number, lines: string[]): void {
+  const status = s.end?.status ?? "running"
+  const dur = s.end?.durationMs
+  lines.push(`${INDENT}STEP ${idx} · ${s.start.stepName}  ${s.start.stepType}  ${status}${dur != null ? `  ${dur}ms` : ""}`)
+  if (s.childStart) {
+    lines.push(`${INDENT}${INDENT}CHILD AGENT  ${s.childStart.goal}`)
+    for (const iter of s.iterations) {
+      const iterToolCalls = iter.events.filter(e => e.kind === "tool-call").length
+      lines.push(`${INDENT}${INDENT}${INDENT}ITER ${iter.marker.iteration}/${iter.marker.maxIterations}${iterToolCalls === 0 ? "  (no tools)" : ""}`)
+      for (const ev of iter.events) lines.push(fmtEvent(ev, 4))
+    }
+    if (s.childEnd) {
+      lines.push(`${INDENT}${INDENT}${INDENT}${s.childEnd.status}  ${s.childEnd.answer || s.childEnd.error || ""}`)
+    }
+  }
+  for (const ev of s.events) lines.push(fmtEvent(ev, 2))
+}
 
 // ═══════════════════════════════════════════════════════════════════
 //  EditorTabs — tab bar for the editor area
@@ -40,10 +211,10 @@ export function EditorTabs({
     [trace],
   )
 
-  const llmCallCount = useMemo(() =>
-    trace.filter((e) => e.kind === "llm-request").length,
-    [trace],
-  )
+  const llmCallCount = useMemo(() => {
+    // Show total meaningful events count — covers both chat and planner modes
+    return trace.length
+  }, [trace])
 
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
     { id: "trace", label: "Trace", count: visibleTraceCount },
@@ -579,43 +750,1094 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   }
   return null
 }
+// ═══════════════════════════════════════════════════════════════════
+//  LlmCallsPanel — Agent Loop inspector (LLM-call-centric view)
+//
+//  EVERYTHING is grouped under LLM Calls. Pre-call events (goal,
+//  system prompt, tools, planner, iteration) appear as a preamble
+//  before the first call or as metadata on the call boundary.
+//  Post-response events (tool-call, tool-result, tool-error, thinking)
+//  appear inside the call's EXECUTION section.
+// ═══════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════════
-//  LlmCallsPanel — DebugInspector's LLM Calls view embedded
-// ═══════════════════════════════════════════════════════════════════
+/* ── Data model ──────────────────────────────────────────────────── */
+
+/** Events that appear before an LLM call (goal, system prompt, iteration, planner, etc.) */
+interface PreCallEvent {
+  entry: TraceEntry
+}
+
+interface LlmCall {
+  callNumber: number
+  /** Iteration N/M shown in header */
+  iteration: { current: number; max: number } | null
+  /** Events between previous call (or start) and this LLM request */
+  preamble: PreCallEvent[]
+  /** The LLM request with all messages */
+  request: Extract<TraceEntry, { kind: "llm-request" }>
+  /** The LLM response (null if still streaming) */
+  response: Extract<TraceEntry, { kind: "llm-response" }> | null
+  /** Usage event for this iteration */
+  usage: Extract<TraceEntry, { kind: "usage" }> | null
+  /** Tool calls + results + errors + thinking after the response */
+  execution: TraceEntry[]
+}
+
+/** Trailing events after the last LLM call (answer, error, etc.) */
+interface TrailingEvents {
+  events: TraceEntry[]
+}
+
+interface GroupedTrace {
+  calls: LlmCall[]
+  trailing: TrailingEvents
+}
+
+/* ── Grouping logic ──────────────────────────────────────────────── */
+
+function isToolExecution(kind: string): boolean {
+  return kind === "tool-call" || kind === "tool-result" || kind === "tool-error" || kind === "thinking"
+}
+
+function groupTraceIntoLlmCalls(trace: TraceEntry[]): GroupedTrace {
+  const calls: LlmCall[] = []
+  let preamble: PreCallEvent[] = []
+  let lastIteration: { current: number; max: number } | null = null
+  let callNum = 0
+  let i = 0
+
+  while (i < trace.length) {
+    const e = trace[i]
+
+    if (e.kind === "llm-request") {
+      callNum++
+      const req = e as Extract<TraceEntry, { kind: "llm-request" }>
+      i++
+
+      // Collect response
+      let resp: Extract<TraceEntry, { kind: "llm-response" }> | null = null
+      if (i < trace.length && trace[i].kind === "llm-response") {
+        resp = trace[i] as Extract<TraceEntry, { kind: "llm-response" }>
+        i++
+      }
+
+      // Collect execution (tool activity) — greedy
+      const execution: TraceEntry[] = []
+      while (i < trace.length && isToolExecution(trace[i].kind)) {
+        execution.push(trace[i])
+        i++
+      }
+
+      // Check if next event is a usage for this iteration
+      let usage: Extract<TraceEntry, { kind: "usage" }> | null = null
+      if (i < trace.length && trace[i].kind === "usage") {
+        usage = trace[i] as Extract<TraceEntry, { kind: "usage" }>
+        i++
+      }
+
+      calls.push({
+        callNumber: callNum,
+        iteration: lastIteration,
+        preamble,
+        request: req,
+        response: resp,
+        usage,
+        execution,
+      })
+      preamble = []
+      lastIteration = null
+    } else {
+      // Track iteration for next LLM call
+      if (e.kind === "iteration") {
+        lastIteration = { current: (e as Extract<TraceEntry, { kind: "iteration" }>).current, max: (e as Extract<TraceEntry, { kind: "iteration" }>).max }
+      }
+      preamble.push({ entry: e })
+      i++
+    }
+  }
+
+  // Remaining preamble events (after last LLM call) become trailing
+  const trailing: TrailingEvents = { events: preamble.map((p) => p.entry) }
+  return { calls, trailing }
+}
+
+/* ── Planner-mode data model ─────────────────────────────────────── */
+
+interface PlannerGroupedTrace {
+  preamble: TraceEntry[]
+  pipelines: PipelineGroup[]
+  trailing: TraceEntry[]
+}
+
+interface PipelineGroup {
+  start: Extract<TraceEntry, { kind: "planner-pipeline-start" }>
+  end: Extract<TraceEntry, { kind: "planner-pipeline-end" }> | null
+  steps: StepGroup[]
+  /** Verification phase: deterministic probe calls + verifier result */
+  verification: VerificationGroup | null
+  /** Events after verification (retry, retry-skipped, etc.) */
+  aftermath: TraceEntry[]
+}
+
+/** Verification probes + result, grouped together */
+interface VerificationGroup {
+  /** Tool calls run by the verifier (read_file, browser_check, etc.) */
+  probes: TraceEntry[]
+  /** The verification decision event */
+  result: Extract<TraceEntry, { kind: "planner-verification" }> | null
+}
+
+interface StepGroup {
+  start: Extract<TraceEntry, { kind: "planner-step-start" }>
+  end: Extract<TraceEntry, { kind: "planner-step-end" }> | null
+  childStart: Extract<TraceEntry, { kind: "planner-delegation-start" }> | null
+  childEnd: Extract<TraceEntry, { kind: "planner-delegation-end" }> | null
+  iterations: IterGroup[]
+  events: TraceEntry[]
+}
+
+interface IterGroup {
+  marker: Extract<TraceEntry, { kind: "planner-delegation-iteration" }>
+  events: TraceEntry[]
+}
+
+/* ── Planner-mode grouping ───────────────────────────────────────── */
+
+function isPlannerRun(trace: TraceEntry[]): boolean {
+  return trace.some((e) => e.kind === "planner-pipeline-start")
+}
+
+function groupTraceForPlanner(trace: TraceEntry[]): PlannerGroupedTrace {
+  const preamble: TraceEntry[] = []
+  const pipelines: PipelineGroup[] = []
+  const trailing: TraceEntry[] = []
+
+  let currentPipeline: PipelineGroup | null = null
+  const stepMap = new Map<string, StepGroup>()
+  let lastActiveChild: string | null = null
+  let phase: "preamble" | "in-pipeline" | "verifying" | "after-verification" = "preamble"
+
+  for (const e of trace) {
+    // Pipeline start — always opens a new pipeline
+    if (e.kind === "planner-pipeline-start") {
+      stepMap.clear()
+      lastActiveChild = null
+      phase = "in-pipeline"
+      currentPipeline = {
+        start: e as Extract<TraceEntry, { kind: "planner-pipeline-start" }>,
+        end: null, steps: [], verification: null, aftermath: [],
+      }
+      pipelines.push(currentPipeline)
+      continue
+    }
+
+    // Pipeline end — transition to verification phase
+    if (e.kind === "planner-pipeline-end" && currentPipeline) {
+      currentPipeline.end = e as Extract<TraceEntry, { kind: "planner-pipeline-end" }>
+      // Enter verification phase: tool calls between pipeline-end and planner-verification
+      // are deterministic probes run by the verifier
+      currentPipeline.verification = { probes: [], result: null }
+      phase = "verifying"
+      continue
+    }
+
+    // Verification result — close verification phase
+    if (e.kind === "planner-verification" && currentPipeline?.verification) {
+      currentPipeline.verification.result = e as Extract<TraceEntry, { kind: "planner-verification" }>
+      phase = "after-verification"
+      continue
+    }
+
+    // Before first pipeline
+    if (phase === "preamble") { preamble.push(e); continue }
+
+    // Inside verification phase — collect probe calls
+    if (phase === "verifying" && currentPipeline?.verification) {
+      currentPipeline.verification.probes.push(e)
+      continue
+    }
+
+    // After verification — retry / answer / error
+    if (phase === "after-verification") {
+      // A new pipeline-start will be caught at the top of the loop
+      if (e.kind === "answer" || e.kind === "error") {
+        trailing.push(e)
+      } else if (currentPipeline) {
+        currentPipeline.aftermath.push(e)
+      } else {
+        trailing.push(e)
+      }
+      continue
+    }
+
+    // ── Inside a pipeline ──
+    if (!currentPipeline) { trailing.push(e); continue }
+
+    if (e.kind === "planner-step-start") {
+      const step: StepGroup = {
+        start: e as Extract<TraceEntry, { kind: "planner-step-start" }>,
+        end: null, childStart: null, childEnd: null, iterations: [], events: [],
+      }
+      currentPipeline.steps.push(step)
+      stepMap.set(
+        (e as Extract<TraceEntry, { kind: "planner-step-start" }>).stepName,
+        step,
+      )
+      continue
+    }
+
+    if (e.kind === "planner-step-end") {
+      const name = (e as Extract<TraceEntry, { kind: "planner-step-end" }>).stepName
+      const step = stepMap.get(name)
+      if (step) { step.end = e as Extract<TraceEntry, { kind: "planner-step-end" }>; stepMap.delete(name) }
+      if (lastActiveChild === name) lastActiveChild = null
+      continue
+    }
+
+    if (e.kind === "planner-delegation-start") {
+      const name = (e as Extract<TraceEntry, { kind: "planner-delegation-start" }>).stepName
+      const step = stepMap.get(name)
+      if (step) {
+        step.childStart = e as Extract<TraceEntry, { kind: "planner-delegation-start" }>
+        lastActiveChild = name
+      }
+      continue
+    }
+
+    if (e.kind === "planner-delegation-end") {
+      const name = (e as Extract<TraceEntry, { kind: "planner-delegation-end" }>).stepName
+      const step = stepMap.get(name)
+      if (step) step.childEnd = e as Extract<TraceEntry, { kind: "planner-delegation-end" }>
+      if (lastActiveChild === name) lastActiveChild = null
+      continue
+    }
+
+    if (e.kind === "planner-delegation-iteration") {
+      const name = (e as Extract<TraceEntry, { kind: "planner-delegation-iteration" }>).stepName
+      const step = stepMap.get(name)
+      if (step) {
+        step.iterations.push({
+          marker: e as Extract<TraceEntry, { kind: "planner-delegation-iteration" }>,
+          events: [],
+        })
+        lastActiveChild = name
+      }
+      continue
+    }
+
+    // Generic event — attribute to last active child's latest iteration
+    if (lastActiveChild) {
+      const step = stepMap.get(lastActiveChild)
+      if (step) {
+        const lastIter = step.iterations[step.iterations.length - 1]
+        if (lastIter) { lastIter.events.push(e) } else { step.events.push(e) }
+        continue
+      }
+    }
+
+    // Fallback — try any open step
+    if (stepMap.size > 0) {
+      const last = [...stepMap.values()].pop()!
+      const lastIter = last.iterations[last.iterations.length - 1]
+      if (lastIter) { lastIter.events.push(e) } else { last.events.push(e) }
+    }
+  }
+
+  return { preamble, pipelines, trailing }
+}
+
+/* ── Main panel ──────────────────────────────────────────────────── */
 
 export function LlmCallsPanel({ trace }: { trace: TraceEntry[] }) {
-  const llmCalls = useMemo(() => {
-    const requests = trace.filter((e) => e.kind === "llm-request") as Array<Extract<TraceEntry, { kind: "llm-request" }>>
-    const responses = trace.filter((e) => e.kind === "llm-response") as Array<Extract<TraceEntry, { kind: "llm-response" }>>
-    return requests.map((req, i) => ({ request: req, response: responses[i] ?? null }))
-  }, [trace])
+  const plannerMode = useMemo(() => isPlannerRun(trace), [trace])
 
-  if (llmCalls.length === 0) {
+  if (trace.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-[13px]" style={{ color: C.dim }}>
-        No iteration data yet — start a run
+      <div className="flex items-center justify-center h-full font-mono" style={{ color: C.dim, fontSize: 13 }}>
+        No trace data — start a run
       </div>
     )
   }
 
+  return plannerMode ? <PlannerView trace={trace} /> : <ChatView trace={trace} />
+}
+
+/* ── Chat-mode view (non-planner, LLM-call-centric) ─────────────── */
+
+function ChatView({ trace }: { trace: TraceEntry[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [trace.length])
+
+  const grouped = useMemo(() => groupTraceIntoLlmCalls(trace), [trace])
+
   return (
-    <div className="h-full overflow-y-auto px-3 py-2 space-y-2 text-[13px]">
-      {/* Stats summary */}
-      <div className="flex items-center gap-3 flex-wrap text-[12px] font-mono" style={{ color: C.muted }}>
-        <span>
-          <span style={{ color: "#6CB4EE" }}>iterations</span> {llmCalls.length}
-          {llmCalls.length > 0 && ` · ${Math.round(llmCalls.reduce((s, c) => s + (c.response?.durationMs ?? 0), 0) / Math.max(1, llmCalls.filter(c => c.response).length))}ms avg`}
+    <div ref={ref} className="h-full overflow-y-auto px-2 py-2 font-mono" style={{ fontSize: 13 }}>
+      {grouped.calls.map((call) => (
+        <LlmCallBlock key={call.callNumber} call={call} />
+      ))}
+      {grouped.trailing.events.length > 0 && (
+        <TrailingSection events={grouped.trailing.events} />
+      )}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LLM Call Block — the main structural unit
+   ═══════════════════════════════════════════════════════════════════ */
+
+function LlmCallBlock({ call }: { call: LlmCall }) {
+  const [open, setOpen] = useState(false)
+  const { request: req, response: resp, execution, callNumber, iteration, usage } = call
+
+  const toolCallCount = resp?.toolCalls.length ?? 0
+  const duration = resp?.durationMs ?? null
+
+  // Build summary line
+  const parts: string[] = []
+  if (iteration) parts.push(`iteration ${iteration.current}`)
+  parts.push(`${req.messageCount} msgs`)
+  parts.push("→ LLM →")
+  if (toolCallCount > 0) parts.push(`${toolCallCount} tool call${toolCallCount > 1 ? "s" : ""}`)
+  else parts.push("no tools")
+  if (duration != null) parts.push(`${duration}ms`)
+
+  // Right-aligned duration badge
+  const durationBadge = duration != null ? `${duration}ms` : null
+
+  return (
+    <div className="mb-1">
+      {/* ── Header row ── */}
+      <div
+        className="flex items-center gap-2 py-1.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.04]"
+        onClick={() => setOpen(!open)}
+        style={{ background: open ? "rgba(255,255,255,0.02)" : undefined }}
+      >
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
         </span>
+        <span className="font-bold" style={{ color: C.text }}>LLM Call #{callNumber}</span>
+        <span style={{ color: C.dim }}>{parts.join("  ")}</span>
+        {durationBadge && (
+          <span className="ml-auto" style={{ color: C.dim }}>{durationBadge}</span>
+        )}
       </div>
 
-      {/* LLM Calls */}
-      {llmCalls.map((call, i) => (
-        <LlmCallCard key={i} index={i} request={call.request} response={call.response} />
+      {/* ── Preamble (above the fold — always visible context) ── */}
+      {open && call.preamble.length > 0 && (
+        <div className="ml-7 mb-1">
+          {call.preamble.map((p, i) => (
+            <PreambleRow key={i} entry={p.entry} />
+          ))}
+        </div>
+      )}
+
+      {/* ── Expanded contents ── */}
+      {open && (
+        <div className="ml-7 space-y-0.5">
+          <RequestSection2 messages={req.messages} toolCount={req.toolCount} />
+          {resp && <ResponseSection2 response={resp} />}
+          {execution.length > 0 && <ExecutionSection events={execution} />}
+          {usage && <UsageRow2 usage={usage} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Preamble: context events before an LLM call ── */
+
+function PreambleRow({ entry: e }: { entry: TraceEntry }) {
+  const [open, setOpen] = useState(false)
+
+  if (e.kind === "goal") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="GOAL" labelColor={C.accent}
+          detail={!open ? truncate(e.text, 120) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "system-prompt") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="SYSTEM PROMPT" labelColor={C.dim}
+          detail={`${e.text.length} chars`}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} maxH={600} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "tools-resolved") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`TOOLS · ${e.tools.length}`} labelColor={C.dim}
+          detail={!open ? e.tools.map((t: { name: string }) => t.name).join(", ") : undefined}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            {e.tools.map((t: { name: string; description: string }, ti: number) => (
+              <div key={ti}>
+                <span className="font-semibold" style={{ color: C.warning }}>{t.name}</span>
+                <span className="ml-2" style={{ color: C.dim }}>{t.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-decision") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`PLANNER · ${e.shouldPlan ? "activated" : "skipped"}`}
+          labelColor={e.shouldPlan ? "#C084FC" : C.dim}
+          detail={`score ${e.score.toFixed(2)}`}
+        />
+        {open && <div className="ml-5 py-0.5" style={{ color: C.muted }}>{e.reason}</div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-plan-generated") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`PLAN · ${e.stepCount} steps`} labelColor={"#C084FC"}
+          detail={!open ? e.reason : undefined}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            <div style={{ color: C.muted }}>{e.reason}</div>
+            {e.steps.map((s: { name: string; type: string }, si: number) => (
+              <div key={si} style={{ color: C.dim }}>
+                {si + 1}. {s.name} ({s.type})
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-pipeline-start") {
+    return <FlatRow label="PIPELINE START" labelColor={"#C084FC"} detail={`attempt ${e.attempt}/${e.maxRetries}`} />
+  }
+
+  if (e.kind === "planner-pipeline-end") {
+    const ok = e.status === "completed"
+    return <FlatRow label={`PIPELINE END · ${e.status}`} labelColor={ok ? C.success : C.coral} detail={`${e.completedSteps}/${e.totalSteps} steps`} />
+  }
+
+  if (e.kind === "planner-step-start") {
+    return <FlatRow label={`STEP · ${e.stepName}`} labelColor={"#C084FC"} detail={e.stepType} />
+  }
+
+  if (e.kind === "planner-step-end") {
+    const ok = e.status === "completed"
+    return <FlatRow label={`STEP END · ${e.stepName}`} labelColor={ok ? C.success : C.coral} detail={`${e.status} · ${e.durationMs}ms`} />
+  }
+
+  if (e.kind === "delegation-start") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}`} labelColor={"#6CB4EE"}
+          detail={!open ? truncate(e.goal, 80) : `d${e.depth} · ${e.tools.length} tools`}
+        />
+        {open && (
+          <div className="ml-5 space-y-1 py-0.5">
+            <div style={{ color: C.dim }}>tools: {e.tools.join(", ")}</div>
+            <Pane text={e.goal} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "delegation-end") {
+    const ok = e.status === "done"
+    return <FlatRow label={`DELEGATE END · ${e.status}`} labelColor={ok ? C.success : C.coral} detail={truncate(e.answer || e.error || "", 80)} />
+  }
+
+  if (e.kind === "delegation-iteration") {
+    return <FlatRow label={`DELEGATE ITER ${e.iteration}/${e.maxIterations}`} labelColor={"#6CB4EE"} />
+  }
+
+  if (e.kind === "delegation-parallel-start") {
+    return <FlatRow label={`PARALLEL · ${e.taskCount} tasks`} labelColor={"#6CB4EE"} />
+  }
+
+  if (e.kind === "delegation-parallel-end") {
+    return <FlatRow label={`PARALLEL END`} labelColor={"#6CB4EE"} detail={`${e.fulfilled}/${e.taskCount} ok`} />
+  }
+
+  if (e.kind === "planner-delegation-start") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`CHILD AGENT · ${e.stepName}`} labelColor={"#E879A8"}
+          detail={!open ? truncate(e.goal, 80) : `d${e.depth} · ${e.tools.length} tools`}
+        />
+        {open && (
+          <div className="ml-5 space-y-1 py-0.5">
+            <div style={{ color: C.dim }}>tools: {e.tools.join(", ")}</div>
+            <Pane text={e.goal} maxH={400} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-delegation-end") {
+    const ok = e.status === "done"
+    return <FlatRow label={`CHILD DONE · ${e.stepName} · ${e.status}`} labelColor={ok ? C.success : C.coral} detail={truncate(e.answer || e.error || "", 80)} />
+  }
+
+  if (e.kind === "planner-delegation-iteration") {
+    return <FlatRow label={`${e.stepName} · ITER ${e.iteration}/${e.maxIterations}`} labelColor={"#E879A8"} />
+  }
+
+  if (e.kind === "planner-verification") {
+    const color = e.overall === "pass" ? C.success : e.overall === "retry" ? C.warning : C.coral
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`VERIFY · ${e.overall}`} labelColor={color}
+          detail={`${(e.confidence * 100).toFixed(0)}% confidence`}
+        />
+        {open && e.steps.length > 0 && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            {e.steps.map((s: { stepName: string; outcome: string; issues: string[] }, si: number) => {
+              const sColor = s.outcome === "pass" ? C.success : s.outcome === "fail" ? C.coral : C.warning
+              return (
+                <div key={si}>
+                  <span className="font-semibold" style={{ color: sColor }}>{s.outcome}</span>
+                  <span className="ml-2" style={{ color: C.text }}>{s.stepName}</span>
+                  {s.issues.length > 0 && (
+                    <div className="ml-4">
+                      {s.issues.map((issue: string, ii: number) => (
+                        <div key={ii} style={{ color: C.dim }}>• {issue}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-retry") {
+    return <FlatRow label={`RETRY · attempt ${e.attempt}`} labelColor={C.warning} detail={e.reason} />
+  }
+
+  if (e.kind === "planner-retry-skipped") {
+    return <FlatRow label="RETRY SKIPPED" labelColor={C.dim} detail={e.reason} />
+  }
+
+  if (e.kind === "planner-generating") {
+    return <FlatRow label="GENERATING PLAN" labelColor={"#C084FC"} />
+  }
+
+  if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
+    return <FlatRow label={e.kind === "planner-generation-failed" ? "GENERATION FAILED" : "VALIDATION FAILED"} labelColor={C.coral} />
+  }
+
+  if (e.kind === "user-input-request") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="ASK USER" labelColor={C.warning}
+          detail={!open ? truncate(e.question, 100) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5" style={{ color: C.text }}>{e.question}</div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "user-input-response") {
+    return <FlatRow label="USER REPLY" labelColor={C.success} detail={e.text} />
+  }
+
+  // iteration — skip (shown in header), but keep for completeness
+  if (e.kind === "iteration") {
+    return null
+  }
+
+  // usage — skip (shown in call block)
+  if (e.kind === "usage") {
+    return null
+  }
+
+  // Tool / execution events (can appear in pipeline aftermath)
+  if (e.kind === "tool-call" || e.kind === "tool-result" || e.kind === "tool-error" || e.kind === "thinking") {
+    return <ExecutionRow entry={e} />
+  }
+
+  if (e.kind === "answer") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="ANSWER" labelColor={C.success}
+          detail={!open ? truncate(e.text, 120) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "error") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="ERROR" labelColor={C.coral}
+          detail={!open ? truncate(e.text, 120) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "llm-request") {
+    return <FlatRow label="LLM REQUEST" labelColor={C.accent} detail={`${e.messageCount} msgs · ${e.toolCount} tools`} />
+  }
+
+  if (e.kind === "llm-response") {
+    const tools = e.toolCalls?.length ?? 0
+    return <FlatRow label="LLM RESPONSE" labelColor={C.success} detail={`${tools} tool call${tools !== 1 ? "s" : ""} · ${e.durationMs}ms`} />
+  }
+
+  // Catch-all
+  const raw = e as Record<string, unknown>
+  return <FlatRow label={String(raw.kind ?? "unknown")} labelColor={C.dim} />
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Planner-mode view — hierarchical pipeline / step / child / iter
+   ═══════════════════════════════════════════════════════════════════ */
+
+function PlannerView({ trace }: { trace: TraceEntry[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [trace.length])
+
+  const grouped = useMemo(() => groupTraceForPlanner(trace), [trace])
+
+  return (
+    <div ref={ref} className="h-full overflow-y-auto px-2 py-2 font-mono" style={{ fontSize: 13 }}>
+      {grouped.preamble.map((e, i) => (
+        <PreambleRow key={`pre-${i}`} entry={e} />
+      ))}
+      {grouped.pipelines.map((p, pi) => (
+        <PipelineBlock key={`pipe-${pi}`} pipeline={p} />
+      ))}
+      {grouped.trailing.length > 0 && (
+        <TrailingSection events={grouped.trailing} />
+      )}
+    </div>
+  )
+}
+
+function PipelineBlock({ pipeline: p }: { pipeline: PipelineGroup }) {
+  const [open, setOpen] = useState(true)
+  const en = p.end
+  const statusColor = en
+    ? (en.status === "completed" ? C.success : C.coral)
+    : C.accent
+
+  return (
+    <div className="mb-1">
+      <TreeRow onClick={() => setOpen(!open)} open={open}
+        label={`PIPELINE · attempt ${p.start.attempt}/${p.start.maxRetries}`}
+        labelColor="#C084FC"
+      />
+      {open && (
+        <div className="ml-4">
+          {p.steps.map((s, si) => (
+            <PlannerStepBlock key={si} step={s} index={si + 1} />
+          ))}
+          {en && (
+            <FlatRow
+              label={en.status} labelColor={statusColor}
+              detail={`${en.completedSteps}/${en.totalSteps} steps`}
+            />
+          )}
+          {p.verification && <VerificationBlock verification={p.verification} />}
+          {p.aftermath.map((e, i) => (
+            <PreambleRow key={`aft-${i}`} entry={e} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VerificationBlock({ verification: v }: { verification: VerificationGroup }) {
+  const [open, setOpen] = useState(true)
+  const result = v.result
+  const overall = result?.overall ?? "running"
+  const color = overall === "pass" ? C.success : overall === "retry" ? C.warning : overall === "running" ? C.accent : C.coral
+
+  return (
+    <div className="mb-0.5">
+      <TreeRow onClick={() => setOpen(!open)} open={open}
+        label="VERIFY" labelColor={color}
+        detail={result
+          ? `${overall} · ${(result.confidence * 100).toFixed(0)}% confidence${v.probes.length > 0 ? ` · ${v.probes.filter(e => e.kind === "tool-call").length} probes` : ""}`
+          : `${v.probes.filter(e => e.kind === "tool-call").length} probes running`
+        }
+      />
+      {open && (
+        <div className="ml-4">
+          {v.probes.map((e, i) => (
+            <IterEventRow key={`probe-${i}`} entry={e} />
+          ))}
+          {result && result.steps.length > 0 && (
+            <div className="mt-0.5">
+              {result.steps.map((s, i) => {
+                const sColor = s.outcome === "pass" ? C.success : s.outcome === "fail" ? C.coral : C.warning
+                return (
+                  <div key={i} className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${sColor}40` }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold" style={{ color: sColor }}>{s.outcome}</span>
+                      <span style={{ color: C.text }}>{s.stepName}</span>
+                    </div>
+                    {s.issues.length > 0 && (
+                      <div className="ml-2 mt-0.5">
+                        {s.issues.map((issue, ii) => (
+                          <div key={ii} style={{ color: C.dim }}>
+                            • {issue}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }) {
+  const [open, setOpen] = useState(true)
+  const en = s.end
+  const status = en?.status ?? "running"
+  const statusColor = status === "completed" ? C.success : status === "running" ? C.accent : C.coral
+  const duration = en?.durationMs
+
+  const detail = [s.start.stepType, status !== "running" ? status : null, duration != null ? `${duration}ms` : null]
+    .filter(Boolean).join(" · ")
+
+  return (
+    <div className="mb-0.5">
+      <TreeRow onClick={() => setOpen(!open)} open={open}
+        label={`STEP ${index} · ${s.start.stepName}`}
+        labelColor={statusColor}
+        detail={detail}
+      />
+      {open && (
+        <div className="ml-4">
+          {s.childStart && (
+            <PlannerChildBlock start={s.childStart} end={s.childEnd} iterations={s.iterations} />
+          )}
+          {s.events.map((e, i) => (
+            <IterEventRow key={`ev-${i}`} entry={e} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlannerChildBlock({ start, end, iterations }: {
+  start: Extract<TraceEntry, { kind: "planner-delegation-start" }>
+  end: Extract<TraceEntry, { kind: "planner-delegation-end" }> | null
+  iterations: IterGroup[]
+}) {
+  const [open, setOpen] = useState(true)
+  const ok = end?.status === "done"
+
+  return (
+    <div className="mb-0.5">
+      <TreeRow onClick={() => setOpen(!open)} open={open}
+        label="CHILD AGENT" labelColor="#E879A8"
+        detail={truncate(start.goal, 80)}
+      />
+      {open && (
+        <div className="ml-4">
+          {iterations.map((iter, ii) => (
+            <PlannerIterBlock key={ii} iter={iter} />
+          ))}
+          {end && (
+            <FlatRow
+              label={ok ? "done" : (end.status ?? "error")}
+              labelColor={ok ? C.success : C.coral}
+              detail={truncate(end.answer || end.error || "", 80)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlannerIterBlock({ iter }: { iter: IterGroup }) {
+  const [open, setOpen] = useState(false)
+  const m = iter.marker
+  const toolCalls = iter.events.filter((e) => e.kind === "tool-call").length
+  const detail = toolCalls > 0
+    ? `${toolCalls} tool call${toolCalls > 1 ? "s" : ""}`
+    : iter.events.length > 0
+      ? `${iter.events.length} event${iter.events.length > 1 ? "s" : ""}`
+      : "(no tools)"
+
+  // Color red for empty iterations (agent spun without acting)
+  const iterColor = iter.events.length === 0 ? C.warning : "#E879A8"
+
+  return (
+    <div>
+      <TreeRow onClick={() => setOpen(!open)} open={open}
+        label={`ITER ${m.iteration}/${m.maxIterations}`}
+        labelColor={iterColor} detail={detail}
+      />
+      {open && iter.events.length > 0 && (
+        <div className="ml-4">
+          {iter.events.map((e, i) => (
+            <IterEventRow key={i} entry={e} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IterEventRow({ entry: e }: { entry: TraceEntry }) {
+  if (e.kind === "tool-call" || e.kind === "tool-result" || e.kind === "tool-error" || e.kind === "thinking") {
+    return <ExecutionRow entry={e} />
+  }
+
+  if (e.kind === "llm-request") {
+    const req = e as Extract<TraceEntry, { kind: "llm-request" }>
+    return <FlatRow label="LLM REQUEST" labelColor={C.accent} detail={`${req.messageCount} msgs · ${req.toolCount} tools`} />
+  }
+
+  if (e.kind === "llm-response") {
+    const resp = e as Extract<TraceEntry, { kind: "llm-response" }>
+    const tools = resp.toolCalls?.length ?? 0
+    return <FlatRow label="LLM RESPONSE" labelColor={C.success} detail={`${tools} tool call${tools !== 1 ? "s" : ""} · ${resp.durationMs}ms`} />
+  }
+
+  if (e.kind === "usage") {
+    return <UsageRow2 usage={e as Extract<TraceEntry, { kind: "usage" }>} />
+  }
+
+  return <PreambleRow entry={e} />
+}
+
+/* ── REQUEST section — all messages sent to the LLM ── */
+
+function RequestSection2({ messages, toolCount }: {
+  messages: Array<{
+    role: string
+    content: string | null
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+    toolCallId: string | null
+  }>
+  toolCount: number
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        onClick={() => setOpen(!open)}
+        style={{
+          borderLeft: `2px solid ${C.accent}`,
+          background: open ? "rgba(255,255,255,0.015)" : undefined,
+        }}
+      >
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="font-semibold" style={{ color: C.accent }}>REQUEST</span>
+        <span style={{ color: C.dim }}>{messages.length} messages · {toolCount} tool definitions</span>
+      </div>
+      {open && (
+        <div className="ml-3" style={{ borderLeft: `1px solid ${C.border}` }}>
+          {messages.map((msg, i) => (
+            <MessageRow2 key={i} msg={msg} index={i} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── RESPONSE section — what the LLM returned ── */
+
+function ResponseSection2({ response: resp }: {
+  response: Extract<TraceEntry, { kind: "llm-response" }>
+}) {
+  const [open, setOpen] = useState(false)
+  const usage = resp.usage
+  const usageStr = usage
+    ? `${fmtTokens(usage.promptTokens)} prompt + ${fmtTokens(usage.completionTokens)} completion = ${fmtTokens(usage.totalTokens)} total`
+    : null
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        onClick={() => setOpen(!open)}
+        style={{
+          borderLeft: `2px solid ${C.success}`,
+          background: open ? "rgba(255,255,255,0.015)" : undefined,
+        }}
+      >
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="font-semibold" style={{ color: C.success }}>RESPONSE</span>
+        <span style={{ color: C.dim }}>{[usageStr, `${resp.durationMs}ms`].filter(Boolean).join(" · ")}</span>
+      </div>
+      {open && (
+        <div className="ml-3 py-1 space-y-1" style={{ borderLeft: `1px solid ${C.border}` }}>
+          {resp.content && (
+            <div className="px-2">
+              <div style={{ color: C.dim }} className="mb-0.5">content:</div>
+              <Pane text={resp.content} />
+            </div>
+          )}
+          {resp.toolCalls.length > 0 && (
+            <div className="px-2">
+              <div style={{ color: C.dim }} className="mb-0.5">tool_calls:</div>
+              {resp.toolCalls.map((tc) => (
+                <ToolCallInline key={tc.id} tc={tc} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── EXECUTION section — tool calls, results, errors ── */
+
+function ExecutionSection({ events }: { events: TraceEntry[] }) {
+  const [open, setOpen] = useState(false)
+  const calls = events.filter((e) => e.kind === "tool-call").length
+  const errors = events.filter((e) => e.kind === "tool-error").length
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        onClick={() => setOpen(!open)}
+        style={{
+          borderLeft: `2px solid ${C.warning}`,
+          background: open ? "rgba(255,255,255,0.015)" : undefined,
+        }}
+      >
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="font-semibold" style={{ color: C.warning }}>EXECUTION</span>
+        <span style={{ color: C.dim }}>
+          {calls} tool call{calls !== 1 ? "s" : ""}
+          {errors > 0 && <span style={{ color: C.coral }}> · {errors} error{errors !== 1 ? "s" : ""}</span>}
+        </span>
+      </div>
+      {open && (
+        <div className="ml-3" style={{ borderLeft: `1px solid ${C.border}` }}>
+          {events.map((e, i) => (
+            <ExecutionRow key={i} entry={e} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Usage summary row ── */
+
+function UsageRow2({ usage: u }: { usage: Extract<TraceEntry, { kind: "usage" }> }) {
+  return (
+    <div className="flex items-center gap-2 py-0.5 px-2" style={{ color: C.dim }}>
+      <span style={{ width: 10, flexShrink: 0 }} />
+      <span>USAGE</span>
+      <span>+{fmtK(u.iterationTokens)} tk · total {fmtK(u.totalTokens)} · {fmtTokens(u.promptTokens)} prompt + {fmtTokens(u.completionTokens)} completion · {u.llmCalls} calls</span>
+    </div>
+  )
+}
+
+/* ── Trailing events (after last LLM call — answer, errors) ── */
+
+function TrailingSection({ events }: { events: TraceEntry[] }) {
+  return (
+    <div className="mt-1 space-y-0.5">
+      {events.map((e, i) => (
+        <TrailingRow key={i} entry={e} />
       ))}
     </div>
   )
 }
+
+function TrailingRow({ entry: e }: { entry: TraceEntry }) {
+  const [open, setOpen] = useState(false)
+
+  if (e.kind === "answer") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="ANSWER" labelColor={C.success}
+          detail={!open ? truncate(e.text, 120) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "error") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="ERROR" labelColor={C.coral}
+          detail={!open ? truncate(e.text, 120) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} color={C.coral} /></div>}
+      </div>
+    )
+  }
+
+  // Reuse PreambleRow for anything else
+  return <PreambleRow entry={e} />
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sub-components
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Message row (inside REQUEST section) ── */
 
 const ROLE_COLORS: Record<string, string> = {
   system: C.accent,
@@ -624,143 +1846,222 @@ const ROLE_COLORS: Record<string, string> = {
   tool: "#6CB4EE",
 }
 
-function LlmCallCard({
-  index, request: req, response: res,
-}: {
+function MessageRow2({ msg, index }: {
+  msg: {
+    role: string
+    content: string | null
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+    toolCallId: string | null
+  }
   index: number
-  request: Extract<TraceEntry, { kind: "llm-request" }>
-  response: Extract<TraceEntry, { kind: "llm-response" }> | null
 }) {
-  const [showMessages, setShowMessages] = useState(false)
+  const [open, setOpen] = useState(false)
+  const roleColor = ROLE_COLORS[msg.role] ?? C.dim
+  const charCount = msg.content?.length ?? 0
+  const hasToolCalls = msg.toolCalls.length > 0
 
-  const durationColor = res
-    ? res.durationMs > 5000 ? C.coral : res.durationMs > 2000 ? C.warning : C.success
-    : C.dim
+  const detail = [
+    `#${index}`,
+    charCount > 0 ? `${charCount} chars` : null,
+    hasToolCalls ? `${msg.toolCalls.length} tool calls` : null,
+  ].filter(Boolean).join("  ")
 
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
-      {/* Header */}
+    <div className="px-1">
       <div
-        className="flex items-center gap-3 px-3 py-1.5 cursor-pointer hover:bg-white/[0.03] transition-colors"
-        style={{ background: C.elevated + "20" }}
-        onClick={() => setShowMessages(!showMessages)}
+        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        onClick={() => setOpen(!open)}
       >
-        <span className="text-[13px] font-semibold" style={{ color: "#6CB4EE" }}>#{index + 1}</span>
-        <span className="text-[12px] font-mono" style={{ color: C.muted }}>
-          iter {req.iteration + 1}
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
         </span>
-        <span className="text-[12px]" style={{ color: C.dim }}>
-          {req.messageCount} msgs → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text") : "pending..."}
-        </span>
-        {res && (
-          <span className="text-[12px] font-mono ml-auto" style={{ color: durationColor }}>{res.durationMs}ms</span>
-        )}
-        {res?.usage && (
-          <span className="text-[11px] font-mono" style={{ color: C.dim }}>
-            {fmtK(res.usage.totalTokens)} tk
-          </span>
-        )}
+        <span className="font-bold" style={{ color: roleColor }}>{msg.role.toUpperCase()}</span>
+        <span style={{ color: C.dim }}>{detail}</span>
+        {msg.toolCallId && <span style={{ color: C.dim }}>← {msg.toolCallId}</span>}
       </div>
-
-      {showMessages && (
-        <>
-          {/* Request messages */}
-          <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}` }}>
-            <div className="text-[11px] uppercase tracking-wide mb-1" style={{ color: C.dim }}>
-              Request — {req.messageCount} messages, {req.toolCount} tools
-            </div>
-            <div className="space-y-1 max-h-[300px] overflow-y-auto">
-              {req.messages.map((msg, mi) => (
-                <LlmMessage key={mi} msg={msg} index={mi} />
-              ))}
-            </div>
-          </div>
-
-          {/* Response */}
-          {res && (
-            <div className="px-3 py-2" style={{ borderTop: `1px solid ${C.border}`, background: C.elevated + "10" }}>
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-[11px] uppercase tracking-wide" style={{ color: C.dim }}>Response</span>
-                {res.usage && (
-                  <span className="text-[11px] font-mono" style={{ color: C.dim }}>
-                    {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} compl = {fmtTokens(res.usage.totalTokens)}
-                  </span>
-                )}
-              </div>
-              {res.content && (
-                <pre className="text-[12px] whitespace-pre-wrap break-words leading-relaxed mb-1" style={{ color: C.textSecondary }}>
-                  {res.content}
-                </pre>
-              )}
-              {res.toolCalls.length > 0 && (
-                <div className="space-y-1">
-                  {res.toolCalls.map((tc) => (
-                    <div key={tc.id} className="rounded px-2 py-1" style={{ background: C.warning + "08", border: `1px solid ${C.warning}15` }}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-mono font-semibold" style={{ color: C.warning }}>{tc.name}</span>
-                        <span className="text-[11px] font-mono" style={{ color: C.dim }}>{tc.id.slice(0, 12)}</span>
-                      </div>
-                      <pre className="text-[11px] font-mono whitespace-pre-wrap break-words mt-0.5" style={{ color: C.muted }}>
-                        {JSON.stringify(tc.arguments, null, 2)}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {res.toolCalls.length === 0 && res.content && (
-                <div className="text-[11px] mt-1" style={{ color: C.success + "80" }}>↳ Final answer (no tool calls)</div>
-              )}
-            </div>
-          )}
-        </>
+      {open && (
+        <div className="ml-5 space-y-1 py-0.5">
+          {msg.content && <Pane text={msg.content} />}
+          {msg.toolCalls.map((tc) => (
+            <ToolCallInline key={tc.id} tc={tc} />
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
-function LlmMessage({ msg, index }: {
-  msg: { role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }
-  index: number
+/* ── Tool call inline display (in response + request messages) ── */
+
+function ToolCallInline({ tc }: {
+  tc: { id: string; name: string; arguments: Record<string, unknown> }
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const isLong = (msg.content?.length ?? 0) > 300
-  const displayContent = expanded || !isLong ? msg.content : msg.content!.slice(0, 300) + "..."
+  const [open, setOpen] = useState(false)
+  const summary = Object.entries(tc.arguments)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? `"${truncate(v, 30)}"` : JSON.stringify(v)}`)
+    .join(", ")
 
   return (
-    <div className="pl-2 py-0.5" style={{ borderLeft: `2px solid ${ROLE_COLORS[msg.role] ?? C.dim}` }}>
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-[11px] font-mono font-bold uppercase" style={{ color: ROLE_COLORS[msg.role] ?? C.dim }}>{msg.role}</span>
-        <span className="text-[10px]" style={{ color: C.dim }}>#{index}</span>
-        {msg.toolCallId && <span className="text-[10px] font-mono" style={{ color: C.dim }}>← {msg.toolCallId.slice(0, 12)}</span>}
-        {msg.content && <span className="text-[10px]" style={{ color: C.dim }}>{msg.content.length} chars</span>}
+    <div>
+      <div
+        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        onClick={() => setOpen(!open)}
+      >
+        <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="font-semibold" style={{ color: C.warning }}>{tc.name}</span>
+        {!open && <span className="truncate" style={{ color: C.dim }}>{summary}</span>}
+        {open && <span style={{ color: C.dim }}>{tc.id}</span>}
       </div>
-      {displayContent && (
-        <pre
-          className="text-[12px] whitespace-pre-wrap break-words leading-relaxed cursor-pointer"
-          style={{ color: C.textSecondary }}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {displayContent}
-        </pre>
-      )}
-      {isLong && !expanded && (
-        <button className="text-[11px] mt-0.5 cursor-pointer" style={{ color: C.accent + "60" }} onClick={() => setExpanded(true)}>
-          show full ({msg.content!.length} chars)
-        </button>
-      )}
-      {msg.toolCalls.length > 0 && (
-        <div className="mt-1 space-y-1">
-          {msg.toolCalls.map((tc) => (
-            <div key={tc.id} className="rounded px-2 py-1" style={{ background: C.warning + "08", border: `1px solid ${C.warning}10` }}>
-              <span className="text-[11px] font-mono font-semibold" style={{ color: C.warning }}>{tc.name}</span>
-              <pre className="text-[11px] font-mono whitespace-pre-wrap break-words mt-0.5" style={{ color: C.muted }}>
-                {JSON.stringify(tc.arguments, null, 2)}
-              </pre>
-            </div>
-          ))}
+      {open && (
+        <div className="ml-5 py-0.5">
+          <Pane text={JSON.stringify(tc.arguments, null, 2)} />
         </div>
       )}
     </div>
+  )
+}
+
+/* ── Execution row (tool-call / tool-result / tool-error / thinking) ── */
+
+function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
+  const [open, setOpen] = useState(false)
+
+  if (e.kind === "tool-call") {
+    return (
+      <div className="px-1">
+        <div
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          onClick={() => setOpen(!open)}
+        >
+          <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold" style={{ color: C.warning }}>{e.tool}</span>
+          {!open && <span className="truncate" style={{ color: C.dim }}>{e.argsSummary}</span>}
+        </div>
+        {open && <div className="ml-5 py-0.5"><Pane text={e.argsFormatted} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "tool-result") {
+    return (
+      <div className="px-1">
+        <div
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          onClick={() => setOpen(!open)}
+        >
+          <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold" style={{ color: C.success }}>TOOL RESULT</span>
+          {!open && <span className="truncate" style={{ color: C.dim }}>{truncate(e.text, 100)}</span>}
+          {open && <span style={{ color: C.dim }}>{e.text.length} chars</span>}
+        </div>
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "tool-error") {
+    return (
+      <div className="px-1">
+        <div
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          onClick={() => setOpen(!open)}
+        >
+          <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold" style={{ color: C.coral }}>TOOL ERROR</span>
+          {!open && <span className="truncate" style={{ color: C.coral }}>{truncate(e.text, 100)}</span>}
+        </div>
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} color={C.coral} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "thinking") {
+    return (
+      <div className="px-1">
+        <div
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          onClick={() => setOpen(!open)}
+        >
+          <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="font-semibold" style={{ color: C.accent }}>THINKING</span>
+          {!open && <span className="truncate" style={{ color: C.dim }}>{truncate(e.text, 100)}</span>}
+          {open && <span style={{ color: C.dim }}>{e.text.length} chars</span>}
+        </div>
+        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+      </div>
+    )
+  }
+
+  return null
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shared primitives
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Collapsible tree row — disclosure arrow + label + detail */
+function TreeRow({ onClick, open, label, labelColor, detail }: {
+  onClick: () => void
+  open: boolean
+  label: string
+  labelColor: string
+  detail?: string
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded hover:bg-white/[0.03] transition-colors"
+      onClick={onClick}
+      style={{ fontSize: 13 }}
+    >
+      <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
+        {open ? "▾" : "▸"}
+      </span>
+      <span className="font-semibold whitespace-nowrap" style={{ color: labelColor }}>{label}</span>
+      {detail && <span className="truncate" style={{ color: C.dim }}>{detail}</span>}
+    </div>
+  )
+}
+
+/** Non-collapsible row — spacer + label + detail */
+function FlatRow({ label, labelColor, detail }: {
+  label: string
+  labelColor: string
+  detail?: string
+}) {
+  return (
+    <div className="flex items-center gap-2 py-1 px-2" style={{ fontSize: 13 }}>
+      <span style={{ width: 10, flexShrink: 0 }} />
+      <span className="font-semibold whitespace-nowrap" style={{ color: labelColor }}>{label}</span>
+      {detail && <span className="truncate" style={{ color: C.dim }}>{detail}</span>}
+    </div>
+  )
+}
+
+/** Scrollable content pane */
+function Pane({ text, maxH = 400, color }: { text: string; maxH?: number; color?: string }) {
+  return (
+    <pre
+      className="whitespace-pre-wrap break-words p-2 rounded overflow-auto"
+      style={{
+        fontSize: 13,
+        color: color ?? C.textSecondary,
+        background: C.base,
+        border: `1px solid ${C.border}`,
+        maxHeight: maxH,
+      }}
+    >
+      {text}
+    </pre>
   )
 }
 

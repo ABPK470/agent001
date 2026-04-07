@@ -172,6 +172,7 @@ export async function executePlannerPath(
       delegateFn,
       {
         maxParallel: 4,
+        workspaceRoot: ctx.workspaceRoot,
         priorResults: retryOpts.priorResults,
         retryFeedback: retryOpts.retryFeedback,
         signal: ctx.signal,

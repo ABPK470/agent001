@@ -44,16 +44,20 @@ const DEFAULT_CHILD_ITERATIONS = 20
 const CHILD_SYSTEM_PROMPT = `You are an autonomous worker agent. You receive a goal and work independently until it is FULLY accomplished.
 
 Task execution protocol:
-1. Start executing immediately — use the right tool in your first turn.
-2. NEVER end a turn with only a plan or question. Always include a tool call.
-3. If a command fails, read the error, fix the code, and retry — do NOT stop and report the error.
-4. Keep iterating until the task succeeds or you have genuinely exhausted options.
-5. Finish with grounded results backed by tool evidence.
+1. Start by reading the ## Workspace section of your goal to know WHERE you are working.
+2. Run \`ls -la\` or \`find . -maxdepth 2 -type f\` to see what files already exist before creating new ones.
+3. If your goal lists Source Files or prior step outputs, read those files FIRST to understand the current state.
+4. Use the right tool in your first real action — NEVER end a turn without a tool call.
+5. If a command fails, read the error, fix the code, and retry — do NOT stop and report the error.
+6. Keep iterating until the task succeeds or you have genuinely exhausted options.
+7. Finish with grounded results backed by tool evidence.
 
 Critical rules:
 - You are NOT in a conversation. There is no human. NEVER say "let me know", "shall I proceed", "would you like me to", or similar. These are FORBIDDEN.
 - Work until the goal is COMPLETELY done — not scaffolded, not "foundational", not a skeleton. If the goal says "build a game", the game must be playable. If it says "implement a feature", the feature must work end-to-end.
 - NEVER leave stub functions, TODO comments, or placeholder logic (e.g. \`return true\`, \`// implement later\`). Every function must contain REAL, COMPLETE logic.
+- ALL file paths are RELATIVE to the workspace root (e.g. "game/index.html", not "/Users/.../game/index.html"). Never use absolute paths.
+- If prior steps created files, they are on disk in the workspace. Use read_file with the EXACT path from the goal to access them.
 - After creating web content (HTML/JS/CSS), ALWAYS use browser_check to verify it loads and works. Fix any errors before finishing.
 - After writing testable code, run it with run_command to verify correctness.
 - Before finishing, use read_file to review your own code. Look for stubs, missing logic, hardcoded returns. Fix anything you find.
@@ -423,9 +427,19 @@ export async function spawnChildForPlan(
   envelope: ExecutionEnvelope,
 ): Promise<string> {
   // Build the child's goal from the step's contract
+  // IMPORTANT: Workspace and path context goes FIRST so the child knows
+  // where it's working before reading the objective
   const goalParts: string[] = [
-    `## Objective\n${step.objective}`,
+    `## Workspace — READ THIS FIRST\nYou are working in: ${envelope.workspaceRoot}\nAll file paths are relative to this directory. Use relative paths (e.g. "tmp/index.html") with read_file/write_file.\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}\nBefore creating files, run \`find . -maxdepth 3 -type f\` or \`ls -la\` to see what already exists.`,
   ]
+
+  if (envelope.requiredSourceArtifacts.length > 0) {
+    goalParts.push(
+      `## Source Files — READ THESE FIRST\nThese files should already exist (created by prior steps). Read them before doing anything:\n${envelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
+    )
+  }
+
+  goalParts.push(`## Objective\n${step.objective}`)
 
   if (step.inputContract) {
     goalParts.push(`## Input Context\n${step.inputContract}`)
@@ -442,16 +456,6 @@ export async function spawnChildForPlan(
       `## Target Files\nYou are responsible for creating/modifying:\n${envelope.targetArtifacts.map(a => `- ${a}`).join("\n")}`,
     )
   }
-
-  if (envelope.requiredSourceArtifacts.length > 0) {
-    goalParts.push(
-      `## Source Files (read these first)\n${envelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
-    )
-  }
-
-  goalParts.push(
-    `## Workspace\nRoot: ${envelope.workspaceRoot}\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}`,
-  )
 
   const goal = goalParts.join("\n\n")
 

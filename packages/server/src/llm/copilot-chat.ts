@@ -217,27 +217,40 @@ export class CopilotChatClient implements LLMClient {
       body.tools = tools.map(formatTool)
     }
 
-    const res = await fetch(`${session.endpoint}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.token}`,
-        "Editor-Version": "vscode/1.96.0",
-        "Copilot-Integration-Id": "vscode-chat",
-        "Openai-Intent": "conversation-panel",
-      },
-      body: JSON.stringify(body),
-    })
+    const maxRetries = 5
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      if (res.status === 401) {
-        this.session = null
-      }
-      throw new Error(`Copilot Chat API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch(`${session.endpoint}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.token}`,
+          "Editor-Version": "vscode/1.96.0",
+          "Copilot-Integration-Id": "vscode-chat",
+          "Openai-Intent": "conversation-panel",
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(2000 * 2 ** attempt, 60_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      if (res!.status === 401) {
+        this.session = null
+      }
+      throw new Error(`Copilot Chat API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       choices: Array<{
         message: {
           content: string | null

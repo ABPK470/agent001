@@ -75,23 +75,36 @@ export class AnthropicClient implements LLMClient {
       }))
     }
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-      signal: opts?.signal,
-    })
+    const maxRetries = 5
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Anthropic API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(body),
+        signal: opts?.signal,
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(2000 * 2 ** attempt, 60_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`Anthropic API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       content: Array<
         | { type: "text"; text: string }
         | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }

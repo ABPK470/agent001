@@ -8,6 +8,7 @@
 import {
     CircleDot,
     Columns2,
+    Download,
     GitCompareArrows,
     History,
     Info,
@@ -40,7 +41,7 @@ import {
     type SidebarSection,
     type UsageData
 } from "./ioe/constants"
-import { EditorTabs, LlmCallsPanel, MapPanel, TracePanel } from "./ioe/editors"
+import { EditorTabs, LlmCallsPanel, MapPanel, TracePanel, exportAgentLoop } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
     ComparePanel,
@@ -509,6 +510,16 @@ export function OperatorEnvironment() {
                   trace={trace}
                 />
                 <div className="flex-1" />
+                {editorTab === "llm-calls" && trace.length > 0 && (
+                  <button
+                    className="px-2 py-1 mr-0.5 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                    style={{ color: C.dim }}
+                    onClick={() => exportAgentLoop(trace)}
+                    title="Export Agent Loop"
+                  >
+                    <Download size={14} />
+                  </button>
+                )}
                 <button
                   className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
                   style={{ color: editorSplit ? C.text : C.dim }}
@@ -536,6 +547,17 @@ export function OperatorEnvironment() {
                       onChange={setEditorRightTab}
                       trace={trace}
                     />
+                    <div className="flex-1" />
+                    {editorRightTab === "llm-calls" && trace.length > 0 && (
+                      <button
+                        className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                        style={{ color: C.dim }}
+                        onClick={() => exportAgentLoop(trace)}
+                        title="Export Agent Loop"
+                      >
+                        <Download size={14} />
+                      </button>
+                    )}
                   </div>
                   {/* Right content */}
                   <div className="flex-1 overflow-y-auto min-h-0">

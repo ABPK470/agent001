@@ -48,21 +48,34 @@ export class CopilotClient implements LLMClient {
       body.tools = tools.map(formatTool)
     }
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const maxRetries = 5
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`GitHub Models API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(2000 * 2 ** attempt, 60_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`GitHub Models API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       choices: Array<{
         message: {
           content: string | null

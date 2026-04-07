@@ -78,6 +78,8 @@ export interface ExecutionEnvelope {
   readonly verificationMode: VerificationMode
   /** Typed ownership relations between this step and artifacts. */
   readonly artifactRelations: readonly ArtifactRelation[]
+  /** Role of this step in the workflow (writer, reviewer, validator, grounding). */
+  readonly role?: StepRole
 }
 
 // ============================================================================

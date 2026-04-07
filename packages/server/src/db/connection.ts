@@ -52,7 +52,7 @@ const DEFAULT_AGENT_PROMPT = [
   "Provide a concise final answer when done.",
 ].join("\n")
 
-const DEFAULT_TOOLS = ["read_file", "write_file", "list_directory", "run_command", "fetch_url", "browser_check", "browse_web", "ask_user", "query_mssql", "explore_mssql_schema"]
+const DEFAULT_TOOLS = ["read_file", "write_file", "list_directory", "search_files", "run_command", "fetch_url", "browser_check", "browse_web", "ask_user", "query_mssql", "explore_mssql_schema"]
 
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {

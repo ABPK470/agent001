@@ -96,6 +96,16 @@ You MUST respond with valid JSON matching this schema:
 10. VERIFICATION REQUIRED: If ANY step writes files (effectClass != "readonly"), at least ONE subagent_task step MUST have verificationMode set to "browser_check", "run_tests", or "deterministic_followup" — never leave ALL steps with verificationMode: "none" when there are writes
 11. A step that writes >200 lines of logic is TOO BIG. Break it down further. Each step's targetArtifacts should be either a single complex file or 2-3 simple files, not more.
 
+## CRITICAL: File Paths and Artifact Chains
+- ALL paths in targetArtifacts and requiredSourceArtifacts MUST be relative to workspace root (e.g. "src/app.js", "game/index.html")
+- Each child agent is a SEPARATE process with NO memory of other steps. It does NOT see what other steps did unless artifacts are declared in requiredSourceArtifacts.
+- If step A creates "game/index.html" and step B needs to modify it, step B MUST list "game/index.html" in requiredSourceArtifacts so the child knows to read it first.
+- Use CONSISTENT paths: if step 1 creates "game/index.html", every later step that touches that file must reference "game/index.html" — not "index.html" and not an absolute path.
+- Each step's objective MUST mention the EXACT file paths it should create or modify.
+- Do NOT create a separate "mkdir" setup step — write_file auto-creates parent directories. Let the first writer step create the directory structure naturally.
+- There is NO shared memory between steps. The ONLY way to pass context is through files on disk.
+- NEVER use absolute paths in targetArtifacts or requiredSourceArtifacts. Always use workspace-relative paths.
+
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
 
 // ============================================================================
@@ -194,7 +204,11 @@ export async function generatePlan(
         continue
       }
 
-      return { plan: parsed.plan, diagnostics, rawResponse }
+      // Post-process: normalize workspaceRoot in all execution contexts
+      // to match the actual workspace root (don't trust LLM-generated paths)
+      const normalizedPlan = normalizeWorkspaceRoots(parsed.plan, ctx.workspaceRoot)
+
+      return { plan: normalizedPlan, diagnostics, rawResponse }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       diagnostics.push({
@@ -220,6 +234,38 @@ export async function generatePlan(
   }
 
   return { plan: null, diagnostics, rawResponse: null }
+}
+
+// ============================================================================
+// Workspace root normalization
+// ============================================================================
+
+/**
+ * Override LLM-generated workspaceRoot values in all execution contexts
+ * with the actual workspace root. The LLM often gets paths wrong (uses ".",
+ * relative paths, or host paths that don't match the container).
+ */
+function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
+  const normalizedSteps: PlanStep[] = plan.steps.map(step => {
+    if (step.stepType !== "subagent_task") return step
+
+    const sa = step as SubagentTaskStep
+    return {
+      ...sa,
+      executionContext: {
+        ...sa.executionContext,
+        workspaceRoot: actualRoot,
+        allowedReadRoots: sa.executionContext.allowedReadRoots.map(r =>
+          r === "." || r === "./" ? actualRoot : r,
+        ),
+        allowedWriteRoots: sa.executionContext.allowedWriteRoots.map(r =>
+          r === "." || r === "./" ? actualRoot : r,
+        ),
+      },
+    }
+  })
+
+  return { ...plan, steps: normalizedSteps }
 }
 
 // ============================================================================

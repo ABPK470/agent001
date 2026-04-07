@@ -32,6 +32,7 @@ const P = {
   api:      "#4DD0E1",
   db:       "#AB7DDB",
   system:   "#6B7280",
+  planner:  "#E879A8",
   ok:       "#5DB078",
   err:      "#E05252",
   warn:     "#D4A64A",
@@ -53,6 +54,7 @@ const LANES = [
   { id: "api",      label: "API",        color: P.api },
   { id: "db",       label: "Database",   color: P.db },
   { id: "system",   label: "System",     color: P.system },
+  { id: "planner",  label: "Planner",    color: P.planner },
 ] as const
 
 const LANE_N = LANES.length
@@ -218,6 +220,40 @@ function classify(ev: WsEvent): DRow {
     if (kind === "user-input-response")
       return { ...base, lane: 0, label: `response: ${trunc(String(entry?.text ?? ""), 40)}`, color: P.agent }
 
+    // ── Planner trace events ──────────────────────────────────
+    if (kind === "planner-decision") {
+      const should = entry?.shouldPlan ? "yes" : "no"
+      return { ...base, lane: 9, label: `decision: ${should} (score ${entry?.score})`, color: entry?.shouldPlan ? P.planner : P.dim, arrow: entry?.shouldPlan ? 0 : undefined }
+    }
+    if (kind === "planner-generating")
+      return { ...base, lane: 9, label: "generating plan...", color: P.planner, arrow: 1 }
+    if (kind === "planner-plan-generated")
+      return { ...base, lane: 9, label: `plan: ${entry?.stepCount} steps — ${trunc(String(entry?.reason ?? ""), 35)}`, color: P.ok }
+    if (kind === "planner-generation-failed")
+      return { ...base, lane: 9, label: "plan generation failed", color: P.err }
+    if (kind === "planner-validation-failed")
+      return { ...base, lane: 9, label: "validation failed", color: P.err }
+    if (kind === "planner-pipeline-start")
+      return { ...base, lane: 9, label: `pipeline #${entry?.attempt}/${entry?.maxRetries}`, color: P.planner, arrow: 2 }
+    if (kind === "planner-step-start")
+      return { ...base, lane: 9, label: `step: ${trunc(String(entry?.stepName ?? ""), 30)} (${entry?.stepType})`, color: P.planner, arrow: entry?.stepType === "subagent_task" ? 3 : 2 }
+    if (kind === "planner-step-end") {
+      const ok = entry?.status === "completed"
+      return { ...base, lane: 9, label: `step done: ${trunc(String(entry?.stepName ?? ""), 25)} ${ok ? "✓" : "✗"} ${entry?.durationMs ? fmtMs(entry.durationMs as number) : ""}`, color: ok ? P.ok : P.err }
+    }
+    if (kind === "planner-pipeline-end") {
+      const ok = entry?.status === "completed"
+      return { ...base, lane: 9, label: `pipeline ${entry?.status}: ${entry?.completedSteps}/${entry?.totalSteps}`, color: ok ? P.ok : P.err }
+    }
+    if (kind === "planner-verification") {
+      const color = entry?.overall === "pass" ? P.ok : entry?.overall === "retry" ? P.warn : P.err
+      return { ...base, lane: 9, label: `verify: ${entry?.overall} (${((entry?.confidence as number) ?? 0).toFixed(2)})`, color }
+    }
+    if (kind === "planner-retry")
+      return { ...base, lane: 9, label: `retry #${entry?.attempt}: ${trunc(String(entry?.reason ?? ""), 35)}`, color: P.warn }
+    if (kind === "planner-retry-skipped")
+      return { ...base, lane: 9, label: `retry skipped: ${trunc(String(entry?.reason ?? ""), 40)}`, color: P.dim }
+
     // Debug / inspector
     if (kind === "system-prompt")
       return { ...base, lane: 8, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.system, arrow: 0 }
@@ -351,6 +387,7 @@ function buildActivations(rows: DRow[]): Activation[] {
   const openLlm: number[] = []
   let runStart: number | null = null
   let delegStart: number | null = null
+  let plannerStart: number | null = null
 
   for (let i = 0; i < rows.length; i++) {
     const ev = rows[i].raw
@@ -395,6 +432,17 @@ function buildActivations(rows: DRow[]): Activation[] {
       result.push({ lane: 3, startIdx: delegStart, endIdx: i, color: P.delegate })
       delegStart = null
     }
+
+    // Planner activation on Planner lane (pipeline-start → pipeline-end)
+    if (t === "debug.trace") {
+      const kind = (d.entry as { kind?: string } | undefined)?.kind
+      if (kind === "planner-pipeline-start") plannerStart = i
+      if (kind === "planner-pipeline-end" && plannerStart != null) {
+        const ok = (d.entry as { status?: string } | undefined)?.status === "completed"
+        result.push({ lane: 9, startIdx: plannerStart, endIdx: i, color: ok ? P.planner : P.err })
+        plannerStart = null
+      }
+    }
   }
 
   // Close open activations at the end (still running)
@@ -403,6 +451,7 @@ function buildActivations(rows: DRow[]): Activation[] {
   for (const [, start] of openSteps) result.push({ lane: 2, startIdx: start, endIdx: last, color: P.tools })
   for (const start of openLlm) result.push({ lane: 1, startIdx: start, endIdx: last, color: P.llm })
   if (delegStart != null) result.push({ lane: 3, startIdx: delegStart, endIdx: last, color: P.delegate })
+  if (plannerStart != null) result.push({ lane: 9, startIdx: plannerStart, endIdx: last, color: P.planner })
 
   return result
 }

@@ -94,6 +94,11 @@ export type TraceEntry =
   | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number }
   | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
   | { kind: "planner-retry"; attempt: number; reason: string }
+  | { kind: "planner-retry-skipped"; reason: string }
+  // Planner delegation entries (child agents spawned by planner)
+  | { kind: "planner-delegation-start"; goal: string; stepName: string; depth: number; tools: string[]; envelope: { workspaceRoot?: string; effectClass?: string; verificationMode?: string; targetArtifacts?: string[] } }
+  | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number }
+  | { kind: "planner-delegation-end"; stepName: string; depth: number; status: "done" | "error"; answer?: string; error?: string }
   // Debug/inspector entries
   | { kind: "system-prompt"; text: string }
   | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }

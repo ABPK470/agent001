@@ -117,7 +117,11 @@ export const browserCheckTool: Tool = {
     "Returns console errors, warnings, network failures, and uncaught exceptions. " +
     "Use this AFTER creating or modifying web projects (HTML/JS/CSS) to verify " +
     "they actually work. Optionally click elements to test interactions. " +
-    "The file is served via a local HTTP server so relative paths work correctly.",
+    "IMPORTANT: The file is served via a local HTTP server rooted at the HTML file's " +
+    "parent directory. All CSS/JS/image references in the HTML must be relative to " +
+    "that directory. If your HTML is at tmp/game/index.html, references like " +
+    "'css/styles.css' resolve to tmp/game/css/styles.css. Place ALL project assets " +
+    "(CSS, JS, images) under the same directory as the HTML file.",
   parameters: {
     type: "object",
     properties: {
@@ -273,6 +277,18 @@ export const browserCheckTool: Tool = {
           lines.push(`## Warnings (${consoleWarnings.length})`)
           for (const w of consoleWarnings) lines.push(`  - ${w}`)
         }
+
+        // If there are 404s, add actionable context about the server root
+        const has404 = consoleErrors.some((e) => e.includes("404")) || networkErrors.some((e) => e.includes("ERR_ABORTED") || e.includes("404"))
+        if (has404) {
+          lines.push("")
+          lines.push(`## Path Resolution`)
+          lines.push(`  Static server root: ${dir}/`)
+          lines.push(`  All <script src>, <link href>, and other references in the HTML are resolved relative to this directory.`)
+          lines.push(`  To fix 404s: ensure the referenced files exist under ${dir}/ with matching paths.`)
+          lines.push(`  Use list_directory to verify the file structure, then either move the files or fix the HTML references.`)
+        }
+
         lines.push("")
         lines.push(`Total: ${totalErrors} error(s), ${consoleWarnings.length} warning(s)`)
       }

@@ -63,7 +63,7 @@ export class OpenAIClient implements LLMClient {
       body.tools = tools.map(formatTool)
     }
 
-    const maxRetries = 3
+    const maxRetries = 5
     let res: Response | undefined
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -83,7 +83,7 @@ export class OpenAIClient implements LLMClient {
       const retryAfter = res.headers.get("retry-after")
       const waitMs = retryAfter
         ? Number(retryAfter) * 1000
-        : Math.min(1000 * 2 ** attempt, 30_000)
+        : Math.min(2000 * 2 ** attempt, 60_000)
       await new Promise((r) => setTimeout(r, waitMs))
     }
 

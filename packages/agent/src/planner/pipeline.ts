@@ -56,6 +56,8 @@ export interface PipelineExecutorOptions {
   maxParallel?: number
   /** Abort signal. */
   signal?: AbortSignal
+  /** Actual workspace root (overrides LLM-generated workspaceRoot in envelopes). */
+  workspaceRoot?: string
   /** Called when a step starts. */
   onStepStart?: (step: PlanStep) => void
   /** Called when a step finishes. */
@@ -145,11 +147,17 @@ export async function executePipeline(
       const step = stepMap.get(name)!
       opts?.onStepStart?.(step)
 
-      // Inject verifier feedback into subagent steps on retry
+      // Build context from completed dependency steps so children know
+      // what prior steps produced (files, outputs, etc.)
       let effectiveStep = step
+      if (step.stepType === "subagent_task") {
+        effectiveStep = injectPriorContext(step as SubagentTaskStep, plan, stepResults, opts?.workspaceRoot)
+      }
+
+      // Inject verifier feedback into subagent steps on retry
       const feedback = opts?.retryFeedback?.get(name)
-      if (feedback && feedback.length > 0 && step.stepType === "subagent_task") {
-        const sa = step as SubagentTaskStep
+      if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
+        const sa = effectiveStep as SubagentTaskStep
         effectiveStep = {
           ...sa,
           objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}`,
@@ -295,6 +303,91 @@ async function executeSubagentStep(
       error: err instanceof Error ? err.message : String(err),
       durationMs: Date.now() - t0,
     }
+  }
+}
+
+// ============================================================================
+// Prior step context injection
+// ============================================================================
+
+/**
+ * Augment a subagent step with concrete context from completed dependency steps.
+ *
+ * This solves the "blind child" problem: without this, step N+1 has no idea
+ * what step N actually produced. We inject:
+ *   1. Output summaries from completed dependency steps
+ *   2. Workspace root override (use actual value, not LLM-generated)
+ *   3. A "ground truth" preamble about what files/artifacts already exist
+ */
+function injectPriorContext(
+  step: SubagentTaskStep,
+  plan: Plan,
+  stepResults: ReadonlyMap<string, PipelineStepResult>,
+  workspaceRoot?: string,
+): SubagentTaskStep {
+  const deps = step.dependsOn ?? []
+  if (deps.length === 0 && !workspaceRoot) return step
+
+  const priorSections: string[] = []
+
+  // Collect outputs from completed dependency steps
+  for (const depName of deps) {
+    const depResult = stepResults.get(depName)
+    if (!depResult) continue
+
+    const depStep = plan.steps.find(s => s.name === depName)
+    const summary = depResult.output
+      ? depResult.output.slice(0, 500)
+      : `(step ${depResult.status})`
+
+    priorSections.push(
+      `### Step "${depName}" (${depResult.status})${depStep?.stepType === "deterministic_tool" ? ` — tool: ${(depStep as DeterministicToolStep).tool}` : ""}\n${summary}`,
+    )
+  }
+
+  // Build augmented inputContract with prior context
+  let augmentedInput = step.inputContract || ""
+  if (priorSections.length > 0) {
+    augmentedInput = `## Context from completed prior steps\n\n${priorSections.join("\n\n")}\n\n${augmentedInput}`
+  }
+
+  // Override workspaceRoot in execution context with actual value
+  let executionContext = step.executionContext
+  if (workspaceRoot) {
+    executionContext = {
+      ...executionContext,
+      workspaceRoot,
+      allowedReadRoots: executionContext.allowedReadRoots.length > 0
+        ? executionContext.allowedReadRoots
+        : [workspaceRoot],
+      allowedWriteRoots: executionContext.allowedWriteRoots.length > 0
+        ? executionContext.allowedWriteRoots
+        : [workspaceRoot],
+    }
+  }
+
+  // Augment objective with a filesystem grounding reminder
+  let objective = step.objective
+  if (priorSections.length > 0) {
+    // Collect target artifacts from dependency steps (what they should have created)
+    const priorArtifacts: string[] = []
+    for (const depName of deps) {
+      const depStep = plan.steps.find(s => s.name === depName)
+      if (depStep?.stepType === "subagent_task") {
+        const sa = depStep as SubagentTaskStep
+        priorArtifacts.push(...sa.executionContext.targetArtifacts)
+      }
+    }
+    if (priorArtifacts.length > 0) {
+      objective = `${objective}\n\nIMPORTANT: Prior steps should have created these files: ${priorArtifacts.join(", ")}. Start by reading them with read_file to verify they exist and understand their contents before making changes.`
+    }
+  }
+
+  return {
+    ...step,
+    objective,
+    inputContract: augmentedInput,
+    executionContext,
   }
 }
 

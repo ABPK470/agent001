@@ -122,6 +122,45 @@ export interface LLMClient {
 
 // ── Agent config ─────────────────────────────────────────────────
 
+/**
+ * Error thrown when cumulative token usage exceeds the session budget.
+ * Matches agenc-core's ChatBudgetExceededError.
+ */
+export class ChatBudgetExceededError extends Error {
+  readonly used: number
+  readonly limit: number
+  constructor(used: number, limit: number) {
+    super(`Chat budget exceeded: ${used} / ${limit} tokens`)
+    this.name = "ChatBudgetExceededError"
+    this.used = used
+    this.limit = limit
+  }
+}
+
+/**
+ * Canonical stop reason codes (subset of agenc-core LLMPipelineStopReason).
+ */
+export type StopReason =
+  | "completed"
+  | "max_iterations"
+  | "budget_exceeded"
+  | "aborted"
+  | "error"
+  | "circuit_breaker"
+  | "stuck_loop"
+
+/**
+ * Record of one model API call (cost attribution).
+ * Matches agenc-core ChatCallUsageRecord.
+ */
+export interface ChatCallUsageRecord {
+  readonly phase: "tool_loop" | "planner" | "verifier" | "synthesis" | "evaluator"
+  readonly callIndex: number
+  readonly tokens: TokenUsage
+  readonly durationMs: number
+  readonly model?: string
+}
+
 export interface AgentConfig {
   /** Max think→act→observe iterations before stopping. Default: 30 */
   maxIterations?: number
