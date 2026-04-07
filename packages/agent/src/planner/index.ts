@@ -220,13 +220,13 @@ export async function executePlannerPath(
       break
     }
 
-    // Accept "retry" with high confidence — the pipeline completed and issues are minor
+    // Accept "retry" with sufficient confidence — the pipeline completed and issues are minor
     if (verifierDecision.overall === "retry"
-      && verifierDecision.confidence >= 0.75
+      && verifierDecision.confidence >= 0.65
       && pipelineResult.status === "completed") {
       ctx.onTrace?.({
         kind: "planner-retry-skipped",
-        reason: `confidence ${verifierDecision.confidence.toFixed(2)} >= 0.75 with completed pipeline — accepting`,
+        reason: `confidence ${verifierDecision.confidence.toFixed(2)} >= 0.65 with completed pipeline — accepting`,
       })
       break
     }

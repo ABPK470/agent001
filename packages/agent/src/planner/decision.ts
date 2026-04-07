@@ -121,6 +121,10 @@ export function assessPlannerDecision(
     score += 3
     reasons.push("implementation_scope")
   }
+  if (signals.hasVerificationCue && signals.hasImplementationScopeCue) {
+    score += 1
+    reasons.push("verification_on_impl")
+  }
   if (signals.longTask) {
     score += 1
     reasons.push("long_or_structured")
