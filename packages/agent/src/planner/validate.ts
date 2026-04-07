@@ -42,6 +42,7 @@ export function validatePlan(
   diagnostics.push(...validateStepContracts(plan.steps))
   diagnostics.push(...validateArtifactOwnership(plan.steps))
   diagnostics.push(...validateVerificationCoverage(plan.steps))
+  diagnostics.push(...validatePathConsistency(plan.steps))
 
   return {
     valid: diagnostics.length === 0,
@@ -292,6 +293,75 @@ function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnosti
       category: "verification",
       code: "no_verification_steps",
       message: "Plan has write steps but no verification step. Add at least one step with verificationMode != 'none', or include a deterministic verification step.",
+    })
+  }
+
+  return diagnostics
+}
+
+// ============================================================================
+// Path consistency — all steps must use the same output directory
+// ============================================================================
+
+function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
+  const diagnostics: PlanDiagnostic[] = []
+
+  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+
+  // Collect all target artifact directories
+  const artifactDirs = new Map<string, string>() // dir → step name (first seen)
+  const allDirs: string[] = []
+
+  for (const step of subagentSteps) {
+    for (const artifact of step.executionContext?.targetArtifacts ?? []) {
+      const parts = artifact.split("/")
+      if (parts.length > 1) {
+        const dir = parts.slice(0, -1).join("/")
+        allDirs.push(dir)
+        if (!artifactDirs.has(dir)) {
+          artifactDirs.set(dir, step.name)
+        }
+      }
+    }
+  }
+
+  if (allDirs.length === 0) return diagnostics
+
+  // Check if the same filename appears under different directories
+  // e.g. "game/index.html" and "tmp/game/index.html" — this is a clear error
+  const filesByName = new Map<string, string[]>()
+  for (const step of subagentSteps) {
+    for (const artifact of step.executionContext?.targetArtifacts ?? []) {
+      const filename = artifact.split("/").pop()!
+      if (!filesByName.has(filename)) filesByName.set(filename, [])
+      filesByName.get(filename)!.push(artifact)
+    }
+  }
+
+  for (const [filename, paths] of filesByName) {
+    const uniquePaths = [...new Set(paths)]
+    if (uniquePaths.length > 1) {
+      // Same filename in different directories — likely a path inconsistency
+      const dirs = uniquePaths.map(p => p.split("/").slice(0, -1).join("/") || "(root)")
+      diagnostics.push({
+        category: "graph",
+        code: "inconsistent_output_directory",
+        message: `File "${filename}" appears under different directories: ${dirs.join(", ")}. All steps MUST use the same output directory. Pick one directory and use it consistently for ALL targetArtifacts across all steps.`,
+      })
+    }
+  }
+
+  // Also check: if some artifacts have a directory prefix and others don't
+  const hasDir = allDirs.length > 0
+  const rootFiles = subagentSteps.flatMap(s =>
+    (s.executionContext?.targetArtifacts ?? []).filter(a => !a.includes("/"))
+  )
+  if (hasDir && rootFiles.length > 0) {
+    const commonDir = allDirs[0]
+    diagnostics.push({
+      category: "graph",
+      code: "mixed_root_and_subdir",
+      message: `Some artifacts are in subdirectory "${commonDir}/" but others (${rootFiles.join(", ")}) are at the root. Move all artifacts into the same directory.`,
     })
   }
 

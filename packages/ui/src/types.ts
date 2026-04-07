@@ -85,7 +85,7 @@ export type TraceEntry =
   // Planner entries (agenc-core planner-first routing)
   | { kind: "planner-decision"; score: number; shouldPlan: boolean; reason: string }
   | { kind: "planner-generating" }
-  | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string }> }
+  | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
   | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }

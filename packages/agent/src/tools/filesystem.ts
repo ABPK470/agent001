@@ -219,12 +219,91 @@ export const writeFileTool: Tool = {
           throw mkdirErr
         }
       }
-      await writeFile(target, String(args.content), "utf-8")
-      return `Successfully wrote to ${args.path}`
+      const content = String(args.content)
+      await writeFile(target, content, "utf-8")
+
+      // Integrity check: detect LLM degeneration in the written content.
+      // If the output is corrupted, warn the child so it can fix within its own iteration budget
+      // instead of silently accepting garbage that wastes a full pipeline retry.
+      const filePath = String(args.path)
+      const integrityWarnings = checkWriteIntegrity(filePath, content)
+      if (integrityWarnings.length > 0) {
+        return (
+          `\u26a0 WRITTEN WITH ERRORS to ${filePath} — your output is CORRUPTED and must be fixed:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
+          `The file was saved but contains broken/degenerated code. ` +
+          `Use read_file to see what you wrote, then write_file again with CORRECT content. ` +
+          `Write SMALLER chunks if needed.`
+        )
+      }
+
+      return `Successfully wrote to ${filePath}`
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+}
+
+// ── Write integrity check ────────────────────────────────────────
+
+/**
+ * Check written content for LLM degeneration / corruption patterns.
+ * Returns a list of warnings (empty = content is OK).
+ */
+function checkWriteIntegrity(filePath: string, content: string): string[] {
+  const warnings: string[] = []
+  if (content.length < 50) return warnings
+
+  const isCode = /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php|sh|bash|zsh)$/i.test(filePath)
+  const isHtml = /\.html?$/i.test(filePath)
+
+  if (isCode) {
+    // Detect code-mixed-with-gibberish: closing brace/paren followed by random English words
+    const brokenCodeRe = /[})\]][\s]*[a-z]{3,}\s+[a-z]{3,}\s+[a-z]{3,}/i
+    const lines = content.split("\n")
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.length > 10 && brokenCodeRe.test(trimmed) &&
+          !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("#")) {
+        warnings.push(`Line contains gibberish mixed with code: "${trimmed.slice(0, 80)}"`)
+        break
+      }
+    }
+
+    // Detect unclosed braces (truncated/degenerated output)
+    const opens = (content.match(/{/g) ?? []).length
+    const closes = (content.match(/}/g) ?? []).length
+    if (opens > closes + 2) {
+      warnings.push(`${opens - closes} unclosed brace(s) — file appears truncated or corrupted`)
+    }
+
+    // Detect abrupt ending with non-code text
+    const lastLine = lines.filter(l => l.trim().length > 0).pop()?.trim() ?? ""
+    if (lastLine.length > 10 &&
+        !/[});\]`'"\\]$/.test(lastLine) &&
+        !/^(?:export|module\.exports|\/\/|#|\*)/i.test(lastLine) &&
+        /[a-z]{3,}\s+[a-z]{3,}/i.test(lastLine)) {
+      warnings.push(`File ends with non-code text: "${lastLine.slice(-60)}"`)
+    }
+  }
+
+  if (isHtml) {
+    // Detect unclosed attribute values
+    const unclosedAttrRe = /\w+="[^"]{10,}(?:>|\n|$)/gm
+    const unclosed = content.match(unclosedAttrRe)
+    if (unclosed && unclosed.length > 0) {
+      warnings.push(`Unclosed HTML attribute value: "${unclosed[0].trim().slice(0, 60)}"`)
+    }
+
+    // Detect attributes with code garbage
+    const corruptAttrRe = /(?!style=)\w+="[^"]*[{};][^"]*"/g
+    const corrupt = content.match(corruptAttrRe)
+    if (corrupt && corrupt.length > 0) {
+      warnings.push(`HTML attribute contains code garbage: "${corrupt[0].slice(0, 60)}"`)
+    }
+  }
+
+  return warnings
 }
 
 // ── list_directory ───────────────────────────────────────────────

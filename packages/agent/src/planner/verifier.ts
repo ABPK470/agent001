@@ -45,6 +45,107 @@ const SOURCE_LIKE_PATH_RE =
 // ============================================================================
 
 /**
+ * Extract actual file paths from child agent output text.
+ * Children typically report "Successfully created `path/file.js`" or mention paths they wrote.
+ */
+function extractActualPaths(output: string): string[] {
+  const paths: string[] = []
+  // Match backtick-quoted paths: `path/file.ext`
+  for (const m of output.matchAll(/`([^`\s]+\.[a-zA-Z0-9]+)`/g)) {
+    if (m[1] && m[1].length < 200) paths.push(m[1])
+  }
+  // Match "created/wrote/modified <path>" patterns
+  for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat)\w*\s+(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+    if (m[1] && m[1].length < 200) paths.push(m[1])
+  }
+  // Deduplicate
+  return [...new Set(paths)]
+}
+
+/**
+ * Try to read a file, attempting the exact path first, then matching against
+ * paths the child actually wrote, then searching with `find` as last resort.
+ * Returns { found: true, resolvedPath } on success, { found: false } on failure.
+ */
+async function probeArtifact(
+  readFile: Tool,
+  plannedPath: string,
+  actualPaths: string[],
+  workspaceRoot?: string,
+  runCommand?: Tool,
+  allowedWriteRoots?: readonly string[],
+): Promise<{ found: boolean; resolvedPath: string }> {
+  // Build candidate paths: planned path both bare and prefixed with workspaceRoot
+  const candidates: string[] = [plannedPath]
+  if (workspaceRoot && !plannedPath.startsWith(workspaceRoot)) {
+    const rooted = workspaceRoot.endsWith("/")
+      ? `${workspaceRoot}${plannedPath}`
+      : `${workspaceRoot}/${plannedPath}`
+    candidates.unshift(rooted) // try workspace-rooted path first
+  }
+
+  // Also try write-root-scoped paths: if allowedWriteRoots is a subdir of
+  // workspaceRoot (e.g. "/project/tmp"), try "tmp/index.html" for bare "index.html"
+  if (allowedWriteRoots && workspaceRoot && !plannedPath.includes("/")) {
+    const wsNorm = workspaceRoot.replace(/\/$/, "")
+    for (const wr of allowedWriteRoots) {
+      const wrNorm = wr.replace(/\/$/, "")
+      if (wrNorm !== wsNorm && wrNorm.startsWith(wsNorm + "/")) {
+        const subdir = wrNorm.slice(wsNorm.length + 1)
+        candidates.push(`${subdir}/${plannedPath}`)
+      } else if (!wrNorm.startsWith("/") && wrNorm !== "." && wrNorm !== "./") {
+        candidates.push(`${wrNorm}/${plannedPath}`)
+      }
+    }
+  }
+
+  // 1. Try planned path (and workspace-rooted variant)
+  for (const candidate of candidates) {
+    try {
+      const content = await readFile.execute({ path: candidate })
+      if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
+        return { found: true, resolvedPath: candidate }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 2. Try to match against paths the child actually wrote
+  const basename = plannedPath.split("/").pop() ?? plannedPath
+  for (const actual of actualPaths) {
+    if (actual === plannedPath || actual.endsWith(`/${plannedPath}`) || actual.endsWith(`/${basename}`)) {
+      try {
+        const content = await readFile.execute({ path: actual })
+        if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
+          return { found: true, resolvedPath: actual }
+        }
+      } catch { /* fall through */ }
+    }
+  }
+
+  // 3. Last resort: search with find, scoped to workspaceRoot and excluding noise
+  if (runCommand && basename) {
+    try {
+      const searchRoot = workspaceRoot || "."
+      const findResult = await runCommand.execute({
+        command: `find ${JSON.stringify(searchRoot)} -maxdepth 5 -name ${JSON.stringify(basename)} -type f -not -path "*/node_modules/*" -not -path "*/dist/*" -not -path "*/.git/*" 2>/dev/null | head -5`,
+      })
+      const foundPaths = findResult.trim().split("\n").filter((p: string) => p.length > 0 && p !== "." && !p.includes("(no output)") && p.startsWith("/"))
+      for (const fp of foundPaths) {
+        const cleanPath = fp.replace(/^\.\//, "")
+        try {
+          const content = await readFile.execute({ path: cleanPath })
+          if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
+            return { found: true, resolvedPath: cleanPath }
+          }
+        } catch { /* fall through */ }
+      }
+    } catch { /* fall through */ }
+  }
+
+  return { found: false, resolvedPath: plannedPath }
+}
+
+/**
  * Run deterministic acceptance probes — file existence checks, build commands, etc.
  * Returns per-step assessments based on concrete evidence.
  */
@@ -72,18 +173,23 @@ export async function runDeterministicProbes(
     if (step.stepType === "subagent_task") {
       const sa = step as SubagentTaskStep
       const issues: string[] = []
+      const outputText = (stepResult.output ?? "").trim()
 
-      // Check target artifacts exist
+      // Extract actual file paths from child output for path resolution
+      const actualPaths = extractActualPaths(outputText)
+
+      // Check target artifacts exist (with path resolution fallback)
+      // Cache probe results so content-completeness and browser_check can reuse them
       const readFile = toolMap.get("read_file")
+      const runCommand = toolMap.get("run_command")
+      const wsRoot = sa.executionContext.workspaceRoot || undefined
+      const probeCache = new Map<string, { found: boolean; resolvedPath: string }>()
       if (readFile && sa.executionContext.targetArtifacts.length > 0) {
         for (const artifact of sa.executionContext.targetArtifacts) {
-          try {
-            const content = await readFile.execute({ path: artifact })
-            if (content.startsWith("Error:") || content.includes("not found") || content.includes("ENOENT")) {
-              issues.push(`Target artifact "${artifact}" not found`)
-            }
-          } catch {
-            issues.push(`Could not read target artifact "${artifact}"`)
+          const probe = await probeArtifact(readFile, artifact, actualPaths, wsRoot, runCommand, sa.executionContext.allowedWriteRoots)
+          probeCache.set(artifact, probe)
+          if (!probe.found) {
+            issues.push(`Target artifact "${artifact}" not found`)
           }
         }
       }
@@ -96,13 +202,20 @@ export async function runDeterministicProbes(
             a => a.endsWith(".html") || a.endsWith(".htm"),
           )
           for (const html of htmlArtifacts) {
+            // Reuse cached probe result; browser_check expects a RELATIVE path
+            const cached = probeCache.get(html)
+            let browserPath = cached?.found ? cached.resolvedPath : html
+            // Strip workspace root prefix — browser_check joins cwd + path internally
+            if (wsRoot && browserPath.startsWith(wsRoot)) {
+              browserPath = browserPath.slice(wsRoot.length).replace(/^\//, "")
+            }
             try {
-              const result = await browserCheck.execute({ url: html })
+              const result = await browserCheck.execute({ path: browserPath })
               if (/error|fail|exception/i.test(result) && !/no errors/i.test(result)) {
-                issues.push(`Browser check for "${html}" reported errors: ${result.slice(0, 300)}`)
+                issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
               }
             } catch {
-              issues.push(`Browser check failed for "${html}"`)
+              issues.push(`Browser check failed for "${browserPath}"`)
             }
           }
         }
@@ -124,8 +237,81 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Content completeness probe — detect placeholder / skeleton / corrupted code ──
+      if (readFile && sa.executionContext.targetArtifacts.length > 0) {
+        const codeArtifacts = sa.executionContext.targetArtifacts.filter(
+          a => /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a),
+        )
+        for (const artifact of codeArtifacts) {
+          const cached = probeCache.get(artifact)
+          if (!cached?.found) continue // already flagged by existence check
+          try {
+            const content = await readFile.execute({ path: cached.resolvedPath })
+            if (typeof content === "string" && content.length > 0) {
+              // Check for placeholder patterns
+              const placeholders = detectPlaceholderPatterns(content)
+              if (placeholders.length > 0) {
+                issues.push(
+                  `Placeholder/stub code in "${artifact}": ${placeholders.join("; ")}`,
+                )
+              }
+              // Check for LLM degeneration / corrupted code
+              const corruption = detectCodeCorruption(content)
+              if (corruption.length > 0) {
+                issues.push(
+                  `Corrupted/degenerated code in "${artifact}": ${corruption.join("; ")}`,
+                )
+              }
+            }
+          } catch { /* already flagged */ }
+        }
+
+        // ── JavaScript syntax validation — run node --check on .js files ──
+        if (runCommand) {
+          const jsArtifacts = sa.executionContext.targetArtifacts.filter(
+            a => /\.js$/i.test(a),
+          )
+          for (const artifact of jsArtifacts) {
+            const cached = probeCache.get(artifact)
+            if (!cached?.found) continue
+            let checkPath = cached.resolvedPath
+            // Ensure path is suitable for shell execution
+            if (!checkPath.startsWith("/") && wsRoot) {
+              checkPath = wsRoot.endsWith("/") ? `${wsRoot}${checkPath}` : `${wsRoot}/${checkPath}`
+            }
+            try {
+              const result = await runCommand.execute({
+                command: `node --check ${JSON.stringify(checkPath)} 2>&1`,
+              })
+              if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(result)) {
+                issues.push(`Syntax error in "${artifact}": ${result.trim().split("\n").slice(0, 3).join(" | ")}`)
+              }
+            } catch { /* non-critical */ }
+          }
+        }
+
+        // ── HTML corruption detection ──
+        const htmlArtifs = sa.executionContext.targetArtifacts.filter(
+          a => /\.html?$/i.test(a),
+        )
+        for (const artifact of htmlArtifs) {
+          const cached = probeCache.get(artifact)
+          if (!cached?.found) continue
+          try {
+            const content = await readFile.execute({ path: cached.resolvedPath })
+            if (typeof content === "string" && content.length > 0) {
+              const htmlIssues = detectHtmlCorruption(content)
+              if (htmlIssues.length > 0) {
+                issues.push(
+                  `Corrupted HTML in "${artifact}": ${htmlIssues.join("; ")}`,
+                )
+              }
+            }
+          } catch { /* already flagged */ }
+        }
+      }
+
       // ── Evidence density scoring (agenc-core pattern) ──
-      const outputText = (stepResult.output ?? "").trim()
       const outputLower = outputText.toLowerCase()
 
       if (outputText.length > 0 && !EVIDENCE_DENSITY_RE.test(outputLower)) {
@@ -165,15 +351,29 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Gibberish / word-salad detection ──
+      if (outputText.length > 20) {
+        const gibberishScore = computeGibberishScore(outputText)
+        if (gibberishScore >= 0.6) {
+          issues.push("Child output appears to be gibberish/word-salad — no coherent implementation summary")
+        }
+      }
+
       // ── Role-specific validation (agenc-core pattern) ──
       const role = sa.executionContext.role ?? "writer"
       if (role === "writer") {
-        // Writer steps must produce mutations — not just findings
-        const hasMutationEvidence = sa.executionContext.targetArtifacts.some(a => SOURCE_LIKE_PATH_RE.test(a))
-        if (!hasMutationEvidence && outputText.length > 0 && !outputText.includes("write_file") && !outputText.includes("wrote")) {
-          // Don't hard-fail, but note the concern
-          if (!issues.some(i => i.includes("mutation"))) {
-            issues.push("Writer step may lack mutation evidence — verify files were actually created/modified")
+        // Writer steps must actually produce files — verify they exist and have content
+        let mutationConfirmed = false
+        for (const artifact of sa.executionContext.targetArtifacts) {
+          const cached = probeCache.get(artifact)
+          if (cached?.found) {
+            mutationConfirmed = true
+            break
+          }
+        }
+        if (!mutationConfirmed && sa.executionContext.targetArtifacts.length > 0) {
+          if (!issues.some(i => i.includes("not found"))) {
+            issues.push("Writer step may lack mutation evidence — target artifacts not found on disk")
           }
         }
       }
@@ -236,9 +436,10 @@ You MUST respond with valid JSON matching this schema:
 }
 
 Rules:
-- "pass" means the step completed and produced reasonable output for its objective
+- "pass" means the step completed and produced REAL, WORKING implementation that meets the core objective
 - "retry" means the step produced output but has clear, concrete deficiencies that a retry could fix
 - "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
+- SKELETON / PLACEHOLDER CODE IS NEVER "pass": If a step was supposed to implement logic but output contains placeholder functions (\`return true\` as validation, empty bodies, \`// TODO\`, \`// Placeholder\`), mark it "retry" with specific issues listing what needs real implementation
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem
@@ -255,7 +456,7 @@ export async function runLLMVerification(
   plan: Plan,
   pipelineResult: PipelineResult,
   deterministicAssessments: readonly VerifierStepAssessment[],
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
 ): Promise<VerifierDecision> {
   // Build verification context
   const stepSummaries = plan.steps.map(step => {
@@ -286,8 +487,35 @@ export async function runLLMVerification(
     },
   ]
 
+  // Emit llm-request trace so the UI can display the verifier prompt
+  opts?.onTrace?.({
+    kind: "llm-request",
+    iteration: -1,
+    messageCount: messages.length,
+    toolCount: 0,
+    messages: messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      toolCalls: [],
+      toolCallId: null,
+    })),
+  })
+
   try {
+    const t0 = Date.now()
     const response = await llm.chat(messages, [], { signal: opts?.signal })
+    const durationMs = Date.now() - t0
+
+    // Emit llm-response trace
+    opts?.onTrace?.({
+      kind: "llm-response",
+      iteration: -1,
+      durationMs,
+      content: response.content,
+      toolCalls: [],
+      usage: response.usage ?? null,
+    })
+
     if (!response.content) {
       return buildFallbackDecision(deterministicAssessments)
     }
@@ -312,7 +540,7 @@ export async function verify(
   plan: Plan,
   pipelineResult: PipelineResult,
   tools: readonly Tool[],
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
 ): Promise<VerifierDecision> {
   // Phase 1: Deterministic probes
   const detAssessments = await runDeterministicProbes(plan, pipelineResult, tools)
@@ -324,7 +552,7 @@ export async function verify(
   }
 
   // Phase 2: LLM verification
-  const decision = await runLLMVerification(llm, plan, pipelineResult, detAssessments, opts)
+  const decision = await runLLMVerification(llm, plan, pipelineResult, detAssessments, { signal: opts?.signal, onTrace: opts?.onTrace })
 
   // Merge: if deterministic says "retry" but LLM says "pass", trust deterministic
   const mergedSteps = decision.steps.map(llmStep => {
@@ -403,6 +631,212 @@ function buildFallbackDecision(
     steps: [...assessments],
     unresolvedItems: allIssues,
   }
+}
+
+// ============================================================================
+// Content completeness helpers
+// ============================================================================
+
+/** Patterns that indicate skeleton / placeholder code that is not real implementation. */
+const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string; contextRe?: RegExp }> = [
+  // Explicit stubs
+  { re: /\/\/\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  { re: /\/\*\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  { re: /#\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  // Trivially-returning validation functions — only flag when function name suggests
+  // it should validate/check/compute something
+  {
+    re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gi,
+    label: "validation function always returns constant",
+  },
+  // Arrow function variant
+  {
+    re: /(?:const|let|var)\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*=\s*\([^)]*\)\s*=>\s*(true|false)\s*;?/gi,
+    label: "validation function always returns constant",
+  },
+  // Empty function bodies (function with only whitespace/comments inside)
+  {
+    re: /(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:function|\([^)]*\)\s*=>))\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*)*\}/gi,
+    label: "empty function body",
+  },
+]
+
+/**
+ * Scan source code for placeholder / stub patterns.
+ * Returns a list of human-readable findings, at most 5.
+ */
+function detectPlaceholderPatterns(code: string): string[] {
+  const findings: string[] = []
+  for (const { re, label } of PLACEHOLDER_PATTERNS) {
+    // Reset lastIndex for global regexes
+    re.lastIndex = 0
+    const matches = code.match(re)
+    if (matches && matches.length > 0) {
+      // Only report the first match  snippet (truncated) to keep it actionable
+      const snippet = matches[0].replace(/\n/g, " ").trim().slice(0, 80)
+      findings.push(`${label} (${matches.length}x) e.g. "${snippet}"`)
+    }
+    if (findings.length >= 5) break
+  }
+  return findings
+}
+
+/**
+ * Heuristic to detect word-salad / gibberish output from child agents.
+ * Returns a score 0..1 where higher = more likely gibberish.
+ *
+ * Signals:
+ *  - Very few sentence-ending punctuation relative to word count
+ *  - High ratio of capitalized mid-sentence words (jargon mashup)
+ *  - Contains compound-hyphenated nonsense words
+ *  - Very few common English function words (the, is, a, and, to)
+ */
+function computeGibberishScore(text: string): number {
+  const words = text.split(/\s+/).filter(w => w.length > 0)
+  if (words.length < 5) return 0
+
+  let score = 0
+  const wordCount = words.length
+
+  // Signal 1: Compound-hyphenated words that look like jargon mashup
+  const compoundJargon = text.match(/[a-z]+-[a-z]+-[a-z]+/gi) ?? []
+  if (compoundJargon.length >= 2) score += 0.3
+
+  // Signal 2: Very few function words (the, is, a, and, to, of, in, for, with, that)
+  const functionWordRe = /\b(the|is|a|an|and|to|of|in|for|with|that|was|were|has|have|it|this|are)\b/gi
+  const functionWordCount = (text.match(functionWordRe) ?? []).length
+  const functionWordRatio = functionWordCount / wordCount
+  if (functionWordRatio === 0 && wordCount >= 8) score += 0.4
+  else if (functionWordRatio < 0.05) score += 0.3
+
+  // Signal 3: Sentence-ending punctuation count vs word count
+  const sentenceEnders = (text.match(/[.!?]\s/g) ?? []).length + (text.endsWith(".") || text.endsWith("!") || text.endsWith("?") ? 1 : 0)
+  if (sentenceEnders === 0 && wordCount >= 8) score += 0.2
+
+  // Signal 4: Contains no file paths or code indicators (for agent output, this is suspicious)
+  const hasCodeIndicators = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b/i.test(text)
+  if (!hasCodeIndicators && wordCount >= 8) score += 0.2
+
+  return Math.min(1, score)
+}
+
+// ============================================================================
+// Code corruption / LLM degeneration detection
+// ============================================================================
+
+/**
+ * Detect LLM degeneration in code files.
+ * When a model degenerates mid-output, you get things like:
+ *   `}valuator move saftey can ahead validated, letinline acknowledge`
+ *   `// Rooks dx or /dy condition stric validation for attack`
+ * These are NOT valid code and NOT valid comments — they're word-salad mixed into code.
+ *
+ * Returns a list of findings (empty = clean).
+ */
+function detectCodeCorruption(code: string): string[] {
+  const findings: string[] = []
+  const lines = code.split("\n")
+
+  // Signal 1: Lines that look like broken code — closing brace/paren followed by
+  // random English words that don't form valid code
+  const brokenCodeRe = /[})\]]\s*[a-z]{3,}\s+[a-z]{3,}\s+[a-z]{3,}/i
+  let brokenLineCount = 0
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.length > 10 && brokenCodeRe.test(trimmed)) {
+      // Make sure it's not a legit comment or string
+      if (!trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("#")) {
+        brokenLineCount++
+      }
+    }
+  }
+  if (brokenLineCount > 0) {
+    findings.push(`${brokenLineCount} line(s) with code-mixed-with-gibberish (LLM degeneration)`)
+  }
+
+  // Signal 2: Non-ASCII-art noise in code (random symbols + words that don't form expressions)
+  // Pattern: semicolons, slashes or dots in contexts that don't make sense as code
+  const nonsenseTokenRe = /\b[a-z]+(?:\/[a-z])+\b/gi // e.g. "othered.scope/s"
+  const nonsenseMatches = code.match(nonsenseTokenRe) ?? []
+  // Filter out legitimate paths (contain common path components)
+  const suspiciousNonsense = nonsenseMatches.filter(m =>
+    !SOURCE_LIKE_PATH_RE.test(m) && m.length > 3
+  )
+  if (suspiciousNonsense.length >= 2) {
+    findings.push(`Suspicious word/symbol fragments: "${suspiciousNonsense.slice(0, 3).join('", "')}"`)
+  }
+
+  // Signal 3: Abrupt file ending — code file that ends without proper closure
+  // (missing closing braces, or ends mid-expression)
+  const lastMeaningfulLine = lines.filter(l => l.trim().length > 0).pop()?.trim() ?? ""
+  if (
+    code.length > 100 &&
+    lastMeaningfulLine.length > 0 &&
+    !lastMeaningfulLine.endsWith("}") &&
+    !lastMeaningfulLine.endsWith(";") &&
+    !lastMeaningfulLine.endsWith(")") &&
+    !lastMeaningfulLine.endsWith("*/") &&
+    !lastMeaningfulLine.endsWith("`") &&
+    !/^(?:export|module\.exports|\/\/)/i.test(lastMeaningfulLine)
+  ) {
+    // Check brace balance too
+    const opens = (code.match(/{/g) ?? []).length
+    const closes = (code.match(/}/g) ?? []).length
+    if (opens > closes + 1) {
+      findings.push(`File appears truncated/corrupted: ${opens - closes} unclosed brace(s), ends with "${lastMeaningfulLine.slice(-60)}"`)
+    }
+  }
+
+  return findings
+}
+
+/**
+ * Detect corruption patterns specific to HTML files.
+ * LLM degeneration in HTML looks like:
+ *   `<div id="capture-black_white_notes;letRs}>`
+ * Semicolons, braces, and random tokens inside HTML attribute values.
+ */
+function detectHtmlCorruption(html: string): string[] {
+  const findings: string[] = []
+
+  // Signal 1: HTML attributes with code garbage in values (properly quoted)
+  // Match attribute values containing semicolons, braces, or JS-like tokens
+  const corruptAttrRe = /\w+="[^"]*[{};][^"]*"/g
+  const corruptAttrs = html.match(corruptAttrRe) ?? []
+  // Filter out legitimate CSS inline styles which can contain semicolons
+  const suspiciousAttrs = corruptAttrs.filter(a => {
+    if (/^style="/i.test(a)) return false // CSS inline styles are OK
+    return true
+  })
+  if (suspiciousAttrs.length > 0) {
+    findings.push(`Corrupted HTML attribute(s): ${suspiciousAttrs.slice(0, 3).map(a => `"${a.slice(0, 60)}"`).join(", ")}`)
+  }
+
+  // Signal 2: Unclosed attribute values — opening quote never closed before tag end or newline
+  // e.g. id="capture-black_white_notes;letRs}>
+  const unclosedAttrRe = /\w+="[^"]{10,}(?:>|\n|$)/gm
+  const unclosedAttrs = html.match(unclosedAttrRe) ?? []
+  if (unclosedAttrs.length > 0) {
+    findings.push(`Unclosed HTML attribute value(s): ${unclosedAttrs.slice(0, 3).map(a => `"${a.trim().slice(0, 60)}"`).join(", ")}`)
+  }
+
+  // Signal 3: Tags that never close properly (degeneration mid-tag)
+  const unclosedTagRe = /<\w+[^>]*(?:\n[^>]*){5,}/g
+  if (unclosedTagRe.test(html)) {
+    findings.push("HTML tag spans 5+ lines without closing — possible degeneration")
+  }
+
+  // Signal 4: Brace balance in <script> or <style> blocks
+  const scriptBlocks = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) ?? []
+  for (const block of scriptBlocks) {
+    const inner = block.replace(/<\/?script[^>]*>/gi, "")
+    const corruption = detectCodeCorruption(inner)
+    if (corruption.length > 0) {
+      findings.push(`Embedded <script> has corrupted code: ${corruption[0]}`)
+    }
+  }
+
+  return findings
 }
 
 // ============================================================================

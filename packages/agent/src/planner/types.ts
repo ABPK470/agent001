@@ -202,11 +202,26 @@ export type PipelineStepStatus =
   | "failed"
   | "skipped"
 
+/**
+ * Typed failure classes for child agent failures (agenc-core pattern).
+ * Used by the retry policy to determine appropriate recovery strategy.
+ */
+export type SubagentFailureClass =
+  | "timeout"
+  | "budget_exceeded"
+  | "tool_misuse"
+  | "spawn_error"
+  | "cancelled"
+  | "transient_provider_error"
+  | "unknown"
+
 export interface PipelineStepResult {
   readonly name: string
   readonly status: PipelineStepStatus
   readonly output?: string
   readonly error?: string
+  /** Typed failure class for diagnostic/retry purposes. */
+  readonly failureClass?: SubagentFailureClass
   readonly durationMs: number
 }
 

@@ -361,6 +361,10 @@ export class Agent {
     // Track whether the last tool round included a delegation call.
     // Used for post-delegation verification enforcement.
     let lastRoundHadDelegation = false
+    // Track if the child wrote code/HTML files and hasn't verified them yet.
+    let wroteUnverifiedFiles = false
+    // One-shot: only fire WRITE-WITHOUT-VERIFY nudge once to avoid infinite loops.
+    let writeVerifyNudged = false
     // Track if the agent is in the "post-delegation verification" phase.
     // Set true when the verification guard fires, cleared after the verification round.
     let inPostDelegationVerification = false
@@ -488,6 +492,28 @@ export class Agent {
           continue
         }
 
+        // Guard: if the child wrote files but never verified them, force a review.
+        // This catches the pattern where the LLM writes corrupted code and immediately exits.
+        // One-shot: only fire once to avoid infinite loops where the child rewrites instead of reading.
+        if (wroteUnverifiedFiles && !writeVerifyNudged) {
+          wroteUnverifiedFiles = false
+          writeVerifyNudged = true
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            section: "history",
+          })
+          const writeVerifyMsg =
+              "WRITE-WITHOUT-VERIFY: You wrote code files but attempted to finish without " +
+              "reviewing them. You MUST use read_file to review every file you wrote — look for " +
+              "corrupted code, gibberish, incomplete functions, or syntax errors. Then use " +
+              "browser_check or run_command to verify the output actually works. " +
+              "Do NOT finish until you have confirmed your code is correct."
+          messages.push({ role: "system", content: writeVerifyMsg, section: "history" })
+          this.config.onNudge?.({ tag: "write-without-verify", message: writeVerifyMsg, iteration: i })
+          continue
+        }
+
         // Guard: if verification just found issues, the agent must fix them,
         // not just describe the problem and finish.
         if (verificationFoundIssues) {
@@ -602,6 +628,18 @@ export class Agent {
 
           if (call.name === "delegate" || call.name === "delegate_parallel") {
             delegationThisRound = true
+          }
+
+          // Track write-without-verify: if the child writes code/HTML, mark as unverified.
+          // Reading or checking clears it.
+          if (call.name === "write_file") {
+            const writePath = String((call.arguments as Record<string, unknown>).path ?? "")
+            if (/\.(js|jsx|ts|tsx|py|html?|css|json)$/i.test(writePath)) {
+              wroteUnverifiedFiles = true
+            }
+          }
+          if (call.name === "read_file" || call.name === "browser_check" || call.name === "run_command") {
+            wroteUnverifiedFiles = false
           }
         }
       }

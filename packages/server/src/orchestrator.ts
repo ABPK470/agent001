@@ -483,6 +483,9 @@ export class AgentOrchestrator {
         } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
           // Planner delegation events (planner-delegation-start/iteration/end)
           broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
+        } else if (entry.kind === "llm-request" || entry.kind === "llm-response" || entry.kind === "nudge") {
+          // Child LLM call events and nudges — forward to trace for visibility
+          broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
         }
       },
       onChildUsage: (() => {

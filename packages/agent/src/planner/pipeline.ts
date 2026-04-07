@@ -251,7 +251,16 @@ async function executeDeterministicStep(
     }
 
     try {
-      const output = await toolExecFn(step.tool, step.args)
+      // Normalize args: LLM sometimes uses wrong parameter names.
+      // browser_check expects "path" but planner may generate "key" or "url".
+      let args = step.args
+      if (step.tool === "browser_check" && !args.path && (args.key || args.url)) {
+        args = { ...args, path: String(args.key ?? args.url) }
+        delete (args as Record<string, unknown>).key
+        delete (args as Record<string, unknown>).url
+      }
+
+      const output = await toolExecFn(step.tool, args)
 
       // Check if the output indicates an error
       if (output.startsWith("Error:")) {
@@ -285,22 +294,51 @@ async function executeSubagentStep(
   signal?: AbortSignal,
 ): Promise<PipelineStepResult> {
   if (signal?.aborted) {
-    return { name: step.name, status: "failed", error: "Aborted", durationMs: Date.now() - t0 }
+    return { name: step.name, status: "failed", error: "Aborted", failureClass: "cancelled", durationMs: Date.now() - t0 }
   }
 
   try {
     const output = await delegateFn(step, step.executionContext)
 
-    // Check for delegation failure markers
-    if (
-      output.startsWith("Delegation failed:") ||
-      output.includes("DELEGATION INCOMPLETE") ||
-      output.includes("stuck in a tool loop")
-    ) {
+    // agenc-core pattern: typed failure classification.
+    // Classify delegation output to determine retry policy.
+    if (output.startsWith("Delegation failed:")) {
+      const isSpawnError = output.includes("not found") || output.includes("spawn")
       return {
         name: step.name,
         status: "failed",
         error: output,
+        failureClass: isSpawnError ? "spawn_error" : "unknown",
+        durationMs: Date.now() - t0,
+      }
+    }
+
+    if (output.includes("DELEGATION INCOMPLETE")) {
+      return {
+        name: step.name,
+        status: "failed",
+        error: output,
+        failureClass: "budget_exceeded",
+        durationMs: Date.now() - t0,
+      }
+    }
+
+    if (output.includes("stuck in a tool loop")) {
+      return {
+        name: step.name,
+        status: "failed",
+        error: output,
+        failureClass: "tool_misuse",
+        durationMs: Date.now() - t0,
+      }
+    }
+
+    if (output.includes("cancelled") || output.includes("aborted")) {
+      return {
+        name: step.name,
+        status: "failed",
+        error: output,
+        failureClass: "cancelled",
         durationMs: Date.now() - t0,
       }
     }
@@ -312,10 +350,13 @@ async function executeSubagentStep(
       durationMs: Date.now() - t0,
     }
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    const isTransient = /ECONNRESET|ETIMEDOUT|rate.?limit|429|503|overloaded/i.test(errMsg)
     return {
       name: step.name,
       status: "failed",
-      error: err instanceof Error ? err.message : String(err),
+      error: errMsg,
+      failureClass: isTransient ? "transient_provider_error" : "unknown",
       durationMs: Date.now() - t0,
     }
   }
@@ -333,7 +374,48 @@ async function executeSubagentStep(
  *   1. Output summaries from completed dependency steps
  *   2. Workspace root override (use actual value, not LLM-generated)
  *   3. A "ground truth" preamble about what files/artifacts already exist
+ *
+ * agenc-core pattern: dependency summarization extracts modified files,
+ * verified commands, and key output lines rather than raw truncation.
  */
+
+/** Extract file paths mentioned in child output (created/modified). */
+function extractMentionedPaths(output: string): string[] {
+  const paths: string[] = []
+  // Backtick-quoted paths: `path/file.ext`
+  for (const m of output.matchAll(/`([^`\s]+\.[a-zA-Z0-9]+)`/g)) {
+    if (m[1] && m[1].length < 200) paths.push(m[1])
+  }
+  // "created/wrote/modified <path>" patterns
+  for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat)\w*\s+(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+    if (m[1] && m[1].length < 200) paths.push(m[1])
+  }
+  return [...new Set(paths)]
+}
+
+/** Summarize a dependency step's output for downstream consumption. */
+function summarizeDependencyOutput(output: string, maxChars: number): string {
+  const mentionedPaths = extractMentionedPaths(output)
+  const parts: string[] = []
+
+  if (mentionedPaths.length > 0) {
+    parts.push(`Files created/modified: ${mentionedPaths.join(", ")}`)
+  }
+
+  // Extract the first few meaningful lines (skip blanks, markdown headers)
+  const lines = output.split("\n").filter(l => l.trim().length > 0)
+  const meaningfulLines = lines.slice(0, 5).join("\n")
+
+  if (meaningfulLines.length > 0) {
+    const remaining = maxChars - parts.join("\n").length - 20
+    if (remaining > 100) {
+      parts.push(meaningfulLines.slice(0, remaining))
+    }
+  }
+
+  return parts.join("\n") || output.slice(0, maxChars)
+}
+
 function injectPriorContext(
   step: SubagentTaskStep,
   plan: Plan,
@@ -351,8 +433,10 @@ function injectPriorContext(
     if (!depResult) continue
 
     const depStep = plan.steps.find(s => s.name === depName)
+
+    // agenc-core pattern: summarize rather than raw truncate
     const summary = depResult.output
-      ? depResult.output.slice(0, 500)
+      ? summarizeDependencyOutput(depResult.output, 800)
       : `(step ${depResult.status})`
 
     priorSections.push(
@@ -384,17 +468,46 @@ function injectPriorContext(
   // Augment objective with a filesystem grounding reminder
   let objective = step.objective
   if (priorSections.length > 0) {
-    // Collect target artifacts from dependency steps (what they should have created)
+    // Collect ACTUAL file paths from completed dependency outputs.
+    // This is critical: the plan may declare targetArtifacts as "game/index.html"
+    // but the child may have actually written "tmp/game/index.html". Using the
+    // actual paths from the child's output prevents downstream children from
+    // looking for files in the wrong directory.
     const priorArtifacts: string[] = []
     for (const depName of deps) {
+      const depResult = stepResults.get(depName)
       const depStep = plan.steps.find(s => s.name === depName)
+
+      // First: try to extract actual paths from the child's output
+      if (depResult?.output) {
+        const actualPaths = extractMentionedPaths(depResult.output)
+        if (actualPaths.length > 0) {
+          priorArtifacts.push(...actualPaths)
+          continue
+        }
+      }
+
+      // Fallback: use plan-declared targetArtifacts
       if (depStep?.stepType === "subagent_task") {
         const sa = depStep as SubagentTaskStep
         priorArtifacts.push(...sa.executionContext.targetArtifacts)
       }
     }
     if (priorArtifacts.length > 0) {
-      objective = `${objective}\n\nIMPORTANT: Prior steps should have created these files: ${priorArtifacts.join(", ")}. Start by reading them with read_file to verify they exist and understand their contents before making changes.`
+      // Deduplicate
+      const uniqueArtifacts = [...new Set(priorArtifacts)]
+      objective = `${objective}\n\nIMPORTANT: Prior steps should have created these files: ${uniqueArtifacts.join(", ")}. Start by reading them with read_file using these EXACT paths to verify they exist and understand their contents before making changes.`
+
+      // Also update requiredSourceArtifacts in the execution context so that
+      // spawnChildForPlan's "Source Files" section uses the ACTUAL paths
+      const existingSource = new Set(executionContext.requiredSourceArtifacts)
+      for (const artifact of uniqueArtifacts) {
+        existingSource.add(artifact)
+      }
+      executionContext = {
+        ...executionContext,
+        requiredSourceArtifacts: [...existingSource],
+      }
     }
   }
 

@@ -49,8 +49,8 @@ You MUST respond with valid JSON matching this schema:
   "objective": "What the child must accomplish — specific and measurable",
   "inputContract": "What context/inputs are available to the child",
   "acceptanceCriteria": [
-    "Measurable success condition 1",
-    "Measurable success condition 2"
+    "Measurable success condition 1 — must be concrete and verifiable, e.g. 'pieces move according to chess rules' NOT 'game logic is implemented'",
+    "Measurable success condition 2 — must describe FUNCTIONAL behavior, not just file existence"
   ],
   "requiredToolCapabilities": ["write_file", "run_command", "read_file"],
   "contextRequirements": ["needs workspace context", "needs dependency outputs"],
@@ -88,16 +88,19 @@ You MUST respond with valid JSON matching this schema:
 2. Each subagent_task MUST declare which tools it needs in requiredToolCapabilities  
 3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes. If step B writes to a file that step A created, only step B should be write_owner and step A should either not list that artifact or use "read_dependency"
 4. Steps that can run independently SHOULD have canRunParallel: true
-5. SCOPE EACH STEP TO BE COMPLETABLE IN ITS BUDGET. A child agent gets ~20 iterations (tool calls). Each step should be scoped so a competent developer could complete it in that many actions. If a task is too complex for one step (e.g. "build a full chess engine"), split it into focused sub-steps — e.g. one step for core move logic, another for check/checkmate detection, another for the UI. Prefer 3-7 steps. Under-decomposition is worse than over-decomposition.
-6. For web projects: include verification steps (browser_check, test runs)
+5. SCOPE EACH STEP TO BE COMPLETABLE IN ITS BUDGET. A child agent gets ~20 iterations (tool calls). Each step should be scoped so a competent developer could complete it in that many actions. If a task is too complex for one step (e.g. "build a full chess engine"), split it into focused sub-steps — e.g. one step for core move logic, another for check/checkmate detection, another for the UI. Prefer 3-7 steps. Under-decomposition is worse than over-decomposition. HOWEVER — for SMALL tasks (estimated <800 lines of output code total), prefer 1-2 large steps over many small ones. A single child agent with 20 iterations can comfortably write 400-600 lines of code in one go. Do NOT split a small project into skeleton + logic + wiring steps — instead combine them into one step that writes the complete working code. For example, a browser chess game that fits in 2-3 files should be 1-2 steps, not 4+.
+6. DO NOT add a separate "final_verification" or "verify" deterministic_tool step that calls browser_check. Verification is handled AUTOMATICALLY by the system after the pipeline finishes. Instead, set verificationMode on the subagent_task steps that produce verifiable output (e.g. verificationMode: "browser_check" for HTML). Adding a redundant verification step wastes budget and fails because the system verifier runs separately.
 7. workspaceRoot should match the actual working directory
 8. DO NOT produce plans with only read/analysis steps — if the task asks to BUILD something, include write steps
 9. Each step name must be unique across the plan
 10. VERIFICATION REQUIRED: If ANY step writes files (effectClass != "readonly"), at least ONE subagent_task step MUST have verificationMode set to "browser_check", "run_tests", or "deterministic_followup" — never leave ALL steps with verificationMode: "none" when there are writes
-11. A step that writes >200 lines of logic is TOO BIG. Break it down further. Each step's targetArtifacts should be either a single complex file or 2-3 simple files, not more.
+11. A step that writes >200 lines of logic is TOO BIG — UNLESS the entire project is small (<800 LOC). For small projects, a single step CAN write 400-600 lines if it produces a complete, working deliverable. Each step's targetArtifacts should be either a single complex file or 2-3 simple files, not more.
+12. IMPLEMENTATION COMPLETENESS: Every step objective MUST specify that REAL, COMPLETE logic is required — not scaffolding, not placeholders, not stubs. For example, "implement chess move validation" means every piece type has real movement rules, not \`isValidMove() { return true }\`. The verifier WILL read the output files and flag any placeholder patterns (\`return true\` as validation, \`// TODO\`, empty function bodies). Such findings force a retry.
+13. acceptanceCriteria MUST describe FUNCTIONAL behavior ("pawns can only move forward", "clicking a piece highlights legal moves") NOT structural facts ("file exists", "function is defined"). The verifier uses these criteria to judge real quality.
 
 ## CRITICAL: File Paths and Artifact Chains
 - ALL paths in targetArtifacts and requiredSourceArtifacts MUST be relative to workspace root (e.g. "src/app.js", "game/index.html")
+- ALL steps in a plan MUST use the SAME output directory. If step 1 creates "tmp/game/index.html", ALL other steps MUST also put files in "tmp/game/" — NEVER in "game/" or the root. The full directory prefix (including ALL parent directories like "tmp/game/") must be preserved in every path. This is the most critical rule — inconsistent paths cause children to create duplicate files in wrong directories.
 - Each child agent is a SEPARATE process with NO memory of other steps. It does NOT see what other steps did unless artifacts are declared in requiredSourceArtifacts.
 - If step A creates "game/index.html" and step B needs to modify it, step B MUST list "game/index.html" in requiredSourceArtifacts so the child knows to read it first.
 - Use CONSISTENT paths: if step 1 creates "game/index.html", every later step that touches that file must reference "game/index.html" — not "index.html" and not an absolute path.
@@ -199,6 +202,18 @@ export async function generatePlan(
       // Parse the JSON plan
       const parsed = parsePlanFromResponse(rawResponse)
       if (!parsed.plan) {
+        // agenc-core pattern: attempt to salvage a plan from partial/malformed response
+        const salvaged = salvagePlanFromMalformedResponse(rawResponse, ctx.workspaceRoot)
+        if (salvaged) {
+          diagnostics.push({
+            category: "parse",
+            code: "salvaged_from_malformed",
+            message: "Plan was salvaged from malformed planner response",
+            details: { attempt },
+          })
+          return { plan: normalizeWorkspaceRoots(salvaged, ctx.workspaceRoot), diagnostics, rawResponse }
+        }
+
         diagnostics.push(...parsed.diagnostics)
         refinementHint = parsed.diagnostics.map(d => d.message).join("\n")
         continue
@@ -250,6 +265,27 @@ function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
     if (step.stepType !== "subagent_task") return step
 
     const sa = step as SubagentTaskStep
+    const originalRoot = sa.executionContext.workspaceRoot
+
+    // If the LLM generated a relative workspaceRoot (e.g. "tmp", "game/src"),
+    // targetArtifacts and other paths are relative to THAT subdirectory.
+    // When we replace workspaceRoot with the actual root, we must prefix those
+    // paths so they remain correct.
+    const needsPrefix = originalRoot
+      && originalRoot !== "."
+      && originalRoot !== "./"
+      && !originalRoot.startsWith("/")
+      && originalRoot !== actualRoot
+
+    const prefixPath = (p: string): string => {
+      if (!needsPrefix) return p
+      // Don't double-prefix if already starts with the original root
+      if (p.startsWith(originalRoot + "/") || p === originalRoot) return p
+      // Don't prefix absolute paths
+      if (p.startsWith("/")) return p
+      return `${originalRoot}/${p}`
+    }
+
     return {
       ...sa,
       executionContext: {
@@ -261,11 +297,55 @@ function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
         allowedWriteRoots: sa.executionContext.allowedWriteRoots.map(r =>
           r === "." || r === "./" ? actualRoot : r,
         ),
+        targetArtifacts: sa.executionContext.targetArtifacts.map(prefixPath),
+        requiredSourceArtifacts: sa.executionContext.requiredSourceArtifacts.map(prefixPath),
+        artifactRelations: sa.executionContext.artifactRelations.map(rel => ({
+          ...rel,
+          artifactPath: prefixPath(rel.artifactPath),
+        })),
       },
+      // Also fix workflowStep artifact relations if present
+      ...(sa.workflowStep ? {
+        workflowStep: {
+          ...sa.workflowStep,
+          artifactRelations: sa.workflowStep.artifactRelations.map(rel => ({
+            ...rel,
+            artifactPath: prefixPath(rel.artifactPath),
+          })),
+        },
+      } : {}),
     }
   })
 
   return { ...plan, steps: normalizedSteps }
+}
+
+// ============================================================================
+// Plan salvage from malformed responses (agenc-core pattern)
+// ============================================================================
+
+/**
+ * When the planner returns something that can't parse as a full plan,
+ * try to extract any usable file-write or tool-call info and salvage it
+ * into a minimal single-step plan. This prevents total failure when the
+ * planner's JSON is slightly malformed or wrapped in prose.
+ */
+function salvagePlanFromMalformedResponse(raw: string, _workspaceRoot: string): Plan | null {
+  // Try harder: find any JSON object buried in the response
+  const jsonMatches = raw.match(/\{[\s\S]*?"steps"\s*:\s*\[[\s\S]*?\]\s*[\s\S]*?\}/g)
+  if (jsonMatches) {
+    for (const candidate of jsonMatches) {
+      try {
+        const obj = JSON.parse(candidate) as Record<string, unknown>
+        if (Array.isArray(obj.steps) && obj.steps.length > 0) {
+          const inner = parsePlanFromResponse(candidate)
+          if (inner.plan) return inner.plan
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  return null
 }
 
 // ============================================================================
@@ -407,11 +487,22 @@ function parsePlanFromResponse(raw: string): {
     }
   }
 
+  // Auto-fix: ensure artifact paths include the output directory prefix.
+  // The LLM often puts "game_logic.js" in targetArtifacts while the objective
+  // says "write to tmp/game_logic.js" — causing the verifier to look in the
+  // wrong place. Detect the common output directory from objectives and fix paths.
+  normalizeArtifactDirectories(steps)
+
   // Auto-fix: ensure verification coverage on write plans
   ensureVerificationCoverage(steps)
 
   // Auto-fix: deduplicate write ownership per artifact
   deduplicateWriteOwnership(steps)
+
+  // Auto-fix: strip redundant verification deterministic_tool steps.
+  // The system verifier runs automatically; planner-generated browser_check
+  // deterministic steps are redundant and fail (wrong arg names, path issues).
+  stripRedundantVerificationSteps(steps, edges)
 
   const plan: Plan = {
     reason: String(data.reason ?? "planner_generated"),
@@ -557,6 +648,109 @@ function parseArtifactRelations(value: unknown): Array<{ relationType: "read_dep
 }
 
 // ============================================================================
+// Auto-fix: normalise artifact directory prefixes
+// ============================================================================
+
+/**
+ * The LLM often generates targetArtifacts without the output-directory prefix
+ * even though the child should write to a subdirectory. Two detection strategies:
+ *
+ * 1. If allowedWriteRoots specifies a subdirectory of workspaceRoot, and
+ *    targetArtifacts are bare filenames, prefix them with that subdirectory.
+ *
+ * 2. Scan objective + acceptanceCriteria for paths like "dir/filename" where
+ *    the filename matches a targetArtifact.
+ */
+function normalizeArtifactDirectories(steps: PlanStep[]): void {
+  for (let si = 0; si < steps.length; si++) {
+    const step = steps[si]
+    if (step.stepType !== "subagent_task") continue
+    const sa = step as SubagentTaskStep
+    const ctx = sa.executionContext
+    if (!ctx?.targetArtifacts?.length) continue
+
+    const newArtifacts = [...ctx.targetArtifacts]
+    const newRelations = ctx.artifactRelations ? [...ctx.artifactRelations] : undefined
+    let changed = false
+
+    // Strategy 1: derive prefix from allowedWriteRoots
+    // If there's exactly one write root that is a subdirectory of workspaceRoot,
+    // use it as the prefix for bare-filename artifacts.
+    let writePrefix: string | null = null
+    if (ctx.allowedWriteRoots?.length) {
+      const wsRoot = ctx.workspaceRoot.replace(/\/$/, "")
+      for (const wr of ctx.allowedWriteRoots) {
+        const norm = wr.replace(/\/$/, "")
+        if (norm !== wsRoot && norm !== "." && norm !== "./" && norm.startsWith(wsRoot + "/")) {
+          // e.g. wsRoot="/Users/x/project", wr="/Users/x/project/tmp" → prefix="tmp"
+          writePrefix = norm.slice(wsRoot.length + 1)
+          break
+        }
+        // Also handle relative paths like "tmp"
+        if (!norm.startsWith("/") && norm !== "." && norm !== "./") {
+          writePrefix = norm
+          break
+        }
+      }
+    }
+
+    if (writePrefix) {
+      for (let i = 0; i < newArtifacts.length; i++) {
+        const art = newArtifacts[i]
+        if (!art.includes("/")) {
+          const prefixed = `${writePrefix}/${art}`
+          newArtifacts[i] = prefixed
+          changed = true
+          if (newRelations) {
+            for (let ri = 0; ri < newRelations.length; ri++) {
+              if (newRelations[ri].artifactPath === art) {
+                newRelations[ri] = { ...newRelations[ri], artifactPath: prefixed }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Strategy 2: scan objective text for "dir/filename" patterns
+    if (!changed) {
+      const textBlob = [
+        sa.objective ?? "",
+        ...(sa.acceptanceCriteria ?? []),
+      ].join(" ")
+
+      for (let i = 0; i < newArtifacts.length; i++) {
+        const art = newArtifacts[i]
+        if (art.includes("/")) continue
+        const escaped = art.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        const m = textBlob.match(new RegExp(`(\\b[\\w.-]+/)${escaped}\\b`))
+        if (m) {
+          const prefixed = m[1] + art
+          newArtifacts[i] = prefixed
+          changed = true
+          if (newRelations) {
+            for (let ri = 0; ri < newRelations.length; ri++) {
+              if (newRelations[ri].artifactPath === art) {
+                newRelations[ri] = { ...newRelations[ri], artifactPath: prefixed }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      const newCtx = {
+        ...ctx,
+        targetArtifacts: newArtifacts,
+        ...(newRelations ? { artifactRelations: newRelations } : {}),
+      }
+      steps[si] = { ...sa, executionContext: newCtx } as SubagentTaskStep
+    }
+  }
+}
+
+// ============================================================================
 // Auto-fix: deduplicate write ownership
 // ============================================================================
 
@@ -564,6 +758,62 @@ function parseArtifactRelations(value: unknown): Array<{ relationType: "read_dep
  * If multiple steps claim write_owner on the same artifact, keep only the
  * last one in step order (the downstream implementor) and downgrade earlier
  * ones to read_dependency. This prevents the multiple_write_owners
+// ============================================================================
+// Auto-fix: strip redundant verification deterministic_tool steps
+// ============================================================================
+
+/**
+ * Remove deterministic_tool steps that just call browser_check or similar
+ * verification tools. The system verifier handles this automatically after
+ * the pipeline finishes. Planner-generated verification steps are redundant,
+ * waste an iteration, and often fail due to incorrect parameter names.
+ */
+function stripRedundantVerificationSteps(steps: PlanStep[], edges: PlanEdge[]): void {
+  const verifyToolNames = new Set(["browser_check"])
+  const toRemove = new Set<string>()
+
+  for (const step of steps) {
+    if (step.stepType === "deterministic_tool") {
+      const dt = step as DeterministicToolStep
+      if (verifyToolNames.has(dt.tool)) {
+        toRemove.add(step.name)
+      }
+    }
+  }
+
+  if (toRemove.size === 0) return
+
+  // Remove the steps
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (toRemove.has(steps[i].name)) {
+      steps.splice(i, 1)
+    }
+  }
+
+  // Remove edges referencing removed steps
+  for (let i = edges.length - 1; i >= 0; i--) {
+    if (toRemove.has(edges[i].from) || toRemove.has(edges[i].to)) {
+      edges.splice(i, 1)
+    }
+  }
+
+  // Clean up dependsOn references
+  for (const step of steps) {
+    if (step.dependsOn) {
+      const filtered = step.dependsOn.filter(d => !toRemove.has(d))
+      ;(step as unknown as { dependsOn: string[] }).dependsOn = filtered
+    }
+  }
+}
+
+// ============================================================================
+// Auto-fix: write ownership deduplication
+// ============================================================================
+
+/**
+ * If multiple steps claim "write_owner" for the same artifact, keep only
+ * the LAST one (which will overwrite) and downgrade earlier ones to
+ * "read_dependency". This prevents the duplicate_write_owner
  * validation failure when the LLM duplicates ownership.
  */
 function deduplicateWriteOwnership(steps: PlanStep[]): void {

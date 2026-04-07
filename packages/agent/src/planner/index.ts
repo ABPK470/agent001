@@ -28,61 +28,16 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArtifactRelation, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, StepRole, SubagentTaskStep, VerificationMode, VerifierDecision, VerifierOutcome,
+    ArtifactRelation, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationMode, VerifierDecision, VerifierOutcome,
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
+import type { LLMClient, Message, Tool } from "../types.js"
 import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
 import type { PipelineResult, Plan, VerifierDecision } from "./types.js"
-
-/** Wrap an LLMClient to emit llm-request / llm-response trace entries. */
-function tracingLlm(
-  llm: LLMClient,
-  onTrace: (entry: Record<string, unknown>) => void,
-  label: string,
-): LLMClient {
-  let callCounter = 0
-  return {
-    async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse> {
-      const iteration = ++callCounter
-      const serMessages = messages.map(m => ({
-        role: m.role,
-        content: m.content ?? null,
-        toolCalls: (m.toolCalls ?? []).map((tc: ToolCall) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
-        toolCallId: m.toolCallId ?? null,
-      }))
-
-      onTrace({
-        kind: "llm-request",
-        iteration,
-        messageCount: messages.length,
-        toolCount: tools.length,
-        messages: serMessages,
-        label,
-      })
-
-      const start = Date.now()
-      const response = await llm.chat(messages, tools, opts)
-      const durationMs = Date.now() - start
-
-      onTrace({
-        kind: "llm-response",
-        iteration,
-        durationMs,
-        content: response.content,
-        toolCalls: response.toolCalls.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
-        usage: response.usage ?? null,
-        label,
-      })
-
-      return response
-    },
-  }
-}
 import { validatePlan } from "./validate.js"
 import { verify } from "./verifier.js"
 
@@ -174,7 +129,8 @@ export async function executePlannerPath(
     kind: "planner-plan-generated",
     reason: plan.reason,
     stepCount: plan.steps.length,
-    steps: plan.steps.map(s => ({ name: s.name, type: s.stepType })),
+    steps: plan.steps.map(s => ({ name: s.name, type: s.stepType, dependsOn: s.dependsOn ? [...s.dependsOn] : undefined })),
+    edges: plan.edges.map(e => ({ from: e.from, to: e.to })),
   })
 
   // Step 3: Validate plan
@@ -192,13 +148,19 @@ export async function executePlannerPath(
     }
   }
 
-  // Step 4: Execute pipeline (with retry)
+  // Step 4: Execute pipeline with verifier loop (agenc-core pattern)
+  // Track execution rounds and verifier rounds separately.
+  // Verifier runs deterministic probes each round; retries only if retryable steps exist.
+  const MAX_VERIFIER_ROUNDS = MAX_PIPELINE_RETRIES + 1
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined
   let retryOpts: {
     priorResults?: Map<string, import("./types.js").PipelineStepResult>
     retryFeedback?: Map<string, string[]>
   } = {}
+  let verifierRounds = 0
+  // Track issues per step across attempts to detect repeated identical failures
+  const priorStepIssues = new Map<string, string>()
 
   for (let attempt = 0; attempt <= MAX_PIPELINE_RETRIES; attempt++) {
     if (ctx.signal?.aborted) {
@@ -208,6 +170,7 @@ export async function executePlannerPath(
     ctx.onTrace?.({
       kind: "planner-pipeline-start",
       attempt: attempt + 1,
+      verifierRound: verifierRounds,
       maxRetries: MAX_PIPELINE_RETRIES + 1,
     })
 
@@ -248,13 +211,14 @@ export async function executePlannerPath(
       plan,
       pipelineResult,
       ctx.tools as Tool[],
-      { signal: ctx.signal },
+      { signal: ctx.signal, onTrace: ctx.onTrace },
     )
 
     ctx.onTrace?.({
       kind: "planner-verification",
       overall: verifierDecision.overall,
       confidence: verifierDecision.confidence,
+      verifierRound: verifierRounds + 1,
       steps: verifierDecision.steps.map(s => ({
         stepName: s.stepName,
         outcome: s.outcome,
@@ -262,38 +226,80 @@ export async function executePlannerPath(
       })),
     })
 
+    verifierRounds++
+
     if (verifierDecision.overall === "pass") {
       break
     }
 
-    // Accept "retry" with sufficient confidence — the pipeline completed and issues are minor
-    if (verifierDecision.overall === "retry"
-      && verifierDecision.confidence >= 0.65
-      && pipelineResult.status === "completed") {
-      ctx.onTrace?.({
-        kind: "planner-retry-skipped",
-        reason: `confidence ${verifierDecision.confidence.toFixed(2)} >= 0.65 with completed pipeline — accepting`,
-      })
-      break
-    }
+    // agenc-core pattern: strict retry gating.
+    // Only retry if:
+    //   1. We haven't exceeded max verifier rounds
+    //   2. There are retryable steps
+    //   3. Confidence is below threshold OR overall is "retry"
+    const hasRetryableSteps = verifierDecision.steps.some(
+      s => s.outcome !== "pass" && s.retryable !== false,
+    )
+    const canRetry = (
+      verifierRounds < MAX_VERIFIER_ROUNDS &&
+      hasRetryableSteps &&
+      (verifierDecision.overall === "retry" || verifierDecision.confidence < 0.65)
+    )
 
-    if (verifierDecision.overall === "fail" || attempt === MAX_PIPELINE_RETRIES) {
-      // Can't recover
+    if (!canRetry || attempt === MAX_PIPELINE_RETRIES) {
+      // Can't recover: no retryable steps, verifier rounds exhausted, or budget exhausted
       break
     }
 
     // Build targeted retry context from verifier feedback
     const priorResults = new Map<string, import("./types.js").PipelineStepResult>()
     const retryFeedback = new Map<string, string[]>()
+    const NON_RETRYABLE_CLASSES = new Set(["cancelled", "spawn_error"])
+
+    // Detect repeated identical failures — if a step produces the same issues
+    // as the previous attempt, further retries won't help (LLM is stuck).
+    let allStepsRepeatedFailure = true
+
     for (const stepAssessment of verifierDecision.steps) {
       const stepResult = pipelineResult.stepResults.get(stepAssessment.stepName)
+
+      // Check if this step's issues are identical to the previous attempt
+      const issueKey = [...stepAssessment.issues].sort().join("|")
+      const prevIssueKey = priorStepIssues.get(stepAssessment.stepName)
+
       if (stepAssessment.outcome === "pass" && stepResult) {
-        // Reuse verified-pass step results — don't re-run them
+        priorResults.set(stepAssessment.stepName, stepResult)
+        priorStepIssues.delete(stepAssessment.stepName)
+      } else if (stepResult?.failureClass && NON_RETRYABLE_CLASSES.has(stepResult.failureClass)) {
         priorResults.set(stepAssessment.stepName, stepResult)
       } else if (stepAssessment.issues.length > 0) {
-        // Send verifier feedback to steps that need retry
-        retryFeedback.set(stepAssessment.stepName, [...stepAssessment.issues])
+        if (prevIssueKey === issueKey) {
+          // Same issues as last time — this step is stuck, skip it
+          ctx.onTrace?.({
+            kind: "planner-retry-skip",
+            stepName: stepAssessment.stepName,
+            reason: "Repeated identical failure — further retries won't help",
+          })
+          if (stepResult) {
+            priorResults.set(stepAssessment.stepName, stepResult)
+          }
+        } else {
+          retryFeedback.set(stepAssessment.stepName, [...stepAssessment.issues])
+          allStepsRepeatedFailure = false
+        }
+        priorStepIssues.set(stepAssessment.stepName, issueKey)
+      } else {
+        allStepsRepeatedFailure = false
       }
+    }
+
+    // If every failing step has repeated identical issues, stop retrying entirely
+    if (allStepsRepeatedFailure && retryFeedback.size === 0) {
+      ctx.onTrace?.({
+        kind: "planner-retry-abort",
+        reason: "All failing steps have repeated identical issues — aborting retries",
+      })
+      break
     }
 
     ctx.onTrace?.({

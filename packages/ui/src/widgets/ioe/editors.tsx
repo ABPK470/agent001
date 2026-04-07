@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-  C,
-  fmtK,
-  statusDot,
-  type EditorTab,
+    C,
+    fmtK,
+    statusDot,
+    type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1749,6 +1749,8 @@ function ResponseSection2({ response: resp }: {
   const usageStr = usage
     ? `${fmtTokens(usage.promptTokens)} prompt + ${fmtTokens(usage.completionTokens)} completion = ${fmtTokens(usage.totalTokens)} total`
     : null
+  const tcCount = resp.toolCalls.length
+  const tcStr = tcCount > 0 ? `→ ${tcCount} tool call${tcCount > 1 ? "s" : ""}` : null
 
   return (
     <div>
@@ -1764,9 +1766,9 @@ function ResponseSection2({ response: resp }: {
           {open ? "▾" : "▸"}
         </span>
         <span className="font-semibold" style={{ color: C.success }}>RESPONSE</span>
-        <span style={{ color: C.dim }}>{[usageStr, `${resp.durationMs}ms`].filter(Boolean).join(" · ")}</span>
+        <span style={{ color: C.dim }}>{[usageStr, `${resp.durationMs}ms`, tcStr].filter(Boolean).join(" · ")}</span>
       </div>
-      {open && (
+      {open && (resp.content || resp.toolCalls.length > 0) && (
         <div className="ml-3 py-1 space-y-1" style={{ borderLeft: `1px solid ${C.border}` }}>
           {resp.content && (
             <div className="px-2">
@@ -1776,9 +1778,9 @@ function ResponseSection2({ response: resp }: {
           )}
           {resp.toolCalls.length > 0 && (
             <div className="px-2">
-              <div style={{ color: C.dim }} className="mb-0.5">tool_calls:</div>
-              {resp.toolCalls.map((tc, tci) => (
-                <ToolCallInline key={tc.id || `tc-${tci}`} tc={tc} />
+              <div style={{ color: C.dim }} className="mb-0.5">tool calls:</div>
+              {resp.toolCalls.map((tc, i) => (
+                <ToolCallInline key={tc.id || `tc-${i}`} tc={tc} />
               ))}
             </div>
           )}
@@ -2157,7 +2159,7 @@ function mapToolLabel(id: string): string {
 
 interface MapNode {
   id: string
-  type: "agent" | "tool" | "delegate" | "planstep"
+  type: "agent" | "tool" | "delegate" | "planstep" | "planner-child"
   label: string
   color: string
   agentId?: string
@@ -2165,6 +2167,9 @@ interface MapNode {
   delegateDepth?: number
   delegateStatus?: "active" | "done" | "error"
   planStepType?: string
+  plannerChildGoal?: string
+  plannerChildTools?: string[]
+  plannerChildUsedTools?: string[]
   val?: number
   x?: number
   y?: number
@@ -2278,7 +2283,7 @@ export function MapPanel({
   const tracePlanSteps = useMemo(() => {
     const all: Array<{ key: string; name: string; type: string; status: "active" | "done" | "error" }> = []
     for (const e of trace) {
-      if (e.kind === "planner-step-start") {
+      if (e.kind === "planner-step-start" && e.stepType !== "subagent_task") {
         all.push({ key: `ps${all.length}`, name: e.stepName, type: e.stepType, status: "active" })
       } else if (e.kind === "planner-step-end") {
         for (let j = all.length - 1; j >= 0; j--) {
@@ -2295,6 +2300,104 @@ export function MapPanel({
     return all
   }, [trace])
 
+  // Stabilised planner child agents (subagent_task delegations)
+  const prevPlanChildRef = useRef<Array<{
+    key: string; name: string; goal: string; tools: string[];
+    usedTools: string[]; status: "active" | "done" | "error"
+  }>>([])
+  const tracePlannerChildren = useMemo(() => {
+    const all: Array<{
+      key: string; name: string; goal: string; tools: string[];
+      usedTools: string[]; status: "active" | "done" | "error"
+    }> = []
+    const activeByStep = new Map<string, number>()
+    let lastActiveStep: string | null = null
+    for (const e of trace) {
+      if (e.kind === "planner-delegation-start") {
+        const idx = all.length
+        all.push({
+          key: `pc${idx}`, name: e.stepName, goal: e.goal,
+          tools: e.tools, usedTools: [], status: "active",
+        })
+        activeByStep.set(e.stepName, idx)
+        lastActiveStep = e.stepName
+      } else if (e.kind === "planner-delegation-end") {
+        const idx = activeByStep.get(e.stepName)
+        if (idx != null) {
+          all[idx].status = e.status === "done" ? "done" : "error"
+          activeByStep.delete(e.stepName)
+          if (lastActiveStep === e.stepName) lastActiveStep = null
+        }
+      } else if (e.kind === "planner-delegation-iteration") {
+        lastActiveStep = e.stepName
+      } else if (e.kind === "llm-response" && lastActiveStep != null) {
+        const idx = activeByStep.get(lastActiveStep)
+        if (idx != null && e.toolCalls) {
+          for (const tc of e.toolCalls) {
+            if (!all[idx].usedTools.includes(tc.name)) {
+              all[idx].usedTools.push(tc.name)
+            }
+          }
+        }
+      }
+    }
+    const prev = prevPlanChildRef.current
+    if (prev.length === all.length && prev.every((c, i) =>
+      c.key === all[i].key && c.status === all[i].status &&
+      c.usedTools.length === all[i].usedTools.length
+    )) return prev
+    prevPlanChildRef.current = all
+    return all
+  }, [trace])
+
+  // Extract plan DAG from trace (if planner generated a plan)
+  const planDag = useMemo(() => {
+    for (const e of trace) {
+      if (e.kind === "planner-plan-generated") {
+        const edges: Array<{ from: string; to: string }> = e.edges ?? []
+        // Fallback: derive edges from dependsOn if edges not emitted
+        if (edges.length === 0) {
+          for (const step of e.steps) {
+            if (step.dependsOn) {
+              for (const dep of step.dependsOn) {
+                edges.push({ from: dep, to: step.name })
+              }
+            }
+          }
+        }
+        return { steps: e.steps, edges }
+      }
+    }
+    return null
+  }, [trace])
+
+  // Unified step status tracking for DAG view
+  const planStepStatuses = useMemo(() => {
+    const statuses = new Map<string, {
+      status: "pending" | "active" | "done" | "error"
+      iteration?: number; maxIterations?: number; durationMs?: number
+    }>()
+    for (const e of trace) {
+      if (e.kind === "planner-step-start") {
+        statuses.set(e.stepName, { status: "active" })
+      } else if (e.kind === "planner-step-end") {
+        const existing = statuses.get(e.stepName)
+        statuses.set(e.stepName, {
+          status: e.status === "completed" ? "done" : "error",
+          iteration: existing?.iteration, maxIterations: existing?.maxIterations,
+          durationMs: e.durationMs,
+        })
+      } else if (e.kind === "planner-delegation-iteration") {
+        const existing = statuses.get(e.stepName)
+        if (existing) {
+          existing.iteration = e.iteration
+          existing.maxIterations = e.maxIterations
+        }
+      }
+    }
+    return statuses
+  }, [trace])
+
   const hasRunContext = activeAgentId != null && trace.length > 0
 
   // Build graph — stabilised topology
@@ -2304,6 +2407,60 @@ export function MapPanel({
     const links: MapLink[] = []
     const toolNodeIds = new Set<string>()
 
+    if (planDag) {
+      // ═══ WORKFLOW DAG MODE ═══
+      // When the planner generated a plan, show it as a proper top-down workflow DAG.
+      // Agent at top → steps connected by dependency edges → no tool clutter.
+      const agentDef = agents.find(a => a.id === activeAgentId) ?? agents[0]
+      const agentColor = AGENT_COLORS[0]
+      const agentNodeId = `agent:${agentDef?.id ?? "0"}`
+
+      nodes.push({
+        id: agentNodeId, type: "agent", label: agentDef?.name ?? "Agent",
+        color: agentColor, agentId: agentDef?.id, val: 6,
+      })
+
+      const hasIncoming = new Set(planDag.edges.map(e => e.to))
+
+      for (const step of planDag.steps) {
+        const nodeId = `step:${step.name}`
+        const isChild = step.type === "subagent_task"
+        const stepStatus = planStepStatuses.get(step.name)
+        const childData = tracePlannerChildren.find(c => c.name === step.name)
+
+        nodes.push({
+          id: nodeId,
+          type: isChild ? "planner-child" : "planstep",
+          label: step.name,
+          color: stepStatus?.status === "error" ? C.coral : "#A78BFA",
+          delegateStatus: stepStatus?.status === "active" ? "active" : stepStatus?.status === "done" ? "done" : stepStatus?.status === "error" ? "error" : undefined,
+          planStepType: step.type,
+          plannerChildGoal: childData?.goal,
+          plannerChildTools: childData?.tools,
+          plannerChildUsedTools: childData?.usedTools,
+          val: isChild ? 5 : 4,
+        })
+
+        // Root steps (no incoming edges) link from the agent
+        if (!hasIncoming.has(step.name)) {
+          links.push({
+            source: agentNodeId, target: nodeId,
+            agentId: agentDef?.id ?? "", color: agentColor + "50",
+          })
+        }
+      }
+
+      // DAG dependency edges between steps
+      for (const edge of planDag.edges) {
+        const fromStatus = planStepStatuses.get(edge.from)?.status
+        const edgeColor = fromStatus === "done" ? C.success + "40" : fromStatus === "error" ? C.coral + "40" : "#A78BFA30"
+        links.push({
+          source: `step:${edge.from}`, target: `step:${edge.to}`,
+          agentId: "", color: edgeColor,
+        })
+      }
+    } else {
+      // ═══ FORCE-DIRECTED MODE (no planner) ═══
     agents.forEach((agent, idx) => {
       const agentColor = AGENT_COLORS[idx % AGENT_COLORS.length]
       const agentNodeId = `agent:${agent.id}`
@@ -2366,12 +2523,12 @@ export function MapPanel({
       }
     }
 
-    // Planner step nodes
+    // Planner deterministic step nodes (small rectangles for inline tool executions)
     for (const ps of tracePlanSteps) {
       const psId = `planstep:${ps.key}`
       const color = ps.status === "active" ? "#C084FC" : ps.status === "error" ? C.coral : "#C084FC"
       nodes.push({
-        id: psId, type: "planstep", label: ps.name.slice(0, 8), color,
+        id: psId, type: "planstep", label: ps.name, color,
         delegateDepth: 1, delegateStatus: ps.status, planStepType: ps.type,
         val: 3, x: -30, y: (agents.length + traceDelegations.length + tracePlanSteps.indexOf(ps)) * 50,
       })
@@ -2380,11 +2537,54 @@ export function MapPanel({
       }
     }
 
-    // Structural comparison
+    // Planner child agent nodes (circles — spawned subagent_task delegations)
+    for (const pc of tracePlannerChildren) {
+      const pcId = `planner-child:${pc.key}`
+      const baseColor = "#A78BFA"
+      const color = pc.status === "error" ? C.coral : baseColor
+      const childIdx = tracePlannerChildren.indexOf(pc)
+      nodes.push({
+        id: pcId, type: "planner-child", label: pc.name, color,
+        delegateStatus: pc.status,
+        plannerChildGoal: pc.goal,
+        plannerChildTools: pc.tools,
+        plannerChildUsedTools: pc.usedTools,
+        val: 5, x: -20,
+        y: (agents.length + traceDelegations.length + tracePlanSteps.length + childIdx - 1) * 50,
+      })
+      // Link from main agent → child (spawning relationship)
+      if (activeAgentId) {
+        links.push({
+          source: `agent:${activeAgentId}`, target: pcId,
+          agentId: activeAgentId, color: color + "80",
+        })
+      }
+      // Links from child → tools it actually used (or assigned tools if none used yet)
+      const toolsToShow = pc.usedTools.length > 0 ? pc.usedTools : pc.tools
+      for (const toolName of toolsToShow) {
+        if (toolName === "delegate" || toolName === "delegate_parallel") continue
+        const toolNodeId = `tool:${toolName}`
+        if (!toolNodeIds.has(toolNodeId)) {
+          const toolIdx = toolNodeIds.size
+          toolNodeIds.add(toolNodeId)
+          nodes.push({
+            id: toolNodeId, type: "tool", label: mapToolLabel(toolName), color: C.dim,
+            toolId: toolName, val: 3, x: 60, y: (toolIdx - 2.5) * 40,
+          })
+        }
+        links.push({
+          source: pcId, target: toolNodeId,
+          agentId: activeAgentId ?? "", color: color + "50",
+        })
+      }
+    }
+    } // end else (force-directed mode)
+
+    // Structural comparison (includes status + color so state changes trigger repaint)
     const prev = prevGraphRef.current
-    const nk = nodes.map(n => n.id).join("\0")
+    const nk = nodes.map(n => `${n.id}|${n.delegateStatus ?? ""}|${n.color}`).join("\0")
     const lk = links.map(l => `${l.source}\0${l.target}`).join("\0")
-    const pnk = prev.nodes.map(n => n.id).join("\0")
+    const pnk = prev.nodes.map(n => `${n.id}|${n.delegateStatus ?? ""}|${n.color}`).join("\0")
     const plk = prev.links.map(l => {
       const s = typeof l.source === "string" ? l.source : (l.source as MapNode).id
       const t = typeof l.target === "string" ? l.target : (l.target as MapNode).id
@@ -2393,7 +2593,7 @@ export function MapPanel({
     if (nk === pnk && lk === plk) return prev
     prevGraphRef.current = { nodes, links }
     return { nodes, links }
-  }, [agents, traceDelegations, tracePlanSteps, activeAgentId, involvedToolIds])
+  }, [agents, traceDelegations, tracePlanSteps, tracePlannerChildren, activeAgentId, involvedToolIds, planDag, planStepStatuses])
 
   // Set of currently-running tool IDs (for highlighting)
   const activeToolSet = useMemo(() => {
@@ -2402,21 +2602,27 @@ export function MapPanel({
     return set
   }, [toolStats])
 
-  // Animate while tools are running — keeps canvas repainting
+  // Check if any planner step is currently active (for spinner animation)
+  const hasActiveStep = useMemo(() => {
+    for (const [, s] of planStepStatuses) { if (s.status === "active") return true }
+    return false
+  }, [planStepStatuses])
+
+  // Animate while tools are running or steps are active — keeps canvas repainting
   useEffect(() => {
-    if (activeToolSet.size === 0) return
+    if (activeToolSet.size === 0 && !hasActiveStep) return
     let running = true
     const tick = () => {
       if (!running) return
       animPhaseRef.current = Date.now()
       // Briefly reheat to force a repaint frame; very low alpha so nodes barely move
       const fg = graphRef.current
-      if (fg) { fg.d3ReheatSimulation(); fg.d3Force("charge")?.strength(-120) }
+      if (fg) { fg.d3ReheatSimulation(); fg.d3Force("charge")?.strength(planDag ? -250 : -120) }
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => { running = false; cancelAnimationFrame(rafRef.current) }
-  }, [activeToolSet.size])
+  }, [activeToolSet.size, hasActiveStep, planDag])
 
   // Track new tool calls for edge flash
   useEffect(() => {
@@ -2428,20 +2634,27 @@ export function MapPanel({
   useEffect(() => {
     const fg = graphRef.current
     if (!fg) return
-    fg.d3Force("link")?.distance(55).strength(0.2)
-    fg.d3Force("charge")?.strength(-120).distanceMax(200)
-    let forceNodes: NodeObject<MapNode>[] = []
-    const xBias = (alpha: number) => {
-      for (const node of forceNodes) {
-        if (node.fx != null) continue
-        const target = node.type === "agent" ? -60 : node.type === "delegate" ? -30 : 60
-        node.vx = (node.vx ?? 0) + (target - (node.x ?? 0)) * 0.02 * alpha
+    if (planDag) {
+      // DAG mode: wider spacing, no xBias
+      fg.d3Force("xBias", null)
+      fg.d3Force("link")?.distance(70).strength(0.4)
+      fg.d3Force("charge")?.strength(-250).distanceMax(400)
+    } else {
+      fg.d3Force("link")?.distance(55).strength(0.2)
+      fg.d3Force("charge")?.strength(-120).distanceMax(200)
+      let forceNodes: NodeObject<MapNode>[] = []
+      const xBias = (alpha: number) => {
+        for (const node of forceNodes) {
+          if (node.fx != null) continue
+          const target = node.type === "agent" ? -60 : node.type === "planner-child" ? -20 : node.type === "delegate" || node.type === "planstep" ? -30 : 60
+          node.vx = (node.vx ?? 0) + (target - (node.x ?? 0)) * 0.02 * alpha
+        }
       }
+      xBias.initialize = (nodes: NodeObject<MapNode>[]) => { forceNodes = nodes }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fg.d3Force("xBias", xBias as any)
     }
-    xBias.initialize = (nodes: NodeObject<MapNode>[]) => { forceNodes = nodes }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fg.d3Force("xBias", xBias as any)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planDag]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fit to view
   useEffect(() => {
@@ -2456,7 +2669,7 @@ export function MapPanel({
       }, 450)
     }, 300)
     return () => clearTimeout(timer)
-  }, [agents.length])
+  }, [agents.length, planDag])
 
   // Track zoom
   const handleZoom = useCallback((transform: { k: number }) => {
@@ -2470,36 +2683,47 @@ export function MapPanel({
   const paintNode = useCallback((node: NodeObject<MapNode>, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const x = node.x ?? 0
     const y = node.y ?? 0
-    const r = node.type === "agent" ? 10 : node.type === "delegate" || node.type === "planstep" ? 8 : 7
+    const r = node.type === "agent" || node.type === "planner-child" ? 10 : node.type === "delegate" || node.type === "planstep" ? 8 : 7
 
     if (node.type === "delegate") {
       const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
-      const opacity = isDone ? "66" : "cc"
+      const fillColor = node.delegateStatus === "error" ? C.coral + "30" : isDone ? C.success + "25" : "#342F57cc"
+      const strokeColor = node.delegateStatus === "error" ? C.coral + "aa" : isDone ? C.success + "66" : node.color + "bb"
       ctx.save()
       ctx.translate(x, y)
       ctx.rotate(Math.PI / 4)
-      ctx.fillStyle = "#342F57" + opacity
+      ctx.fillStyle = fillColor
       ctx.fillRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
-      ctx.strokeStyle = node.color + (isDone ? "55" : "bb")
+      ctx.strokeStyle = strokeColor
       ctx.lineWidth = 1.2
       ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
-      if (isDone) {
-        ctx.restore()
-        ctx.font = `${Math.max(4, 10 / globalScale)}px sans-serif`
-        ctx.fillStyle = (node.delegateStatus === "error" ? C.coral : C.success) + "aa"
-        ctx.textAlign = "center"; ctx.textBaseline = "middle"
-        ctx.fillText(node.delegateStatus === "error" ? "✗" : "✓", x, y)
-      } else { ctx.restore() }
+      ctx.restore()
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = node.color; ctx.textAlign = "center"; ctx.textBaseline = "top"
+      ctx.fillStyle = isDone ? (node.delegateStatus === "error" ? C.coral + "88" : C.muted) : node.color
+      ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 3)
       return
     }
 
     if (node.type === "planstep") {
       const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
-      const opacity = isDone ? "66" : "cc"
-      const w = r * 1.6, h = r * 1.2, rad = 2
+      const isActive = node.delegateStatus === "active"
+      const isPending = !isActive && !isDone
+      const w = r * 1.6, h = r * 1.2, rad = 3
+      // Active spinner ring
+      if (isActive) {
+        const t = animPhaseRef.current * 0.003
+        const arcLen = Math.PI * 0.8
+        ctx.beginPath()
+        ctx.arc(x, y, Math.max(w, h) + 3, t, t + arcLen)
+        ctx.strokeStyle = C.accent + "88"
+        ctx.lineWidth = 1.8
+        ctx.lineCap = "round"
+        ctx.stroke()
+      }
+      // Determine fill and stroke based on state
+      const fillColor = node.delegateStatus === "error" ? C.coral + "20" : isDone ? C.success + "18" : isActive ? "#342F57cc" : "#342F5744"
+      const strokeColor = node.delegateStatus === "error" ? C.coral + "88" : isDone ? C.success + "55" : isActive ? node.color + "bb" : node.color + "25"
       ctx.beginPath()
       ctx.moveTo(x - w + rad, y - h)
       ctx.lineTo(x + w - rad, y - h)
@@ -2511,20 +2735,50 @@ export function MapPanel({
       ctx.lineTo(x - w, y - h + rad)
       ctx.arcTo(x - w, y - h, x - w + rad, y - h, rad)
       ctx.closePath()
-      ctx.fillStyle = "#342F57" + opacity
+      ctx.fillStyle = fillColor
       ctx.fill()
-      ctx.strokeStyle = node.color + (isDone ? "55" : "bb")
-      ctx.lineWidth = 1.2
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = isDone || isActive ? 1.4 : 0.8
       ctx.stroke()
-      if (isDone) {
-        ctx.font = `${Math.max(4, 10 / globalScale)}px sans-serif`
-        ctx.fillStyle = (node.delegateStatus === "error" ? C.coral : C.success) + "aa"
-        ctx.textAlign = "center"; ctx.textBaseline = "middle"
-        ctx.fillText(node.delegateStatus === "error" ? "✗" : "✓", x, y)
-      }
+      // Label color reflects state
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = node.color; ctx.textAlign = "center"; ctx.textBaseline = "top"
+      ctx.fillStyle = node.delegateStatus === "error" ? C.coral + "cc" : isDone ? C.success + "bb" : isPending ? node.color + "40" : node.color
+      ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + h + 3)
+      return
+    }
+
+    if (node.type === "planner-child") {
+      const isActive = node.delegateStatus === "active"
+      const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
+      const isPending = !isActive && !isDone
+      // Active spinner ring
+      if (isActive) {
+        const t = animPhaseRef.current * 0.003
+        const arcLen = Math.PI * 0.8
+        ctx.beginPath()
+        ctx.arc(x, y, r + 3, t, t + arcLen)
+        ctx.strokeStyle = C.accent + "88"
+        ctx.lineWidth = 1.8
+        ctx.lineCap = "round"
+        ctx.stroke()
+        // Glow
+        ctx.fillStyle = C.accent + "10"
+        ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.fill()
+      }
+      // Circle body — color indicates state
+      const fillColor = node.delegateStatus === "error" ? C.coral + "25" : isDone ? C.success + "1c" : isActive ? "#342F57cc" : "#342F5744"
+      const strokeColor = node.delegateStatus === "error" ? C.coral + "99" : isDone ? C.success + "55" : isActive ? C.accent + "aa" : node.color + "25"
+      ctx.fillStyle = fillColor
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = isActive ? 1.6 : isDone ? 1.2 : 0.8; ctx.stroke()
+      // Label — color reflects state
+      const lbl = node.label.length > 20 ? node.label.slice(0, 18) + "…" : node.label
+      ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
+      ctx.fillStyle = node.delegateStatus === "error" ? C.coral + "cc" : isDone ? C.success + "bb" : isPending ? node.color + "40" : C.text + "dd"
+      ctx.textAlign = "center"; ctx.textBaseline = "top"
+      ctx.fillText(lbl, x, y + r + 3)
       return
     }
 
@@ -2588,7 +2842,7 @@ export function MapPanel({
 
   // Node hit area
   const paintNodeArea = useCallback((node: NodeObject<MapNode>, color: string, ctx: CanvasRenderingContext2D) => {
-    const r = node.type === "agent" ? 12 : node.type === "delegate" || node.type === "planstep" ? 10 : 9
+    const r = node.type === "agent" || node.type === "planner-child" ? 12 : node.type === "delegate" || node.type === "planstep" ? 10 : 9
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, Math.PI * 2); ctx.fill()
   }, [])
 
@@ -2606,6 +2860,38 @@ export function MapPanel({
     const src = link.source as NodeObject<MapNode>
     const tgt = link.target as NodeObject<MapNode>
     if (!src || !tgt || src.x == null || tgt.x == null) return
+
+    if (planDag) {
+      // DAG mode: straight lines with arrow heads
+      const sx = src.x!, sy = src.y!
+      const tx = tgt.x!, ty = tgt.y!
+      const dx = tx - sx, dy = ty - sy
+      const len = Math.sqrt(dx * dx + dy * dy) || 1
+      const angle = Math.atan2(dy, dx)
+      const tgtR = (tgt.type === "planner-child" ? 12 : tgt.type === "agent" ? 12 : 10)
+      // Shorten line to node edge
+      const ex = tx - (dx / len) * tgtR
+      const ey = ty - (dy / len) * tgtR
+
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(ex, ey)
+      ctx.strokeStyle = vLink.color
+      ctx.lineWidth = 1.6
+      ctx.stroke()
+
+      // Arrow head
+      const arrowSize = 5
+      ctx.beginPath()
+      ctx.moveTo(ex, ey)
+      ctx.lineTo(ex - arrowSize * Math.cos(angle - Math.PI / 7), ey - arrowSize * Math.sin(angle - Math.PI / 7))
+      ctx.lineTo(ex - arrowSize * Math.cos(angle + Math.PI / 7), ey - arrowSize * Math.sin(angle + Math.PI / 7))
+      ctx.closePath()
+      ctx.fillStyle = vLink.color
+      ctx.fill()
+      return
+    }
+
     const isActiveLink = vLink.agentId === activeAgentId
     const tgtToolId = tgt.id?.toString().replace("tool:", "") ?? ""
     const toolUsed = involvedToolIds.has(tgtToolId)
@@ -2632,7 +2918,7 @@ export function MapPanel({
       ctx.beginPath(); ctx.moveTo(src.x, src.y!); ctx.quadraticCurveTo(cx, cy, tgt.x, tgt.y!)
       ctx.strokeStyle = vLink.color + alpha; ctx.lineWidth = highlight ? 1.2 : 0.5; ctx.stroke()
     }
-  }, [activeAgentId, hasRunContext, involvedToolIds, activeToolSet])
+  }, [planDag, activeAgentId, hasRunContext, involvedToolIds, activeToolSet])
 
   // Detail panel for selected node
   const detailInfo = useMemo((): { title: string; lines: Array<{ label: string; value: string }>; invocations?: Array<{ args: string; result: string; status: "ok" | "error" }> } | null => {
@@ -2696,15 +2982,49 @@ export function MapPanel({
         | { durationMs?: number }
         | undefined
       return {
-        title: `Plan Step: ${ps.name}`, lines: [
+        title: `Step: ${ps.name}`, lines: [
           { label: "Type", value: ps.type },
           { label: "Status", value: ps.status === "done" ? "completed" : ps.status },
           ...(endEvt?.durationMs != null ? [{ label: "Duration", value: `${endEvt.durationMs}ms` }] : []),
         ],
       }
     }
+    if (selectedNode.startsWith("planner-child:")) {
+      const key = selectedNode.slice(14)
+      const pc = tracePlannerChildren.find(c => c.key === key)
+      if (!pc) return null
+      return {
+        title: `Agent: ${pc.name}`, lines: [
+          { label: "Goal", value: pc.goal.length > 80 ? pc.goal.slice(0, 77) + "…" : pc.goal },
+          { label: "Assigned tools", value: pc.tools.length > 0 ? pc.tools.join(", ") : "—" },
+          { label: "Used tools", value: pc.usedTools.length > 0 ? pc.usedTools.join(", ") : "—" },
+          { label: "Status", value: pc.status === "done" ? "completed" : pc.status },
+        ],
+      }
+    }
+    // DAG mode: step:name nodes
+    if (selectedNode.startsWith("step:")) {
+      const stepName = selectedNode.slice(5)
+      const stepStatus = planStepStatuses.get(stepName)
+      const stepDef = planDag?.steps.find(s => s.name === stepName)
+      const childData = tracePlannerChildren.find(c => c.name === stepName)
+      const isChild = stepDef?.type === "subagent_task"
+      const lines: Array<{ label: string; value: string }> = [
+        { label: "Type", value: isChild ? "subagent_task" : stepDef?.type ?? "unknown" },
+        { label: "Status", value: stepStatus?.status === "done" ? "completed" : stepStatus?.status ?? "pending" },
+      ]
+      if (stepStatus?.durationMs != null) lines.push({ label: "Duration", value: `${stepStatus.durationMs}ms` })
+      if (stepStatus?.iteration != null) lines.push({ label: "Iteration", value: `${stepStatus.iteration}/${stepStatus.maxIterations ?? "?"}` })
+      if (childData) {
+        lines.push({ label: "Goal", value: childData.goal.length > 80 ? childData.goal.slice(0, 77) + "…" : childData.goal })
+        if (childData.tools.length > 0) lines.push({ label: "Tools", value: childData.tools.join(", ") })
+        if (childData.usedTools.length > 0) lines.push({ label: "Used tools", value: childData.usedTools.join(", ") })
+      }
+      if (stepDef?.dependsOn && stepDef.dependsOn.length > 0) lines.push({ label: "Depends on", value: stepDef.dependsOn.join(", ") })
+      return { title: stepName, lines }
+    }
     return null
-  }, [selectedNode, agents, run, toolStats, traceDelegations, tracePlanSteps, trace])
+  }, [selectedNode, agents, run, toolStats, traceDelegations, tracePlanSteps, tracePlannerChildren, trace, planDag, planStepStatuses])
 
   if (agents.length === 0) {
     return (
@@ -2719,6 +3039,7 @@ export function MapPanel({
       {/* Force-directed graph */}
       <div className="absolute inset-0" style={{ cursor: "grab" }}>
         <ForceGraph2D
+          key={planDag ? "dag" : "force"}
           ref={graphRef}
           graphData={graphData}
           width={size.w}
@@ -2741,7 +3062,8 @@ export function MapPanel({
           d3AlphaMin={0.005}
           minZoom={0.3}
           maxZoom={8}
-          dagLevelDistance={80}
+          dagMode={planDag ? "td" : undefined}
+          dagLevelDistance={planDag ? 70 : 80}
         />
       </div>
 

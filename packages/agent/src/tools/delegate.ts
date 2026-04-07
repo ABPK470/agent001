@@ -33,6 +33,12 @@ import type { LLMClient, TokenUsage, Tool } from "../types.js"
 const DEFAULT_CHILD_ITERATIONS = 20
 
 /**
+ * Hard cap on child iterations.
+ * agenc-core uses dynamic budgets based on contract shape, but always has a generous cap.
+ */
+const MAX_CHILD_ITERATIONS = 50
+
+/**
  * Dedicated system prompt for child worker agents.
  *
  * Key differences from the parent prompt:
@@ -45,8 +51,8 @@ const CHILD_SYSTEM_PROMPT = `You are an autonomous worker agent. You receive a g
 
 Task execution protocol:
 1. Start by reading the ## Workspace section of your goal to know WHERE you are working.
-2. Run \`ls -la\` or \`find . -maxdepth 2 -type f\` to see what files already exist before creating new ones.
-3. If your goal lists Source Files or prior step outputs, read those files FIRST to understand the current state.
+2. If your goal lists Source Files, read those files FIRST with read_file to understand the current state.
+3. Start working on the objective immediately — do NOT run exploratory commands like \`find\` or \`ls\` on the workspace root. Your goal already tells you exactly which files to read and which files to create/modify.
 4. Use the right tool in your first real action — NEVER end a turn without a tool call.
 5. If a command fails, read the error, fix the code, and retry — do NOT stop and report the error.
 6. Keep iterating until the task succeeds or you have genuinely exhausted options.
@@ -57,7 +63,8 @@ Critical rules:
 - Work until the goal is COMPLETELY done — not scaffolded, not "foundational", not a skeleton. If the goal says "build a game", the game must be playable. If it says "implement a feature", the feature must work end-to-end.
 - NEVER leave stub functions, TODO comments, or placeholder logic (e.g. \`return true\`, \`// implement later\`). Every function must contain REAL, COMPLETE logic.
 - ALL file paths are RELATIVE to the workspace root (e.g. "game/index.html", not "/Users/.../game/index.html"). Never use absolute paths.
-- If prior steps created files, they are on disk in the workspace. Use read_file with the EXACT path from the goal to access them.
+- WORKSPACE CONTAINMENT: If your goal specifies Target Files with a directory prefix (e.g. "tmp/game/index.html"), ALL files you create MUST go in that SAME directory. NEVER create files in a different directory or strip the directory prefix. If targets are in "tmp/game/", every file you write must start with "tmp/game/". This is non-negotiable.
+- If prior steps created files, the EXACT paths are listed in the ## Source Files section. Use read_file with those EXACT paths — do not guess or shorten them.
 - After creating web content (HTML/JS/CSS), ALWAYS use browser_check to verify it loads and works. Fix any errors before finishing.
 - After writing testable code, run it with run_command to verify correctness.
 - Before finishing, use read_file to review your own code. Look for stubs, missing logic, hardcoded returns. Fix anything you find.
@@ -154,7 +161,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
         },
         maxIterations: {
           type: "number",
-          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: 25).`,
+          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).`,
         },
       },
       required: ["goal"],
@@ -198,7 +205,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
               agentId: { type: "string", description: "Optional agent definition ID." },
               instructions: { type: "string", description: "Optional child instructions." },
               tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
-              maxIterations: { type: "number", description: "Max iterations (default: 15, max: 25)." },
+              maxIterations: { type: "number", description: `Max iterations (default: 15, max: ${MAX_CHILD_ITERATIONS}).` },
             },
             required: ["goal"],
           },
@@ -284,7 +291,7 @@ interface ChildSpec {
 }
 
 async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string> {
-  const maxIter = Math.min(spec.maxIterations ?? DEFAULT_CHILD_ITERATIONS, 25)
+  const maxIter = Math.min(spec.maxIterations ?? DEFAULT_CHILD_ITERATIONS, MAX_CHILD_ITERATIONS)
 
   // Resolve named agent definition
   let resolvedAgent: ResolvedAgent | null = null
@@ -469,8 +476,43 @@ export async function spawnChildForPlan(
   // Build the child's goal from the step's contract
   // IMPORTANT: Workspace and path context goes FIRST so the child knows
   // where it's working before reading the objective
+  // Derive the child's working subdirectory from target/source artifacts
+  const artifactPaths = [
+    ...envelope.targetArtifacts,
+    ...envelope.requiredSourceArtifacts,
+  ]
+  // Extract the common output directory from all artifact paths.
+  // Use the full directory path (e.g. "tmp/game") not just the first segment.
+  const artifactDirs = artifactPaths
+    .map(p => {
+      const parts = p.split("/")
+      return parts.length > 1 ? parts.slice(0, -1).join("/") : null
+    })
+    .filter((d): d is string => d !== null)
+  const uniqueDirs = [...new Set(artifactDirs)]
+
+  // Find the longest common prefix directory
+  let outputDir: string | null = null
+  if (uniqueDirs.length === 1) {
+    outputDir = uniqueDirs[0]
+  } else if (uniqueDirs.length > 1) {
+    // Find common prefix of all directories
+    const segments = uniqueDirs.map(d => d.split("/"))
+    const common: string[] = []
+    for (let i = 0; i < segments[0].length; i++) {
+      const seg = segments[0][i]
+      if (segments.every(s => s[i] === seg)) common.push(seg)
+      else break
+    }
+    if (common.length > 0) outputDir = common.join("/")
+  }
+
+  const scopeHint = outputDir
+    ? `\nOUTPUT DIRECTORY: All your files MUST be created inside \`${outputDir}/\`. If you need to see what exists, run \`ls ${outputDir}/\` — NEVER run find or ls on the workspace root. Do NOT create files outside \`${outputDir}/\`.`
+    : ""
+
   const goalParts: string[] = [
-    `## Workspace — READ THIS FIRST\nYou are working in: ${envelope.workspaceRoot}\nAll file paths are relative to this directory. Use relative paths (e.g. "tmp/index.html") with read_file/write_file.\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}\nBefore creating files, run \`find . -maxdepth 3 -type f\` or \`ls -la\` to see what already exists.`,
+    `## Workspace — READ THIS FIRST\nYou are working in: ${envelope.workspaceRoot}\nAll file paths are relative to this directory. Use relative paths (e.g. "tmp/index.html") with read_file/write_file.\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}${scopeHint}`,
   ]
 
   if (envelope.requiredSourceArtifacts.length > 0) {
@@ -506,6 +548,15 @@ export async function spawnChildForPlan(
     ...step.requiredToolCapabilities,
   ])
 
+  // Children that write files ALWAYS need read_file + verification tools,
+  // even if the LLM plan forgot to list them. Without these the child
+  // cannot self-review and gets stuck in write-only loops.
+  if (allowedToolNames.size > 0 && envelope.effectClass !== "readonly") {
+    for (const essential of ["read_file", "list_directory", "browser_check", "run_command"]) {
+      allowedToolNames.add(essential)
+    }
+  }
+
   if (allowedToolNames.size > 0) {
     childTools = ctx.availableTools.filter(t =>
       allowedToolNames.has(t.name) && t.name !== "delegate" && t.name !== "delegate_parallel",
@@ -527,7 +578,22 @@ export async function spawnChildForPlan(
 
   // Parse max iterations from budget hint
   const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
-  const maxIter = Math.min(budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS, 25)
+  // agenc-core pattern: contract-shaped budget floor.
+  // Estimate minimum iterations from the step's contract shape:
+  //   + targetArtifacts count (each needs at least 1 write)
+  //   + acceptanceCriteria count (each may need verification)
+  //   + source artifacts (each needs a read)
+  //   + verificationMode pass if applicable
+  const contractFloor = Math.min(12, Math.max(1,
+    envelope.targetArtifacts.length +
+    step.acceptanceCriteria.length +
+    envelope.requiredSourceArtifacts.length +
+    (envelope.verificationMode !== "none" ? 1 : 0) +
+    (envelope.effectClass !== "readonly" && envelope.targetArtifacts.length > 0 ? 1 : 0)
+  ))
+  const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
+  // Use whichever is larger: the parsed budget hint or the contract floor, capped at MAX_CHILD_ITERATIONS
+  const maxIter = Math.min(Math.max(parsedBudget, contractFloor), MAX_CHILD_ITERATIONS)
 
   ctx.onChildTrace?.({
     kind: "planner-delegation-start",

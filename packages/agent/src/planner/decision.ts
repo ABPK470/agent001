@@ -44,6 +44,28 @@ const SIMPLE_DIALOGUE_RE =
 const REVIEW_QUESTION_RE =
   /\b(?:read\s+through|review|analyze|check|look\s+at|go\s+through|evaluate|assess)\b[\s\S]{0,60}\?/i
 
+// ── Direct-path gates (agenc-core pattern) ──────────────────────
+// These detect request shapes that are better handled by a single agent
+// without planner overhead, even if the complexity score is high.
+
+/** Exact response: user wants a literal output, not an orchestrated build */
+const EXACT_RESPONSE_RE =
+  /\b(?:respond\s+with|output\s+exactly|just\s+(?:say|write|output|reply|return)|^(?:say|write|echo)\b)/i
+
+/** Memory/recall: storing or retrieving info (no planning needed) */
+const DIALOGUE_MEMORY_RE =
+  /\b(?:remember|memorize|save\s+(?:this|that)|store\s+(?:this|that)|note\s+that|keep\s+in\s+mind)\b/i
+const DIALOGUE_RECALL_RE =
+  /\b(?:what\s+did\s+(?:I|you|we)|recall|do\s+you\s+remember|earlier\s+(?:I|you|we))\b/i
+
+/** Edit artifact: simple read-edit-write cycle that one agent handles better */
+const EDIT_ARTIFACT_RE =
+  /\b(?:edit|update|change|modify|fix|patch|rename|refactor|replace)\b[\s\S]{0,80}\b(?:in|of|the\s+file|this\s+file|\.(?:ts|js|tsx|jsx|css|html|json|md|py|rs|go))\b/i
+
+/** Plan/document creation: user asks agent to write a plan, doc, or spec (let LLM write directly) */
+const PLAN_CREATION_RE =
+  /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
+
 // ============================================================================
 // Structured signal collection
 // ============================================================================
@@ -134,7 +156,10 @@ export function assessPlannerDecision(
     reasons.push("prior_tool_activity")
   }
 
-  // Fast-exit: simple dialogue, review questions, or very short messages
+  // ── Direct-path gates (agenc-core pattern) ──────────────────────
+  // Context-aware skips that bypass planning even when the score is high.
+  // These detect request shapes handled better by a single agent without
+  // planner decomposition overhead.
   if (SIMPLE_DIALOGUE_RE.test(signals.normalized)) {
     return { score, shouldPlan: false, reason: "simple_dialogue" }
   }
@@ -143,6 +168,21 @@ export function assessPlannerDecision(
   }
   if (signals.normalized.length < 20) {
     return { score, shouldPlan: false, reason: "too_short" }
+  }
+  if (EXACT_RESPONSE_RE.test(signals.normalized)) {
+    return { score, shouldPlan: false, reason: "exact_response_turn" }
+  }
+  if (DIALOGUE_MEMORY_RE.test(signals.normalized)) {
+    return { score, shouldPlan: false, reason: "dialogue_memory_turn" }
+  }
+  if (DIALOGUE_RECALL_RE.test(signals.normalized)) {
+    return { score, shouldPlan: false, reason: "dialogue_recall_turn" }
+  }
+  if (EDIT_ARTIFACT_RE.test(signals.normalized) && !signals.hasDelegationCue) {
+    return { score, shouldPlan: false, reason: "edit_artifact_direct_path" }
+  }
+  if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
+    return { score, shouldPlan: false, reason: "plan_generation_direct_path" }
   }
 
   const shouldPlan = score >= 3
