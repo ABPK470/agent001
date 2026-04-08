@@ -351,6 +351,32 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Functional complexity heuristic ──
+      // A step with many acceptance criteria (e.g. 5+ for a chess game) needs
+      // substantial code.  If ALL code artifacts together are under a threshold,
+      // the implementation is almost certainly shallow / skeleton.
+      if (readFile && sa.acceptanceCriteria.length >= 4) {
+        let totalCodeLines = 0
+        for (const artifact of sa.executionContext.targetArtifacts) {
+          const cached = probeCache.get(artifact)
+          if (!cached?.found) continue
+          if (!/\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(artifact)) continue
+          try {
+            const content = await readFile.execute({ path: cached.resolvedPath })
+            if (typeof content === "string") {
+              totalCodeLines += content.split("\n").filter(l => l.trim().length > 0 && !l.trim().startsWith("//") && !l.trim().startsWith("/*") && !l.trim().startsWith("*")).length
+            }
+          } catch { /* skip */ }
+        }
+        // Rough heuristic: ~40 meaningful lines per acceptance criterion is minimum
+        const minExpectedLines = sa.acceptanceCriteria.length * 40
+        if (totalCodeLines > 0 && totalCodeLines < minExpectedLines) {
+          issues.push(
+            `Implementation appears shallow: ${totalCodeLines} non-comment code lines for ${sa.acceptanceCriteria.length} acceptance criteria (expected ${minExpectedLines}+). The code likely lacks complete logic for all criteria.`,
+          )
+        }
+      }
+
       // ── Gibberish / word-salad detection ──
       if (outputText.length > 20) {
         const gibberishScore = computeGibberishScore(outputText)
@@ -440,9 +466,11 @@ Rules:
 - "retry" means the step produced output but has clear, concrete deficiencies that a retry could fix
 - "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
 - SKELETON / PLACEHOLDER CODE IS NEVER "pass": If a step was supposed to implement logic but output contains placeholder functions (\`return true\` as validation, empty bodies, \`// TODO\`, \`// Placeholder\`), mark it "retry" with specific issues listing what needs real implementation
+- SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. piece movement rules, validation, game state management) but the code only has trivial/generic implementations (e.g. a movePiece function that doesn't validate piece-specific movement, a highlightLegalMoves that doesn't check actual legal moves), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
+- When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
-- If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem
+- If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem in the actual code
 - Evidence quality: outputs with concrete indicators (file paths, line numbers, error messages, data) are more trustworthy than vague summaries
 - Hallucination check: if output claims "according to logs" or "as seen in" but doesn't match known artifacts, flag it
 - confidence is 0.0 to 1.0
@@ -456,7 +484,7 @@ export async function runLLMVerification(
   plan: Plan,
   pipelineResult: PipelineResult,
   deterministicAssessments: readonly VerifierStepAssessment[],
-  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
+  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void; artifactContents?: ReadonlyMap<string, string> },
 ): Promise<VerifierDecision> {
   // Build verification context
   const stepSummaries = plan.steps.map(step => {
@@ -479,11 +507,26 @@ export async function runLLMVerification(
     }
   })
 
+  // Build artifact content section for code files so the LLM can assess
+  // whether the code actually implements the acceptance criteria
+  let artifactSection = ""
+  if (opts?.artifactContents && opts.artifactContents.size > 0) {
+    const parts: string[] = []
+    for (const [path, content] of opts.artifactContents) {
+      // Truncate very large files but keep enough for assessment
+      const truncated = content.length > 4000
+        ? content.slice(0, 4000) + `\n... (truncated, ${content.length} chars total)`
+        : content
+      parts.push(`### ${path}\n\`\`\`\n${truncated}\n\`\`\``)
+    }
+    artifactSection = `\n\n## Actual File Contents\nReview these carefully against the acceptance criteria:\n\n${parts.join("\n\n")}`
+  }
+
   const messages: Message[] = [
     { role: "system", content: VERIFIER_SYSTEM_PROMPT },
     {
       role: "user",
-      content: `Verify the following plan execution results:\n\nPlan reason: ${plan.reason}\n\nStep results:\n${JSON.stringify(stepSummaries, null, 2)}`,
+      content: `Verify the following plan execution results:\n\nPlan reason: ${plan.reason}\n\nStep results:\n${JSON.stringify(stepSummaries, null, 2)}${artifactSection}`,
     },
   ]
 
@@ -551,8 +594,29 @@ export async function verify(
     return buildFallbackDecision(detAssessments)
   }
 
+  // Read actual file contents for code artifacts to give the LLM verifier
+  // concrete code to assess (not just the child's self-reported output)
+  const artifactContents = new Map<string, string>()
+  const toolMap = new Map(tools.map(t => [t.name, t]))
+  const readFile = toolMap.get("read_file")
+  if (readFile) {
+    for (const step of plan.steps) {
+      if (step.stepType !== "subagent_task") continue
+      const sa = step as SubagentTaskStep
+      for (const artifact of sa.executionContext.targetArtifacts) {
+        if (!/\.(js|jsx|ts|tsx|html|css|py)$/i.test(artifact)) continue
+        try {
+          const content = await readFile.execute({ path: artifact })
+          if (typeof content === "string" && content.length > 0 && !content.startsWith("Error:")) {
+            artifactContents.set(artifact, content)
+          }
+        } catch { /* skip */ }
+      }
+    }
+  }
+
   // Phase 2: LLM verification
-  const decision = await runLLMVerification(llm, plan, pipelineResult, detAssessments, { signal: opts?.signal, onTrace: opts?.onTrace })
+  const decision = await runLLMVerification(llm, plan, pipelineResult, detAssessments, { signal: opts?.signal, onTrace: opts?.onTrace, artifactContents })
 
   // Merge: if deterministic says "retry" but LLM says "pass", trust deterministic
   const mergedSteps = decision.steps.map(llmStep => {
