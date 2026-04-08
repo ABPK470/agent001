@@ -32,14 +32,16 @@ export type {
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
+import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../delegation-decision.js"
 import { getCorrectionGuidance, type DelegationOutputValidationCode } from "../delegation-validation.js"
 import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../escalation.js"
 import type { LLMClient, Message, Tool } from "../types.js"
+import { createBudgetState, maybeExtendBudget } from "./circuit-breaker.js"
 import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
-import type { PipelineResult, Plan, VerifierDecision } from "./types.js"
+import type { PipelineResult, Plan, PlanStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
 import { verify } from "./verifier.js"
 
@@ -150,6 +152,62 @@ export async function executePlannerPath(
     }
   }
 
+  // Step 3b: Delegation decision gate — safety, economics, hard-block checks
+  // Build step profiles for the delegation decision system
+  const subagentSteps = plan.steps.filter(
+    (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task",
+  )
+  const subagentProfiles: DelegationSubagentStepProfile[] = subagentSteps.map((s) => {
+    // Map planner's EffectClass to delegation-decision's effectClass
+    const effectMap: Record<string, "read_only" | "write" | "mixed"> = {
+      readonly: "read_only",
+      filesystem_write: "write",
+      filesystem_scaffold: "write",
+      shell: "mixed",
+      mixed: "mixed",
+    }
+    return {
+      name: s.name,
+      objective: s.objective,
+      dependsOn: s.dependsOn ? [...s.dependsOn] : undefined,
+      acceptanceCriteria: [...s.acceptanceCriteria],
+      requiredToolCapabilities: [...s.requiredToolCapabilities],
+      canRunParallel: s.canRunParallel,
+      effectClass: effectMap[s.executionContext.effectClass] ?? "mixed",
+    }
+  })
+
+  if (subagentProfiles.length > 0) {
+    const delegationInput: DelegationDecisionInput = {
+      messageText: goal,
+      plannerConfidence: decision.score / 10,
+      complexityScore: decision.score,
+      totalSteps: plan.steps.length,
+      synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
+      subagentSteps: subagentProfiles,
+    }
+
+    const delegationDecision = assessDelegationDecision(delegationInput)
+
+    ctx.onTrace?.({
+      kind: "planner-delegation-decision",
+      shouldDelegate: delegationDecision.shouldDelegate,
+      reason: delegationDecision.reason,
+      utilityScore: delegationDecision.utilityScore,
+      safetyRisk: delegationDecision.safetyRisk,
+      confidence: delegationDecision.confidence,
+      hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass,
+    })
+
+    if (!delegationDecision.shouldDelegate) {
+      return {
+        handled: false,
+        plan,
+        skipReason: `Delegation blocked: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`,
+      }
+    }
+  }
+
   // Step 4: Execute pipeline with verifier loop (agenc-core pattern)
   // Track execution rounds and verifier rounds separately.
   // Verifier runs contract validation + deterministic probes each round.
@@ -166,6 +224,10 @@ export async function executePlannerPath(
   // Track stub-issue count per step across attempts — if count doesn't decrease,
   // the child is stuck and further retries won't help
   const priorStubCounts = new Map<string, number>()
+
+  // Pipeline budget tracking (planner/circuit-breaker) — monitor progress
+  // across retry attempts and detect when further retries add no value
+  let budgetState = createBudgetState(MAX_PIPELINE_RETRIES + 1, plan.steps.length)
 
   for (let attempt = 0; attempt <= MAX_PIPELINE_RETRIES; attempt++) {
     if (ctx.signal?.aborted) {
@@ -209,6 +271,18 @@ export async function executePlannerPath(
       completedSteps: pipelineResult.completedSteps,
       totalSteps: pipelineResult.totalSteps,
     })
+
+    // Update pipeline budget state — track progress for extension decisions
+    const prevBudget = budgetState
+    budgetState = maybeExtendBudget(budgetState, pipelineResult.completedSteps)
+    if (budgetState.extensions > prevBudget.extensions) {
+      ctx.onTrace?.({
+        kind: "planner-budget-extended",
+        completedSteps: pipelineResult.completedSteps,
+        effectiveBudget: budgetState.effectiveBudget,
+        extensions: budgetState.extensions,
+      })
+    }
 
     // Step 5: Verify
     verifierDecision = await verify(

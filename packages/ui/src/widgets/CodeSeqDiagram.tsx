@@ -36,6 +36,14 @@ const P = {
   delegate:"#5B98D1",
   audit:   "#78909C",
   planner: "#C084FC",
+  recovery:"#F59E0B",
+  circuit: "#EF4444",
+  budget:  "#38BDF8",
+  tutils:  "#6EE7B7",
+  dvalid:  "#F472B6",
+  escal:   "#FB923C",
+  cqual:   "#A78BFA",
+  ddecide: "#2DD4BF",
   text:    "#a1a1aa",
   dim:     "#3f3f46",
   dimmer:  "#27272a",
@@ -72,6 +80,14 @@ const LIFELINES: Lifeline[] = [
   { id: "db",       label: "SQLite",         file: "db/*.ts",             color: P.db },
   { id: "ws",       label: "WS Broadcast",   file: "ws.ts",              color: P.ws },
   { id: "audit",    label: "Audit",          file: "audit.ts",            color: P.audit },
+  { id: "recovery", label: "Recovery",       file: "recovery.ts",        color: P.recovery },
+  { id: "circuit",  label: "CircuitBreaker", file: "circuit-breaker.ts",  color: P.circuit },
+  { id: "budget",   label: "PromptBudget",  file: "prompt-budget.ts",    color: P.budget },
+  { id: "tutils",   label: "ToolUtils",     file: "tool-utils.ts",       color: P.tutils },
+  { id: "dvalid",   label: "DelegValidation",file: "delegation-validation.ts", color: P.dvalid },
+  { id: "escal",    label: "Escalation",    file: "escalation.ts",       color: P.escal },
+  { id: "cqual",    label: "CodeQuality",   file: "code-quality.ts",     color: P.cqual },
+  { id: "ddecide",  label: "DelegDecision", file: "delegation-decision.ts",color: P.ddecide },
 ]
 
 // ── Message types ────────────────────────────────────────────────
@@ -178,7 +194,11 @@ function buildMessages(showPhase: Set<string>): Msg[] {
   // Iteration loop
   add({ kind: "alt-start", from: "agent", to: "agent", label: "loop [i = 0..maxIterations]", altLabel: "Agent Think-Act-Observe Loop", phase: "agent" })
 
-  add({ kind: "self", from: "agent", to: "agent", label: "truncateMessages(messages)", detail: "agent.ts:74 — 64K token budget", phase: "agent" })
+  add({ kind: "self", from: "agent", to: "agent", label: "truncateMessages(messages)", detail: "agent.ts:74 — section-aware budget", phase: "agent" })
+  add({ kind: "call", from: "agent", to: "budget", label: "applyPromptBudget(messages, config)", detail: "prompt-budget.ts — per-section allocation", color: P.budget, phase: "agent" })
+  add({ kind: "self", from: "budget", to: "budget", label: "derivePromptBudgetPlan(config)", detail: "anchor + tools + memory + history budgets", phase: "agent" })
+  add({ kind: "self", from: "budget", to: "budget", label: "rebalanceSlack(sections)", detail: "redistribute unused capacity", phase: "agent" })
+  add({ kind: "return", from: "budget", to: "agent", label: "{ kept, dropped, truncated }", dashed: true, color: P.budget, phase: "agent" })
 
   // LLM call
   add({ kind: "call", from: "agent", to: "llm", label: "llm.chat(messages, tools, { signal })", detail: "copilot.ts:35 — async fetch", color: P.llm, phase: "agent" })

@@ -26,7 +26,7 @@ import { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
 import * as log from "./logger.js"
 import type { PlannerContext } from "./planner/index.js"
 import { executePlannerPath } from "./planner/index.js"
-import { applyPromptBudget } from "./prompt-budget.js"
+import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
@@ -65,6 +65,11 @@ function estimateTokens(messages: Message[]): number {
 /** Max token budget for the request body. */
 const MAX_CONTEXT_TOKENS = 64000
 
+interface TruncationResult {
+  readonly messages: Message[]
+  readonly budgetDiagnostics?: PromptBudgetDiagnostics
+}
+
 /**
  * Budget-aware message truncation (agenc-core pattern).
  *
@@ -75,7 +80,7 @@ const MAX_CONTEXT_TOKENS = 64000
  *   3. For history: drop oldest messages first (preserve recent context)
  *   4. NEVER drop: system_anchor, user, tools
  */
-function truncateMessages(messages: Message[]): Message[] {
+function truncateMessages(messages: Message[]): TruncationResult {
   // Trim any single tool result that's excessively long
   const MAX_RESULT_LEN = 8000
   const trimmed = messages.map((m) => {
@@ -85,8 +90,8 @@ function truncateMessages(messages: Message[]): Message[] {
     return m
   })
 
-  if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return trimmed
-  if (trimmed.length <= 4) return trimmed
+  if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return { messages: trimmed }
+  if (trimmed.length <= 4) return { messages: trimmed }
 
   // Check if any messages have section tags (structured prompt)
   const hasStructuredPrompt = trimmed.some((m) => m.section != null)
@@ -100,15 +105,15 @@ function truncateMessages(messages: Message[]): Message[] {
       hardMaxPromptChars: MAX_CONTEXT_TOKENS * 4,
     })
     if (budgetResult.messages.length > 0) {
-      return budgetResult.messages
+      return { messages: budgetResult.messages, budgetDiagnostics: budgetResult.diagnostics }
     }
     // Fallback to legacy if budget system produced empty
     console
-    return truncateBySection(trimmed)
+    return { messages: truncateBySection(trimmed) }
   }
 
   // Legacy fallback: keep head (system + goal) and recent tail, drop middle
-  return truncateLegacy(trimmed)
+  return { messages: truncateLegacy(trimmed) }
 }
 
 /**
@@ -411,7 +416,20 @@ export class Agent {
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
       // Truncate context if approaching token budget
-      const chatMessages = truncateMessages(messages)
+      const truncationResult = truncateMessages(messages)
+      const chatMessages = truncationResult.messages
+
+      // Emit prompt-budget trace when budget system was activated
+      if (truncationResult.budgetDiagnostics) {
+        const diag = truncationResult.budgetDiagnostics
+        this.config.onNudge?.({
+          tag: "prompt-budget",
+          message: `Prompt budget applied: ${diag.totalBeforeChars} → ${diag.totalAfterChars} chars` +
+            (diag.droppedSections.length > 0 ? `, dropped: ${diag.droppedSections.join(", ")}` : "") +
+            (diag.constrained ? " [constrained]" : ""),
+          iteration: i,
+        })
+      }
 
       // Notify listener before LLM call (for debug/trace)
       this.config.onLlmCall?.({

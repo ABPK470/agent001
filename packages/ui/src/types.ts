@@ -95,6 +95,16 @@ export type TraceEntry =
   | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
   | { kind: "planner-retry"; attempt: number; reason: string }
   | { kind: "planner-retry-skipped"; reason: string }
+  // Delegation decision gate (safety, economics, hard-block)
+  | { kind: "planner-delegation-decision"; shouldDelegate: boolean; reason: string; utilityScore: number; safetyRisk: number; confidence: number; hardBlockedTaskClass: string | null }
+  // Pipeline budget extension (planner/circuit-breaker)
+  | { kind: "planner-budget-extended"; completedSteps: number; effectiveBudget: number; extensions: number }
+  // Escalation graph
+  | { kind: "planner-escalation"; action: string; reason: string; attempt: number }
+  // Retry abort (all steps stuck)
+  | { kind: "planner-retry-abort"; reason: string }
+  // Per-step retry skip (repeated failure / stub regression)
+  | { kind: "planner-retry-skip"; stepName: string; reason: string }
   // Planner delegation entries (child agents spawned by planner)
   | { kind: "planner-delegation-start"; goal: string; stepName: string; depth: number; tools: string[]; envelope: { workspaceRoot?: string; effectClass?: string; verificationMode?: string; targetArtifacts?: string[] } }
   | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number }
