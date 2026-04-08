@@ -21,7 +21,7 @@ export { assessPlannerDecision } from "./decision.js"
 export { generatePlan } from "./generate.js"
 export type { PlanGenerationContext, PlanGenerationResult } from "./generate.js"
 export { executePipeline } from "./pipeline.js"
-export type { DelegateFn, PipelineExecutorOptions, ToolExecFn } from "./pipeline.js"
+export type { DelegateFn, DelegateResult, PipelineExecutorOptions, ToolExecFn } from "./pipeline.js"
 export { validatePlan } from "./validate.js"
 export type { ValidationResult } from "./validate.js"
 export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.js"
@@ -32,6 +32,8 @@ export type {
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
+import { getCorrectionGuidance, type DelegationOutputValidationCode } from "../delegation-validation.js"
+import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../escalation.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
@@ -150,8 +152,8 @@ export async function executePlannerPath(
 
   // Step 4: Execute pipeline with verifier loop (agenc-core pattern)
   // Track execution rounds and verifier rounds separately.
-  // Verifier runs deterministic probes each round; retries only if retryable steps exist.
-  const MAX_VERIFIER_ROUNDS = MAX_PIPELINE_RETRIES + 1
+  // Verifier runs contract validation + deterministic probes each round.
+  // Retry decisions are made by the escalation graph.
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined
   let retryOpts: {
@@ -235,22 +237,40 @@ export async function executePlannerPath(
       break
     }
 
-    // agenc-core pattern: strict retry gating.
-    // Only retry if:
-    //   1. We haven't exceeded max verifier rounds
-    //   2. There are retryable steps
-    //   3. Confidence is below threshold OR overall is "retry"
+    // agenc-core pattern: strict retry gating via escalation graph.
+    // The escalation graph is a pure deterministic function that maps
+    // the current state to a next action: pass/retry/revise/escalate.
     const hasRetryableSteps = verifierDecision.steps.some(
       s => s.outcome !== "pass" && s.retryable !== false,
     )
-    const canRetry = (
-      verifierRounds < MAX_VERIFIER_ROUNDS &&
-      hasRetryableSteps &&
-      (verifierDecision.overall === "retry" || verifierDecision.confidence < 0.65)
-    )
 
-    if (!canRetry || attempt === MAX_PIPELINE_RETRIES) {
-      // Can't recover: no retryable steps, verifier rounds exhausted, or budget exhausted
+    // Pre-compute: detect repeated identical failures for escalation input
+    let prelimAllStepsRepeatedFailure = true
+    for (const stepAssessment of verifierDecision.steps) {
+      if (stepAssessment.outcome === "pass") continue
+      const issueKey = [...stepAssessment.issues].sort().join("|")
+      if (priorStepIssues.get(stepAssessment.stepName) !== issueKey) {
+        prelimAllStepsRepeatedFailure = false
+        break
+      }
+    }
+
+    const escalation: EscalationDecision = resolveEscalation(buildEscalationInput({
+      verifierOverall: verifierDecision.overall,
+      attempt,
+      maxAttempts: MAX_PIPELINE_RETRIES + 1,
+      hasRetryableSteps,
+      allStepsRepeatedFailure: prelimAllStepsRepeatedFailure,
+    }))
+
+    ctx.onTrace?.({
+      kind: "planner-escalation",
+      action: escalation.action,
+      reason: escalation.reason,
+      attempt: attempt + 1,
+    })
+
+    if (escalation.action === "pass" || escalation.action === "escalate") {
       break
     }
 
@@ -304,7 +324,19 @@ export async function executePlannerPath(
             priorResults.set(stepAssessment.stepName, stepResult)
           }
         } else {
-          retryFeedback.set(stepAssessment.stepName, [...stepAssessment.issues])
+          // Inject correction guidance for contract validation failures
+          const enrichedIssues = [...stepAssessment.issues]
+          for (const issue of stepAssessment.issues) {
+            const contractMatch = issue.match(/^\[contract:(\w+)\]/)
+            if (contractMatch) {
+              const code = contractMatch[1] as DelegationOutputValidationCode
+              const guidance = getCorrectionGuidance(code)
+              if (guidance && !enrichedIssues.includes(`[correction] ${guidance}`)) {
+                enrichedIssues.push(`[correction] ${guidance}`)
+              }
+            }
+          }
+          retryFeedback.set(stepAssessment.stepName, enrichedIssues)
           allStepsRepeatedFailure = false
         }
         priorStepIssues.set(stepAssessment.stepName, issueKey)

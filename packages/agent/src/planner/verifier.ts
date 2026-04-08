@@ -9,6 +9,11 @@
  */
 
 import { detectPlaceholderPatterns } from "../code-quality.js"
+import {
+  buildContractSpec,
+  getCorrectionGuidance,
+  validateDelegatedOutputContract
+} from "../delegation-validation.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import type {
   PipelineResult,
@@ -716,6 +721,72 @@ export async function verify(
   tools: readonly Tool[],
   opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
 ): Promise<VerifierDecision> {
+  // Phase 0: Delegation output contract validation
+  // Fast, deterministic checks on child output structure + tool evidence.
+  // These catch empty outputs, missing file mutations, contradictory claims, etc.
+  // BEFORE spending tokens on LLM verification.
+  const contractFailures: VerifierStepAssessment[] = []
+  for (const step of plan.steps) {
+    if (step.stepType !== "subagent_task") continue
+    const sa = step as SubagentTaskStep
+    const stepResult = pipelineResult.stepResults.get(step.name)
+    if (!stepResult || stepResult.status === "skipped") continue
+
+    const contractSpec = buildContractSpec(
+      sa,
+      sa.executionContext,
+    )
+    const contractResult = validateDelegatedOutputContract({
+      spec: contractSpec,
+      output: stepResult.output ?? stepResult.error ?? "",
+      toolCalls: stepResult.toolCalls,
+    })
+
+    if (!contractResult.ok && contractResult.code) {
+      const guidance = getCorrectionGuidance(contractResult.code)
+      contractFailures.push({
+        stepName: step.name,
+        outcome: "retry",
+        confidence: 0.95, // high confidence — deterministic check
+        issues: [
+          `[contract:${contractResult.code}] ${contractResult.message}`,
+          `[correction] ${guidance}`,
+        ],
+        retryable: true,
+      })
+      opts?.onTrace?.({
+        kind: "verifier-contract-check",
+        stepName: step.name,
+        code: contractResult.code,
+        message: contractResult.message,
+      })
+    }
+  }
+
+  // If contract validation caught issues, return immediately (no LLM needed)
+  if (contractFailures.length > 0) {
+    // Merge contract failures with pass assessments for steps that passed
+    const allSteps: VerifierStepAssessment[] = []
+    for (const step of plan.steps) {
+      if (step.stepType !== "subagent_task") continue
+      const contractFail = contractFailures.find(cf => cf.stepName === step.name)
+      if (contractFail) {
+        allSteps.push(contractFail)
+      } else {
+        const sr = pipelineResult.stepResults.get(step.name)
+        if (sr && sr.status === "completed") {
+          allSteps.push({ stepName: step.name, outcome: "pass", confidence: 0.8, issues: [], retryable: false })
+        }
+      }
+    }
+    return {
+      overall: "retry",
+      confidence: Math.min(...allSteps.map(s => s.confidence)),
+      steps: allSteps,
+      unresolvedItems: contractFailures.map(cf => cf.issues[0]),
+    }
+  }
+
   // Phase 1: Deterministic probes
   const detAssessments = await runDeterministicProbes(plan, pipelineResult, tools)
 

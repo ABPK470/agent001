@@ -345,7 +345,7 @@ describe("Pipeline: executePipeline", () => {
       edges: [{ from: "step-1", to: "step-2" }],
     })
 
-    const result = await executePipeline(plan, [tool], async () => "delegated")
+    const result = await executePipeline(plan, [tool], async () => ({ output: "delegated" }))
 
     expect(result.status).toBe("completed")
     expect(calls).toEqual(["first", "second"])
@@ -369,7 +369,7 @@ describe("Pipeline: executePipeline", () => {
       edges: [{ from: "step-fail", to: "step-after" }],
     })
 
-    const result = await executePipeline(plan, [failTool], async () => "")
+    const result = await executePipeline(plan, [failTool], async () => ({ output: "" }))
     expect(result.status).toBe("failed")
     // step-after should be skipped because step-fail failed
     const afterResult = result.stepResults.get("step-after")
@@ -389,7 +389,7 @@ describe("Pipeline: executePipeline", () => {
       [],
       async (step) => {
         delegatedTasks.push(step.name)
-        return "Build completed successfully"
+        return { output: "Build completed successfully" }
       },
     )
 
@@ -408,7 +408,7 @@ describe("Pipeline: executePipeline", () => {
       edges: [],
     })
 
-    const result = await executePipeline(plan, [echoTool()], async () => "", {
+    const result = await executePipeline(plan, [echoTool()], async () => ({ output: "" }), {
       signal: controller.signal,
     })
 
@@ -439,7 +439,7 @@ describe("Pipeline: executePipeline", () => {
       ["step-1", { name: "step-1", status: "completed" as const, output: "done: first", durationMs: 10 }],
     ])
 
-    const result = await executePipeline(plan, [tool], async () => "", { priorResults })
+    const result = await executePipeline(plan, [tool], async () => ({ output: "" }), { priorResults })
 
     expect(result.status).toBe("completed")
     // step-1 should NOT be re-executed (it was in priorResults)

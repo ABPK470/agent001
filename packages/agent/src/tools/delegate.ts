@@ -29,6 +29,7 @@ import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
 import { Agent } from "../agent.js"
 import { detectPlaceholderPatterns } from "../code-quality.js"
+import type { DelegateResult } from "../planner/pipeline.js"
 import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
@@ -499,7 +500,7 @@ export async function spawnChildForPlan(
   ctx: DelegateContext,
   step: SubagentTaskStep,
   envelope: ExecutionEnvelope,
-): Promise<string> {
+): Promise<DelegateResult> {
   // Build the child's goal from the step's contract
   // IMPORTANT: Workspace and path context goes FIRST so the child knows
   // where it's working before reading the objective
@@ -720,10 +721,13 @@ export async function spawnChildForPlan(
     })
 
     if (hitLimit) {
-      return `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`
+      return {
+        output: `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`,
+        toolCalls: child.allToolCalls,
+      }
     }
 
-    return answer
+    return { output: answer, toolCalls: child.allToolCalls }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     ctx.onChildTrace?.({
@@ -733,7 +737,7 @@ export async function spawnChildForPlan(
       status: "error",
       error: errMsg,
     })
-    return `Delegation failed: ${errMsg}`
+    return { output: `Delegation failed: ${errMsg}`, toolCalls: child.allToolCalls }
   } finally {
     releaseSlot?.()
   }

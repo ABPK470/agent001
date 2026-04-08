@@ -215,6 +215,9 @@ export type SubagentFailureClass =
   | "transient_provider_error"
   | "unknown"
 
+import type { DelegationOutputValidationCode } from "../delegation-validation.js"
+import type { ToolCallRecord } from "../recovery.js"
+
 export interface PipelineStepResult {
   readonly name: string
   readonly status: PipelineStepStatus
@@ -223,6 +226,10 @@ export interface PipelineStepResult {
   /** Typed failure class for diagnostic/retry purposes. */
   readonly failureClass?: SubagentFailureClass
   readonly durationMs: number
+  /** Structured tool call records from the child agent (if available). */
+  readonly toolCalls?: readonly ToolCallRecord[]
+  /** Delegation contract validation code (if validation ran). */
+  readonly validationCode?: DelegationOutputValidationCode
 }
 
 export type PipelineStatus = "running" | "completed" | "failed"

@@ -15,6 +15,7 @@
  * @module
  */
 
+import type { ToolCallRecord } from "../recovery.js"
 import type { Tool } from "../types.js"
 import type {
     DeterministicToolStep,
@@ -32,13 +33,22 @@ import type {
 // ============================================================================
 
 /**
+ * Result from a delegation call — structured output + tool evidence.
+ */
+export interface DelegateResult {
+  readonly output: string
+  /** All tool calls the child agent made during execution. */
+  readonly toolCalls?: readonly ToolCallRecord[]
+}
+
+/**
  * Function that spawns a child agent for a subagent_task step.
  * The pipeline executor doesn't know about Agent — it calls this abstraction.
  */
 export type DelegateFn = (
   step: SubagentTaskStep,
   envelope: ExecutionEnvelope,
-) => Promise<string>
+) => Promise<DelegateResult>
 
 /**
  * Function that executes a deterministic tool call directly.
@@ -364,7 +374,9 @@ async function executeSubagentStep(
   }
 
   try {
-    const output = await delegateFn(step, step.executionContext)
+    const delegateResult = await delegateFn(step, step.executionContext)
+    const output = delegateResult.output
+    const childToolCalls = delegateResult.toolCalls
 
     // agenc-core pattern: typed failure classification.
     // Classify delegation output to determine retry policy.
@@ -376,6 +388,7 @@ async function executeSubagentStep(
         error: output,
         failureClass: isSpawnError ? "spawn_error" : "unknown",
         durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
       }
     }
 
@@ -386,6 +399,7 @@ async function executeSubagentStep(
         error: output,
         failureClass: "budget_exceeded",
         durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
       }
     }
 
@@ -396,6 +410,7 @@ async function executeSubagentStep(
         error: output,
         failureClass: "tool_misuse",
         durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
       }
     }
 
@@ -406,6 +421,7 @@ async function executeSubagentStep(
         error: output,
         failureClass: "cancelled",
         durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
       }
     }
 
@@ -414,6 +430,7 @@ async function executeSubagentStep(
       status: "completed",
       output,
       durationMs: Date.now() - t0,
+      toolCalls: childToolCalls,
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)

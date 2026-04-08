@@ -30,17 +30,17 @@ import { applyPromptBudget } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
-    RoundStuckState,
-    ToolLoopState,
-    ToolRoundProgressSummary,
+  RoundStuckState,
+  ToolLoopState,
+  ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-    checkToolLoopStuckDetection,
-    enrichToolResultMetadata as enrichResult,
-    evaluateToolRoundBudgetExtension,
-    executeToolWithTimeout,
-    summarizeToolRoundProgress,
-    trackToolCallFailureState,
+  checkToolLoopStuckDetection,
+  enrichToolResultMetadata as enrichResult,
+  evaluateToolRoundBudgetExtension,
+  executeToolWithTimeout,
+  summarizeToolRoundProgress,
+  trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -257,6 +257,8 @@ export class Agent {
   readonly usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   /** Number of LLM API calls made. */
   llmCalls = 0
+  /** All tool calls made during this agent's run (accumulated across iterations). */
+  readonly allToolCalls: ToolCallRecord[] = []
 
   constructor(llm: LLMClient, tools: Tool[], config: AgentConfig = {}) {
     this.llm = llm
@@ -757,6 +759,9 @@ export class Agent {
           }
         }
       }
+
+      // ── Accumulate tool calls for parent access ──
+      this.allToolCalls.push(...roundToolCalls)
 
       // ── Structured stuck detection (3-level, agenc-core pattern) ──
       const stuckResult = checkToolLoopStuckDetection(
