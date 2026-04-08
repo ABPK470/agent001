@@ -17,6 +17,7 @@
 
 import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve, sep } from "node:path"
+import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { Tool } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
@@ -252,6 +253,20 @@ export const writeFileTool: Tool = {
             `FUNCTION LOSS: Your write REMOVED ${lost.length} existing definition(s): ${lost.join(", ")}. ` +
             `Other code likely calls these — your write has BROKEN the application. ` +
             `You MUST write_file again with ALL missing definitions restored.`
+          )
+        }
+      }
+
+      // ── Inline stub detection — real-time feedback at point of action ──
+      // Instead of waiting for the verifier (which runs AFTER the child finishes),
+      // detect stubs NOW so the child can fix them in its next iteration.
+      if (/\.(js|jsx|ts|tsx|py)$/i.test(filePath) && content.length > 50) {
+        const stubFindings = detectPlaceholderPatterns(content)
+        if (stubFindings.length > 0) {
+          integrityWarnings.push(
+            `STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation:\n` +
+            stubFindings.map(f => `    • ${f}`).join("\n") + "\n" +
+            `  Fix these NOW in your next write_file. The verifier WILL reject stub functions.`
           )
         }
       }

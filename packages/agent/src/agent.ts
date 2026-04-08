@@ -250,6 +250,7 @@ export class Agent {
     onPlannerTrace: AgentConfig["onPlannerTrace"]
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
     toolKillManager: AgentConfig["toolKillManager"]
+    completionValidator: AgentConfig["completionValidator"]
   }
 
   /** Cumulative token usage across all LLM calls in this agent's run. */
@@ -276,6 +277,7 @@ export class Agent {
       onPlannerTrace: config.onPlannerTrace,
       plannerDelegateFn: config.plannerDelegateFn,
       toolKillManager: config.toolKillManager,
+      completionValidator: config.completionValidator,
     }
   }
 
@@ -377,6 +379,8 @@ export class Agent {
     let earlyExitNudged = false
     // Track if we already nudged for budget awareness (only once per run).
     let budgetNudged = false
+    // Track if we already ran the completion validator (only once per run).
+    let completionValidated = false
 
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
@@ -534,6 +538,27 @@ export class Agent {
           messages.push({ role: "system", content: vfailMsg, section: "history" })
           this.config.onNudge?.({ tag: "verification-failed", message: vfailMsg, iteration: i })
           continue
+        }
+
+        // Guard: completion validator — enforce code quality before allowing exit.
+        // Unlike the other guards which check mechanical properties (did you use tools?
+        // did you read files?), this reads the ACTUAL code and checks for stubs.
+        // Fires at most once per run to prevent infinite loops.
+        if (this.config.completionValidator && !completionValidated) {
+          completionValidated = true
+          try {
+            const validationIssues = await this.config.completionValidator()
+            if (validationIssues) {
+              messages.push({
+                role: "assistant",
+                content: response.content,
+                section: "history",
+              })
+              messages.push({ role: "system", content: validationIssues, section: "history" })
+              this.config.onNudge?.({ tag: "completion-validator", message: validationIssues, iteration: i })
+              continue
+            }
+          } catch { /* validator failed — don't block the agent */ }
         }
 
         const answer = response.content ?? "(no response)"

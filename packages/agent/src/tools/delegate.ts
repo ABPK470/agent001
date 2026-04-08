@@ -25,7 +25,10 @@
  *   concurrently with Promise.allSettled so one failure doesn't kill the rest.
  */
 
+import { readFile as fsReadFile } from "node:fs/promises"
+import { resolve as pathResolve } from "node:path"
 import { Agent } from "../agent.js"
+import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
@@ -608,11 +611,50 @@ export async function spawnChildForPlan(
   // Buffer LLM request/response events so they emit AFTER the iteration marker
   let pendingPlannerLlmEvents: Record<string, unknown>[] = []
 
+  // ── Build completion validator for code quality gate ──
+  // When the child tries to exit, read ALL target artifacts and run stub
+  // detection. If stubs remain, force the child to keep working.
+  const targetArtifacts = envelope.targetArtifacts
+  const wsRoot = envelope.workspaceRoot
+  const completionValidator = targetArtifacts.length > 0 ? async (): Promise<string | null> => {
+    const codeArtifacts = targetArtifacts.filter(
+      a => /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs)$/i.test(a),
+    )
+    if (codeArtifacts.length === 0) return null
+
+    const allIssues: string[] = []
+    for (const artifact of codeArtifacts) {
+      const fullPath = pathResolve(wsRoot, artifact)
+      try {
+        const content = await fsReadFile(fullPath, "utf-8")
+        const findings = detectPlaceholderPatterns(content)
+        for (const f of findings) {
+          allIssues.push(`${artifact}: ${f}`)
+        }
+      } catch { /* file not created yet or unreadable */ }
+    }
+
+    if (allIssues.length > 0) {
+      return (
+        `COMPLETION CHECK FAILED — your code still contains stub/placeholder functions:\n` +
+        allIssues.map(i => `  - ${i}`).join("\n") + "\n\n" +
+        `You MUST fix these before finishing. For EACH stub function:\n` +
+        `1. The function name tells you what it should do — implement the REAL algorithm\n` +
+        `2. Replace the stub body (return true/false/[]/{}/ or comment-only) with working logic\n` +
+        `3. A function called "isMoveLegal" must validate piece-specific movement rules\n` +
+        `4. A function called "isCheckmate" must check if the king has no legal escape\n` +
+        `Do NOT provide a final answer until ALL stubs are replaced with real code.`
+      )
+    }
+    return null
+  } : undefined
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
+    completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: "planner-delegation-iteration",

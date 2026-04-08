@@ -217,4 +217,11 @@ export interface AgentConfig {
   onPlannerTrace?: (entry: Record<string, unknown>) => void
   /** Delegation function for planner-spawned children (injected by server). */
   plannerDelegateFn?: (step: import("./planner/types.js").SubagentTaskStep, envelope: import("./planner/types.js").ExecutionEnvelope) => Promise<string>
+  /**
+   * Completion validator — called when the agent tries to exit (0 tool calls).
+   * If it returns a non-null string, that string is injected as a system message
+   * and the agent is forced to continue. Fires at most once per run.
+   * Used by child agents to enforce code quality before exit.
+   */
+  completionValidator?: () => Promise<string | null>
 }
