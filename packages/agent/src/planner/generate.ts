@@ -100,6 +100,12 @@ You MUST respond with valid JSON matching this schema:
 14. MINIMIZE FILE CONFLICTS: If multiple fixes/changes target the SAME file, COMBINE them into ONE step when possible. Each time a file is rewritten by a different step, ALL previous changes to that file risk being lost (because write_file replaces the entire file). Splitting "fix bug A in file.js" and "fix bug B in file.js" into separate steps is DANGEROUS — the second step's rewrite will likely overwrite bug-A's fix. Instead combine: "fix bugs A and B in file.js" as a single step. Only split into separate steps when the changes are truly independent files.
 15. EACH FILE WRITTEN COMPLETELY IN ONE PASS: A step's objective MUST instruct the child to write each target file's COMPLETE implementation in a single write_file call — not incrementally. The child should plan (using the think tool) what ALL functions in each file will be, then write the entire file at once. Incremental rewrites (write skeleton → add feature → add feature) cause function loss and degeneration. One-shot writes do not.
 16. USE replace_in_file FOR FIXES: If a retry step needs to fix specific functions in an existing file, the objective MUST say to use replace_in_file (surgical section replacement) rather than rewriting the entire file with write_file. This prevents function loss during corrections.
+17. NO "FINALIZE/INTEGRATE" STEPS THAT MODIFY OTHER STEPS' FILES: NEVER create a "finalize_and_test" or "integration" step that REWRITES files created by earlier steps. Each step is a separate process with no memory — a "finalize" step WILL overwrite earlier steps' work and lose their implementations. If you need testing/verification, set verificationMode on the producing step itself. If you need cross-file wiring (e.g., adding script tags to HTML), the HTML-creating step should already include ALL script tags, OR the last code-writing step should own the HTML file too.
+19. HTML MUST LOAD ALL SCRIPTS — MANDATORY: For browser projects, the step that creates the HTML file MUST include \`<script src="filename.js">\` tags for EVERY JS file in the plan. The HTML step's objective MUST explicitly list every script tag to add. If the HTML is created before the JS files, the script tags still MUST be present (the browser will load them when the files exist). The verifier WILL check that HTML files reference all JS artifacts and flag missing script tags as an integration failure.
+20. targetArtifacts MUST be FILE PATHS only: Every entry in targetArtifacts must be a valid file path (e.g. "game/board.js"). NEVER put CSS selectors (".square.light"), DOM queries, URLs, or other non-path values in targetArtifacts.
+18. ONE OWNER PER FILE — STRICT: Every file appears in targetArtifacts of EXACTLY ONE step. No file should be written by multiple steps. If step A creates game_logic.js, NO other step may have game_logic.js in its targetArtifacts. A step that needs to READ another step's file puts it in requiredSourceArtifacts (read-only), not targetArtifacts. Violating this WILL cause destructive overwrites.
+21. SHARED DATA CONTRACT — MANDATORY FOR MULTI-FILE PROJECTS: When multiple JS files need to share data structures (game state, board representation, app state), the FIRST step's objective MUST define the EXACT data format. Example: "Board cells use the format { type: 'pawn', color: 'white' }. The board is a 2D array: board[row][col]." ALL subsequent steps' objectives MUST reference this same format verbatim. Without a shared contract, each child invents its own format and the files are INCOMPATIBLE.
+22. WRITE SCOPE — STRICT: Each child agent MUST ONLY write to files listed in its targetArtifacts. The child MUST NOT create placeholder/stub files for other steps' artifacts. If step A owns index.html and step B owns game.js, step A MUST NOT create an empty game.js "for later" — this confuses step B and causes path/content conflicts. Each step writes ONLY its own files.
 
 ## CRITICAL: File Paths and Artifact Chains
 - ALL paths in targetArtifacts and requiredSourceArtifacts MUST be relative to workspace root (e.g. "src/app.js", "game/index.html")
@@ -193,7 +199,7 @@ export async function generatePlan(
 
       if (!rawResponse) {
         diagnostics.push({
-          category: "parse",
+          category: "parse", severity: "error",
           code: "empty_response",
           message: "Planner returned empty response",
           details: { attempt },
@@ -209,7 +215,7 @@ export async function generatePlan(
         const salvaged = salvagePlanFromMalformedResponse(rawResponse, ctx.workspaceRoot)
         if (salvaged) {
           diagnostics.push({
-            category: "parse",
+            category: "parse", severity: "error",
             code: "salvaged_from_malformed",
             message: "Plan was salvaged from malformed planner response",
             details: { attempt },
@@ -230,7 +236,7 @@ export async function generatePlan(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       diagnostics.push({
-        category: "parse",
+        category: "parse", severity: "error",
         code: "llm_error",
         message: `LLM call failed: ${errMsg}`,
         details: { attempt },
@@ -374,7 +380,7 @@ function parsePlanFromResponse(raw: string): {
     obj = JSON.parse(jsonStr)
   } catch {
     diagnostics.push({
-      category: "parse",
+      category: "parse", severity: "error",
       code: "invalid_json",
       message: "Response is not valid JSON. Respond with ONLY a JSON object, no markdown.",
     })
@@ -383,7 +389,7 @@ function parsePlanFromResponse(raw: string): {
 
   if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     diagnostics.push({
-      category: "parse",
+      category: "parse", severity: "error",
       code: "not_object",
       message: "Response must be a JSON object with { reason, steps, edges }.",
     })
@@ -395,7 +401,7 @@ function parsePlanFromResponse(raw: string): {
   // Validate required fields
   if (!Array.isArray(data.steps) || data.steps.length === 0) {
     diagnostics.push({
-      category: "parse",
+      category: "parse", severity: "error",
       code: "missing_steps",
       message: "Plan must have a non-empty 'steps' array.",
     })
@@ -409,7 +415,7 @@ function parsePlanFromResponse(raw: string): {
     const raw = data.steps[i] as Record<string, unknown>
     if (!raw || typeof raw !== "object") {
       diagnostics.push({
-        category: "parse",
+        category: "parse", severity: "error",
         code: "invalid_step",
         message: `Step ${i} is not an object.`,
       })
@@ -419,7 +425,7 @@ function parsePlanFromResponse(raw: string): {
     const name = String(raw.name ?? `step_${i}`)
     if (stepNames.has(name)) {
       diagnostics.push({
-        category: "graph",
+        category: "graph", severity: "error",
         code: "duplicate_step_name",
         message: `Duplicate step name "${name}". Each step must have a unique name.`,
       })
@@ -439,7 +445,7 @@ function parsePlanFromResponse(raw: string): {
       steps.push(parsed.step!)
     } else {
       diagnostics.push({
-        category: "parse",
+        category: "parse", severity: "error",
         code: "unknown_step_type",
         message: `Step "${name}" has unknown stepType "${stepType}". Must be "deterministic_tool" or "subagent_task".`,
       })
@@ -456,7 +462,7 @@ function parsePlanFromResponse(raw: string): {
       const to = String(edge.to ?? "")
       if (!stepNames.has(from)) {
         diagnostics.push({
-          category: "graph",
+          category: "graph", severity: "error",
           code: "edge_unknown_source",
           message: `Edge from "${from}" → "${to}": source step "${from}" not found.`,
         })
@@ -464,7 +470,7 @@ function parsePlanFromResponse(raw: string): {
       }
       if (!stepNames.has(to)) {
         diagnostics.push({
-          category: "graph",
+          category: "graph", severity: "error",
           code: "edge_unknown_target",
           message: `Edge from "${from}" → "${to}": target step "${to}" not found.`,
         })
@@ -480,7 +486,7 @@ function parsePlanFromResponse(raw: string): {
       for (const dep of step.dependsOn) {
         if (!stepNames.has(dep)) {
           diagnostics.push({
-            category: "graph",
+            category: "graph", severity: "error",
             code: "dependency_not_found",
             message: `Step "${step.name}" depends on "${dep}", which doesn't exist.`,
           })
@@ -544,7 +550,7 @@ function parseSubagentStep(
 
   if (!raw.objective || typeof raw.objective !== "string") {
     diagnostics.push({
-      category: "contract",
+      category: "contract", severity: "error",
       code: "missing_objective",
       message: `Subagent step "${name}" must have a string 'objective'.`,
     })
@@ -554,7 +560,7 @@ function parseSubagentStep(
   const acceptanceCriteria = safeStringArray(raw.acceptanceCriteria)
   if (acceptanceCriteria.length === 0) {
     diagnostics.push({
-      category: "contract",
+      category: "contract", severity: "error",
       code: "missing_acceptance_criteria",
       message: `Subagent step "${name}" must have non-empty 'acceptanceCriteria' array.`,
     })
@@ -568,7 +574,7 @@ function parseSubagentStep(
     allowedWriteRoots: safeStringArray(execCtx.allowedWriteRoots),
     allowedTools: safeStringArray(execCtx.allowedTools),
     requiredSourceArtifacts: safeStringArray(execCtx.requiredSourceArtifacts),
-    targetArtifacts: safeStringArray(execCtx.targetArtifacts),
+    targetArtifacts: safeStringArray(execCtx.targetArtifacts).filter(isValidArtifactPath),
     effectClass: parseEffectClass(execCtx.effectClass),
     verificationMode: parseVerificationMode(execCtx.verificationMode),
     artifactRelations: parseArtifactRelations(execCtx.artifactRelations),
@@ -614,6 +620,15 @@ function parseSubagentStep(
 function safeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+}
+
+/** Reject non-file-path entries that the LLM sometimes puts in targetArtifacts (CSS selectors, URLs, bare words). */
+export function isValidArtifactPath(path: string): boolean {
+  // CSS selectors: start with . or # and don't contain /
+  if (/^[.#]/.test(path) && !path.includes("/")) return false
+  // Must look like a file path (contain a dot with extension, or contain a /)
+  if (!path.includes("/") && !path.includes(".")) return false
+  return true
 }
 
 function parseEffectClass(value: unknown): "readonly" | "filesystem_write" | "filesystem_scaffold" | "shell" | "mixed" {

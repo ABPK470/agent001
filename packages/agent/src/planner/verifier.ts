@@ -224,6 +224,59 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Path mismatch detection ──
+      // When probeArtifact found a file, but at a DIFFERENT path than planned,
+      // the child wrote to the wrong directory.  This is critical: the HTML
+      // loads scripts from the planned path, so the code at the wrong path is
+      // effectively dead.  Normalise paths to strip workspace root prefix
+      // before comparison so "tmp/game.js" and "./tmp/game.js" are equivalent.
+      for (const [artifact, probe] of probeCache) {
+        if (!probe.found) continue
+        const normPlanned = artifact.replace(/^\.\//, "")
+        const normResolved = probe.resolvedPath.replace(/^\.\//, "")
+        if (normResolved !== normPlanned) {
+          // Strip wsRoot prefix from both sides for comparison
+          const stripped = wsRoot
+            ? normResolved.replace(new RegExp(`^${wsRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?`), "")
+            : normResolved
+          if (stripped !== normPlanned) {
+            issues.push(
+              `PATH MISMATCH: artifact "${artifact}" was found at "${probe.resolvedPath}" instead of the planned path. ` +
+              `The child wrote to the WRONG directory. HTML and other files reference the planned path, so this file will NOT be loaded. ` +
+              `The child must write to the EXACT path specified in targetArtifacts.`
+            )
+          }
+        }
+      }
+
+      // ── Off-target write detection ──
+      // Check if the child wrote to files NOT in its targetArtifacts.
+      // This catches scope explosion (e.g. HTML step creating placeholder JS files).
+      const targetSet = new Set(sa.executionContext.targetArtifacts.map(a => a.replace(/^\.\//, "")))
+      for (const actual of actualPaths) {
+        const normActual = actual.replace(/^\.\//, "")
+        // Strip workspace root prefix for comparison
+        const stripped = wsRoot
+          ? normActual.replace(new RegExp(`^${wsRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?`), "")
+          : normActual
+        if (!targetSet.has(stripped) && !targetSet.has(normActual)) {
+          // Only flag if this is a file owned by a DIFFERENT step
+          const ownedByOtherStep = plan.steps.some(s => {
+            if (s.name === step.name || s.stepType !== "subagent_task") return false
+            const other = s as SubagentTaskStep
+            return other.executionContext.targetArtifacts.some(
+              a => a.replace(/^\.\//, "") === stripped || a.replace(/^\.\//, "") === normActual
+            )
+          })
+          if (ownedByOtherStep) {
+            issues.push(
+              `SCOPE VIOLATION: Child wrote to "${actual}" which belongs to a DIFFERENT step's targetArtifacts. ` +
+              `Each step must ONLY write to its own target files. Writing to other steps' files causes overwrites and data loss.`
+            )
+          }
+        }
+      }
+
       // If verification mode is browser_check, run it
       let browserCheckPassed = false
       if (sa.executionContext.verificationMode === "browser_check") {
@@ -510,7 +563,7 @@ export async function runDeterministicProbes(
         "Missing method", "Browser check", "catch-all", "empty function",
         "deferred-work", "explicit failure", "all tool calls failed",
         "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
-        "degeneration", "no code evidence",
+        "degeneration", "no code evidence", "PATH MISMATCH", "SCOPE VIOLATION",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -556,7 +609,110 @@ export async function runDeterministicProbes(
     }
   }
 
+  // ── Cross-step integration probe ──
+  // After all per-step probes, check that artifacts across steps integrate properly.
+  // This catches: HTML missing <script> tags for JS files, cross-file window.X references
+  // to unexported symbols, etc.
+  await runIntegrationProbes(plan, pipelineResult, toolMap, assessments)
+
   return assessments
+}
+
+// ============================================================================
+// Cross-step integration probes
+// ============================================================================
+
+/**
+ * Check that artifacts produced by different steps integrate with each other.
+ * Detects: HTML files missing <script> tags for JS artifacts, cross-file
+ * window.X references to symbols that no file exports.
+ */
+async function runIntegrationProbes(
+  plan: Plan,
+  _pipelineResult: PipelineResult,
+  toolMap: Map<string, Tool>,
+  assessments: VerifierStepAssessment[],
+): Promise<void> {
+  const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
+  if (!readFile) return
+
+  // Collect ALL target artifacts and their owning step across the plan
+  const allArtifacts: Array<{ path: string; stepName: string }> = []
+  for (const step of plan.steps) {
+    if (step.stepType !== "subagent_task") continue
+    const sa = step as SubagentTaskStep
+    for (const artifact of sa.executionContext.targetArtifacts) {
+      allArtifacts.push({ path: artifact, stepName: step.name })
+    }
+  }
+
+  const htmlArtifacts = allArtifacts.filter(a => /\.html?$/i.test(a.path))
+  const jsArtifacts = allArtifacts.filter(a => /\.js$/i.test(a.path))
+
+  // No HTML+JS combination → nothing to check
+  if (htmlArtifacts.length === 0 || jsArtifacts.length === 0) return
+
+  // Read each HTML file and check for <script> tags referencing the JS artifacts
+  for (const htmlEntry of htmlArtifacts) {
+    const wsRoot = findWsRootForStep(plan, htmlEntry.stepName)
+    const probe = await probeArtifact(readFile, htmlEntry.path, [], wsRoot, runCommand)
+    if (!probe.found) continue
+
+    let htmlContent: string
+    try {
+      const raw = await readFile.execute({ path: probe.resolvedPath })
+      if (typeof raw !== "string" || raw.length === 0) continue
+      htmlContent = raw
+    } catch { continue }
+
+    // Find JS files that should be loaded by this HTML
+    // Only check JS artifacts from the same project (same directory tree)
+    const htmlDir = htmlEntry.path.replace(/[^/]+$/, "")
+    const relatedJs = jsArtifacts.filter(js => {
+      const jsDir = js.path.replace(/[^/]+$/, "")
+      // Same directory tree: either same dir or one is a subdirectory of the other
+      return jsDir.startsWith(htmlDir) || htmlDir.startsWith(jsDir)
+    })
+
+    if (relatedJs.length === 0) continue
+
+    const missingScripts: string[] = []
+    for (const jsEntry of relatedJs) {
+      const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
+      // Check both src="filename.js" and src="./subdir/filename.js" patterns
+      const hasScriptTag = htmlContent.includes(jsBasename) &&
+        /<script\b[^>]*src\s*=\s*["'][^"']*/.test(htmlContent)
+      if (!hasScriptTag) {
+        missingScripts.push(jsBasename)
+      }
+    }
+
+    if (missingScripts.length > 0) {
+      // Find the assessment for the HTML-owning step and replace it with integration issue
+      const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
+      const issue = `Integration gap: HTML file "${htmlEntry.path}" has no <script> tags for JS files: ${missingScripts.join(", ")}. The JavaScript will never load.`
+      if (idx >= 0) {
+        const existing = assessments[idx]
+        assessments[idx] = {
+          stepName: existing.stepName,
+          outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+          confidence: existing.outcome === "pass" ? 0.4 : existing.confidence,
+          issues: [...existing.issues, issue],
+          retryable: true,
+        }
+      }
+    }
+  }
+}
+
+/** Find workspace root for a given step name. */
+function findWsRootForStep(plan: Plan, stepName: string): string | undefined {
+  const step = plan.steps.find(s => s.name === stepName)
+  if (step?.stepType === "subagent_task") {
+    return (step as SubagentTaskStep).executionContext.workspaceRoot || undefined
+  }
+  return undefined
 }
 
 // ============================================================================
@@ -884,13 +1040,20 @@ function parseLLMVerification(
     const obj = JSON.parse(jsonStr) as Record<string, unknown>
 
     const steps: VerifierStepAssessment[] = Array.isArray(obj.steps)
-      ? (obj.steps as Array<Record<string, unknown>>).map(s => ({
-          stepName: String(s.stepName ?? ""),
-          outcome: parseOutcome(s.outcome),
-          confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
-          issues: Array.isArray(s.issues) ? s.issues.map(String) : [],
-          retryable: Boolean(s.retryable ?? true),
-        }))
+      ? (obj.steps as Array<Record<string, unknown>>).map(s => {
+          // Filter out gibberish issues — the verifier LLM sometimes degenerates
+          // and produces word-salad that would confuse retry children.
+          const rawIssues: string[] = Array.isArray(s.issues) ? s.issues.map(String) : []
+          const cleanIssues = rawIssues.filter(i => !isLLMGibberish(i))
+
+          return {
+            stepName: String(s.stepName ?? ""),
+            outcome: parseOutcome(s.outcome),
+            confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
+            issues: cleanIssues,
+            retryable: Boolean(s.retryable ?? true),
+          }
+        })
       : [...fallbackAssessments]
 
     return {
@@ -1273,4 +1436,43 @@ export function extractCriterionKeywords(criterion: string): string[] {
 
   // Deduplicate
   return [...new Set(keywords)]
+}
+
+// ============================================================================
+// LLM gibberish detection for verifier output
+// ============================================================================
+
+/**
+ * Detect if a verifier LLM issue string is gibberish/word-salad.
+ * The verifier LLM sometimes degenerates and produces nonsense like:
+ *   "Edge-action resets fail appropriate bound-scoping interpolated mouse-rerun
+ *    initialization layers, creating block scenario loop redundancies"
+ * These confuse retry children if injected as retry feedback.
+ */
+export function isLLMGibberish(issue: string): boolean {
+  const words = issue.split(/\s+/).filter(w => w.length > 0)
+  if (words.length < 8) return false
+
+  let score = 0
+
+  // Signal 1: Compound-hyphenated jargon: "bound-scoping", "frame-hydro-exclusive"
+  const compoundCount = (issue.match(/[a-z]+-[a-z]+-[a-z]+/gi) ?? []).length
+  if (compoundCount >= 3) score += 0.4
+  else if (compoundCount >= 2) score += 0.2
+
+  // Signal 2: Very few common English function words relative to total
+  const functionWords = (issue.match(/\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi) ?? []).length
+  const ratio = functionWords / words.length
+  if (ratio < 0.04 && words.length >= 15) score += 0.4
+  else if (ratio < 0.06 && words.length >= 12) score += 0.2
+
+  // Signal 3: No file paths, tool names, or code-relevant indicators
+  const hasCodeRefs = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b|\bstub\b|\bplaceholder\b/i.test(issue)
+  if (!hasCodeRefs && words.length >= 10) score += 0.2
+
+  // Signal 4: Very few sentence-ending punctuation relative to word count
+  const sentenceEnders = (issue.match(/[.!?]\s/g) ?? []).length + (issue.endsWith(".") || issue.endsWith("!") || issue.endsWith("?") ? 1 : 0)
+  if (sentenceEnders === 0 && words.length >= 12) score += 0.1
+
+  return score >= 0.6
 }

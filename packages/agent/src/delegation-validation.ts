@@ -120,7 +120,25 @@ const COMPLETION_CLAIM_RE =
 
 /** Unresolved work markers — the child claims "done" but these indicate otherwise. */
 const UNRESOLVED_WORK_RE =
-  /\b(?:TODO|FIXME|HACK|XXX|PLACEHOLDER|STUB|NOT YET|UNFINISHED|INCOMPLETE|WILL BE|NEEDS? (?:TO BE )?IMPLEMENT|WILL GO HERE|WILL BE ADDED|COME(?:S)? BACK|LATER|BLOCKED ON|WAITING FOR|DEPENDS ON|CAN'T|CANNOT|UNABLE TO|FAILED TO|ERROR(?:S)? (?:OCCURRED|ENCOUNTERED)|REMAINING WORK|FOLLOW[- ]?UP|PARTIAL(?:LY)?(?: IMPLEMENTED)?)\b/i
+  /\b(?:TODO|FIXME|HACK|XXX|PLACEHOLDER|STUB|NOT YET|UNFINISHED|NEEDS? (?:TO BE )?IMPLEMENT|WILL GO HERE|WILL BE ADDED|WAITING FOR|DEPENDS ON|UNABLE TO|FAILED TO|ERROR(?:S)? (?:OCCURRED|ENCOUNTERED)|REMAINING WORK|FOLLOW[- ]?UP|PARTIAL(?:LY)? IMPLEMENTED)\b/i
+
+/**
+ * Context-sensitive markers — only flag these when they appear in "unresolved work"
+ * context, not in normal English descriptions like "for later clearing" or
+ * "checking for incomplete implementations".
+ */
+const CONTEXT_SENSITIVE_MARKERS: Array<{ re: RegExp; label: string }> = [
+  // "later" only when preceded by action verbs: "do later", "implement later", "fix later"
+  { re: /\b(?:do|implement|fix|add|handle|address|revisit|come back(?:to)?)\s+later\b/i, label: "later" },
+  // "incomplete" only when describing the work itself: "implementation is incomplete", "incomplete code"
+  { re: /\b(?:incomplete\s+(?:implementation|code|logic|work|feature)|(?:implementation|code|logic|work|feature)\s+(?:is|are|remains?)\s+incomplete)\b/i, label: "incomplete" },
+  // "will be" only in deferred-work patterns: "will be implemented", "will be done"
+  { re: /\bwill be\s+(?:implemented|added|done|completed|fixed|handled|addressed)\b/i, label: "will be" },
+  // "blocked on" only when describing a blocker for the task
+  { re: /\b(?:blocked on|blocked by)\s+(?:a |the |an )?(?:missing|lack|absence|dependency|requirement|issue|bug|error)/i, label: "blocked on" },
+  // "can't" / "cannot" only when admitting inability to complete work
+  { re: /\b(?:can'?t|cannot)\s+(?:implement|complete|finish|fix|resolve|access|proceed)/i, label: "can't" },
+]
 
 /** File mutation tool names — tools that create/modify/delete files. */
 const FILE_MUTATION_TOOLS = new Set([
@@ -527,13 +545,25 @@ export function validateDelegatedOutputContract(params: {
   }
 
   // ── 9. Contradictory completion claim ──
-  if (COMPLETION_CLAIM_RE.test(outputLower) && UNRESOLVED_WORK_RE.test(trimmed)) {
-    // The child says "done" but the output also contains TODO/FIXME/placeholder markers
-    const unresolvedMatch = trimmed.match(UNRESOLVED_WORK_RE)
-    return {
-      ok: false,
-      code: "contradictory_completion_claim",
-      message: `Child claims completion but output contains unresolved work: "${unresolvedMatch?.[0]}"`,
+  if (COMPLETION_CLAIM_RE.test(outputLower)) {
+    // Check unambiguous markers first
+    if (UNRESOLVED_WORK_RE.test(trimmed)) {
+      const unresolvedMatch = trimmed.match(UNRESOLVED_WORK_RE)
+      return {
+        ok: false,
+        code: "contradictory_completion_claim",
+        message: `Child claims completion but output contains unresolved work: "${unresolvedMatch?.[0]}"`,
+      }
+    }
+    // Check context-sensitive markers (require surrounding context to avoid false positives)
+    for (const { re, label } of CONTEXT_SENSITIVE_MARKERS) {
+      if (re.test(trimmed)) {
+        return {
+          ok: false,
+          code: "contradictory_completion_claim",
+          message: `Child claims completion but output contains unresolved work: "${label}"`,
+        }
+      }
     }
   }
 

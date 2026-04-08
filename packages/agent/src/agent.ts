@@ -65,6 +65,300 @@ function estimateTokens(messages: Message[]): number {
 /** Max token budget for the request body. */
 const MAX_CONTEXT_TOKENS = 64000
 
+// ============================================================================
+// Progressive context compaction
+// ============================================================================
+
+/**
+ * How many recent iterations to preserve in full detail.
+ * Tool results within this window are kept verbatim.
+ * Older results are compacted to summaries.
+ */
+const COMPACT_PRESERVE_RECENT = 3
+
+/**
+ * Tool results shorter than this (chars) are never compacted — they're cheap.
+ */
+const COMPACT_MIN_SIZE = 500
+
+/**
+ * Progressive context compaction — the key to preventing LLM degeneration.
+ *
+ * Instead of keeping all tool results verbatim until hard truncation drops
+ * entire messages, this function surgically compacts old tool results while
+ * preserving their semantic signal. This keeps the LLM focused on what
+ * matters NOW rather than drowning in stale file contents.
+ *
+ * Three compaction strategies:
+ *   1. Superseded reads: If file X was read, then later written/replaced,
+ *      the old read result is actively misleading — compact it.
+ *   2. Superseded writes: If file X was written multiple times, only the
+ *      LAST write's content matters — earlier writes are compacted.
+ *   3. Old tool results: Tool results from >3 iterations ago that are
+ *      large (>500 chars) are compacted to a summary line.
+ *
+ * This is how enterprise systems (Copilot, Cursor, agenc-core) maintain
+ * output quality across long agent sessions. Without it, the LLM's
+ * attention gets diluted across 50K+ tokens of stale file dumps.
+ */
+/** @internal — exported for testing */
+export function compactMessages(messages: Message[]): Message[] {
+  // Build a timeline: for each message, determine which iteration it belongs to.
+  // An "iteration" boundary is each assistant message with tool calls.
+  const iterationOf = new Map<number, number>()
+  let currentIteration = 0
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+      currentIteration++
+    }
+    iterationOf.set(i, currentIteration)
+  }
+  const latestIteration = currentIteration
+
+  // --- Pass 1: Track file read/write history ---
+  // Map: filePath → index of last write (write_file or replace_in_file) tool CALL
+  const lastWriteOf = new Map<string, number>()
+  // Map: filePath → index of last read (read_file) tool CALL
+  const lastReadOf = new Map<string, number>()
+
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role !== "assistant" || !m.toolCalls) continue
+    for (const tc of m.toolCalls) {
+      const args = tc.arguments as Record<string, unknown>
+      const path = extractFilePath(tc.name, args)
+      if (!path) continue
+      if (tc.name === "write_file" || tc.name === "replace_in_file") {
+        lastWriteOf.set(path, i)
+      } else if (tc.name === "read_file") {
+        lastReadOf.set(path, i)
+      }
+    }
+  }
+
+  // --- Pass 2: Identify which tool-result messages to compact ---
+  // A tool result is compactable if:
+  //   a) It's a read_file result for a file that was later written (superseded)
+  //   b) It's a write_file result for a file that was later re-written (superseded)
+  //   c) It's old (>COMPACT_PRESERVE_RECENT iterations ago) and large (>COMPACT_MIN_SIZE chars)
+  //
+  // We also need to match tool RESULTS to their tool CALLS.
+  // The flow is: assistant message (with toolCalls) → tool result messages (one per call).
+  // We match by toolCallId.
+
+  // Build a map from toolCallId → { tool name, file path, assistant message index }
+  const toolCallMeta = new Map<string, { name: string; path: string | null; assistantIdx: number }>()
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role !== "assistant" || !m.toolCalls) continue
+    for (const tc of m.toolCalls) {
+      const args = tc.arguments as Record<string, unknown>
+      toolCallMeta.set(tc.id, {
+        name: tc.name,
+        path: extractFilePath(tc.name, args),
+        assistantIdx: i,
+      })
+    }
+  }
+
+  // --- Pass 3: Build compacted messages ---
+  const result: Message[] = []
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+
+    // Strategy 4: Compact old assistant tool call ARGUMENTS.
+    // When the LLM calls write_file, the FULL file content appears in
+    // assistant.toolCalls[].arguments.content — this is sent to the API
+    // in addition to the tool result. A 300-line write doubles to ~20K.
+    // Compact the arguments of old/superseded tool calls.
+    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+      const iter = iterationOf.get(i) ?? 0
+      const age = latestIteration - iter
+      let needsCompaction = false
+
+      if (age > COMPACT_PRESERVE_RECENT) {
+        // Check if any tool call has large arguments
+        needsCompaction = m.toolCalls.some((tc) => {
+          const args = tc.arguments as Record<string, unknown>
+          const content = typeof args.content === "string" ? args.content : ""
+          return content.length >= COMPACT_MIN_SIZE
+        })
+      } else {
+        // Even recent calls: compact arguments for superseded writes
+        needsCompaction = m.toolCalls.some((tc) => {
+          if (tc.name !== "write_file" && tc.name !== "replace_in_file") return false
+          const args = tc.arguments as Record<string, unknown>
+          const content = typeof args.content === "string" ? args.content : ""
+          if (content.length < COMPACT_MIN_SIZE) return false
+          const path = extractFilePath(tc.name, args)
+          if (!path) return false
+          const lastWrite = lastWriteOf.get(path)
+          return lastWrite != null && lastWrite > i
+        })
+      }
+
+      if (needsCompaction) {
+        const compactedCalls = m.toolCalls.map((tc) => {
+          const args = tc.arguments as Record<string, unknown>
+          const content = typeof args.content === "string" ? args.content : ""
+          if (content.length < COMPACT_MIN_SIZE) return tc
+
+          const path = extractFilePath(tc.name, args)
+          const isSuperseded = path != null && lastWriteOf.has(path) && lastWriteOf.get(path)! > i
+          const isOld = age > COMPACT_PRESERVE_RECENT
+
+          if (isSuperseded || isOld) {
+            const lineCount = content.split("\n").length
+            return {
+              ...tc,
+              arguments: {
+                ...args,
+                content: `[compacted — ${lineCount} lines, see tool result]`,
+              },
+            }
+          }
+          return tc
+        })
+        result.push({ ...m, toolCalls: compactedCalls })
+      } else {
+        result.push(m)
+      }
+      continue
+    }
+
+    // Only compact tool result messages
+    if (m.role !== "tool" || !m.toolCallId || !m.content || m.content.length < COMPACT_MIN_SIZE) {
+      result.push(m)
+      continue
+    }
+
+    const meta = toolCallMeta.get(m.toolCallId)
+    if (!meta) {
+      result.push(m)
+      continue
+    }
+
+    const iter = iterationOf.get(meta.assistantIdx) ?? 0
+    const age = latestIteration - iter
+
+    // Strategy 1: Superseded read — file was read then later written
+    if (meta.name === "read_file" && meta.path && lastWriteOf.has(meta.path)) {
+      const writeIdx = lastWriteOf.get(meta.path)!
+      if (writeIdx > meta.assistantIdx) {
+        // This read result is stale — the file was modified after this read
+        const lineCount = m.content.split("\n").length
+        result.push({
+          ...m,
+          content: `[compacted — file was modified later] read_file ${meta.path}: ${lineCount} lines (superseded by later write)`,
+        })
+        continue
+      }
+    }
+
+    // Strategy 2: Superseded write — file was written then later re-written
+    if ((meta.name === "write_file" || meta.name === "replace_in_file") && meta.path && lastWriteOf.has(meta.path)) {
+      const lastWrite = lastWriteOf.get(meta.path)!
+      if (lastWrite > meta.assistantIdx) {
+        // This write was superseded — a later write overwrote this file
+        const lineCount = m.content.split("\n").length
+        result.push({
+          ...m,
+          content: `[compacted — file was rewritten later] ${meta.name} ${meta.path}: ${lineCount} lines (superseded)`,
+        })
+        continue
+      }
+    }
+
+    // Strategy 3: Old large results — compact anything old regardless of tool type
+    if (age > COMPACT_PRESERVE_RECENT) {
+      result.push({
+        ...m,
+        content: compactToolResult(meta.name, meta.path, m.content),
+      })
+      continue
+    }
+
+    // Recent enough — keep verbatim
+    result.push(m)
+  }
+
+  return result
+}
+
+/**
+ * Produce a compact summary of a tool result.
+ * The summary preserves the SIGNAL (what happened) while dropping the BULK (raw content).
+ */
+function compactToolResult(toolName: string, filePath: string | null, content: string): string {
+  const lineCount = content.split("\n").length
+  const charCount = content.length
+  const pathLabel = filePath ? ` ${filePath}` : ""
+
+  switch (toolName) {
+    case "read_file":
+      return `[compacted] read_file${pathLabel}: ${lineCount} lines, ${charCount} chars`
+    case "write_file": {
+      // Extract function/class names if it looks like code
+      const defs = extractDefinitionSummary(content)
+      return `[compacted] write_file${pathLabel}: ${lineCount} lines` + (defs ? ` — defines: ${defs}` : "")
+    }
+    case "replace_in_file":
+      return `[compacted] replace_in_file${pathLabel}: replacement applied (${charCount} chars in result)`
+    case "run_command": {
+      // Keep first and last few lines (often the error or summary)
+      const lines = content.split("\n")
+      if (lines.length <= 10) return content
+      const head = lines.slice(0, 3).join("\n")
+      const tail = lines.slice(-3).join("\n")
+      return `[compacted] run_command (${lineCount} lines):\n${head}\n  ... (${lineCount - 6} lines omitted) ...\n${tail}`
+    }
+    case "list_directory":
+      return `[compacted] list_directory${pathLabel}: ${lineCount} entries`
+    case "search_files":
+      return `[compacted] search_files: ${lineCount} result lines`
+    case "browser_check": {
+      // Keep the status but trim long DOM dumps
+      if (charCount < 1000) return content
+      return content.slice(0, 800) + `\n... (${charCount - 800} chars omitted)`
+    }
+    default:
+      // Generic compaction: keep first 200 chars as summary
+      if (charCount < 500) return content
+      return `[compacted] ${toolName}${pathLabel} (${charCount} chars): ${content.slice(0, 200)}...`
+  }
+}
+
+/**
+ * Extract a brief summary of definitions (function/class/const names) from code content.
+ */
+function extractDefinitionSummary(code: string): string | null {
+  const names: string[] = []
+  const re = /(?:function|class|const|let|var|export\s+(?:function|class|const|let|var))\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g
+  let match
+  while ((match = re.exec(code)) !== null) {
+    if (!names.includes(match[1])) names.push(match[1])
+  }
+  if (names.length === 0) return null
+  if (names.length <= 8) return names.join(", ")
+  return names.slice(0, 8).join(", ") + ` (+${names.length - 8} more)`
+}
+
+/**
+ * Extract file path from a tool call's arguments.
+ * Different tools use different arg names for file paths.
+ */
+function extractFilePath(toolName: string, args: Record<string, unknown>): string | null {
+  // Common arg names for file path
+  for (const key of ["path", "filePath", "file_path", "file", "filename"]) {
+    if (typeof args[key] === "string") return args[key] as string
+  }
+  // write_file often uses "path" at top level
+  if (toolName === "write_file" && typeof args.path === "string") return args.path as string
+  if (toolName === "read_file" && typeof args.path === "string") return args.path as string
+  return null
+}
+
 interface TruncationResult {
   readonly messages: Message[]
   readonly budgetDiagnostics?: PromptBudgetDiagnostics
@@ -146,6 +440,7 @@ function truncateBySection(messages: Message[]): Message[] {
 /**
  * Drop oldest history messages (assistant/tool pairs) while keeping recent context.
  * Preserves system messages and the most recent tail.
+ * Generates a progress summary from dropped messages so the LLM knows what it already did.
  */
 function dropOldestHistory(messages: Message[]): Message[] {
   // Find the boundaries of history messages (non-system, non-section-tagged)
@@ -166,13 +461,84 @@ function dropOldestHistory(messages: Message[]): Message[] {
 
   // Keep only the most recent half of history
   const keepCount = Math.max(6, Math.floor(tail.length / 2))
+  const droppedTail = tail.slice(0, -keepCount)
   const keptTail = tail.slice(-keepCount)
+
+  // Build a progress summary from the dropped messages
+  const summary = buildDroppedHistorySummary(droppedTail)
 
   return [
     ...head,
-    { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]", section: "history" as PromptBudgetSection },
+    { role: "system" as const, content: summary, section: "history" as PromptBudgetSection },
     ...keptTail,
   ]
+}
+
+/**
+ * Build a concise progress summary from messages that are about to be dropped.
+ * This tells the LLM what it already accomplished so it doesn't redo work.
+ */
+function buildDroppedHistorySummary(dropped: Message[]): string {
+  const actions: string[] = []
+  const filesWritten = new Set<string>()
+  const filesRead = new Set<string>()
+
+  for (const m of dropped) {
+    if (m.role !== "assistant" || !m.toolCalls) continue
+    for (const tc of m.toolCalls) {
+      const args = tc.arguments as Record<string, unknown>
+      const path = extractFilePath(tc.name, args)
+
+      switch (tc.name) {
+        case "write_file":
+          if (path && !filesWritten.has(path)) {
+            filesWritten.add(path)
+            actions.push(`wrote ${path}`)
+          }
+          break
+        case "replace_in_file":
+          if (path) actions.push(`edited ${path}`)
+          break
+        case "read_file":
+          if (path && !filesRead.has(path)) {
+            filesRead.add(path)
+            actions.push(`read ${path}`)
+          }
+          break
+        case "run_command": {
+          const cmd = typeof args.command === "string"
+            ? args.command.slice(0, 60)
+            : "command"
+          actions.push(`ran: ${cmd}`)
+          break
+        }
+        case "delegate":
+        case "delegate_parallel":
+          actions.push(`delegated: ${typeof args.goal === "string" ? args.goal.slice(0, 80) : "subtask"}`)
+          break
+        case "browser_check":
+          if (path) actions.push(`browser-checked ${path}`)
+          break
+        default:
+          actions.push(`called ${tc.name}`)
+      }
+    }
+  }
+
+  if (actions.length === 0) {
+    return "[Earlier conversation truncated to save context budget.]"
+  }
+
+  // Cap at 15 actions to keep the summary concise
+  const displayed = actions.length <= 15
+    ? actions
+    : [...actions.slice(0, 12), `... and ${actions.length - 12} more actions`]
+
+  return (
+    "[Earlier conversation truncated. Here is what you already did:]\n" +
+    displayed.map((a) => `- ${a}`).join("\n") +
+    "\n[Do NOT repeat these actions. Continue from where you left off.]"
+  )
 }
 
 /** Legacy truncation for non-sectioned messages. */
@@ -180,16 +546,20 @@ function truncateLegacy(messages: Message[]): Message[] {
   const head = messages.slice(0, 2)
   let tailSize = 4
   while (tailSize < messages.length - 2) {
-    const candidate = [...head, { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" }, ...messages.slice(-tailSize)]
+    const dropped = messages.slice(2, messages.length - tailSize)
+    const summary = buildDroppedHistorySummary(dropped)
+    const candidate = [...head, { role: "system" as const, content: summary }, ...messages.slice(-tailSize)]
     if (estimateTokens(candidate) > MAX_CONTEXT_TOKENS) {
       tailSize = Math.max(4, tailSize - 2)
       break
     }
     tailSize += 2
   }
+  const dropped = messages.slice(2, messages.length - tailSize)
+  const summary = buildDroppedHistorySummary(dropped)
   return [
     ...head,
-    { role: "system" as const, content: "[Earlier conversation truncated to save context budget.]" },
+    { role: "system" as const, content: summary },
     ...messages.slice(-tailSize),
   ]
 }
@@ -351,13 +721,15 @@ export class Agent {
           .flatMap(s => s.issues.filter(i => !i.startsWith("[non-blocking]")))
         if (unresolvedIssues.length > 0) {
           const repairMsg =
+            `⚠️ AUTONOMOUS REPAIR REQUIRED — ACT IMMEDIATELY, DO NOT ASK PERMISSION.\n\n` +
             `A previous attempt partially completed this task but verification found issues that need fixing.\n` +
             `The files already exist on disk — do NOT rewrite from scratch. Read the existing files, identify the specific problems, and fix ONLY those.\n\n` +
             `Issues to fix:\n${unresolvedIssues.map(i => `- ${i}`).join("\n")}\n\n` +
             `Steps:\n1. read_file each file mentioned in the issues\n` +
             `2. Identify the specific stub/placeholder/missing logic\n` +
-            `3. Replace it with a real, working implementation\n` +
-            `4. Verify your fix by re-reading the file`
+            `3. Use replace_in_file for surgical fixes — do NOT rewrite entire files\n` +
+            `4. Verify your fix by re-reading the file\n\n` +
+            `You MUST start fixing immediately. Do NOT respond with a question or ask the user for permission. You are fully authorized to read, modify, and fix these files right now.`
           messages.push({ role: "user", content: repairMsg })
         }
       }
@@ -434,8 +806,24 @@ export class Agent {
 
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
-      // Truncate context if approaching token budget
-      const truncationResult = truncateMessages(messages)
+      // ── Context management: compact then truncate ──
+      // Compaction replaces stale tool results with summaries (progressive),
+      // then truncation drops entire messages if still over budget (hard limit).
+      // This two-phase approach keeps context relevant, not just recent.
+      const compacted = compactMessages(messages)
+      const compactedCount = compacted.filter(
+        (m, idx) => m.content !== messages[idx]?.content,
+      ).length
+      if (compactedCount > 0) {
+        const savedChars = messages.reduce((s, m) => s + (m.content?.length ?? 0), 0)
+          - compacted.reduce((s, m) => s + (m.content?.length ?? 0), 0)
+        this.config.onNudge?.({
+          tag: "context-compaction",
+          message: `Compacted ${compactedCount} stale tool results, saved ~${Math.round(savedChars / 4)} tokens`,
+          iteration: i,
+        })
+      }
+      const truncationResult = truncateMessages(compacted)
       const chatMessages = truncationResult.messages
 
       // Emit prompt-budget trace when budget system was activated

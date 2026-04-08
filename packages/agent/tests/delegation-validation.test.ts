@@ -310,6 +310,74 @@ describe("validateDelegatedOutputContract", () => {
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
     })
+
+    it("does NOT false-positive on 'later' in normal English descriptions", () => {
+      // Real trace: child said "appends it to the highlightedSquares array for later clearing"
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Successfully implemented UI. highlightSquare appends it to the highlightedSquares array for later clearing. tmp/chess/ui.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(true)
+    })
+
+    it("does NOT false-positive on 'incomplete' in review context", () => {
+      // Real trace: child said "checking for incomplete implementations"
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Done! Verified all code by checking for incomplete patterns — found none. All functions have real logic. tmp/chess/game.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(true)
+    })
+
+    it("does NOT false-positive on 'will be' in descriptive context", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Completed implementation. The status display will be updated whenever a move is made. tmp/chess/status.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(true)
+    })
+
+    it("does NOT false-positive on 'comes back' in code description", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Done! The function comes back to the caller with the validated result. tmp/chess/validate.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(true)
+    })
+
+    it("DOES detect 'implement later' as unresolved work", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Created the game files. Will implement later the castling logic. tmp/chess/game.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("contradictory_completion_claim")
+    })
+
+    it("DOES detect 'implementation is incomplete' as unresolved work", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Created game.js. The implementation is incomplete for pawn promotion. tmp/chess/game.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("contradictory_completion_claim")
+    })
+
+    it("DOES detect 'will be implemented' as unresolved work", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ acceptanceCriteria: [] }),
+        output: "Done with basic structure. En passant will be implemented in a follow-up. tmp/chess/game.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("contradictory_completion_claim")
+    })
   })
 
   describe("acceptance evidence", () => {

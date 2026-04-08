@@ -168,7 +168,10 @@ export async function executePipeline(
       // Inject verifier feedback into subagent steps on retry.
       // Critical: also promote target artifacts to source files so the child
       // reads its own prior work instead of rewriting from scratch.
-      const feedback = opts?.retryFeedback?.get(name)
+      const rawFeedback = opts?.retryFeedback?.get(name)
+      // Filter out gibberish/degenerated verifier reasons — the LLM verifier
+      // sometimes produces word-salad that confuses retry children.
+      const feedback = rawFeedback?.filter(f => !isGibberishIssue(f))
       if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
         const sa = effectiveStep as SubagentTaskStep
         // Add target artifacts as source files — these files already exist from
@@ -188,7 +191,7 @@ export async function executePipeline(
 
         effectiveStep = {
           ...sa,
-          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}\n\n⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n3. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n4. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions\n5. Your fix should be SURGICAL: read → identify the gap → write the file with the gap filled, keeping everything else identical`,
+          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}\n\n⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions`,
           executionContext: {
             ...sa.executionContext,
             requiredSourceArtifacts: [...existingSource],
@@ -750,4 +753,36 @@ async function detectRetryRegressions(
   }
 
   return regressions
+}
+
+// ── Gibberish issue detection ────────────────────────────────────
+
+/**
+ * Detect if a verifier issue string is gibberish/word-salad.
+ * The LLM verifier sometimes degenerates and produces nonsense like:
+ *   "Edge-action resets fail appropriate bound-scoping interpolated mouse-rerun
+ *    initialization layers, creating block scenario loop redundancies"
+ * These confuse retry children. Filter them out.
+ */
+export function isGibberishIssue(issue: string): boolean {
+  const words = issue.split(/\s+/).filter(w => w.length > 0)
+  if (words.length < 8) return false
+
+  // Compound-hyphenated jargon: "bound-scoping", "frame-hydro-exclusive"
+  const tripleCompound = (issue.match(/[a-z]+-[a-z]+-[a-z]+/gi) ?? []).length
+  if (tripleCompound >= 3) return true
+
+  const doubleCompound = (issue.match(/[a-z]{3,}-[a-z]{3,}/gi) ?? []).length
+
+  // Very few common English function words relative to total
+  const functionWords = (issue.match(/\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi) ?? []).length
+  const ratio = functionWords / words.length
+  if (ratio < 0.04 && words.length >= 15) return true
+
+  // Contains no code-relevant indicators (file paths, function names, tool names)
+  const hasCodeRefs = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b/i.test(issue)
+  // Many compound words + few function words + no code refs = gibberish
+  if (!hasCodeRefs && doubleCompound >= 4 && ratio < 0.08) return true
+
+  return false
 }

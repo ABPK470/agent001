@@ -183,8 +183,16 @@ export interface Plan {
 
 export type DiagnosticCategory = "parse" | "graph" | "contract" | "ownership" | "verification" | "policy"
 
+/**
+ * Severity controls whether a diagnostic blocks the pipeline:
+ * - "error"   → structurally broken plan, pipeline cannot run (cycles, unknown tools)
+ * - "warning" → advisory issue, pipeline proceeds but warning is injected into step objectives
+ */
+export type DiagnosticSeverity = "error" | "warning"
+
 export interface PlanDiagnostic {
   readonly category: DiagnosticCategory
+  readonly severity: DiagnosticSeverity
   readonly code: string
   readonly message: string
   readonly stepName?: string

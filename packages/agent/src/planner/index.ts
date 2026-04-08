@@ -28,7 +28,7 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArtifactRelation, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationMode, VerifierDecision, VerifierOutcome,
+    ArtifactRelation, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationMode, VerifierDecision, VerifierOutcome,
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
@@ -41,9 +41,48 @@ import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
-import type { PipelineResult, Plan, PlanStep, VerifierDecision } from "./types.js"
+import type { PipelineResult, Plan, PlanDiagnostic, PlanStep, SubagentTaskStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
 import { verify } from "./verifier.js"
+
+// ============================================================================
+// Warning injection — augment step objectives with validation warnings
+// ============================================================================
+
+/**
+ * Inject validation warnings into the plan's step objectives so child agents
+ * receive guidance about potential issues without blocking the pipeline.
+ *
+ * Mutates step objectives in-place on the (mutable) plan object.
+ */
+function injectWarningsIntoSteps(plan: Plan, warnings: readonly PlanDiagnostic[]): void {
+  // Partition: step-specific warnings go to that step; global ones go to all subagent steps
+  const stepWarnings = new Map<string, string[]>()
+  const globalWarnings: string[] = []
+
+  for (const w of warnings) {
+    if (w.stepName) {
+      const arr = stepWarnings.get(w.stepName) ?? []
+      arr.push(w.message)
+      stepWarnings.set(w.stepName, arr)
+    } else {
+      globalWarnings.push(w.message)
+    }
+  }
+
+  for (const step of plan.steps) {
+    if (step.stepType !== "subagent_task") continue
+    const sa = step as SubagentTaskStep
+    const msgs = [
+      ...(stepWarnings.get(sa.name) ?? []),
+      ...globalWarnings,
+    ]
+    if (msgs.length === 0) continue
+    const suffix = `\n\n⚠️ VALIDATION WARNINGS (address these in your implementation):\n${msgs.map(m => `- ${m}`).join("\n")}`
+    // Mutate objective — plan steps are not deeply frozen
+    ;(sa as { objective: string }).objective = sa.objective + suffix
+  }
+}
 
 // ============================================================================
 // Main orchestrator
@@ -139,17 +178,30 @@ export async function executePlannerPath(
 
   // Step 3: Validate plan
   const validation = validatePlan(plan, ctx.tools)
+  const errors = validation.diagnostics.filter(d => d.severity === "error")
+  const warnings = validation.diagnostics.filter(d => d.severity === "warning")
+
   if (!validation.valid) {
     ctx.onTrace?.({
       kind: "planner-validation-failed",
-      diagnostics: validation.diagnostics,
+      diagnostics: errors,
     })
-    // If validation fails, fall back to direct tool loop rather than blocking
+    // Only hard-block on errors (structurally broken plans)
     return {
       handled: false,
       plan,
-      skipReason: `Validation failed: ${validation.diagnostics.map(d => d.message).join("; ")}`,
+      skipReason: `Validation failed: ${errors.map(d => d.message).join("; ")}`,
     }
+  }
+
+  // Inject warnings into step objectives as guidance (plan still runs)
+  if (warnings.length > 0) {
+    ctx.onTrace?.({
+      kind: "planner-validation-warnings",
+      warningCount: warnings.length,
+      diagnostics: warnings,
+    })
+    injectWarningsIntoSteps(plan, warnings)
   }
 
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks

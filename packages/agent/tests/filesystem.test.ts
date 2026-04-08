@@ -275,6 +275,40 @@ describe("write_file: corruption detection", () => {
 
     expect(result).toBe("Successfully wrote to clean.js")
   })
+
+  it("rejects pure gibberish with no code keywords", async () => {
+    const result = await writeFileTool.execute({
+      path: "gibberish.js",
+      content: "[compacted \\u0001 full COMPL'd PROMO].THISs''. UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH. wrapper + glbal dom visualization strict bind",
+    })
+
+    expect(result).toContain("GIBBERISH REJECTED")
+  })
+
+  it("rejects degenerated compaction output as gibberish", async () => {
+    const result = await writeFileTool.execute({
+      path: "compacted.js",
+      content: "RESET PlaceholderINTRO.Handler-container validateManyCritical success BOILER<TAG> reinstated LEGAL WORKFLOW-safe cleaned Matrix operational",
+    })
+
+    expect(result).toContain("GIBBERISH REJECTED")
+  })
+
+  it("accepts valid JS with code keywords", async () => {
+    const result = await writeFileTool.execute({
+      path: "valid.js",
+      content: [
+        "const board = [];",
+        "function init() {",
+        "  for (let i = 0; i < 8; i++) {",
+        "    board.push(new Array(8).fill(null));",
+        "  }",
+        "}",
+      ].join("\n"),
+    })
+
+    expect(result).not.toContain("GIBBERISH")
+  })
 })
 
 // ============================================================================

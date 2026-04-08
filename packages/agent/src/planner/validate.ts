@@ -43,9 +43,12 @@ export function validatePlan(
   diagnostics.push(...validateArtifactOwnership(plan.steps))
   diagnostics.push(...validateVerificationCoverage(plan.steps))
   diagnostics.push(...validatePathConsistency(plan.steps))
+  diagnostics.push(...validateHtmlJsIntegration(plan.steps))
+  diagnostics.push(...validateVisualCompleteness(plan.steps))
+  diagnostics.push(...validateSharedDataContract(plan.steps))
 
   return {
-    valid: diagnostics.length === 0,
+    valid: diagnostics.filter(d => d.severity === "error").length === 0,
     diagnostics,
   }
 }
@@ -84,6 +87,7 @@ function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEdge[]): 
     if (color.get(name) === WHITE && dfs(name)) {
       diagnostics.push({
         category: "graph",
+        severity: "error",
         code: "cycle_detected",
         message: "Plan dependency graph contains a cycle. Remove circular dependencies between steps.",
         stepName: name,
@@ -97,6 +101,7 @@ function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEdge[]): 
     if (neighbors.length > 8) {
       diagnostics.push({
         category: "graph",
+        severity: "warning",
         code: "excessive_fanout",
         message: `Step "${name}" has ${neighbors.length} outgoing edges. Reduce fanout to <=8 to keep the plan manageable.`,
         stepName: name,
@@ -110,6 +115,7 @@ function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEdge[]): 
     if (depth > 10) {
       diagnostics.push({
         category: "graph",
+        severity: "warning",
         code: "excessive_depth",
         message: `Plan has critical path depth ${depth}. Reduce to <=10 by parallelizing independent work.`,
       })
@@ -121,6 +127,7 @@ function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEdge[]): 
     diagnostics.push({
       category: "graph",
       code: "too_many_steps",
+      severity: "warning",
       message: `Plan has ${steps.length} steps. Prefer 2-8 steps. Consolidate related work into fewer subagent tasks.`,
     })
   }
@@ -164,6 +171,7 @@ function validateToolReferences(
       if (!toolNames.has(dt.tool)) {
         diagnostics.push({
           category: "contract",
+          severity: "error",
           code: "unknown_tool",
           message: `Deterministic step "${step.name}" references tool "${dt.tool}" which is not available. Available tools: ${[...toolNames].join(", ")}`,
           stepName: step.name,
@@ -189,6 +197,7 @@ function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnostic[] {
       if (!sa.objective || sa.objective.trim().length < 10) {
         diagnostics.push({
           category: "contract",
+          severity: "warning",
           code: "vague_objective",
           message: `Subagent step "${step.name}" has a vague or missing objective. Provide a specific, measurable objective (min 10 chars).`,
           stepName: step.name,
@@ -198,6 +207,7 @@ function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnostic[] {
       if (sa.acceptanceCriteria.length === 0) {
         diagnostics.push({
           category: "contract",
+          severity: "warning",
           code: "missing_acceptance_criteria",
           message: `Subagent step "${step.name}" has no acceptance criteria. Add at least one measurable success condition.`,
           stepName: step.name,
@@ -209,6 +219,7 @@ function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnostic[] {
         if (crit.length < 10 || /^(done|works?|good|complete|ok)$/i.test(crit.trim())) {
           diagnostics.push({
             category: "contract",
+            severity: "warning",
             code: "vague_criteria",
             message: `Subagent step "${step.name}" has vague acceptance criterion: "${crit}". Be specific and measurable.`,
             stepName: step.name,
@@ -219,6 +230,7 @@ function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnostic[] {
       if (sa.requiredToolCapabilities.length === 0) {
         diagnostics.push({
           category: "contract",
+          severity: "warning",
           code: "no_tool_capabilities",
           message: `Subagent step "${step.name}" declares no required tool capabilities. Specify which tools the child needs.`,
           stepName: step.name,
@@ -262,6 +274,7 @@ function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagnostic[]
     if (owners.length > 1) {
       diagnostics.push({
         category: "ownership",
+        severity: "warning",
         code: "multiple_write_owners",
         message: `Artifact "${artifact}" has ${owners.length} write owners: [${owners.join(", ")}]. Only ONE step may be write_owner for a given artifact.`,
       })
@@ -291,6 +304,7 @@ function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnosti
   if (hasWriters && !hasVerification && subagentSteps.length > 1) {
     diagnostics.push({
       category: "verification",
+      severity: "warning",
       code: "no_verification_steps",
       message: "Plan has write steps but no verification step. Add at least one step with verificationMode != 'none', or include a deterministic verification step.",
     })
@@ -345,6 +359,7 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
       const dirs = uniquePaths.map(p => p.split("/").slice(0, -1).join("/") || "(root)")
       diagnostics.push({
         category: "graph",
+        severity: "warning",
         code: "inconsistent_output_directory",
         message: `File "${filename}" appears under different directories: ${dirs.join(", ")}. All steps MUST use the same output directory. Pick one directory and use it consistently for ALL targetArtifacts across all steps.`,
       })
@@ -360,8 +375,23 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     const commonDir = allDirs[0]
     diagnostics.push({
       category: "graph",
+      severity: "warning",
       code: "mixed_root_and_subdir",
       message: `Some artifacts are in subdirectory "${commonDir}/" but others (${rootFiles.join(", ")}) are at the root. Move all artifacts into the same directory.`,
+    })
+  }
+
+  // Check for inconsistent top-level directory across steps.
+  // e.g. step A uses "tmp/game/" and step B uses "tmp/chess_game/js/" — children
+  // will write to different directories and files won't load each other.
+  const uniqueTopDirs = new Set(allDirs.map(d => d.split("/").slice(0, 2).join("/")))
+  if (uniqueTopDirs.size > 1) {
+    diagnostics.push({
+      category: "graph",
+      severity: "warning",
+      code: "inconsistent_output_directory",
+      message: `Steps use ${uniqueTopDirs.size} different output directories: ${[...uniqueTopDirs].join(", ")}. ` +
+        `ALL steps MUST write to the SAME directory tree. Pick one and use it for all targetArtifacts.`,
     })
   }
 
@@ -382,12 +412,167 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     if (writers.length > 1) {
       diagnostics.push({
         category: "ownership",
+        severity: "warning",
         code: "shared_target_artifact",
         message: `File "${artifact}" is a targetArtifact of ${writers.length} steps: [${writers.join(", ")}]. ` +
           `Each step does a full file rewrite, so later steps will overwrite earlier steps' changes. ` +
           `COMBINE these steps into a single step, or ensure only one step writes to this file.`,
       })
     }
+  }
+
+  return diagnostics
+}
+
+// ============================================================================
+// HTML+JS integration validation
+// ============================================================================
+
+/**
+ * When a plan creates both HTML and JS files, verify that at least one step
+ * owns the HTML file AND its acceptance criteria or objective mentions loading
+ * scripts. This catches the "HTML missing <script> tags" pattern early.
+ */
+function validateHtmlJsIntegration(steps: readonly PlanStep[]): PlanDiagnostic[] {
+  const diagnostics: PlanDiagnostic[] = []
+  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+
+  const allHtml: string[] = []
+  const allJs: string[] = []
+
+  for (const sa of subagentSteps) {
+    for (const artifact of sa.executionContext?.targetArtifacts ?? []) {
+      if (/\.html?$/i.test(artifact)) allHtml.push(artifact)
+      else if (/\.js$/i.test(artifact)) allJs.push(artifact)
+    }
+  }
+
+  // Only check if the plan has both HTML and JS files
+  if (allHtml.length === 0 || allJs.length === 0) return diagnostics
+
+  // Find the step that owns the HTML file
+  for (const html of allHtml) {
+    const htmlStep = subagentSteps.find(
+      sa => sa.executionContext?.targetArtifacts?.includes(html),
+    )
+    if (!htmlStep) continue
+
+    // Check whether the HTML step's objective or criteria mention script loading
+    const combined = [
+      htmlStep.objective,
+      ...htmlStep.acceptanceCriteria,
+    ].join(" ").toLowerCase()
+
+    const mentionsScripts = /script|<script|\.js|javascript|load.*file|include.*file/i.test(combined)
+
+    if (!mentionsScripts) {
+      diagnostics.push({
+        category: "contract",
+        severity: "warning",
+        code: "html_missing_script_loading",
+        message: `Step "${htmlStep.name}" creates HTML file "${html}" but its objective/criteria don't mention loading JS files (${allJs.map(j => j.split("/").pop()).join(", ")}). ` +
+          `The HTML step MUST include <script src="..."> tags for all JS files. Add script-loading to the step's objective and acceptance criteria.`,
+        stepName: htmlStep.name,
+      })
+    }
+  }
+
+  return diagnostics
+}
+
+// ============================================================================
+// Visual completeness — UI/game tasks must have display/render criteria
+// ============================================================================
+
+/** Keywords that indicate a task involves visual/UI output. */
+const VISUAL_TASK_RE =
+  /\b(?:game|chess|board|tetris|snake|pong|tic[- ]?tac|puzzle|visual|render|displa|animat|canvas|sprite|ui|interface|dashboard|chart|graph|diagram)\b/i
+
+/** Keywords that indicate a step covers visual content rendering. */
+const VISUAL_CONTENT_RE =
+  /\b(?:render|display|show|draw|paint|place|position|symbol|sprite|image|icon|unicode|piece|tile|cell|marker|token|avatar|visual|appear|visible)s?\b/i
+
+/**
+ * When a plan's reason or step objectives indicate a visual/game/UI task,
+ * ensure that at least one step's acceptance criteria explicitly covers
+ * rendering visual content (not just creating a grid/layout).
+ *
+ * This catches the "chess board grid exists but no pieces rendered" pattern.
+ */
+function validateVisualCompleteness(steps: readonly PlanStep[]): PlanDiagnostic[] {
+  const diagnostics: PlanDiagnostic[] = []
+  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+  if (subagentSteps.length === 0) return diagnostics
+
+  // Check if this is a visual/UI task
+  const allObjectives = subagentSteps.map(sa => sa.objective).join(" ")
+  const isVisualTask = VISUAL_TASK_RE.test(allObjectives)
+  if (!isVisualTask) return diagnostics
+
+  // Check that at least one step's acceptance criteria mentions visual content rendering
+  const hasVisualCriteria = subagentSteps.some(sa =>
+    sa.acceptanceCriteria.some(c => VISUAL_CONTENT_RE.test(c)),
+  )
+
+  if (!hasVisualCriteria) {
+    diagnostics.push({
+      category: "contract",
+      severity: "warning",
+      code: "missing_visual_rendering_criteria",
+      message: `This appears to be a visual/UI task but NO step has acceptance criteria for rendering visual content. ` +
+        `Add specific criteria like "pieces display correct Unicode symbols", "tiles show their values", or "chart renders data points". ` +
+        `Without visual rendering criteria, the output will have structure (grid/layout) but no visible content.`,
+    })
+  }
+
+  return diagnostics
+}
+
+// ============================================================================
+// Shared data contract validation — multi-file JS projects
+// ============================================================================
+
+/** Pattern for data-format keywords that signal shared state. */
+const DATA_FORMAT_RE =
+  /\b(?:board|state|grid|cells?|pieces?|tiles?|items?|nodes?|entries|rows?|columns?|matrix)\b/i
+
+/**
+ * When a plan has 2+ JS files written by different steps, verify that at
+ * least one step's objective specifies the shared data format. Without this,
+ * each child invents its own data structure and the files are incompatible.
+ */
+function validateSharedDataContract(steps: readonly PlanStep[]): PlanDiagnostic[] {
+  const diagnostics: PlanDiagnostic[] = []
+  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+
+  // Collect steps that write JS files
+  const jsWriterSteps = subagentSteps.filter(sa =>
+    (sa.executionContext?.targetArtifacts ?? []).some(a => /\.js$/i.test(a)),
+  )
+
+  // Only relevant when 2+ different steps produce JS files
+  if (jsWriterSteps.length < 2) return diagnostics
+
+  // Check if the task involves shared data structures
+  const allObjectives = jsWriterSteps.map(sa => sa.objective).join(" ")
+  if (!DATA_FORMAT_RE.test(allObjectives)) return diagnostics
+
+  // Check that at least one step defines the data format in its objective
+  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|each\s+(?:cell|entry|item|piece|tile|element)\s+(?:is|has|contains|looks|uses))\b/i
+  const hasFormatSpec = jsWriterSteps.some(sa => FORMAT_SPEC_RE.test(sa.objective))
+
+  if (!hasFormatSpec) {
+    diagnostics.push({
+      category: "contract",
+      severity: "warning",
+      code: "missing_shared_data_contract",
+      message: `Plan has ${jsWriterSteps.length} steps writing JS files that reference shared data (${
+        allObjectives.match(DATA_FORMAT_RE)?.[0] ?? "state"
+      }) but NO step's objective defines the data format. ` +
+        `Add a specific data structure definition to the first JS step's objective, e.g. ` +
+        `"Board cells use format { type: 'pawn', color: 'white' }. Board is board[row][col]." ` +
+        `Without this, each child will invent its own incompatible format.`,
+    })
   }
 
   return diagnostics

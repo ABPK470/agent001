@@ -5,11 +5,12 @@
 import { describe, expect, it } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
+import { isValidArtifactPath } from "../src/planner/generate.js"
 import { synthesizeAnswer } from "../src/planner/index.js"
-import { executePipeline } from "../src/planner/pipeline.js"
+import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
-import { extractCriterionKeywords } from "../src/planner/verifier.js"
+import { extractCriterionKeywords, isLLMGibberish } from "../src/planner/verifier.js"
 import type { Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -221,8 +222,8 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "vague_objective")).toBe(true)
+    expect(result.valid).toBe(true) // warnings don't block
+    expect(result.diagnostics.some(d => d.code === "vague_objective" && d.severity === "warning")).toBe(true)
   })
 
   it("detects missing acceptance criteria", () => {
@@ -232,8 +233,8 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "missing_acceptance_criteria")).toBe(true)
+    expect(result.valid).toBe(true) // warnings don't block
+    expect(result.diagnostics.some(d => d.code === "missing_acceptance_criteria" && d.severity === "warning")).toBe(true)
   })
 
   it("detects multiple write owners for same artifact", () => {
@@ -270,8 +271,8 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "multiple_write_owners")).toBe(true)
+    expect(result.valid).toBe(true) // warnings don't block
+    expect(result.diagnostics.some(d => d.code === "multiple_write_owners" && d.severity === "warning")).toBe(true)
   })
 
   it("detects too many steps (>15)", () => {
@@ -317,6 +318,311 @@ describe("Plan validation: validatePlan", () => {
 
     const result = validatePlan(plan, [])
     expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(true)
+  })
+
+  it("warns when HTML step doesn't mention script loading for JS artifacts", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create the HTML structure with an 8x8 grid",
+          acceptanceCriteria: ["Board renders 8x8 grid with alternating colors"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/index.html", "tmp/chess/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Implement game logic for the chess board",
+          acceptanceCriteria: ["Move validation works for all pieces"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "html_missing_script_loading")).toBe(true)
+  })
+
+  it("passes when HTML step mentions script loading", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create the HTML structure with an 8x8 grid. Include <script src='game.js'> tag.",
+          acceptanceCriteria: ["Board renders 8x8 grid", "HTML includes script tags for all JS files"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Implement game logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "html_missing_script_loading")).toBe(false)
+  })
+
+  it("warns when visual/game task has no visual rendering criteria", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("render-board", {
+          objective: "Create a chess board grid with HTML",
+          acceptanceCriteria: ["Board has 8x8 grid", "Alternating colors on squares"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("game-logic", {
+          objective: "Implement chess game rules and move validation",
+          acceptanceCriteria: ["Pawns can only move forward", "Castling works correctly"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "missing_visual_rendering_criteria")).toBe(true)
+  })
+
+  it("passes when visual task has rendering criteria", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("render-board", {
+          objective: "Create a chess board grid and render pieces",
+          acceptanceCriteria: [
+            "Board has 8x8 grid with alternating colors",
+            "Pieces display correct Unicode symbols in starting positions",
+          ],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "missing_visual_rendering_criteria")).toBe(false)
+  })
+
+  it("warns when multi-file JS plan has no shared data contract", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-board", {
+          objective: "Create the chess board rendering with HTML and CSS grid",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/board.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Implement game logic with piece movement and board validation",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "missing_shared_data_contract")).toBe(true)
+  })
+
+  it("passes when JS steps define shared data format", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-board", {
+          objective: "Create the chess board. Each cell uses format { type: 'pawn', color: 'white' }. Board is board[row][col].",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/board.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Implement game logic with piece movement and board validation",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "missing_shared_data_contract")).toBe(false)
+  })
+
+  it("detects inconsistent top-level directories", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("step-a", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/game/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("step-b", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess_game/js/board.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(true)
+  })
+
+  it("errors block pipeline but warnings don't", () => {
+    // Plan with only warnings (vague objective) → valid: true
+    const warningPlan = makePlan({
+      steps: [makeSubagentStep("bad-step", { objective: "do it" })],
+      edges: [],
+    })
+    const warningResult = validatePlan(warningPlan, [])
+    expect(warningResult.valid).toBe(true)
+    expect(warningResult.diagnostics.every(d => d.severity === "warning")).toBe(true)
+    expect(warningResult.diagnostics.length).toBeGreaterThan(0)
+
+    // Plan with error (unknown tool) → valid: false
+    const errorPlan = makePlan({
+      steps: [{
+        name: "bad-tool",
+        stepType: "deterministic_tool",
+        tool: "nonexistent",
+        args: {},
+      }],
+      edges: [],
+    })
+    const errorResult = validatePlan(errorPlan, [echoTool()])
+    expect(errorResult.valid).toBe(false)
+    expect(errorResult.diagnostics.some(d => d.severity === "error")).toBe(true)
+  })
+
+  it("cycle_detected is severity error", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("a", { dependsOn: ["b"] }),
+        makeSubagentStep("b", { dependsOn: ["a"] }),
+      ],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "a" }],
+    })
+    const result = validatePlan(plan, [])
+    expect(result.valid).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "cycle_detected" && d.severity === "error")).toBe(true)
   })
 })
 
@@ -688,5 +994,91 @@ describe("synthesizeAnswer — verification status rendering", () => {
     expect(answer).toContain("✓ setup_board")
     expect(answer).toContain("⚠ add_rules")
     expect(answer).toContain("incomplete")
+  })
+})
+
+// ============================================================================
+// Gibberish issue detection
+// ============================================================================
+
+describe("Gibberish issue detection", () => {
+  describe("isGibberishIssue (pipeline)", () => {
+    it("detects compound-hyphenated word-salad", () => {
+      expect(isGibberishIssue(
+        "Edge-action resets fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block-scenario loop-redundancies",
+      )).toBe(true)
+    })
+
+    it("detects gibberish with very few function words", () => {
+      expect(isGibberishIssue(
+        "clearHighlights fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block scenario loop redundancies unresolved coordination assured surround unpredictable",
+      )).toBe(true)
+    })
+
+    it("passes through legitimate issues with file paths", () => {
+      expect(isGibberishIssue(
+        "game_logic.js: getLegalMoves returns empty array for all piece types — stub detected",
+      )).toBe(false)
+    })
+
+    it("passes through short issues", () => {
+      expect(isGibberishIssue("Missing castling logic")).toBe(false)
+    })
+
+    it("passes through issues mentioning code patterns", () => {
+      expect(isGibberishIssue(
+        "The function isValidMove in game_logic.js contains a placeholder `return true` instead of real validation logic for each piece type",
+      )).toBe(false)
+    })
+  })
+
+  describe("isLLMGibberish (verifier)", () => {
+    it("detects pure word-salad from degenerated LLM", () => {
+      expect(isLLMGibberish(
+        "frame-hydro-exclusive memory-chaining cleanup fails interactive clearance fails qualifiers mis-nullify-control-actionations errors overall preservation misses automated-recursive",
+      )).toBe(true)
+    })
+
+    it("keeps valid technical issues", () => {
+      expect(isLLMGibberish(
+        "The render_chessboard step creates board.js but does not implement the drawPieces function — it returns immediately without rendering any pieces on the board",
+      )).toBe(false)
+    })
+
+    it("keeps issues with stub/placeholder keywords", () => {
+      expect(isLLMGibberish(
+        "stub: isInCheck returns false always without checking if the king is attacked by any opponent piece",
+      )).toBe(false)
+    })
+  })
+})
+
+// ============================================================================
+// Artifact path validation
+// ============================================================================
+
+describe("isValidArtifactPath", () => {
+  it("accepts normal file paths", () => {
+    expect(isValidArtifactPath("game.js")).toBe(true)
+    expect(isValidArtifactPath("tmp/chess/index.html")).toBe(true)
+    expect(isValidArtifactPath("src/board_logic.js")).toBe(true)
+    expect(isValidArtifactPath("styles.css")).toBe(true)
+  })
+
+  it("rejects CSS selectors", () => {
+    expect(isValidArtifactPath(".square.light")).toBe(false)
+    expect(isValidArtifactPath(".square.dark")).toBe(false)
+    expect(isValidArtifactPath("#chessboard")).toBe(false)
+    expect(isValidArtifactPath(".game-container")).toBe(false)
+  })
+
+  it("accepts dotfile paths with directories", () => {
+    // .hidden/config.json is a valid path even though it starts with .
+    expect(isValidArtifactPath(".hidden/config.json")).toBe(true)
+  })
+
+  it("rejects bare words without extension or path separator", () => {
+    expect(isValidArtifactPath("chessboard")).toBe(false)
+    expect(isValidArtifactPath("game_logic")).toBe(false)
   })
 })

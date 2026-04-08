@@ -343,7 +343,19 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
   const isCode = /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php|sh|bash|zsh)$/i.test(filePath)
   const isHtml = /\.html?$/i.test(filePath)
 
-  if (isCode) {
+  if (isCode) {    // ── Pure gibberish detection ──
+    // Catches LLM degeneration that produces entirely non-code text,
+    // e.g. "[compacted \u0001 full COMPL'd PROMO].THISs''." or
+    //      "UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH"
+    // These lack ANY valid programming keywords.
+    const CODE_KEYWORD_RE = /\b(?:function|const|let|var|class|if|else|for|while|do|switch|case|return|import|export|require|module|try|catch|throw|new|this|typeof|instanceof|null|undefined|true|false|async|await|yield|=>|console|document|window)\b/
+    if (!CODE_KEYWORD_RE.test(content)) {
+      warnings.push(
+        `GIBBERISH REJECTED: File contains NO valid code keywords — this is degenerated LLM output, not code. ` +
+        `Do NOT write non-code text to code files. Use the think tool to plan, then write REAL code.`
+      )
+      return warnings // Early return — no point checking further
+    }
     // Detect code-mixed-with-gibberish: closing brace/paren followed by random English words
     const brokenCodeRe = /[})\]][\s]*[a-z]{3,}\s+[a-z]{3,}\s+[a-z]{3,}/i
     const lines = content.split("\n")

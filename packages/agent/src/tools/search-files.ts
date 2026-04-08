@@ -47,8 +47,48 @@ const BINARY_EXTS = new Set([
 
 let _basePath = process.cwd()
 
+/**
+ * Extra directories to exclude from search results (relative to _basePath).
+ * Set via `setSearchExcludeDirs()` — used to prevent the agent's own source
+ * code from flooding search results when child agents search for patterns
+ * like TODO/PLACEHOLDER.
+ */
+let _excludeDirs: Set<string> = new Set()
+
 export function setSearchBasePath(path: string): void {
   _basePath = resolve(path)
+  // Auto-detect agent source directories to exclude on workspace change
+  autoDetectExcludeDirs()
+}
+
+/**
+ * Set directories to exclude from search (relative to _basePath).
+ * Prevents agent source code from appearing in task-scoped searches.
+ *
+ * Example: setSearchExcludeDirs(["packages", "scripts", "deploy", "docs"])
+ */
+export function setSearchExcludeDirs(dirs: string[]): void {
+  _excludeDirs = new Set(dirs)
+}
+
+/**
+ * Auto-detect agent source directories in the workspace and exclude them.
+ * Call once at startup or when workspace changes.
+ */
+export function autoDetectExcludeDirs(): void {
+  // If the workspace root has a packages/ dir with package.json files,
+  // it's likely a monorepo containing agent source code
+  const dirs: string[] = []
+  const knownAgentDirs = ["packages", "deploy", "scripts", "bin", "docs"]
+  for (const dir of knownAgentDirs) {
+    try {
+      const stats = require("node:fs").statSync(resolve(_basePath, dir))
+      if (stats.isDirectory()) {
+        dirs.push(dir)
+      }
+    } catch { /* doesn't exist, skip */ }
+  }
+  _excludeDirs = new Set(dirs)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -67,6 +107,7 @@ function shouldSkipFile(name: string): boolean {
 async function* walkFiles(
   dir: string,
   includeGlob: string | undefined,
+  excludeTopLevelDirs?: Set<string>,
 ): AsyncGenerator<string> {
   let entries
   try {
@@ -80,7 +121,13 @@ async function* walkFiles(
 
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      yield* walkFiles(full, includeGlob)
+      // Check dynamic exclude list (relative to _basePath)
+      if (excludeTopLevelDirs && excludeTopLevelDirs.size > 0) {
+        const relPath = full.slice(_basePath.length + 1)
+        // Only exclude at top level — "packages" excludes "/base/packages" but not "/base/tmp/packages"
+        if (excludeTopLevelDirs.has(relPath)) continue
+      }
+      yield* walkFiles(full, includeGlob, excludeTopLevelDirs)
     } else if (entry.isFile()) {
       if (shouldSkipFile(entry.name)) continue
 
@@ -110,7 +157,9 @@ export const searchFilesTool: Tool = {
   description:
     "Search for text or a regex pattern across files in the workspace. " +
     "Returns matching lines with file paths and line numbers. " +
-    "Useful for finding function definitions, references, TODOs, etc.",
+    "Useful for finding function definitions, references, TODOs, etc. " +
+    "Use the 'path' parameter to scope searches to a specific directory (e.g. the task output directory) " +
+    "to avoid irrelevant matches from other parts of the workspace.",
   parameters: {
     type: "object",
     properties: {
@@ -141,7 +190,13 @@ export const searchFilesTool: Tool = {
 
       const isRegex = Boolean(args.regex)
       const include = args.include ? String(args.include) : undefined
-      const searchDir = args.path ? resolve(_basePath, String(args.path)) : _basePath
+      const hasExplicitPath = Boolean(args.path)
+      const searchDir = hasExplicitPath ? resolve(_basePath, String(args.path)) : _basePath
+
+      // Only exclude agent-source directories when searching from workspace root
+      // (no explicit path). When the user/agent explicitly scopes to a directory,
+      // respect that scope fully.
+      const excludeDirs = hasExplicitPath ? undefined : _excludeDirs
 
       // Validate search dir is within workspace
       if (!searchDir.startsWith(_basePath + "/") && searchDir !== _basePath) {
@@ -160,7 +215,7 @@ export const searchFilesTool: Tool = {
       let filesSearched = 0
       let truncated = false
 
-      for await (const filePath of walkFiles(searchDir, include)) {
+      for await (const filePath of walkFiles(searchDir, include, excludeDirs)) {
         if (matches.length >= MAX_MATCHES) {
           truncated = true
           break
