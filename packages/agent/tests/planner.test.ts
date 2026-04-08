@@ -8,6 +8,7 @@ import { assessPlannerDecision } from "../src/planner/decision.js"
 import { executePipeline } from "../src/planner/pipeline.js"
 import type { Plan, SubagentTaskStep } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
+import { extractCriterionKeywords } from "../src/planner/verifier.js"
 import type { Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -503,5 +504,56 @@ describe("ToolFailureCircuitBreaker", () => {
     cb.recordFailure("key1", "tool1")
 
     expect(cb.getActiveCircuit()).toBeNull()
+  })
+})
+
+// ============================================================================
+// Acceptance criteria keyword extraction
+// ============================================================================
+
+describe("extractCriterionKeywords", () => {
+  it("extracts keyword stems from a castling criterion", () => {
+    const kws = extractCriterionKeywords("castling must work correctly with rook and king")
+    expect(kws.some(kw => "castling".includes(kw))).toBe(true)
+  })
+
+  it("extracts en passant multi-word phrase", () => {
+    const kws = extractCriterionKeywords("en passant capture must be implemented")
+    expect(kws).toContain("passant")
+    expect(kws).toContain("enpassant")
+  })
+
+  it("extracts checkmate and stalemate", () => {
+    const kws = extractCriterionKeywords("check and checkmate detection should end the game, stalemate should draw")
+    expect(kws.some(kw => "checkmate".includes(kw))).toBe(true)
+    expect(kws.some(kw => "stalemate".includes(kw))).toBe(true)
+  })
+
+  it("extracts pawn promotion keywords", () => {
+    const kws = extractCriterionKeywords("pawn promotion to queen rook bishop or knight")
+    expect(kws.some(kw => "promotion".includes(kw))).toBe(true)
+    expect(kws.some(kw => "pawn".includes(kw))).toBe(true)
+  })
+
+  it("filters out stop words", () => {
+    const kws = extractCriterionKeywords("must implement the code with this value")
+    // All words are stop words → empty
+    expect(kws.length).toBe(0)
+  })
+
+  it("handles non-game criteria (auth, API)", () => {
+    const kws = extractCriterionKeywords("access control with role-based permissions")
+    expect(kws).toContain("permission")
+    expect(kws).toContain("authorize")
+  })
+
+  it("handles criteria with highlighting and selection", () => {
+    const kws = extractCriterionKeywords("clicking a piece highlights its legal moves on the board")
+    expect(kws.some(kw => "highlight".includes(kw))).toBe(true)
+  })
+
+  it("returns empty for very short generic criteria", () => {
+    const kws = extractCriterionKeywords("it is ok")
+    expect(kws.length).toBe(0)
   })
 })

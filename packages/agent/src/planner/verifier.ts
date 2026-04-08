@@ -428,6 +428,46 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── Acceptance criteria ↔ code evidence check ──
+      // For each acceptance criterion, extract distinctive keywords and verify
+      // at least one appears somewhere in the code artifacts.  If none of a
+      // criterion's keywords are found, the feature is likely unimplemented —
+      // even if the child claims otherwise.
+      if (readFile && sa.acceptanceCriteria.length > 0) {
+        // Gather all code content (already read by earlier probes — reuse probeCache)
+        let allCode = ""
+        for (const artifact of sa.executionContext.targetArtifacts) {
+          const cached = probeCache.get(artifact)
+          if (!cached?.found) continue
+          try {
+            const content = await readFile.execute({ path: cached.resolvedPath })
+            if (typeof content === "string") allCode += "\n" + content
+          } catch { /* skip */ }
+        }
+
+        if (allCode.length > 0) {
+          const codeLower = allCode.toLowerCase()
+          const missingCriteria: string[] = []
+
+          for (const criterion of sa.acceptanceCriteria) {
+            const keywords = extractCriterionKeywords(criterion)
+            if (keywords.length === 0) continue
+            // A criterion is "covered" if at least one of its keywords appears in code
+            const covered = keywords.some(kw => codeLower.includes(kw))
+            if (!covered) {
+              missingCriteria.push(`"${criterion.slice(0, 80)}" (expected: ${keywords.join(", ")})`)
+            }
+          }
+
+          if (missingCriteria.length > 0) {
+            issues.push(
+              `Acceptance criteria with no code evidence (${missingCriteria.length}/${sa.acceptanceCriteria.length}): ` +
+              missingCriteria.slice(0, 5).join("; "),
+            )
+          }
+        }
+      }
+
       // ── Gibberish / word-salad detection ──
       if (outputText.length > 20) {
         const gibberishScore = computeGibberishScore(outputText)
@@ -465,7 +505,7 @@ export async function runDeterministicProbes(
         "Missing method", "Browser check", "catch-all", "empty function",
         "deferred-work", "explicit failure", "all tool calls failed",
         "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
-        "degeneration",
+        "degeneration", "no code evidence",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -553,6 +593,8 @@ Rules:
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
 - GUARD ORDERING: Check that early-return guards in event handlers or dispatchers don't block valid interactions. Example: \`if (item.owner !== currentUser) return;\` at the top of a click handler prevents clicking on opponent items to interact with them (e.g. capture). The guard should be conditional on current state (e.g. only reject when no item is already selected).
+- HELPER FUNCTION TRACING: For each key acceptance criterion, identify the function(s) that implement it and the helpers they call. Pick ONE concrete scenario and mentally trace the code path step by step, including into helper functions. Verify each helper returns the correct value for that scenario. A helper whose name implies a semantic (e.g. "isSameTeam", "isValid", "hasPermission", "belongsTo") must actually implement that semantic correctly — don't assume it works just because it has a body. Pay special attention to comparisons that erase important distinctions (e.g. case-insensitive comparison on data where case carries meaning).
+- MISSING FEATURE DETECTION: For each acceptance criterion, verify there is ACTUAL CODE implementing it — not just a function with a matching name, but real logic. If a criterion requires "checkmate detection" but no function traces king escape squares, that criterion is NOT met. If a criterion requires "en passant" but no code tracks the previous move's double-step, it is NOT met. List every criterion that is NOT implemented.
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem in the actual code
@@ -598,9 +640,13 @@ export async function runLLMVerification(
   if (opts?.artifactContents && opts.artifactContents.size > 0) {
     const parts: string[] = []
     for (const [path, content] of opts.artifactContents) {
-      // Truncate very large files but keep enough for assessment
-      const truncated = content.length > 4000
-        ? content.slice(0, 4000) + `\n... (truncated, ${content.length} chars total)`
+      // Dynamic truncation: fewer artifacts → more space per file.
+      // Single artifact gets 12k chars (enough for ~300 lines).
+      // Many artifacts share a 24k total budget.
+      const totalBudget = 24_000
+      const perArtifactLimit = Math.max(4000, Math.floor(totalBudget / opts.artifactContents.size))
+      const truncated = content.length > perArtifactLimit
+        ? content.slice(0, perArtifactLimit) + `\n... (truncated, ${content.length} chars total)`
         : content
       parts.push(`### ${path}\n\`\`\`\n${truncated}\n\`\`\``)
     }
@@ -1082,4 +1128,78 @@ function safeParseJson(text: string): Record<string, unknown> | null {
   } catch {
     return null
   }
+}
+
+// ============================================================================
+// Acceptance criteria keyword extraction
+// ============================================================================
+
+/**
+ * Common words that should NOT be used as criterion keywords because they
+ * appear in almost any codebase and provide no signal.
+ */
+const CRITERION_STOP_WORDS = new Set([
+  // Generic programming terms
+  "must", "should", "implement", "function", "method", "code", "logic",
+  "data", "value", "values", "return", "check", "that", "this", "with",
+  "when", "each", "from", "have", "correctly", "properly", "displayed",
+  "support", "allow", "prevent", "include", "system", "state", "valid",
+  "invalid", "true", "false", "game", "piece", "pieces", "move", "moves",
+  "player", "board", "square", "click", "selected", "display", "area",
+  "type", "rule", "rules", "handle", "event", "user", "item", "items",
+  "file", "error", "result", "input", "output", "update", "action",
+])
+
+/**
+ * Extract distinctive keywords from an acceptance criterion.
+ *
+ * These keywords represent specific features or concepts that should appear
+ * somewhere in the code if the criterion is actually implemented.
+ *
+ * Strategy:
+ * - Split on word boundaries, split camelCase
+ * - Keep words ≥4 chars that are not stop words
+ * - Also detect multi-word technical phrases ("en passant" → "enpassant", "en_passant")
+ * - Return lowercase keywords
+ *
+ * Examples:
+ *   "castling must work correctly" → ["castl"]
+ *   "pawn promotion to queen" → ["pawn", "promot"]
+ *   "check and checkmate detection" → ["checkmate"]  (check is too common)
+ *   "en passant capture" → ["passant", "enpassant", "en_passant"]
+ */
+export function extractCriterionKeywords(criterion: string): string[] {
+  const lower = criterion.toLowerCase()
+  const keywords: string[] = []
+
+  // Extract multi-word technical phrases first
+  const PHRASE_PATTERNS: Array<{ re: RegExp; stems: string[] }> = [
+    { re: /en\s+passant/i, stems: ["passant", "enpassant", "en_passant"] },
+    { re: /check\s*mate/i, stems: ["checkmate", "check_mate"] },
+    { re: /stale\s*mate/i, stems: ["stalemate", "stale_mate"] },
+    { re: /drag\s*(?:and|&)\s*drop/i, stems: ["drag", "drop"] },
+    { re: /right[\s-]click/i, stems: ["rightclick", "contextmenu"] },
+    { re: /double[\s-]click/i, stems: ["dblclick", "doubleclick"] },
+    { re: /access[\s-]control/i, stems: ["permission", "authorize", "access"] },
+  ]
+  for (const { re, stems } of PHRASE_PATTERNS) {
+    if (re.test(lower)) {
+      keywords.push(...stems)
+    }
+  }
+
+  // Extract individual words, split camelCase, keep distinctive ones
+  const words = lower.split(/[\s,;:.()\[\]{}'"\/\\]+/).filter(w => w.length >= 4)
+  for (const word of words) {
+    if (CRITERION_STOP_WORDS.has(word)) continue
+    // Use word stems (prefix) for matching to handle "castling" matching "castl",
+    // "promotion" matching "promot", etc.
+    const stem = word.length > 6 ? word.slice(0, Math.max(5, Math.ceil(word.length * 0.7))) : word
+    if (stem.length >= 4 && !CRITERION_STOP_WORDS.has(stem)) {
+      keywords.push(stem)
+    }
+  }
+
+  // Deduplicate
+  return [...new Set(keywords)]
 }

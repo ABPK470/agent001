@@ -369,6 +369,12 @@ export class Agent {
     let wroteUnverifiedFiles = false
     // One-shot: only fire WRITE-WITHOUT-VERIFY nudge once to avoid infinite loops.
     let writeVerifyNudged = false
+    // Track written code files that haven't been re-read via read_file.
+    // browser_check checks for JS errors but NOT logical correctness.
+    // This set is only cleared when the child reads back the specific file.
+    const writtenButNotReread = new Set<string>()
+    // One-shot: only fire WRITE-WITHOUT-REVIEW nudge once.
+    let writeReviewNudged = false
     // Track if the agent is in the "post-delegation verification" phase.
     // Set true when the verification guard fires, cleared after the verification round.
     let inPostDelegationVerification = false
@@ -517,6 +523,33 @@ export class Agent {
               "Do NOT finish until you have confirmed your code is correct."
           messages.push({ role: "system", content: writeVerifyMsg, section: "history" })
           this.config.onNudge?.({ tag: "write-without-verify", message: writeVerifyMsg, iteration: i })
+          continue
+        }
+
+        // Guard: if the child wrote code files, ran browser_check, but never
+        // re-read the actual code to verify logical correctness. browser_check
+        // only detects JS load errors — it can't find semantic bugs like wrong
+        // comparison logic, missing features, or broken helper functions.
+        // One-shot: only fire once.
+        if (writtenButNotReread.size > 0 && !writeReviewNudged) {
+          writeReviewNudged = true
+          messages.push({
+            role: "assistant",
+            content: response.content,
+            section: "history",
+          })
+          const fileList = [...writtenButNotReread].slice(0, 5).join(", ")
+          const reviewMsg =
+              "CODE REVIEW REQUIRED: You wrote code files but only ran browser_check, which " +
+              "only catches JavaScript load errors — it cannot verify logical correctness. " +
+              `You MUST use read_file to review your code in: ${fileList}\n` +
+              "For each file, check:\n" +
+              "1. Every helper function does what its name implies (trace through an example)\n" +
+              "2. ALL acceptance criteria have corresponding real logic (not just function names)\n" +
+              "3. No comparison or logic errors (e.g. case-insensitive compare where case matters)\n" +
+              "Do NOT finish until you have read and verified every code file."
+          messages.push({ role: "system", content: reviewMsg, section: "history" })
+          this.config.onNudge?.({ tag: "code-review-required", message: reviewMsg, iteration: i })
           continue
         }
 
@@ -707,9 +740,19 @@ export class Agent {
             const writePath = String((call.arguments as Record<string, unknown>).path ?? "")
             if (/\.(js|jsx|ts|tsx|py|html?|css|json)$/i.test(writePath)) {
               wroteUnverifiedFiles = true
+              // Track for code review: only read_file on this specific file clears it
+              if (/\.(js|jsx|ts|tsx|py)$/i.test(writePath)) {
+                writtenButNotReread.add(writePath)
+              }
             }
           }
-          if (call.name === "read_file" || call.name === "run_command" || call.name === "browser_check") {
+          if (call.name === "read_file") {
+            wroteUnverifiedFiles = false
+            // Clear the specific file from the re-read tracking
+            const readPath = String((call.arguments as Record<string, unknown>).path ?? "")
+            writtenButNotReread.delete(readPath)
+          }
+          if (call.name === "run_command" || call.name === "browser_check") {
             wroteUnverifiedFiles = false
           }
         }
