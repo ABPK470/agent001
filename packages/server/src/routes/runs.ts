@@ -175,6 +175,21 @@ export function registerRunRoutes(
     return { ok: true }
   })
 
+  // Kill a specific tool call and provide a user steering message
+  app.post<{ Params: { id: string }; Body: { toolCallId: string; message: string } }>("/api/runs/:id/kill-tool", async (req, reply) => {
+    const { toolCallId, message } = req.body
+    if (!toolCallId) {
+      reply.code(400)
+      return { error: "toolCallId is required" }
+    }
+    const ok = orchestrator.killToolCall(req.params.id, String(toolCallId), String(message ?? ""))
+    if (!ok) {
+      reply.code(404)
+      return { error: "No executing tool call with that ID" }
+    }
+    return { ok: true }
+  })
+
   // Get run trace
   app.get<{ Params: { id: string } }>("/api/runs/:id/trace", async (req, reply) => {
     const run = db.getRun(req.params.id)

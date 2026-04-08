@@ -3,12 +3,18 @@
  * Supports simple mode (user goal → final answer) and detailed mode (full trace inline).
  */
 
-import { AlertCircle, Brain, HelpCircle, MessageSquare, Send, User, Wrench } from "lucide-react"
+import { AlertCircle, Brain, HelpCircle, MessageSquare, Send, Square, User, Wrench } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
 
 export type ChatMode = "simple" | "detailed"
+
+interface ToolCallKillInfo {
+  runId: string
+  toolCallId: string
+  toolName: string
+}
 
 export function ChatPanel({
   messages,
@@ -19,6 +25,10 @@ export function ChatPanel({
   submitting,
   pendingInput,
   onRespond,
+  executingToolCalls,
+  pendingKill,
+  onKillToolCall,
+  onSubmitKill,
 }: {
   messages: ChatMessage[]
   goalInput: string
@@ -28,9 +38,14 @@ export function ChatPanel({
   submitting: boolean
   pendingInput?: { question: string; options?: string[]; sensitive?: boolean } | null
   onRespond?: (response: string) => void
+  executingToolCalls?: Map<string, ToolCallKillInfo>
+  pendingKill?: ToolCallKillInfo | null
+  onKillToolCall?: (info: ToolCallKillInfo | null) => void
+  onSubmitKill?: (message: string) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [responseInput, setResponseInput] = useState("")
+  const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("simple")
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -43,6 +58,14 @@ export function ChatPanel({
     onRespond!(responseInput.trim())
     setResponseInput("")
   }
+
+  const handleSubmitKillMsg = () => {
+    if (!pendingKill || !onSubmitKill) return
+    onSubmitKill(killMessageInput.trim())
+    setKillMessageInput("")
+  }
+
+  const hasExecutingTools = executingToolCalls && executingToolCalls.size > 0 && !pendingKill
 
   // In simple mode, show only user goals and final assistant answers
   const visibleMessages = chatMode === "simple"
@@ -100,6 +123,72 @@ export function ChatPanel({
           visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)
         )}
       </div>
+
+      {/* Executing tool calls — kill bar */}
+      {hasExecutingTools && onKillToolCall && (
+        <div className="shrink-0 px-3 py-1.5" style={{ borderTop: `1px solid ${C.borderSolid}`, background: C.elevated + "80" }}>
+          <div className="text-[11px] font-mono mb-1" style={{ color: C.dim }}>Executing tools:</div>
+          <div className="flex flex-wrap gap-1">
+            {[...executingToolCalls.values()].map((tc) => (
+              <button
+                key={tc.toolCallId}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[12px] cursor-pointer transition-colors hover:brightness-125"
+                style={{
+                  background: "#ef444420",
+                  color: "#ef4444",
+                  border: "1px solid #ef444440",
+                }}
+                onClick={() => onKillToolCall(tc)}
+                title={`Kill ${tc.toolName}`}
+              >
+                <Square size={10} />
+                {tc.toolName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Kill message dialog */}
+      {pendingKill && onSubmitKill && onKillToolCall && (
+        <div className="shrink-0 px-3 py-2" style={{ borderTop: `1px solid #ef444460`, background: "#ef444410" }}>
+          <div className="text-[12px] mb-1.5" style={{ color: "#ef4444" }}>
+            Kill <span className="font-mono font-medium">{pendingKill.toolName}</span> — provide a steering message:
+          </div>
+          <div
+            className="flex items-center gap-2 rounded-lg px-3 py-2"
+            style={{ background: C.elevated, border: "1px solid #ef444460" }}
+          >
+            <input
+              type="text"
+              className="flex-1 bg-transparent outline-none text-[13px]"
+              style={{ color: C.text, caretColor: "#ef4444" }}
+              placeholder="e.g. Skip this, try a different approach..."
+              value={killMessageInput}
+              onChange={(e) => setKillMessageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSubmitKillMsg()
+                if (e.key === "Escape") { onKillToolCall(null); setKillMessageInput("") }
+              }}
+              autoFocus
+            />
+            <button
+              className="px-2 py-1 rounded text-[12px] cursor-pointer transition-colors hover:brightness-125"
+              style={{ background: "#ef444420", color: "#ef4444", border: "1px solid #ef444440" }}
+              onClick={() => { onKillToolCall(null); setKillMessageInput("") }}
+            >
+              Cancel
+            </button>
+            <button
+              className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+              style={{ color: "#ef4444" }}
+              onClick={handleSubmitKillMsg}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Input area — switches between goal entry and response entry */}
       <div className="shrink-0 px-3 py-2" style={{ borderTop: `1px solid ${C.borderSolid}` }}>

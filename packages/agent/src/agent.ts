@@ -249,6 +249,7 @@ export class Agent {
     workspaceRoot: string
     onPlannerTrace: AgentConfig["onPlannerTrace"]
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
+    toolKillManager: AgentConfig["toolKillManager"]
   }
 
   /** Cumulative token usage across all LLM calls in this agent's run. */
@@ -274,6 +275,7 @@ export class Agent {
       workspaceRoot: config.workspaceRoot ?? ".",
       onPlannerTrace: config.onPlannerTrace,
       plannerDelegateFn: config.plannerDelegateFn,
+      toolKillManager: config.toolKillManager,
     }
   }
 
@@ -593,16 +595,57 @@ export class Agent {
         }
 
         // Execute with timeout racing + transport-failure retry (agenc-core pattern)
-        const execResult = await executeToolWithTimeout(
-          call.name,
-          call.arguments as Record<string, unknown>,
-          (a) => tool.execute(a),
-          {
-            toolCallTimeoutMs: 0, // 0 = no timeout (respects agent-level signal)
-            maxRetries: 1,
-            signal: this.config.signal,
-          },
-        )
+        // Race against per-tool-call kill signal so the user can abort individual tools.
+        const killManager = this.config.toolKillManager
+        const killPromise = killManager?.register(call.id, call.name)
+
+        let execResult: Awaited<ReturnType<typeof executeToolWithTimeout>>
+        let killed = false
+        let killMessage = ""
+
+        if (killPromise) {
+          const result = await Promise.race([
+            executeToolWithTimeout(
+              call.name,
+              call.arguments as Record<string, unknown>,
+              (a) => tool.execute(a),
+              {
+                toolCallTimeoutMs: 0,
+                maxRetries: 1,
+                signal: this.config.signal,
+              },
+            ).then((r) => ({ kind: "exec" as const, value: r })),
+            killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg })),
+          ])
+          if (result.kind === "kill") {
+            killed = true
+            killMessage = result.value
+            execResult = { result: "", isError: true, timedOut: false, retryCount: 0, toolFailed: false, durationMs: 0 }
+          } else {
+            execResult = result.value
+          }
+          killManager!.unregister(call.id)
+        } else {
+          execResult = await executeToolWithTimeout(
+            call.name,
+            call.arguments as Record<string, unknown>,
+            (a) => tool.execute(a),
+            {
+              toolCallTimeoutMs: 0,
+              maxRetries: 1,
+              signal: this.config.signal,
+            },
+          )
+        }
+
+        if (killed) {
+          const msg = `[TOOL KILLED BY USER] ${killMessage}`
+          if (this.config.verbose) log.logToolError(msg)
+          messages.push({ role: "tool", toolCallId: call.id, content: msg, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: msg, isError: true })
+          failuresThisRound++
+          continue
+        }
 
         if (execResult.isError) {
           if (this.config.verbose) log.logToolError(execResult.result)
@@ -631,14 +674,17 @@ export class Agent {
           }
 
           // Track write-without-verify: if the child writes code/HTML, mark as unverified.
-          // Reading or checking clears it.
+          // read_file, run_command, AND browser_check clear the flag.
+          // browser_check launches a real browser that checks for JS errors — this counts
+          // as verification. Without this, children that properly verify via browser_check
+          // get a spurious WRITE-WITHOUT-VERIFY nudge, wasting iterations.
           if (call.name === "write_file") {
             const writePath = String((call.arguments as Record<string, unknown>).path ?? "")
             if (/\.(js|jsx|ts|tsx|py|html?|css|json)$/i.test(writePath)) {
               wroteUnverifiedFiles = true
             }
           }
-          if (call.name === "read_file" || call.name === "browser_check" || call.name === "run_command") {
+          if (call.name === "read_file" || call.name === "run_command" || call.name === "browser_check") {
             wroteUnverifiedFiles = false
           }
         }

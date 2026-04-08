@@ -15,6 +15,7 @@ import {
     MessageSquare,
     PanelBottom,
     Search,
+    Square,
     Terminal,
     X,
     type LucideIcon
@@ -73,6 +74,9 @@ export function OperatorEnvironment() {
   const setAudit = useStore((s) => s.setAudit)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
+  const executingToolCalls = useStore((s) => s.executingToolCalls)
+  const pendingKill = useStore((s) => s.pendingKill)
+  const setPendingKill = useStore((s) => s.setPendingKill)
   // ── API data ──────────────────────────────────────────────────
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [tools, setTools] = useState<ToolInfo[]>([])
@@ -203,6 +207,16 @@ export function OperatorEnvironment() {
     }
     clearPendingInput()
   }, [pendingInput, clearPendingInput])
+
+  const handleKillToolCall = useCallback(async (message: string) => {
+    if (!pendingKill) return
+    try {
+      await api.killToolCall(pendingKill.runId, pendingKill.toolCallId, message)
+    } catch {
+      /* swallow */
+    }
+    setPendingKill(null)
+  }, [pendingKill, setPendingKill])
 
   const handleCancel = useCallback(async () => {
     if (activeRun) await api.cancelRun(activeRun.id).catch(() => {})
@@ -498,6 +512,56 @@ export function OperatorEnvironment() {
             </div>
           </div>
 
+          {/* Kill bar — shows executing tool calls */}
+          {executingToolCalls.size > 0 && !pendingKill && (
+            <div
+              className="flex items-center gap-2 px-3 py-1 shrink-0 text-[12px] font-mono overflow-x-auto"
+              style={{ background: "#ef444408", borderBottom: `1px solid #ef444420` }}
+            >
+              <span style={{ color: "#ef4444", opacity: 0.7 }}>EXECUTING:</span>
+              {[...executingToolCalls.values()].map((tc) => (
+                <button
+                  key={tc.toolCallId}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer transition-colors hover:brightness-125 shrink-0"
+                  style={{ background: "#ef444415", color: "#ef4444", border: "1px solid #ef444430" }}
+                  onClick={() => setPendingKill(tc)}
+                  title={`Kill ${tc.toolName}`}
+                >
+                  <Square size={8} />
+                  {tc.toolName}
+                </button>
+              ))}
+            </div>
+          )}
+          {pendingKill && (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 shrink-0 text-[12px]"
+              style={{ background: "#ef444410", borderBottom: `1px solid #ef444440` }}
+            >
+              <span style={{ color: "#ef4444" }}>Kill <span className="font-mono font-medium">{pendingKill.toolName}</span>:</span>
+              <input
+                type="text"
+                className="flex-1 bg-transparent outline-none text-[12px] font-mono min-w-0"
+                style={{ color: C.text, caretColor: "#ef4444" }}
+                placeholder="steering message (or press Enter to skip)..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleKillToolCall((e.target as HTMLInputElement).value.trim())
+                  }
+                  if (e.key === "Escape") setPendingKill(null)
+                }}
+              />
+              <button
+                className="px-1.5 py-0.5 rounded text-[11px] cursor-pointer"
+                style={{ color: "#ef4444", border: "1px solid #ef444430" }}
+                onClick={() => setPendingKill(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           {/* Editor content (split or single) */}
           <div className="flex flex-1 min-h-0" style={{ background: C.base }}>
             {/* Left panel */}
@@ -709,6 +773,10 @@ export function OperatorEnvironment() {
               submitting={submitting}
               pendingInput={pendingInput}
               onRespond={handleRespondToInput}
+              executingToolCalls={executingToolCalls}
+              pendingKill={pendingKill}
+              onKillToolCall={setPendingKill}
+              onSubmitKill={handleKillToolCall}
             />
           </div>
         )}

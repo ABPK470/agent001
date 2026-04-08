@@ -97,7 +97,7 @@ export {
 
 // Additional types
 export { ChatBudgetExceededError } from "./types.js"
-export type { ChatCallUsageRecord, StopReason } from "./types.js"
+export type { ChatCallUsageRecord, StopReason, ToolKillManager } from "./types.js"
 
 // Engine (re-export governance infrastructure for server)
 export {

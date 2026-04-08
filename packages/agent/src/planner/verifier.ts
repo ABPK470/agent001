@@ -54,8 +54,9 @@ function extractActualPaths(output: string): string[] {
   for (const m of output.matchAll(/`([^`\s]+\.[a-zA-Z0-9]+)`/g)) {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
-  // Match "created/wrote/modified <path>" patterns
-  for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat)\w*\s+(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+  // Match "created/wrote/modified [to] <path>" patterns — the optional "to" is
+  // critical because tool output says "Successfully wrote to tmp/chess/game.js"
+  for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   // Deduplicate
@@ -129,13 +130,36 @@ async function probeArtifact(
       const findResult = await runCommand.execute({
         command: `find ${JSON.stringify(searchRoot)} -maxdepth 5 -name ${JSON.stringify(basename)} -type f -not -path "*/node_modules/*" -not -path "*/dist/*" -not -path "*/.git/*" 2>/dev/null | head -5`,
       })
-      const foundPaths = findResult.trim().split("\n").filter((p: string) => p.length > 0 && p !== "." && !p.includes("(no output)") && p.startsWith("/"))
+      // Accept both absolute and relative paths from find ("./tmp/file.js")
+      const foundPaths = findResult.trim().split("\n")
+        .filter((p: string) => p.length > 0 && p !== "." && !p.includes("(no output)"))
+        .map((p: string) => p.replace(/^\.\//,  ""))
       for (const fp of foundPaths) {
-        const cleanPath = fp.replace(/^\.\//, "")
         try {
-          const content = await readFile.execute({ path: cleanPath })
+          const content = await readFile.execute({ path: fp })
           if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
-            return { found: true, resolvedPath: cleanPath }
+            return { found: true, resolvedPath: fp }
+          }
+        } catch { /* fall through */ }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 4. Second-chance find with relative "." as search root — catches cases where
+  //    the absolute-path find returns no output due to CWD/sandbox differences.
+  if (runCommand && basename) {
+    try {
+      const findResult2 = await runCommand.execute({
+        command: `find . -maxdepth 6 -name ${JSON.stringify(basename)} -type f -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null | head -5`,
+      })
+      const foundPaths2 = findResult2.trim().split("\n")
+        .filter((p: string) => p.length > 0 && p !== "." && !p.includes("(no output)"))
+        .map((p: string) => p.replace(/^\.\//,  ""))
+      for (const fp of foundPaths2) {
+        try {
+          const content = await readFile.execute({ path: fp })
+          if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
+            return { found: true, resolvedPath: fp }
           }
         } catch { /* fall through */ }
       }
@@ -195,12 +219,14 @@ export async function runDeterministicProbes(
       }
 
       // If verification mode is browser_check, run it
+      let browserCheckPassed = false
       if (sa.executionContext.verificationMode === "browser_check") {
         const browserCheck = toolMap.get("browser_check")
         if (browserCheck) {
           const htmlArtifacts = sa.executionContext.targetArtifacts.filter(
             a => a.endsWith(".html") || a.endsWith(".htm"),
           )
+          let anyBrowserFailure = false
           for (const html of htmlArtifacts) {
             // Reuse cached probe result; browser_check expects a RELATIVE path
             const cached = probeCache.get(html)
@@ -213,10 +239,15 @@ export async function runDeterministicProbes(
               const result = await browserCheck.execute({ path: browserPath })
               if (/error|fail|exception/i.test(result) && !/no errors/i.test(result)) {
                 issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
+                anyBrowserFailure = true
               }
             } catch {
               issues.push(`Browser check failed for "${browserPath}"`)
+              anyBrowserFailure = true
             }
+          }
+          if (htmlArtifacts.length > 0 && !anyBrowserFailure) {
+            browserCheckPassed = true
           }
         }
       }
@@ -262,6 +293,17 @@ export async function runDeterministicProbes(
                   `Corrupted/degenerated code in "${artifact}": ${corruption.join("; ")}`,
                 )
               }
+              // Check for unresolved method references (this.foo() where foo is not defined)
+              // This catches destructive rewrites where a child agent removes functions
+              // that are still called from other methods in the same file.
+              if (/\bclass\b/.test(content)) {
+                const unresolvedMethods = detectUnresolvedMethods(content)
+                if (unresolvedMethods.length > 0) {
+                  issues.push(
+                    `Missing method(s) in "${artifact}": ${unresolvedMethods.join("; ")}`,
+                  )
+                }
+              }
             }
           } catch { /* already flagged */ }
         }
@@ -283,7 +325,13 @@ export async function runDeterministicProbes(
               const result = await runCommand.execute({
                 command: `node --check ${JSON.stringify(checkPath)} 2>&1`,
               })
-              if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(result)) {
+              // Skip MODULE_NOT_FOUND — means the file path doesn't exist on
+              // the actual filesystem (e.g. sandbox/virtual FS paths).  Only
+              // flag genuine syntax errors.
+              if (
+                /SyntaxError|Unexpected token|Unexpected identifier/i.test(result) &&
+                !/MODULE_NOT_FOUND|Cannot find module/i.test(result)
+              ) {
                 issues.push(`Syntax error in "${artifact}": ${result.trim().split("\n").slice(0, 3).join(" | ")}`)
               }
             } catch { /* non-critical */ }
@@ -352,10 +400,11 @@ export async function runDeterministicProbes(
       }
 
       // ── Functional complexity heuristic ──
-      // A step with many acceptance criteria (e.g. 5+ for a chess game) needs
-      // substantial code.  If ALL code artifacts together are under a threshold,
-      // the implementation is almost certainly shallow / skeleton.
-      if (readFile && sa.acceptanceCriteria.length >= 4) {
+      // A step with many acceptance criteria needs substantial code.  If ALL
+      // code artifacts together are under a very low threshold, flag it.
+      // Multiplier kept conservative (8 lines/criterion) to avoid false
+      // positives on compact but correct implementations.
+      if (readFile && sa.acceptanceCriteria.length >= 5) {
         let totalCodeLines = 0
         for (const artifact of sa.executionContext.targetArtifacts) {
           const cached = probeCache.get(artifact)
@@ -368,11 +417,12 @@ export async function runDeterministicProbes(
             }
           } catch { /* skip */ }
         }
-        // Rough heuristic: ~40 meaningful lines per acceptance criterion is minimum
-        const minExpectedLines = sa.acceptanceCriteria.length * 40
+        // Conservative heuristic: ~8 meaningful lines per acceptance criterion.
+        // Only flags truly skeletal code — compact implementations are fine.
+        const minExpectedLines = sa.acceptanceCriteria.length * 8
         if (totalCodeLines > 0 && totalCodeLines < minExpectedLines) {
           issues.push(
-            `Implementation appears shallow: ${totalCodeLines} non-comment code lines for ${sa.acceptanceCriteria.length} acceptance criteria (expected ${minExpectedLines}+). The code likely lacks complete logic for all criteria.`,
+            `Implementation appears skeletal: ${totalCodeLines} non-comment code lines for ${sa.acceptanceCriteria.length} acceptance criteria (expected at least ${minExpectedLines}). The code likely lacks real logic for most criteria.`,
           )
         }
       }
@@ -405,8 +455,36 @@ export async function runDeterministicProbes(
       }
 
       // ── Confidence from issue count (agenc-core formula) ──
-      const confidence = Math.max(0, 1 - Math.min(0.9, issues.length * 0.18))
-      const outcome: VerifierOutcome = issues.length > 0
+      // Structural issues are blockers (stubs, corruption, syntax errors, missing files).
+      // Non-structural issues (evidence density, line count, hallucination risk) are
+      // informational — they should NOT trigger retries when browser_check passed and
+      // no structural problems exist, because retries risk destroying working code.
+      const STRUCTURAL_KEYWORDS = [
+        "not found", "Placeholder", "stub", "Syntax error", "Corrupted",
+        "Missing method", "Browser check", "catch-all", "empty function",
+        "deferred-work", "explicit failure", "all tool calls failed",
+        "zero tool calls", "gibberish", "skeletal",
+      ]
+      const structuralIssues = issues.filter(i =>
+        STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
+      )
+      const nonStructuralIssues = issues.filter(i =>
+        !STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
+      )
+
+      // If browser_check passed and all artifacts exist and no structural issues,
+      // the code is working — don't let non-structural concerns trigger a retry
+      // that could destroy it.
+      let effectiveIssueCount = issues.length
+      if (browserCheckPassed && structuralIssues.length === 0) {
+        effectiveIssueCount = 0 // all remaining issues are non-structural → code is working
+      } else if (browserCheckPassed && structuralIssues.length < issues.length) {
+        // Browser works but has some structural issues — only count those
+        effectiveIssueCount = structuralIssues.length
+      }
+
+      const confidence = Math.max(0, 1 - Math.min(0.9, effectiveIssueCount * 0.18))
+      const outcome: VerifierOutcome = effectiveIssueCount > 0
         ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" : "retry")
         : "pass"
 
@@ -414,7 +492,9 @@ export async function runDeterministicProbes(
         stepName: step.name,
         outcome,
         confidence,
-        issues,
+        issues: effectiveIssueCount < issues.length
+          ? [...structuralIssues, ...nonStructuralIssues.map(i => `[non-blocking] ${i}`)]
+          : issues,
         retryable: true,
       })
     } else {
@@ -467,6 +547,7 @@ Rules:
 - "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
 - SKELETON / PLACEHOLDER CODE IS NEVER "pass": If a step was supposed to implement logic but output contains placeholder functions (\`return true\` as validation, empty bodies, \`// TODO\`, \`// Placeholder\`), mark it "retry" with specific issues listing what needs real implementation
 - SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. piece movement rules, validation, game state management) but the code only has trivial/generic implementations (e.g. a movePiece function that doesn't validate piece-specific movement, a highlightLegalMoves that doesn't check actual legal moves), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
+- CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
@@ -595,22 +676,38 @@ export async function verify(
   }
 
   // Read actual file contents for code artifacts to give the LLM verifier
-  // concrete code to assess (not just the child's self-reported output)
+  // concrete code to assess (not just the child's self-reported output).
+  // Use probeArtifact for path resolution — the planned paths are often bare
+  // filenames (e.g. "gameLogic.js") but the actual files live in subdirectories
+  // (e.g. "tmp/chess/gameLogic.js"). Without resolution the LLM verifier
+  // gets zero code context and cannot assess quality.
   const artifactContents = new Map<string, string>()
   const toolMap = new Map(tools.map(t => [t.name, t]))
   const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
   if (readFile) {
     for (const step of plan.steps) {
       if (step.stepType !== "subagent_task") continue
       const sa = step as SubagentTaskStep
+      // Gather actual paths from child output for better probe resolution
+      const stepResult = pipelineResult.stepResults.get(step.name)
+      const actualPaths = stepResult?.output ? extractActualPaths(stepResult.output) : []
       for (const artifact of sa.executionContext.targetArtifacts) {
         if (!/\.(js|jsx|ts|tsx|html|css|py)$/i.test(artifact)) continue
-        try {
-          const content = await readFile.execute({ path: artifact })
-          if (typeof content === "string" && content.length > 0 && !content.startsWith("Error:")) {
-            artifactContents.set(artifact, content)
-          }
-        } catch { /* skip */ }
+        const probe = await probeArtifact(
+          readFile, artifact, actualPaths,
+          sa.executionContext.workspaceRoot || undefined,
+          runCommand,
+          sa.executionContext.allowedWriteRoots,
+        )
+        if (probe.found) {
+          try {
+            const content = await readFile.execute({ path: probe.resolvedPath })
+            if (typeof content === "string" && content.length > 0 && !content.startsWith("Error:")) {
+              artifactContents.set(artifact, content)
+            }
+          } catch { /* skip */ }
+        }
       }
     }
   }
@@ -619,9 +716,19 @@ export async function verify(
   const decision = await runLLMVerification(llm, plan, pipelineResult, detAssessments, { signal: opts?.signal, onTrace: opts?.onTrace, artifactContents })
 
   // Merge: if deterministic says "retry" but LLM says "pass", trust deterministic
+  // UNLESS the deterministic outcome was upgraded from non-structural issues only
+  // (i.e., all issues are prefixed [non-blocking]). In that case, the LLM's
+  // "pass" is trustworthy — the code works (browser_check passed), and forcing
+  // a retry risks destroying working code.
   const mergedSteps = decision.steps.map(llmStep => {
     const detStep = detAssessments.find(d => d.stepName === llmStep.stepName)
     if (detStep && detStep.outcome !== "pass" && llmStep.outcome === "pass") {
+      // Check if all deterministic issues are non-blocking
+      const allNonBlocking = detStep.issues.every(i => i.startsWith("[non-blocking]"))
+      if (allNonBlocking && detStep.issues.length > 0) {
+        // LLM says pass + deterministic issues are all non-blocking → trust LLM
+        return { ...llmStep, issues: [...llmStep.issues, ...detStep.issues] }
+      }
       return { ...detStep } // deterministic issues override LLM optimism
     }
     return llmStep
@@ -707,16 +814,38 @@ const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string; contextRe?: RegEx
   { re: /\/\/\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
   { re: /\/\*\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
   { re: /#\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  // "TO BE IMPLEMENTED" / "TO BE ADDED" / "NOT YET IMPLEMENTED" deferred stubs
+  { re: /\/\/\s*(?:\w+\s+)*(?:to\s+be\s+implemented|to\s+be\s+added|not\s+yet\s+implemented)\b/gi, label: "stub comment" },
   // Trivially-returning validation functions — only flag when function name suggests
   // it should validate/check/compute something
   {
     re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gi,
     label: "validation function always returns constant",
   },
+  // Validation/compute functions with a comment then trivial return (e.g. isCheckmate() { // Implement…\n return false; })
+  {
+    re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+|get\w+)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*|\/\*[^*]*\*\/[\s\n]*)+return\s+(true|false|\[\]|\{\}|null|undefined|0|"")\s*;?\s*\}/gi,
+    label: "stub function (comment + trivial return)",
+  },
+  // Functions whose ENTIRE body is `/* comment */ return [];` or `return {};`
+  // Catches: function calculateRookMoves(row, col) { /* Logic for rook */ return []; }
+  {
+    re: /function\s+\w+\s*\([^)]*\)\s*\{[\s\n]*(?:\/\*[^*]*\*\/[\s\n]*|\/\/[^\n]*[\s\n]*)*(return\s+\[\]\s*;?)\s*\}/gi,
+    label: "stub function returns empty array",
+  },
+  {
+    re: /function\s+\w+\s*\([^)]*\)\s*\{[\s\n]*(?:\/\*[^*]*\*\/[\s\n]*|\/\/[^\n]*[\s\n]*)*(return\s+\{\}\s*;?)\s*\}/gi,
+    label: "stub function returns empty object",
+  },
   // Arrow function variant
   {
     re: /(?:const|let|var)\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*=\s*\([^)]*\)\s*=>\s*(true|false)\s*;?/gi,
     label: "validation function always returns constant",
+  },
+  // Arrow function returning empty array/object stub
+  {
+    re: /(?:const|let|var)\s+\w+\s*=\s*\([^)]*\)\s*=>\s*(\[\]|\{\})\s*;?/gi,
+    label: "arrow function returns empty array/object stub",
   },
   // Empty function bodies (function with only whitespace/comments inside)
   {
@@ -727,20 +856,120 @@ const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string; contextRe?: RegEx
 
 /**
  * Scan source code for placeholder / stub patterns.
- * Returns a list of human-readable findings, at most 5.
+ * Returns a list of human-readable findings with function names and line numbers
+ * so retry feedback is precise and actionable.
  */
 function detectPlaceholderPatterns(code: string): string[] {
   const findings: string[] = []
-  for (const { re, label } of PLACEHOLDER_PATTERNS) {
-    // Reset lastIndex for global regexes
-    re.lastIndex = 0
-    const matches = code.match(re)
-    if (matches && matches.length > 0) {
-      // Only report the first match  snippet (truncated) to keep it actionable
-      const snippet = matches[0].replace(/\n/g, " ").trim().slice(0, 80)
-      findings.push(`${label} (${matches.length}x) e.g. "${snippet}"`)
+
+  // Precompute line starts for O(log n) line number lookup
+  const lineStarts: number[] = [0]
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] === "\n") lineStarts.push(i + 1)
+  }
+  const getLineNumber = (offset: number): number => {
+    let lo = 0, hi = lineStarts.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (lineStarts[mid]! <= offset) lo = mid
+      else hi = mid - 1
     }
-    if (findings.length >= 5) break
+    return lo + 1 // 1-indexed
+  }
+
+  for (const { re, label } of PLACEHOLDER_PATTERNS) {
+    re.lastIndex = 0
+    const matchDetails: string[] = []
+    let m: RegExpExecArray | null
+    while ((m = re.exec(code)) !== null) {
+      // Extract function name from match text
+      const fnMatch = m[0].match(/function\s+(\w+)|(?:const|let|var)\s+(\w+)/)
+      const fnName = fnMatch?.[1] || fnMatch?.[2] || null
+      const lineNum = getLineNumber(m.index)
+      matchDetails.push(fnName ? `${fnName}() (line ${lineNum})` : `line ${lineNum}`)
+      if (matchDetails.length >= 15) break
+    }
+    if (matchDetails.length > 0) {
+      findings.push(`${label}: ${matchDetails.join(", ")}`)
+    }
+    if (findings.length >= 8) break
+  }
+
+  // ── Catch-all return detection ──
+  const catchAllFindings = detectCatchAllReturns(code)
+  for (const f of catchAllFindings) {
+    if (findings.length >= 8) break
+    findings.push(f)
+  }
+
+  // ── "will go here" / "will be added" deferred-work comments ──
+  const deferredRe = /\/\/\s*(?:\w+\s+)*(?:will\s+(?:go|be\s+(?:added|implemented|handled))|goes?\s+here|add(?:ed)?\s+(?:later|here))\b/gi
+  deferredRe.lastIndex = 0
+  const matchDetails: string[] = []
+  let dm: RegExpExecArray | null
+  while ((dm = deferredRe.exec(code)) !== null) {
+    matchDetails.push(`line ${getLineNumber(dm.index)}`)
+    if (matchDetails.length >= 10) break
+  }
+  if (matchDetails.length > 0 && findings.length < 8) {
+    findings.push(`deferred-work comment: ${matchDetails.join(", ")}`)
+  }
+
+  return findings
+}
+
+/**
+ * Detect validation/check functions that end with a catch-all `return true`.
+ * These are functions with names like `validate*`, `check*`, `isValid*`, `canMove*`
+ * that have some conditional logic but then fall through to `return true` for
+ * unhandled cases — the classic stub disguise.
+ *
+ * Works by extracting function bodies via brace-matching and checking if the
+ * last meaningful statement is `return true` while the function has if/switch
+ * branches that only cover a subset of cases.
+ */
+function detectCatchAllReturns(code: string): string[] {
+  const findings: string[] = []
+  // Match function declarations with validation-like or compute-like names
+  const funcRe = /function\s+(validate\w*|check\w*|is[A-Z]\w*|can[A-Z]\w*|isValid\w*|isLegal\w*|getLegal\w*|calculate\w*|compute\w*|get[A-Z]\w*|find[A-Z]\w*)\s*\(/g
+  let m: RegExpExecArray | null
+  while ((m = funcRe.exec(code)) !== null) {
+    const funcName = m[1]
+    const bodyStart = code.indexOf("{", m.index + m[0].length)
+    if (bodyStart < 0) continue
+    // Simple brace-matching to find function body
+    let depth = 0
+    let bodyEnd = -1
+    for (let i = bodyStart; i < code.length; i++) {
+      if (code[i] === "{") depth++
+      else if (code[i] === "}") {
+        depth--
+        if (depth === 0) { bodyEnd = i; break }
+      }
+    }
+    if (bodyEnd < 0) continue
+    const body = code.slice(bodyStart + 1, bodyEnd)
+    const bodyLines = body.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("//") && !l.startsWith("/*") && !l.startsWith("*"))
+    if (bodyLines.length < 3) continue // too small to be a catch-all pattern
+
+    // Check if the last meaningful statement is `return true`
+    const lastLine = bodyLines[bodyLines.length - 1]
+    if (/^return\s+true\s*;?\s*$/.test(lastLine)) {
+      // And the function has conditional branches (if/switch/case) meaning
+      // it handles some cases but falls through on others
+      const hasBranches = /\b(?:if|switch|case)\b/.test(body)
+      if (hasBranches) {
+        // Exclude exhaustive-search functions: if the body contains for-loops
+        // that iterate over all possibilities (e.g. isCheckmate scanning every
+        // piece and every square), `return true` at the end means "condition
+        // holds because no counterexample was found" — that's correct logic,
+        // not a stub. Also exclude functions with 10+ lines of real logic.
+        const hasExhaustiveLoop = /\bfor\s*\(/.test(body)
+        if (!hasExhaustiveLoop && bodyLines.length < 10) {
+          findings.push(`catch-all "return true" in ${funcName}() — handles some cases but falls through to true for the rest`)
+        }
+      }
+    }
   }
   return findings
 }
@@ -901,6 +1130,89 @@ function detectHtmlCorruption(html: string): string[] {
   }
 
   return findings
+}
+
+// ============================================================================
+// Method reference integrity check
+// ============================================================================
+
+/**
+ * Common built-in methods that should not be flagged as unresolved.
+ * Covers JS/TS Object, Array, String, Math, and common DOM methods.
+ */
+const BUILTIN_METHODS = new Set([
+  // Object builtins
+  "toString", "valueOf", "hasOwnProperty", "constructor",
+  // Array mutation
+  "push", "pop", "shift", "unshift", "splice", "sort", "reverse", "fill",
+  // Array iteration
+  "map", "filter", "reduce", "forEach", "find", "findIndex", "some", "every",
+  "includes", "indexOf", "lastIndexOf", "flat", "flatMap", "slice", "concat", "join",
+  // String
+  "toLowerCase", "toUpperCase", "trim", "split", "replace", "match", "startsWith",
+  "endsWith", "includes", "charAt", "substring", "padStart", "padEnd",
+  // Set/Map
+  "add", "delete", "has", "get", "set", "clear", "keys", "values", "entries",
+  // DOM/Events
+  "addEventListener", "removeEventListener", "querySelector", "querySelectorAll",
+  "getElementById", "getElementsByClassName", "createElement", "appendChild",
+  "removeChild", "setAttribute", "getAttribute", "classList", "dispatchEvent",
+  "preventDefault", "stopPropagation",
+  // Common utility
+  "bind", "call", "apply", "then", "catch", "finally", "emit", "on", "off",
+  "log", "warn", "error", "info",
+])
+
+/**
+ * Detect unresolved method references in class-based JS/TS code.
+ *
+ * When a child agent destructively rewrites a file, it often removes method
+ * definitions while keeping calls to those methods in other methods. For example:
+ *   - isMoveLegal() calls this.isPawnMove() but isPawnMove was deleted
+ *   - makeMove() calls this.handleCastling() but handleCastling was deleted
+ *
+ * This check extracts all `this.X()` calls and all method/function definitions,
+ * then reports calls to methods that don't exist in the file.
+ */
+function detectUnresolvedMethods(code: string): string[] {
+  // Extract all this.X( calls
+  const callRe = /this\.([a-zA-Z_$]\w*)\s*\(/g
+  const calls = new Set<string>()
+  let m: RegExpExecArray | null
+  while ((m = callRe.exec(code)) !== null) {
+    calls.add(m[1])
+  }
+
+  // Extract method definitions: class method syntax, assigned functions, and declarations
+  const definitions = new Set<string>()
+  // Class method syntax:  methodName(args) { or  async methodName(args) {
+  const methodRe = /^\s*(?:async\s+)?([a-zA-Z_$]\w*)\s*\(/gm
+  while ((m = methodRe.exec(code)) !== null) {
+    if (m[1]) definitions.add(m[1])
+  }
+  // Also check for get/set accessors: get propertyName() {
+  const accessorRe = /^\s*(?:get|set)\s+([a-zA-Z_$]\w*)\s*\(/gm
+  while ((m = accessorRe.exec(code)) !== null) {
+    if (m[1]) definitions.add(m[1])
+  }
+  // Also check for function declarations and const assignments
+  const funcDeclRe = /function\s+([a-zA-Z_$]\w*)\s*\(/g
+  while ((m = funcDeclRe.exec(code)) !== null) {
+    if (m[1]) definitions.add(m[1])
+  }
+  const constFuncRe = /(?:const|let|var)\s+([a-zA-Z_$]\w*)\s*=\s*(?:function|\([^)]*\)\s*=>)/g
+  while ((m = constFuncRe.exec(code)) !== null) {
+    if (m[1]) definitions.add(m[1])
+  }
+
+  // Find unresolved: called via this.X() but never defined, and not a builtin
+  const unresolved: string[] = []
+  for (const call of calls) {
+    if (!definitions.has(call) && !BUILTIN_METHODS.has(call)) {
+      unresolved.push(`this.${call}() called but not defined in file`)
+    }
+  }
+  return unresolved.slice(0, 5)  // Cap at 5 to keep output actionable
 }
 
 // ============================================================================

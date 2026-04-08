@@ -36,6 +36,7 @@ import {
     type ResolvedAgent,
     type RunState,
     type Tool,
+    type ToolKillManager,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
@@ -80,6 +81,7 @@ export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
+  private readonly pendingKills = new Map<string, { resolve: (message: string) => void }>()
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
@@ -247,6 +249,17 @@ export class AgentOrchestrator {
 
     this.saveTrace(runId, { kind: "user-input-response", text: response })
     broadcast({ type: "user_input.response", data: { runId } })
+    return true
+  }
+
+  /** Kill a specific tool call and inject a user steering message. */
+  killToolCall(runId: string, toolCallId: string, message: string): boolean {
+    const key = `${runId}:${toolCallId}`
+    const pending = this.pendingKills.get(key)
+    if (!pending) return false
+    pending.resolve(message)
+    this.pendingKills.delete(key)
+    broadcast({ type: "tool_call.killed", data: { runId, toolCallId, message } })
     return true
   }
 
@@ -643,10 +656,27 @@ export class AgentOrchestrator {
     broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry: toolsResolvedEntry } })
 
     let prevTotalTokens = 0
+
+    // Build a per-run ToolKillManager so the user can kill individual tool calls
+    const killManager: ToolKillManager = {
+      register: (toolCallId: string, toolName: string) => {
+        return new Promise<string>((resolve) => {
+          const key = `${runId}:${toolCallId}`
+          this.pendingKills.set(key, { resolve })
+          broadcast({ type: "tool_call.executing", data: { runId, toolCallId, toolName } })
+        })
+      },
+      unregister: (toolCallId: string) => {
+        this.pendingKills.delete(`${runId}:${toolCallId}`)
+        broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
+      },
+    }
+
     const agent = new Agent(this.llm, allTools, {
       verbose: true,
       signal: controller.signal,
       systemMessages,
+      toolKillManager: killManager,
       // ── Planner-first routing ──────────────────────────────────
       enablePlanner: true,
       workspaceRoot: this.workspace ?? process.cwd(),

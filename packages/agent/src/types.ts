@@ -149,6 +149,23 @@ export type StopReason =
   | "circuit_breaker"
   | "stuck_loop"
 
+// ── Tool kill manager ────────────────────────────────────────────
+
+/**
+ * Allows the user to kill individual tool calls while they are executing.
+ * The orchestrator implements this; the agent races tool execution against kill.
+ */
+export interface ToolKillManager {
+  /**
+   * Register a tool call as executing.
+   * Returns a promise that resolves with the user's steering message
+   * when/if the tool call is killed.  Never resolves otherwise.
+   */
+  register(toolCallId: string, toolName: string): Promise<string>
+  /** Unregister when done (tool completed or killed). */
+  unregister(toolCallId: string): void
+}
+
 /**
  * Record of one model API call (cost attribution).
  * Matches agenc-core ChatCallUsageRecord.
@@ -184,6 +201,11 @@ export interface AgentConfig {
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /** AbortSignal for external cancellation. */
   signal?: AbortSignal
+  /**
+   * Per-tool-call kill manager — allows the user to kill individual tool
+   * calls and provide a steering message that replaces the tool result.
+   */
+  toolKillManager?: ToolKillManager
 
   // ── Planner options (agenc-core pattern) ──────────────────────
 

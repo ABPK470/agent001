@@ -172,8 +172,10 @@ export const readFileTool: Tool = {
 export const writeFileTool: Tool = {
   name: "write_file",
   description:
-    "Write content to a file. Creates the file if it doesn't exist, " +
-    "overwrites if it does. Paths are relative to the working directory.",
+    "Write content to a file. Creates the file if it doesn't exist. " +
+    "WARNING: This REPLACES the entire file content — it does NOT append. " +
+    "To add code to an existing file, you MUST include all existing content plus your additions. " +
+    "Paths are relative to the working directory.",
   parameters: {
     type: "object",
     properties: {
@@ -187,6 +189,19 @@ export const writeFileTool: Tool = {
     try {
       // Use safePathResolved to prevent writing through symlinks that point outside workspace
       const target = await safePathResolved(String(args.path))
+
+      // ── Regression guard: snapshot existing file before overwrite ──
+      // If the file already exists, extract its defined names so we can detect
+      // function/class loss after writing. This catches destructive rewrites
+      // where the child drops existing functions that other code depends on.
+      let priorNames: Set<string> | undefined
+      try {
+        const existing = await readFile(target, "utf-8")
+        if (existing.length > 0) {
+          priorNames = extractDefinedNames(existing)
+        }
+      } catch { /* file doesn't exist yet — no regression possible */ }
+
       // Auto-create parent directories (safe: target is already validated under _basePath)
       const parentDir = dirname(target)
       try {
@@ -227,6 +242,20 @@ export const writeFileTool: Tool = {
       // instead of silently accepting garbage that wastes a full pipeline retry.
       const filePath = String(args.path)
       const integrityWarnings = checkWriteIntegrity(filePath, content)
+
+      // ── Regression guard: detect function/class loss ──
+      if (priorNames && priorNames.size > 0) {
+        const newNames = extractDefinedNames(content)
+        const lost = [...priorNames].filter(n => !newNames.has(n))
+        if (lost.length > 0) {
+          integrityWarnings.push(
+            `FUNCTION LOSS: Your write REMOVED ${lost.length} existing definition(s): ${lost.join(", ")}. ` +
+            `Other code likely calls these — your write has BROKEN the application. ` +
+            `You MUST write_file again with ALL missing definitions restored.`
+          )
+        }
+      }
+
       if (integrityWarnings.length > 0) {
         return (
           `\u26a0 WRITTEN WITH ERRORS to ${filePath} — your output is CORRUPTED and must be fixed:\n` +
@@ -242,6 +271,29 @@ export const writeFileTool: Tool = {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+}
+
+// ── Definition name extraction (for regression detection) ────────
+
+/**
+ * Extract function, class, and named constant definitions from source code.
+ * Used to detect when a rewrite drops existing definitions that other code depends on.
+ */
+function extractDefinedNames(code: string): Set<string> {
+  const names = new Set<string>()
+  // function declarations: function name(
+  for (const m of code.matchAll(/\bfunction\s+([a-zA-Z_$][\w$]*)\s*\(/g)) {
+    if (m[1]) names.add(m[1])
+  }
+  // class declarations: class Name
+  for (const m of code.matchAll(/\bclass\s+([a-zA-Z_$][\w$]*)/g)) {
+    if (m[1]) names.add(m[1])
+  }
+  // const/let/var with function value: const name = function | const name = (
+  for (const m of code.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:function|\(|[a-zA-Z_$][\w$]*\s*=>)/g)) {
+    if (m[1]) names.add(m[1])
+  }
+  return names
 }
 
 // ── Write integrity check ────────────────────────────────────────

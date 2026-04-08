@@ -161,6 +161,9 @@ export async function executePlannerPath(
   let verifierRounds = 0
   // Track issues per step across attempts to detect repeated identical failures
   const priorStepIssues = new Map<string, string>()
+  // Track stub-issue count per step across attempts — if count doesn't decrease,
+  // the child is stuck and further retries won't help
+  const priorStubCounts = new Map<string, number>()
 
   for (let attempt = 0; attempt <= MAX_PIPELINE_RETRIES; attempt++) {
     if (ctx.signal?.aborted) {
@@ -260,6 +263,11 @@ export async function executePlannerPath(
     // as the previous attempt, further retries won't help (LLM is stuck).
     let allStepsRepeatedFailure = true
 
+    // ── Stub-count regression tracking ──
+    // Track the number of stub-related issues per step across retries.
+    // If a retry doesn't reduce the stub count, the child is stuck — abort.
+    const STUB_KEYWORDS = ["stub", "placeholder", "empty array", "empty object", "returns constant", "catch-all", "trivial return", "empty function"]
+
     for (const stepAssessment of verifierDecision.steps) {
       const stepResult = pipelineResult.stepResults.get(stepAssessment.stepName)
 
@@ -267,18 +275,30 @@ export async function executePlannerPath(
       const issueKey = [...stepAssessment.issues].sort().join("|")
       const prevIssueKey = priorStepIssues.get(stepAssessment.stepName)
 
+      // Count stub-specific issues for regression tracking
+      const currentStubCount = stepAssessment.issues.filter(i =>
+        STUB_KEYWORDS.some(kw => i.toLowerCase().includes(kw)),
+      ).length
+      const prevStubCount = priorStubCounts.get(stepAssessment.stepName)
+
       if (stepAssessment.outcome === "pass" && stepResult) {
         priorResults.set(stepAssessment.stepName, stepResult)
         priorStepIssues.delete(stepAssessment.stepName)
+        priorStubCounts.delete(stepAssessment.stepName)
       } else if (stepResult?.failureClass && NON_RETRYABLE_CLASSES.has(stepResult.failureClass)) {
         priorResults.set(stepAssessment.stepName, stepResult)
       } else if (stepAssessment.issues.length > 0) {
-        if (prevIssueKey === issueKey) {
-          // Same issues as last time — this step is stuck, skip it
+        // Check for repeated failure OR stub-count not improving
+        const isExactRepeat = prevIssueKey === issueKey
+        const stubsNotImproving = prevStubCount !== undefined && currentStubCount >= prevStubCount && currentStubCount > 0
+
+        if (isExactRepeat || stubsNotImproving) {
           ctx.onTrace?.({
             kind: "planner-retry-skip",
             stepName: stepAssessment.stepName,
-            reason: "Repeated identical failure — further retries won't help",
+            reason: isExactRepeat
+              ? "Repeated identical failure — further retries won't help"
+              : `Stub count not improving (${prevStubCount} → ${currentStubCount}) — child is stuck`,
           })
           if (stepResult) {
             priorResults.set(stepAssessment.stepName, stepResult)
@@ -288,6 +308,7 @@ export async function executePlannerPath(
           allStepsRepeatedFailure = false
         }
         priorStepIssues.set(stepAssessment.stepName, issueKey)
+        priorStubCounts.set(stepAssessment.stepName, currentStubCount)
       } else {
         allStepsRepeatedFailure = false
       }

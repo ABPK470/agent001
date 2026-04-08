@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
 import { fmtTokens, truncate } from "../../util"
 import {
-    C,
-    fmtK,
-    statusDot,
-    type EditorTab,
+  C,
+  fmtK,
+  statusDot,
+  type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2236,8 +2236,14 @@ export function MapPanel({
         currentTool = null
       }
     }
+    // If the run is no longer active, resolve any lingering "running" tools
+    if (!isRunning) {
+      for (const s of stats.values()) {
+        if (s.lastStatus === "running") s.lastStatus = "done"
+      }
+    }
     return stats
-  }, [trace])
+  }, [trace, isRunning])
 
   // Stabilised involved tool IDs
   const prevInvolvedRef = useRef<Set<string>>(new Set())
@@ -2718,7 +2724,7 @@ export function MapPanel({
         ctx.arc(x, y, Math.max(w, h) + 3, t, t + arcLen)
         ctx.strokeStyle = C.accent + "88"
         ctx.lineWidth = 1.8
-        ctx.lineCap = "round"
+        ctx.lineCap = "butt"
         ctx.stroke()
       }
       // Determine fill and stroke based on state
@@ -2760,7 +2766,7 @@ export function MapPanel({
         ctx.arc(x, y, r + 3, t, t + arcLen)
         ctx.strokeStyle = C.accent + "88"
         ctx.lineWidth = 1.8
-        ctx.lineCap = "round"
+        ctx.lineCap = "butt"
         ctx.stroke()
         // Glow
         ctx.fillStyle = C.accent + "10"
@@ -2813,7 +2819,7 @@ export function MapPanel({
         ctx.arc(x, y, r + 3, t, t + arcLen)
         ctx.strokeStyle = C.accent + "88"
         ctx.lineWidth = 1.8
-        ctx.lineCap = "round"
+        ctx.lineCap = "butt"
         ctx.stroke()
         // Glow behind the node
         ctx.fillStyle = C.accent + "12"
@@ -2829,9 +2835,6 @@ export function MapPanel({
         ctx.fillStyle = dimmed ? toolColor + "30" : toolColor
         ctx.textAlign = "center"; ctx.textBaseline = "middle"
         ctx.fillText(stats.calls > 99 ? "99+" : String(stats.calls), x, y + 0.5)
-      } else {
-        ctx.fillStyle = dimmed ? toolColor + "10" : toolColor + "40"
-        ctx.beginPath(); ctx.arc(x, y, r * 0.2, 0, Math.PI * 2); ctx.fill()
       }
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
       ctx.fillStyle = dimmed ? C.muted + "30" : stats && stats.calls > 0 ? C.text : C.muted
@@ -2862,30 +2865,34 @@ export function MapPanel({
     if (!src || !tgt || src.x == null || tgt.x == null) return
 
     if (planDag) {
-      // DAG mode: straight lines with arrow heads
+      // DAG mode: straight lines with arrowheads
       const sx = src.x!, sy = src.y!
       const tx = tgt.x!, ty = tgt.y!
       const dx = tx - sx, dy = ty - sy
       const len = Math.sqrt(dx * dx + dy * dy) || 1
-      const angle = Math.atan2(dy, dx)
-      const tgtR = (tgt.type === "planner-child" ? 12 : tgt.type === "agent" ? 12 : 10)
-      // Shorten line to node edge
-      const ex = tx - (dx / len) * tgtR
-      const ey = ty - (dy / len) * tgtR
+      const ux = dx / len, uy = dy / len
+      // Use same radii as paintNode to avoid artifacts at circle edges
+      const srcR = src.type === "agent" || src.type === "planner-child" ? 10 : src.type === "delegate" || src.type === "planstep" ? 8 : 7
+      const tgtR = tgt.type === "agent" || tgt.type === "planner-child" ? 10 : tgt.type === "delegate" || tgt.type === "planstep" ? 8 : 7
+      // Shorten line to node edges on both ends
+      const startX = sx + ux * srcR
+      const startY = sy + uy * srcR
+      const endX = tx - ux * tgtR
+      const endY = ty - uy * tgtR
 
       ctx.beginPath()
-      ctx.moveTo(sx, sy)
-      ctx.lineTo(ex, ey)
+      ctx.moveTo(startX, startY)
+      ctx.lineTo(endX, endY)
       ctx.strokeStyle = vLink.color
       ctx.lineWidth = 1.6
       ctx.stroke()
 
-      // Arrow head
-      const arrowSize = 5
+      // Arrowhead at target end
+      const arrowLen = 5, arrowW = 3
       ctx.beginPath()
-      ctx.moveTo(ex, ey)
-      ctx.lineTo(ex - arrowSize * Math.cos(angle - Math.PI / 7), ey - arrowSize * Math.sin(angle - Math.PI / 7))
-      ctx.lineTo(ex - arrowSize * Math.cos(angle + Math.PI / 7), ey - arrowSize * Math.sin(angle + Math.PI / 7))
+      ctx.moveTo(endX, endY)
+      ctx.lineTo(endX - ux * arrowLen + uy * arrowW, endY - uy * arrowLen - ux * arrowW)
+      ctx.lineTo(endX - ux * arrowLen - uy * arrowW, endY - uy * arrowLen + ux * arrowW)
       ctx.closePath()
       ctx.fillStyle = vLink.color
       ctx.fill()

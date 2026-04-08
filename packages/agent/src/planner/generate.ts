@@ -97,6 +97,7 @@ You MUST respond with valid JSON matching this schema:
 11. A step that writes >200 lines of logic is TOO BIG — UNLESS the entire project is small (<800 LOC). For small projects, a single step CAN write 400-600 lines if it produces a complete, working deliverable. Each step's targetArtifacts should be either a single complex file or 2-3 simple files, not more.
 12. IMPLEMENTATION COMPLETENESS: Every step objective MUST specify that REAL, COMPLETE logic is required — not scaffolding, not placeholders, not stubs. For example, "implement chess move validation" means every piece type has real movement rules, not \`isValidMove() { return true }\`. The verifier WILL read the output files and flag any placeholder patterns (\`return true\` as validation, \`// TODO\`, empty function bodies). Such findings force a retry.
 13. acceptanceCriteria MUST describe FUNCTIONAL behavior ("pawns can only move forward", "clicking a piece highlights legal moves") NOT structural facts ("file exists", "function is defined"). The verifier uses these criteria to judge real quality.
+14. MINIMIZE FILE CONFLICTS: If multiple fixes/changes target the SAME file, COMBINE them into ONE step when possible. Each time a file is rewritten by a different step, ALL previous changes to that file risk being lost (because write_file replaces the entire file). Splitting "fix bug A in file.js" and "fix bug B in file.js" into separate steps is DANGEROUS — the second step's rewrite will likely overwrite bug-A's fix. Instead combine: "fix bugs A and B in file.js" as a single step. Only split into separate steps when the changes are truly independent files.
 
 ## CRITICAL: File Paths and Artifact Chains
 - ALL paths in targetArtifacts and requiredSourceArtifacts MUST be relative to workspace root (e.g. "src/app.js", "game/index.html")
@@ -265,7 +266,8 @@ function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
     if (step.stepType !== "subagent_task") return step
 
     const sa = step as SubagentTaskStep
-    const originalRoot = sa.executionContext.workspaceRoot
+    // Strip trailing slashes to prevent double-prefixing (e.g. "tmp/" + "/" + "tmp/file" → "tmp//tmp/file")
+    const originalRoot = sa.executionContext.workspaceRoot.replace(/\/+$/, "")
 
     // If the LLM generated a relative workspaceRoot (e.g. "tmp", "game/src"),
     // targetArtifacts and other paths are relative to THAT subdirectory.
@@ -273,7 +275,7 @@ function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
     // paths so they remain correct.
     const needsPrefix = originalRoot
       && originalRoot !== "."
-      && originalRoot !== "./"
+      && originalRoot !== ""
       && !originalRoot.startsWith("/")
       && originalRoot !== actualRoot
 

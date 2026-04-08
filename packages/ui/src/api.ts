@@ -37,6 +37,10 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ response }),
   }),
+  killToolCall: (runId: string, toolCallId: string, message: string) => json<{ ok: boolean }>(`/api/runs/${runId}/kill-tool`, {
+    method: "POST",
+    body: JSON.stringify({ toolCallId, message }),
+  }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
 

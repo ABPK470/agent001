@@ -4,7 +4,7 @@
   "description": "AI Agent Command Center — autonomous agents with tools, policies, memory, and a real-time dashboard.",
   "type": "module",
   "bin": {
-    "agent001": "./bin/agent001.js"
+    "agent001": "bin/agent001.js"
   },
   "main": "./dist/server.js",
   "files": [
@@ -38,5 +38,11 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "esbuild": "^0.28.0"
-  }
+  },
+  "directories": {
+    "doc": "docs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

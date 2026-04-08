@@ -94,6 +94,11 @@ interface AppState {
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   clearPendingInput: () => void
 
+  // Tool calls that are currently executing and can be killed
+  executingToolCalls: Map<string, { runId: string; toolCallId: string; toolName: string }>
+  pendingKill: { runId: string; toolCallId: string; toolName: string } | null
+  setPendingKill: (info: { runId: string; toolCallId: string; toolName: string } | null) => void
+
   // Raw WebSocket event log (platform dev)
   wsEventLog: WsEvent[]
   clearWsEventLog: () => void
@@ -406,6 +411,11 @@ export const useStore = create<AppState>()(
       pendingInput: null,
       clearPendingInput: () => set({ pendingInput: null }),
 
+      // Executing tool calls + kill
+      executingToolCalls: new Map(),
+      pendingKill: null,
+      setPendingKill: (info) => set({ pendingKill: info }),
+
       // Raw WS event log
       wsEventLog: [],
       clearWsEventLog: () => set({ wsEventLog: [] }),
@@ -472,7 +482,7 @@ export const useStore = create<AppState>()(
               completionTokens: (data["completionTokens"] as number) ?? 0,
               llmCalls: (data["llmCalls"] as number) ?? 0,
             })
-            set({ pendingInput: null })
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
 
           case "run.failed":
@@ -488,7 +498,7 @@ export const useStore = create<AppState>()(
               completionTokens: (data["completionTokens"] as number) ?? 0,
               llmCalls: (data["llmCalls"] as number) ?? 0,
             })
-            set({ pendingInput: null })
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
 
           case "run.cancelled":
@@ -498,7 +508,7 @@ export const useStore = create<AppState>()(
               status: "cancelled",
               completedAt: timestamp,
             })
-            set({ pendingInput: null })
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
 
           case "step.started": {
@@ -541,6 +551,38 @@ export const useStore = create<AppState>()(
               error: data["error"] as string,
               completedAt: timestamp,
             } as Step)
+            break
+          }
+
+          case "tool_call.executing": {
+            const tcRunId = data["runId"] as string
+            const toolCallId = data["toolCallId"] as string
+            const toolName = data["toolName"] as string
+            if (tcRunId && toolCallId) {
+              const next = new Map(get().executingToolCalls)
+              next.set(toolCallId, { runId: tcRunId, toolCallId, toolName })
+              set({ executingToolCalls: next })
+            }
+            break
+          }
+
+          case "tool_call.completed": {
+            const tcId = data["toolCallId"] as string
+            if (tcId) {
+              const next = new Map(get().executingToolCalls)
+              next.delete(tcId)
+              set({ executingToolCalls: next })
+            }
+            break
+          }
+
+          case "tool_call.killed": {
+            const toolCallId = data["toolCallId"] as string
+            if (toolCallId) {
+              const next = new Map(get().executingToolCalls)
+              next.delete(toolCallId)
+              set({ executingToolCalls: next, pendingKill: null })
+            }
             break
           }
 

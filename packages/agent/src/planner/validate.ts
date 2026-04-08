@@ -365,5 +365,30 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     })
   }
 
+  // Check for multiple steps writing the same file (not just write_owner
+  // declarations, but actual targetArtifacts overlap).  This catches the
+  // common "children stomp on each other" failure pattern where step A
+  // fixes something in a file and step B rewrites the entire file for a
+  // different fix, losing step A's changes.
+  const targetWriters = new Map<string, string[]>() // artifact → step names
+  for (const step of subagentSteps) {
+    for (const artifact of step.executionContext?.targetArtifacts ?? []) {
+      const writers = targetWriters.get(artifact) ?? []
+      writers.push(step.name)
+      targetWriters.set(artifact, writers)
+    }
+  }
+  for (const [artifact, writers] of targetWriters) {
+    if (writers.length > 1) {
+      diagnostics.push({
+        category: "ownership",
+        code: "shared_target_artifact",
+        message: `File "${artifact}" is a targetArtifact of ${writers.length} steps: [${writers.join(", ")}]. ` +
+          `Each step does a full file rewrite, so later steps will overwrite earlier steps' changes. ` +
+          `COMBINE these steps into a single step, or ensure only one step writes to this file.`,
+      })
+    }
+  }
+
   return diagnostics
 }
