@@ -1370,11 +1370,105 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "planner-retry") {
-    return <FlatRow label={`RETRY · attempt ${e.attempt}`} labelColor={C.warning} detail={e.reason} />
+    const detail = e.reason ? (e.reason.length > 80 ? truncate(e.reason, 80) : e.reason) : undefined
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`RETRY · attempt ${e.attempt}`} labelColor={C.warning}
+          detail={!open ? detail : undefined}
+        />
+        {open && (
+          <div className="ml-5 py-0.5">
+            {e.reason && <Pane text={e.reason} maxH={300} />}
+            {((e as Record<string, unknown>).skippedSteps != null || (e as Record<string, unknown>).retrySteps != null) && (
+              <div className="mt-1" style={{ color: C.dim, fontSize: 12 }}>
+                {(e as Record<string, unknown>).retrySteps != null && <span>retrying {String((e as Record<string, unknown>).retrySteps)} step(s)</span>}
+                {(e as Record<string, unknown>).skippedSteps != null && <span className="ml-2">· {String((e as Record<string, unknown>).skippedSteps)} skipped</span>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (e.kind === "planner-retry-skipped") {
-    return <FlatRow label="RETRY SKIPPED" labelColor={C.dim} detail={e.reason} />
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="RETRY SKIPPED" labelColor={C.dim}
+          detail={!open ? truncate(e.reason, 80) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.reason} maxH={200} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-escalation") {
+    const actionColor = e.action === "pass" ? C.success : e.action === "escalate" ? C.coral : C.warning
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`ESCALATION · ${e.action}`} labelColor={actionColor}
+          detail={!open ? `${e.reason} · attempt ${e.attempt}` : undefined}
+        />
+        {open && (
+          <div className="ml-5 py-0.5" style={{ color: C.dim }}>
+            <div>reason: {e.reason}</div>
+            <div>attempt: {e.attempt}</div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-retry-skip") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`RETRY SKIP · ${e.stepName}`} labelColor={C.dim}
+          detail={!open ? truncate(e.reason, 80) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.reason} maxH={200} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-retry-abort") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label="RETRY ABORT" labelColor={C.coral}
+          detail={!open ? truncate(e.reason, 80) : undefined}
+        />
+        {open && <div className="ml-5 py-0.5"><Pane text={e.reason} maxH={200} /></div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-budget-extended") {
+    return <FlatRow label="BUDGET EXTENDED" labelColor={C.accent} detail={`${e.completedSteps} steps done · budget → ${e.effectiveBudget} (ext #${e.extensions})`} />
+  }
+
+  if (e.kind === "planner-delegation-decision") {
+    const blocked = e.hardBlockedTaskClass
+    const decColor = e.shouldDelegate ? C.success : blocked ? C.coral : C.warning
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`DELEGATION GATE · ${e.shouldDelegate ? "approved" : blocked ? "BLOCKED" : "declined"}`}
+          labelColor={decColor}
+          detail={!open ? truncate(e.reason, 80) : undefined}
+        />
+        {open && (
+          <div className="ml-5 py-0.5" style={{ color: C.dim }}>
+            <div>{e.reason}</div>
+            <div className="mt-0.5">utility: {e.utilityScore.toFixed(2)} · safety: {e.safetyRisk.toFixed(2)} · confidence: {(e.confidence * 100).toFixed(0)}%</div>
+            {blocked && <div className="mt-0.5" style={{ color: C.coral }}>blocked: {blocked}</div>}
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (e.kind === "planner-generating") {

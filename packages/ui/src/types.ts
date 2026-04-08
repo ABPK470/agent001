@@ -93,7 +93,7 @@ export type TraceEntry =
   | { kind: "planner-step-start"; stepName: string; stepType: string }
   | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number }
   | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
-  | { kind: "planner-retry"; attempt: number; reason: string }
+  | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number }
   | { kind: "planner-retry-skipped"; reason: string }
   // Delegation decision gate (safety, economics, hard-block)
   | { kind: "planner-delegation-decision"; shouldDelegate: boolean; reason: string; utilityScore: number; safetyRisk: number; confidence: number; hardBlockedTaskClass: string | null }

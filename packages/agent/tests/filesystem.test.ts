@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { setBasePath, writeFileTool } from "../src/tools/filesystem.js"
+import { replaceInFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
 
 let tempDir: string
 
@@ -274,5 +274,111 @@ describe("write_file: corruption detection", () => {
     })
 
     expect(result).toBe("Successfully wrote to clean.js")
+  })
+})
+
+// ============================================================================
+// replace_in_file tool
+// ============================================================================
+
+describe("replace_in_file", () => {
+  it("replaces a matching section in an existing file", async () => {
+    await writeFileTool.execute({
+      path: "replace-test.js",
+      content: [
+        "function alpha() { return 1; }",
+        "function beta() { return 2; }",
+        "function gamma() { return 3; }",
+      ].join("\n"),
+    })
+
+    const result = await replaceInFileTool.execute({
+      path: "replace-test.js",
+      old_string: "function beta() { return 2; }",
+      new_string: "function beta() { return 42; }",
+    })
+
+    expect(result).toBe("Successfully replaced in replace-test.js")
+  })
+
+  it("preserves all other content when replacing a section", async () => {
+    await writeFileTool.execute({
+      path: "replace-preserve.js",
+      content: [
+        "function a() { return 1; }",
+        "function b() { return 2; }",
+        "function c() { return 3; }",
+      ].join("\n"),
+    })
+
+    await replaceInFileTool.execute({
+      path: "replace-preserve.js",
+      old_string: "function b() { return 2; }",
+      new_string: "function b() { return 99; }",
+    })
+
+    // Read back and verify all functions exist
+    const { readFile } = await import("node:fs/promises")
+    const content = await readFile(join(tempDir, "replace-preserve.js"), "utf-8")
+    expect(content).toContain("function a() { return 1; }")
+    expect(content).toContain("function b() { return 99; }")
+    expect(content).toContain("function c() { return 3; }")
+  })
+
+  it("returns error when file does not exist", async () => {
+    const result = await replaceInFileTool.execute({
+      path: "nonexistent-replace.js",
+      old_string: "hello",
+      new_string: "world",
+    })
+
+    expect(result).toContain("does not exist")
+  })
+
+  it("returns error when old_string is not found", async () => {
+    await writeFileTool.execute({
+      path: "replace-nomatch.js",
+      content: "function foo() { return 1; }",
+    })
+
+    const result = await replaceInFileTool.execute({
+      path: "replace-nomatch.js",
+      old_string: "function bar() { return 2; }",
+      new_string: "function bar() { return 42; }",
+    })
+
+    expect(result).toContain("not found")
+  })
+
+  it("detects stubs in replacement content", async () => {
+    await writeFileTool.execute({
+      path: "replace-stub.js",
+      content: [
+        "function validate(input) {",
+        "  if (input.length < 3) return false;",
+        "  if (input.length > 100) return false;",
+        "  return /^[a-zA-Z]+$/.test(input);",
+        "}",
+      ].join("\n"),
+    })
+
+    const result = await replaceInFileTool.execute({
+      path: "replace-stub.js",
+      old_string: [
+        "function validate(input) {",
+        "  if (input.length < 3) return false;",
+        "  if (input.length > 100) return false;",
+        "  return /^[a-zA-Z]+$/.test(input);",
+        "}",
+      ].join("\n"),
+      new_string: [
+        "function validate(input) {",
+        "  // TODO: implement validation",
+        "  return true;",
+        "}",
+      ].join("\n"),
+    })
+
+    expect(result).toContain("STUB")
   })
 })

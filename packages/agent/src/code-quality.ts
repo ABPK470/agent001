@@ -19,10 +19,11 @@
 
 /** Patterns that indicate skeleton / placeholder code that is not real implementation. */
 export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
-  // Explicit stubs
-  { re: /\/\/\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
-  { re: /\/\*\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
-  { re: /#\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  // Explicit stubs — keyword can appear ANYWHERE in the comment, not just at the start.
+  // LLMs write "// Basic legal move logic placeholder" or "// Handle X (placeholder for now)".
+  { re: /\/\/.*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  { re: /\/\*[^*]*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  { re: /#.*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
   // "TO BE IMPLEMENTED" / "TO BE ADDED" / "NOT YET IMPLEMENTED" deferred stubs
   { re: /\/\/\s*(?:\w+\s+)*(?:to\s+be\s+implemented|to\s+be\s+added|not\s+yet\s+implemented)\b/gi, label: "stub comment" },
   // LLM degeneration: references "existing" code instead of writing it
@@ -33,15 +34,25 @@ export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /\/\/\s*(?:same|similar|code continues?)\s+(?:as\s+)?(?:above|before|previously|existing)\b/gi, label: "degeneration comment (references code that should be written)" },
   { re: /\/\/\s*(?:as\s+per|as\s+in)\s+(?:existing|previous|above|the\s+original)\b/gi, label: "degeneration comment (references code that should be written)" },
   { re: /\/\/\s*\.{3}\s*(?:remaining|rest|other|more)\b/gi, label: "degeneration comment (elided code)" },
-  // Trivially-returning validation functions
+  // Trivially-returning validation functions — both `function` declarations AND class methods
   {
     re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gi,
     label: "validation function always returns constant",
+  },
+  // Class method variant: `isLegalMove(...) { return true; }` (no `function` keyword)
+  {
+    re: /^\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+|get\w+Legal\w*|on\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gim,
+    label: "stub method always returns constant",
   },
   // Validation/compute functions with a comment then trivial return
   {
     re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+|get\w+)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*|\/\*[^*]*\*\/[\s\n]*)+return\s+(true|false|\[\]|\{\}|null|undefined|0|"")\s*;?\s*\}/gi,
     label: "stub function (comment + trivial return)",
+  },
+  // Class method with comment then trivial return: `isLegalMove(...) { // placeholder\n return true; }`
+  {
+    re: /^\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+|get\w+|on\w+|handle\w+)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*|\/\*[^*]*\*\/[\s\n]*)+return\s+(true|false|\[\]|\{\}|null|undefined|0|"")\s*;?\s*\}/gim,
+    label: "stub method (comment + trivial return)",
   },
   // Functions whose ENTIRE body is `/* comment */ return [];` or `return {};`
   {
@@ -62,10 +73,23 @@ export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
     re: /(?:const|let|var)\s+\w+\s*=\s*\([^)]*\)\s*=>\s*(\[\]|\{\})\s*;?/gi,
     label: "arrow function returns empty array/object stub",
   },
-  // Empty function bodies
+  // Console.log-only function — a function/method whose only non-comment statement is console.log()
+  // This is a de facto stub event handler: `onSquareClick(row, col) { console.log(...); }`
+  // Negative lookahead excludes JS keywords (if, for, while, etc.) to prevent false positives.
+  {
+    re: /(?:function\s+\w+|^\s+(?!if\b|for\b|while\b|switch\b|do\b|catch\b|else\b|return\b|throw\b|new\b|typeof\b|try\b|class\b|const\b|let\b|var\b)\w+)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*)*console\.log\([^)]*\)\s*;?[\s\n]*\}/gim,
+    label: "console.log-only function (stub event handler)",
+  },
+  // Empty function bodies — both declarations and class methods
   {
     re: /(?:function\s+\w+|(?:const|let|var)\s+\w+\s*=\s*(?:function|\([^)]*\)\s*=>))\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*)*\}/gi,
     label: "empty function body",
+  },
+  // Class method empty body: `  methodName(...) { }` or `  methodName(...) { // comment }`
+  // Negative lookahead excludes JS keywords to avoid matching `if (...) {}` as empty methods.
+  {
+    re: /^\s+(?!if\b|for\b|while\b|switch\b|do\b|catch\b|else\b|return\b|throw\b|new\b|typeof\b|try\b|class\b|const\b|let\b|var\b)\w+\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*)*\}/gim,
+    label: "empty method body",
   },
 ]
 
@@ -152,7 +176,9 @@ export function detectPlaceholderPatterns(code: string): string[] {
  */
 export function detectCatchAllReturns(code: string): string[] {
   const findings: string[] = []
-  const funcRe = /function\s+(validate\w*|check\w*|is[A-Z]\w*|can[A-Z]\w*|isValid\w*|isLegal\w*|getLegal\w*|calculate\w*|compute\w*|get[A-Z]\w*|find[A-Z]\w*)\s*\(/g
+  // Match both `function` declarations AND class method syntax (indented, no `function` keyword).
+  // Class methods: `  isLegalMove(start, end) {` — indented name, followed by parens and brace.
+  const funcRe = /(?:function\s+|^\s+)(validate\w*|check\w*|is[A-Z]\w*|can[A-Z]\w*|isValid\w*|isLegal\w*|getLegal\w*|calculate\w*|compute\w*|get[A-Z]\w*|find[A-Z]\w*|handle[A-Z]\w*|on[A-Z]\w*)\s*\(/gm
   let m: RegExpExecArray | null
   while ((m = funcRe.exec(code)) !== null) {
     const funcName = m[1]
@@ -234,8 +260,8 @@ function extractFunctionBody(code: string, startOffset: number): { body: string;
 export function detectInconsistentBranches(code: string): string[] {
   const findings: string[] = []
 
-  // Match ALL named functions — no name-pattern filter
-  const funcRe = /function\s+(\w+)\s*\(/g
+  // Match ALL named functions AND class methods — no name-pattern filter
+  const funcRe = /(?:function\s+|^\s+)(\w+)\s*\(/gm
   let m: RegExpExecArray | null
 
   // Same-property comparison: `.PROP op .PROP` where PROP is identical on both sides.

@@ -808,3 +808,136 @@ function processItem(item, target, itemType) {
     expect(joined).toMatch(/inconsistent branch/i)
   })
 })
+
+// ============================================================================
+// Regression tests for trace-2026-04-08: chess game stub escape
+// ============================================================================
+// These reproduce the exact code patterns that escaped detection in the agent
+// loop trace from 2026-04-08 (non-functional chess game output).
+
+describe("code-quality: class method stub detection (trace regression)", () => {
+  it("detects class method with comment-embedded 'placeholder' keyword", () => {
+    // Exact code from the failed chess game trace — the word "placeholder" is
+    // buried mid-sentence, not at the start of the comment.
+    const code = `class ChessGame {
+  constructor() {
+    this.board = this.createBoard();
+  }
+
+  isLegalMove(start, end) {
+    // Basic legal move logic placeholder (to be replaced with full rules)
+    return true;
+  }
+}`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/placeholder/i)
+  })
+
+  it("detects class method stub returning constant (no function keyword)", () => {
+    const code = `class Validator {
+  isValid(input) {
+    return false;
+  }
+}`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/stub method|always returns constant/i)
+  })
+
+  it("detects class method with comment then trivial return", () => {
+    const code = `class Game {
+  canMove(piece, target) {
+    // Check if the piece can move to the target
+    return true;
+  }
+}`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/stub method/i)
+  })
+
+  it("detects console.log-only function (stub event handler)", () => {
+    // Exact pattern from the failed chess game trace
+    const code = `function onSquareClick(row, col) {
+  // Handle piece selection and moves (placeholder logic for now)
+  console.log(\`Square clicked: \${row}, \${col}\`);
+}`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    // Should catch EITHER the placeholder comment OR the console.log-only stub
+    expect(joined).toMatch(/placeholder|console\.log-only/i)
+  })
+
+  it("detects placeholder keyword mid-sentence in comments", () => {
+    // Various real LLM outputs where "placeholder" appears after natural language
+    const cases = [
+      "// Basic legal move logic placeholder (to be replaced with full rules)",
+      "// Handle piece selection and moves (placeholder logic for now)",
+      "// This is a placeholder implementation",
+      "// Game state placeholder — will be filled in later",
+    ]
+    for (const comment of cases) {
+      const code = `function test() {\n  ${comment}\n  return true;\n}`
+      const findings = detectPlaceholderPatterns(code)
+      expect(findings.length, `Should detect: ${comment}`).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it("detectCatchAllReturns works on class methods (not just function declarations)", () => {
+    const code = `class Game {
+  isLegalMove(piece, from, to) {
+    if (piece === 'pawn') {
+      return to.row === from.row + 1;
+    } else if (piece === 'rook') {
+      return to.row === from.row || to.col === from.col;
+    } else if (piece === 'bishop') {
+      return true;
+    }
+    return true;
+  }
+}`
+    const findings = detectCatchAllReturns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    expect(findings[0]).toMatch(/catch-all.*return true.*isLegalMove/i)
+  })
+
+  it("does NOT false-positive on if/for/while as method names", () => {
+    // The keyword exclusion must prevent matching control flow as methods
+    const code = `function process() {
+  if (condition) {
+    console.log('branching');
+  }
+  for (let i = 0; i < 10; i++) {
+    console.log(i);
+  }
+  while (running) {
+    console.log('loop');
+  }
+}`
+    const findings = detectPlaceholderPatterns(code)
+    const joined = findings.join("\n")
+    // Should NOT report empty method body or console.log-only for if/for/while
+    expect(joined).not.toMatch(/empty method body/)
+    expect(joined).not.toMatch(/console\.log-only/)
+  })
+
+  it("detects empty class method body", () => {
+    const code = `class Handler {
+  onClick(event) {
+  }
+
+  onSubmit(data) {
+    // TODO
+  }
+}`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/empty method body|placeholder/i)
+  })
+})

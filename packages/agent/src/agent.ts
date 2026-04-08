@@ -342,6 +342,25 @@ export class Agent {
       if (this.config.verbose && plannerResult.skipReason) {
         log.logError(`Planner skipped: ${plannerResult.skipReason}`)
       }
+
+      // If the planner tried but verification failed, inject repair context
+      // so the direct tool loop knows what files exist and what to fix.
+      if (plannerResult.verifierDecision && plannerResult.verifierDecision.overall !== "pass") {
+        const unresolvedIssues = plannerResult.verifierDecision.steps
+          .filter(s => s.outcome !== "pass")
+          .flatMap(s => s.issues.filter(i => !i.startsWith("[non-blocking]")))
+        if (unresolvedIssues.length > 0) {
+          const repairMsg =
+            `A previous attempt partially completed this task but verification found issues that need fixing.\n` +
+            `The files already exist on disk — do NOT rewrite from scratch. Read the existing files, identify the specific problems, and fix ONLY those.\n\n` +
+            `Issues to fix:\n${unresolvedIssues.map(i => `- ${i}`).join("\n")}\n\n` +
+            `Steps:\n1. read_file each file mentioned in the issues\n` +
+            `2. Identify the specific stub/placeholder/missing logic\n` +
+            `3. Replace it with a real, working implementation\n` +
+            `4. Verify your fix by re-reading the file`
+          messages.push({ role: "user", content: repairMsg })
+        }
+      }
     }
 
     // ── Direct tool loop ────────────────────────────────────────

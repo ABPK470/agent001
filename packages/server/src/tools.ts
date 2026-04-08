@@ -15,6 +15,7 @@ import {
     mssqlSchemaTool,
     mssqlTool,
     readFileTool,
+    replaceInFileTool,
     searchFilesTool,
     shellTool,
     thinkTool,
@@ -32,6 +33,7 @@ export interface ToolInfo {
 const ALL_TOOLS: Tool[] = [
   readFileTool,
   writeFileTool,
+  replaceInFileTool,
   listDirectoryTool,
   searchFilesTool,
   shellTool,

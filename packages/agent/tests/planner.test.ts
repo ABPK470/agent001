@@ -5,8 +5,9 @@
 import { describe, expect, it } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
+import { synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline } from "../src/planner/pipeline.js"
-import type { Plan, SubagentTaskStep } from "../src/planner/types.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
 import { extractCriterionKeywords } from "../src/planner/verifier.js"
 import type { Tool } from "../src/types.js"
@@ -555,5 +556,137 @@ describe("extractCriterionKeywords", () => {
   it("returns empty for very short generic criteria", () => {
     const kws = extractCriterionKeywords("it is ok")
     expect(kws.length).toBe(0)
+  })
+})
+
+// ============================================================================
+// synthesizeAnswer — honest status rendering
+// ============================================================================
+
+describe("synthesizeAnswer — verification status rendering", () => {
+  const plan = makePlan({
+    reason: "build chess game",
+    steps: [makeSubagentStep("build_chess")],
+  })
+
+  function makePipelineResult(status: "completed" | "failed" = "completed"): PipelineResult {
+    return {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["build_chess", {
+          name: "build_chess",
+          status,
+          output: "All files written successfully",
+          durationMs: 5000,
+        }],
+      ]),
+    }
+  }
+
+  it("marks step ✓ completed when verifier says pass", () => {
+    const decision: VerifierDecision = {
+      overall: "pass",
+      confidence: 0.95,
+      steps: [{ stepName: "build_chess", outcome: "pass", confidence: 0.95, issues: [], retryable: false }],
+      unresolvedItems: [],
+    }
+    const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
+    expect(answer).toContain("All tasks completed and verified successfully")
+    expect(answer).toContain("✓ build_chess")
+    expect(answer).toContain("completed")
+    expect(answer).not.toContain("incomplete")
+  })
+
+  it("marks step ⚠ incomplete when verifier says retry with issues", () => {
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.4,
+      steps: [{
+        stepName: "build_chess",
+        outcome: "retry",
+        confidence: 0.4,
+        issues: ["Castling logic is a placeholder", "Missing checkmate detection"],
+        retryable: true,
+      }],
+      unresolvedItems: ["Implement castling", "Implement checkmate"],
+    }
+    const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
+    expect(answer).toContain("Task verification FAILED")
+    expect(answer).toContain("⚠ build_chess")
+    expect(answer).toContain("incomplete")
+    expect(answer).not.toContain("✓ build_chess")
+    expect(answer).toContain("! Castling logic is a placeholder")
+    expect(answer).toContain("! Missing checkmate detection")
+  })
+
+  it("marks step ⚠ incomplete on fail verdict too", () => {
+    const decision: VerifierDecision = {
+      overall: "fail",
+      confidence: 0.2,
+      steps: [{
+        stepName: "build_chess",
+        outcome: "fail",
+        confidence: 0.2,
+        issues: ["Child agent reported explicit failure"],
+        retryable: false,
+      }],
+      unresolvedItems: [],
+    }
+    const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
+    expect(answer).toContain("Task FAILED")
+    expect(answer).toContain("⚠ build_chess")
+    expect(answer).toContain("incomplete")
+  })
+
+  it("renders unresolved items section", () => {
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.5,
+      steps: [{
+        stepName: "build_chess",
+        outcome: "retry",
+        confidence: 0.5,
+        issues: ["Missing en passant"],
+        retryable: true,
+      }],
+      unresolvedItems: ["Implement en passant rule"],
+    }
+    const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
+    expect(answer).toContain("Unresolved:")
+    expect(answer).toContain("Implement en passant rule")
+  })
+
+  it("keeps ✓ for passing steps even when overall is retry (multi-step)", () => {
+    const multiPlan = makePlan({
+      reason: "build chess game",
+      steps: [
+        makeSubagentStep("setup_board"),
+        makeSubagentStep("add_rules", { objective: "Add game rules" }),
+      ],
+    })
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["setup_board", { name: "setup_board", status: "completed", output: "Board done", durationMs: 3000 }],
+        ["add_rules", { name: "add_rules", status: "completed", output: "Rules done", durationMs: 4000 }],
+      ]),
+    }
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.6,
+      steps: [
+        { stepName: "setup_board", outcome: "pass", confidence: 0.9, issues: [], retryable: false },
+        { stepName: "add_rules", outcome: "retry", confidence: 0.4, issues: ["Missing castling"], retryable: true },
+      ],
+      unresolvedItems: [],
+    }
+    const answer = synthesizeAnswer(multiPlan, pipelineResult, decision)
+    expect(answer).toContain("✓ setup_board")
+    expect(answer).toContain("⚠ add_rules")
+    expect(answer).toContain("incomplete")
   })
 })

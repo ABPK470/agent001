@@ -392,6 +392,97 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
   return warnings
 }
 
+// ── replace_in_file ──────────────────────────────────────────────
+
+export const replaceInFileTool: Tool = {
+  name: "replace_in_file",
+  description:
+    "Replace a specific section of an existing file with new content. " +
+    "Use this instead of write_file when you only need to change part of a file — " +
+    "it preserves all other content and prevents function loss. " +
+    "Provide old_string (the exact text to find and replace) and new_string (the replacement). " +
+    "old_string must match EXACTLY (including whitespace/indentation). " +
+    "If old_string appears more than once, only the first occurrence is replaced.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Path to the file to edit" },
+      old_string: { type: "string", description: "The exact text to find in the file (must match exactly, including whitespace)" },
+      new_string: { type: "string", description: "The replacement text" },
+    },
+    required: ["path", "old_string", "new_string"],
+  },
+
+  async execute(args) {
+    try {
+      const target = await safePathResolved(String(args.path))
+      const filePath = String(args.path)
+      const oldStr = String(args.old_string)
+      const newStr = String(args.new_string)
+
+      // Read existing content
+      let existing: string
+      try {
+        existing = await readFile(target, "utf-8")
+      } catch {
+        return `Error: File "${filePath}" does not exist. Use write_file to create new files.`
+      }
+
+      // Find the old string
+      const idx = existing.indexOf(oldStr)
+      if (idx === -1) {
+        // Help debug: show a snippet around where it might be
+        const firstLine = oldStr.split("\n")[0].trim()
+        const approxIdx = existing.indexOf(firstLine)
+        if (approxIdx !== -1) {
+          const context = existing.slice(Math.max(0, approxIdx - 20), approxIdx + firstLine.length + 20)
+          return (
+            `Error: old_string not found as an exact match in "${filePath}". ` +
+            `Found a partial match — the first line exists but surrounding whitespace/context differs. ` +
+            `Nearby content: "${context.replace(/\n/g, "\\n").slice(0, 120)}". ` +
+            `Use read_file to see the exact content, then retry with the precise text.`
+          )
+        }
+        return (
+          `Error: old_string not found in "${filePath}". ` +
+          `The text you provided does not exist in the file. ` +
+          `Use read_file to see the current content first.`
+        )
+      }
+
+      // Perform the replacement (first occurrence only)
+      const updated = existing.slice(0, idx) + newStr + existing.slice(idx + oldStr.length)
+      await writeFile(target, updated, "utf-8")
+
+      // Run integrity checks on the modified file
+      const integrityWarnings = checkWriteIntegrity(filePath, updated)
+
+      // Stub detection on the replaced section
+      if (/\.(js|jsx|ts|tsx|py)$/i.test(filePath) && newStr.length > 50) {
+        const stubFindings = detectPlaceholderPatterns(newStr)
+        if (stubFindings.length > 0) {
+          integrityWarnings.push(
+            `STUB/PLACEHOLDER in replaced section:\n` +
+            stubFindings.map(f => `    • ${f}`).join("\n") + "\n" +
+            `  Fix these NOW. The verifier WILL reject stub functions.`
+          )
+        }
+      }
+
+      if (integrityWarnings.length > 0) {
+        return (
+          `Replaced in ${filePath}, but issues detected:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n")
+        )
+      }
+
+      return `Successfully replaced in ${filePath}`
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`
+    }
+  },
+}
+
 // ── list_directory ───────────────────────────────────────────────
 
 export const listDirectoryTool: Tool = {

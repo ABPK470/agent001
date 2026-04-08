@@ -443,6 +443,21 @@ export async function executePlannerPath(
 
   // Step 6: Synthesize final answer
   const answer = synthesizeAnswer(plan, pipelineResult!, verifierDecision!)
+
+  // If verification didn't pass after all retries, return handled: false so
+  // the parent agent can fall through to the direct tool loop and attempt to
+  // fix the remaining issues itself — with full knowledge of what's wrong.
+  if (verifierDecision!.overall !== "pass") {
+    return {
+      handled: false,
+      answer,
+      plan,
+      pipelineResult,
+      verifierDecision,
+      skipReason: "Verification failed after retries — falling through to self-repair",
+    }
+  }
+
   return {
     handled: true,
     answer,
@@ -456,7 +471,7 @@ export async function executePlannerPath(
 // Answer synthesis
 // ============================================================================
 
-function synthesizeAnswer(
+export function synthesizeAnswer(
   plan: Plan,
   pipelineResult: PipelineResult,
   verifierDecision: VerifierDecision,
@@ -466,9 +481,9 @@ function synthesizeAnswer(
   if (verifierDecision.overall === "pass") {
     parts.push("All tasks completed and verified successfully.")
   } else if (verifierDecision.overall === "retry") {
-    parts.push("Tasks completed with some issues that could not be fully resolved.")
+    parts.push("Task verification FAILED — the following issues remain unresolved after all retry attempts:")
   } else {
-    parts.push("Some tasks failed to complete successfully.")
+    parts.push("Task FAILED — critical errors prevented completion:")
   }
 
   parts.push("")
@@ -478,8 +493,12 @@ function synthesizeAnswer(
 
   for (const step of plan.steps) {
     const result = pipelineResult.stepResults.get(step.name)
-    const status = result?.status ?? "unknown"
-    const icon = status === "completed" ? "✓" : status === "failed" ? "✗" : "⊘"
+    const stepVerification = verifierDecision.steps.find(s => s.stepName === step.name)
+    // Reflect verifier assessment in step status — a step that the pipeline
+    // marked "completed" but the verifier flagged is NOT truly complete.
+    const hasUnresolvedIssues = stepVerification && stepVerification.issues.length > 0 && stepVerification.outcome !== "pass"
+    const status = hasUnresolvedIssues ? "incomplete" : (result?.status ?? "unknown")
+    const icon = hasUnresolvedIssues ? "⚠" : status === "completed" ? "✓" : status === "failed" ? "✗" : "⊘"
     parts.push(`${icon} ${step.name} (${step.stepType}): ${status}`)
 
     // Include output summary for completed subagent tasks
@@ -494,7 +513,6 @@ function synthesizeAnswer(
     }
 
     // Include verifier issues
-    const stepVerification = verifierDecision.steps.find(s => s.stepName === step.name)
     if (stepVerification && stepVerification.issues.length > 0) {
       for (const issue of stepVerification.issues) {
         parts.push(`  ! ${issue}`)

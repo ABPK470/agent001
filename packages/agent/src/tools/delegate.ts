@@ -84,6 +84,22 @@ CRITICAL — write_file REPLACES the ENTIRE file:
 - If your write_file content is getting very long (300+ lines), it's fine — include everything. A complete file that is long is FAR better than a partial file that destroys prior work.
 - FUNCTION PRESERVATION RULE: When you read an existing file and rewrite it, you MUST preserve ALL existing functions/methods. BEFORE calling write_file, verify that your new content contains EVERY function from the original. If your fix only touches 1-2 functions, copy the ENTIRE file and modify only those functions — keep everything else exactly as-is. Removing functions that other code calls will crash the system and the verifier WILL reject your work.
 
+PREFER replace_in_file FOR FIXES:
+- When you need to fix or update a SPECIFIC function/section in an existing file, use replace_in_file instead of write_file.
+- replace_in_file takes old_string (exact text to find) and new_string (replacement), leaving all other content untouched.
+- This ELIMINATES the risk of accidentally removing other functions during a rewrite.
+- Use write_file for CREATING new files. Use replace_in_file for MODIFYING existing files.
+- Only use write_file to modify an existing file when you need to change MORE THAN HALF of its content.
+
+MODULAR FILE ARCHITECTURE — MANDATORY FOR CODE > 200 LINES:
+- If the total code you need to write exceeds ~200 lines of logic, you MUST split it across multiple files.
+- A chess game is NOT one giant script.js. It is: board.js (state management, ~80 lines), rules.js (piece movement, ~150 lines), game.js (check/checkmate/special rules, ~120 lines), ui.js (rendering/DOM, ~100 lines), index.html (loads scripts in order), styles.css.
+- Each file should be <200 lines and handle ONE concern.
+- Load files via multiple \`<script src="file.js">\` tags in dependency order in index.html.
+- Share data between files via global variables (e.g. \`window.Board = { ... }\`).
+- This is NOT over-engineering — it's the ONLY way to write reliable code at this scale. A single 800-line file will degenerate during writes.
+- WRITE EACH FILE COMPLETELY IN ONE write_file CALL. Do not write a skeleton and then fill it in — write ALL the logic for that file at once.
+
 Browser projects:
 - For browser-based HTML/JS/CSS projects, put ALL code in plain \`<script>\` tags — do NOT use ES module \`import\`/\`export\` syntax. Use multiple \`<script src="file.js">\` tags loaded in dependency order, sharing via globals.
 - Do NOT try to install npm packages, start HTTP servers, or run \`npm init\`. The browser_check tool loads files directly — no server needed.
@@ -546,7 +562,7 @@ export async function spawnChildForPlan(
   // even if the LLM plan forgot to list them. Without these the child
   // cannot self-review and gets stuck in write-only loops.
   if (allowedToolNames.size > 0 && envelope.effectClass !== "readonly") {
-    for (const essential of ["read_file", "list_directory", "browser_check", "run_command"]) {
+    for (const essential of ["read_file", "replace_in_file", "list_directory", "browser_check", "run_command"]) {
       allowedToolNames.add(essential)
     }
   }
