@@ -1,12 +1,13 @@
 /**
  * Code quality detection tests — hardcoded cases from real agent traces.
  *
- * Tests PLACEHOLDER_PATTERNS, detectPlaceholderPatterns(), and detectCatchAllReturns()
- * against actual stub code produced by child agents in production runs.
+ * Tests PLACEHOLDER_PATTERNS, detectPlaceholderPatterns(), detectCatchAllReturns(),
+ * and detectInconsistentBranches() against actual code produced by child agents.
  */
 import { describe, expect, it } from "vitest"
 import {
     detectCatchAllReturns,
+    detectInconsistentBranches,
     detectPlaceholderPatterns,
     PLACEHOLDER_PATTERNS,
 } from "../src/code-quality.js"
@@ -130,6 +131,100 @@ function processPayment(order) {
 }
 `
 
+/** LLM degeneration: references "existing" code instead of writing it */
+const DEGENERATION_EXISTING_LOGIC = `
+function getLegalMoves(row, col, piece, simulateOnly = false) {
+  const moves = [];
+  const direction = piece === piece.toUpperCase() ? -1 : 1;
+
+  // Other code as per existing logic
+
+  if (!simulateOnly) {
+    return moves.filter(move => {
+      const tempBoard = JSON.parse(JSON.stringify(board));
+      tempBoard[row][col] = null;
+      tempBoard[move.row][move.col] = piece;
+      return !isInCheck(turn, tempBoard);
+    });
+  }
+  return moves;
+}
+`
+
+/** LLM degeneration: "rest of the code here" / "remaining logic" */
+const DEGENERATION_REST_OF_CODE = `
+function renderBoard() {
+  const chessboard = document.getElementById('chessboard');
+  chessboard.innerHTML = '';
+  // rest of the code here
+}
+
+function handleInput(event) {
+  const value = event.target.value;
+  // remaining logic
+  return value;
+}
+`
+
+/** LLM degeneration: "same as above" / "similar to before" */
+const DEGENERATION_SAME_AS_ABOVE = `
+function processBlack(piece, board) {
+  // same as above but for black pieces
+  return [];
+}
+
+function handleDelete(item) {
+  // similar to before
+  return true;
+}
+
+function updateUI() {
+  // code continues as before
+}
+`
+
+/** LLM degeneration: "as per existing" / "as in the original" */
+const DEGENERATION_AS_PER = `
+function calculateScore(player) {
+  // as per existing implementation
+  return 0;
+}
+
+function validateMove(from, to) {
+  // as in the original code
+  return true;
+}
+`
+
+/** LLM degeneration: ellipsis elision "... remaining" */
+const DEGENERATION_ELLIPSIS = `
+function buildMenu(items) {
+  const menu = document.createElement('ul');
+  // ... remaining items
+  return menu;
+}
+
+function setupRoutes(app) {
+  app.get('/', home);
+  // ... other routes
+}
+`
+
+/** REAL code with a "same" variable or "existing" in business logic — should NOT trigger */
+const REAL_CODE_WITH_SIMILAR_WORDS = `
+function compareVersions(existing, incoming) {
+  // Check if existing version is same as incoming
+  if (existing.version === incoming.version) return 0;
+  return existing.version > incoming.version ? 1 : -1;
+}
+
+function updateRecord(record) {
+  const existing = database.find(r => r.id === record.id);
+  if (!existing) return null;
+  return Object.assign(existing, record);
+}
+`
+
 /** REAL chess implementation — should NOT trigger */
 const REAL_CHESS_MOVE_VALIDATION = `
 function isMoveLegal([row, col], [newRow, newCol]) {
@@ -222,6 +317,67 @@ function filterTodos(filter) {
 }
 `
 
+/**
+ * REAL generated code from agent trace — multi-branch dispatch with inconsistent checks.
+ * The isValidMove function checks .color in only 1 of 6 branches.
+ * Generic detector catches this without knowing it's a chess game.
+ */
+const DISPATCH_INCONSISTENT_BRANCHES = `
+function isValidMove(fromSquare, toSquare) {
+    if (!fromSquare.piece) return false;
+    const piece = fromSquare.piece;
+    const dx = toSquare.col - fromSquare.col;
+    const dy = toSquare.row - fromSquare.row;
+
+    if (piece.symbol === '\\\\u2659' || piece.symbol === '\\\\u265f') {
+        const direction = piece.color === 'white' ? -1 : 1;
+        if (dx === 0 && dy === direction && !toSquare.piece) return true;
+        if (Math.abs(dx) === 1 && dy === direction && toSquare.piece && toSquare.piece.color !== piece.color) return true;
+    } else if (piece.symbol === '\\\\u2656' || piece.symbol === '\\\\u265c') {
+        if ((dx === 0 || dy === 0) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2658' || piece.symbol === '\\\\u265e') {
+        if ((Math.abs(dx) === 2 && Math.abs(dy) === 1) || (Math.abs(dx) === 1 && Math.abs(dy) === 2)) return true;
+    } else if (piece.symbol === '\\\\u2657' || piece.symbol === '\\\\u265d') {
+        if (Math.abs(dx) === Math.abs(dy) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2655' || piece.symbol === '\\\\u265b') {
+        if ((Math.abs(dx) === Math.abs(dy) || dx === 0 || dy === 0) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2654' || piece.symbol === '\\\\u265a') {
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return true;
+    }
+
+    return false;
+}
+`
+
+/** Same function with a global guard before dispatch — should NOT trigger */
+const DISPATCH_WITH_GLOBAL_GUARD = `
+function isValidMove(fromSquare, toSquare) {
+    if (!fromSquare.piece) return false;
+    const piece = fromSquare.piece;
+    if (toSquare.piece && toSquare.piece.color === piece.color) return false;
+    const dx = toSquare.col - fromSquare.col;
+    const dy = toSquare.row - fromSquare.row;
+
+    if (piece.symbol === '\\\\u2659' || piece.symbol === '\\\\u265f') {
+        const direction = piece.color === 'white' ? -1 : 1;
+        if (dx === 0 && dy === direction && !toSquare.piece) return true;
+        if (Math.abs(dx) === 1 && dy === direction && toSquare.piece) return true;
+    } else if (piece.symbol === '\\\\u2656' || piece.symbol === '\\\\u265c') {
+        if ((dx === 0 || dy === 0) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2658' || piece.symbol === '\\\\u265e') {
+        if ((Math.abs(dx) === 2 && Math.abs(dy) === 1) || (Math.abs(dx) === 1 && Math.abs(dy) === 2)) return true;
+    } else if (piece.symbol === '\\\\u2657' || piece.symbol === '\\\\u265d') {
+        if (Math.abs(dx) === Math.abs(dy) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2655' || piece.symbol === '\\\\u265b') {
+        if ((Math.abs(dx) === Math.abs(dy) || dx === 0 || dy === 0) && checkPathClear(fromSquare, toSquare)) return true;
+    } else if (piece.symbol === '\\\\u2654' || piece.symbol === '\\\\u265a') {
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return true;
+    }
+
+    return false;
+}
+`
+
 /** REAL calculator — should NOT trigger */
 const REAL_CALCULATOR = `
 function calculate(a, op, b) {
@@ -298,6 +454,41 @@ describe("code-quality: detectPlaceholderPatterns", () => {
       const joined = findings.join(" ")
       expect(joined).toMatch(/stub comment|placeholder/i)
     })
+
+    it("detects 'Other code as per existing logic' degeneration", () => {
+      const findings = detectPlaceholderPatterns(DEGENERATION_EXISTING_LOGIC)
+      expect(findings.length).toBeGreaterThan(0)
+      const joined = findings.join(" ")
+      expect(joined).toMatch(/degeneration/i)
+    })
+
+    it("detects 'rest of the code here' / 'remaining logic' degeneration", () => {
+      const findings = detectPlaceholderPatterns(DEGENERATION_REST_OF_CODE)
+      expect(findings.length).toBeGreaterThan(0)
+      const joined = findings.join(" ")
+      expect(joined).toMatch(/degeneration/i)
+    })
+
+    it("detects 'same as above' / 'similar to before' degeneration", () => {
+      const findings = detectPlaceholderPatterns(DEGENERATION_SAME_AS_ABOVE)
+      expect(findings.length).toBeGreaterThan(0)
+      const joined = findings.join(" ")
+      expect(joined).toMatch(/degeneration/i)
+    })
+
+    it("detects 'as per existing' / 'as in the original' degeneration", () => {
+      const findings = detectPlaceholderPatterns(DEGENERATION_AS_PER)
+      expect(findings.length).toBeGreaterThan(0)
+      const joined = findings.join(" ")
+      expect(joined).toMatch(/degeneration/i)
+    })
+
+    it("detects ellipsis elision '... remaining' / '... other'", () => {
+      const findings = detectPlaceholderPatterns(DEGENERATION_ELLIPSIS)
+      expect(findings.length).toBeGreaterThan(0)
+      const joined = findings.join(" ")
+      expect(joined).toMatch(/degeneration/i)
+    })
   })
 
   describe("does NOT false-positive on real implementations", () => {
@@ -313,6 +504,11 @@ describe("code-quality: detectPlaceholderPatterns", () => {
 
     it("accepts real calculator code", () => {
       const findings = detectPlaceholderPatterns(REAL_CALCULATOR)
+      expect(findings).toHaveLength(0)
+    })
+
+    it("accepts code using 'existing'/'same' as variable names or in logic (not comments)", () => {
+      const findings = detectPlaceholderPatterns(REAL_CODE_WITH_SIMILAR_WORDS)
       expect(findings).toHaveLength(0)
     })
   })
@@ -454,5 +650,161 @@ describe("code-quality: PLACEHOLDER_PATTERNS", () => {
       expect(typeof p.label).toBe("string")
       expect(p.label.length).toBeGreaterThan(0)
     }
+  })
+})
+
+// ============================================================================
+// Generic structural detector: detectInconsistentBranches
+// ============================================================================
+
+describe("code-quality: detectInconsistentBranches", () => {
+  it("detects inconsistent .color check in real multi-branch dispatch", () => {
+    const findings = detectInconsistentBranches(DISPATCH_INCONSISTENT_BRANCHES)
+    expect(findings.length).toBeGreaterThan(0)
+    expect(findings[0]).toMatch(/isValidMove/)
+    expect(findings[0]).toMatch(/1\/\d/)
+    expect(findings[0]).toMatch(/\.color/)
+  })
+
+  it("does NOT flag when global guard exists before dispatch chain", () => {
+    const findings = detectInconsistentBranches(DISPATCH_WITH_GLOBAL_GUARD)
+    expect(findings).toHaveLength(0)
+  })
+
+  it("does NOT flag when ALL branches check the same property", () => {
+    const code = `
+function checkAccess(user, resource) {
+    if (resource.type === 'file') {
+        if (user.role === resource.role) return true;
+    } else if (resource.type === 'folder') {
+        if (user.role === resource.role && resource.shared) return true;
+    } else if (resource.type === 'link') {
+        if (user.role === resource.role) return true;
+    }
+    return false;
+}
+`
+    const findings = detectInconsistentBranches(code)
+    expect(findings).toHaveLength(0)
+  })
+
+  it("does NOT flag functions without same-property comparisons", () => {
+    const code = `
+function route(request) {
+    if (request.method === 'GET') {
+        return true;
+    } else if (request.method === 'POST') {
+        return true;
+    } else if (request.method === 'PUT') {
+        return true;
+    }
+    return false;
+}
+`
+    const findings = detectInconsistentBranches(code)
+    expect(findings).toHaveLength(0)
+  })
+
+  it("does NOT flag functions with fewer than 3 branches", () => {
+    const code = `
+function validate(a, b) {
+    if (a.type === 'x') {
+        if (a.owner === b.owner) return true;
+    } else if (a.type === 'y') {
+        return true;
+    }
+    return false;
+}
+`
+    const findings = detectInconsistentBranches(code)
+    expect(findings).toHaveLength(0)
+  })
+
+  it("catches auth/permission dispatch with inconsistent .role check", () => {
+    const code = `
+function checkPermission(user, action, resource) {
+    if (action === 'read') {
+        if (user.role === resource.role) return true;
+    } else if (action === 'write') {
+        return true;
+    } else if (action === 'delete') {
+        return true;
+    } else if (action === 'admin') {
+        return true;
+    }
+    return false;
+}
+`
+    const findings = detectInconsistentBranches(code)
+    expect(findings.length).toBeGreaterThan(0)
+    expect(findings[0]).toMatch(/checkPermission/)
+    expect(findings[0]).toMatch(/\.role/)
+  })
+
+  it("catches any function name — not limited to validation naming", () => {
+    const code = `
+function processTransaction(source, target, txType) {
+    if (txType === 'transfer') {
+        if (source.currency === target.currency) return true;
+    } else if (txType === 'swap') {
+        return true;
+    } else if (txType === 'bridge') {
+        return true;
+    }
+    return false;
+}
+`
+    const findings = detectInconsistentBranches(code)
+    expect(findings.length).toBeGreaterThan(0)
+    expect(findings[0]).toMatch(/processTransaction/)
+    expect(findings[0]).toMatch(/\.currency/)
+  })
+
+  it("is integrated into detectPlaceholderPatterns", () => {
+    const findings = detectPlaceholderPatterns(DISPATCH_INCONSISTENT_BRANCHES)
+    const branchFinding = findings.find(f => /inconsistent branch/i.test(f))
+    expect(branchFinding).toBeDefined()
+  })
+})
+
+// ============================================================================
+// Integration: real generated code through the full pipeline
+// ============================================================================
+
+describe("code-quality: real generated code detection", () => {
+  it("catches branch inconsistency in real broken dispatch code", () => {
+    const findings = detectPlaceholderPatterns(DISPATCH_INCONSISTENT_BRANCHES)
+    expect(findings.length).toBeGreaterThanOrEqual(1)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/isValidMove/)
+    expect(joined).toMatch(/inconsistent branch/i)
+  })
+
+  it("returns ZERO findings for code with global guard", () => {
+    const findings = detectPlaceholderPatterns(DISPATCH_WITH_GLOBAL_GUARD)
+    expect(findings).toHaveLength(0)
+  })
+
+  it("still catches TODO/stub patterns in addition to structural issues", () => {
+    const code = `
+function processItem(item, target, itemType) {
+    // TODO: add logging
+    if (itemType === 'typeA') {
+        if (item.owner === target.owner) return true;
+    } else if (itemType === 'typeB') {
+        return true;
+    } else if (itemType === 'typeC') {
+        return true;
+    } else if (itemType === 'typeD') {
+        return true;
+    }
+    return false;
+}
+`
+    const findings = detectPlaceholderPatterns(code)
+    expect(findings.length).toBeGreaterThanOrEqual(2)
+    const joined = findings.join("\n")
+    expect(joined).toMatch(/placeholder comment/i)
+    expect(joined).toMatch(/inconsistent branch/i)
   })
 })

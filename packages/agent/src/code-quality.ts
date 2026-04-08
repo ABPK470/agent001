@@ -25,6 +25,14 @@ export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /#\s*(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
   // "TO BE IMPLEMENTED" / "TO BE ADDED" / "NOT YET IMPLEMENTED" deferred stubs
   { re: /\/\/\s*(?:\w+\s+)*(?:to\s+be\s+implemented|to\s+be\s+added|not\s+yet\s+implemented)\b/gi, label: "stub comment" },
+  // LLM degeneration: references "existing" code instead of writing it
+  // Catches: "// Other code as per existing logic", "// existing implementation",
+  // "// rest of the code here", "// same as above", "// code continues as before", "// ... remaining"
+  { re: /\/\/\s*(?:other|rest\s+of(?:\s+the)?|remaining)\s+(?:code|logic|implementation)\b/gi, label: "degeneration comment (references code that should be written)" },
+  { re: /\/\/\s*(?:existing|previous|prior)\s+(?:code|logic|implementation)\b/gi, label: "degeneration comment (references code that should be written)" },
+  { re: /\/\/\s*(?:same|similar|code continues?)\s+(?:as\s+)?(?:above|before|previously|existing)\b/gi, label: "degeneration comment (references code that should be written)" },
+  { re: /\/\/\s*(?:as\s+per|as\s+in)\s+(?:existing|previous|above|the\s+original)\b/gi, label: "degeneration comment (references code that should be written)" },
+  { re: /\/\/\s*\.{3}\s*(?:remaining|rest|other|more)\b/gi, label: "degeneration comment (elided code)" },
   // Trivially-returning validation functions
   {
     re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gi,
@@ -113,6 +121,13 @@ export function detectPlaceholderPatterns(code: string): string[] {
     findings.push(f)
   }
 
+  // ── Structural: inconsistent branch logic (generic, domain-agnostic) ──
+  const branchFindings = detectInconsistentBranches(code)
+  for (const f of branchFindings) {
+    if (findings.length >= 8) break
+    findings.push(f)
+  }
+
   // ── "will go here" / "will be added" deferred-work comments ──
   const deferredRe = /\/\/\s*(?:\w+\s+)*(?:will\s+(?:go|be\s+(?:added|implemented|handled))|goes?\s+here|add(?:ed)?\s+(?:later|here))\b/gi
   deferredRe.lastIndex = 0
@@ -169,5 +184,115 @@ export function detectCatchAllReturns(code: string): string[] {
       }
     }
   }
+  return findings
+}
+
+// ============================================================================
+// Structural logic analysis — catches "looks complete but is broken"
+// ============================================================================
+
+/**
+ * Helper: extract the body of a function (brace-matched).
+ * Returns null if the body can't be found.
+ */
+function extractFunctionBody(code: string, startOffset: number): { body: string; bodyStart: number; bodyEnd: number } | null {
+  const bodyStart = code.indexOf("{", startOffset)
+  if (bodyStart < 0) return null
+  let depth = 0
+  let bodyEnd = -1
+  for (let i = bodyStart; i < code.length; i++) {
+    if (code[i] === "{") depth++
+    else if (code[i] === "}") {
+      depth--
+      if (depth === 0) { bodyEnd = i; break }
+    }
+  }
+  if (bodyEnd < 0) return null
+  return { body: code.slice(bodyStart + 1, bodyEnd), bodyStart, bodyEnd }
+}
+
+/**
+ * Detect multi-branch dispatch functions with inconsistent predicate checks.
+ *
+ * Generic structural analysis — zero domain-specific knowledge.
+ *
+ * Finds ANY function with ≥3 if/else-if branches that return true, where a
+ * "same-property comparison" (`.prop op .prop` with the same property name
+ * on both sides) appears in SOME branches but not ALL.  This indicates a
+ * cross-cutting concern (ownership, role, permission, type) that was applied
+ * to only a subset of branches — a structural inconsistency regardless of domain.
+ *
+ * Examples this catches (without knowing what .color, .role, .method mean):
+ *   - Game:  isValidMove() checks `.color` in pawn branch but not rook/knight/bishop
+ *   - Auth:  checkPermission() checks `.role` in admin branch but not user/guest
+ *   - API:   validateRequest() checks `.origin` in POST branch but not PUT/DELETE
+ *
+ * The detector also recognises a global guard before the dispatch chain:
+ *   if (target.prop === source.prop) return false;
+ * When such a guard exists the per-branch check is unnecessary → no finding.
+ */
+export function detectInconsistentBranches(code: string): string[] {
+  const findings: string[] = []
+
+  // Match ALL named functions — no name-pattern filter
+  const funcRe = /function\s+(\w+)\s*\(/g
+  let m: RegExpExecArray | null
+
+  // Same-property comparison: `.PROP op .PROP` where PROP is identical on both sides.
+  // The backreference \1 ensures the property name matches.
+  // Excludes | and & to avoid matching across `||`/`&&` boundaries
+  // (e.g. `x.sym === 'a' || x.sym === 'b'` should NOT match).
+  // e.g. `.color !== piece.color`, `.role === user.role`, `.team != other.team`
+  const propPairRe = /\.(\w+)\s*(?:!==|===|!=|==)\s*[^;{}\n|&]*\.\1\b/
+
+  while ((m = funcRe.exec(code)) !== null) {
+    const funcName = m[1]!
+    const result = extractFunctionBody(code, m.index + m[0].length)
+    if (!result) continue
+    const { body } = result
+
+    // Need ≥3 total branches (1 if + ≥2 else-if)
+    const elseIfs = body.match(/\}\s*else\s+if\s*\(/g)
+    if (!elseIfs || elseIfs.length < 2) continue
+
+    // Split into branches and check each one that returns true
+    const branches = body.split(/\}\s*else\s+if\s*\(/)
+    let branchesWithPairCheck = 0
+    let branchesWithReturnTrue = 0
+    let detectedProp = ''
+
+    for (const branch of branches) {
+      if (/return\s+true\b/.test(branch)) {
+        branchesWithReturnTrue++
+        const pairMatch = propPairRe.exec(branch)
+        if (pairMatch) {
+          branchesWithPairCheck++
+          if (!detectedProp) detectedProp = pairMatch[1]!
+        }
+      }
+    }
+
+    // Need substantial dispatch, and inconsistency (some but not all)
+    if (branchesWithReturnTrue < 3) continue
+    if (branchesWithPairCheck === 0 || branchesWithPairCheck === branchesWithReturnTrue) continue
+
+    // Check for a global guard before the dispatch chain:
+    //   if (x.PROP === y.PROP) return false
+    // Uses backreference to match any property name generically.
+    const firstElseIfIdx = body.search(/\}\s*else\s+if\s*\(/)
+    if (firstElseIfIdx >= 0) {
+      const preBranch = body.slice(0, firstElseIfIdx)
+      const guardRe = /if\s*\([^{}]*?\.(\w+)\s*===\s*[^{}]*?\.\1[^{}]*\)\s*return\s+false/
+      if (guardRe.test(preBranch)) continue // global guard exists → ok
+    }
+
+    findings.push(
+      `inconsistent branch logic in ${funcName}(): ` +
+      `${branchesWithPairCheck}/${branchesWithReturnTrue} branches ` +
+      `check .${detectedProp} equality — remaining branches omit this check, ` +
+      `which may allow invalid state transitions`,
+    )
+  }
+
   return findings
 }

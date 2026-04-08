@@ -170,10 +170,10 @@ export async function executePipeline(
 
         // Check if issues mention stub functions — build targeted remediation list
         const hasStubIssues = feedback.some(f =>
-          /stub|placeholder|empty array|empty object|returns constant|catch-all|trivial return/i.test(f),
+          /stub|placeholder|empty array|empty object|returns constant|catch-all|trivial return|degeneration/i.test(f),
         )
         const stubRemediationBlock = hasStubIssues
-          ? `\n\n⚠️ STUB FUNCTION REMEDIATION — THIS IS YOUR PRIMARY TASK:\nThe verifier detected functions that are stubs (returning [], {}, true, false, or having only a comment + trivial return). The function names and line numbers are listed in the issues above.\nFor EACH stub function you MUST:\n1. Read the file that contains it\n2. Locate the function by name\n3. Replace the stub body with a REAL, COMPLETE algorithm\n4. A function called "calculateRookMoves" must compute rook movement along ranks and files. A function called "isCheckmate" must check if the king has no legal escape. The function NAME tells you WHAT it must do — implement it.\n5. Do NOT change the function signature — only replace the body\n6. After implementing, re-read the file and verify the stub is gone`
+          ? `\n\n⚠️ STUB FUNCTION REMEDIATION — THIS IS YOUR PRIMARY TASK:\nThe verifier detected functions that are stubs or contain degeneration comments (e.g. "// Other code as per existing logic", "// rest of the code here", "// same as above"). These comments mean NO CODE WAS ACTUALLY WRITTEN — the function body is empty/incomplete.\nFor EACH stub/degenerated function you MUST:\n1. Read the file that contains it\n2. Locate the function by name\n3. Replace the stub body with a REAL, COMPLETE algorithm — DO NOT use comments like "existing logic" or "same as above"\n4. The function NAME tells you WHAT it must do — implement the FULL algorithm. Example: "getLegalMoves" must compute legal moves for ALL piece types with proper board bounds checking.\n5. Do NOT change the function signature — only replace the body\n6. After implementing, re-read the file and verify the stub is gone`
           : ""
 
         effectiveStep = {

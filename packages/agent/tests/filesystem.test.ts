@@ -119,6 +119,48 @@ describe("write_file: inline stub detection", () => {
     // File too small to trigger stub detection (threshold is 50 chars)
     expect(result).toBe("Successfully wrote to tiny.js")
   })
+
+  it("warns when writing JS with LLM degeneration comment", async () => {
+    const result = await writeFileTool.execute({
+      path: "degen.js",
+      content: [
+        "function getLegalMoves(row, col, piece) {",
+        "  const moves = [];",
+        "  const direction = piece === piece.toUpperCase() ? -1 : 1;",
+        "",
+        "  // Other code as per existing logic",
+        "",
+        "  return moves;",
+        "}",
+      ].join("\n"),
+    })
+
+    expect(result).toContain("degeneration")
+    expect(result).not.toContain("CORRUPTED")
+    expect(result).toContain("WRITTEN WITH ISSUES")
+  })
+
+  it("uses targeted message for stub-only issues (not CORRUPTED)", async () => {
+    const result = await writeFileTool.execute({
+      path: "stub-msg.js",
+      content: [
+        "function initBoard() { return []; }",
+        "function isMoveLegal(from, to) {",
+        "    // Placeholder for legal move logic",
+        "    return true;",
+        "}",
+        "function renderBoard() {",
+        "    const canvas = document.getElementById('board');",
+        "    canvas.width = 640;",
+        "    canvas.height = 640;",
+        "}",
+      ].join("\n"),
+    })
+
+    expect(result).toContain("WRITTEN WITH ISSUES")
+    expect(result).not.toContain("CORRUPTED")
+    expect(result).toContain("only replace the stub portions")
+  })
 })
 
 // ============================================================================

@@ -11,12 +11,12 @@
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierDecision,
-    VerifierOutcome,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierDecision,
+  VerifierOutcome,
+  VerifierStepAssessment,
 } from "./types.js"
 
 // ============================================================================
@@ -464,7 +464,8 @@ export async function runDeterministicProbes(
         "not found", "Placeholder", "stub", "Syntax error", "Corrupted",
         "Missing method", "Browser check", "catch-all", "empty function",
         "deferred-work", "explicit failure", "all tool calls failed",
-        "zero tool calls", "gibberish", "skeletal",
+        "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
+        "degeneration",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -547,9 +548,11 @@ Rules:
 - "retry" means the step produced output but has clear, concrete deficiencies that a retry could fix
 - "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
 - SKELETON / PLACEHOLDER CODE IS NEVER "pass": If a step was supposed to implement logic but output contains placeholder functions (\`return true\` as validation, empty bodies, \`// TODO\`, \`// Placeholder\`), mark it "retry" with specific issues listing what needs real implementation
+- LLM DEGENERATION IS NEVER "pass": Comments like \`// Other code as per existing logic\`, \`// rest of the code here\`, \`// same as above\`, \`// ... remaining\` mean the LLM skipped generating the actual code. Functions containing such comments are EMPTY STUBS even if they have some boilerplate around them. Check that functions have REAL algorithmic bodies, not just setup + degeneration comment + return.
 - SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. piece movement rules, validation, game state management) but the code only has trivial/generic implementations (e.g. a movePiece function that doesn't validate piece-specific movement, a highlightLegalMoves that doesn't check actual legal moves), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
+- GUARD ORDERING: Check that early-return guards in event handlers or dispatchers don't block valid interactions. Example: \`if (item.owner !== currentUser) return;\` at the top of a click handler prevents clicking on opponent items to interact with them (e.g. capture). The guard should be conditional on current state (e.g. only reject when no item is already selected).
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem in the actual code

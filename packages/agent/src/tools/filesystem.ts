@@ -272,12 +272,31 @@ export const writeFileTool: Tool = {
       }
 
       if (integrityWarnings.length > 0) {
+        // Separate structural errors (truncation, corruption, function loss)
+        // from stub/placeholder detections — the latter need targeted guidance,
+        // not panic-inducing "CORRUPTED" framing that causes full rewrites.
+        const hasStructuralCorruption = integrityWarnings.some(w =>
+          /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS/i.test(w)
+        )
+        const onlyStubDetections = !hasStructuralCorruption && integrityWarnings.every(w =>
+          /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w)
+        )
+
+        if (onlyStubDetections) {
+          return (
+            `\u26a0 WRITTEN WITH ISSUES to ${filePath} — stub/placeholder code detected:\n` +
+            integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
+            `The file was saved but contains incomplete code. ` +
+            `Read the file, find the specific stub locations listed above, and write_file with those stubs replaced by REAL implementation. ` +
+            `Keep ALL existing working code — only replace the stub portions.`
+          )
+        }
         return (
           `\u26a0 WRITTEN WITH ERRORS to ${filePath} — your output is CORRUPTED and must be fixed:\n` +
           integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
           `The file was saved but contains broken/degenerated code. ` +
           `Use read_file to see what you wrote, then write_file again with CORRECT content. ` +
-          `Write SMALLER chunks if needed.`
+          `Keep ALL existing working code intact.`
         )
       }
 
