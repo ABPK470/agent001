@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { replaceInFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
+import { readFileTool, replaceInFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
 
 let tempDir: string
 
@@ -214,6 +214,31 @@ describe("write_file: function loss detection", () => {
     })
 
     expect(result).toBe("Successfully wrote to chess-ok.js")
+  })
+
+  it("rejects structural-corruption rewrites and keeps prior file intact", async () => {
+    await writeFileTool.execute({
+      path: "chess-atomic.js",
+      content: [
+        "function initBoard() { return []; }",
+        "function renderBoard(board) { console.log(board); }",
+      ].join("\n"),
+    })
+
+    const rejected = await writeFileTool.execute({
+      path: "chess-atomic.js",
+      content: [
+        "function initBoard() {",
+        "  const x = 1;",
+        "}garbled output impossible token stream",
+      ].join("\n"),
+    })
+
+    expect(rejected).toContain("WRITE REJECTED")
+
+    const contentAfter = await readFileTool.execute({ path: "chess-atomic.js" })
+    expect(contentAfter).toContain("function renderBoard")
+    expect(contentAfter).not.toContain("garbled output impossible token stream")
   })
 })
 

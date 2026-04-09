@@ -713,13 +713,56 @@ export class Agent {
         log.logError(`Planner skipped: ${plannerResult.skipReason}`)
       }
 
-      // If the planner tried but verification failed, inject repair context
-      // so the direct tool loop knows what files exist and what to fix.
+      // If the planner tried but verification failed, prefer a second
+      // structured planner pass over falling through to an unstructured loop.
       if (plannerResult.verifierDecision && plannerResult.verifierDecision.overall !== "pass") {
         const unresolvedIssues = plannerResult.verifierDecision.steps
           .filter(s => s.outcome !== "pass")
           .flatMap(s => s.issues.filter(i => !i.startsWith("[non-blocking]")))
+
+        const planStepCount = plannerResult.plan?.steps.length ?? 0
+        const isComplexPlannerRun = planStepCount >= 2 || plannerResult.verifierDecision.steps.length >= 2
+
+        if (isComplexPlannerRun) {
+          const remediationContext =
+            `Planner remediation context:\n` +
+            `A previous structured execution failed verification. Generate a revised plan that fixes these exact issues without rewriting unrelated files:\n` +
+            unresolvedIssues.map(i => `- ${i}`).join("\n")
+
+          const remediationResult = await executePlannerPath(
+            `${goal}\n\n${remediationContext}`,
+            {
+              ...plannerCtx,
+              history: [
+                ...messages,
+                { role: "system", content: remediationContext, section: "history" },
+              ],
+            },
+            this.config.plannerDelegateFn,
+          )
+
+          if (remediationResult.handled) {
+            const answer = remediationResult.answer ?? "(planner remediation produced no answer)"
+            if (this.config.verbose) log.logFinalAnswer(answer)
+            return answer
+          }
+
+          // Do NOT fall through to the unstructured tool loop for complex,
+          // partially-implemented tasks — that path tends to regress quality.
+          const finalFailureAnswer = remediationResult.answer
+            ?? plannerResult.answer
+            ?? "Planner verification failed after remediation attempts. Structured execution halted to avoid destructive rewrites."
+          if (this.config.verbose) log.logFinalAnswer(finalFailureAnswer)
+          return finalFailureAnswer
+        }
+
+        // Low-complexity fallback: inject tool-aware repair context for direct loop.
         if (unresolvedIssues.length > 0) {
+          const hasReplaceInFile = this.toolList.some(t => t.name === "replace_in_file")
+          const editInstruction = hasReplaceInFile
+            ? "3. Use replace_in_file for surgical fixes — do NOT rewrite entire files"
+            : "3. Use write_file only for minimal targeted updates; preserve all existing working code and avoid full-file rewrites"
+
           const repairMsg =
             `⚠️ AUTONOMOUS REPAIR REQUIRED — ACT IMMEDIATELY, DO NOT ASK PERMISSION.\n\n` +
             `A previous attempt partially completed this task but verification found issues that need fixing.\n` +
@@ -727,7 +770,7 @@ export class Agent {
             `Issues to fix:\n${unresolvedIssues.map(i => `- ${i}`).join("\n")}\n\n` +
             `Steps:\n1. read_file each file mentioned in the issues\n` +
             `2. Identify the specific stub/placeholder/missing logic\n` +
-            `3. Use replace_in_file for surgical fixes — do NOT rewrite entire files\n` +
+            `${editInstruction}\n` +
             `4. Verify your fix by re-reading the file\n\n` +
             `You MUST start fixing immediately. Do NOT respond with a question or ask the user for permission. You are fully authorized to read, modify, and fix these files right now.`
           messages.push({ role: "user", content: repairMsg })

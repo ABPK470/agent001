@@ -204,6 +204,7 @@ export async function runDeterministicProbes(
       const sa = step as SubagentTaskStep
       const issues: string[] = []
       const outputText = (stepResult.output ?? "").trim()
+      const executedModalities = new Set<string>()
 
       // Extract actual file paths from child output for path resolution
       const actualPaths = extractActualPaths(outputText)
@@ -277,14 +278,15 @@ export async function runDeterministicProbes(
         }
       }
 
-      // If verification mode is browser_check, run it
+      // Runtime probe: for HTML artifacts, run browser_check regardless of
+      // verificationMode to ensure UI/runtime behavior gets deterministic checks.
       let browserCheckPassed = false
-      if (sa.executionContext.verificationMode === "browser_check") {
+      const htmlArtifacts = sa.executionContext.targetArtifacts.filter(
+        a => a.endsWith(".html") || a.endsWith(".htm"),
+      )
+      if (htmlArtifacts.length > 0) {
         const browserCheck = toolMap.get("browser_check")
         if (browserCheck) {
-          const htmlArtifacts = sa.executionContext.targetArtifacts.filter(
-            a => a.endsWith(".html") || a.endsWith(".htm"),
-          )
           let anyBrowserFailure = false
           for (const html of htmlArtifacts) {
             // Reuse cached probe result; browser_check expects a RELATIVE path
@@ -295,6 +297,7 @@ export async function runDeterministicProbes(
               browserPath = browserPath.slice(wsRoot.length).replace(/^\//, "")
             }
             try {
+              executedModalities.add("runtime")
               const result = await browserCheck.execute({ path: browserPath })
               if (/error|fail|exception/i.test(result) && !/no errors/i.test(result)) {
                 issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
@@ -305,9 +308,11 @@ export async function runDeterministicProbes(
               anyBrowserFailure = true
             }
           }
-          if (htmlArtifacts.length > 0 && !anyBrowserFailure) {
+          if (!anyBrowserFailure) {
             browserCheckPassed = true
           }
+        } else {
+          issues.push("VERIFICATION MODALITY GAP: HTML artifacts exist but browser_check tool is unavailable, so runtime verification could not run")
         }
       }
 
@@ -316,6 +321,7 @@ export async function runDeterministicProbes(
         const runCmd = toolMap.get("run_command")
         if (runCmd) {
           try {
+            executedModalities.add("runtime")
             const result = await runCmd.execute({ command: "npm test 2>&1 || exit 0" })
             // Only flag real test failures ("X failed", "FAIL"), not incidental mentions of error/fail
             if (/\d+\s+fail|FAIL\s|tests?\s+failed/i.test(result) && !/0 failed/i.test(result)) {
@@ -338,6 +344,7 @@ export async function runDeterministicProbes(
           try {
             const content = await readFile.execute({ path: cached.resolvedPath })
             if (typeof content === "string" && content.length > 0) {
+              executedModalities.add("artifact-review")
               // Check for placeholder patterns
               const placeholders = detectPlaceholderPatterns(content)
               if (placeholders.length > 0) {
@@ -384,6 +391,7 @@ export async function runDeterministicProbes(
               const result = await runCommand.execute({
                 command: `node --check ${JSON.stringify(checkPath)} 2>&1`,
               })
+              executedModalities.add("syntax")
               // Skip MODULE_NOT_FOUND — means the file path doesn't exist on
               // the actual filesystem (e.g. sandbox/virtual FS paths).  Only
               // flag genuine syntax errors.
@@ -407,6 +415,7 @@ export async function runDeterministicProbes(
           try {
             const content = await readFile.execute({ path: cached.resolvedPath })
             if (typeof content === "string" && content.length > 0) {
+              executedModalities.add("artifact-review")
               const htmlIssues = detectHtmlCorruption(content)
               if (htmlIssues.length > 0) {
                 issues.push(
@@ -526,6 +535,10 @@ export async function runDeterministicProbes(
         }
       }
 
+      // ── General verification modality coverage probe ──
+      const modalityGaps = detectVerificationModalityGaps(sa, executedModalities, toolMap)
+      issues.push(...modalityGaps)
+
       // ── Gibberish / word-salad detection ──
       if (outputText.length > 20) {
         const gibberishScore = computeGibberishScore(outputText)
@@ -564,6 +577,7 @@ export async function runDeterministicProbes(
         "deferred-work", "explicit failure", "all tool calls failed",
         "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
         "degeneration", "no code evidence", "PATH MISMATCH", "SCOPE VIOLATION",
+        "VERIFICATION MODALITY GAP",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -713,6 +727,53 @@ function findWsRootForStep(plan: Plan, stepName: string): string | undefined {
     return (step as SubagentTaskStep).executionContext.workspaceRoot || undefined
   }
   return undefined
+}
+
+/**
+ * Domain-agnostic probe: infer required verification modalities from declared
+ * outcomes and produced artifacts, then ensure they were actually executed.
+ */
+function detectVerificationModalityGaps(
+  step: SubagentTaskStep,
+  executedModalities: ReadonlySet<string>,
+  toolMap: Map<string, Tool>,
+): string[] {
+  const issues: string[] = []
+  const artifacts = step.executionContext.targetArtifacts
+  const hasHtml = artifacts.some(a => /\.html?$/i.test(a))
+  const hasCode = artifacts.some(a => /\.(?:js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a))
+
+  const criteriaText = [step.objective, ...step.acceptanceCriteria].join(" ").toLowerCase()
+  const INTERACTION_RUNTIME_RE = /\b(?:click|submit|drag|drop|keyboard|mouse|navigate|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end)\b/i
+  const IO_RUNTIME_RE = /\b(?:api|request|response|endpoint|fetch|http|rpc|query|database|sql|persist|sync|connect|auth|login|permission)\b/i
+
+  const requiresArtifactReview = artifacts.length > 0
+  const requiresSyntax = hasCode
+  const requiresRuntime = hasHtml || INTERACTION_RUNTIME_RE.test(criteriaText) || IO_RUNTIME_RE.test(criteriaText)
+
+  if (requiresArtifactReview && !executedModalities.has("artifact-review")) {
+    if (toolMap.has("read_file")) {
+      issues.push("VERIFICATION MODALITY GAP: target artifacts were produced but no deterministic artifact read/review probe ran")
+    }
+  }
+
+  if (requiresSyntax && !executedModalities.has("syntax")) {
+    if (toolMap.has("run_command")) {
+      issues.push("VERIFICATION MODALITY GAP: code artifacts exist but no syntax/compile probe ran")
+    } else {
+      issues.push("VERIFICATION MODALITY GAP: code artifacts exist but syntax probe could not run (run_command unavailable)")
+    }
+  }
+
+  if (requiresRuntime && !executedModalities.has("runtime")) {
+    if (hasHtml && !toolMap.has("browser_check")) {
+      issues.push("VERIFICATION MODALITY GAP: runtime behavior required for HTML output but browser_check tool is unavailable")
+    } else {
+      issues.push("VERIFICATION MODALITY GAP: acceptance criteria imply runtime behavior, but no runtime probe (browser_check/tests/command) ran")
+    }
+  }
+
+  return issues
 }
 
 // ============================================================================

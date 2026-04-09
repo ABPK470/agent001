@@ -236,7 +236,6 @@ export const writeFileTool: Tool = {
         }
       }
       const content = String(args.content)
-      await writeFile(target, content, "utf-8")
 
       // Integrity check: detect LLM degeneration in the written content.
       // If the output is corrupted, warn the child so it can fix within its own iteration budget
@@ -271,13 +270,24 @@ export const writeFileTool: Tool = {
         }
       }
 
-      if (integrityWarnings.length > 0) {
-        // Separate structural errors (truncation, corruption, function loss)
-        // from stub/placeholder detections — the latter need targeted guidance,
-        // not panic-inducing "CORRUPTED" framing that causes full rewrites.
-        const hasStructuralCorruption = integrityWarnings.some(w =>
-          /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS/i.test(w)
+      // Separate structural errors (truncation, corruption, function loss)
+      // from stub/placeholder detections — the latter need targeted guidance,
+      // not panic-inducing "CORRUPTED" framing that causes full rewrites.
+      const hasStructuralCorruption = hasStructuralIntegrityIssue(integrityWarnings)
+
+      if (hasStructuralCorruption) {
+        return (
+          `⚠ WRITE REJECTED for ${filePath} — your output is CORRUPTED and was NOT saved:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
+          `The existing file was kept unchanged. ` +
+          `Use read_file to inspect current content, then write_file again with corrected code.`
         )
+      }
+
+      // Commit only non-structural writes.
+      await writeFile(target, content, "utf-8")
+
+      if (integrityWarnings.length > 0) {
         const onlyStubDetections = !hasStructuralCorruption && integrityWarnings.every(w =>
           /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w)
         )
@@ -404,6 +414,13 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
   return warnings
 }
 
+/** Structural integrity issues must block writes to keep file state monotonic. */
+function hasStructuralIntegrityIssue(warnings: readonly string[]): boolean {
+  return warnings.some(w =>
+    /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS|Unclosed HTML attribute|code garbage/i.test(w),
+  )
+}
+
 // ── replace_in_file ──────────────────────────────────────────────
 
 export const replaceInFileTool: Tool = {
@@ -464,9 +481,8 @@ export const replaceInFileTool: Tool = {
 
       // Perform the replacement (first occurrence only)
       const updated = existing.slice(0, idx) + newStr + existing.slice(idx + oldStr.length)
-      await writeFile(target, updated, "utf-8")
 
-      // Run integrity checks on the modified file
+      // Run integrity checks on the modified file BEFORE committing.
       const integrityWarnings = checkWriteIntegrity(filePath, updated)
 
       // Stub detection on the replaced section
@@ -480,6 +496,16 @@ export const replaceInFileTool: Tool = {
           )
         }
       }
+
+      if (hasStructuralIntegrityIssue(integrityWarnings)) {
+        return (
+          `Replace rejected in ${filePath} — update was NOT saved due to structural issues:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
+          `Use read_file to inspect the current file, then retry with corrected replacement text.`
+        )
+      }
+
+      await writeFile(target, updated, "utf-8")
 
       if (integrityWarnings.length > 0) {
         return (

@@ -84,6 +84,114 @@ function injectWarningsIntoSteps(plan: Plan, warnings: readonly PlanDiagnostic[]
   }
 }
 
+/**
+ * Auto-fix warning classes that are known to cause cross-step integration
+ * failures if left as guidance-only.
+ */
+function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]): void {
+  const codes = new Set(warnings.map(w => w.code))
+
+  if (codes.has("inconsistent_output_directory") || codes.has("mixed_root_and_subdir")) {
+    normalizePlanOutputDirectory(plan)
+  }
+
+  if (codes.has("missing_shared_data_contract")) {
+    injectSharedDataContract(plan)
+  }
+
+  if (codes.has("html_missing_script_loading")) {
+    injectHtmlScriptCriteria(plan)
+  }
+}
+
+function normalizePlanOutputDirectory(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  const dirs: string[] = []
+
+  for (const step of subagentSteps) {
+    for (const artifact of step.executionContext.targetArtifacts) {
+      const normalized = artifact.replace(/^\.\//, "")
+      const slash = normalized.lastIndexOf("/")
+      if (slash > 0) dirs.push(normalized.slice(0, slash))
+    }
+  }
+
+  const preferredDir = mostFrequent(dirs) ?? "tmp"
+
+  for (const step of subagentSteps) {
+    const current = step.executionContext.targetArtifacts
+    const normalized = current.map((artifact) => {
+      const path = artifact.replace(/^\.\//, "")
+      if (!path.includes("/")) return `${preferredDir}/${path}`
+      if (path.startsWith(`${preferredDir}/`)) return path
+      const parts = path.split("/")
+      return `${preferredDir}/${parts.slice(1).join("/")}`
+    })
+    ;(step.executionContext as unknown as { targetArtifacts: readonly string[] }).targetArtifacts = normalized
+  }
+}
+
+function injectSharedDataContract(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  const jsWriters = subagentSteps.filter(s => s.executionContext.targetArtifacts.some(a => /\.js$/i.test(a)))
+  if (jsWriters.length < 2) return
+
+  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|each\s+(?:cell|entry|item|piece|tile|element)\s+(?:is|has|contains|looks|uses))\b/i
+  if (jsWriters.some(s => FORMAT_SPEC_RE.test(s.objective))) return
+
+  const owner = jsWriters[0]
+  ;(owner as { objective: string }).objective = `${owner.objective}\n\nShared data contract: Use a single board matrix format board[row][col], where each occupied cell is { type: string, color: "white" | "black", hasMoved?: boolean } and empty cells are null.`
+
+  if (!owner.acceptanceCriteria.some(c => /board\[row\]\[col\]|shared data contract|schema/i.test(c))) {
+    ;(owner as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+      ...owner.acceptanceCriteria,
+      "Defines and documents shared data contract: board[row][col] with piece shape { type, color, hasMoved? }.",
+    ]
+  }
+}
+
+function injectHtmlScriptCriteria(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  const jsBasenames = subagentSteps
+    .flatMap(s => s.executionContext.targetArtifacts)
+    .filter(a => /\.js$/i.test(a))
+    .map(a => a.split("/").pop() ?? a)
+
+  if (jsBasenames.length === 0) return
+
+  for (const step of subagentSteps) {
+    const hasHtml = step.executionContext.targetArtifacts.some(a => /\.html?$/i.test(a))
+    if (!hasHtml) continue
+    const hasScriptCriterion = step.acceptanceCriteria.some(c => /<script|script\s+src|loads?\s+js/i.test(c))
+    if (!hasScriptCriterion) {
+      ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+        ...step.acceptanceCriteria,
+        `HTML loads JS files via <script src> tags: ${[...new Set(jsBasenames)].join(", ")}.`,
+      ]
+    }
+  }
+}
+
+function mostFrequent(items: readonly string[]): string | undefined {
+  const counts = new Map<string, number>()
+  for (const item of items) counts.set(item, (counts.get(item) ?? 0) + 1)
+  let best: string | undefined
+  let bestCount = -1
+  for (const [item, count] of counts) {
+    if (count > bestCount) {
+      best = item
+      bestCount = count
+    }
+  }
+  return best
+}
+
 // ============================================================================
 // Main orchestrator
 // ============================================================================
@@ -196,6 +304,7 @@ export async function executePlannerPath(
 
   // Inject warnings into step objectives as guidance (plan still runs)
   if (warnings.length > 0) {
+    applyWarningAutoFixes(plan, warnings)
     ctx.onTrace?.({
       kind: "planner-validation-warnings",
       warningCount: warnings.length,

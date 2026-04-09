@@ -10,7 +10,7 @@ import { synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
-import { extractCriterionKeywords, isLLMGibberish } from "../src/planner/verifier.js"
+import { extractCriterionKeywords, isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
 import type { Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -623,6 +623,134 @@ describe("Plan validation: validatePlan", () => {
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(false)
     expect(result.diagnostics.some(d => d.code === "cycle_detected" && d.severity === "error")).toBe(true)
+  })
+})
+
+// ============================================================================
+// Deterministic verifier probes (general modality coverage)
+// ============================================================================
+
+describe("Verifier: runDeterministicProbes modality coverage", () => {
+  it("runs runtime verification for HTML artifacts even when verificationMode is none", async () => {
+    let browserChecks = 0
+
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("ui-step", {
+          objective: "Build an interactive UI page",
+          acceptanceCriteria: ["UI responds to clicks and updates state"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file", "run_command", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html", "tmp/app.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["ui-step", { name: "ui-step", status: "completed", output: "wrote tmp/index.html and tmp/app.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><script src='app.js'></script></body></html>"
+          if (path.endsWith("app.js")) return "const state = { count: 0 }; function click() { state.count++; }"
+          return ""
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+      {
+        name: "browser_check",
+        description: "browser",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute() {
+          browserChecks++
+          return "No errors"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "ui-step")
+    expect(step).toBeDefined()
+    expect(browserChecks).toBeGreaterThan(0)
+    expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(false)
+  })
+
+  it("reports runtime modality gap when runtime verification tools are unavailable", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("ui-step", {
+          objective: "Create interactive dashboard behavior",
+          acceptanceCriteria: ["User can click controls and navigate between views"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html", "tmp/app.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["ui-step", { name: "ui-step", status: "completed", output: "wrote files", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><script src='app.js'></script></body></html>"
+          if (path.endsWith("app.js")) return "function render(){ return true }"
+          return ""
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "ui-step")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(true)
   })
 })
 
