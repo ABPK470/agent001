@@ -106,6 +106,36 @@ describe("validateDelegatedOutputContract", () => {
     })
   })
 
+  describe("unresolved handoff detection", () => {
+    it("rejects outputs that ask user whether to continue implementation", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec(),
+        output: "The game currently meets foundational requirements. Further refinements can be made. Would you like to proceed with implementing missing game mechanics? tmp/chess/game.js",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("unresolved_handoff_output")
+    })
+
+    it("does not apply handoff rule to pure research tasks", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          task: "Review architecture and identify risks",
+          acceptanceCriteria: [],
+          role: "reviewer",
+          effectClass: "readonly",
+          targetArtifacts: [],
+          requiredSourceArtifacts: ["src/engine.ts"],
+        }),
+        output: "I reviewed the current architecture. Would you like me to continue with a deeper analysis? src/engine.ts",
+        toolCalls: [
+          makeToolCall({ name: "read_file", args: { path: "src/engine.ts" }, result: "code..." }),
+        ],
+      })
+      expect(result.ok).toBe(true)
+    })
+  })
+
   describe("tool evidence checks", () => {
     it("detects all-failed tool calls", () => {
       const result = validateDelegatedOutputContract({

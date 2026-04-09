@@ -334,6 +334,162 @@ interface ChildSpec {
   maxIterations?: number
 }
 
+interface CanonicalPathMap {
+  readonly targets: readonly string[]
+  readonly targetSet: ReadonlySet<string>
+  readonly byBasename: ReadonlyMap<string, readonly string[]>
+}
+
+function normalizeRelativePath(path: string, workspaceRoot?: string): string {
+  let p = path.replace(/\\/g, "/").trim()
+  if (workspaceRoot) {
+    const wsNorm = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "")
+    if (p.startsWith(`${wsNorm}/`)) {
+      p = p.slice(wsNorm.length + 1)
+    }
+  }
+  p = p.replace(/^\.\//, "").replace(/^\//, "")
+  const segs = p.split("/").filter(Boolean)
+  return segs.join("/")
+}
+
+function chooseCanonicalRoot(paths: readonly string[]): string | null {
+  const counts = new Map<string, number>()
+  for (const p of paths) {
+    const slash = p.lastIndexOf("/")
+    if (slash <= 0) continue
+    const dir = p.slice(0, slash)
+    counts.set(dir, (counts.get(dir) ?? 0) + 1)
+  }
+  let best: string | null = null
+  let bestCount = -1
+  for (const [dir, count] of counts) {
+    if (count > bestCount) {
+      best = dir
+      bestCount = count
+    }
+  }
+  return best
+}
+
+function canonicalizeArtifacts(artifacts: readonly string[], workspaceRoot?: string): string[] {
+  const normalized = artifacts
+    .map(a => normalizeRelativePath(a, workspaceRoot))
+    .filter(Boolean)
+  if (normalized.length === 0) return []
+
+  const canonicalRoot = chooseCanonicalRoot(normalized)
+  if (!canonicalRoot) return [...new Set(normalized)]
+
+  const canonical = normalized.map((p) => {
+    if (p.includes("/")) return p
+    return `${canonicalRoot}/${p}`
+  })
+  return [...new Set(canonical)]
+}
+
+function buildCanonicalPathMap(targetArtifacts: readonly string[], workspaceRoot?: string): CanonicalPathMap {
+  const targets = canonicalizeArtifacts(targetArtifacts, workspaceRoot)
+  const targetSet = new Set(targets)
+  const byBasename = new Map<string, string[]>()
+  for (const t of targets) {
+    const base = t.split("/").pop() ?? t
+    const arr = byBasename.get(base) ?? []
+    arr.push(t)
+    byBasename.set(base, arr)
+  }
+  return {
+    targets,
+    targetSet,
+    byBasename,
+  }
+}
+
+function resolveWritePathToCanonical(
+  rawPath: string,
+  canonical: CanonicalPathMap,
+  workspaceRoot?: string,
+): { ok: true; path: string; rewritten: boolean } | { ok: false; reason: string } {
+  if (canonical.targets.length === 0) {
+    const normalized = normalizeRelativePath(rawPath, workspaceRoot)
+    return { ok: true, path: normalized || rawPath, rewritten: false }
+  }
+
+  const normalized = normalizeRelativePath(rawPath, workspaceRoot)
+  if (!normalized) {
+    return { ok: false, reason: "empty write path" }
+  }
+
+  if (canonical.targetSet.has(normalized)) {
+    return { ok: true, path: normalized, rewritten: normalized !== rawPath }
+  }
+
+  const base = normalized.split("/").pop() ?? normalized
+  const candidates = canonical.byBasename.get(base) ?? []
+  if (candidates.length === 1 && candidates[0]) {
+    return { ok: true, path: candidates[0], rewritten: candidates[0] !== rawPath }
+  }
+
+  return {
+    ok: false,
+    reason: `path "${rawPath}" is outside this step's targetArtifacts`,
+  }
+}
+
+function wrapPlannerChildToolsForWriteScope(tools: readonly Tool[], envelope: ExecutionEnvelope): Tool[] {
+  const canonical = buildCanonicalPathMap(envelope.targetArtifacts, envelope.workspaceRoot)
+
+  return tools.map((tool) => {
+    if (tool.name !== "write_file" && tool.name !== "replace_in_file") {
+      return tool
+    }
+
+    return {
+      ...tool,
+      async execute(args) {
+        const rawPath = typeof args?.path === "string" ? args.path : ""
+        if (!rawPath) {
+          return "Error: WRITE SCOPE VIOLATION — missing path argument"
+        }
+
+        const resolved = resolveWritePathToCanonical(rawPath, canonical, envelope.workspaceRoot)
+        if (!resolved.ok) {
+          return (
+            `Error: WRITE SCOPE VIOLATION — ${resolved.reason}. ` +
+            `Allowed targetArtifacts for this step: ${canonical.targets.join(", ") || "(none declared)"}. ` +
+            `Write was rejected before filesystem mutation.`
+          )
+        }
+
+        const nextArgs = { ...(args as Record<string, unknown>), path: resolved.path }
+        const result = await tool.execute(nextArgs)
+        if (resolved.rewritten && typeof result === "string" && !result.startsWith("Error:")) {
+          return `${result}\n[canonical-path] Rewrote write path "${rawPath}" -> "${resolved.path}"`
+        }
+        return result
+      },
+    }
+  })
+}
+
+function canonicalizeEnvelope(envelope: ExecutionEnvelope): ExecutionEnvelope {
+  const targetArtifacts = canonicalizeArtifacts(envelope.targetArtifacts, envelope.workspaceRoot)
+  const targetSet = new Set(targetArtifacts)
+  const requiredSourceArtifacts = canonicalizeArtifacts(envelope.requiredSourceArtifacts, envelope.workspaceRoot)
+    .map((src) => {
+      if (targetSet.has(src)) return src
+      const base = src.split("/").pop() ?? src
+      const matches = targetArtifacts.filter(t => t.endsWith(`/${base}`) || t === base)
+      return matches.length === 1 ? matches[0] : src
+    })
+
+  return {
+    ...envelope,
+    targetArtifacts,
+    requiredSourceArtifacts: [...new Set(requiredSourceArtifacts)],
+  }
+}
+
 async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise<string> {
   const maxIter = Math.min(spec.maxIterations ?? DEFAULT_CHILD_ITERATIONS, MAX_CHILD_ITERATIONS)
 
@@ -517,17 +673,19 @@ export async function spawnChildForPlan(
   step: SubagentTaskStep,
   envelope: ExecutionEnvelope,
 ): Promise<DelegateResult> {
+  const normalizedEnvelope = canonicalizeEnvelope(envelope)
+
   // Build the child's goal from the step's contract
   // IMPORTANT: Workspace and path context goes FIRST so the child knows
   // where it's working before reading the objective
 
   const goalParts: string[] = [
-    `## Workspace — READ THIS FIRST\nYou are working in: ${envelope.workspaceRoot}\nAll file paths are relative to this directory. Use relative paths (e.g. "tmp/index.html") with read_file/write_file.\nWrite scope: ${envelope.allowedWriteRoots.join(", ") || envelope.workspaceRoot}`,
+    `## Workspace — READ THIS FIRST\nYou are working in: ${normalizedEnvelope.workspaceRoot}\nAll file paths are relative to this directory. Use relative paths (e.g. "tmp/index.html") with read_file/write_file.\nWrite scope: ${normalizedEnvelope.allowedWriteRoots.join(", ") || normalizedEnvelope.workspaceRoot}`,
   ]
 
-  if (envelope.requiredSourceArtifacts.length > 0) {
+  if (normalizedEnvelope.requiredSourceArtifacts.length > 0) {
     goalParts.push(
-      `## Source Files — READ THESE FIRST\nThese files should already exist (created by prior steps). Read them before doing anything:\n${envelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
+      `## Source Files — READ THESE FIRST\nThese files should already exist (created by prior steps). Read them before doing anything:\n${normalizedEnvelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
     )
   }
 
@@ -543,9 +701,9 @@ export async function spawnChildForPlan(
     )
   }
 
-  if (envelope.targetArtifacts.length > 0) {
+  if (normalizedEnvelope.targetArtifacts.length > 0) {
     goalParts.push(
-      `## Target Files\nYou are responsible for creating/modifying:\n${envelope.targetArtifacts.map(a => `- ${a}`).join("\n")}`,
+      `## Target Files\nYou are responsible for creating/modifying:\n${normalizedEnvelope.targetArtifacts.map(a => `- ${a}`).join("\n")}`,
     )
   }
 
@@ -554,14 +712,14 @@ export async function spawnChildForPlan(
   // Filter tools based on the envelope's allowedTools / requiredToolCapabilities
   let childTools: Tool[]
   const allowedToolNames = new Set([
-    ...envelope.allowedTools,
+    ...normalizedEnvelope.allowedTools,
     ...step.requiredToolCapabilities,
   ])
 
   // Children that write files ALWAYS need read_file + verification tools,
   // even if the LLM plan forgot to list them. Without these the child
   // cannot self-review and gets stuck in write-only loops.
-  if (allowedToolNames.size > 0 && envelope.effectClass !== "readonly") {
+  if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass !== "readonly") {
     for (const essential of ["read_file", "replace_in_file", "list_directory", "browser_check", "run_command"]) {
       allowedToolNames.add(essential)
     }
@@ -586,6 +744,8 @@ export async function spawnChildForPlan(
     ]
   }
 
+  childTools = wrapPlannerChildToolsForWriteScope(childTools, normalizedEnvelope)
+
   // Parse max iterations from budget hint
   const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
   // agenc-core pattern: contract-shaped budget floor.
@@ -595,11 +755,11 @@ export async function spawnChildForPlan(
   //   + source artifacts (each needs a read)
   //   + verificationMode pass if applicable
   const contractFloor = Math.min(12, Math.max(1,
-    envelope.targetArtifacts.length +
+    normalizedEnvelope.targetArtifacts.length +
     step.acceptanceCriteria.length +
-    envelope.requiredSourceArtifacts.length +
-    (envelope.verificationMode !== "none" ? 1 : 0) +
-    (envelope.effectClass !== "readonly" && envelope.targetArtifacts.length > 0 ? 1 : 0)
+    normalizedEnvelope.requiredSourceArtifacts.length +
+    (normalizedEnvelope.verificationMode !== "none" ? 1 : 0) +
+    (normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0 ? 1 : 0)
   ))
   const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
   // Use whichever is larger: the parsed budget hint or the contract floor, capped at MAX_CHILD_ITERATIONS
@@ -612,10 +772,10 @@ export async function spawnChildForPlan(
     depth: ctx.depth + 1,
     tools: childTools.map(t => t.name),
     envelope: {
-      workspaceRoot: envelope.workspaceRoot,
-      effectClass: envelope.effectClass,
-      verificationMode: envelope.verificationMode,
-      targetArtifacts: envelope.targetArtifacts,
+        workspaceRoot: normalizedEnvelope.workspaceRoot,
+        effectClass: normalizedEnvelope.effectClass,
+        verificationMode: normalizedEnvelope.verificationMode,
+        targetArtifacts: normalizedEnvelope.targetArtifacts,
     },
   })
 
@@ -631,8 +791,8 @@ export async function spawnChildForPlan(
   // ── Build completion validator for code quality gate ──
   // When the child tries to exit, read ALL target artifacts and run stub
   // detection. If stubs remain, force the child to keep working.
-  const targetArtifacts = envelope.targetArtifacts
-  const wsRoot = envelope.workspaceRoot
+  const targetArtifacts = normalizedEnvelope.targetArtifacts
+  const wsRoot = normalizedEnvelope.workspaceRoot
   const completionValidator = targetArtifacts.length > 0 ? async (): Promise<string | null> => {
     const codeArtifacts = targetArtifacts.filter(
       a => /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs)$/i.test(a),

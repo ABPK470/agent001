@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
 import { isValidArtifactPath } from "../src/planner/generate.js"
-import { synthesizeAnswer } from "../src/planner/index.js"
+import { inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
@@ -154,6 +154,23 @@ describe("Planner decision: assessPlannerDecision", () => {
     const decision = assessPlannerDecision("Now build a game application with these components", history)
     expect(decision.score).toBeGreaterThanOrEqual(5)
     expect(decision.reason).toContain("prior_tool_activity")
+  })
+})
+
+describe("Planner output-root inference", () => {
+  it("forces tmp root when goal declares temporary working directory named tmp", () => {
+    const goal = "Create a temporary working directory named tmp where all project files will be stored and organized."
+    expect(inferForcedOutputDirectoryFromGoal(goal)).toBe("tmp")
+  })
+
+  it("extracts explicit output root from all-project-files constraint", () => {
+    const goal = "Build the app and keep all project files inside sandbox/workdir for this task."
+    expect(inferForcedOutputDirectoryFromGoal(goal)).toBe("sandbox/workdir")
+  })
+
+  it("returns null when goal does not specify a strict output directory", () => {
+    const goal = "Implement a dashboard with tests and API integration."
+    expect(inferForcedOutputDirectoryFromGoal(goal)).toBeNull()
   })
 })
 
@@ -751,6 +768,77 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     const step = assessments.find(a => a.stepName === "ui-step")
     expect(step).toBeDefined()
     expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("CRITERIA PROOF MISSING"))).toBe(true)
+    expect(step?.outcome).toBe("fail")
+    expect(step?.retryable).toBe(false)
+  })
+
+  it("fails when shared-state contract consumer does not declare owner artifact as required source", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("rules-step", {
+          objective: "Implement rules against shared state",
+          acceptanceCriteria: ["Legal moves are validated against shared state"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/rules.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            sharedStateContract: {
+              contractId: "shared-state:tmp/state.js",
+              ownerStepName: "state-step",
+              ownerArtifactPath: "tmp/state.js",
+              schema: "single shared state object",
+              mutationPolicy: "owner-only",
+            },
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["rules-step", { name: "rules-step", status: "completed", output: "updated tmp/rules.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          if (String(args.path).endsWith("rules.js")) {
+            return "function validateMove(state, move) { return !!state && !!move }"
+          }
+          return ""
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "rules-step")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("shared-state contract"))).toBe(true)
+    expect(step?.outcome).toBe("fail")
+    expect(step?.retryable).toBe(false)
   })
 })
 

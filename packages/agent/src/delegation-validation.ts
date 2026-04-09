@@ -50,6 +50,8 @@ export const DELEGATION_OUTPUT_VALIDATION_CODES = [
   "all_tools_failed",
   /** Browser evidence is low-signal (only about:blank or tab listing). */
   "low_signal_browser_evidence",
+  /** Child asks for continuation or describes output as partial/foundation. */
+  "unresolved_handoff_output",
 ] as const
 
 export type DelegationOutputValidationCode =
@@ -170,6 +172,10 @@ const FILE_ARTIFACT_RE =
 /** Blocked/incomplete phase language. */
 const BLOCKED_PHASE_RE =
   /\b(?:blocked|stuck|cannot proceed|unable to continue|waiting for|depends on|prerequisite|not possible|impossible to|can't access|no access)\b/i
+
+/** Output text that indicates the child is handing off unfinished implementation. */
+const UNRESOLVED_HANDOFF_RE =
+  /\b(?:would you like to (?:proceed|continue)|should i (?:proceed|continue)|let me know if you (?:want|would like) me to (?:continue|proceed|implement)|partial(?:ly)? logic|partial(?:ly)? implementation|foundational partial implementation|this (?:project|implementation) is (?:a )?foundation|further refinements can be made|missing game mechanics)\b/i
 
 /** Narrative file claims without tool evidence. */
 const NARRATIVE_FILE_CLAIM_RE =
@@ -394,14 +400,15 @@ export function specRequiresBrowserEvidence(spec: DelegationContractSpec): boole
  * Check order (priority):
  *   1. Empty output
  *   2. Blocked/incomplete phase
- *   3. Successful tool evidence
- *   4. File mutation evidence
- *   5. Workspace inspection evidence
- *   6. Required source artifact evidence
- *   7. File artifact evidence in output
- *   8. Browser evidence quality
- *   9. Contradictory completion claim
- *  10. Acceptance evidence
+ *   3. Unresolved handoff/partial output
+ *   4. Successful tool evidence
+ *   5. File mutation evidence
+ *   6. Workspace inspection evidence
+ *   7. Required source artifact evidence
+ *   8. File artifact evidence in output
+ *   9. Browser evidence quality
+ *  10. Contradictory completion claim
+ *  11. Acceptance evidence
  */
 export function validateDelegatedOutputContract(params: {
   spec: DelegationContractSpec
@@ -435,7 +442,21 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 3. Successful tool evidence ──
+  // ── 3. Unresolved handoff / partial output ──
+  // Implementation tasks must finish autonomously. If the child asks whether to
+  // continue or labels output as partial/foundation, treat it as incomplete.
+  const intent = classifyTaskIntent(spec)
+  const isImplementationLike = intent === "implementation" || intent === "mixed"
+  if (isImplementationLike && specRequiresFileMutationEvidence(spec) && UNRESOLVED_HANDOFF_RE.test(trimmed)) {
+    const handoffMatch = trimmed.match(UNRESOLVED_HANDOFF_RE)
+    return {
+      ok: false,
+      code: "unresolved_handoff_output",
+      message: `Output contains unresolved handoff/partial language: "${handoffMatch?.[0]}"`,
+    }
+  }
+
+  // ── 4. Successful tool evidence ──
   if (specRequiresSuccessfulToolEvidence(spec) && toolCalls.length > 0) {
     const successfulCalls = toolCalls.filter(tc => !tc.isError)
     if (successfulCalls.length === 0) {
@@ -458,7 +479,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 4. File mutation evidence ──
+  // ── 5. File mutation evidence ──
   if (specRequiresFileMutationEvidence(spec)) {
     const hasMutation = toolCalls.some(tc => isFileMutationToolCall(tc) && !tc.isError)
     if (!hasMutation && toolCalls.length > 0) {
@@ -478,7 +499,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 5. Workspace inspection evidence ──
+  // ── 6. Workspace inspection evidence ──
   if (specRequiresWorkspaceInspection(spec) && toolCalls.length > 0) {
     const hasInspection = toolCalls.some(tc => isWorkspaceInspectionToolCall(tc) && !tc.isError)
     if (!hasInspection) {
@@ -490,7 +511,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 6. Required source artifact evidence ──
+  // ── 7. Required source artifact evidence ──
   if (spec.requiredSourceArtifacts.length > 0 && toolCalls.length > 0) {
     const readPaths = new Set<string>()
     for (const tc of toolCalls) {
@@ -515,7 +536,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 7. File artifact evidence in output ──
+  // ── 8. File artifact evidence in output ──
   if (specRequiresFileMutationEvidence(spec) && toolCalls.some(tc => isFileMutationToolCall(tc) && !tc.isError)) {
     // Child used file mutation tools — verify it reports what it created
     if (!FILE_ARTIFACT_RE.test(trimmed)) {
@@ -527,7 +548,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 8. Browser evidence quality ──
+  // ── 9. Browser evidence quality ──
   if (specRequiresBrowserEvidence(spec) && toolCalls.length > 0) {
     const browserCalls = toolCalls.filter(tc =>
       MEANINGFUL_BROWSER_TOOLS.has(tc.name) || LOW_SIGNAL_BROWSER_TOOLS.has(tc.name),
@@ -544,7 +565,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 9. Contradictory completion claim ──
+  // ── 10. Contradictory completion claim ──
   if (COMPLETION_CLAIM_RE.test(outputLower)) {
     // Check unambiguous markers first
     if (UNRESOLVED_WORK_RE.test(trimmed)) {
@@ -567,7 +588,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 10. Acceptance criteria evidence ──
+  // ── 11. Acceptance criteria evidence ──
   if (spec.acceptanceCriteria.length > 0) {
     const tokens = extractAcceptanceTokens(spec.acceptanceCriteria)
     if (tokens.length > 0) {
@@ -633,6 +654,9 @@ export function getCorrectionGuidance(code: DelegationOutputValidationCode): str
 
     case "low_signal_browser_evidence":
       return "Your browser testing was insufficient — you only checked about:blank or listed tabs. Use browser_check with an actual file path to verify your HTML/JS works."
+
+    case "unresolved_handoff_output":
+      return "Your previous output ended in a handoff/partial state. Do NOT ask whether to continue. Complete the implementation end-to-end, verify behavior, and return finished artifacts with evidence."
   }
 }
 

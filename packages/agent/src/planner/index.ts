@@ -104,7 +104,39 @@ function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]):
   }
 }
 
-function normalizePlanOutputDirectory(plan: Plan): void {
+function normalizeOutputDirToken(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^['"`]+|['"`]+$/g, "")
+    .replace(/^\.\//, "")
+    .replace(/^\//, "")
+    .replace(/\/+$/, "")
+}
+
+export function inferForcedOutputDirectoryFromGoal(goal: string): string | null {
+  const namedMatch = goal.match(/\btemporary\s+working\s+directory\s+named\s+([a-zA-Z0-9._\/-]+)/i)
+  if (namedMatch?.[1]) {
+    const dir = normalizeOutputDirToken(namedMatch[1])
+    if (dir && !dir.includes("..")) return dir
+  }
+
+  const constrainedPathMatch = goal.match(
+    /\ball\s+project\s+files\b[\s\S]{0,120}?\b(?:in|under|inside)\s+([a-zA-Z0-9._\/-]+)/i,
+  )
+  if (constrainedPathMatch?.[1]) {
+    const dir = normalizeOutputDirToken(constrainedPathMatch[1])
+    if (dir && !dir.includes("..")) return dir
+  }
+
+  // Strong fallback for common phrasing in goal prompts.
+  if (/\ball\s+project\s+files\b[\s\S]{0,120}?\btmp\b/i.test(goal)) {
+    return "tmp"
+  }
+
+  return null
+}
+
+function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: string): void {
   const subagentSteps = plan.steps.filter(
     (s): s is SubagentTaskStep => s.stepType === "subagent_task",
   )
@@ -118,7 +150,9 @@ function normalizePlanOutputDirectory(plan: Plan): void {
     }
   }
 
-  const preferredDir = mostFrequent(dirs) ?? "tmp"
+  const preferredDir = normalizeOutputDirToken(preferredDirOverride ?? "") || (mostFrequent(dirs) ?? "tmp")
+  const knownTopDirs = new Set(dirs.map(d => d.split("/")[0]).filter(Boolean))
+  const targetByBasename = new Map<string, string>()
 
   for (const step of subagentSteps) {
     const current = step.executionContext.targetArtifacts
@@ -130,6 +164,42 @@ function normalizePlanOutputDirectory(plan: Plan): void {
       return `${preferredDir}/${parts.slice(1).join("/")}`
     })
     ;(step.executionContext as unknown as { targetArtifacts: readonly string[] }).targetArtifacts = normalized
+
+    // Align write roots with the forced/normalized output directory so children
+    // cannot create sibling trees like scripts/ while targets are in tmp/.
+    const wsRoot = step.executionContext.workspaceRoot.replace(/\/+$/, "")
+    const scopedWriteRoot = wsRoot && (wsRoot.startsWith("/") || /^[A-Za-z]:[\\/]/.test(wsRoot))
+      ? `${wsRoot}/${preferredDir}`
+      : preferredDir
+    ;(step.executionContext as unknown as { allowedWriteRoots: readonly string[] }).allowedWriteRoots = [scopedWriteRoot]
+
+    for (const target of normalized) {
+      const base = target.split("/").pop()
+      if (!base) continue
+      if (!targetByBasename.has(base)) {
+        targetByBasename.set(base, target)
+      }
+    }
+  }
+
+  for (const step of subagentSteps) {
+    const currentSources = step.executionContext.requiredSourceArtifacts
+    const normalizedSources = currentSources.map((artifact) => {
+      const source = artifact.replace(/^\.\//, "")
+      if (source.startsWith(`${preferredDir}/`)) return source
+
+      const slash = source.indexOf("/")
+      if (slash > 0) {
+        const top = source.slice(0, slash)
+        if (knownTopDirs.has(top)) {
+          return `${preferredDir}/${source.slice(slash + 1)}`
+        }
+      }
+
+      const base = source.split("/").pop() ?? source
+      return targetByBasename.get(base) ?? source
+    })
+    ;(step.executionContext as unknown as { requiredSourceArtifacts: readonly string[] }).requiredSourceArtifacts = [...new Set(normalizedSources)]
   }
 }
 
@@ -151,6 +221,50 @@ function injectSharedDataContract(plan: Plan): void {
       ...owner.acceptanceCriteria,
       "Defines and documents shared data contract: board[row][col] with piece shape { type, color, hasMoved? }.",
     ]
+  }
+}
+
+function injectSharedStateOwnershipContract(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  const jsWriters = subagentSteps.filter(s => s.executionContext.targetArtifacts.some(a => /\.js$/i.test(a)))
+  if (jsWriters.length < 2) return
+
+  const owner = [...jsWriters].sort((a, b) => {
+    const aCount = a.executionContext.targetArtifacts.filter(x => /\.js$/i.test(x)).length
+    const bCount = b.executionContext.targetArtifacts.filter(x => /\.js$/i.test(x)).length
+    return bCount - aCount
+  })[0]
+  if (!owner) return
+
+  const ownerArtifact = owner.executionContext.targetArtifacts.find(a => /\.js$/i.test(a))
+  if (!ownerArtifact) return
+
+  const contract = {
+    contractId: `shared-state:${ownerArtifact}`,
+    ownerStepName: owner.name,
+    ownerArtifactPath: ownerArtifact,
+    schema: "Single shared state object documented by owner file; consumers must read and use that schema without redefining it.",
+    mutationPolicy: "owner-only" as const,
+  }
+
+  for (const step of jsWriters) {
+    ;(step.executionContext as unknown as { sharedStateContract?: typeof contract }).sharedStateContract = contract
+
+    if (step.name !== owner.name) {
+      const required = new Set(step.executionContext.requiredSourceArtifacts)
+      required.add(ownerArtifact)
+      ;(step.executionContext as unknown as { requiredSourceArtifacts: readonly string[] }).requiredSourceArtifacts = [...required]
+
+      ;(step as { objective: string }).objective =
+        `${step.objective}\n\nShared state contract (${contract.contractId}): ` +
+        `READ and consume state from ${ownerArtifact}. Do NOT mutate ${ownerArtifact} or redefine the schema in this step.`
+    } else {
+      ;(step as { objective: string }).objective =
+        `${step.objective}\n\nShared state contract (${contract.contractId}): ` +
+        `You are the sole state owner. Define and document the canonical schema in ${ownerArtifact}.`
+    }
   }
 }
 
@@ -276,6 +390,13 @@ export async function executePlannerPath(
   }
 
   const plan = genResult.plan
+
+  const forcedOutputDir = inferForcedOutputDirectoryFromGoal(goal)
+  if (forcedOutputDir) {
+    normalizePlanOutputDirectory(plan, forcedOutputDir)
+    ctx.onTrace?.({ kind: "planner-output-root-forced", outputRoot: forcedOutputDir })
+  }
+
   ctx.onTrace?.({
     kind: "planner-plan-generated",
     reason: plan.reason,
@@ -302,6 +423,11 @@ export async function executePlannerPath(
     }
   }
 
+  // Always canonicalize output directory usage before execution.
+  // This prevents late path mismatch failures caused by mixed bare-path
+  // vs subdirectory artifacts across steps.
+  normalizePlanOutputDirectory(plan, forcedOutputDir ?? undefined)
+
   // Inject warnings into step objectives as guidance (plan still runs)
   if (warnings.length > 0) {
     applyWarningAutoFixes(plan, warnings)
@@ -312,6 +438,10 @@ export async function executePlannerPath(
     })
     injectWarningsIntoSteps(plan, warnings)
   }
+
+  // Global hardening: for multi-file JS plans, enforce one explicit shared
+  // state owner and propagate a typed contract to all writer steps.
+  injectSharedStateOwnershipContract(plan)
 
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks
   // Build step profiles for the delegation decision system
@@ -385,6 +515,8 @@ export async function executePlannerPath(
   // Track stub-issue count per step across attempts — if count doesn't decrease,
   // the child is stuck and further retries won't help
   const priorStubCounts = new Map<string, number>()
+  // Repeated fatal failures should bypass additional retries and force replan.
+  let forceReplanForFatalPattern = false
 
   // Pipeline budget tracking (planner/circuit-breaker) — monitor progress
   // across retry attempts and detect when further retries add no value
@@ -517,6 +649,7 @@ export async function executePlannerPath(
     // Detect repeated identical failures — if a step produces the same issues
     // as the previous attempt, further retries won't help (LLM is stuck).
     let allStepsRepeatedFailure = true
+    let shouldAbortRetriesForFatalPattern = false
 
     // ── Stub-count regression tracking ──
     // Track the number of stub-related issues per step across retries.
@@ -535,6 +668,9 @@ export async function executePlannerPath(
         STUB_KEYWORDS.some(kw => i.toLowerCase().includes(kw)),
       ).length
       const prevStubCount = priorStubCounts.get(stepAssessment.stepName)
+      const hasFatalPattern = stepAssessment.issues.some(i =>
+        /function loss|\[contract:contradictory_completion_claim\]|\[contract:unresolved_handoff_output\]/i.test(i),
+      )
 
       if (stepAssessment.outcome === "pass" && stepResult) {
         priorResults.set(stepAssessment.stepName, stepResult)
@@ -574,6 +710,17 @@ export async function executePlannerPath(
           retryFeedback.set(stepAssessment.stepName, enrichedIssues)
           allStepsRepeatedFailure = false
         }
+
+        if (hasFatalPattern && isExactRepeat) {
+          shouldAbortRetriesForFatalPattern = true
+          forceReplanForFatalPattern = true
+          ctx.onTrace?.({
+            kind: "planner-retry-abort",
+            stepName: stepAssessment.stepName,
+            reason: "Repeated fatal pattern detected (FUNCTION LOSS / contradictory completion claim) — aborting retries and forcing replan",
+          })
+        }
+
         priorStepIssues.set(stepAssessment.stepName, issueKey)
         priorStubCounts.set(stepAssessment.stepName, currentStubCount)
       } else {
@@ -590,6 +737,10 @@ export async function executePlannerPath(
       break
     }
 
+    if (shouldAbortRetriesForFatalPattern) {
+      break
+    }
+
     ctx.onTrace?.({
       kind: "planner-retry",
       attempt: attempt + 1,
@@ -603,6 +754,14 @@ export async function executePlannerPath(
   }
 
   // Step 6: Synthesize final answer
+  if (forceReplanForFatalPattern) {
+    ctx.onTrace?.({
+      kind: "planner-escalation",
+      action: "escalate",
+      reason: "Forced replan after repeated fatal FUNCTION LOSS / contradictory completion pattern",
+    })
+  }
+
   const answer = synthesizeAnswer(plan, pipelineResult!, verifierDecision!)
 
   // If verification didn't pass after all retries, return handled: false so

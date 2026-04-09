@@ -528,10 +528,21 @@ export async function runDeterministicProbes(
 
           if (missingCriteria.length > 0) {
             issues.push(
-              `Acceptance criteria with no code evidence (${missingCriteria.length}/${sa.acceptanceCriteria.length}): ` +
+              `CRITERIA PROOF MISSING: acceptance criteria with no code evidence (${missingCriteria.length}/${sa.acceptanceCriteria.length}): ` +
               missingCriteria.slice(0, 5).join("; "),
             )
           }
+        }
+      }
+
+      // Runtime-facing criteria require runtime proof, not only static code checks.
+      const runtimeCriterionRe = /\b(?:click|submit|drag|drop|keyboard|mouse|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end|api|request|response|endpoint|fetch|http|query|database|sql|persist|sync|auth|login)\b/i
+      if (!executedModalities.has("runtime")) {
+        const runtimeCriteria = sa.acceptanceCriteria.filter(c => runtimeCriterionRe.test(c))
+        if (runtimeCriteria.length > 0) {
+          issues.push(
+            `CRITERIA PROOF MISSING: runtime criteria were declared but no runtime probe executed (${runtimeCriteria.length}/${sa.acceptanceCriteria.length})`,
+          )
         }
       }
 
@@ -566,6 +577,20 @@ export async function runDeterministicProbes(
         }
       }
 
+      // Shared-state contract enforcement: one owner mutates; consumers must read owner artifact.
+      const shared = sa.executionContext.sharedStateContract
+      if (shared) {
+        if (sa.name !== shared.ownerStepName) {
+          const required = new Set(sa.executionContext.requiredSourceArtifacts.map(a => a.replace(/^\.\//, "")))
+          const ownerArtifact = shared.ownerArtifactPath.replace(/^\.\//, "")
+          if (!required.has(ownerArtifact)) {
+            issues.push(
+              `CRITERIA PROOF MISSING: shared-state contract requires consuming owner artifact "${shared.ownerArtifactPath}", but it is missing from requiredSourceArtifacts`,
+            )
+          }
+        }
+      }
+
       // ── Confidence from issue count (agenc-core formula) ──
       // Structural issues are blockers (stubs, corruption, syntax errors, missing files).
       // Non-structural issues (evidence density, line count, hallucination risk) are
@@ -577,7 +602,7 @@ export async function runDeterministicProbes(
         "deferred-work", "explicit failure", "all tool calls failed",
         "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
         "degeneration", "no code evidence", "PATH MISMATCH", "SCOPE VIOLATION",
-        "VERIFICATION MODALITY GAP",
+        "VERIFICATION MODALITY GAP", "CRITERIA PROOF MISSING",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -597,10 +622,13 @@ export async function runDeterministicProbes(
         effectiveIssueCount = structuralIssues.length
       }
 
+      const hasCriteriaProofGap = issues.some(i => i.includes("CRITERIA PROOF MISSING"))
       const confidence = Math.max(0, 1 - Math.min(0.9, effectiveIssueCount * 0.18))
-      const outcome: VerifierOutcome = effectiveIssueCount > 0
-        ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" : "retry")
-        : "pass"
+      const outcome: VerifierOutcome = hasCriteriaProofGap
+        ? "fail"
+        : effectiveIssueCount > 0
+          ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" : "retry")
+          : "pass"
 
       assessments.push({
         stepName: step.name,
@@ -609,7 +637,7 @@ export async function runDeterministicProbes(
         issues: effectiveIssueCount < issues.length
           ? [...structuralIssues, ...nonStructuralIssues.map(i => `[non-blocking] ${i}`)]
           : issues,
-        retryable: true,
+        retryable: !hasCriteriaProofGap,
       })
     } else {
       // Deterministic tool steps: if they completed, they pass

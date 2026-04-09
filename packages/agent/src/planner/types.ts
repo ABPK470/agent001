@@ -56,6 +56,18 @@ export interface ArtifactRelation {
 }
 
 /**
+ * Shared state contract for multi-file implementations.
+ * Exactly one owner step controls state mutation; other steps consume it.
+ */
+export interface SharedStateContract {
+  readonly contractId: string
+  readonly ownerStepName: string
+  readonly ownerArtifactPath: string
+  readonly schema: string
+  readonly mutationPolicy: "owner-only"
+}
+
+/**
  * The execution envelope: scoped permissions and contracts for a child agent.
  * This is what makes agenc-core's children produce quality work.
  */
@@ -80,6 +92,8 @@ export interface ExecutionEnvelope {
   readonly artifactRelations: readonly ArtifactRelation[]
   /** Role of this step in the workflow (writer, reviewer, validator, grounding). */
   readonly role?: StepRole
+  /** Optional shared-state contract for multi-file workflows. */
+  readonly sharedStateContract?: SharedStateContract
 }
 
 // ============================================================================
