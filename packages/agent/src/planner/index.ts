@@ -764,17 +764,17 @@ export async function executePlannerPath(
 
   const answer = synthesizeAnswer(plan, pipelineResult!, verifierDecision!)
 
-  // If verification didn't pass after all retries, return handled: false so
-  // the parent agent can fall through to the direct tool loop and attempt to
-  // fix the remaining issues itself — with full knowledge of what's wrong.
+  // Contract-governed-first behavior: if verification didn't pass after all
+  // retries, DO NOT fall through to the unstructured direct tool loop.
+  // Return a structured failure response and keep remediation in planner mode.
   if (verifierDecision!.overall !== "pass") {
     return {
-      handled: false,
+      handled: true,
       answer,
       plan,
       pipelineResult,
       verifierDecision,
-      skipReason: "Verification failed after retries — falling through to self-repair",
+      skipReason: "Verification failed after retries — structured execution halted",
     }
   }
 

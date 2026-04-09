@@ -52,6 +52,10 @@ export const DELEGATION_OUTPUT_VALIDATION_CODES = [
   "low_signal_browser_evidence",
   /** Child asks for continuation or describes output as partial/foundation. */
   "unresolved_handoff_output",
+  /** Contract declares target artifacts but child touched none of them. */
+  "missing_target_artifact_coverage",
+  /** Written content references local artifacts with no existence evidence. */
+  "unresolved_artifact_references",
 ] as const
 
 export type DelegationOutputValidationCode =
@@ -169,6 +173,13 @@ const SHELL_SCAFFOLD_RE =
 const FILE_ARTIFACT_RE =
   /(?:^|[\s`'"])(?:\/[^\s`'"]+|\.{1,2}\/[^\s`'"]+|[a-z0-9_-]+(?:\/[a-z0-9_.-]+)+|[a-z0-9_.-]+\.[a-z0-9]{1,10})(?=$|[\s`'"])/i
 
+/** Basic local file reference patterns found inside source content. */
+const LOCAL_ARTIFACT_REFERENCE_RE =
+  /["'`](\.{1,2}\/[^"'`\s]+|[a-z0-9_.-]+\/[a-z0-9_./-]+|[a-z0-9_.-]+\.[a-z0-9]{1,10})["'`]/gi
+
+/** Ignore URL-like and anchor references that are not workspace artifacts. */
+const NON_WORKSPACE_REF_RE = /^(?:https?:|data:|mailto:|tel:|#)/i
+
 /** Blocked/incomplete phase language. */
 const BLOCKED_PHASE_RE =
   /\b(?:blocked|stuck|cannot proceed|unable to continue|waiting for|depends on|prerequisite|not possible|impossible to|can't access|no access)\b/i
@@ -198,6 +209,41 @@ const MEANINGFUL_BROWSER_TOOLS = new Set([
 const LOW_SIGNAL_BROWSER_TOOLS = new Set([
   "browser_tab_list", "browser_console_messages",
 ])
+
+/**
+ * Normalize artifact-like paths for resilient comparisons.
+ */
+function normalizeArtifactPath(value: string): string {
+  const cleaned = value.trim().replace(/^['"`]|['"`]$/g, "")
+  return cleaned.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+/g, "/").toLowerCase()
+}
+
+/**
+ * Extract a best-effort path argument from a tool call.
+ */
+function getToolCallPathArg(record: ToolCallRecord): string | null {
+  const candidateKeys = ["path", "file", "filePath", "target", "dest", "destination"] as const
+  for (const key of candidateKeys) {
+    const raw = record.args[key]
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      return raw
+    }
+  }
+  return null
+}
+
+/**
+ * Extract local artifact references from source content.
+ */
+function extractLocalArtifactReferences(content: string): string[] {
+  const refs = new Set<string>()
+  for (const match of content.matchAll(LOCAL_ARTIFACT_REFERENCE_RE)) {
+    const raw = match[1]?.trim()
+    if (!raw || NON_WORKSPACE_REF_RE.test(raw)) continue
+    refs.add(raw)
+  }
+  return [...refs]
+}
 
 // ============================================================================
 // Task intent classification (agenc-core pattern)
@@ -548,6 +594,72 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
+  // ── 8b. Target artifact coverage + reference integrity ──
+  if (isImplementationLike && spec.targetArtifacts.length > 0) {
+    const successfulMutations = toolCalls.filter(tc => isFileMutationToolCall(tc) && !tc.isError)
+    const mutatedPaths = new Set<string>()
+    const unresolvedReferences = new Set<string>()
+    let hasUnknownMutationPath = false
+
+    for (const tc of successfulMutations) {
+      const pathArg = getToolCallPathArg(tc)
+      if (pathArg) {
+        mutatedPaths.add(normalizeArtifactPath(pathArg))
+      } else {
+        hasUnknownMutationPath = true
+      }
+    }
+
+    const normalizedTargets = spec.targetArtifacts.map(normalizeArtifactPath)
+    const touchedTargets = normalizedTargets.filter(target => {
+      const targetBase = target.split("/").pop() ?? target
+      return [...mutatedPaths].some(mp => mp === target || mp.endsWith(`/${targetBase}`))
+    })
+
+    if (successfulMutations.length > 0 && touchedTargets.length === 0 && !hasUnknownMutationPath) {
+      return {
+        ok: false,
+        code: "missing_target_artifact_coverage",
+        message: `Mutation tools ran, but none of the declared target artifacts were touched: ${spec.targetArtifacts.slice(0, 3).join(", ")}`,
+      }
+    }
+
+    const knownArtifacts = new Set<string>([
+      ...normalizedTargets,
+      ...spec.requiredSourceArtifacts.map(normalizeArtifactPath),
+      ...[...mutatedPaths],
+    ])
+
+    for (const tc of successfulMutations) {
+      const pathArg = getToolCallPathArg(tc)
+      const content = typeof tc.args.content === "string" ? tc.args.content : ""
+      if (!pathArg || content.length === 0) continue
+
+      const baseDir = normalizeArtifactPath(pathArg).split("/").slice(0, -1).join("/")
+      const refs = extractLocalArtifactReferences(content)
+      for (const ref of refs) {
+        const normalizedRef = normalizeArtifactPath(ref)
+        const resolved = normalizedRef.startsWith("../") || normalizedRef.startsWith("./")
+          ? normalizeArtifactPath(`${baseDir}/${normalizedRef}`)
+          : normalizedRef
+        const refBase = resolved.split("/").pop() ?? resolved
+        const isKnown = [...knownArtifacts].some(k => k === resolved || k.endsWith(`/${refBase}`))
+        if (!isKnown) {
+          unresolvedReferences.add(ref)
+        }
+      }
+    }
+
+    if (unresolvedReferences.size > 0) {
+      const sample = [...unresolvedReferences].slice(0, 4).join(", ")
+      return {
+        ok: false,
+        code: "unresolved_artifact_references",
+        message: `Created/edited content references local artifacts without evidence they exist: ${sample}`,
+      }
+    }
+  }
+
   // ── 9. Browser evidence quality ──
   if (specRequiresBrowserEvidence(spec) && toolCalls.length > 0) {
     const browserCalls = toolCalls.filter(tc =>
@@ -657,6 +769,12 @@ export function getCorrectionGuidance(code: DelegationOutputValidationCode): str
 
     case "unresolved_handoff_output":
       return "Your previous output ended in a handoff/partial state. Do NOT ask whether to continue. Complete the implementation end-to-end, verify behavior, and return finished artifacts with evidence."
+
+    case "missing_target_artifact_coverage":
+      return "Your previous attempt modified files, but not the declared target artifacts. You MUST create or update the exact target artifacts in your contract and report them in your summary."
+
+    case "unresolved_artifact_references":
+      return "Your previous output wrote code that references local files/assets without evidence they exist. Create those referenced artifacts (or update references) before claiming completion."
   }
 }
 

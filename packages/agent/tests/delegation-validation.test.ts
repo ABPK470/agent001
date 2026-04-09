@@ -275,6 +275,80 @@ describe("validateDelegatedOutputContract", () => {
     })
   })
 
+  describe("target artifact contract integrity", () => {
+    it("fails when mutations do not touch declared target artifacts", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/game.js"],
+        }),
+        output: "Created implementation files and verified behavior. tmp/chess/index.html tmp/chess/game.js",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/notes.md", content: "implementation notes" },
+            result: "Success",
+          }),
+        ],
+      })
+
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("missing_target_artifact_coverage")
+    })
+
+    it("fails when written content references unresolved local artifacts", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          targetArtifacts: ["tmp/chess/index.html"],
+        }),
+        output: "Created tmp/chess/index.html with full app shell.",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: {
+              path: "tmp/chess/index.html",
+              content: "<script src=\"board.js\"></script>\n<script src=\"pieces.js\"></script>",
+            },
+            result: "Success",
+          }),
+        ],
+      })
+
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("unresolved_artifact_references")
+    })
+
+    it("passes when local references are covered by target artifacts", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/board.js", "tmp/chess/pieces.js"],
+        }),
+        output: "Created tmp/chess/index.html tmp/chess/board.js tmp/chess/pieces.js and wired them together.",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: {
+              path: "tmp/chess/index.html",
+              content: "<script src=\"board.js\"></script>\n<script src=\"pieces.js\"></script>",
+            },
+            result: "Success",
+          }),
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/board.js", content: "export const board = []" },
+            result: "Success",
+          }),
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/pieces.js", content: "export const pieces = {}" },
+            result: "Success",
+          }),
+        ],
+      })
+
+      expect(result.ok).toBe(true)
+    })
+  })
+
   describe("browser evidence quality", () => {
     it("detects low-signal browser evidence", () => {
       const result = validateDelegatedOutputContract({

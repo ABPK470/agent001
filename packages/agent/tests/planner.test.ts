@@ -288,8 +288,8 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(true) // warnings don't block
-    expect(result.diagnostics.some(d => d.code === "multiple_write_owners" && d.severity === "warning")).toBe(true)
+    expect(result.valid).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "multiple_write_owners" && d.severity === "error")).toBe(true)
   })
 
   it("detects too many steps (>15)", () => {
@@ -335,6 +335,46 @@ describe("Plan validation: validatePlan", () => {
 
     const result = validatePlan(plan, [])
     expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(true)
+    expect(result.valid).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory" && d.severity === "error")).toBe(true)
+  })
+
+  it("treats missing verification coverage as blocking error", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("writer-a", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/a.txt"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("writer-b", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/b.txt"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.valid).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "no_verification_steps" && d.severity === "error")).toBe(true)
   })
 
   it("warns when HTML step doesn't mention script loading for JS artifacts", () => {

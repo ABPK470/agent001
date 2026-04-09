@@ -274,7 +274,7 @@ function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagnostic[]
     if (owners.length > 1) {
       diagnostics.push({
         category: "ownership",
-        severity: "warning",
+        severity: "error",
         code: "multiple_write_owners",
         message: `Artifact "${artifact}" has ${owners.length} write owners: [${owners.join(", ")}]. Only ONE step may be write_owner for a given artifact.`,
       })
@@ -304,7 +304,7 @@ function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnosti
   if (hasWriters && !hasVerification && subagentSteps.length > 1) {
     diagnostics.push({
       category: "verification",
-      severity: "warning",
+      severity: "error",
       code: "no_verification_steps",
       message: "Plan has write steps but no verification step. Add at least one step with verificationMode != 'none', or include a deterministic verification step.",
     })
@@ -359,7 +359,7 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
       const dirs = uniquePaths.map(p => p.split("/").slice(0, -1).join("/") || "(root)")
       diagnostics.push({
         category: "graph",
-        severity: "warning",
+        severity: "error",
         code: "inconsistent_output_directory",
         message: `File "${filename}" appears under different directories: ${dirs.join(", ")}. All steps MUST use the same output directory. Pick one directory and use it consistently for ALL targetArtifacts across all steps.`,
       })
@@ -375,7 +375,7 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     const commonDir = allDirs[0]
     diagnostics.push({
       category: "graph",
-      severity: "warning",
+      severity: "error",
       code: "mixed_root_and_subdir",
       message: `Some artifacts are in subdirectory "${commonDir}/" but others (${rootFiles.join(", ")}) are at the root. Move all artifacts into the same directory.`,
     })
@@ -388,7 +388,7 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
   if (uniqueTopDirs.size > 1) {
     diagnostics.push({
       category: "graph",
-      severity: "warning",
+      severity: "error",
       code: "inconsistent_output_directory",
       message: `Steps use ${uniqueTopDirs.size} different output directories: ${[...uniqueTopDirs].join(", ")}. ` +
         `ALL steps MUST write to the SAME directory tree. Pick one and use it for all targetArtifacts.`,
@@ -412,7 +412,7 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     if (writers.length > 1) {
       diagnostics.push({
         category: "ownership",
-        severity: "warning",
+        severity: "error",
         code: "shared_target_artifact",
         message: `File "${artifact}" is a targetArtifact of ${writers.length} steps: [${writers.join(", ")}]. ` +
           `Each step does a full file rewrite, so later steps will overwrite earlier steps' changes. ` +
