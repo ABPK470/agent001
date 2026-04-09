@@ -358,6 +358,7 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-step-start") items.push({ text: `STEP ⟩ ${e.stepName}`, color: C.dim })
     else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "completed" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "completed" ? C.success : C.coral })
+    else if (e.kind === "planner-validation-remediated") items.push({ text: `PLAN ✓ validation auto-remediated (${e.diagnostics.length})`, color: C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
     else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
     else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
@@ -374,6 +375,8 @@ export function buildProblems(trace: TraceEntry[], steps: Step[]): Problem[] {
       for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
     } else if (e.kind === "planner-validation-failed") {
       for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
+    } else if (e.kind === "planner-validation-remediated") {
+      for (const d of e.diagnostics) items.push({ text: `[${d.code}] auto-remediated: ${d.message}`, source: "planner" })
     } else if (e.kind === "planner-pipeline-end" && e.status === "failed") {
       items.push({ text: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed`, source: "planner" })
     }

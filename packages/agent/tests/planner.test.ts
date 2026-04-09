@@ -155,6 +155,40 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.score).toBeGreaterThanOrEqual(5)
     expect(decision.reason).toContain("prior_tool_activity")
   })
+
+  it("keeps explicit single-file full implementation in direct burst path", () => {
+    const decision = assessPlannerDecision(
+      "Implement the full auth flow in single file src/auth.ts with complete logic from scratch",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.reason).toBe("single_artifact_direct_burst")
+  })
+
+  it("does NOT use direct burst when no concrete target file is provided", () => {
+    const decision = assessPlannerDecision(
+      "Implement a full auth flow in a single file with complete logic from scratch",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+  })
+
+  it("does NOT use direct burst for ambiguous multi-target requests", () => {
+    const decision = assessPlannerDecision(
+      "Implement a full auth flow in single file src/auth.ts and add backend service wiring",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+  })
+
+  it("keeps trace-like multi-artifact game goals in planner path", () => {
+    const decision = assessPlannerDecision(
+      "Build a complete playable chess game and create tmp/game/index.html, tmp/game/styles.css, and tmp/game/game.js with verification.",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+    expect(decision.reason).toContain("implementation_scope")
+  })
 })
 
 describe("Planner output-root inference", () => {
@@ -339,7 +373,44 @@ describe("Plan validation: validatePlan", () => {
     expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory" && d.severity === "error")).toBe(true)
   })
 
-  it("treats missing verification coverage as blocking error", () => {
+  it("allows sibling subdirectories under a single root output tree", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("step-css", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/css/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "browser_check",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("step-js", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/js/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(false)
+  })
+
+  it("treats missing per-step verification coverage as non-blocking guidance", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("writer-a", {
@@ -373,11 +444,11 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "no_verification_steps" && d.severity === "error")).toBe(true)
+    expect(result.valid).toBe(true)
+    expect(result.diagnostics.some(d => d.code === "no_verification_steps" && d.severity === "warning")).toBe(true)
   })
 
-  it("warns when HTML step doesn't mention script loading for JS artifacts", () => {
+  it("does not warn for HTML scaffold steps that do not own JS artifacts", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("create-html", {
@@ -415,36 +486,22 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "html_missing_script_loading")).toBe(true)
+    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(false)
   })
 
-  it("passes when HTML step mentions script loading", () => {
+  it("warns when a consumer step owns dependency artifacts but doesn't mention wiring", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("create-html", {
-          objective: "Create the HTML structure with an 8x8 grid. Include <script src='game.js'> tag.",
-          acceptanceCriteria: ["Board renders 8x8 grid", "HTML includes script tags for all JS files"],
+        makeSubagentStep("create-html-and-js", {
+          objective: "Create the HTML structure and initialize game logic",
+          acceptanceCriteria: ["Board renders 8x8 grid"],
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/index.html"],
-            effectClass: "filesystem_write",
-            verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
-        makeSubagentStep("create-logic", {
-          objective: "Implement game logic",
-          executionContext: {
-            workspaceRoot: ".",
-            allowedReadRoots: ["."],
-            allowedWriteRoots: ["."],
-            allowedTools: ["write_file"],
-            requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/game.js"],
+            targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
@@ -455,37 +512,143 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "html_missing_script_loading")).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(true)
   })
 
-  it("warns when visual/game task has no visual rendering criteria", () => {
+  it("passes when a consumer step owns dependency artifacts and mentions wiring", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("render-board", {
-          objective: "Create a chess board grid with HTML",
-          acceptanceCriteria: ["Board has 8x8 grid", "Alternating colors on squares"],
+        makeSubagentStep("create-html-and-js", {
+          objective: "Create the HTML structure with an 8x8 grid. Include <script src='game.js'> tag.",
+          acceptanceCriteria: ["Board renders 8x8 grid", "HTML includes script tags for all JS files"],
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/index.html"],
+            targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(false)
+  })
+
+  it("blocks browser_check when related JS files are owned by other steps", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create index.html and verify in browser",
+          acceptanceCriteria: ["HTML renders", "No runtime errors"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "browser_check",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Create board/game/ui scripts",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/board.js", "tmp/game.js", "tmp/ui.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.valid).toBe(false)
+    expect(result.diagnostics.some(d => d.code === "premature_browser_verification" && d.severity === "error")).toBe(true)
+  })
+
+  it("allows browser_check when HTML step owns related JS files", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html-and-js", {
+          objective: "Create HTML and related scripts, then verify in browser",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html", "tmp/styles.css", "tmp/board.js", "tmp/game.js", "tmp/ui.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "browser_check",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("other-page-script", {
+          objective: "Create admin page script",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/admin/monitor.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const result = validatePlan(plan, [])
+    expect(result.diagnostics.some(d => d.code === "premature_browser_verification")).toBe(false)
+  })
+
+  it("warns when visual task has no visual rendering criteria", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("render-layout", {
+          objective: "Create a visual dashboard grid with HTML",
+          acceptanceCriteria: ["Layout has a 3x3 grid", "Alternating colors on sections"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
           },
         }),
         makeSubagentStep("game-logic", {
-          objective: "Implement chess game rules and move validation",
-          acceptanceCriteria: ["Pawns can only move forward", "Castling works correctly"],
+          objective: "Implement domain rules and action validation",
+          acceptanceCriteria: ["Invalid actions are rejected", "State transitions are validated"],
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/game.js"],
+            targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
@@ -502,11 +665,11 @@ describe("Plan validation: validatePlan", () => {
   it("passes when visual task has rendering criteria", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("render-board", {
-          objective: "Create a chess board grid and render pieces",
+        makeSubagentStep("render-ui", {
+          objective: "Create a dashboard layout and render widgets",
           acceptanceCriteria: [
-            "Board has 8x8 grid with alternating colors",
-            "Pieces display correct Unicode symbols in starting positions",
+            "Layout has distinct visual regions with clear styling",
+            "Widgets render visible labels and status indicators",
           ],
           executionContext: {
             workspaceRoot: ".",
@@ -514,7 +677,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/index.html"],
+            targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
@@ -531,29 +694,29 @@ describe("Plan validation: validatePlan", () => {
   it("warns when multi-file JS plan has no shared data contract", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("create-board", {
-          objective: "Create the chess board rendering with HTML and CSS grid",
+        makeSubagentStep("create-state-view", {
+          objective: "Create state rendering with HTML and CSS grid",
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/board.js"],
+            targetArtifacts: ["tmp/app/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
           },
         }),
         makeSubagentStep("create-logic", {
-          objective: "Implement game logic with piece movement and board validation",
+          objective: "Implement domain logic with validation and state updates",
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/game.js"],
+            targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
@@ -570,29 +733,29 @@ describe("Plan validation: validatePlan", () => {
   it("passes when JS steps define shared data format", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("create-board", {
-          objective: "Create the chess board. Each cell uses format { type: 'pawn', color: 'white' }. Board is board[row][col].",
+        makeSubagentStep("create-state-view", {
+          objective: "Create the shared model. Records use format { id: string, status: string }. State is a keyed map by id.",
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/board.js"],
+            targetArtifacts: ["tmp/app/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
           },
         }),
         makeSubagentStep("create-logic", {
-          objective: "Implement game logic with piece movement and board validation",
+          objective: "Implement domain logic with validation and state updates",
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/chess/game.js"],
+            targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
@@ -880,6 +1043,88 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(step?.outcome).toBe("fail")
     expect(step?.retryable).toBe(false)
   })
+
+  it("defers cross-step HTML/JS integration checks until all subagent steps are complete", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "failed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "skipped", error: "upstream aborted", durationMs: 0 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><h1>Chess</h1></body></html>"
+          if (path.endsWith("game-logic.js")) return "export const game = {}"
+          if (path.endsWith("ui-logic.js")) return "export const ui = {}"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+      {
+        name: "browser_check",
+        description: "browser",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute() {
+          return "No errors"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
+  })
 })
 
 // ============================================================================
@@ -980,6 +1225,109 @@ describe("Pipeline: executePipeline", () => {
 
     expect(result.status).toBe("completed")
     expect(delegatedTasks).toContain("build-game")
+  })
+
+  it("injects prior artifacts from tool evidence, not narrative mentions", async () => {
+    const receivedObjectives = new Map<string, string>()
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/index.html", "tmp/chess/logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-pieces", {
+          objective: "Create piece rendering logic",
+          dependsOn: ["create-html"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/chess/pieces.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-pieces" }],
+    })
+
+    const priorResults = new Map<string, {
+      name: string
+      status: "completed"
+      output: string
+      durationMs: number
+      toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string; isError: boolean }>
+    }>([
+      [
+        "create-html",
+        {
+          name: "create-html",
+          status: "completed",
+          output: "Created tmp/chess/index.html. Future integration will add logic.js.",
+          durationMs: 5,
+          toolCalls: [
+            {
+              name: "write_file",
+              args: { path: "tmp/chess/index.html", content: "<html></html>" },
+              result: "Successfully wrote to tmp/chess/index.html",
+              isError: false,
+            },
+            {
+              name: "read_file",
+              args: { path: "tmp/chess/index.html" },
+              result: "<html></html>",
+              isError: false,
+            },
+          ],
+        },
+      ],
+    ])
+
+    const result = await executePipeline(plan, [], async (step) => {
+      receivedObjectives.set(step.name, step.objective)
+
+      return {
+        output: "Created tmp/chess/pieces.js",
+        toolCalls: [
+          {
+            name: "read_file",
+            args: { path: "tmp/chess/index.html" },
+            result: "<html></html>",
+            isError: false,
+          },
+          {
+            name: "write_file",
+            args: { path: "tmp/chess/pieces.js", content: "export const pieces = []" },
+            result: "Successfully wrote to tmp/chess/pieces.js",
+            isError: false,
+          },
+          {
+            name: "read_file",
+            args: { path: "tmp/chess/pieces.js" },
+            result: "export const pieces = []",
+            isError: false,
+          },
+        ],
+      }
+    }, { priorResults })
+
+    expect(result.status).toBe("completed")
+    const step2Objective = receivedObjectives.get("create-pieces") ?? ""
+    expect(step2Objective).toContain("tmp/chess/index.html")
+    expect(step2Objective).not.toContain("logic.js")
   })
 
   it("fails subagent step when write integrity warnings are present", async () => {
@@ -1147,27 +1495,27 @@ describe("ToolFailureCircuitBreaker", () => {
 // ============================================================================
 
 describe("extractCriterionKeywords", () => {
-  it("extracts keyword stems from a castling criterion", () => {
-    const kws = extractCriterionKeywords("castling must work correctly with rook and king")
-    expect(kws.some(kw => "castling".includes(kw))).toBe(true)
+  it("extracts keyword stems from a token refresh criterion", () => {
+    const kws = extractCriterionKeywords("token refresh must work correctly")
+    expect(kws.some(kw => "refresh".includes(kw))).toBe(true)
   })
 
-  it("extracts en passant multi-word phrase", () => {
-    const kws = extractCriterionKeywords("en passant capture must be implemented")
-    expect(kws).toContain("passant")
-    expect(kws).toContain("enpassant")
+  it("extracts access-control multi-word phrase", () => {
+    const kws = extractCriterionKeywords("access control must be enforced")
+    expect(kws).toContain("permission")
+    expect(kws).toContain("authorize")
   })
 
-  it("extracts checkmate and stalemate", () => {
-    const kws = extractCriterionKeywords("check and checkmate detection should end the game, stalemate should draw")
-    expect(kws.some(kw => "checkmate".includes(kw))).toBe(true)
-    expect(kws.some(kw => "stalemate".includes(kw))).toBe(true)
+  it("extracts drag-and-drop phrase", () => {
+    const kws = extractCriterionKeywords("drag and drop reordering should work")
+    expect(kws).toContain("drag")
+    expect(kws).toContain("drop")
   })
 
-  it("extracts pawn promotion keywords", () => {
-    const kws = extractCriterionKeywords("pawn promotion to queen rook bishop or knight")
+  it("extracts promotion-related keywords", () => {
+    const kws = extractCriterionKeywords("plan promotion to approved status")
     expect(kws.some(kw => "promotion".includes(kw))).toBe(true)
-    expect(kws.some(kw => "pawn".includes(kw))).toBe(true)
+    expect(kws.some(kw => "status".includes(kw))).toBe(true)
   })
 
   it("filters out stop words", () => {
@@ -1183,7 +1531,7 @@ describe("extractCriterionKeywords", () => {
   })
 
   it("handles criteria with highlighting and selection", () => {
-    const kws = extractCriterionKeywords("clicking a piece highlights its legal moves on the board")
+    const kws = extractCriterionKeywords("clicking an item highlights valid actions in the interface")
     expect(kws.some(kw => "highlight".includes(kw))).toBe(true)
   })
 

@@ -35,6 +35,7 @@ export type TrajectoryEvent =
   | ToolsResolvedEvent
   | LlmRequestEvent
   | LlmResponseEvent
+  | PlannerValidationRemediatedEvent
   | UserInputRequestEvent
   | UserInputResponseEvent
 
@@ -149,6 +150,11 @@ interface LlmResponseEvent {
   content: string | null
   toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
   usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null
+}
+
+interface PlannerValidationRemediatedEvent {
+  kind: "planner-validation-remediated"
+  diagnostics: Array<{ code: string; message: string }>
 }
 
 interface UserInputRequestEvent {
@@ -297,7 +303,7 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
   // "usage", "delegation-iteration", and "delegation-parallel-*" are
   // observability/meta events, not agent states. They can appear between any
   // pair of real states and should be transparent to the state machine validator.
-  const META_KINDS = new Set(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end", "system-prompt", "tools-resolved", "llm-request", "llm-response", "user-input-request", "user-input-response"])
+  const META_KINDS = new Set(["usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end", "system-prompt", "tools-resolved", "llm-request", "llm-response", "user-input-request", "user-input-response", "planner-validation-remediated"])
 
   // Build a filtered view that only contains real state events for validation,
   // while preserving the original seq numbers for violation reporting.

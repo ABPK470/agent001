@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROME_BIN=/usr/bin/chromium
+ENV NODE_PATH=/usr/local/lib/node_modules
 
 # Install puppeteer (just the Node package, no browser download)
 RUN npm install -g puppeteer@latest --unsafe-perm

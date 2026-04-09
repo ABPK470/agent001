@@ -41,6 +41,7 @@ type EventKind =
   | "answer" | "error"
   | "system-prompt" | "tools-resolved" | "llm-request" | "llm-response"
   | "user-input-request" | "user-input-response"
+  | "planner-validation-remediated"
 
 interface TrajectoryEvent { kind: EventKind; [key: string]: unknown }
 interface TrajectoryEntry { seq: number; event: TrajectoryEvent; timestamp: string }
@@ -157,6 +158,7 @@ const EVENT_META: Record<EventKind, { color: string; label: string; short: strin
   "llm-response":      { color: "var(--color-text-muted)", label: "LLM Response",   short: "→LLM" },
   "user-input-request":  { color: "var(--color-accent)",  label: "User Prompt",    short: "ASK" },
   "user-input-response": { color: "var(--color-accent)",  label: "User Reply",     short: "RPL" },
+  "planner-validation-remediated": { color: "var(--color-warning)", label: "Validation Remediated", short: "VFIX" },
 }
 
 const SPEEDS = [0.5, 1, 2, 4] as const

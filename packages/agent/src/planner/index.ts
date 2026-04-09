@@ -99,8 +99,8 @@ function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]):
     injectSharedDataContract(plan)
   }
 
-  if (codes.has("html_missing_script_loading")) {
-    injectHtmlScriptCriteria(plan)
+  if (codes.has("missing_dependency_wiring_criteria")) {
+    injectDependencyWiringCriteria(plan)
   }
 }
 
@@ -210,16 +210,19 @@ function injectSharedDataContract(plan: Plan): void {
   const jsWriters = subagentSteps.filter(s => s.executionContext.targetArtifacts.some(a => /\.js$/i.test(a)))
   if (jsWriters.length < 2) return
 
-  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|each\s+(?:cell|entry|item|piece|tile|element)\s+(?:is|has|contains|looks|uses))\b/i
+  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|record\s*of|map\s*of|canonical\s+data\s+contract)\b/i
   if (jsWriters.some(s => FORMAT_SPEC_RE.test(s.objective))) return
 
   const owner = jsWriters[0]
-  ;(owner as { objective: string }).objective = `${owner.objective}\n\nShared data contract: Use a single board matrix format board[row][col], where each occupied cell is { type: string, color: "white" | "black", hasMoved?: boolean } and empty cells are null.`
+  ;(owner as { objective: string }).objective =
+    `${owner.objective}\n\n` +
+    `Shared data contract: define one canonical state schema (keys, types, and example payload), ` +
+    `and ensure all related modules consume that exact schema consistently.`
 
-  if (!owner.acceptanceCriteria.some(c => /board\[row\]\[col\]|shared data contract|schema/i.test(c))) {
+  if (!owner.acceptanceCriteria.some(c => /shared data contract|schema|canonical state/i.test(c))) {
     ;(owner as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
       ...owner.acceptanceCriteria,
-      "Defines and documents shared data contract: board[row][col] with piece shape { type, color, hasMoved? }.",
+      "Defines and documents a canonical shared data contract (state schema + field types) used by all dependent modules.",
     ]
   }
 }
@@ -268,28 +271,83 @@ function injectSharedStateOwnershipContract(plan: Plan): void {
   }
 }
 
-function injectHtmlScriptCriteria(plan: Plan): void {
+function injectDependencyWiringCriteria(plan: Plan): void {
   const subagentSteps = plan.steps.filter(
     (s): s is SubagentTaskStep => s.stepType === "subagent_task",
   )
-  const jsBasenames = subagentSteps
-    .flatMap(s => s.executionContext.targetArtifacts)
-    .filter(a => /\.js$/i.test(a))
-    .map(a => a.split("/").pop() ?? a)
-
-  if (jsBasenames.length === 0) return
 
   for (const step of subagentSteps) {
-    const hasHtml = step.executionContext.targetArtifacts.some(a => /\.html?$/i.test(a))
-    if (!hasHtml) continue
-    const hasScriptCriterion = step.acceptanceCriteria.some(c => /<script|script\s+src|loads?\s+js/i.test(c))
-    if (!hasScriptCriterion) {
+    const hasConsumerArtifact = step.executionContext.targetArtifacts.some(
+      a => /\.(?:html?|xhtml|xml|md|markdown|svg)$/i.test(a),
+    )
+    if (!hasConsumerArtifact) continue
+
+    const ownedDependencyBasenames = step.executionContext.targetArtifacts
+      .filter(a => /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a))
+      .map(a => a.split("/").pop() ?? a)
+    if (ownedDependencyBasenames.length === 0) continue
+
+    const hasWiringCriterion = step.acceptanceCriteria.some(
+      c => /\b(?:load|import|include|link|reference|wire|attach|depends?\s+on|hook(?:s|ed)?\s+up)\b/i.test(c),
+    )
+    if (!hasWiringCriterion) {
       ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
         ...step.acceptanceCriteria,
-        `HTML loads JS files via <script src> tags: ${[...new Set(jsBasenames)].join(", ")}.`,
+        `Consumer artifacts explicitly load/reference dependency artifacts: ${[...new Set(ownedDependencyBasenames)].join(", ")}.`,
       ]
     }
   }
+}
+
+/**
+ * Apply deterministic remediations for specific blocking validation errors.
+ * Returns true when the plan was modified and should be re-validated.
+ */
+function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagnostic[]): boolean {
+  let changed = false
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  // If an HTML step verifies with browser_check before related JS ownership,
+  // defer that verification to a later owner step to avoid impossible contracts.
+  const premature = errors.filter(
+    (e) => e.code === "premature_browser_verification" && typeof e.stepName === "string",
+  )
+
+  if (premature.length > 0) {
+    for (const diag of premature) {
+      const step = subagentSteps.find(s => s.name === diag.stepName)
+      if (!step) continue
+      if (step.executionContext.verificationMode === "browser_check") {
+        ;(step.executionContext as unknown as { verificationMode: SubagentTaskStep["executionContext"]["verificationMode"] }).verificationMode = "none"
+        changed = true
+      }
+    }
+  }
+
+  // Hard guard: if a browser entry step verifies with browser_check but owns no
+  // web runtime artifacts, while sibling steps own those artifacts, defer verification.
+  for (const step of subagentSteps) {
+    if (step.executionContext.verificationMode !== "browser_check") continue
+    const hasBrowserEntry = step.executionContext.targetArtifacts.some(a => /\.(?:html?|xhtml)$/i.test(a))
+    if (!hasBrowserEntry) continue
+
+    const ownsRuntime = step.executionContext.targetArtifacts.some(
+      a => /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a),
+    )
+    if (ownsRuntime) continue
+
+    const hasForeignRuntime = subagentSteps.some(
+      s => s.name !== step.name && s.executionContext.targetArtifacts.some(a => /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)),
+    )
+    if (!hasForeignRuntime) continue
+
+    ;(step.executionContext as unknown as { verificationMode: SubagentTaskStep["executionContext"]["verificationMode"] }).verificationMode = "none"
+    changed = true
+  }
+
+  return changed
 }
 
 function mostFrequent(items: readonly string[]): string | undefined {
@@ -433,9 +491,22 @@ export async function executePlannerPath(
   })
 
   // Step 3: Validate plan
-  const validation = validatePlan(plan, ctx.tools)
-  const errors = validation.diagnostics.filter(d => d.severity === "error")
-  const warnings = validation.diagnostics.filter(d => d.severity === "warning")
+  let validation = validatePlan(plan, ctx.tools)
+  let errors = validation.diagnostics.filter(d => d.severity === "error")
+  let warnings = validation.diagnostics.filter(d => d.severity === "warning")
+
+  if (!validation.valid) {
+    const remediated = remediateValidationErrors(plan, errors)
+    if (remediated) {
+      const after = validatePlan(plan, ctx.tools)
+      if (after.valid) {
+        validation = after
+        errors = validation.diagnostics.filter(d => d.severity === "error")
+        warnings = validation.diagnostics.filter(d => d.severity === "warning")
+        ctx.onTrace?.({ kind: "planner-validation-remediated", diagnostics: validation.diagnostics })
+      }
+    }
+  }
 
   if (!validation.valid) {
     ctx.onTrace?.({

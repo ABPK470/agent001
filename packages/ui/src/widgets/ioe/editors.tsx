@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, TraceEntry } from "../../types"
-import { fmtTokens, truncate } from "../../util"
+import { fmtTokens, remediationHintForValidationCode, truncate } from "../../util"
 import {
   C,
   fmtK,
@@ -78,13 +78,17 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-generation-failed": return `${p}GENERATION FAILED`
     case "planner-output-root-forced": return `${p}OUTPUT ROOT FORCED  ${e.outputRoot}`
     case "planner-validation-failed": return `${p}VALIDATION FAILED`
+    case "planner-validation-remediated": return `${p}VALIDATION AUTO-REMEDIATED`
     case "planner-validation-warnings": return `${p}VALIDATION WARNINGS  ${e.warningCount}`
     case "planner-delegation-decision":
       return `${p}DELEGATION GATE  ${e.shouldDelegate ? "delegate" : "local"}  ${e.reason}`
     case "planner-pipeline-start": return `${p}PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`
     case "planner-pipeline-end": return `${p}PIPELINE END  ${e.status}  ${e.completedSteps}/${e.totalSteps} steps`
     case "planner-step-start": return `${p}STEP  ${e.stepName}  ${e.stepType}`
-    case "planner-step-end": return `${p}STEP END  ${e.stepName}  ${e.status}  ${e.durationMs}ms`
+    case "planner-step-end":
+      return `${p}STEP END  ${e.stepName}  ${e.status}${e.validationCode ? ` [${e.validationCode}]` : ""}  ${e.durationMs}ms${
+        e.status !== "completed" ? `\n${p}  fix: ${remediationHintForValidationCode(e.validationCode)}` : ""
+      }`
     case "planner-verification":
       return `${p}VERIFY  ${e.overall}  ${(e.confidence * 100).toFixed(0)}% confidence\n` +
         e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
@@ -424,6 +428,7 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
   // Count children by type for summary
   const toolCalls = g.children.filter((e) => e.kind === "tool-call").length
   const hasErrors = g.children.some((e) => e.kind === "tool-error" || e.kind === "planner-validation-failed" || e.kind === "planner-generation-failed")
+  const hasRemediations = g.children.some((e) => e.kind === "planner-validation-remediated")
   const usage = g.children.find((e) => e.kind === "usage") as Extract<TraceEntry, { kind: "usage" }> | undefined
 
   return (
@@ -442,7 +447,7 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
           className="absolute left-[5px] top-1 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
           style={{ background: hasErrors ? C.coral + "20" : headerColor + "15", border: `1px solid ${hasErrors ? C.coral + "40" : headerColor + "30"}` }}
         >
-          <span className="text-[9px] font-bold" style={{ color: hasErrors ? C.coral : headerColor }}>
+          <span className="text-[9px] font-bold" style={{ color: hasErrors ? C.coral : hasRemediations ? C.warning : headerColor }}>
             {headerBadge}
           </span>
         </div>
@@ -708,6 +713,23 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       </div>
     )
   }
+  if (e.kind === "planner-validation-remediated") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.success}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[12px] font-mono" style={{ color: C.success }}>
+            ✓ validation auto-remediated
+          </span>
+        </div>
+        {e.diagnostics.map((d, i) => (
+          <div key={i} className="text-[12px] mt-0.5 pl-2" style={{ color: C.success + "B0" }}>
+            [{d.code}] {d.message}
+          </div>
+        ))}
+      </div>
+    )
+  }
   if (e.kind === "planner-pipeline-start") {
     return (
       <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: "#C084FC80" }}>
@@ -730,6 +752,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           {e.status === "completed" ? "✓" : "✗"} {e.stepName}
         </span>
         <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms</span>
+        {e.validationCode && (
+          <span className="text-[11px] font-mono ml-1" style={{ color: C.warning }}>[{e.validationCode}]</span>
+        )}
+        {e.status !== "completed" && (
+          <div className="text-[11px] mt-0.5 pl-2" style={{ color: C.warning }}>
+            fix: {remediationHintForValidationCode(e.validationCode)}
+          </div>
+        )}
       </div>
     )
   }
@@ -1546,6 +1576,10 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
 
   if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
     return <FlatRow label={e.kind === "planner-generation-failed" ? "GENERATION FAILED" : "VALIDATION FAILED"} labelColor={C.coral} />
+  }
+
+  if (e.kind === "planner-validation-remediated") {
+    return <FlatRow label="VALIDATION AUTO-REMEDIATED" labelColor={C.success} />
   }
 
   if (e.kind === "user-input-request") {

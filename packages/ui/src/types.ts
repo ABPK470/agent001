@@ -108,11 +108,12 @@ export type TraceEntry =
   | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-output-root-forced"; outputRoot: string }
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
   | { kind: "planner-step-start"; stepName: string; stepType: string }
-  | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number }
+  | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number; error?: string; validationCode?: string }
   | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
   | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number }
   | { kind: "planner-retry-skipped"; reason: string }

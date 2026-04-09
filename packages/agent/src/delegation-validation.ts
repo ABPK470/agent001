@@ -101,6 +101,12 @@ export interface DelegationContractSpec {
   readonly role: "writer" | "reviewer" | "validator" | "grounding"
   /** Last validation code from a prior attempt (for correction routing). */
   readonly lastValidationCode?: DelegationOutputValidationCode
+  /**
+   * Optional full artifact set planned across the workflow.
+   * Used to avoid false unresolved-reference failures while artifacts are
+   * still being assembled across sibling steps.
+   */
+  readonly knownProjectArtifacts?: readonly string[]
 }
 
 /**
@@ -128,7 +134,7 @@ const COMPLETION_CLAIM_RE =
 
 /** Unresolved work markers — the child claims "done" but these indicate otherwise. */
 const UNRESOLVED_WORK_RE =
-  /\b(?:TODO|FIXME|HACK|XXX|PLACEHOLDER|STUB|NOT YET|UNFINISHED|NEEDS? (?:TO BE )?IMPLEMENT|WILL GO HERE|WILL BE ADDED|WAITING FOR|DEPENDS ON|UNABLE TO|FAILED TO|ERROR(?:S)? (?:OCCURRED|ENCOUNTERED)|REMAINING WORK|FOLLOW[- ]?UP|PARTIAL(?:LY)? IMPLEMENTED)\b/i
+  /\b(?:TODO|FIXME|HACK|XXX|NOT YET|UNFINISHED|NEEDS? (?:TO BE )?IMPLEMENT|WILL GO HERE|WILL BE ADDED|WAITING FOR|DEPENDS ON|UNABLE TO|FAILED TO|ERROR(?:S)? (?:OCCURRED|ENCOUNTERED)|REMAINING WORK|FOLLOW[- ]?UP|PARTIAL(?:LY)? IMPLEMENTED)\b/i
 
 /**
  * Context-sensitive markers — only flag these when they appear in "unresolved work"
@@ -146,6 +152,8 @@ const CONTEXT_SENSITIVE_MARKERS: Array<{ re: RegExp; label: string }> = [
   { re: /\b(?:blocked on|blocked by)\s+(?:a |the |an )?(?:missing|lack|absence|dependency|requirement|issue|bug|error)/i, label: "blocked on" },
   // "can't" / "cannot" only when admitting inability to complete work
   { re: /\b(?:can'?t|cannot)\s+(?:implement|complete|finish|fix|resolve|access|proceed)/i, label: "can't" },
+  // placeholder/stub only when explicitly describing unfinished implementation
+  { re: /\b(?:placeholder|stub)\s+(?:logic|code|function|implementation)\b/i, label: "placeholder/stub" },
 ]
 
 /** File mutation tool names — tools that create/modify/delete files. */
@@ -163,9 +171,13 @@ const FILE_READ_TOOLS = new Set([
 const EXECUTABLE_VERIFICATION_CMD_RE =
   /\b(?:npm\s+test|npm\s+run\s+(?:test|lint|build|check)|pnpm\s+(?:test|lint|build|check)|yarn\s+(?:test|lint|build|check)|vitest|jest|pytest|go\s+test|cargo\s+test|cargo\s+check|mvn\s+test|gradle\s+test|ruff\s+check|eslint|tsc\b|phpunit|dotnet\s+test)\b/i
 
+/** Browser runtime/load failures that invalidate browser_check evidence. */
+const BROWSER_RUNTIME_FAILURE_RE =
+  /(Failed to load resource|net::ERR_|status of 404|\b404\b|ReferenceError|TypeError|SyntaxError|Total:\s*[1-9]\d*\s+error\(s\))/i
+
 /** Shell commands that create/modify files. */
 const SHELL_FILE_WRITE_RE =
-  /\b(?:cat|tee|touch|cp|mv|install)\b|(?:^|[^>])>{1,2}\s*\S/i
+  /\b(?:tee|touch|cp|mv|install)\b|\bcat\b[^\n]*\s(?:>|>>|<<)\s*\S|(?:^|[^>])>{1,2}\s*\S/i
 
 /** Shell in-place edit commands. */
 const SHELL_IN_PLACE_EDIT_RE =
@@ -182,6 +194,10 @@ const FILE_ARTIFACT_RE =
 /** Basic local file reference patterns found inside source content. */
 const LOCAL_ARTIFACT_REFERENCE_RE =
   /["'`](\.{1,2}\/[^"'`\s]+|[a-z0-9_.-]+\/[a-z0-9_./-]+|[a-z0-9_.-]+\.[a-z0-9]{1,10})["'`]/gi
+
+/** Extensions likely to represent workspace artifacts (not numeric/style literals). */
+const WORKSPACE_FILE_EXT_RE =
+  /^(?:html?|css|js|mjs|cjs|jsx|ts|tsx|json|ya?ml|xml|svg|png|jpe?g|gif|webp|ico|woff2?|ttf|otf|map|md|txt|sql|sh|bash|zsh|py|rb|java|cs|go|rs|php)$/i
 
 /** Ignore URL-like and anchor references that are not workspace artifacts. */
 const NON_WORKSPACE_REF_RE = /^(?:https?:|data:|mailto:|tel:|#)/i
@@ -234,6 +250,12 @@ function getToolCallPathArg(record: ToolCallRecord): string | null {
   return null
 }
 
+function hasMutationPathEvidence(record: ToolCallRecord): boolean {
+  const pathArg = getToolCallPathArg(record)
+  if (pathArg && pathArg.trim().length > 0) return true
+  return FILE_ARTIFACT_RE.test(record.result)
+}
+
 /**
  * Extract local artifact references from source content.
  */
@@ -242,9 +264,25 @@ function extractLocalArtifactReferences(content: string): string[] {
   for (const match of content.matchAll(LOCAL_ARTIFACT_REFERENCE_RE)) {
     const raw = match[1]?.trim()
     if (!raw || NON_WORKSPACE_REF_RE.test(raw)) continue
+    if (isLikelyNonArtifactLiteral(raw)) continue
     refs.add(raw)
   }
   return [...refs]
+}
+
+function isLikelyNonArtifactLiteral(raw: string): boolean {
+  // Numeric + unit literals often appear in style values (e.g. "1.8rem").
+  if (/^\d+(?:\.\d+)?(?:rem|em|px|vh|vw|vmin|vmax|ch|ex|fr|pt|pc|cm|mm|in|s|ms|deg|rad|turn|%)$/i.test(raw)) {
+    return true
+  }
+
+  const normalized = raw.replace(/^\.{1,2}\//, "")
+  const base = normalized.split("/").pop() ?? normalized
+  const dot = base.lastIndexOf(".")
+  if (dot <= 0 || dot === base.length - 1) return false
+
+  const ext = base.slice(dot + 1)
+  return !WORKSPACE_FILE_EXT_RE.test(ext)
 }
 
 // ============================================================================
@@ -623,12 +661,15 @@ export function validateDelegatedOutputContract(params: {
 
   // ── 8. File artifact evidence in output ──
   if (specRequiresFileMutationEvidence(spec) && toolCalls.some(tc => isFileMutationToolCall(tc) && !tc.isError)) {
-    // Child used file mutation tools — verify it reports what it created
-    if (!FILE_ARTIFACT_RE.test(trimmed)) {
+    // Child used file mutation tools — verify there is artifact evidence either
+    // in output text or directly in successful mutation tool-call paths/results.
+    const successfulMutations = toolCalls.filter(tc => isFileMutationToolCall(tc) && !tc.isError)
+    const hasToolPathEvidence = successfulMutations.some(hasMutationPathEvidence)
+    if (!FILE_ARTIFACT_RE.test(trimmed) && !hasToolPathEvidence) {
       return {
         ok: false,
         code: "missing_file_artifact_evidence",
-        message: "File mutation tools were used but output doesn't identify any file paths — child must report what it created",
+        message: "File mutation tools were used but no artifact path evidence was found in output or tool results",
       }
     }
   }
@@ -666,6 +707,7 @@ export function validateDelegatedOutputContract(params: {
     const knownArtifacts = new Set<string>([
       ...normalizedTargets,
       ...spec.requiredSourceArtifacts.map(normalizeArtifactPath),
+      ...(spec.knownProjectArtifacts ?? []).map(normalizeArtifactPath),
       ...[...mutatedPaths],
     ])
 
@@ -689,7 +731,10 @@ export function validateDelegatedOutputContract(params: {
       }
     }
 
-    if (unresolvedReferences.size > 0) {
+    const shouldEnforceReferenceIntegrity =
+      spec.verificationMode !== "none" || spec.role !== "writer"
+
+    if (unresolvedReferences.size > 0 && shouldEnforceReferenceIntegrity) {
       const sample = [...unresolvedReferences].slice(0, 4).join(", ")
       return {
         ok: false,
@@ -705,6 +750,17 @@ export function validateDelegatedOutputContract(params: {
       MEANINGFUL_BROWSER_TOOLS.has(tc.name) || LOW_SIGNAL_BROWSER_TOOLS.has(tc.name),
     )
     if (browserCalls.length > 0) {
+      const hasFailedMeaningfulBrowserEvidence = browserCalls.some((tc) =>
+        MEANINGFUL_BROWSER_TOOLS.has(tc.name) && (tc.isError || BROWSER_RUNTIME_FAILURE_RE.test(tc.result)),
+      )
+      if (hasFailedMeaningfulBrowserEvidence) {
+        return {
+          ok: false,
+          code: "missing_executable_verification_evidence",
+          message: "browser_check evidence contains runtime/load errors — fix those errors before claiming completion",
+        }
+      }
+
       const allLowSignal = browserCalls.every(tc => isLowSignalBrowserToolCall(tc))
       if (allLowSignal) {
         return {
@@ -810,7 +866,7 @@ export function getCorrectionGuidance(code: DelegationOutputValidationCode): str
       return "Your previous attempt reported being blocked or unable to proceed. Try a different approach. If you can't access a resource, work around it. Do NOT report blockage — find a solution."
 
     case "missing_file_artifact_evidence":
-      return "Your previous attempt used file tools but didn't report which files were created/modified. Include the file paths in your output summary."
+      return "Your previous attempt used file tools but didn't provide clear file-path evidence. Include modified file paths in your output summary and ensure file-tool calls include explicit path arguments."
 
     case "missing_workspace_inspection_evidence":
       return "Your previous attempt didn't read the required source files. Use read_file to read ALL source files listed in your goal BEFORE making changes."
@@ -850,6 +906,7 @@ export function buildContractSpec(
   step: { objective: string; acceptanceCriteria: readonly string[]; requiredToolCapabilities: readonly string[] },
   envelope: { targetArtifacts: readonly string[]; requiredSourceArtifacts: readonly string[]; allowedTools: readonly string[]; effectClass: string; verificationMode: string; role?: string },
   lastValidationCode?: DelegationOutputValidationCode,
+  knownProjectArtifacts?: readonly string[],
 ): DelegationContractSpec {
   return {
     task: step.objective,
@@ -864,5 +921,6 @@ export function buildContractSpec(
     verificationMode: envelope.verificationMode,
     role: (envelope.role ?? "writer") as DelegationContractSpec["role"],
     lastValidationCode,
+    knownProjectArtifacts,
   }
 }

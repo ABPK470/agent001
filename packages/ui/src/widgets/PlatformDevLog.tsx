@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Filter, History, Search, Trash2 } from "luci
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useStore } from "../store"
 import type { WsEvent } from "../types"
+import { remediationHintForValidationCode } from "../util"
 
 // ── Event category mapping ─────────────────────────────────────
 
@@ -97,14 +98,40 @@ function summarize(event: WsEvent): string {
   if (event.type === "planner.started") return `score=${Number(d["score"] ?? 0).toFixed(2)} ${String(d["reason"] ?? "")}`
   if (event.type === "planner.completed") return `${d["status"]} ${d["completedSteps"]}/${d["totalSteps"]}`
   if (event.type === "planner.pipeline.started") return `attempt ${d["attempt"]}/${d["maxRetries"]}`
+  if (event.type === "planner.validation.failed") {
+    const diagnostics = Array.isArray(d["diagnostics"]) ? d["diagnostics"] as Array<{ code?: unknown }> : []
+    const first = diagnostics[0]
+    const code = typeof first?.code === "string" ? first.code : "validation_error"
+    return `validation failed (${diagnostics.length} diagnostics, first=${code})`
+  }
+  if (event.type === "planner.validation.remediated") {
+    const diagnostics = Array.isArray(d["diagnostics"]) ? d["diagnostics"] as Array<{ code?: unknown }> : []
+    const first = diagnostics[0]
+    const code = typeof first?.code === "string" ? first.code : "none"
+    return `validation auto-remediated (${diagnostics.length} diagnostics, first=${code})`
+  }
   if (event.type === "planner.step.started") return `${d["stepName"]} (${d["stepType"]})`
-  if (event.type === "planner.step.completed") return `${d["stepName"]} ${d["status"]} ${d["durationMs"]}ms`
+  if (event.type === "planner.step.completed") {
+    const status = String(d["status"] ?? "unknown")
+    const code = typeof d["validationCode"] === "string" ? d["validationCode"] : undefined
+    if (status === "completed") return `${d["stepName"]} ${status} ${d["durationMs"]}ms`
+    const hint = remediationHintForValidationCode(code)
+    return `${d["stepName"]} ${status}${code ? ` [${code}]` : ""} — ${hint}`
+  }
   if (event.type === "planner.delegation.started") return `child ${d["stepName"]} depth=${d["depth"]}`
   if (event.type === "planner.delegation.iteration") return `${d["stepName"]} iter ${d["iteration"]}/${d["maxIterations"]}`
   if (event.type === "planner.delegation.ended") return `child ${d["stepName"]} ${d["status"]}`
   if (event.type === "debug.trace") {
     const entry = d["entry"] as Record<string, unknown> | undefined
     const kind = entry?.["kind"]
+    if (kind === "planner-step-end") {
+      const status = String(entry?.["status"] ?? "unknown")
+      const code = typeof entry?.["validationCode"] === "string" ? entry["validationCode"] : undefined
+      if (status === "completed") {
+        return `${String(entry?.["stepName"] ?? "step")} ${status} ${entry?.["durationMs"] ?? "?"}ms`
+      }
+      return `${String(entry?.["stepName"] ?? "step")} ${status}${code ? ` [${code}]` : ""} — ${remediationHintForValidationCode(code)}`
+    }
     if (kind === "workspace_diff") {
       const diff = entry?.["diff"] as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined
       const added = diff?.added?.length ?? 0

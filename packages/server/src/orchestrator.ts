@@ -753,6 +753,36 @@ export class AgentOrchestrator {
             type: "planner.pipeline.started",
             data: { runId, attempt: entry.attempt, maxRetries: entry.maxRetries },
           })
+        } else if (entry.kind === "planner-validation-failed") {
+          broadcast({
+            type: "planner.validation.failed",
+            data: {
+              runId,
+              diagnostics: entry.diagnostics,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.validation.failed",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { diagnostics: entry.diagnostics },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-validation-remediated") {
+          broadcast({
+            type: "planner.validation.remediated",
+            data: {
+              runId,
+              diagnostics: entry.diagnostics,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.validation.remediated",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { diagnostics: entry.diagnostics },
+          }).catch(() => {})
         } else if (entry.kind === "planner-step-start") {
           broadcast({
             type: "planner.step.started",
@@ -761,7 +791,14 @@ export class AgentOrchestrator {
         } else if (entry.kind === "planner-step-end") {
           broadcast({
             type: "planner.step.completed",
-            data: { runId, stepName: entry.stepName, status: entry.status, durationMs: entry.durationMs },
+            data: {
+              runId,
+              stepName: entry.stepName,
+              status: entry.status,
+              durationMs: entry.durationMs,
+              error: entry.error,
+              validationCode: entry.validationCode,
+            },
           })
         } else if (entry.kind === "planner-delegation-start") {
           broadcast({

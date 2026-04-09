@@ -66,6 +66,24 @@ const EDIT_ARTIFACT_RE =
 const PLAN_CREATION_RE =
   /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
 
+/**
+ * High-throughput direct coding cue: user explicitly asks for single-artifact
+ * implementation (one file/module/page) in a cohesive pass.
+ */
+const SINGLE_ARTIFACT_BURST_RE =
+  /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b|\b(?:in|into)\s+[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/i
+
+/** User explicitly asks for a full cohesive implementation pass. */
+const COHESIVE_IMPLEMENTATION_RE =
+  /\b(?:full|complete|entire|end[- ]to[- ]end|from scratch|all logic|whole implementation)\b/i
+
+/** Concrete file targets used for high-confidence single-artifact routing. */
+const TARGET_FILE_RE = /\b[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/gi
+
+/** Conflicting multi-target cues that should block direct burst routing. */
+const MULTI_TARGET_CUE_RE =
+  /\b(?:and|plus|along with|together with)\b[\s\S]{0,40}\b(?:file|module|component|page|script|api|service|backend|frontend|database|schema|tests?)\b/i
+
 // ============================================================================
 // Structured signal collection
 // ============================================================================
@@ -80,6 +98,7 @@ interface RequestSignals {
   readonly longTask: boolean
   readonly structuredBulletCount: number
   readonly priorToolMessages: number
+  readonly targetFilePaths: readonly string[]
 }
 
 function collectSignals(messageText: string, history: readonly Message[]): RequestSignals {
@@ -88,6 +107,7 @@ function collectSignals(messageText: string, history: readonly Message[]): Reque
     + (normalized.match(/^\s*\d+[.)]\s/gm) ?? []).length
 
   const priorToolMessages = history.filter(m => m.role === "tool").length
+  const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//, "")))]
 
   return {
     normalized,
@@ -99,7 +119,24 @@ function collectSignals(messageText: string, history: readonly Message[]): Reque
     longTask: normalized.length > 200 || bulletCount >= 3,
     structuredBulletCount: bulletCount,
     priorToolMessages,
+    targetFilePaths,
   }
+}
+
+function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): boolean {
+  const explicitSingleArtifact = /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b/i.test(signals.normalized)
+  if (!explicitSingleArtifact) return false
+
+  // Require exactly one concrete target file path for deterministic routing.
+  if (signals.targetFilePaths.length !== 1) return false
+
+  // Block burst routing on ambiguous or decomposable requests.
+  if (signals.hasDelegationCue || signals.hasMultiStepCue) return false
+  if (signals.structuredBulletCount > 0) return false
+  if (MULTI_TARGET_CUE_RE.test(signals.normalized)) return false
+
+  // Must still be a cohesive implementation intent, not a tiny edit turn.
+  return signals.hasImplementationScopeCue || COHESIVE_IMPLEMENTATION_RE.test(signals.normalized)
 }
 
 // ============================================================================
@@ -183,6 +220,12 @@ export function assessPlannerDecision(
   }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return { score, shouldPlan: false, reason: "plan_generation_direct_path" }
+  }
+
+  // Adaptive no-plan route: single-artifact implementation requests are usually
+  // faster and higher quality in a direct cohesive coding pass than micro-planning.
+  if (SINGLE_ARTIFACT_BURST_RE.test(signals.normalized) && isHighConfidenceSingleArtifactBurst(signals)) {
+    return { score, shouldPlan: false, reason: "single_artifact_direct_burst" }
   }
 
   const shouldPlan = score >= 3

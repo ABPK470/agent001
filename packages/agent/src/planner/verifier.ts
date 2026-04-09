@@ -61,7 +61,7 @@ function extractActualPaths(output: string): string[] {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   // Match "created/wrote/modified [to] <path>" patterns — the optional "to" is
-  // critical because tool output says "Successfully wrote to tmp/chess/game.js"
+  // critical because tool output often says "Successfully wrote to tmp/app/main.js"
   for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
@@ -652,10 +652,15 @@ export async function runDeterministicProbes(
   }
 
   // ── Cross-step integration probe ──
-  // After all per-step probes, check that artifacts across steps integrate properly.
-  // This catches: HTML missing <script> tags for JS files, cross-file window.X references
-  // to unexported symbols, etc.
-  await runIntegrationProbes(plan, pipelineResult, toolMap, assessments)
+  // Run ONLY after all subagent steps completed; otherwise this creates
+  // premature failures while artifacts are still being assembled.
+  const allSubagentStepsCompleted = plan.steps
+    .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
+    .every((s) => pipelineResult.stepResults.get(s.name)?.status === "completed")
+
+  if (allSubagentStepsCompleted) {
+    await runIntegrationProbes(plan, pipelineResult, toolMap, assessments)
+  }
 
   return assessments
 }
@@ -675,19 +680,51 @@ async function runIntegrationProbes(
   toolMap: Map<string, Tool>,
   assessments: VerifierStepAssessment[],
 ): Promise<void> {
-  const readFile = toolMap.get("read_file")
-  const runCommand = toolMap.get("run_command")
-  if (!readFile) return
+  const allArtifacts = collectIntegrationArtifacts(plan)
+  const ctx: IntegrationProbeContext = {
+    plan,
+    toolMap,
+    assessments,
+    allArtifacts,
+  }
 
-  // Collect ALL target artifacts and their owning step across the plan
-  const allArtifacts: Array<{ path: string; stepName: string }> = []
+  const probes: readonly IntegrationProbe[] = [probeWebEntrypointRuntimeWiring]
+  for (const probe of probes) {
+    await probe(ctx)
+  }
+}
+
+interface IntegrationArtifact {
+  path: string
+  stepName: string
+}
+
+interface IntegrationProbeContext {
+  plan: Plan
+  toolMap: Map<string, Tool>
+  assessments: VerifierStepAssessment[]
+  allArtifacts: readonly IntegrationArtifact[]
+}
+
+type IntegrationProbe = (ctx: IntegrationProbeContext) => Promise<void>
+
+function collectIntegrationArtifacts(plan: Plan): IntegrationArtifact[] {
+  const artifacts: IntegrationArtifact[] = []
   for (const step of plan.steps) {
     if (step.stepType !== "subagent_task") continue
     const sa = step as SubagentTaskStep
     for (const artifact of sa.executionContext.targetArtifacts) {
-      allArtifacts.push({ path: artifact, stepName: step.name })
+      artifacts.push({ path: artifact, stepName: step.name })
     }
   }
+  return artifacts
+}
+
+async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Promise<void> {
+  const { plan, toolMap, assessments, allArtifacts } = ctx
+  const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
+  if (!readFile) return
 
   const htmlArtifacts = allArtifacts.filter(a => /\.html?$/i.test(a.path))
   const jsArtifacts = allArtifacts.filter(a => /\.js$/i.test(a.path))
@@ -733,7 +770,7 @@ async function runIntegrationProbes(
     if (missingScripts.length > 0) {
       // Find the assessment for the HTML-owning step and replace it with integration issue
       const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
-      const issue = `Integration gap: HTML file "${htmlEntry.path}" has no <script> tags for JS files: ${missingScripts.join(", ")}. The JavaScript will never load.`
+      const issue = `Integration gap: entry artifact "${htmlEntry.path}" does not wire related runtime artifacts: ${missingScripts.join(", ")}. Runtime code will never load.`
       if (idx >= 0) {
         const existing = assessments[idx]
         assessments[idx] = {
@@ -839,12 +876,12 @@ Rules:
 - "fail" means the step fundamentally failed (error, no output, wrong approach entirely)
 - SKELETON / PLACEHOLDER CODE IS NEVER "pass": If a step was supposed to implement logic but output contains placeholder functions (\`return true\` as validation, empty bodies, \`// TODO\`, \`// Placeholder\`), mark it "retry" with specific issues listing what needs real implementation
 - LLM DEGENERATION IS NEVER "pass": Comments like \`// Other code as per existing logic\`, \`// rest of the code here\`, \`// same as above\`, \`// ... remaining\` mean the LLM skipped generating the actual code. Functions containing such comments are EMPTY STUBS even if they have some boilerplate around them. Check that functions have REAL algorithmic bodies, not just setup + degeneration comment + return.
-- SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. piece movement rules, validation, game state management) but the code only has trivial/generic implementations (e.g. a movePiece function that doesn't validate piece-specific movement, a highlightLegalMoves that doesn't check actual legal moves), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
+- SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. validation rules, state transitions, business workflows) but the code only has trivial/generic implementations (e.g. a validate function that always returns true, a UI update function that skips required checks), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
 - GUARD ORDERING: Check that early-return guards in event handlers or dispatchers don't block valid interactions. Example: \`if (item.owner !== currentUser) return;\` at the top of a click handler prevents clicking on opponent items to interact with them (e.g. capture). The guard should be conditional on current state (e.g. only reject when no item is already selected).
 - HELPER FUNCTION TRACING: For each key acceptance criterion, identify the function(s) that implement it and the helpers they call. Pick ONE concrete scenario and mentally trace the code path step by step, including into helper functions. Verify each helper returns the correct value for that scenario. A helper whose name implies a semantic (e.g. "isSameTeam", "isValid", "hasPermission", "belongsTo") must actually implement that semantic correctly — don't assume it works just because it has a body. Pay special attention to comparisons that erase important distinctions (e.g. case-insensitive comparison on data where case carries meaning).
-- MISSING FEATURE DETECTION: For each acceptance criterion, verify there is ACTUAL CODE implementing it — not just a function with a matching name, but real logic. If a criterion requires "checkmate detection" but no function traces king escape squares, that criterion is NOT met. If a criterion requires "en passant" but no code tracks the previous move's double-step, it is NOT met. List every criterion that is NOT implemented.
+- MISSING FEATURE DETECTION: For each acceptance criterion, verify there is ACTUAL CODE implementing it — not just a function with a matching name, but real logic. If a criterion requires session expiration logic but no code checks timestamps, that criterion is NOT met. If a criterion requires duplicate suppression but no code tracks prior ids, it is NOT met. List every criterion that is NOT implemented.
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem in the actual code
@@ -966,6 +1003,10 @@ export async function verify(
   tools: readonly Tool[],
   opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
 ): Promise<VerifierDecision> {
+  const knownProjectArtifacts = plan.steps
+    .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
+    .flatMap((s) => s.executionContext.targetArtifacts)
+
   // Phase 0: Delegation output contract validation
   // Fast, deterministic checks on child output structure + tool evidence.
   // These catch empty outputs, missing file mutations, contradictory claims, etc.
@@ -980,6 +1021,8 @@ export async function verify(
     const contractSpec = buildContractSpec(
       sa,
       sa.executionContext,
+      undefined,
+      knownProjectArtifacts,
     )
     const contractResult = validateDelegatedOutputContract({
       spec: contractSpec,
@@ -1045,7 +1088,7 @@ export async function verify(
   // concrete code to assess (not just the child's self-reported output).
   // Use probeArtifact for path resolution — the planned paths are often bare
   // filenames (e.g. "gameLogic.js") but the actual files live in subdirectories
-  // (e.g. "tmp/chess/gameLogic.js"). Without resolution the LLM verifier
+  // (e.g. "tmp/project/logic.js"). Without resolution the LLM verifier
   // gets zero code context and cannot assess quality.
   const artifactContents = new Map<string, string>()
   const toolMap = new Map(tools.map(t => [t.name, t]))
@@ -1376,8 +1419,8 @@ const BUILTIN_METHODS = new Set([
  *
  * When a child agent destructively rewrites a file, it often removes method
  * definitions while keeping calls to those methods in other methods. For example:
- *   - isMoveLegal() calls this.isPawnMove() but isPawnMove was deleted
- *   - makeMove() calls this.handleCastling() but handleCastling was deleted
+ *   - validateRecord() calls this.checkConstraints() but checkConstraints was deleted
+ *   - processEvent() calls this.normalizePayload() but normalizePayload was deleted
  *
  * This check extracts all `this.X()` calls and all method/function definitions,
  * then reports calls to methods that don't exist in the file.
@@ -1467,8 +1510,7 @@ const CRITERION_STOP_WORDS = new Set([
   "data", "value", "values", "return", "check", "that", "this", "with",
   "when", "each", "from", "have", "correctly", "properly", "displayed",
   "support", "allow", "prevent", "include", "system", "state", "valid",
-  "invalid", "true", "false", "game", "piece", "pieces", "move", "moves",
-  "player", "board", "square", "click", "selected", "display", "area",
+  "invalid", "true", "false", "click", "selected", "display", "area",
   "type", "rule", "rules", "handle", "event", "user", "item", "items",
   "file", "error", "result", "input", "output", "update", "action",
 ])
@@ -1482,14 +1524,14 @@ const CRITERION_STOP_WORDS = new Set([
  * Strategy:
  * - Split on word boundaries, split camelCase
  * - Keep words ≥4 chars that are not stop words
- * - Also detect multi-word technical phrases ("en passant" → "enpassant", "en_passant")
+ * - Also detect multi-word technical phrases ("access control" → "permission", "authorize")
  * - Return lowercase keywords
  *
  * Examples:
- *   "castling must work correctly" → ["castl"]
- *   "pawn promotion to queen" → ["pawn", "promot"]
- *   "check and checkmate detection" → ["checkmate"]  (check is too common)
- *   "en passant capture" → ["passant", "enpassant", "en_passant"]
+ *   "token refresh must work correctly" → ["token", "refresh"]
+ *   "duplicate event suppression" → ["duplic", "suppres"]
+ *   "access control enforcement" → ["permission", "authorize", "access"]
+ *   "drag and drop ordering" → ["drag", "drop", "order"]
  */
 export function extractCriterionKeywords(criterion: string): string[] {
   const lower = criterion.toLowerCase()
@@ -1497,9 +1539,6 @@ export function extractCriterionKeywords(criterion: string): string[] {
 
   // Extract multi-word technical phrases first
   const PHRASE_PATTERNS: Array<{ re: RegExp; stems: string[] }> = [
-    { re: /en\s+passant/i, stems: ["passant", "enpassant", "en_passant"] },
-    { re: /check\s*mate/i, stems: ["checkmate", "check_mate"] },
-    { re: /stale\s*mate/i, stems: ["stalemate", "stale_mate"] },
     { re: /drag\s*(?:and|&)\s*drop/i, stems: ["drag", "drop"] },
     { re: /right[\s-]click/i, stems: ["rightclick", "contextmenu"] },
     { re: /double[\s-]click/i, stems: ["dblclick", "doubleclick"] },
@@ -1515,8 +1554,8 @@ export function extractCriterionKeywords(criterion: string): string[] {
   const words = lower.split(/[\s,;:.()\[\]{}'"\/\\]+/).filter(w => w.length >= 4)
   for (const word of words) {
     if (CRITERION_STOP_WORDS.has(word)) continue
-    // Use word stems (prefix) for matching to handle "castling" matching "castl",
-    // "promotion" matching "promot", etc.
+    // Use word stems (prefix) for matching to handle variants like
+    // "validation" matching "validat" and "promotion" matching "promot".
     const stem = word.length > 6 ? word.slice(0, Math.max(5, Math.ceil(word.length * 0.7))) : word
     if (stem.length >= 4 && !CRITERION_STOP_WORDS.has(stem)) {
       keywords.push(stem)

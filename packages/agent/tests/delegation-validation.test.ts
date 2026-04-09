@@ -266,14 +266,31 @@ describe("validateDelegatedOutputContract", () => {
   })
 
   describe("file artifact evidence in output", () => {
-    it("detects missing file paths in output after mutation", () => {
+    it("detects missing file paths when neither output nor tool result has artifact paths", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
         output: "I created all the chess game files successfully with board rendering and drag-and-drop",
-        toolCalls: [makeToolCall()],
+        toolCalls: [
+          makeToolCall({
+            args: { content: "console.log('hello')" },
+            result: "Success",
+          }),
+        ],
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_file_artifact_evidence")
+    })
+
+    it("passes when mutation tool calls include explicit path evidence", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ verificationMode: "none" }),
+        output: "Board renders 8x8 grid and pieces can be dragged.",
+        toolCalls: [
+          makeToolCall(),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "verified implementation" }),
+        ],
+      })
+      expect(result.ok).toBe(true)
     })
   })
 
@@ -301,6 +318,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
           targetArtifacts: ["tmp/chess/index.html"],
+          verificationMode: "browser_check",
         }),
         output: "Created tmp/chess/index.html with full app shell.",
         toolCalls: [
@@ -317,6 +335,30 @@ describe("validateDelegatedOutputContract", () => {
 
       expect(result.ok).toBe(false)
       expect(result.code).toBe("unresolved_artifact_references")
+    })
+
+    it("passes when unresolved references are planned in other workflow steps", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          targetArtifacts: ["tmp/chess/index.html"],
+          verificationMode: "none",
+          knownProjectArtifacts: ["tmp/chess/styles.css", "tmp/chess/game-logic.js", "tmp/chess/ui-logic.js"],
+        }),
+        output: "Created tmp/chess/index.html scaffold and linked planned assets.",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: {
+              path: "tmp/chess/index.html",
+              content: "<link rel=\"stylesheet\" href=\"styles.css\">\\n<script src=\"game-logic.js\"></script>\\n<script src=\"ui-logic.js\"></script>",
+            },
+            result: "Success",
+          }),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" }),
+        ],
+      })
+
+      expect(result.ok).toBe(true)
     })
 
     it("passes when local references are covered by target artifacts", () => {
@@ -350,6 +392,29 @@ describe("validateDelegatedOutputContract", () => {
 
       expect(result.ok).toBe(true)
     })
+
+    it("does not treat CSS unit literals as unresolved artifact references", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          targetArtifacts: ["tmp/chess/pieces.js"],
+        }),
+        output: "Updated tmp/chess/pieces.js and verified rendering setup.",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: {
+              path: "tmp/chess/pieces.js",
+              content: "pieceElement.style.fontSize = '1.8rem';\\npieceElement.style.height = '100%';",
+            },
+            result: "Success",
+          }),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/pieces.js" }, result: "ok" }),
+        ],
+      })
+
+      expect(result.ok).toBe(true)
+      expect(result.code).not.toBe("unresolved_artifact_references")
+    })
   })
 
   describe("browser evidence quality", () => {
@@ -368,6 +433,23 @@ describe("validateDelegatedOutputContract", () => {
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("low_signal_browser_evidence")
+    })
+
+    it("rejects browser_check evidence when runtime/load errors are present", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ verificationMode: "browser_check" }),
+        output: "Implemented chess UI and verified in browser. tmp/chess/index.html",
+        toolCalls: [
+          makeToolCall(),
+          makeToolCall({
+            name: "browser_check",
+            args: { path: "tmp/chess/index.html" },
+            result: "Found 2 JavaScript error(s): Failed to load resource: the server responded with a status of 404",
+          }),
+        ],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("missing_executable_verification_evidence")
     })
 
     it("passes with meaningful browser evidence", () => {
@@ -442,6 +524,25 @@ describe("validateDelegatedOutputContract", () => {
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
+    })
+
+    it("does NOT fail on placeholder wording used as requirement description", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({
+          acceptanceCriteria: [],
+          verificationMode: "none",
+        }),
+        output: "Done. Added placeholders for JavaScript and CSS linking in tmp/chess/index.html as requested.",
+        toolCalls: [
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/index.html", content: "<link rel=\"stylesheet\" href=\"styles.css\">" },
+            result: "Success",
+          }),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" }),
+        ],
+      })
+      expect(result.ok).toBe(true)
     })
 
     it("does NOT false-positive on 'later' in normal English descriptions", () => {
@@ -678,6 +779,13 @@ describe("isFileMutationToolCall", () => {
 
   it("does not identify read_file as mutation", () => {
     expect(isFileMutationToolCall(makeToolCall({ name: "read_file" }))).toBe(false)
+  })
+
+  it("does not treat plain cat reads as mutation", () => {
+    expect(isFileMutationToolCall(makeToolCall({
+      name: "run_command",
+      args: { command: "cat tmp/chess/index.html" },
+    }))).toBe(false)
   })
 })
 

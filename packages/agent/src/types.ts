@@ -199,6 +199,12 @@ export interface AgentConfig {
   onLlmCall?: (data: { phase: "request"; messages: Message[]; tools: Tool[]; iteration: number } | { phase: "response"; response: LLMResponse; iteration: number; durationMs: number }) => void
   /** Called when the agent loop injects a system nudge/guard message. */
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
+  /**
+   * When true, defer recovery-hint system nudges until the agent first attempts
+   * completion (response with zero tool calls). This preserves an uninterrupted
+   * implementation window for high-throughput coding tasks.
+   */
+  deferRecoveryHintsUntilCompletionAttempt?: boolean
   /** AbortSignal for external cancellation. */
   signal?: AbortSignal
   /**

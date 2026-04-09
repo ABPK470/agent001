@@ -9,7 +9,7 @@ import { ArrowDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
-import { fmtTokens } from "../util"
+import { fmtTokens, remediationHintForValidationCode } from "../util"
 
 function TraceItem({ entry }: { entry: TraceEntry }) {
   const [expanded, setExpanded] = useState(false)
@@ -219,6 +219,21 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         </div>
       )
 
+    case "planner-validation-remediated":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-success/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">PLAN</span>
+            <span className="text-success text-[13px]">✓ validation auto-remediated</span>
+          </div>
+          {entry.diagnostics.map((d, i) => (
+            <div key={i} className="text-success/80 text-[12px] ml-5 mt-0.5">
+              [{d.code}] {d.message}
+            </div>
+          ))}
+        </div>
+      )
+
     case "planner-output-root-forced":
       return (
         <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
@@ -257,10 +272,25 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
     case "planner-step-end":
       return (
         <div className="text-[12px] font-mono pl-6 py-0.5">
-          <span className={entry.status === "completed" ? "text-success" : "text-error"}>
-            {entry.status === "completed" ? "✓" : "✗"} {entry.stepName}
-          </span>
-          <span className="text-text-muted/50 ml-2">{entry.durationMs}ms</span>
+          <div>
+            <span className={entry.status === "completed" ? "text-success" : "text-error"}>
+              {entry.status === "completed" ? "✓" : "✗"} {entry.stepName}
+            </span>
+            <span className="text-text-muted/50 ml-2">{entry.durationMs}ms</span>
+            {entry.validationCode && (
+              <span className="text-warning/90 ml-2">[{entry.validationCode}]</span>
+            )}
+          </div>
+          {entry.status !== "completed" && (entry.error || entry.validationCode) && (
+            <div className="pl-3 mt-0.5 space-y-0.5 border-l border-error/20">
+              {entry.error && (
+                <div className="text-error/80 text-[11px] whitespace-pre-wrap">{entry.error}</div>
+              )}
+              <div className="text-warning/80 text-[11px] whitespace-pre-wrap">
+                fix: {remediationHintForValidationCode(entry.validationCode)}
+              </div>
+            </div>
+          )}
         </div>
       )
 

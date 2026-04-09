@@ -111,9 +111,8 @@ async function main() {
   const dockerReady = await sandbox.isDockerAvailable()
   if (dockerReady) {
     setShellExecutor(async (command, cwd) => {
-      const result = await sandbox.exec(command, currentWorkspace, {
-        cwd: cwd !== currentWorkspace ? cwd.replace(currentWorkspace + "/", "") : undefined,
-      })
+      const workspaceForRun = cwd || currentWorkspace
+      const result = await sandbox.exec(command, workspaceForRun)
       return result
     })
     if (sandbox.isStrictMode) {
@@ -126,9 +125,10 @@ async function main() {
     // Build browser image in background (don't block startup)
     sandbox.ensureBrowserImage().then((ready) => {
       if (ready) {
-        setBrowserCheckExecutor(async (htmlPath, clicks, waitMs, _cwd) => {
+        setBrowserCheckExecutor(async (htmlPath, clicks, waitMs, cwd) => {
           const script = buildBrowserScript(htmlPath, clicks, waitMs)
-          const result = await sandbox.browserExec(script, currentWorkspace, { timeout: 30_000 })
+          const workspaceForRun = cwd || currentWorkspace
+          const result = await sandbox.browserExec(script, workspaceForRun, { timeout: 30_000 })
 
           if (result.stderr === "FALLBACK_TO_HOST") {
             throw new Error("Browser image not available")
@@ -419,7 +419,16 @@ function buildBrowserScript(htmlPath: string, clicks: string[], waitMs: number):
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const puppeteer = require("puppeteer");
+let puppeteer;
+try {
+  puppeteer = require("puppeteer");
+} catch {
+  try {
+    puppeteer = require("/usr/local/lib/node_modules/puppeteer");
+  } catch {
+    puppeteer = require("/usr/lib/node_modules/puppeteer");
+  }
+}
 
 const MIME = {
   ".html": "text/html", ".htm": "text/html", ".js": "application/javascript",
@@ -441,7 +450,8 @@ async function main() {
   // Static file server
   const server = http.createServer(async (req, res) => {
     const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-    const filePath = path.join(dir, urlPath === "/" ? "index.html" : urlPath);
+    const relPath = (urlPath === "/" ? "index.html" : urlPath.replace(/^\\/+/, "")) || "index.html";
+    const filePath = path.join(dir, relPath);
     if (!filePath.startsWith(dir)) { res.writeHead(403); res.end(); return; }
     try {
       const content = fs.readFileSync(filePath);

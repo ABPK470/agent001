@@ -320,6 +320,7 @@ function buildMessages(showPhase: Set<string>): Msg[] {
 
   add({ kind: "alt-else", from: "planner", to: "planner", label: "else [validation failed → fallback]", phase: "planner" })
   add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-validation-failed')", detail: "diagnostics[]", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-validation-remediated')", detail: "diagnostics[]", phase: "planner" })
   add({ kind: "return", from: "planner", to: "agent", label: "{ handled: false, skipReason }", dashed: true, color: P.planner, phase: "planner" })
   add({ kind: "self", from: "agent", to: "agent", label: "fall through to direct tool loop", detail: "agent.ts:300 — standard path", phase: "planner" })
   add({ kind: "alt-end", from: "planner", to: "planner", label: "", phase: "planner" })
@@ -478,6 +479,7 @@ function traceToPhase(trace: TraceEntry[]): {
       case "planner-plan-generated":
       case "planner-generation-failed":
       case "planner-validation-failed":
+      case "planner-validation-remediated":
         activePhase = "planner"
         activeLifelines.add("planner").add("llm")
         break

@@ -248,10 +248,10 @@ function extractFunctionBody(code: string, startOffset: number): { body: string;
  * cross-cutting concern (ownership, role, permission, type) that was applied
  * to only a subset of branches — a structural inconsistency regardless of domain.
  *
- * Examples this catches (without knowing what .color, .role, .method mean):
- *   - Game:  isValidMove() checks `.color` in pawn branch but not rook/knight/bishop
- *   - Auth:  checkPermission() checks `.role` in admin branch but not user/guest
- *   - API:   validateRequest() checks `.origin` in POST branch but not PUT/DELETE
+ * Examples this catches (without knowing what .owner, .role, .method mean):
+ *   - Domain: evaluateAction() checks `.owner` in one branch but not others
+ *   - Auth: checkPermission() checks `.role` in admin branch but not user/guest
+ *   - API: validateRequest() checks `.origin` in POST branch but not PUT/DELETE
  *
  * The detector also recognises a global guard before the dispatch chain:
  *   if (target.prop === source.prop) return false;

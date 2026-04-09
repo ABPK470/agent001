@@ -91,6 +91,7 @@ export interface PipelineExecutorOptions {
 interface SubagentStepValidationContext {
   readFileTool?: Tool
   workspaceRoot?: string
+  knownProjectArtifacts?: readonly string[]
 }
 
 /**
@@ -106,6 +107,9 @@ export async function executePipeline(
 ): Promise<PipelineResult> {
   const maxParallel = opts?.maxParallel ?? 4
   const stepResults = new Map<string, PipelineStepResult>()
+  const knownProjectArtifacts = plan.steps
+    .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
+    .flatMap((s) => s.executionContext.targetArtifacts)
 
   // Build tool lookup
   const toolMap = new Map(tools.map(t => [t.name, t]))
@@ -203,9 +207,14 @@ export async function executePipeline(
           ? `\n\n⚠️ STUB FUNCTION REMEDIATION — THIS IS YOUR PRIMARY TASK:\nThe verifier detected functions that are stubs or contain degeneration comments (e.g. "// Other code as per existing logic", "// rest of the code here", "// same as above"). These comments mean NO CODE WAS ACTUALLY WRITTEN — the function body is empty/incomplete.\nFor EACH stub/degenerated function you MUST:\n1. Read the file that contains it\n2. Locate the function by name\n3. Replace the stub body with a REAL, COMPLETE algorithm — DO NOT use comments like "existing logic" or "same as above"\n4. The function NAME tells you WHAT it must do — implement the FULL algorithm. Example: "getLegalMoves" must compute legal moves for ALL piece types with proper board bounds checking.\n5. Do NOT change the function signature — only replace the body\n6. After implementing, re-read the file and verify the stub is gone`
           : ""
 
+        const hasReplaceInFile = toolMap.has("replace_in_file")
+        const retryRules = hasReplaceInFile
+          ? "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions"
+          : "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. replace_in_file is unavailable in this environment. Use write_file carefully and preserve all existing code.\n3. write_file REPLACES the entire file — include the full current file plus your fix, never partial fragments.\n4. Make the smallest targeted correction needed for the listed issues.\n5. Do not introduce placeholders, stubs, or narrative comments in code."
+
         effectiveStep = {
           ...sa,
-          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}\n\n⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions`,
+          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}\n\n${retryRules}`,
           executionContext: {
             ...sa.executionContext,
             requiredSourceArtifacts: [...existingSource],
@@ -238,7 +247,11 @@ export async function executePipeline(
         toolExecFn,
         delegateFn,
         opts?.signal,
-        { readFileTool: toolMap.get("read_file"), workspaceRoot: opts?.workspaceRoot },
+        {
+          readFileTool: toolMap.get("read_file"),
+          workspaceRoot: opts?.workspaceRoot,
+          knownProjectArtifacts,
+        },
       )
 
       // ── Post-retry regression check ──
@@ -493,6 +506,21 @@ interface SubagentValidationFailure {
   message: string
 }
 
+function getMutatedArtifactPaths(calls: readonly ToolCallRecord[]): Set<string> {
+  const paths = new Set<string>()
+  for (const c of calls) {
+    if (c.isError) continue
+    if (c.name !== "write_file" && c.name !== "replace_in_file") continue
+    const path = typeof c.args.path === "string" ? c.args.path : ""
+    if (!path) continue
+    paths.add(path)
+    paths.add(path.replace(/^\.\//, ""))
+    const base = path.split("/").pop()
+    if (base) paths.add(base)
+  }
+  return paths
+}
+
 async function validateSubagentCompletion(
   step: SubagentTaskStep,
   output: string,
@@ -515,8 +543,13 @@ async function validateSubagentCompletion(
   }
 
   // Deterministic child-output contract gate.
-  const contractSpec = buildContractSpec(step, step.executionContext)
-  if (specRequiresSuccessfulToolEvidence(contractSpec) && calls.length === 0) {
+  const enrichedSpec = buildContractSpec(
+    step,
+    step.executionContext,
+    undefined,
+    validationCtx?.knownProjectArtifacts,
+  )
+  if (specRequiresSuccessfulToolEvidence(enrichedSpec) && calls.length === 0) {
     return {
       code: "missing_successful_tool_evidence",
       message:
@@ -524,7 +557,7 @@ async function validateSubagentCompletion(
         `Completion is rejected until at least one successful tool execution is recorded.`,
     }
   }
-  if (specRequiresFileMutationEvidence(contractSpec) && calls.length === 0) {
+  if (specRequiresFileMutationEvidence(enrichedSpec) && calls.length === 0) {
     return {
       code: "missing_file_mutation_evidence",
       message:
@@ -534,7 +567,7 @@ async function validateSubagentCompletion(
   }
 
   const contract = validateDelegatedOutputContract({
-    spec: contractSpec,
+    spec: enrichedSpec,
     output,
     toolCalls: calls,
   })
@@ -552,15 +585,34 @@ async function validateSubagentCompletion(
   const readFileTool = validationCtx?.readFileTool
   if (!readFileTool) return null
 
-  // Artifact-quality gate: no placeholder/stub logic in code targets.
+  // Adaptive artifact-quality gate:
+  // - strict scope for verification-critical or reviewer/validator roles
+  // - progressive scope for large writer steps (check mutated code targets first)
   const codeTargets = step.executionContext.targetArtifacts.filter((a) => /\.(js|jsx|ts|tsx|py)$/i.test(a))
-  for (const artifact of codeTargets) {
+  const strictQualityScope =
+    step.executionContext.verificationMode !== "none"
+    || step.executionContext.role === "validator"
+    || step.executionContext.role === "reviewer"
+
+  const mutatedPaths = getMutatedArtifactPaths(calls)
+  const qualityTargets = strictQualityScope
+    ? codeTargets
+    : codeTargets.filter((artifact) => {
+        const normalized = artifact.replace(/^\.\//, "")
+        const base = normalized.split("/").pop() ?? normalized
+        return mutatedPaths.has(artifact) || mutatedPaths.has(normalized) || mutatedPaths.has(base)
+      })
+
+  for (const artifact of qualityTargets) {
     const content = await tryReadArtifact(readFileTool, artifact, validationCtx?.workspaceRoot)
     if (!content) {
-      return {
-        code: "missing_target_artifact_coverage",
-        message: `Step "${step.name}" did not produce readable target artifact: ${artifact}`,
+      if (strictQualityScope) {
+        return {
+          code: "missing_target_artifact_coverage",
+          message: `Step "${step.name}" did not produce readable target artifact: ${artifact}`,
+        }
       }
+      continue
     }
 
     const placeholders = detectPlaceholderPatterns(content)
@@ -604,16 +656,44 @@ function extractMentionedPaths(output: string): string[] {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   // "created/wrote/modified [to] <path>" patterns — the optional "to" is
-  // critical because tool output says "Successfully wrote to tmp/chess/game.js"
+  // critical because tool output often says "Successfully wrote to tmp/app/main.js"
   for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   return [...new Set(paths)]
 }
 
+function extractMutatedPathsFromToolCalls(calls: readonly ToolCallRecord[] | undefined): string[] {
+  if (!calls || calls.length === 0) return []
+  const paths = new Set<string>()
+
+  for (const c of calls) {
+    if (c.isError) continue
+    if (c.name !== "write_file" && c.name !== "replace_in_file" && c.name !== "create_file") continue
+
+    const fromArgs = typeof c.args.path === "string"
+      ? c.args.path
+      : typeof c.args.filePath === "string"
+        ? c.args.filePath
+        : typeof c.args.file === "string"
+          ? c.args.file
+          : ""
+    if (fromArgs.trim().length > 0) {
+      paths.add(fromArgs)
+      continue
+    }
+
+    for (const m of c.result.matchAll(/(?:wrote|created|updated|saved)\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+      if (m[1] && m[1].length < 200) paths.add(m[1])
+    }
+  }
+
+  return [...paths]
+}
+
 /** Summarize a dependency step's output for downstream consumption. */
-function summarizeDependencyOutput(output: string, maxChars: number): string {
-  const mentionedPaths = extractMentionedPaths(output)
+function summarizeDependencyOutput(output: string, maxChars: number, toolCalls?: readonly ToolCallRecord[]): string {
+  const mentionedPaths = extractMutatedPathsFromToolCalls(toolCalls)
   const parts: string[] = []
 
   if (mentionedPaths.length > 0) {
@@ -654,7 +734,7 @@ function injectPriorContext(
 
     // agenc-core pattern: summarize rather than raw truncate
     const summary = depResult.output
-      ? summarizeDependencyOutput(depResult.output, 800)
+      ? summarizeDependencyOutput(depResult.output, 800, depResult.toolCalls)
       : `(step ${depResult.status})`
 
     priorSections.push(
@@ -701,15 +781,15 @@ function injectPriorContext(
         ? (depStep as SubagentTaskStep).executionContext.targetArtifacts
         : []
 
-      // First: try to extract actual paths from the child's output
-      if (depResult?.output) {
-        const actualPaths = extractMentionedPaths(depResult.output)
+      // First: use concrete tool-call mutation paths from the dependency step.
+      if (depResult) {
+        const actualPaths = extractMutatedPathsFromToolCalls(depResult.toolCalls)
         if (actualPaths.length > 0) {
           // Cross-reference: if extracted path is a bare name (no "/") but
           // the plan's targetArtifact has the full path (with directory prefix),
-          // prefer the target artifact version.  Children often report
-          // "`gameLogic.js`" in their summary but the actual file is at
-          // "tmp/chess/gameLogic.js".
+          // prefer the target artifact version. Children often report
+          // "`logic.js`" in their summary but the actual file is at
+          // "tmp/project/logic.js".
           const resolvedPaths = actualPaths.map(extracted => {
             if (!extracted.includes("/") && depTargetArtifacts.length > 0) {
               const match = depTargetArtifacts.find(
@@ -720,6 +800,15 @@ function injectPriorContext(
             return extracted
           })
           priorArtifacts.push(...resolvedPaths)
+          continue
+        }
+      }
+
+      // Fallback: parse textual output paths only if tool-call evidence is absent.
+      if (depResult?.output) {
+        const outputPaths = extractMentionedPaths(depResult.output)
+        if (outputPaths.length > 0) {
+          priorArtifacts.push(...outputPaths)
           continue
         }
       }

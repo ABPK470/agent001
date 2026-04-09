@@ -626,6 +626,7 @@ export class Agent {
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
     toolKillManager: AgentConfig["toolKillManager"]
     completionValidator: AgentConfig["completionValidator"]
+    deferRecoveryHintsUntilCompletionAttempt: AgentConfig["deferRecoveryHintsUntilCompletionAttempt"]
   }
 
   /** Cumulative token usage across all LLM calls in this agent's run. */
@@ -655,6 +656,7 @@ export class Agent {
       plannerDelegateFn: config.plannerDelegateFn,
       toolKillManager: config.toolKillManager,
       completionValidator: config.completionValidator,
+      deferRecoveryHintsUntilCompletionAttempt: config.deferRecoveryHintsUntilCompletionAttempt,
     }
   }
 
@@ -828,6 +830,9 @@ export class Agent {
     let budgetNudged = false
     // Track if we already ran the completion validator (only once per run).
     let completionValidated = false
+    // Track whether the model has made at least one completion attempt
+    // (response with zero tool calls). Used by optional deferred-nudge mode.
+    let completionAttempted = false
 
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
@@ -933,6 +938,7 @@ export class Agent {
 
       // No tool calls → the agent is done, return the final answer
       if (response.toolCalls.length === 0) {
+        completionAttempted = true
         // Guard: if this is iteration 0 and the agent has tools, it likely
         // bailed without doing any work. Nudge it once to actually act.
         if (i === 0 && this.toolList.length > 0 && !earlyExitNudged) {
@@ -1282,6 +1288,9 @@ export class Agent {
       // Recovery hints: scan for known failure patterns and inject targeted advice
       const recoveryHints = buildRecoveryHints(roundToolCalls, emittedRecoveryHints)
       for (const hint of recoveryHints) {
+        if (this.config.deferRecoveryHintsUntilCompletionAttempt && !completionAttempted) {
+          continue
+        }
         const hintMsg = `RECOVERY HINT: ${hint.message}`
         messages.push({ role: "system", content: hintMsg, section: "history" })
         this.config.onNudge?.({ tag: `recovery-hint:${hint.key}`, message: hintMsg, iteration: i })

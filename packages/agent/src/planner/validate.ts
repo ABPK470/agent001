@@ -16,6 +16,8 @@
 import type { Tool } from "../types.js"
 import type { DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "./types.js"
 
+const RUNTIME_CODE_ARTIFACT_RE = /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i
+
 // ============================================================================
 // Main validation entry point
 // ============================================================================
@@ -43,7 +45,8 @@ export function validatePlan(
   diagnostics.push(...validateArtifactOwnership(plan.steps))
   diagnostics.push(...validateVerificationCoverage(plan.steps))
   diagnostics.push(...validatePathConsistency(plan.steps))
-  diagnostics.push(...validateHtmlJsIntegration(plan.steps))
+  diagnostics.push(...validateArtifactDependencyWiring(plan.steps))
+  diagnostics.push(...validatePrematureBrowserVerification(plan.steps))
   diagnostics.push(...validateVisualCompleteness(plan.steps))
   diagnostics.push(...validateSharedDataContract(plan.steps))
 
@@ -51,6 +54,73 @@ export function validatePlan(
     valid: diagnostics.filter(d => d.severity === "error").length === 0,
     diagnostics,
   }
+}
+
+function artifactDir(path: string): string {
+  const parts = path.split("/")
+  if (parts.length <= 1) return ""
+  return parts.slice(0, -1).join("/")
+}
+
+function isSameOrNestedDir(candidate: string, base: string): boolean {
+  if (!base) return candidate.length === 0
+  return candidate === base || candidate.startsWith(`${base}/`)
+}
+
+// ============================================================================
+// Browser verification ordering
+// ============================================================================
+
+/**
+ * Detect impossible contracts where a browser_check step runs on web entry
+ * artifacts before related web runtime artifacts are produced by other steps.
+ */
+function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanDiagnostic[] {
+  const diagnostics: PlanDiagnostic[] = []
+  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+
+  const runtimeByStep = new Map<string, string[]>()
+  for (const step of subagentSteps) {
+    const runtimeArtifacts = (step.executionContext?.targetArtifacts ?? [])
+      .filter(a => RUNTIME_CODE_ARTIFACT_RE.test(a))
+    runtimeByStep.set(step.name, runtimeArtifacts)
+  }
+
+  for (const step of subagentSteps) {
+    if (step.executionContext?.verificationMode !== "browser_check") continue
+    const entryTargets = (step.executionContext?.targetArtifacts ?? []).filter(a => /\.(?:html?|xhtml)$/i.test(a))
+    if (entryTargets.length === 0) continue
+
+    const ownRuntime = new Set(runtimeByStep.get(step.name) ?? [])
+    const entryDirs = entryTargets.map(artifactDir)
+
+    const ownRuntimeDirs = new Set([...ownRuntime].map(artifactDir))
+    const relatedForeignRuntime = subagentSteps
+      .filter(s => s.name !== step.name)
+      .flatMap(s => runtimeByStep.get(s.name) ?? [])
+      .filter((artifactPath) => {
+        if (ownRuntime.has(artifactPath)) return false
+        const runtimeDir = artifactDir(artifactPath)
+        if (ownRuntimeDirs.size > 0) {
+          return ownRuntimeDirs.has(runtimeDir)
+        }
+        return entryDirs.some((dir) => isSameOrNestedDir(runtimeDir, dir) || isSameOrNestedDir(dir, runtimeDir))
+      })
+
+    if (relatedForeignRuntime.length > 0) {
+      const sample = [...new Set(relatedForeignRuntime)].slice(0, 4).join(", ")
+      diagnostics.push({
+        category: "verification",
+        severity: "error",
+        code: "premature_browser_verification",
+        message: `Step "${step.name}" runs browser_check on web entry artifacts before related runtime artifacts are owned by this step: ${sample}. ` +
+          `Move required runtime artifacts into this step, or defer browser_check to a later integration owner step that includes all referenced assets.`,
+        stepName: step.name,
+      })
+    }
+  }
+
+  return diagnostics
 }
 
 // ============================================================================
@@ -293,7 +363,9 @@ function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnosti
 
   const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
 
-  // If there are write steps but no step with verification mode set, warn
+  // If there are write steps but no step with verification mode set, emit
+  // guidance only. Runtime/test verification can still run in the final
+  // verifier after implementation is complete.
   const hasWriters = subagentSteps.some(
     s => s.executionContext?.effectClass !== "readonly",
   )
@@ -304,9 +376,9 @@ function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnosti
   if (hasWriters && !hasVerification && subagentSteps.length > 1) {
     diagnostics.push({
       category: "verification",
-      severity: "error",
+      severity: "warning",
       code: "no_verification_steps",
-      message: "Plan has write steps but no verification step. Add at least one step with verificationMode != 'none', or include a deterministic verification step.",
+      message: "Plan has write steps but no per-step verification mode. This is allowed; final verifier checks run after implementation. Consider setting verificationMode only on steps that fully own runnable artifacts.",
     })
   }
 
@@ -381,17 +453,53 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
     })
   }
 
-  // Check for inconsistent top-level directory across steps.
-  // e.g. step A uses "tmp/game/" and step B uses "tmp/chess_game/js/" — children
-  // will write to different directories and files won't load each other.
-  const uniqueTopDirs = new Set(allDirs.map(d => d.split("/").slice(0, 2).join("/")))
-  if (uniqueTopDirs.size > 1) {
+  // Check for inconsistent root output tree across steps.
+  // Sibling subdirectories under the same root (tmp/css, tmp/js) are valid and
+  // should NOT fail path consistency validation.
+  const uniqueRootDirs = new Set(
+    allDirs.map((d) => {
+      const root = d.split("/")[0]
+      return root && root.length > 0 ? root : "(root)"
+    }),
+  )
+  if (uniqueRootDirs.size > 1) {
     diagnostics.push({
       category: "graph",
       severity: "error",
       code: "inconsistent_output_directory",
-      message: `Steps use ${uniqueTopDirs.size} different output directories: ${[...uniqueTopDirs].join(", ")}. ` +
+      message: `Steps use ${uniqueRootDirs.size} different root output directories: ${[...uniqueRootDirs].join(", ")}. ` +
         `ALL steps MUST write to the SAME directory tree. Pick one and use it for all targetArtifacts.`,
+    })
+  }
+
+  // Under a shared root (e.g. tmp/*), detect divergent project namespaces.
+  // Example of invalid split tree: tmp/project_alpha/* vs tmp/project_beta/*.
+  // Example of valid sibling functional dirs: tmp/css/* and tmp/js/*.
+  const FUNCTIONAL_SUBDIRS = new Set([
+    "src", "lib", "app", "apps", "public", "assets", "static", "styles", "style", "css", "js", "scripts", "img", "images", "fonts", "tests", "test",
+  ])
+  const extractNamespace = (dir: string): string => {
+    const parts = dir.split("/").filter(Boolean)
+    // Skip root prefix (parts[0]); namespace starts from the next non-functional segment.
+    for (let i = 1; i < parts.length; i++) {
+      const seg = parts[i]!.toLowerCase()
+      if (FUNCTIONAL_SUBDIRS.has(seg)) continue
+      return parts[i]!
+    }
+    return ""
+  }
+  const namespaces = new Set(
+    allDirs
+      .map((d) => extractNamespace(d))
+      .filter((n) => n.length > 0),
+  )
+  if (uniqueRootDirs.size === 1 && namespaces.size > 1) {
+    diagnostics.push({
+      category: "graph",
+      severity: "error",
+      code: "inconsistent_output_directory",
+      message: `Steps diverge into different project namespaces under one root: ${[...namespaces].join(", ")}. ` +
+        `ALL steps must write to one coherent project tree (same namespace) to avoid broken cross-file wiring.`,
     })
   }
 
@@ -425,54 +533,58 @@ function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
 }
 
 // ============================================================================
-// HTML+JS integration validation
+// Artifact dependency wiring validation
 // ============================================================================
 
 /**
- * When a plan creates both HTML and JS files, verify that at least one step
- * owns the HTML file AND its acceptance criteria or objective mentions loading
- * scripts. This catches the "HTML missing <script> tags" pattern early.
+ * When a step owns both consumer artifacts (entry/markup files) and producer
+ * artifacts (runtime/dependency files), ensure its objective/criteria mention
+ * dependency wiring/integration behavior.
  */
-function validateHtmlJsIntegration(steps: readonly PlanStep[]): PlanDiagnostic[] {
+function validateArtifactDependencyWiring(steps: readonly PlanStep[]): PlanDiagnostic[] {
   const diagnostics: PlanDiagnostic[] = []
   const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
 
-  const allHtml: string[] = []
-  const allJs: string[] = []
+  const allConsumer: string[] = []
+  const allProducer: string[] = []
 
   for (const sa of subagentSteps) {
     for (const artifact of sa.executionContext?.targetArtifacts ?? []) {
-      if (/\.html?$/i.test(artifact)) allHtml.push(artifact)
-      else if (/\.js$/i.test(artifact)) allJs.push(artifact)
+      if (/\.(?:html?|xhtml|xml|md|markdown|svg)$/i.test(artifact)) allConsumer.push(artifact)
+      else if (RUNTIME_CODE_ARTIFACT_RE.test(artifact)) allProducer.push(artifact)
     }
   }
 
-  // Only check if the plan has both HTML and JS files
-  if (allHtml.length === 0 || allJs.length === 0) return diagnostics
+  if (allConsumer.length === 0 || allProducer.length === 0) return diagnostics
 
-  // Find the step that owns the HTML file
-  for (const html of allHtml) {
-    const htmlStep = subagentSteps.find(
-      sa => sa.executionContext?.targetArtifacts?.includes(html),
+  for (const consumerArtifact of allConsumer) {
+    const ownerStep = subagentSteps.find(
+      sa => sa.executionContext?.targetArtifacts?.includes(consumerArtifact),
     )
-    if (!htmlStep) continue
+    if (!ownerStep) continue
 
-    // Check whether the HTML step's objective or criteria mention script loading
+    const ownProducer = (ownerStep.executionContext?.targetArtifacts ?? []).filter(a => RUNTIME_CODE_ARTIFACT_RE.test(a))
+    if (ownProducer.length === 0) continue
+
     const combined = [
-      htmlStep.objective,
-      ...htmlStep.acceptanceCriteria,
+      ownerStep.objective,
+      ...ownerStep.acceptanceCriteria,
     ].join(" ").toLowerCase()
 
-    const mentionsScripts = /script|<script|\.js|javascript|load.*file|include.*file/i.test(combined)
+    const wiringCue = /\b(?:load|import|include|link|reference|wire|attach|depends?\s+on|hook(?:s|ed)?\s+up)\b/i.test(combined)
+    const mentionsProducer = ownProducer.some((a) => {
+      const base = a.split("/").pop() ?? a
+      return combined.includes(base.toLowerCase())
+    })
 
-    if (!mentionsScripts) {
+    if (!wiringCue && !mentionsProducer) {
       diagnostics.push({
         category: "contract",
         severity: "warning",
-        code: "html_missing_script_loading",
-        message: `Step "${htmlStep.name}" creates HTML file "${html}" but its objective/criteria don't mention loading JS files (${allJs.map(j => j.split("/").pop()).join(", ")}). ` +
-          `The HTML step MUST include <script src="..."> tags for all JS files. Add script-loading to the step's objective and acceptance criteria.`,
-        stepName: htmlStep.name,
+        code: "missing_dependency_wiring_criteria",
+        message: `Step "${ownerStep.name}" creates consumer artifact "${consumerArtifact}" and also owns dependency artifacts (${ownProducer.map(a => a.split("/").pop()).join(", ")}), but its objective/criteria don't mention dependency wiring/integration. ` +
+          `Add explicit criteria describing how produced artifacts are linked or consumed together.`,
+        stepName: ownerStep.name,
       })
     }
   }
@@ -481,23 +593,23 @@ function validateHtmlJsIntegration(steps: readonly PlanStep[]): PlanDiagnostic[]
 }
 
 // ============================================================================
-// Visual completeness — UI/game tasks must have display/render criteria
+// Visual completeness — UI tasks must have display/render criteria
 // ============================================================================
 
 /** Keywords that indicate a task involves visual/UI output. */
 const VISUAL_TASK_RE =
-  /\b(?:game|chess|board|tetris|snake|pong|tic[- ]?tac|puzzle|visual|render|displa|animat|canvas|sprite|ui|interface|dashboard|chart|graph|diagram)\b/i
+  /\b(?:visual|render|displa|animat|canvas|sprite|ui|interface|dashboard|chart|graph|diagram|widget|layout|screen|view)\b/i
 
 /** Keywords that indicate a step covers visual content rendering. */
 const VISUAL_CONTENT_RE =
   /\b(?:render|display|show|draw|paint|place|position|symbol|sprite|image|icon|unicode|piece|tile|cell|marker|token|avatar|visual|appear|visible)s?\b/i
 
 /**
- * When a plan's reason or step objectives indicate a visual/game/UI task,
+ * When a plan's reason or step objectives indicate a visual/UI task,
  * ensure that at least one step's acceptance criteria explicitly covers
  * rendering visual content (not just creating a grid/layout).
  *
- * This catches the "chess board grid exists but no pieces rendered" pattern.
+ * This catches the "layout exists but meaningful content is not rendered" pattern.
  */
 function validateVisualCompleteness(steps: readonly PlanStep[]): PlanDiagnostic[] {
   const diagnostics: PlanDiagnostic[] = []
@@ -534,7 +646,7 @@ function validateVisualCompleteness(steps: readonly PlanStep[]): PlanDiagnostic[
 
 /** Pattern for data-format keywords that signal shared state. */
 const DATA_FORMAT_RE =
-  /\b(?:board|state|grid|cells?|pieces?|tiles?|items?|nodes?|entries|rows?|columns?|matrix)\b/i
+  /\b(?:state|schema|model|record|entity|items?|nodes?|entries|rows?|columns?|map|dictionary|payload)\b/i
 
 /**
  * When a plan has 2+ JS files written by different steps, verify that at
@@ -558,7 +670,7 @@ function validateSharedDataContract(steps: readonly PlanStep[]): PlanDiagnostic[
   if (!DATA_FORMAT_RE.test(allObjectives)) return diagnostics
 
   // Check that at least one step defines the data format in its objective
-  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|each\s+(?:cell|entry|item|piece|tile|element)\s+(?:is|has|contains|looks|uses))\b/i
+  const FORMAT_SPEC_RE = /\b(?:format|structure|schema|interface|shape|object\s*\{|array\s*of|record\s*of|map\s*of|canonical\s+data\s+contract)\b/i
   const hasFormatSpec = jsWriterSteps.some(sa => FORMAT_SPEC_RE.test(sa.objective))
 
   if (!hasFormatSpec) {
@@ -570,7 +682,7 @@ function validateSharedDataContract(steps: readonly PlanStep[]): PlanDiagnostic[
         allObjectives.match(DATA_FORMAT_RE)?.[0] ?? "state"
       }) but NO step's objective defines the data format. ` +
         `Add a specific data structure definition to the first JS step's objective, e.g. ` +
-        `"Board cells use format { type: 'pawn', color: 'white' }. Board is board[row][col]." ` +
+        `"Records use { id: string, status: string } and state is a keyed map by id." ` +
         `Without this, each child will invent its own incompatible format.`,
     })
   }

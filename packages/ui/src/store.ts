@@ -703,6 +703,18 @@ export const useStore = create<AppState>()(
             break
           }
 
+          case "planner.validation.failed": {
+            // Validation diagnostics are already emitted in debug.trace as
+            // planner-validation-failed; keep this event for event-driven widgets.
+            break
+          }
+
+          case "planner.validation.remediated": {
+            // Remediation details are already emitted in debug.trace as
+            // planner-validation-remediated; keep this event for event widgets.
+            break
+          }
+
           case "usage.updated": {
             // Usage trace entry now arrives via debug.trace; this handler
             // only updates the liveUsage summary counters.

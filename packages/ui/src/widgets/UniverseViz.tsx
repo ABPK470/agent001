@@ -235,6 +235,8 @@ function classify(ev: WsEvent): DRow {
       return { ...base, lane: 9, label: `output root forced: ${trunc(String(entry?.outputRoot ?? ""), 28)}`, color: P.warn }
     if (kind === "planner-validation-failed")
       return { ...base, lane: 9, label: "validation failed", color: P.err }
+    if (kind === "planner-validation-remediated")
+      return { ...base, lane: 9, label: "validation auto-remediated", color: P.ok }
     if (kind === "planner-validation-warnings")
       return { ...base, lane: 9, label: `validation warnings: ${entry?.warningCount ?? 0}`, color: P.warn }
     if (kind === "planner-delegation-decision") {
@@ -253,7 +255,13 @@ function classify(ev: WsEvent): DRow {
       return { ...base, lane: 9, label: `step: ${trunc(String(entry?.stepName ?? ""), 30)} (${entry?.stepType})`, color: P.planner, arrow: entry?.stepType === "subagent_task" ? 3 : 2 }
     if (kind === "planner-step-end") {
       const ok = entry?.status === "completed"
-      return { ...base, lane: 9, label: `step done: ${trunc(String(entry?.stepName ?? ""), 25)} ${ok ? "✓" : "✗"} ${entry?.durationMs ? fmtMs(entry.durationMs as number) : ""}`, color: ok ? P.ok : P.err }
+      const validation = !ok && entry?.validationCode ? ` [${String(entry.validationCode)}]` : ""
+      return {
+        ...base,
+        lane: 9,
+        label: `step done: ${trunc(String(entry?.stepName ?? ""), 25)} ${ok ? "✓" : "✗"}${validation} ${entry?.durationMs ? fmtMs(entry.durationMs as number) : ""}`,
+        color: ok ? P.ok : P.err,
+      }
     }
     if (kind === "planner-pipeline-end") {
       const ok = entry?.status === "completed"
@@ -369,10 +377,19 @@ function classify(ev: WsEvent): DRow {
     return { ...base, lane: 9, label: `planner ${d.status} (${d.completedSteps ?? 0}/${d.totalSteps ?? 0})`, color: d.status === "completed" ? P.ok : P.err, arrow: 0 }
   if (t === "planner.pipeline.started")
     return { ...base, lane: 9, label: `pipeline #${d.attempt}/${d.maxRetries}`, color: P.planner, arrow: 2 }
+  if (t === "planner.validation.failed")
+    return { ...base, lane: 9, label: `validation failed (${(d.diagnostics as unknown[] | undefined)?.length ?? 0})`, color: P.err, arrow: 0 }
+  if (t === "planner.validation.remediated")
+    return { ...base, lane: 9, label: `validation remediated (${(d.diagnostics as unknown[] | undefined)?.length ?? 0})`, color: P.ok, arrow: 0 }
   if (t === "planner.step.started")
     return { ...base, lane: 9, label: `step: ${trunc(String(d.stepName ?? ""), 26)} (${d.stepType})`, color: P.planner, arrow: d.stepType === "subagent_task" ? 3 : 2 }
   if (t === "planner.step.completed")
-    return { ...base, lane: 9, label: `step done: ${trunc(String(d.stepName ?? ""), 22)} ${d.status}`, color: d.status === "completed" ? P.ok : P.err }
+    return {
+      ...base,
+      lane: 9,
+      label: `step done: ${trunc(String(d.stepName ?? ""), 22)} ${d.status}${d.status === "completed" ? "" : d.validationCode ? ` [${trunc(String(d.validationCode), 20)}]` : ""}`,
+      color: d.status === "completed" ? P.ok : P.err,
+    }
   if (t === "planner.delegation.started")
     return { ...base, lane: 9, label: `child start: ${trunc(String(d.stepName ?? ""), 24)}`, color: P.delegate, arrow: 3 }
   if (t === "planner.delegation.iteration")

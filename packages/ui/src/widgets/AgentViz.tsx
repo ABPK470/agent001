@@ -17,6 +17,7 @@ import ForceGraph2D from "react-force-graph-2d"
 import { api } from "../api"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry } from "../types"
+import { remediationHintForValidationCode } from "../util"
 
 // ── Palette ──────────────────────────────────────────────────────
 
@@ -860,14 +861,18 @@ export function AgentViz() {
       const ps = tracePlanSteps.find((s) => s.key === key)
       if (!ps) return null
       const endEvt = trace.find((e) => e.kind === "planner-step-end" && e.stepName === ps.name) as
-        | { durationMs?: number }
+        | { durationMs?: number; validationCode?: string; error?: string; status?: string }
         | undefined
       return {
         title: `Plan Step: ${ps.name}`,
         lines: [
           { label: "Type", value: ps.type },
           { label: "Status", value: ps.status === "done" ? "completed" : ps.status },
+          ...(endEvt?.validationCode ? [{ label: "Validation", value: endEvt.validationCode }] : []),
           ...(endEvt?.durationMs != null ? [{ label: "Duration", value: `${endEvt.durationMs}ms` }] : []),
+          ...(endEvt?.status && endEvt.status !== "completed"
+            ? [{ label: "Fix", value: remediationHintForValidationCode(endEvt.validationCode) }]
+            : []),
         ],
       }
     }

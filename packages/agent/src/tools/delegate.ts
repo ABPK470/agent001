@@ -71,7 +71,7 @@ Critical rules:
 - If prior steps created files, the EXACT paths are listed in the ## Source Files section. Use read_file with those EXACT paths — do not guess or shorten them.
 
 COMPLETE IMPLEMENTATION — NO STUBS OF ANY KIND:
-- When implementing logic that handles MULTIPLE cases (e.g. chess piece movement, form validation, route handling), you MUST implement EVERY case with real logic.
+- When implementing logic that handles MULTIPLE cases (e.g. validation rules, route handling, business rules), you MUST implement EVERY case with real logic.
 - A function that handles one or two cases and then has \`return true\` or \`return false\` as a catch-all for the remaining cases is a STUB. Your verifier WILL reject it.
 - A function that returns \`[]\` or \`{}\` without doing real work is a STUB. Wrapping it in a comment like \`/* Logic for X */\` does not make it real code. The verifier WILL reject it.
 - A comment saying "will go here", "will be added later", or "specific logic goes here" is a STUB marker and will be rejected.
@@ -93,7 +93,7 @@ PREFER replace_in_file FOR FIXES:
 
 MODULAR FILE ARCHITECTURE — MANDATORY FOR CODE > 200 LINES:
 - If the total code you need to write exceeds ~200 lines of logic, you MUST split it across multiple files.
-- A chess game is NOT one giant script.js. It is: board.js (state management, ~80 lines), rules.js (piece movement, ~150 lines), game.js (check/checkmate/special rules, ~120 lines), ui.js (rendering/DOM, ~100 lines), index.html (loads scripts in order), styles.css.
+- Do not write one giant script. Use focused modules (e.g. domain-model.js, rules.js, controller.js, ui.js, index.html, styles.css).
 - Each file should be <200 lines and handle ONE concern.
 - Load files via multiple \`<script src="file.js">\` tags in dependency order in index.html.
 - Share data between files via global variables (e.g. \`window.Board = { ... }\`).
@@ -107,7 +107,7 @@ Browser projects:
 Writing approach:
 - For new files, write the complete implementation in one go. Include ALL logic needed for the acceptance criteria.
 - For existing files, ALWAYS read_file first, then write_file with the FULL updated content.
-- IMPORTANT: "it renders" is NOT "it works". A chess board that displays but can't move pieces is NOT done. browser_check only checks for JavaScript load errors — it does NOT test functionality.
+- IMPORTANT: "it renders" is NOT "it works". A UI that displays but has broken interactions or logic is NOT done. browser_check only checks for JavaScript load errors — it does NOT test functionality.
 - If your first write_file attempt gets errors, FIX the specific errors — do NOT delete everything and start over.
 
 Retry handling:
@@ -125,7 +125,7 @@ After writing code and before providing your final answer, you MUST complete thi
 2. Open the ## Acceptance Criteria section of your goal.
 3. Go through each criterion ONE BY ONE. For each one, confirm there is REAL, WORKING code implementing it.
 4. If ANY criterion is missing or implemented with a stub/placeholder, you MUST keep working.
-5. Use browser_check to verify no JS errors. Remember: browser_check passing does NOT mean you are done — it only checks for load errors.
+5. Run browser_check ONLY if all referenced runtime assets for the checked page are already present in your current step's owned/available files. If dependencies are produced by later steps, skip browser_check and rely on post-write read_file verification.
 6. Only after ALL criteria are verified with real code may you provide your final summary.
 If you skip this checklist, your output WILL be rejected and you will waste a retry.`
 
@@ -818,8 +818,8 @@ export async function spawnChildForPlan(
         `You MUST fix these before finishing. For EACH stub function:\n` +
         `1. The function name tells you what it should do — implement the REAL algorithm\n` +
         `2. Replace the stub body (return true/false/[]/{}/ or comment-only) with working logic\n` +
-        `3. A function called "isMoveLegal" must validate piece-specific movement rules\n` +
-        `4. A function called "isCheckmate" must check if the king has no legal escape\n` +
+        `3. A function called "validateInput" must enforce all required validation rules\n` +
+        `4. A function called "computeResult" must execute the full required business logic\n` +
         `Do NOT provide a final answer until ALL stubs are replaced with real code.`
       )
     }
@@ -831,6 +831,7 @@ export async function spawnChildForPlan(
     systemPrompt: CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
+    deferRecoveryHintsUntilCompletionAttempt: true,
     completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
