@@ -201,6 +201,50 @@ export function registerRunRoutes(
     return entries.map((e) => JSON.parse(e.data))
   })
 
+  // Get isolated workspace diff for a completed run
+  app.get<{ Params: { id: string } }>("/api/runs/:id/workspace-diff", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+
+    const diff = orchestrator.getRunWorkspaceDiff(req.params.id)
+    if (!diff) {
+      reply.code(404)
+      return { error: "No isolated workspace diff available for this run" }
+    }
+
+    return {
+      runId: req.params.id,
+      added: diff.added,
+      modified: diff.modified,
+      deleted: diff.deleted,
+      total: diff.added.length + diff.modified.length + diff.deleted.length,
+    }
+  })
+
+  // Apply approved isolated workspace diff back to source workspace
+  app.post<{ Params: { id: string } }>("/api/runs/:id/workspace-diff/apply", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+
+    const applied = await orchestrator.applyRunWorkspaceDiff(req.params.id)
+    if (!applied) {
+      reply.code(404)
+      return { error: "No pending isolated workspace diff to apply" }
+    }
+
+    return {
+      ok: true,
+      runId: req.params.id,
+      applied,
+    }
+  })
+
   // Get active runs
   app.get("/api/runs/active", async () => {
     return { runIds: orchestrator.getActiveRunIds() }

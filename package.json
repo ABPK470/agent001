@@ -22,6 +22,7 @@
     "test": "npm test --workspaces",
     "build:dev": "npm run build --workspaces",
     "build": "node scripts/build.mjs",
+    "eval:reliability": "node scripts/reliability-eval.mjs",
     "lint": "npm run lint --workspaces",
     "pack:test": "npm run build && npm pack"
   },

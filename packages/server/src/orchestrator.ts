@@ -11,32 +11,36 @@
  */
 
 import {
-    Agent,
-    askUserTool,
-    cancelRun,
-    completeRun,
-    createDelegateTools,
-    createEngineServices,
-    createRun,
-    failRun,
-    governTool,
-    PolicyEffect,
-    runCompleted,
-    runFailed,
-    runStarted,
-    setShellSignal,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    type DelegateContext,
-    type DomainEvent,
-    type EngineServices,
-    type LLMClient,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager,
+  Agent,
+  askUserTool,
+  cancelRun,
+  completeRun,
+  createDelegateTools,
+  createEngineServices,
+  createRun,
+  failRun,
+  governTool,
+  PolicyEffect,
+  runCompleted,
+  runFailed,
+  runStarted,
+  setBasePath,
+  setBrowserCheckCwd,
+  setSearchBasePath,
+  setShellCwd,
+  setShellSignal,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  type DelegateContext,
+  type DomainEvent,
+  type EngineServices,
+  type LLMClient,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
@@ -46,6 +50,14 @@ import { migrateEffects, recordEffect, recordFileWrite, resetEffectSeq } from ".
 import { consolidate, extractProcedural, ingestRunTurns, migrateMemory, retrieveContext } from "./memory.js"
 import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "./prompt-builder.js"
 import { RunQueue, type RunPriority } from "./queue.js"
+import {
+  applyWorkspaceDiff,
+  cleanupRunWorkspace,
+  computeWorkspaceDiff,
+  prepareRunWorkspace,
+  type RunWorkspaceContext,
+  type WorkspaceDiff,
+} from "./run-workspace.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
 
@@ -60,6 +72,8 @@ interface ActiveRun {
   traceSeq: number
   /** Agent message bus for inter-agent communication within this run tree. */
   bus: AgentBus
+  /** Workspace context (may be isolated per-run). */
+  workspace: RunWorkspaceContext | null
 }
 
 /** Per-run agent configuration — which tools and prompt to use. */
@@ -85,6 +99,9 @@ export class AgentOrchestrator {
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
+  private readonly completedRunWorkspaces = new Map<string, RunWorkspaceContext>()
+  private readonly completedRunDiffs = new Map<string, WorkspaceDiff>()
+  private toolContextQueue: Promise<void> = Promise.resolve()
 
   constructor(config: OrchestratorConfig) {
     this.llm = config.llm
@@ -136,7 +153,7 @@ export class AgentOrchestrator {
     // Create a message bus for this run tree (parent + all delegates share it)
     const bus = new AgentBus(runId)
 
-    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus })
+    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null })
 
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     this.saveTrace(runId, { kind: "goal", text: goal })
@@ -191,6 +208,7 @@ export class AgentOrchestrator {
       services,
       traceSeq: 0,
       bus,
+      workspace: null,
     })
 
     broadcast({
@@ -396,6 +414,17 @@ export class AgentOrchestrator {
     const actor = "user"
     let lastMessages: Message[] = []
     let lastIteration = 0
+    const baseWorkspace = this.workspace ?? process.cwd()
+    const runWorkspace = await prepareRunWorkspace({
+      runId,
+      sourceRoot: baseWorkspace,
+      goal,
+      resume: !!resume,
+    })
+    const activeRun = this.activeRuns.get(runId)
+    if (activeRun) {
+      activeRun.workspace = runWorkspace
+    }
 
     // Create a tracked workflow run
     const run = createRun("agent-session", { goal })
@@ -416,7 +445,13 @@ export class AgentOrchestrator {
       action: "agent.started",
       resourceType: "AgentRun",
       resourceId: run.id,
-      detail: { goal, tools: tools.map((t) => t.name), agentId },
+      detail: {
+        goal,
+        tools: tools.map((t) => t.name),
+        agentId,
+        workspaceMode: runWorkspace.isolated ? "isolated" : "shared",
+        workspaceRoot: runWorkspace.executionRoot,
+      },
     })
 
     // Save initial run to DB
@@ -430,7 +465,7 @@ export class AgentOrchestrator {
     }
 
     // Wrap write_file with effect tracking (pre-write snapshots)
-    const trackedTools = tools.map((t) => this.wrapWithEffects(t, runId))
+    const trackedTools = tools.map((t) => this.wrapWithEffects(t, runId, runWorkspace.executionRoot))
     const governedTools = trackedTools.map((t) => governTool(t, services, state, { signal: controller.signal }))
 
     // Create delegate tools for sub-agent spawning (sequential + parallel)
@@ -596,10 +631,10 @@ export class AgentOrchestrator {
     }
 
     // Section 3: system_runtime — workspace context (droppable)
-    if (this.workspace) {
-      const wsContext = await getWorkspaceContext(this.workspace)
+    if (runWorkspace.executionRoot) {
+      const wsContext = await getWorkspaceContext(runWorkspace.executionRoot)
       const contextBlock = [
-        `Workspace: ${this.workspace}`,
+        `Workspace: ${runWorkspace.executionRoot}`,
         wsContext,
         "",
       ].join("\n")
@@ -611,7 +646,10 @@ export class AgentOrchestrator {
     }
 
     // Sections 4-6: memory tiers (each as separate message for independent truncation)
-    const { perTier } = await retrieveContext(goal, { sessionId: agentId ?? "default", runId })
+    const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !resume)
+    const { perTier } = shouldUseMemory
+      ? await retrieveContext(goal, { sessionId: agentId ?? "default", runId })
+      : { perTier: { working: "", episodic: "", semantic: "" } }
 
     if (perTier.working) {
       systemMessages.push({
@@ -679,7 +717,7 @@ export class AgentOrchestrator {
       toolKillManager: killManager,
       // ── Planner-first routing ──────────────────────────────────
       enablePlanner: true,
-      workspaceRoot: this.workspace ?? process.cwd(),
+      workspaceRoot: runWorkspace.executionRoot,
       onPlannerTrace: (entry) => {
         this.saveTrace(runId, entry)
         broadcast({ type: "debug.trace", data: { runId, seq: debugSeq++, entry } })
@@ -828,6 +866,7 @@ export class AgentOrchestrator {
       // Check if the run was cancelled (agent returns gracefully with cancel message)
       if (controller.signal.aborted) {
         cancelRun(run)
+        await this.captureRunWorkspaceDiff(runId)
 
         await services.auditService.log({
           actor,
@@ -897,6 +936,11 @@ export class AgentOrchestrator {
       this.persistTokenUsage(runId, agent)
 
       this.saveTrace(runId, { kind: "answer", text: answer })
+      await this.captureRunWorkspaceDiff(runId)
+      const pendingDiff = this.completedRunDiffs.get(runId)
+      const pendingChangeCount = pendingDiff
+        ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
+        : 0
 
       // Ingest all significant turns into unified memory
       const toolNames = run.steps.map((s) => s.action)
@@ -934,6 +978,7 @@ export class AgentOrchestrator {
           promptTokens: agent.usage.promptTokens,
           completionTokens: agent.usage.completionTokens,
           llmCalls: agent.llmCalls,
+          pendingWorkspaceChanges: pendingChangeCount,
         },
       })
 
@@ -941,7 +986,9 @@ export class AgentOrchestrator {
       this.createNotification({
         type: "run.completed",
         title: "Run completed",
-        message: `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`,
+        message: pendingChangeCount > 0
+          ? `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.`
+          : `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`,
         runId,
         actions: [
           { label: "View", action: "view-run", data: { runId } },
@@ -995,6 +1042,7 @@ export class AgentOrchestrator {
       this.persistTokenUsage(runId, agent)
 
       this.saveTrace(runId, { kind: "error", text: errMsg })
+      await this.captureRunWorkspaceDiff(runId)
 
       // Ingest failed run into memory (lower confidence)
       const failedTools = run.steps.map((s) => s.action)
@@ -1053,21 +1101,105 @@ export class AgentOrchestrator {
 
   // ── Private: wire domain events to WebSocket ─────────────────
 
+  private async withToolWorkspaceContext<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.toolContextQueue
+    let release!: () => void
+    this.toolContextQueue = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    await previous
+    setBasePath(workspaceRoot)
+    setSearchBasePath(workspaceRoot)
+    setShellCwd(workspaceRoot)
+    setBrowserCheckCwd(workspaceRoot)
+
+    try {
+      return await fn()
+    } finally {
+      setBasePath(this.workspace ?? process.cwd())
+      setSearchBasePath(this.workspace ?? process.cwd())
+      setShellCwd(this.workspace ?? process.cwd())
+      setBrowserCheckCwd(this.workspace ?? process.cwd())
+      release()
+    }
+  }
+
+  private async captureRunWorkspaceDiff(runId: string): Promise<void> {
+    const run = this.activeRuns.get(runId)
+    if (!run?.workspace?.isolated) return
+
+    const diff = await computeWorkspaceDiff(run.workspace.sourceRoot, run.workspace.executionRoot)
+    this.completedRunWorkspaces.set(runId, run.workspace)
+    this.completedRunDiffs.set(runId, diff)
+
+    const total = diff.added.length + diff.modified.length + diff.deleted.length
+    if (total === 0) {
+      await cleanupRunWorkspace(run.workspace)
+      this.completedRunWorkspaces.delete(runId)
+      this.completedRunDiffs.delete(runId)
+      return
+    }
+
+    if (total > 0) {
+      this.saveTrace(runId, { kind: "workspace_diff", diff })
+      this.createNotification({
+        type: "run.completed",
+        title: "Apply run changes",
+        message: `Run ${runId.slice(0, 8)} produced ${total} isolated workspace changes pending approval.`,
+        runId,
+        actions: [
+          { label: "Review", action: "view-run", data: { runId } },
+          { label: "Apply", action: "apply-run-diff", data: { runId } },
+        ],
+      })
+    }
+  }
+
+  getRunWorkspaceDiff(runId: string): WorkspaceDiff | null {
+    return this.completedRunDiffs.get(runId) ?? null
+  }
+
+  async applyRunWorkspaceDiff(runId: string): Promise<{ added: number; modified: number; deleted: number } | null> {
+    const context = this.completedRunWorkspaces.get(runId)
+    const diff = this.completedRunDiffs.get(runId)
+    if (!context || !diff) return null
+
+    const summary = await applyWorkspaceDiff({
+      sourceRoot: context.sourceRoot,
+      executionRoot: context.executionRoot,
+      diff,
+    })
+    await cleanupRunWorkspace(context)
+    this.completedRunWorkspaces.delete(runId)
+    this.completedRunDiffs.delete(runId)
+
+    this.saveTrace(runId, { kind: "workspace_diff_applied", summary })
+    this.createNotification({
+      type: "run.completed",
+      title: "Run changes applied",
+      message: `Applied ${summary.added + summary.modified + summary.deleted} file changes from isolated run ${runId.slice(0, 8)}.`,
+      runId,
+      actions: [{ label: "View", action: "view-run", data: { runId } }],
+    })
+
+    return summary
+  }
+
   /**
    * Wrap a tool with effect tracking.
    * For write_file: captures pre-write snapshots and records file effects.
    * For run_command: records command effects.
    */
-  private wrapWithEffects(tool: Tool, runId: string): Tool {
+  private wrapWithEffects(tool: Tool, runId: string, workspaceRoot: string): Tool {
     if (tool.name === "write_file") {
       return {
         ...tool,
-        execute: async (args) => {
+        execute: async (args) => this.withToolWorkspaceContext(workspaceRoot, async () => {
           const path = String(args.path)
           // Resolve to absolute path using workspace
           const { resolve } = await import("node:path")
-          const basePath = this.workspace ?? process.cwd()
-          const absPath = resolve(basePath, path)
+          const absPath = resolve(workspaceRoot, path)
 
           // Record the effect with pre-write snapshot
           await recordFileWrite({
@@ -1079,14 +1211,14 @@ export class AgentOrchestrator {
 
           // Execute the actual write
           return tool.execute(args)
-        },
+        }),
       }
     }
 
     if (tool.name === "run_command") {
       return {
         ...tool,
-        execute: async (args) => {
+        execute: async (args) => this.withToolWorkspaceContext(workspaceRoot, async () => {
           const result = await tool.execute(args)
           // Record command effect after execution
           recordEffect({
@@ -1097,11 +1229,14 @@ export class AgentOrchestrator {
             metadata: { output: String(result).slice(0, 1000) },
           })
           return result
-        },
+        }),
       }
     }
 
-    return tool
+    return {
+      ...tool,
+      execute: async (args) => this.withToolWorkspaceContext(workspaceRoot, () => tool.execute(args)),
+    }
   }
 
   private saveTrace(runId: string, entry: Record<string, unknown>): void {

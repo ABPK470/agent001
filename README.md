@@ -66,6 +66,9 @@ npm run dev
 
 # Run tests (31 agent + 40 server)
 npm test
+
+# Run reliability benchmark suite (requires server running)
+npm run eval:reliability
 ```
 
 Open [http://localhost:5179](http://localhost:5179) — the dashboard connects automatically.
@@ -409,6 +412,8 @@ Failed deliveries are retried automatically:
 | `POST` | `/api/runs/:id/resume` | Resume from checkpoint |
 | `GET` | `/api/runs/active` | List active run IDs |
 | `GET` | `/api/runs/:id/trace` | Get rich execution trace |
+| `GET` | `/api/runs/:id/workspace-diff` | View isolated-run file diff awaiting approval |
+| `POST` | `/api/runs/:id/workspace-diff/apply` | Apply approved isolated diff back to source workspace |
 | `GET` | `/api/queue` | Run queue stats (active, queued, concurrency) |
 
 ### Governance & config

@@ -196,6 +196,7 @@ describe("validateDelegatedOutputContract", () => {
             args: { command: "cat > tmp/chess/game.js << 'EOF'\nconsole.log('chess')\nEOF" },
             result: "",
           }),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "console.log('chess')" }),
         ],
       })
       expect(result.ok).toBe(true)
@@ -257,6 +258,7 @@ describe("validateDelegatedOutputContract", () => {
         toolCalls: [
           makeToolCall({ name: "read_file", args: { path: "/project/src/engine.ts" }, result: "code..." }),
           makeToolCall(),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "verified content" }),
         ],
       })
       expect(result.ok).toBe(true)
@@ -342,6 +344,7 @@ describe("validateDelegatedOutputContract", () => {
             args: { path: "tmp/chess/pieces.js", content: "export const pieces = {}" },
             result: "Success",
           }),
+          makeToolCall({ name: "run_command", args: { command: "npm test" }, result: "tests passed" }),
         ],
       })
 
@@ -384,6 +387,32 @@ describe("validateDelegatedOutputContract", () => {
     })
   })
 
+  describe("executable verification evidence", () => {
+    it("detects implementation outputs with no executable verification", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec(),
+        output: "Created tmp/chess/game.js and implemented move logic. Board renders and pieces move.",
+        toolCalls: [
+          makeToolCall({ name: "write_file", args: { path: "tmp/chess/game.js", content: "const x=1" }, result: "Success" }),
+        ],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("missing_executable_verification_evidence")
+    })
+
+    it("passes when executable verification command is present", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec(),
+        output: "Implemented tmp/chess/game.js and verified with tests.",
+        toolCalls: [
+          makeToolCall({ name: "write_file", args: { path: "tmp/chess/game.js", content: "const x=1" }, result: "Success" }),
+          makeToolCall({ name: "run_command", args: { command: "npm test -- --runInBand" }, result: "All tests passed" }),
+        ],
+      })
+      expect(result.ok).toBe(true)
+    })
+  })
+
   describe("contradictory completion claim", () => {
     it("detects TODO markers in completed output", () => {
       const result = validateDelegatedOutputContract({
@@ -418,9 +447,15 @@ describe("validateDelegatedOutputContract", () => {
     it("does NOT false-positive on 'later' in normal English descriptions", () => {
       // Real trace: child said "appends it to the highlightedSquares array for later clearing"
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ acceptanceCriteria: [] }),
+        spec: makeSpec({
+          acceptanceCriteria: [],
+          effectClass: "readonly",
+          role: "reviewer",
+          targetArtifacts: [],
+          verificationMode: "test",
+        }),
         output: "Successfully implemented UI. highlightSquare appends it to the highlightedSquares array for later clearing. tmp/chess/ui.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/ui.js" }, result: "code" })],
       })
       expect(result.ok).toBe(true)
     })
@@ -428,27 +463,45 @@ describe("validateDelegatedOutputContract", () => {
     it("does NOT false-positive on 'incomplete' in review context", () => {
       // Real trace: child said "checking for incomplete implementations"
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ acceptanceCriteria: [] }),
+        spec: makeSpec({
+          acceptanceCriteria: [],
+          effectClass: "readonly",
+          role: "reviewer",
+          targetArtifacts: [],
+          verificationMode: "test",
+        }),
         output: "Done! Verified all code by checking for incomplete patterns — found none. All functions have real logic. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "code" })],
       })
       expect(result.ok).toBe(true)
     })
 
     it("does NOT false-positive on 'will be' in descriptive context", () => {
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ acceptanceCriteria: [] }),
+        spec: makeSpec({
+          acceptanceCriteria: [],
+          effectClass: "readonly",
+          role: "reviewer",
+          targetArtifacts: [],
+          verificationMode: "test",
+        }),
         output: "Completed implementation. The status display will be updated whenever a move is made. tmp/chess/status.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/status.js" }, result: "code" })],
       })
       expect(result.ok).toBe(true)
     })
 
     it("does NOT false-positive on 'comes back' in code description", () => {
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ acceptanceCriteria: [] }),
+        spec: makeSpec({
+          acceptanceCriteria: [],
+          effectClass: "readonly",
+          role: "reviewer",
+          targetArtifacts: [],
+          verificationMode: "test",
+        }),
         output: "Done! The function comes back to the caller with the validated result. tmp/chess/validate.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/validate.js" }, result: "code" })],
       })
       expect(result.ok).toBe(true)
     })
@@ -488,16 +541,21 @@ describe("validateDelegatedOutputContract", () => {
     it("detects missing acceptance criteria tokens", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
+          task: "Review output against acceptance criteria and report gaps",
+          effectClass: "readonly",
+          role: "reviewer",
+          targetArtifacts: [],
+          verificationMode: "test",
           acceptanceCriteria: [
-            "Chess board renders 8x8 grid with alternating colors",
-            "Pieces display correct Unicode symbols",
-            "Drag-and-drop moves pieces between squares",
-            "Move validation enforces legal chess moves",
-            "Check and checkmate detection works correctly",
+            "Repository summary includes module boundaries",
+            "Dependency graph is captured for core packages",
+            "Operational risks are listed with mitigations",
           ],
         }),
-        output: "Created a hello world application. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        output: "Status report generated for baseline prototype. tmp/demo/app.txt",
+        toolCalls: [
+          makeToolCall({ name: "read_file", args: { path: "tmp/demo/app.txt" }, result: "placeholder" }),
+        ],
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("acceptance_evidence_missing")
@@ -507,7 +565,10 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
         output: "Created chess game with board that renders an 8x8 grid. Pieces can be dragged between squares. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [
+          makeToolCall(),
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "game code" }),
+        ],
       })
       expect(result.ok).toBe(true)
     })

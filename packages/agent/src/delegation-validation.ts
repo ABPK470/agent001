@@ -50,6 +50,8 @@ export const DELEGATION_OUTPUT_VALIDATION_CODES = [
   "all_tools_failed",
   /** Browser evidence is low-signal (only about:blank or tab listing). */
   "low_signal_browser_evidence",
+  /** Implementation output lacks executable verification evidence. */
+  "missing_executable_verification_evidence",
   /** Child asks for continuation or describes output as partial/foundation. */
   "unresolved_handoff_output",
   /** Contract declares target artifacts but child touched none of them. */
@@ -157,6 +159,10 @@ const FILE_READ_TOOLS = new Set([
   "read_file", "list_directory", "search_files",
 ])
 
+/** Commands that provide executable verification evidence. */
+const EXECUTABLE_VERIFICATION_CMD_RE =
+  /\b(?:npm\s+test|npm\s+run\s+(?:test|lint|build|check)|pnpm\s+(?:test|lint|build|check)|yarn\s+(?:test|lint|build|check)|vitest|jest|pytest|go\s+test|cargo\s+test|cargo\s+check|mvn\s+test|gradle\s+test|ruff\s+check|eslint|tsc\b|phpunit|dotnet\s+test)\b/i
+
 /** Shell commands that create/modify files. */
 const SHELL_FILE_WRITE_RE =
   /\b(?:cat|tee|touch|cp|mv|install)\b|(?:^|[^>])>{1,2}\s*\S/i
@@ -191,10 +197,6 @@ const UNRESOLVED_HANDOFF_RE =
 /** Narrative file claims without tool evidence. */
 const NARRATIVE_FILE_CLAIM_RE =
   /\b(?:created|wrote|saved|updated|implemented|scaffolded|generated)\b/i
-
-/** File path patterns in shell commands. */
-const SHELL_FILE_PATH_RE =
-  /(?:^|[\s])-?[a-z]*\s+["']?(?:\/[^\s"']+|\.{1,2}\/[^\s"']+|[a-z0-9_.-]+\.[a-z0-9]{1,10})["']?/i
 
 /** Low-signal browser targets that don't count as meaningful evidence. */
 const LOW_SIGNAL_BROWSER_TARGETS = new Set(["about:blank"])
@@ -375,6 +377,43 @@ export function isLowSignalBrowserToolCall(record: ToolCallRecord): boolean {
 export function isMeaningfulBrowserToolCall(record: ToolCallRecord): boolean {
   if (!MEANINGFUL_BROWSER_TOOLS.has(record.name)) return false
   return !isLowSignalBrowserToolCall(record)
+}
+
+/**
+ * Check if a tool call provides executable verification evidence.
+ */
+export function isExecutableVerificationToolCall(record: ToolCallRecord): boolean {
+  if (isMeaningfulBrowserToolCall(record)) return true
+  if ((record.name === "run_command" || record.name === "shell") && typeof record.args.command === "string") {
+    return EXECUTABLE_VERIFICATION_CMD_RE.test(record.args.command)
+  }
+  return false
+}
+
+/**
+ * Check if at least one target artifact was inspected after mutation.
+ */
+function hasPostMutationArtifactInspection(
+  toolCalls: readonly ToolCallRecord[],
+  targetArtifacts: readonly string[],
+): boolean {
+  const targetBasenames = new Set(targetArtifacts.map(a => a.split("/").pop() ?? a))
+  let sawMutation = false
+  for (const tc of toolCalls) {
+    if (!tc.isError && isFileMutationToolCall(tc)) {
+      sawMutation = true
+      continue
+    }
+    if (!sawMutation || tc.isError) continue
+    if (!FILE_READ_TOOLS.has(tc.name)) continue
+    const path = typeof tc.args.path === "string" ? tc.args.path : ""
+    if (!path) continue
+    const basename = path.split("/").pop() ?? path
+    if (targetBasenames.has(basename) || targetArtifacts.some(t => t === path || path.endsWith(`/${t.split("/").pop() ?? t}`))) {
+      return true
+    }
+  }
+  return false
 }
 
 // ============================================================================
@@ -677,7 +716,7 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 10. Contradictory completion claim ──
+  // ── 11. Contradictory completion claim ──
   if (COMPLETION_CLAIM_RE.test(outputLower)) {
     // Check unambiguous markers first
     if (UNRESOLVED_WORK_RE.test(trimmed)) {
@@ -700,8 +739,26 @@ export function validateDelegatedOutputContract(params: {
     }
   }
 
-  // ── 11. Acceptance criteria evidence ──
+  // ── 12. Executable verification evidence (implementation tasks) ──
+  if (isImplementationLike && specRequiresFileMutationEvidence(spec) && toolCalls.length > 0) {
+    const hasVerificationCall = toolCalls.some(tc => !tc.isError && isExecutableVerificationToolCall(tc))
+    const hasPostWriteInspection = hasPostMutationArtifactInspection(toolCalls, spec.targetArtifacts)
+    if (!hasVerificationCall && !hasPostWriteInspection) {
+      return {
+        ok: false,
+        code: "missing_executable_verification_evidence",
+        message: "Implementation output lacks executable verification evidence (runtime/test check or post-write artifact inspection)",
+      }
+    }
+  }
+
+  // ── 13. Acceptance criteria evidence ──
   if (spec.acceptanceCriteria.length > 0) {
+    // Implementation tasks must be validated by executable evidence, not
+    // narrative token overlap. Keep token checks for non-implementation tasks.
+    if (isImplementationLike) {
+      return { ok: true }
+    }
     const tokens = extractAcceptanceTokens(spec.acceptanceCriteria)
     if (tokens.length > 0) {
       const matchedTokens = tokens.filter(t => outputLower.includes(t))
@@ -766,6 +823,9 @@ export function getCorrectionGuidance(code: DelegationOutputValidationCode): str
 
     case "low_signal_browser_evidence":
       return "Your browser testing was insufficient — you only checked about:blank or listed tabs. Use browser_check with an actual file path to verify your HTML/JS works."
+
+    case "missing_executable_verification_evidence":
+      return "Your previous attempt relied on narrative completion without executable proof. Run deterministic verification (tests/build/runtime checks) or inspect mutated artifacts with read_file before claiming completion."
 
     case "unresolved_handoff_output":
       return "Your previous output ended in a handoff/partial state. Do NOT ask whether to continue. Complete the implementation end-to-end, verify behavior, and return finished artifacts with evidence."

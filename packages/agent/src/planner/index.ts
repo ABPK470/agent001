@@ -340,6 +340,25 @@ export interface PlannerResult {
   readonly skipReason?: string
 }
 
+function buildPlannerFailurePayload(params: {
+  stage: "generation" | "validation" | "delegation"
+  reason: string
+  diagnostics?: readonly unknown[]
+  score?: number
+  plannerReason?: string
+}): string {
+  return JSON.stringify({
+    kind: "planner_failure",
+    stage: params.stage,
+    reason: params.reason,
+    diagnostics: params.diagnostics ?? [],
+    score: params.score ?? null,
+    plannerReason: params.plannerReason ?? null,
+    requiresDirectLoopFallback: false,
+    action: "stop_and_request_plan_remediation",
+  }, null, 2)
+}
+
 /**
  * Try to handle a task via the planner path.
  *
@@ -383,9 +402,17 @@ export async function executePlannerPath(
       kind: "planner-generation-failed",
       diagnostics: genResult.diagnostics,
     })
+    const reason = `Plan generation failed: ${genResult.diagnostics.map(d => d.message).join("; ")}`
     return {
-      handled: false,
-      skipReason: `Plan generation failed: ${genResult.diagnostics.map(d => d.message).join("; ")}`,
+      handled: true,
+      answer: buildPlannerFailurePayload({
+        stage: "generation",
+        reason,
+        diagnostics: genResult.diagnostics,
+        score: decision.score,
+        plannerReason: decision.reason,
+      }),
+      skipReason: reason,
     }
   }
 
@@ -415,11 +442,18 @@ export async function executePlannerPath(
       kind: "planner-validation-failed",
       diagnostics: errors,
     })
-    // Only hard-block on errors (structurally broken plans)
+    const reason = `Validation failed: ${errors.map(d => d.message).join("; ")}`
     return {
-      handled: false,
+      handled: true,
+      answer: buildPlannerFailurePayload({
+        stage: "validation",
+        reason,
+        diagnostics: errors,
+        score: decision.score,
+        plannerReason: decision.reason,
+      }),
       plan,
-      skipReason: `Validation failed: ${errors.map(d => d.message).join("; ")}`,
+      skipReason: reason,
     }
   }
 
@@ -491,10 +525,22 @@ export async function executePlannerPath(
     })
 
     if (!delegationDecision.shouldDelegate) {
+      const reason = `Delegation blocked: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`
       return {
-        handled: false,
+        handled: true,
+        answer: buildPlannerFailurePayload({
+          stage: "delegation",
+          reason,
+          diagnostics: [{
+            utilityScore: delegationDecision.utilityScore,
+            safetyRisk: delegationDecision.safetyRisk,
+            reason: delegationDecision.reason,
+          }],
+          score: decision.score,
+          plannerReason: decision.reason,
+        }),
         plan,
-        skipReason: `Delegation blocked: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`,
+        skipReason: reason,
       }
     }
   }
