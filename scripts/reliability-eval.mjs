@@ -53,12 +53,15 @@ async function loadSuite(path) {
 }
 
 async function jsonFetch(url, options = {}) {
+    const hasBody = options.body !== undefined && options.body !== null
+    const headers = {
+        ...(hasBody ? { "content-type": "application/json" } : {}),
+        ...(options.headers ?? {}),
+    }
+
     const response = await fetch(url, {
         ...options,
-        headers: {
-            "content-type": "application/json",
-            ...(options.headers ?? {}),
-        },
+        headers,
     })
 
     const text = await response.text()
@@ -103,6 +106,21 @@ async function waitForRun(server, runId, timeoutMs, pollMs) {
             throw new Error(`Run ${runId} timed out after ${timeoutMs}ms`)
         }
         await new Promise((resolveDelay) => setTimeout(resolveDelay, pollMs))
+    }
+}
+
+async function maybeApplyWorkspaceDiff(server, runId, spec) {
+    if (!spec.applyWorkspaceDiff) return null
+    try {
+        const applied = await jsonFetch(`${server}/api/runs/${runId}/workspace-diff/apply`, {
+            method: "POST",
+        })
+        return applied
+    } catch (error) {
+        if (error instanceof HttpError && error.status === 404) {
+            return { ok: false, reason: "no_pending_workspace_diff" }
+        }
+        throw error
     }
 }
 
@@ -166,16 +184,25 @@ async function runSuite(config) {
             })
             runId = String(start.runId)
             const run = await waitForRun(config.server, runId, config.timeoutMs, config.pollMs)
+            const appliedDiff = await maybeApplyWorkspaceDiff(config.server, runId, spec)
             const trace = await jsonFetch(`${config.server}/api/runs/${runId}/trace`)
             const evaluation = evaluateCase(run, Array.isArray(trace) ? trace : [], spec)
+
+            const applyErrors = []
+            if (spec.applyWorkspaceDiff) {
+                if (!appliedDiff || appliedDiff.ok !== true) {
+                    applyErrors.push("workspace diff was not applied")
+                }
+            }
 
             results.push({
                 id: spec.id,
                 runId,
                 goal: spec.goal,
                 status: run.status,
-                pass: evaluation.pass,
-                errors: evaluation.errors,
+                pass: evaluation.pass && applyErrors.length === 0,
+                errors: [...evaluation.errors, ...applyErrors],
+                workspaceDiffApply: appliedDiff,
                 durationMs: Date.now() - startedMs,
                 startedAt,
             })

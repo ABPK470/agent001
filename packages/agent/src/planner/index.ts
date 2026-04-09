@@ -600,6 +600,8 @@ export async function executePlannerPath(
           stepName: step.name,
           status: result.status,
           durationMs: result.durationMs,
+          error: result.error,
+          validationCode: result.validationCode,
         }),
       },
     )

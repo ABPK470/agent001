@@ -19,6 +19,7 @@ export interface Run {
   promptTokens: number
   completionTokens: number
   llmCalls: number
+  pendingWorkspaceChanges?: number
 }
 
 export interface RunDetail extends Run {
@@ -29,6 +30,24 @@ export interface RunDetail extends Run {
   audit: AuditEntry[]
   logs: LogEntry[]
   hasCheckpoint: boolean
+}
+
+export interface WorkspaceDiff {
+  runId: string
+  added: string[]
+  modified: string[]
+  deleted: string[]
+  total: number
+}
+
+export interface WorkspaceDiffApplyResult {
+  ok: boolean
+  runId: string
+  applied: {
+    added: number
+    modified: number
+    deleted: number
+  }
 }
 
 // ── Step ─────────────────────────────────────────────────────────
@@ -87,7 +106,9 @@ export type TraceEntry =
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
   | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-output-root-forced"; outputRoot: string }
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
   | { kind: "planner-step-start"; stepName: string; stepType: string }
@@ -115,6 +136,8 @@ export type TraceEntry =
   | { kind: "nudge"; tag: string; message: string; iteration: number }
   | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
   | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
+  | { kind: "workspace_diff"; diff: { added: string[]; modified: string[]; deleted: string[] } }
+  | { kind: "workspace_diff_applied"; summary: { added: number; modified: number; deleted: number } }
 
 // ── Layout ───────────────────────────────────────────────────────
 

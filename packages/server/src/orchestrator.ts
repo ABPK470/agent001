@@ -53,6 +53,7 @@ import { RunQueue, type RunPriority } from "./queue.js"
 import {
   applyWorkspaceDiff,
   cleanupRunWorkspace,
+  cleanupStaleRunWorkspaces,
   computeWorkspaceDiff,
   prepareRunWorkspace,
   type RunWorkspaceContext,
@@ -112,6 +113,12 @@ export class AgentOrchestrator {
     // Migrate memory + effects tables on startup
     migrateMemory()
     migrateEffects()
+
+    // Best-effort cleanup for old isolated run sandboxes (e.g. after restarts).
+    const ttlMs = Number(process.env["AGENT_RUN_WORKSPACE_TTL_MS"] ?? 6 * 60 * 60 * 1000)
+    if (Number.isFinite(ttlMs) && ttlMs >= 0) {
+      void cleanupStaleRunWorkspaces(ttlMs)
+    }
   }
 
   /** Update the workspace path (used in system prompt context). */
@@ -741,6 +748,55 @@ export class AgentOrchestrator {
             resourceId: runId,
             detail: { status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps },
           }).catch(() => {})
+        } else if (entry.kind === "planner-pipeline-start") {
+          broadcast({
+            type: "planner.pipeline.started",
+            data: { runId, attempt: entry.attempt, maxRetries: entry.maxRetries },
+          })
+        } else if (entry.kind === "planner-step-start") {
+          broadcast({
+            type: "planner.step.started",
+            data: { runId, stepName: entry.stepName, stepType: entry.stepType },
+          })
+        } else if (entry.kind === "planner-step-end") {
+          broadcast({
+            type: "planner.step.completed",
+            data: { runId, stepName: entry.stepName, status: entry.status, durationMs: entry.durationMs },
+          })
+        } else if (entry.kind === "planner-delegation-start") {
+          broadcast({
+            type: "planner.delegation.started",
+            data: {
+              runId,
+              stepName: entry.stepName,
+              depth: entry.depth,
+              goal: entry.goal,
+              tools: entry.tools,
+            },
+          })
+        } else if (entry.kind === "planner-delegation-iteration") {
+          broadcast({
+            type: "planner.delegation.iteration",
+            data: {
+              runId,
+              stepName: entry.stepName,
+              depth: entry.depth,
+              iteration: entry.iteration,
+              maxIterations: entry.maxIterations,
+            },
+          })
+        } else if (entry.kind === "planner-delegation-end") {
+          broadcast({
+            type: "planner.delegation.ended",
+            data: {
+              runId,
+              stepName: entry.stepName,
+              depth: entry.depth,
+              status: entry.status,
+              answer: entry.answer,
+              error: entry.error,
+            },
+          })
         } else if (entry.kind === "planner-verification") {
           services.auditService.log({
             actor: "agent",
@@ -1143,6 +1199,7 @@ export class AgentOrchestrator {
 
     if (total > 0) {
       this.saveTrace(runId, { kind: "workspace_diff", diff })
+      broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry: { kind: "workspace_diff", diff } } })
       this.createNotification({
         type: "run.completed",
         title: "Apply run changes",
@@ -1175,6 +1232,7 @@ export class AgentOrchestrator {
     this.completedRunDiffs.delete(runId)
 
     this.saveTrace(runId, { kind: "workspace_diff_applied", summary })
+    broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry: { kind: "workspace_diff_applied", summary } } })
     this.createNotification({
       type: "run.completed",
       title: "Run changes applied",

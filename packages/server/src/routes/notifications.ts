@@ -80,6 +80,18 @@ export function registerNotificationRoutes(
           return { ok: true, compensated: result.compensated, skipped: result.skipped, failed: result.failed.length }
         }
 
+        case "apply-run-diff": {
+          const runId = data?.runId as string
+          if (!runId) { reply.code(400); return { error: "runId required" } }
+          const result = await orchestrator.applyRunWorkspaceDiff(runId)
+          if (!result) { reply.code(404); return { error: "No pending isolated workspace diff to apply" } }
+          return {
+            ok: true,
+            runId,
+            applied: result,
+          }
+        }
+
         default:
           return { ok: true }
       }

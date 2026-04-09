@@ -219,6 +219,27 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         </div>
       )
 
+    case "planner-output-root-forced":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          output root forced: {entry.outputRoot}
+        </div>
+      )
+
+    case "planner-validation-warnings":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          validation warnings: {entry.warningCount}
+        </div>
+      )
+
+    case "planner-delegation-decision":
+      return (
+        <div className="text-[#C084FC]/80 text-[12px] font-mono pl-6 py-0.5">
+          delegation gate: {entry.shouldDelegate ? "delegate" : "local"} ({entry.reason})
+        </div>
+      )
+
     case "planner-pipeline-start":
       return (
         <div className="text-[#C084FC]/70 text-[12px] font-mono pl-6 py-0.5 border-t border-[#C084FC]/10 mt-1">
@@ -280,6 +301,99 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
           ↻ retry attempt {entry.attempt}: {entry.reason}
         </div>
       )
+
+    case "planner-retry-abort":
+      return (
+        <div className="text-error text-[12px] font-mono pl-6 py-0.5">
+          retry aborted: {entry.reason}
+        </div>
+      )
+
+    case "planner-retry-skip":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          retry skip {entry.stepName}: {entry.reason}
+        </div>
+      )
+
+    case "planner-budget-extended":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          budget extended to {entry.effectiveBudget} (extensions {entry.extensions})
+        </div>
+      )
+
+    case "planner-escalation":
+      return (
+        <div className="text-warning text-[12px] font-mono pl-6 py-0.5">
+          escalation: {entry.action} ({entry.reason})
+        </div>
+      )
+
+    case "planner-delegation-start":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#6CB4EE]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#6CB4EE] text-[13px] font-medium font-mono">PLAN→CHILD</span>
+            <span className="text-text-secondary text-[13px]">{entry.stepName}</span>
+            <span className="text-text-muted text-[12px]">depth {entry.depth}</span>
+          </div>
+          <div className="text-text-secondary text-sm mt-0.5 ml-5">
+            {entry.goal.length > 180 ? entry.goal.slice(0, 180) + "..." : entry.goal}
+          </div>
+        </div>
+      )
+
+    case "planner-delegation-iteration":
+      return (
+        <div className="text-text-muted/50 text-[12px] font-mono pl-6 py-0.5">
+          ↳ {entry.stepName} child iteration {entry.iteration}/{entry.maxIterations}
+        </div>
+      )
+
+    case "planner-delegation-end":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#6CB4EE]/40 mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#6CB4EE] text-[13px] font-medium font-mono">CHILD→PLAN</span>
+            <span className={`text-[13px] ${entry.status === "done" ? "text-success" : "text-error"}`}>
+              {entry.stepName}: {entry.status}
+            </span>
+          </div>
+          {(entry.answer || entry.error) && (
+            <div className="text-text-muted text-[12px] ml-5 mt-0.5">
+              {entry.answer ?? entry.error}
+            </div>
+          )}
+        </div>
+      )
+
+    case "workspace_diff": {
+      const total = entry.diff.added.length + entry.diff.modified.length + entry.diff.deleted.length
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22d3ee]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22d3ee] text-[13px] font-medium font-mono">DIFF</span>
+            <span className="text-[#22d3ee]/80 text-[13px]">{total} pending changes</span>
+          </div>
+          <div className="text-text-muted/60 text-[11px] font-mono mt-0.5 ml-5">
+            +{entry.diff.added.length} ~{entry.diff.modified.length} -{entry.diff.deleted.length}
+          </div>
+        </div>
+      )
+    }
+
+    case "workspace_diff_applied": {
+      const total = entry.summary.added + entry.summary.modified + entry.summary.deleted
+      return (
+        <div className="py-1 pl-3 border-l-2 border-success/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-success text-[13px] font-medium font-mono">APPLY</span>
+            <span className="text-success/90 text-[13px]">{total} changes moved to repository workspace</span>
+          </div>
+        </div>
+      )
+    }
 
     default:
       return null

@@ -3,10 +3,10 @@
  */
 
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
-import type { AgentDefinition, RollbackPreview } from "../types"
+import type { AgentDefinition, RollbackPreview, WorkspaceDiff } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
 
 export function RunStatus() {
@@ -23,9 +23,55 @@ export function RunStatus() {
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackResult, setRollbackResult] = useState<string | null>(null)
   const [rolledBack, setRolledBack] = useState(false)
+  const [workspaceDiff, setWorkspaceDiff] = useState<WorkspaceDiff | null>(null)
+  const [workspaceLoading, setWorkspaceLoading] = useState(false)
+  const [workspaceResult, setWorkspaceResult] = useState<string | null>(null)
+  const workspaceBusyRef = useRef(false)
+  const autoLoadedKeyRef = useRef<string | null>(null)
+  const upsertRun = useStore((s) => s.upsertRun)
 
   const run = runs.find((r) => r.id === activeRunId)
   const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
+
+  const refreshWorkspaceDiff = useCallback(async (targetRunId?: string) => {
+    const runId = targetRunId ?? run?.id
+    if (!runId || workspaceBusyRef.current) return
+    workspaceBusyRef.current = true
+    setWorkspaceLoading(true)
+    setWorkspaceResult(null)
+    try {
+      const diff = await api.getRunWorkspaceDiff(runId)
+      setWorkspaceDiff(diff)
+      upsertRun({ id: runId, pendingWorkspaceChanges: diff.total })
+      autoLoadedKeyRef.current = `${runId}:${diff.total}`
+    } catch {
+      setWorkspaceDiff(null)
+      upsertRun({ id: runId, pendingWorkspaceChanges: 0 })
+    } finally {
+      workspaceBusyRef.current = false
+      setWorkspaceLoading(false)
+    }
+  }, [run?.id, upsertRun])
+
+  const handleApplyWorkspaceDiff = useCallback(async () => {
+    if (!run || workspaceBusyRef.current) return
+    workspaceBusyRef.current = true
+    setWorkspaceLoading(true)
+    setWorkspaceResult(null)
+    try {
+      const result = await api.applyRunWorkspaceDiff(run.id)
+      const total = result.applied.added + result.applied.modified + result.applied.deleted
+      setWorkspaceResult(`Applied ${total} file changes to repository workspace`)
+      setWorkspaceDiff(null)
+      upsertRun({ id: run.id, pendingWorkspaceChanges: 0 })
+      autoLoadedKeyRef.current = null
+    } catch {
+      setWorkspaceResult("Failed to apply workspace changes")
+    } finally {
+      workspaceBusyRef.current = false
+      setWorkspaceLoading(false)
+    }
+  }, [run, upsertRun])
 
   const handleRollbackPreview = useCallback(async () => {
     if (!run) return
@@ -67,6 +113,21 @@ export function RunStatus() {
     const timer = setTimeout(() => setRollbackResult(null), 8000)
     return () => clearTimeout(timer)
   }, [rollbackResult])
+
+  useEffect(() => {
+    if (!run) {
+      autoLoadedKeyRef.current = null
+      return
+    }
+    if ((run.pendingWorkspaceChanges ?? 0) <= 0) {
+      setWorkspaceDiff(null)
+      autoLoadedKeyRef.current = null
+      return
+    }
+    const key = `${run.id}:${run.pendingWorkspaceChanges ?? 0}`
+    if (autoLoadedKeyRef.current === key) return
+    refreshWorkspaceDiff(run.id).catch(() => {})
+  }, [run?.id, run?.pendingWorkspaceChanges, refreshWorkspaceDiff])
 
   if (!run) {
     return (
@@ -259,6 +320,61 @@ export function RunStatus() {
           </div>
         </div>
       )}
+
+      {/* Workspace diff approval */}
+      <div className="bg-elevated border border-border rounded-lg p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-text">Workspace Changes</div>
+          <div className="text-[12px] text-text-muted">
+            {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0
+              ? `${workspaceDiff?.total ?? run.pendingWorkspaceChanges} pending`
+              : "none"}
+          </div>
+        </div>
+
+        {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0 && (
+          <div className="text-[12px] text-text-secondary">
+            Codegen/file edits are isolated until you apply them.
+          </div>
+        )}
+
+        {workspaceDiff && workspaceDiff.total > 0 && (
+          <div className="space-y-1 text-[12px] font-mono text-text-secondary">
+            {workspaceDiff.added.length > 0 && (
+              <div>+ added: {workspaceDiff.added.slice(0, 4).join(", ")}{workspaceDiff.added.length > 4 ? ` +${workspaceDiff.added.length - 4}` : ""}</div>
+            )}
+            {workspaceDiff.modified.length > 0 && (
+              <div>~ modified: {workspaceDiff.modified.slice(0, 4).join(", ")}{workspaceDiff.modified.length > 4 ? ` +${workspaceDiff.modified.length - 4}` : ""}</div>
+            )}
+            {workspaceDiff.deleted.length > 0 && (
+              <div>- deleted: {workspaceDiff.deleted.slice(0, 4).join(", ")}{workspaceDiff.deleted.length > 4 ? ` +${workspaceDiff.deleted.length - 4}` : ""}</div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            className="px-3 py-1.5 text-[13px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
+            onClick={() => refreshWorkspaceDiff(run.id)}
+            disabled={workspaceLoading || !run}
+          >
+            {workspaceLoading ? "Loading..." : "Refresh Diff"}
+          </button>
+          {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0 && (
+            <button
+              className="px-3 py-1.5 text-[13px] text-success bg-success/10 hover:bg-success/20 rounded-lg transition-colors"
+              onClick={handleApplyWorkspaceDiff}
+              disabled={workspaceLoading}
+            >
+              Apply Changes
+            </button>
+          )}
+        </div>
+
+        {workspaceResult && (
+          <div className="text-[12px] text-text-secondary">{workspaceResult}</div>
+        )}
+      </div>
     </div>
   )
 }

@@ -110,6 +110,20 @@ export function NotificationPanel() {
         break
       }
 
+      case "apply-run-diff": {
+        const runId = action.data?.runId as string | undefined
+        if (runId) {
+          try {
+            await api.applyRunWorkspaceDiff(runId)
+            setActiveRun(runId)
+          } catch {
+            /* swallow */
+          }
+        }
+        setOpen(false)
+        break
+      }
+
       case "open-policies": {
         // This action is handled by the parent — we just close the panel
         // The PolicyEditor modal will be opened by the parent

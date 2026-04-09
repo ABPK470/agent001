@@ -51,6 +51,7 @@ export function DetailsPanel({
             <TreeItem label="Steps" value={String(run.stepCount)} />
             <TreeItem label="Tokens" value={fmtTokens(run.totalTokens)} />
             <TreeItem label="LLM Calls" value={String(run.llmCalls)} />
+            <TreeItem label="Pending Changes" value={String(run.pendingWorkspaceChanges ?? 0)} valueColor={(run.pendingWorkspaceChanges ?? 0) > 0 ? C.warning : C.dim} />
             <TreeItem label="Started" value={timeAgo(run.createdAt)} />
             {run.completedAt && <TreeItem label="Duration" value={dur(run.createdAt, run.completedAt)} />}
             {run.answer && <TreeItem label="Answer" value={run.answer} />}
@@ -317,6 +318,7 @@ export function RunsPanel({
                 <span>{timeAgo(r.createdAt)}</span>
                 {r.stepCount > 0 && <span>{r.stepCount} steps</span>}
                 {r.totalTokens > 0 && <span>{fmtTokens(r.totalTokens)} tk</span>}
+                {(r.pendingWorkspaceChanges ?? 0) > 0 && <span style={{ color: C.warning }}>{r.pendingWorkspaceChanges} pending</span>}
               </div>
             </div>
           </button>

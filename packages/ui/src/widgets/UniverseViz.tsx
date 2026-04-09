@@ -231,8 +231,22 @@ function classify(ev: WsEvent): DRow {
       return { ...base, lane: 9, label: `plan: ${entry?.stepCount} steps — ${trunc(String(entry?.reason ?? ""), 35)}`, color: P.ok }
     if (kind === "planner-generation-failed")
       return { ...base, lane: 9, label: "plan generation failed", color: P.err }
+    if (kind === "planner-output-root-forced")
+      return { ...base, lane: 9, label: `output root forced: ${trunc(String(entry?.outputRoot ?? ""), 28)}`, color: P.warn }
     if (kind === "planner-validation-failed")
       return { ...base, lane: 9, label: "validation failed", color: P.err }
+    if (kind === "planner-validation-warnings")
+      return { ...base, lane: 9, label: `validation warnings: ${entry?.warningCount ?? 0}`, color: P.warn }
+    if (kind === "planner-delegation-decision") {
+      const yes = entry?.shouldDelegate === true
+      return {
+        ...base,
+        lane: 9,
+        label: `delegation gate: ${yes ? "delegate" : "local"} (${trunc(String(entry?.reason ?? ""), 28)})`,
+        color: yes ? P.planner : P.dim,
+        arrow: yes ? 3 : 2,
+      }
+    }
     if (kind === "planner-pipeline-start")
       return { ...base, lane: 9, label: `pipeline #${entry?.attempt}/${entry?.maxRetries}`, color: P.planner, arrow: 2 }
     if (kind === "planner-step-start")
@@ -251,8 +265,59 @@ function classify(ev: WsEvent): DRow {
     }
     if (kind === "planner-retry")
       return { ...base, lane: 9, label: `retry #${entry?.attempt}: ${trunc(String(entry?.reason ?? ""), 35)}`, color: P.warn }
+    if (kind === "planner-retry-skip")
+      return { ...base, lane: 9, label: `retry skip: ${trunc(String(entry?.stepName ?? ""), 24)} (${trunc(String(entry?.reason ?? ""), 20)})`, color: P.warn }
     if (kind === "planner-retry-skipped")
       return { ...base, lane: 9, label: `retry skipped: ${trunc(String(entry?.reason ?? ""), 40)}`, color: P.dim }
+    if (kind === "planner-retry-abort")
+      return { ...base, lane: 9, label: `retry aborted: ${trunc(String(entry?.reason ?? ""), 34)}`, color: P.err }
+    if (kind === "planner-budget-extended")
+      return { ...base, lane: 9, label: `budget +${entry?.extensions ?? 0} → ${entry?.effectiveBudget ?? "?"}`, color: P.warn }
+    if (kind === "planner-escalation")
+      return { ...base, lane: 9, label: `escalate: ${entry?.action} (${trunc(String(entry?.reason ?? ""), 20)})`, color: P.warn }
+
+    // Planner child delegation lifecycle (planner <-> delegate feedback)
+    if (kind === "planner-delegation-start")
+      return {
+        ...base,
+        lane: 9,
+        label: `child start: ${trunc(String(entry?.stepName ?? ""), 24)}`,
+        color: P.delegate,
+        arrow: 3,
+      }
+    if (kind === "planner-delegation-iteration")
+      return {
+        ...base,
+        lane: 3,
+        label: `${trunc(String(entry?.stepName ?? "child"), 20)} iter ${entry?.iteration}/${entry?.maxIterations}`,
+        color: P.delegate,
+        arrow: 9,
+      }
+    if (kind === "planner-delegation-end") {
+      const ok = entry?.status === "done"
+      return {
+        ...base,
+        lane: 3,
+        label: `child ${ok ? "done" : "error"}: ${trunc(String(entry?.stepName ?? ""), 22)}`,
+        color: ok ? P.ok : P.err,
+        arrow: 9,
+      }
+    }
+
+    if (kind === "workspace_diff") {
+      const diff = entry?.diff as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined
+      const added = diff?.added?.length ?? 0
+      const modified = diff?.modified?.length ?? 0
+      const deleted = diff?.deleted?.length ?? 0
+      return { ...base, lane: 0, label: `workspace diff +${added} ~${modified} -${deleted}`, color: P.api, arrow: 8 }
+    }
+    if (kind === "workspace_diff_applied") {
+      const summary = entry?.summary as { added?: number; modified?: number; deleted?: number } | undefined
+      const added = summary?.added ?? 0
+      const modified = summary?.modified ?? 0
+      const deleted = summary?.deleted ?? 0
+      return { ...base, lane: 6, label: `workspace apply +${added} ~${modified} -${deleted}`, color: P.ok, arrow: 0 }
+    }
 
     // Debug / inspector
     if (kind === "system-prompt")
@@ -298,6 +363,22 @@ function classify(ev: WsEvent): DRow {
   }
   if (t === "notification")
     return { ...base, lane: 8, label: `notify: ${trunc(String(d.title ?? ""), 40)}`, color: P.warn, arrow: 6 }
+  if (t === "planner.started")
+    return { ...base, lane: 9, label: `planner started (${Number(d.score ?? 0).toFixed(2)})`, color: P.planner, arrow: 0 }
+  if (t === "planner.completed")
+    return { ...base, lane: 9, label: `planner ${d.status} (${d.completedSteps ?? 0}/${d.totalSteps ?? 0})`, color: d.status === "completed" ? P.ok : P.err, arrow: 0 }
+  if (t === "planner.pipeline.started")
+    return { ...base, lane: 9, label: `pipeline #${d.attempt}/${d.maxRetries}`, color: P.planner, arrow: 2 }
+  if (t === "planner.step.started")
+    return { ...base, lane: 9, label: `step: ${trunc(String(d.stepName ?? ""), 26)} (${d.stepType})`, color: P.planner, arrow: d.stepType === "subagent_task" ? 3 : 2 }
+  if (t === "planner.step.completed")
+    return { ...base, lane: 9, label: `step done: ${trunc(String(d.stepName ?? ""), 22)} ${d.status}`, color: d.status === "completed" ? P.ok : P.err }
+  if (t === "planner.delegation.started")
+    return { ...base, lane: 9, label: `child start: ${trunc(String(d.stepName ?? ""), 24)}`, color: P.delegate, arrow: 3 }
+  if (t === "planner.delegation.iteration")
+    return { ...base, lane: 3, label: `${trunc(String(d.stepName ?? "child"), 20)} iter ${d.iteration}/${d.maxIterations}`, color: P.delegate, arrow: 9 }
+  if (t === "planner.delegation.ended")
+    return { ...base, lane: 3, label: `child ${d.status}: ${trunc(String(d.stepName ?? ""), 22)}`, color: d.status === "done" ? P.ok : P.err, arrow: 9 }
   if (t === "approval.required")
     return { ...base, lane: 8, label: `approval: ${d.toolName}`, color: P.warn, arrow: 0 }
   if (t === "checkpoint.saved")
@@ -423,10 +504,16 @@ function buildActivations(rows: DRow[]): Activation[] {
     }
 
     // Delegation activation on Delegates lane
-    if (t === "delegation.started" || (t === "debug.trace" && (d.entry as { kind?: string } | undefined)?.kind === "delegation-start"))
+    if (
+      t === "delegation.started"
+      || (t === "debug.trace" && ["delegation-start", "planner-delegation-start"].includes((d.entry as { kind?: string } | undefined)?.kind ?? ""))
+    )
       delegStart = i
     if (
-      (t === "delegation.ended" || (t === "debug.trace" && (d.entry as { kind?: string } | undefined)?.kind === "delegation-end"))
+      (
+        t === "delegation.ended"
+        || (t === "debug.trace" && ["delegation-end", "planner-delegation-end"].includes((d.entry as { kind?: string } | undefined)?.kind ?? ""))
+      )
       && delegStart != null
     ) {
       result.push({ lane: 3, startIdx: delegStart, endIdx: i, color: P.delegate })

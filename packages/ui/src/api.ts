@@ -2,7 +2,20 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { AgentDefinition, Notification, PolicyRule, RollbackPreview, RollbackResult, Run, RunDetail, SavedLayout, ToolInfo, ViewConfig } from "./types"
+import type {
+    AgentDefinition,
+    Notification,
+    PolicyRule,
+    RollbackPreview,
+    RollbackResult,
+    Run,
+    RunDetail,
+    SavedLayout,
+    ToolInfo,
+    ViewConfig,
+    WorkspaceDiff,
+    WorkspaceDiffApplyResult,
+} from "./types"
 
 const BASE = ""
 
@@ -43,6 +56,10 @@ export const api = {
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+  getRunWorkspaceDiff: (id: string) => json<WorkspaceDiff>(`/api/runs/${id}/workspace-diff`),
+  applyRunWorkspaceDiff: (id: string) => json<WorkspaceDiffApplyResult>(`/api/runs/${id}/workspace-diff/apply`, {
+    method: "POST",
+  }),
 
   // Rollback
   previewRollback: (runId: string) =>

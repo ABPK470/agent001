@@ -943,7 +943,7 @@ describe("Pipeline: executePipeline", () => {
     const delegatedTasks: string[] = []
 
     const plan = makePlan({
-      steps: [makeSubagentStep("build-game")],
+      steps: [makeSubagentStep("build-game", { acceptanceCriteria: [] })],
       edges: [],
     })
 
@@ -952,12 +952,84 @@ describe("Pipeline: executePipeline", () => {
       [],
       async (step) => {
         delegatedTasks.push(step.name)
-        return { output: "Build completed successfully" }
+        return {
+          output: "Build completed successfully. Created game.js with full logic.",
+          toolCalls: [
+            {
+              name: "read_file",
+              args: { path: "game.js" },
+              result: "// previous state",
+              isError: false,
+            },
+            {
+              name: "write_file",
+              args: { path: "game.js", content: "export const ready = true" },
+              result: "Successfully wrote to game.js",
+              isError: false,
+            },
+            {
+              name: "read_file",
+              args: { path: "game.js" },
+              result: "export const ready = true",
+              isError: false,
+            },
+          ],
+        }
       },
     )
 
     expect(result.status).toBe("completed")
     expect(delegatedTasks).toContain("build-game")
+  })
+
+  it("fails subagent step when write integrity warnings are present", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("build-game")],
+      edges: [],
+    })
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async () => ({
+        output: "Completed",
+        toolCalls: [
+          {
+            name: "write_file",
+            args: { path: "game.js", content: "..." },
+            result: "⚠ WRITTEN WITH ISSUES to game.js — stub/placeholder code detected",
+            isError: false,
+          },
+        ],
+      }),
+    )
+
+    expect(result.status).toBe("failed")
+    const step = result.stepResults.get("build-game")
+    expect(step?.status).toBe("failed")
+    expect(step?.error).toContain("write-integrity violations")
+  })
+
+  it("fails subagent step when delegation contract evidence is missing", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("build-game")],
+      edges: [],
+    })
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async () => ({
+        output: "Done.",
+        toolCalls: [],
+      }),
+    )
+
+    expect(result.status).toBe("failed")
+    const step = result.stepResults.get("build-game")
+    expect(step?.status).toBe("failed")
+    expect(step?.validationCode).toBeDefined()
+    expect(step?.error).toContain("zero tool-call evidence")
   })
 
   it("respects abort signal", async () => {

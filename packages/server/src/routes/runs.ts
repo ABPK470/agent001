@@ -16,6 +16,10 @@ export function registerRunRoutes(
   app.get("/api/runs", async () => {
     const runs = db.listRunsWithUsage()
     return runs.map((r) => ({
+      pendingWorkspaceChanges: (() => {
+        const diff = orchestrator.getRunWorkspaceDiff(r.id)
+        return diff ? diff.added.length + diff.modified.length + diff.deleted.length : 0
+      })(),
       id: r.id,
       goal: r.goal,
       status: r.status,
@@ -45,6 +49,10 @@ export function registerRunRoutes(
     const logs = db.getLogs(run.id)
     const checkpoint = db.getCheckpoint(run.id)
     const usage = db.getTokenUsage(run.id)
+    const pendingDiff = orchestrator.getRunWorkspaceDiff(run.id)
+    const pendingWorkspaceChanges = pendingDiff
+      ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
+      : 0
 
     return {
       id: run.id,
@@ -62,6 +70,7 @@ export function registerRunRoutes(
       promptTokens: usage?.prompt_tokens ?? 0,
       completionTokens: usage?.completion_tokens ?? 0,
       llmCalls: usage?.llm_calls ?? 0,
+      pendingWorkspaceChanges,
       audit: audit.map((a) => ({
         actor: a.actor,
         action: a.action,

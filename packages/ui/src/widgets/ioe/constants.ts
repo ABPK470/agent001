@@ -313,6 +313,28 @@ export function buildDagNodes(trace: TraceEntry[]): DagNode[] {
         status: "done",
         depth: delegationDepth + 1,
       })
+    } else if (e.kind === "workspace_diff") {
+      const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
+      nodes.push({
+        id: `ws-diff-${i}`,
+        type: "tool-call",
+        label: "WD",
+        detail: `${total} isolated changes pending approval`,
+        expanded: `workspace diff\n+${e.diff.added.length} added\n~${e.diff.modified.length} modified\n-${e.diff.deleted.length} deleted`,
+        status: total > 0 ? "running" : "done",
+        depth: delegationDepth + 1,
+      })
+    } else if (e.kind === "workspace_diff_applied") {
+      const total = e.summary.added + e.summary.modified + e.summary.deleted
+      nodes.push({
+        id: `ws-apply-${i}`,
+        type: "answer",
+        label: "WA",
+        detail: `${total} workspace changes applied`,
+        expanded: `workspace apply\n+${e.summary.added} added\n~${e.summary.modified} modified\n-${e.summary.deleted} deleted`,
+        status: "done",
+        depth: delegationDepth + 1,
+      })
     }
   }
   return nodes
@@ -337,6 +359,8 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "completed" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
+    else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
+    else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
   }
   return items
 }
@@ -393,6 +417,14 @@ export function buildSearchResults(
     if (e.kind === "thinking" && e.text.toLowerCase().includes(q)) {
       results.push({ type: "trace", text: e.text.slice(0, 100) })
     }
+    if (e.kind === "workspace_diff") {
+      const summary = `workspace diff +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`
+      if (summary.toLowerCase().includes(q)) results.push({ type: "trace", text: summary })
+    }
+    if (e.kind === "workspace_diff_applied") {
+      const summary = `workspace applied +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`
+      if (summary.toLowerCase().includes(q)) results.push({ type: "trace", text: summary })
+    }
   }
   for (const a of audit) {
     if (a.action.toLowerCase().includes(q) || a.actor.toLowerCase().includes(q)) {
@@ -437,6 +469,10 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
       msgs.push({ role: "system", content: `Verification: ${e.overall} (confidence ${(e.confidence * 100).toFixed(0)}%)` })
     else if (e.kind === "planner-step-end" && e.status !== "completed")
       msgs.push({ role: "system", content: `Plan step failed: ${e.stepName}` })
+    else if (e.kind === "workspace_diff")
+      msgs.push({ role: "system", content: `Workspace diff pending approval (+${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length})` })
+    else if (e.kind === "workspace_diff_applied")
+      msgs.push({ role: "system", content: `Workspace diff applied (+${e.summary.added} ~${e.summary.modified} -${e.summary.deleted})` })
     else if (e.kind === "user-input-request")
       msgs.push({ role: "input-request", content: e.question, options: e.options, sensitive: e.sensitive })
     else if (e.kind === "user-input-response")

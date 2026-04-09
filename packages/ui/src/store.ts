@@ -318,8 +318,18 @@ export const useStore = create<AppState>()(
       upsertRun: (run) => set((s) => {
         const idx = s.runs.findIndex((r) => r.id === run.id)
         if (idx >= 0) {
+          const current = s.runs[idx]
+          const currentRecord = current as unknown as Record<string, unknown>
+          let changed = false
+          for (const [k, v] of Object.entries(run)) {
+            if (currentRecord[k] !== v) {
+              changed = true
+              break
+            }
+          }
+          if (!changed) return s
           const updated = [...s.runs]
-          updated[idx] = { ...updated[idx], ...run }
+          updated[idx] = { ...current, ...run }
           return { runs: updated }
         }
         // New run — always select it so the UI shows it immediately
@@ -451,6 +461,7 @@ export const useStore = create<AppState>()(
               answer: null,
               stepCount: 0,
               error: null,
+              pendingWorkspaceChanges: 0,
               parentRunId: (data["resumedFrom"] as string) ?? null,
               agentId: (data["agentId"] as string) ?? null,
               createdAt: timestamp,
@@ -476,6 +487,7 @@ export const useStore = create<AppState>()(
               status: "completed",
               answer: data["answer"] as string,
               stepCount: data["stepCount"] as number,
+              pendingWorkspaceChanges: (data["pendingWorkspaceChanges"] as number) ?? 0,
               completedAt: timestamp,
               totalTokens: (data["totalTokens"] as number) ?? 0,
               promptTokens: (data["promptTokens"] as number) ?? 0,
@@ -730,7 +742,18 @@ export const useStore = create<AppState>()(
 
           case "debug.trace": {
             const entry = data["entry"] as import("./types").TraceEntry
-            if (entry) store.addTrace(entry)
+            if (entry) {
+              store.addTrace(entry)
+              const runId = data["runId"] as string | undefined
+              if (runId && entry.kind === "workspace_diff") {
+                const pendingCount =
+                  entry.diff.added.length + entry.diff.modified.length + entry.diff.deleted.length
+                store.upsertRun({ id: runId, pendingWorkspaceChanges: pendingCount })
+              }
+              if (runId && entry.kind === "workspace_diff_applied") {
+                store.upsertRun({ id: runId, pendingWorkspaceChanges: 0 })
+              }
+            }
             break
           }
         }

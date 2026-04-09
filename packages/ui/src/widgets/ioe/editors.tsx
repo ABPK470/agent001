@@ -76,7 +76,11 @@ function fmtEvent(e: TraceEntry, depth: number): string {
       return `${p}PLAN  ${e.stepCount} steps\n${p}  ${e.reason}\n` +
         e.steps.map((s, i) => `${p}  ${i + 1}. ${s.name} (${s.type})`).join("\n")
     case "planner-generation-failed": return `${p}GENERATION FAILED`
+    case "planner-output-root-forced": return `${p}OUTPUT ROOT FORCED  ${e.outputRoot}`
     case "planner-validation-failed": return `${p}VALIDATION FAILED`
+    case "planner-validation-warnings": return `${p}VALIDATION WARNINGS  ${e.warningCount}`
+    case "planner-delegation-decision":
+      return `${p}DELEGATION GATE  ${e.shouldDelegate ? "delegate" : "local"}  ${e.reason}`
     case "planner-pipeline-start": return `${p}PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`
     case "planner-pipeline-end": return `${p}PIPELINE END  ${e.status}  ${e.completedSteps}/${e.totalSteps} steps`
     case "planner-step-start": return `${p}STEP  ${e.stepName}  ${e.stepType}`
@@ -86,6 +90,10 @@ function fmtEvent(e: TraceEntry, depth: number): string {
         e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
     case "planner-retry": return `${p}RETRY  attempt ${e.attempt}  ${e.reason}`
     case "planner-retry-skipped": return `${p}RETRY SKIPPED  ${e.reason}`
+    case "planner-budget-extended": return `${p}BUDGET EXTENDED  completed ${e.completedSteps}  budget ${e.effectiveBudget}  ext ${e.extensions}`
+    case "planner-escalation": return `${p}ESCALATION  ${e.action}  ${e.reason}`
+    case "planner-retry-abort": return `${p}RETRY ABORT  ${e.reason}`
+    case "planner-retry-skip": return `${p}RETRY SKIP  ${e.stepName}  ${e.reason}`
 
     case "planner-delegation-start": return `${p}CHILD AGENT  ${e.stepName}\n${p}  ${e.goal}`
     case "planner-delegation-iteration": return `${p}${e.stepName}  ITER ${e.iteration}/${e.maxIterations}`
@@ -104,6 +112,14 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "llm-response": {
       const tc = e.toolCalls?.length ?? 0
       return `${p}LLM RESPONSE  ${tc} tool call${tc !== 1 ? "s" : ""} · ${e.durationMs}ms`
+    }
+    case "workspace_diff": {
+      const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
+      return `${p}WORKSPACE DIFF  pending ${total}  (+${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length})`
+    }
+    case "workspace_diff_applied": {
+      const total = e.summary.added + e.summary.modified + e.summary.deleted
+      return `${p}WORKSPACE APPLY  moved ${total} changes  (+${e.summary.added} ~${e.summary.modified} -${e.summary.deleted})`
     }
     case "nudge": return `${p}NUDGE [${e.tag}]  ${e.message}`
     default: return `${p}${(e as { kind: string }).kind}`
@@ -207,7 +223,13 @@ export function EditorTabs({
       e.kind === "planner-decision" || e.kind === "planner-plan-generated" ||
       e.kind === "planner-step-start" || e.kind === "planner-step-end" ||
       e.kind === "planner-pipeline-start" || e.kind === "planner-pipeline-end" ||
-      e.kind === "planner-verification" || e.kind === "planner-retry"
+      e.kind === "planner-verification" || e.kind === "planner-retry" ||
+      e.kind === "planner-output-root-forced" || e.kind === "planner-validation-warnings" ||
+      e.kind === "planner-delegation-decision" || e.kind === "planner-budget-extended" ||
+      e.kind === "planner-escalation" || e.kind === "planner-retry-abort" ||
+      e.kind === "planner-retry-skip" ||
+      e.kind === "planner-delegation-start" || e.kind === "planner-delegation-iteration" || e.kind === "planner-delegation-end" ||
+      e.kind === "workspace_diff" || e.kind === "workspace_diff_applied"
     ).length,
     [trace],
   )
@@ -746,6 +768,28 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: C.warning }}>
         ↻ retry attempt {e.attempt}: {e.reason}
+      </div>
+    )
+  }
+  if (e.kind === "workspace_diff") {
+    const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: "2px solid #22d3ee66" }}>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#22d3ee" }}>DIFF</span>
+        <span className="text-[12px] font-mono" style={{ color: C.textSecondary }}>
+          {total} pending (+{e.diff.added.length} ~{e.diff.modified.length} -{e.diff.deleted.length})
+        </span>
+      </div>
+    )
+  }
+  if (e.kind === "workspace_diff_applied") {
+    const total = e.summary.added + e.summary.modified + e.summary.deleted
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.success}66` }}>
+        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>APPLY</span>
+        <span className="text-[12px] font-mono" style={{ color: C.textSecondary }}>
+          {total} repository changes applied (+{e.summary.added} ~{e.summary.modified} -{e.summary.deleted})
+        </span>
       </div>
     )
   }
@@ -1475,6 +1519,31 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return <FlatRow label="GENERATING PLAN" labelColor={"#C084FC"} />
   }
 
+  if (e.kind === "workspace_diff") {
+    const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`WORKSPACE DIFF · ${total} pending`}
+          labelColor="#22d3ee"
+          detail={!open ? `+${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}` : undefined}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5" style={{ color: C.dim }}>
+            {e.diff.added.length > 0 && <div>added: {e.diff.added.slice(0, 8).join(", ")}{e.diff.added.length > 8 ? ` +${e.diff.added.length - 8}` : ""}</div>}
+            {e.diff.modified.length > 0 && <div>modified: {e.diff.modified.slice(0, 8).join(", ")}{e.diff.modified.length > 8 ? ` +${e.diff.modified.length - 8}` : ""}</div>}
+            {e.diff.deleted.length > 0 && <div>deleted: {e.diff.deleted.slice(0, 8).join(", ")}{e.diff.deleted.length > 8 ? ` +${e.diff.deleted.length - 8}` : ""}</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "workspace_diff_applied") {
+    const total = e.summary.added + e.summary.modified + e.summary.deleted
+    return <FlatRow label="WORKSPACE APPLIED" labelColor={C.success} detail={`${total} files (+${e.summary.added} ~${e.summary.modified} -${e.summary.deleted})`} />
+  }
+
   if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
     return <FlatRow label={e.kind === "planner-generation-failed" ? "GENERATION FAILED" : "VALIDATION FAILED"} labelColor={C.coral} />
   }
@@ -1789,6 +1858,10 @@ function IterEventRow({ entry: e }: { entry: TraceEntry }) {
 
   if (e.kind === "usage") {
     return <UsageRow2 usage={e as Extract<TraceEntry, { kind: "usage" }>} />
+  }
+
+  if (e.kind === "workspace_diff" || e.kind === "workspace_diff_applied") {
+    return <PreambleRow entry={e} />
   }
 
   return <PreambleRow entry={e} />

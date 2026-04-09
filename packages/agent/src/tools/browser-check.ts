@@ -78,7 +78,8 @@ function startStaticServer(dir: string): Promise<{ server: ReturnType<typeof cre
   return new Promise((resolve, reject) => {
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const urlPath = decodeURIComponent(req.url?.split("?")[0] ?? "/")
-      const filePath = join(dir, urlPath === "/" ? "index.html" : urlPath)
+      const relPath = (urlPath === "/" ? "index.html" : urlPath.replace(/^\/+/, "")) || "index.html"
+      const filePath = join(dir, relPath)
 
       // Prevent path traversal
       if (!filePath.startsWith(dir)) {

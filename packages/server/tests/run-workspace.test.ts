@@ -1,11 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import {
     applyWorkspaceDiff,
     classifyRunTaskType,
+    cleanupStaleRunWorkspaces,
     computeWorkspaceDiff,
+    getRunWorkspaceRoot,
     shouldUseIsolatedWorkspace,
 } from "../src/run-workspace.js"
 
@@ -65,5 +67,22 @@ describe("run-workspace", () => {
     expect(postDiff.added).toHaveLength(0)
     expect(postDiff.modified).toHaveLength(0)
     expect(postDiff.deleted).toHaveLength(0)
+  })
+
+  it("cleans stale isolated workspace directories", async () => {
+    const root = getRunWorkspaceRoot()
+    await mkdir(root, { recursive: true })
+    const staleDir = await mkdtemp(join(root, "stale-run-"))
+
+    const removed = await cleanupStaleRunWorkspaces(-1)
+    expect(removed).toBeGreaterThanOrEqual(1)
+
+    let exists = true
+    try {
+      await stat(staleDir)
+    } catch {
+      exists = false
+    }
+    expect(exists).toBe(false)
   })
 })

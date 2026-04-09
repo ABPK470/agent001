@@ -15,6 +15,15 @@
  * @module
  */
 
+import { detectInconsistentBranches, detectPlaceholderPatterns } from "../code-quality.js"
+import {
+    buildContractSpec,
+    getCorrectionGuidance,
+    specRequiresFileMutationEvidence,
+    specRequiresSuccessfulToolEvidence,
+    validateDelegatedOutputContract,
+    type DelegationOutputValidationCode,
+} from "../delegation-validation.js"
 import type { ToolCallRecord } from "../recovery.js"
 import type { Tool } from "../types.js"
 import type {
@@ -77,6 +86,11 @@ export interface PipelineExecutorOptions {
   priorResults?: ReadonlyMap<string, PipelineStepResult>
   /** Per-step feedback from verifier to inject into retry attempts. */
   retryFeedback?: ReadonlyMap<string, readonly string[]>
+}
+
+interface SubagentStepValidationContext {
+  readFileTool?: Tool
+  workspaceRoot?: string
 }
 
 /**
@@ -219,7 +233,13 @@ export async function executePipeline(
         }
       }
 
-      const result = await executeStep(effectiveStep, toolExecFn, delegateFn, opts?.signal)
+      const result = await executeStep(
+        effectiveStep,
+        toolExecFn,
+        delegateFn,
+        opts?.signal,
+        { readFileTool: toolMap.get("read_file"), workspaceRoot: opts?.workspaceRoot },
+      )
 
       // ── Post-retry regression check ──
       // If we have snapshots and the step "completed", verify the retry
@@ -305,13 +325,14 @@ async function executeStep(
   toolExecFn: ToolExecFn,
   delegateFn: DelegateFn,
   signal?: AbortSignal,
+  validationCtx?: SubagentStepValidationContext,
 ): Promise<PipelineStepResult> {
   const t0 = Date.now()
 
   if (step.stepType === "deterministic_tool") {
     return executeDeterministicStep(step, toolExecFn, t0, signal)
   } else {
-    return executeSubagentStep(step, delegateFn, t0, signal)
+    return executeSubagentStep(step, delegateFn, t0, signal, validationCtx)
   }
 }
 
@@ -371,6 +392,7 @@ async function executeSubagentStep(
   delegateFn: DelegateFn,
   t0: number,
   signal?: AbortSignal,
+  validationCtx?: SubagentStepValidationContext,
 ): Promise<PipelineStepResult> {
   if (signal?.aborted) {
     return { name: step.name, status: "failed", error: "Aborted", failureClass: "cancelled", durationMs: Date.now() - t0 }
@@ -428,6 +450,24 @@ async function executeSubagentStep(
       }
     }
 
+    const strictFailure = await validateSubagentCompletion(
+      step,
+      output,
+      childToolCalls,
+      validationCtx,
+    )
+    if (strictFailure) {
+      return {
+        name: step.name,
+        status: "failed",
+        error: strictFailure.message,
+        failureClass: "unknown",
+        durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
+        validationCode: strictFailure.code,
+      }
+    }
+
     return {
       name: step.name,
       status: "completed",
@@ -446,6 +486,97 @@ async function executeSubagentStep(
       durationMs: Date.now() - t0,
     }
   }
+}
+
+interface SubagentValidationFailure {
+  code?: DelegationOutputValidationCode
+  message: string
+}
+
+async function validateSubagentCompletion(
+  step: SubagentTaskStep,
+  output: string,
+  toolCalls: readonly ToolCallRecord[] | undefined,
+  validationCtx?: SubagentStepValidationContext,
+): Promise<SubagentValidationFailure | null> {
+  const calls = toolCalls ?? []
+
+  // Hard fail if child produced explicit write-integrity warnings.
+  const writeWarning = calls.find((c) => {
+    if (c.name !== "write_file" && c.name !== "replace_in_file") return false
+    return /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result)
+  })
+  if (writeWarning) {
+    return {
+      message:
+        `Step "${step.name}" produced write-integrity violations via ${writeWarning.name}. ` +
+        `The step is rejected until file writes are clean and free of placeholder/corruption warnings.`,
+    }
+  }
+
+  // Deterministic child-output contract gate.
+  const contractSpec = buildContractSpec(step, step.executionContext)
+  if (specRequiresSuccessfulToolEvidence(contractSpec) && calls.length === 0) {
+    return {
+      code: "missing_successful_tool_evidence",
+      message:
+        `Step "${step.name}" produced zero tool-call evidence. ` +
+        `Completion is rejected until at least one successful tool execution is recorded.`,
+    }
+  }
+  if (specRequiresFileMutationEvidence(contractSpec) && calls.length === 0) {
+    return {
+      code: "missing_file_mutation_evidence",
+      message:
+        `Step "${step.name}" requires file mutation evidence but recorded no tool calls. ` +
+        `Completion is rejected until file creation/modification is proven.`,
+    }
+  }
+
+  const contract = validateDelegatedOutputContract({
+    spec: contractSpec,
+    output,
+    toolCalls: calls,
+  })
+  if (!contract.ok) {
+    const guidance = contract.code ? getCorrectionGuidance(contract.code) : "Child output violated delegation contract."
+    return {
+      code: contract.code,
+      message:
+        `Step "${step.name}" violated delegation contract` +
+        `${contract.code ? ` [${contract.code}]` : ""}: ${contract.message ?? "unknown contract failure"}. ` +
+        `Required correction: ${guidance}`,
+    }
+  }
+
+  const readFileTool = validationCtx?.readFileTool
+  if (!readFileTool) return null
+
+  // Artifact-quality gate: no placeholder/stub logic in code targets.
+  const codeTargets = step.executionContext.targetArtifacts.filter((a) => /\.(js|jsx|ts|tsx|py)$/i.test(a))
+  for (const artifact of codeTargets) {
+    const content = await tryReadArtifact(readFileTool, artifact, validationCtx?.workspaceRoot)
+    if (!content) {
+      return {
+        code: "missing_target_artifact_coverage",
+        message: `Step "${step.name}" did not produce readable target artifact: ${artifact}`,
+      }
+    }
+
+    const placeholders = detectPlaceholderPatterns(content)
+    const branchInconsistencies = detectInconsistentBranches(content)
+    const findings = [...placeholders, ...branchInconsistencies]
+    if (findings.length > 0) {
+      return {
+        code: "acceptance_evidence_missing",
+        message:
+          `Step "${step.name}" produced non-executable or incomplete code in ${artifact}: ` +
+          `${findings.slice(0, 5).join("; ")}`,
+      }
+    }
+  }
+
+  return null
 }
 
 // ============================================================================

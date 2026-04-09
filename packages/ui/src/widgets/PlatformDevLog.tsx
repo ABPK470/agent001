@@ -34,6 +34,7 @@ function categorize(type: string): Category {
   if (type.startsWith("step.")) return "step"
   if (type.startsWith("agent.")) return "agent"
   if (type.startsWith("delegation.")) return "delegation"
+  if (type.startsWith("planner.")) return "debug"
   if (type.startsWith("usage.")) return "usage"
   if (type.startsWith("debug.")) return "debug"
   if (type.startsWith("user_input.") || type === "notification") return "input"
@@ -89,6 +90,36 @@ function EventRow({ event, index }: { event: WsEvent; index: number }) {
 
 function summarize(event: WsEvent): string {
   const d = event.data
+  if (event.type === "run.completed") {
+    const pending = (d["pendingWorkspaceChanges"] as number) ?? 0
+    if (pending > 0) return `completed with ${pending} isolated changes awaiting approval`
+  }
+  if (event.type === "planner.started") return `score=${Number(d["score"] ?? 0).toFixed(2)} ${String(d["reason"] ?? "")}`
+  if (event.type === "planner.completed") return `${d["status"]} ${d["completedSteps"]}/${d["totalSteps"]}`
+  if (event.type === "planner.pipeline.started") return `attempt ${d["attempt"]}/${d["maxRetries"]}`
+  if (event.type === "planner.step.started") return `${d["stepName"]} (${d["stepType"]})`
+  if (event.type === "planner.step.completed") return `${d["stepName"]} ${d["status"]} ${d["durationMs"]}ms`
+  if (event.type === "planner.delegation.started") return `child ${d["stepName"]} depth=${d["depth"]}`
+  if (event.type === "planner.delegation.iteration") return `${d["stepName"]} iter ${d["iteration"]}/${d["maxIterations"]}`
+  if (event.type === "planner.delegation.ended") return `child ${d["stepName"]} ${d["status"]}`
+  if (event.type === "debug.trace") {
+    const entry = d["entry"] as Record<string, unknown> | undefined
+    const kind = entry?.["kind"]
+    if (kind === "workspace_diff") {
+      const diff = entry?.["diff"] as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined
+      const added = diff?.added?.length ?? 0
+      const modified = diff?.modified?.length ?? 0
+      const deleted = diff?.deleted?.length ?? 0
+      return `workspace diff pending (+${added} ~${modified} -${deleted})`
+    }
+    if (kind === "workspace_diff_applied") {
+      const summary = entry?.["summary"] as { added?: number; modified?: number; deleted?: number } | undefined
+      const added = summary?.added ?? 0
+      const modified = summary?.modified ?? 0
+      const deleted = summary?.deleted ?? 0
+      return `workspace diff applied (+${added} ~${modified} -${deleted})`
+    }
+  }
   // API request
   if (event.type === "api.request") return `${d["method"]} ${d["url"]} → ${d["status_code"]} (${d["duration_ms"]}ms)`
   // Effect tracking

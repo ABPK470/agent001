@@ -75,6 +75,7 @@ const LIFELINES: Lifeline[] = [
   { id: "tools",    label: "Tool Exec",      file: "tools/*.ts",          color: P.tools },
   { id: "govern",   label: "Governance",     file: "governance.ts",       color: P.govern },
   { id: "effects",  label: "Effects",        file: "effects.ts",          color: P.effects },
+  { id: "rws",      label: "RunWorkspace",   file: "run-workspace.ts",    color: "#22d3ee" },
   { id: "delegate", label: "Delegate",       file: "delegate.ts",         color: P.delegate },
   { id: "planner",  label: "Planner",        file: "planner/*.ts",        color: P.planner },
   { id: "db",       label: "SQLite",         file: "db/*.ts",             color: P.db },
@@ -144,6 +145,7 @@ function buildMessages(showPhase: Set<string>): Msg[] {
   add({ kind: "return", from: "queue", to: "orch", label: "{ releaseSlot }", dashed: true, phase: "init" })
   add({ kind: "call", from: "orch", to: "db", label: "persistRun(run, 'running')", detail: "db/runs.ts → INSERT runs", phase: "init" })
   add({ kind: "call", from: "orch", to: "ws", label: "broadcast('run.started')", detail: "ws.ts:45", phase: "init" })
+  add({ kind: "call", from: "orch", to: "rws", label: "cleanupStaleRunWorkspaces(ttl)", detail: "best-effort startup cleanup", phase: "init" })
 
   // Tool wrapping chain
   add({ kind: "note", from: "orch", to: "orch", label: "── Tool Wrapping Pipeline ──", phase: "init" })
@@ -370,7 +372,20 @@ function buildMessages(showPhase: Set<string>): Msg[] {
   add({ kind: "return", from: "memory", to: "orch", label: "{ promoted, pruned }", dashed: true, phase: "completion" })
 
   // Final broadcasts
-  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('run.completed')", detail: "{ runId, answer, stepCount, tokens }", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "rws", label: "computeWorkspaceDiff(sourceRoot, executionRoot)", detail: "capture isolated run delta", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('debug.trace')", detail: "entry.kind = workspace_diff", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('run.completed')", detail: "includes pendingWorkspaceChanges", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('notification')", detail: "actions: Review / Apply", phase: "completion" })
+
+  add({ kind: "alt-start", from: "http", to: "http", label: "alt [operator approves pending diff]", altLabel: "Approval Apply Path", phase: "completion" })
+  add({ kind: "call", from: "http", to: "orch", label: "POST /api/notifications/:id/action", detail: "action = apply-run-diff", phase: "completion" })
+  add({ kind: "call", from: "http", to: "orch", label: "POST /api/runs/:id/workspace-diff/apply", detail: "routes/runs.ts: applyRunWorkspaceDiff", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "rws", label: "applyWorkspaceDiff()", detail: "copy isolated changes to source workspace", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "rws", label: "cleanupRunWorkspace()", detail: "remove isolated execution directory", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('debug.trace')", detail: "entry.kind = workspace_diff_applied", phase: "completion" })
+  add({ kind: "call", from: "orch", to: "ws", label: "broadcast('notification')", detail: "title: Run changes applied", phase: "completion" })
+  add({ kind: "alt-end", from: "http", to: "http", label: "", phase: "completion" })
+
   add({ kind: "call", from: "orch", to: "ws", label: "broadcast('notification')", detail: "{ title: 'Run completed' }", phase: "completion" })
   add({ kind: "call", from: "orch", to: "queue", label: "releaseSlot()", detail: "queue.ts — free concurrency slot", phase: "completion" })
 
@@ -488,6 +503,11 @@ function traceToPhase(trace: TraceEntry[]): {
         }
         activePhase = "completion"
         activeLifelines.add("orch").add("memory").add("db").add("ws")
+        break
+      case "workspace_diff":
+      case "workspace_diff_applied":
+        activePhase = "completion"
+        activeLifelines.add("orch").add("ws").add("http").add("rws")
         break
       case "error":
         // Keep current phase

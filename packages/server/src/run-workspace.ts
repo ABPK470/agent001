@@ -36,6 +36,12 @@ const COPY_IGNORE_FILES = new Set([
   ".DS_Store",
 ])
 
+const RUN_WORKSPACE_ROOT_NAME = "agent001-runs"
+
+export function getRunWorkspaceRoot(): string {
+  return resolve(tmpdir(), RUN_WORKSPACE_ROOT_NAME)
+}
+
 function shouldIgnorePath(path: string): boolean {
   const segments = path.split("/")
   const base = segments[segments.length - 1] ?? ""
@@ -72,7 +78,7 @@ export async function prepareRunWorkspace(params: {
     }
   }
 
-  const sandboxRoot = resolve(tmpdir(), "agent001-runs", `${params.runId}-${randomUUID().slice(0, 8)}`)
+  const sandboxRoot = resolve(getRunWorkspaceRoot(), `${params.runId}-${randomUUID().slice(0, 8)}`)
   await mkdir(sandboxRoot, { recursive: true })
 
   await cp(sourceRoot, sandboxRoot, {
@@ -186,6 +192,28 @@ export async function applyWorkspaceDiff(params: {
 export async function cleanupRunWorkspace(context: RunWorkspaceContext): Promise<void> {
   if (!context.isolated) return
   await rm(context.executionRoot, { recursive: true, force: true })
+}
+
+export async function cleanupStaleRunWorkspaces(maxAgeMs: number): Promise<number> {
+  const root = getRunWorkspaceRoot()
+  try {
+    const entries = await readdir(root, { withFileTypes: true })
+    const now = Date.now()
+    let removed = 0
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const fullPath = join(root, entry.name)
+      const info = await stat(fullPath)
+      if (now - info.mtimeMs <= maxAgeMs) continue
+      await rm(fullPath, { recursive: true, force: true })
+      removed += 1
+    }
+
+    return removed
+  } catch {
+    return 0
+  }
 }
 
 export function summarizeWorkspaceDiff(diff: WorkspaceDiff): string {
