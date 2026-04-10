@@ -917,6 +917,7 @@ export class Agent {
     const writtenButNotReread = new Set<string>()
     const artifactsRequiringReadBeforeMutation = new Set<string>()
     const fatalArtifactFailureCounts = new Map<string, number>()
+    const blockedArtifactFailureCounts = new Map<string, number>()
     // One-shot: only fire WRITE-WITHOUT-REVIEW nudge once.
     let writeReviewNudged = false
     // Bounded retries: guard against premature handoff/finalization when
@@ -938,6 +939,17 @@ export class Agent {
     // Track whether the model has made at least one completion attempt
     // (response with zero tool calls). Used by optional deferred-nudge mode.
     let completionAttempted = false
+
+    const recordBlockedArtifactFailure = (artifactPath: string, threshold: number, reason: string): string | null => {
+      const normalizedPath = normalizeArtifactPath(artifactPath)
+      if (!normalizedPath) return null
+      const count = (blockedArtifactFailureCounts.get(normalizedPath) ?? 0) + 1
+      blockedArtifactFailureCounts.set(normalizedPath, count)
+      if (count >= threshold) {
+        return `${reason} on ${normalizedPath}. Stopping this agent attempt so the parent can retry or replan from a clean state.`
+      }
+      return null
+    }
 
     for (let i = resume?.iteration ?? 0; i < this.config.maxIterations; i++) {
       if (this.config.signal?.aborted) {
@@ -1282,6 +1294,11 @@ export class Agent {
             },
           })
           failuresThisRound++
+          forcedAbortLoopMessage = recordBlockedArtifactFailure(
+            requestedPath,
+            3,
+            "Repeated mutation-blocked attempts",
+          )
           forcedAbortRoundMessage = `Artifact guard triggered for ${requestedPath}. Read the current file before retrying any mutation.`
           break
         }
@@ -1386,6 +1403,7 @@ export class Agent {
             } else {
               artifactsRequiringReadBeforeMutation.delete(normalizedPath)
               fatalArtifactFailureCounts.delete(normalizedPath)
+              blockedArtifactFailureCounts.delete(normalizedPath)
             }
           }
 
@@ -1399,6 +1417,25 @@ export class Agent {
                 forcedAbortLoopMessage =
                   `Repeated fatal mutation failures on ${normalizedPath}. Stopping this agent attempt so the parent can retry or replan from a clean state.`
               }
+              if (!forcedAbortLoopMessage) {
+                forcedAbortLoopMessage = recordBlockedArtifactFailure(
+                  normalizedPath,
+                  3,
+                  "Repeated blocked mutation failures",
+                )
+              }
+            }
+          } else if (
+            execResult.outcome?.errorCode === "artifact_incomplete_mutation"
+            || execResult.outcome?.errorCode === "artifact_inspection_required"
+          ) {
+            for (const artifact of execResult.outcome.artifacts ?? []) {
+              if (forcedAbortLoopMessage) break
+              forcedAbortLoopMessage = recordBlockedArtifactFailure(
+                artifact.path,
+                3,
+                "Repeated incomplete/blocked mutation failures",
+              )
             }
           }
 
@@ -1425,6 +1462,7 @@ export class Agent {
             writtenButNotReread.delete(readPath)
             const normalizedReadPath = normalizeArtifactPath(readPath)
             artifactsRequiringReadBeforeMutation.delete(normalizedReadPath)
+            blockedArtifactFailureCounts.delete(normalizedReadPath)
           }
           if (call.name === "run_command" || call.name === "browser_check") {
             wroteUnverifiedFiles = false

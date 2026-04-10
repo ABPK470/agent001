@@ -892,6 +892,29 @@ function getMutatedArtifactPaths(calls: readonly ToolCallRecord[]): Set<string> 
   return paths
 }
 
+function isVerificationRunCommand(call: ToolCallRecord): boolean {
+  if (call.name !== "run_command") return false
+  const command = typeof call.args.command === "string" ? call.args.command.trim().toLowerCase() : ""
+  if (!command) return false
+
+  return /(?:^|\s)(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|check|lint|typecheck|verify)\b/.test(command)
+    || /(?:^|\s)(?:npx\s+)?(?:vitest|jest|tsc|pytest|ruff)\b/.test(command)
+    || /(?:^|\s)node\s+--check\b/.test(command)
+}
+
+function findFailedVerificationToolCall(calls: readonly ToolCallRecord[]): ToolCallRecord | null {
+  for (const call of calls) {
+    const isVerificationCall = call.name === "browser_check" || isVerificationRunCommand(call)
+    if (!isVerificationCall) continue
+
+    if (call.isError) return call
+    if (/Uncaught Exceptions|Console Errors|Network Failures|SyntaxError|Total:\s*[1-9]\d*\s+error|Error:/i.test(call.result)) {
+      return call
+    }
+  }
+  return null
+}
+
 async function validateSubagentCompletion(
   step: SubagentTaskStep,
   output: string,
@@ -920,6 +943,17 @@ async function validateSubagentCompletion(
       message:
         `Step "${step.name}" final write to "${path}" has integrity violations via ${finalWriteWarning.name}. ` +
         `The step is rejected until file writes are clean and free of placeholder/corruption warnings.`,
+    }
+  }
+
+  const failedVerificationCall = findFailedVerificationToolCall(calls)
+  if (failedVerificationCall) {
+    return {
+      code: "acceptance_evidence_missing",
+      message:
+        `Step "${step.name}" ran ${failedVerificationCall.name} but verification failed. ` +
+        `The step cannot complete until the reported runtime/check errors are fixed. ` +
+        `Last verification output: ${failedVerificationCall.result}`,
     }
   }
 

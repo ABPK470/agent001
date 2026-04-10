@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import * as delegationDecision from "../src/delegation-decision.js"
+import { parseBlueprintContractBlock } from "../src/planner/blueprint-contract.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
 import { generatePlan, isValidArtifactPath } from "../src/planner/generate.js"
 import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
@@ -219,6 +220,36 @@ describe("Planner output-root inference", () => {
   it("returns null when goal does not specify a strict output directory", () => {
     const goal = "Implement a dashboard with tests and API integration."
     expect(inferForcedOutputDirectoryFromGoal(goal)).toBeNull()
+  })
+})
+
+describe("Blueprint contract parsing", () => {
+  it("accepts shorthand string arrays for functions and shared types", () => {
+    const parsed = parseBlueprintContractBlock([
+      "```blueprint-contract",
+      JSON.stringify({
+        version: 1,
+        files: [
+          {
+            path: "tmp/game_logic.js",
+            purpose: "Game rules",
+            functions: ["initializeGame", "validateMove"],
+          },
+          {
+            path: "tmp/index.html",
+            purpose: "UI shell",
+            functions: [],
+          },
+        ],
+        sharedTypes: ["Piece", "GameState"],
+      }, null, 2),
+      "```",
+    ].join("\n"))
+
+    expect(parsed.present).toBe(true)
+    expect(parsed.errors).toEqual([])
+    expect(parsed.files[0]?.functions.map(fn => fn.name)).toEqual(["initializeGame", "validateMove"])
+    expect(parsed.sharedTypes.map(type => type.name)).toEqual(["Piece", "GameState"])
   })
 })
 
@@ -2767,6 +2798,59 @@ describe("Pipeline: executePipeline", () => {
     const step = result.stepResults.get("build-game")
     expect(step?.status).toBe("failed")
     expect(step?.error).toContain("integrity violations")
+  })
+
+  it("fails subagent step when a child browser_check reports runtime errors", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("build-ui", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["write_file", "read_file", "browser_check"],
+          requiredSourceArtifacts: [],
+          targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async () => ({
+        output: "Completed UI step.",
+        toolCalls: [
+          {
+            name: "write_file",
+            args: { path: "tmp/index.html", content: "<html></html>" },
+            result: "Successfully wrote to tmp/index.html",
+            isError: false,
+          },
+          {
+            name: "browser_check",
+            args: { path: "tmp/index.html" },
+            result: "## Uncaught Exceptions (1)\n  - SyntaxError: Unexpected token ':'\n\nTotal: 1 error(s), 0 warning(s)",
+            isError: true,
+          },
+          {
+            name: "read_file",
+            args: { path: "tmp/index.html" },
+            result: "<html></html>",
+            isError: false,
+          },
+        ],
+      }),
+    )
+
+    expect(result.status).toBe("failed")
+    const step = result.stepResults.get("build-ui")
+    expect(step?.status).toBe("failed")
+    expect(step?.error).toContain("browser_check")
+    expect(step?.error).toContain("verification failed")
   })
 
   it("fails subagent step when delegation contract evidence is missing", async () => {

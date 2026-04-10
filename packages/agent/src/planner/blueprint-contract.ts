@@ -48,6 +48,14 @@ export function uniqueStrings(values: readonly string[]): string[] {
 }
 
 function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
+  if (typeof input === "string") {
+    const name = input.trim()
+    if (!name) return null
+    return {
+      name,
+      signature: `${name}()`,
+    }
+  }
   if (!input || typeof input !== "object") return null
   const raw = input as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""
@@ -60,6 +68,15 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
 }
 
 function normalizeSharedTypeSpec(input: unknown): BlueprintSharedTypeSpec | null {
+  if (typeof input === "string") {
+    const name = input.trim()
+    if (!name) return null
+    return {
+      name,
+      definition: "",
+      usedBy: [],
+    }
+  }
   if (!input || typeof input !== "object") return null
   const raw = input as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""

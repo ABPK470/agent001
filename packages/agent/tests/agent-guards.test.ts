@@ -281,6 +281,49 @@ describe("Agent loop guards", () => {
     expect(answer).toBe("All done")
   })
 
+  it("aborts after repeated blocked mutation failures on the same artifact", async () => {
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        return {
+          ok: false,
+          summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
+          severity: "recoverable",
+          directive: "abort_round",
+          errorCode: "artifact_incomplete_mutation",
+          details: [
+            "STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation.",
+          ],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+        }
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "first" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "second" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "third" } }] },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool], {
+      maxIterations: 6,
+      verbose: false,
+    })
+
+    const answer = await agent.run("fix the file")
+    expect(answer).toContain("Repeated mutation-blocked attempts on tmp/game/chessLogic.js")
+  })
+
   it("returns cancellation message when signal is aborted", async () => {
     const controller = new AbortController()
     controller.abort()
