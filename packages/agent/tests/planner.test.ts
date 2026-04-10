@@ -6,12 +6,13 @@ import { describe, expect, it, vi } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import * as delegationDecision from "../src/delegation-decision.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
-import { isValidArtifactPath } from "../src/planner/generate.js"
+import { generatePlan, isValidArtifactPath } from "../src/planner/generate.js"
 import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
 import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
+import { CHILD_SYSTEM_PROMPT } from "../src/tools/delegate.js"
 import type { LLMClient, Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -222,6 +223,73 @@ describe("Planner output-root inference", () => {
 })
 
 describe("Planner path execution", () => {
+  it("tells the planner to choose the best language for the goal and scopes ESM rules to browser JS/TS", async () => {
+    const chat = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        reason: "python fits best",
+        confidence: 0.8,
+        requiresSynthesis: false,
+        steps: [
+          {
+            name: "write_script",
+            stepType: "subagent_task",
+            dependsOn: [],
+            objective: "Create tmp/process.py",
+            inputContract: "Empty workspace",
+            acceptanceCriteria: ["Script processes the target input and writes the requested output"],
+            requiredToolCapabilities: ["write_file", "read_file"],
+            contextRequirements: [],
+            executionContext: {
+              workspaceRoot: ".",
+              allowedReadRoots: ["."],
+              allowedWriteRoots: ["."],
+              allowedTools: ["write_file", "read_file"],
+              requiredSourceArtifacts: [],
+              targetArtifacts: ["tmp/process.py"],
+              effectClass: "filesystem_write",
+              verificationMode: "none",
+              artifactRelations: [],
+            },
+            maxBudgetHint: "20 iterations",
+            canRunParallel: false,
+          },
+        ],
+        edges: [],
+      }),
+      toolCalls: [],
+    })
+
+    const llm: LLMClient = { chat }
+
+    await generatePlan(llm, {
+      goal: "Process a CSV and emit a summary report; use Python if that is the best fit.",
+      workspaceRoot: ".",
+      availableTools: [echoTool("write_file"), echoTool("read_file")],
+      history: [],
+    })
+
+    const messages = chat.mock.calls[0]?.[0] as Array<{ role: string; content: string }>
+    const systemPrompt = messages?.find(message => message.role === "system" && message.content.includes("## Rules"))?.content ?? ""
+
+    expect(systemPrompt).toContain("CHOOSE THE BEST IMPLEMENTATION MEDIUM FOR THE GOAL")
+    expect(systemPrompt).toContain("Do NOT default to JavaScript for every task")
+    expect(systemPrompt).toContain("This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML")
+    expect(systemPrompt).toContain("This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed")
+    expect(systemPrompt).toContain("HELPER/CALL DEPENDENCY CLOSURE MUST BE EXPLICIT")
+    expect(systemPrompt).toContain("Do NOT leave dangling references like calling helper functions that are never defined anywhere")
+    expect(systemPrompt).toContain("VISUAL STATE/STYLING CONTRACT MUST BE EXPLICIT")
+    expect(systemPrompt).toContain("row/column parity or equivalent coordinate-aware logic")
+  })
+
+  it("gives child workers an explicit no-dangling-helper contract and consistent browser module guidance", () => {
+    expect(CHILD_SYSTEM_PROMPT).toContain("DEPENDENCY CLOSURE RULE")
+    expect(CHILD_SYSTEM_PROMPT).toContain("must be defined in that same file or imported")
+    expect(CHILD_SYSTEM_PROMPT).toContain("VISUAL WIRING RULE")
+    expect(CHILD_SYSTEM_PROMPT).toContain("row/column parity")
+    expect(CHILD_SYSTEM_PROMPT).toContain("use ES modules consistently")
+    expect(CHILD_SYSTEM_PROMPT).not.toContain("put ALL code in plain `<script>` tags")
+  })
+
   it("auto-remediates dependent shared target ownership before execution", async () => {
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
@@ -711,7 +779,8 @@ describe("Planner path execution", () => {
 
     expect(capturedMarkupObjective).toContain("Entrypoint wiring contract")
     expect(capturedMarkupCriteria.some((criterion) => criterion.includes("game_logic.js"))).toBe(true)
-    expect(capturedLogicCriteria).toContain("Uses a browser-compatible module boundary consistently; no CommonJS exports in browser-loaded runtime files.")
+    expect(capturedLogicObjective).toContain("runtime JS must use ES modules consistently")
+    expect(capturedLogicCriteria).toContain("Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals.")
   })
 })
 
@@ -1480,7 +1549,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(true)
     expect(step?.issues.some(i => i.includes("CRITERIA PROOF MISSING"))).toBe(true)
     expect(step?.outcome).toBe("fail")
-    expect(step?.retryable).toBe(false)
+    expect(step?.retryable).toBe(true)
   })
 
   it("fails when shared-state contract consumer does not declare owner artifact as required source", async () => {
@@ -1633,6 +1702,89 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
   })
 
+  it("flags an integration gap when index.html does not load the runtime JS at all", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/game-logic.js and tmp/app/ui-logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><div id='chessboard'></div><p id='status'></p></body></html>"
+          if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
+          if (path.endsWith("ui-logic.js")) return "import { initializeBoard } from './game-logic.js'\nexport function renderBoard() { return initializeBoard() }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+      {
+        name: "browser_check",
+        description: "browser",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute() {
+          return "No errors"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("Integration gap") && i.includes("Runtime code will never load"))).toBe(true)
+    expect(htmlStep?.outcome).not.toBe("pass")
+  })
+
   it("flags browser module mismatch when HTML loads a CommonJS runtime file directly", async () => {
     const plan = makePlan({
       steps: [
@@ -1685,7 +1837,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("index.html")) return "<html><body><script src='game-logic.js'></script></body></html>"
+          if (path.endsWith("index.html")) return "<html><body><script type='module' src='game-logic.js'></script></body></html>"
           if (path.endsWith("game-logic.js")) return "function initializeBoard() { return [] }\nmodule.exports = { initializeBoard }"
           return "Error: not found"
         },
@@ -1705,6 +1857,322 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(htmlStep).toBeDefined()
     expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch") && i.includes("CommonJS"))).toBe(true)
     expect(htmlStep?.outcome).not.toBe("pass")
+  })
+
+  it("flags the exact inconsistent browser contract when UI assumes globals but logic uses CommonJS", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-ui", {
+          objective: "Create UI runtime",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game_ui.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-logic", {
+          objective: "Create logic runtime",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game_logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [
+        { from: "create-html", to: "create-ui" },
+        { from: "create-ui", to: "create-logic" },
+      ],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 3,
+      totalSteps: 3,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-ui", { name: "create-ui", status: "completed", output: "wrote tmp/app/game_ui.js", durationMs: 1 }],
+        ["create-logic", { name: "create-logic", status: "completed", output: "wrote tmp/app/game_logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) {
+            return "<html><body><script type='module' src='./game_ui.js'></script><script type='module' src='./game_logic.js'></script></body></html>"
+          }
+          if (path.endsWith("game_ui.js")) {
+            return [
+              "export function bootGame() {",
+              "  const board = initializeBoard()",
+              "  const legal = validateMove(board, { from: 'e2', to: 'e4' })",
+              "  return updateGameState(board, legal)",
+              "}",
+            ].join("\n")
+          }
+          if (path.endsWith("game_logic.js")) {
+            return "function initializeBoard() { return [] }\nfunction validateMove() { return true }\nfunction updateGameState(board) { return board }\nmodule.exports = { initializeBoard, validateMove, updateGameState }"
+          }
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const uiStep = assessments.find(a => a.stepName === "create-ui")
+    expect(htmlStep).toBeDefined()
+    expect(uiStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch") && i.includes("CommonJS"))).toBe(true)
+    expect(uiStep?.issues.some(i => i.includes("Missing helper dependency/dependencies") && i.includes("initializeBoard()") && i.includes("validateMove()") && i.includes("updateGameState()"))).toBe(true)
+    expect(htmlStep?.outcome).not.toBe("pass")
+    expect(uiStep?.outcome).not.toBe("pass")
+  })
+
+  it("accepts runtime wiring through an ESM entry module import graph", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><script type='module' src='./main.js'></script></body></html>"
+          if (path.endsWith("main.js")) return "import { initializeBoard } from './game-logic.js'\nimport { mountUi } from './ui-logic.js'\nmountUi(initializeBoard())"
+          if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
+          if (path.endsWith("ui-logic.js")) return "export function mountUi(board) { return board }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
+    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch"))).toBe(false)
+  })
+
+  it("flags browser module mismatch when runtime JS is loaded without type=module", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/main.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><script src='main.js'></script></body></html>"
+          if (path.endsWith("main.js")) return "export function boot() { return true }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("without type=\"module\""))).toBe(true)
+  })
+
+  it("flags broken local import/export bindings so helper dependencies cannot hide behind bad ESM wiring", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-js", {
+          objective: "Create browser modules",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("main.js")) return "import { hasObstacles } from './game-logic.js'\nexport function validateMove(board, move) { return hasObstacles(board, move) }"
+          if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "create-js")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("Import/export mismatch") && i.includes("hasObstacles"))).toBe(true)
   })
 
   it("flags unresolved helper dependencies inside a JS artifact", async () => {
@@ -1769,6 +2237,192 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     const step = assessments.find(a => a.stepName === "implement-rules")
     expect(step).toBeDefined()
     expect(step?.issues.some(i => i.includes("Missing helper dependency/dependencies") && i.includes("hasObstacles()") && i.includes("isKingUnderThreat()"))).toBe(true)
+  })
+
+  it("flags temporal-dead-zone style use-before-declaration in a JS artifact", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("implement-rules", {
+          objective: "Implement move validation",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/game_logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["implement-rules", { name: "implement-rules", status: "completed", output: "wrote tmp/game_logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("game_logic.js")) {
+            return [
+              "function validateMove(startPos, endPos) {",
+              "  if (endPos.row === startPos.row + direction) return true",
+              "  const direction = -1",
+              "  return false",
+              "}",
+            ].join("\n")
+          }
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "implement-rules")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("temporal-dead-zone/use-before-declaration") && i.includes("direction"))).toBe(true)
+  })
+
+  it("flags missing stylesheet rules for CSS classes referenced by browser code", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-ui", {
+          objective: "Create browser UI",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game_ui.js", "tmp/app/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["create-ui", { name: "create-ui", status: "completed", output: "wrote tmp/app/game_ui.js and tmp/app/styles.css", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("game_ui.js")) return "cell.classList.add('highlight-move')\ncell.classList.remove('selected')"
+          if (path.endsWith("styles.css")) return ".selected { outline: 1px solid red; }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "create-ui")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("Style integration gap") && i.includes(".highlight-move"))).toBe(true)
+  })
+
+  it("flags flat nth-child striping as suspicious for multi-column grid boards", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-styles", {
+          objective: "Create board styles",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["create-styles", { name: "create-styles", status: "completed", output: "wrote tmp/app/styles.css", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("styles.css")) {
+            return [
+              ".board { display: grid; grid-template-columns: repeat(8, 1fr); }",
+              ".square:nth-child(odd) { background: #fff; }",
+              ".square:nth-child(even) { background: #000; }",
+            ].join("\n")
+          }
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "create-styles")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("Potential 2D grid styling bug") && i.includes("nth-child"))).toBe(true)
   })
 
   it("does not flag scope violation when writing declared required source artifact", async () => {

@@ -93,6 +93,7 @@ You MUST respond with valid JSON matching this schema:
 7. workspaceRoot should match the actual working directory
 8. DO NOT produce plans with only read/analysis steps — if the task asks to BUILD something, include write steps
 9. Each step name must be unique across the plan
+9b. CHOOSE THE BEST IMPLEMENTATION MEDIUM FOR THE GOAL: Do NOT default to JavaScript for every task. Pick the simplest, strongest fit for the requested outcome and environment: browser-delivered UI/runtime work may use HTML/CSS/JS/TS, automation/data processing/CLI glue may be better as Python, POSIX shell, awk/sed, PowerShell, or Windows CMD, and backend/service work may use the language already established by the repo. If a non-JS script is the best fit, plan for that directly instead of forcing JS.
 10. VERIFICATION MODE GUIDANCE: Prefer verificationMode: "none" while files are still being assembled across steps. Use non-"none" verificationMode only when that step fully owns all required artifacts for a reliable check.
 11. MODULARITY GUIDANCE: Prefer modular multi-file plans when work naturally spans multiple concerns or teams of artifacts. Do NOT force decomposition solely by estimated line count. Allow larger single-step outputs when that improves coherence and reduces cross-step overwrite risk. Several hundred lines in one owned file are acceptable if the contract is clear.
 12. IMPLEMENTATION COMPLETENESS: Every step objective MUST specify that REAL, COMPLETE logic is required — not scaffolding, not placeholders, not stubs. For example, "implement validation" means all required cases are handled with real logic, not \`isValid() { return true }\`. The verifier WILL read the output files and flag any placeholder patterns (\`return true\` as validation, \`// TODO\`, empty function bodies). Such findings force a retry.
@@ -102,7 +103,9 @@ You MUST respond with valid JSON matching this schema:
 16. USE replace_in_file FOR FIXES: If a retry step needs to fix specific functions in an existing file, the objective MUST say to use replace_in_file (surgical section replacement) rather than rewriting the entire file with write_file. This prevents function loss during corrections.
 17. NO "FINALIZE/INTEGRATE" STEPS THAT MODIFY OTHER STEPS' FILES: NEVER create a "finalize_and_test" or "integration" step that REWRITES files created by earlier steps. Each step is a separate process with no memory — a "finalize" step WILL overwrite earlier steps' work and lose their implementations. If you need cross-file wiring (e.g., adding script tags to HTML), the HTML-creating step should already include ALL script tags, OR the last code-writing step should own the HTML file too.
 19. ENTRYPOINT DEPENDENCY WIRING + VERIFICATION ORDER MUST BE CONSISTENT: If a step uses runtime verification (e.g. browser_check) on an entry artifact, that step MUST NOT depend on runtime assets created only by later steps. Verification should run only when required dependencies are already owned/produced by that step. The entrypoint-owning step must name the exact runtime files it loads, and its acceptanceCriteria must explicitly mention script/module wiring for those files.
-19b. BROWSER MODULE BOUNDARY MUST BE EXPLICIT: For browser-loaded JS, pick ONE compatibility strategy and state it in the plan. Either use ES modules consistently (\`<script type="module">\` with \`import\`/\`export\`) or use classic scripts with explicit \`window.X\` globals. Do NOT mix browser-global expectations with \`module.exports\`/\`require()\`.
+19b. BROWSER MODULE BOUNDARY MUST BE EXPLICIT: This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML. In that case, use ES modules consistently everywhere. HTML must load runtime entry files with \`<script type="module" src="...">\`. Cross-file browser code must use \`import\`/\`export\` for all shared functions and state. Do NOT use classic non-module scripts, \`window.X\` globals, \`module.exports\`, or \`require()\`. This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed when they are a better fit for the goal.
+19c. HELPER/CALL DEPENDENCY CLOSURE MUST BE EXPLICIT: For every code file a step writes, any non-builtin function, method, class, or constant it calls or references MUST either be defined in that same file or imported from an explicitly declared dependency artifact. Do NOT leave dangling references like calling helper functions that are never defined anywhere. If code is split across files, the objective and acceptanceCriteria must name the dependency wiring explicitly.
+19d. VISUAL STATE/STYLING CONTRACT MUST BE EXPLICIT: If browser HTML/JS references CSS classes for interaction state or visual feedback, the related stylesheet artifacts MUST define those classes. For 2D boards/grids with alternating cell visuals, use row/column parity or equivalent coordinate-aware logic rather than flat \`:nth-child(odd/even)\` striping unless the layout is truly one-dimensional.
 20. targetArtifacts MUST be FILE PATHS only: Every entry in targetArtifacts must be a valid file path (e.g. "src/domain-model.js"). NEVER put CSS selectors (".widget-item"), DOM queries, URLs, or other non-path values in targetArtifacts.
 18. ONE OWNER PER FILE — STRICT: Every file appears in targetArtifacts of EXACTLY ONE step. No file should be written by multiple steps. If step A creates logic.js, NO other step may have logic.js in its targetArtifacts. A step that needs to READ another step's file puts it in requiredSourceArtifacts (read-only), not targetArtifacts. Violating this WILL cause destructive overwrites.
 21. SHARED DATA CONTRACT — MANDATORY FOR MULTI-FILE PROJECTS: When multiple JS files need to share data structures (state, domain objects, app context), the FIRST step's objective MUST define the EXACT data format. Example: "Records use { id: string, status: string, updatedAt: number } and state is an array of records keyed by id." ALL subsequent steps' objectives MUST reference this same format verbatim. Without a shared contract, each child invents its own incompatible format.
@@ -784,6 +787,49 @@ function normalizeArtifactDirectories(steps: PlanStep[]): void {
  * If multiple steps claim write_owner on the same artifact, keep only the
  * last one in step order (the downstream implementor) and downgrade earlier
  * ones to read_dependency. This prevents the multiple_write_owners
+ * validation failure when the LLM duplicates ownership.
+ */
+function deduplicateWriteOwnership(steps: PlanStep[]): void {
+  const subagentSteps = steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  // Collect all write_owner claims per artifact → ordered list of step names
+  const ownersByArtifact = new Map<string, string[]>()
+  for (const s of subagentSteps) {
+    const relations = [
+      ...(s.executionContext?.artifactRelations ?? []),
+      ...(s.workflowStep?.artifactRelations ?? []),
+    ]
+    for (const rel of relations) {
+      if (rel.relationType === "write_owner") {
+        const list = ownersByArtifact.get(rel.artifactPath) ?? []
+        if (!list.includes(s.name)) list.push(s.name)
+        ownersByArtifact.set(rel.artifactPath, list)
+      }
+    }
+  }
+
+  // For each artifact with multiple owners, keep only the last and downgrade others
+  for (const [artifact, owners] of ownersByArtifact) {
+    if (owners.length <= 1) continue
+    const downgradeSet = new Set(owners.slice(0, -1))
+
+    for (const s of subagentSteps) {
+      if (!downgradeSet.has(s.name)) continue
+      const downgrade = (rels: readonly { relationType: string; artifactPath: string }[]) => {
+        for (const rel of rels) {
+          if (rel.artifactPath === artifact && rel.relationType === "write_owner") {
+            ;(rel as { relationType: string }).relationType = "read_dependency"
+          }
+        }
+      }
+      if (s.executionContext?.artifactRelations) downgrade(s.executionContext.artifactRelations)
+      if (s.workflowStep?.artifactRelations) downgrade(s.workflowStep.artifactRelations)
+    }
+  }
+}
+
 // ============================================================================
 // Auto-fix: strip redundant verification deterministic_tool steps
 // ============================================================================
@@ -833,57 +879,6 @@ function stripRedundantVerificationSteps(steps: PlanStep[], edges: PlanEdge[]): 
 }
 
 // ============================================================================
-// Auto-fix: write ownership deduplication
-// ============================================================================
-
-/**
- * If multiple steps claim "write_owner" for the same artifact, keep only
- * the LAST one (which will overwrite) and downgrade earlier ones to
- * "read_dependency". This prevents the duplicate_write_owner
- * validation failure when the LLM duplicates ownership.
- */
-function deduplicateWriteOwnership(steps: PlanStep[]): void {
-  const subagentSteps = steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
-
-  // Collect all write_owner claims per artifact → ordered list of step names
-  const ownersByArtifact = new Map<string, string[]>()
-  for (const s of subagentSteps) {
-    const relations = [
-      ...(s.executionContext?.artifactRelations ?? []),
-      ...(s.workflowStep?.artifactRelations ?? []),
-    ]
-    for (const rel of relations) {
-      if (rel.relationType === "write_owner") {
-        const list = ownersByArtifact.get(rel.artifactPath) ?? []
-        if (!list.includes(s.name)) list.push(s.name)
-        ownersByArtifact.set(rel.artifactPath, list)
-      }
-    }
-  }
-
-  // For each artifact with multiple owners, keep only the last and downgrade others
-  for (const [artifact, owners] of ownersByArtifact) {
-    if (owners.length <= 1) continue
-    const downgradeSet = new Set(owners.slice(0, -1))
-
-    for (const s of subagentSteps) {
-      if (!downgradeSet.has(s.name)) continue
-      const downgrade = (rels: readonly { relationType: string; artifactPath: string }[]) => {
-        for (const rel of rels) {
-          if (rel.artifactPath === artifact && rel.relationType === "write_owner") {
-            ;(rel as { relationType: string }).relationType = "read_dependency"
-          }
-        }
-      }
-      if (s.executionContext?.artifactRelations) downgrade(s.executionContext.artifactRelations)
-      if (s.workflowStep?.artifactRelations) downgrade(s.workflowStep.artifactRelations)
-    }
-  }
-}
-
-// ============================================================================
 // Auto-fix: verification coverage
 // ============================================================================
 
@@ -925,3 +920,4 @@ function ensureVerificationCoverage(steps: PlanStep[]): void {
     }
   }
 }
+

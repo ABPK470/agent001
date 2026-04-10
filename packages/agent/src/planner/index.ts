@@ -105,6 +105,8 @@ function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]):
   }
 
   injectBrowserRuntimeContracts(plan)
+  injectHelperDependencyContracts(plan)
+  injectVisualStyleContracts(plan)
 }
 
 function normalizeOutputDirToken(raw: string): string {
@@ -323,34 +325,91 @@ function injectBrowserRuntimeContracts(plan: Plan): void {
   if (jsBasenames.length === 0) return
 
   const browserModuleInstruction =
-    `Browser runtime contract: runtime JS must use one browser-compatible module strategy consistently for ${jsBasenames.join(", ")}. ` +
-    `Use ES modules (with \`<script type="module">\`, \`export\`, and \`import\`) or classic scripts with explicit \`window.X\` globals. ` +
-    `Never use \`module.exports\` or \`require()\` in browser-loaded files.`
+    `Browser runtime contract: runtime JS must use ES modules consistently for ${jsBasenames.join(", ")}. ` +
+    `Use \`<script type="module">\` in HTML and use \`export\`/\`import\` for every cross-file browser dependency. ` +
+    `Never use classic scripts, \`window.X\` globals, \`module.exports\`, or \`require()\` in browser-loaded files.`
 
   for (const step of htmlOwners) {
-    if (!/script|type="module"|window\.|import\s|load.*\.js/i.test(step.objective)) {
+    if (!/script|type="module"|import\s|load.*\.js/i.test(step.objective)) {
       ;(step as { objective: string }).objective =
-        `${step.objective}\n\nEntrypoint wiring contract: this HTML entrypoint must explicitly load the exact runtime artifacts ${jsBasenames.join(", ")} with script tags. ` +
-        `If the JS uses ES modules, use type="module" on the corresponding script tag.`
+        `${step.objective}\n\nEntrypoint wiring contract: this HTML entrypoint must explicitly load the runtime entry module(s) for ${jsBasenames.join(", ")} using \`<script type="module" src="...">\`. ` +
+        `Every browser runtime file must be reachable from those entry module imports so the page actually loads the full runtime graph.`
     }
 
-    if (!step.acceptanceCriteria.some(criterion => /script tag|type="module"|load.*\.js|runtime artifacts/i.test(criterion))) {
+    if (!step.acceptanceCriteria.some(criterion => /script tag|type="module"|load.*\.js|runtime artifacts|entry module/i.test(criterion))) {
       ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
         ...step.acceptanceCriteria,
-        `Entrypoint HTML explicitly loads the exact runtime artifacts: ${jsBasenames.join(", ")}.`,
+        `Entrypoint HTML loads the runtime entry module(s) with <script type="module"> and reaches the runtime files ${jsBasenames.join(", ")} through direct module loading or imports.`,
       ]
     }
   }
 
   for (const step of jsWriters) {
-    if (!/module\.exports|require\(|type="module"|window\.|export\s|import\s/i.test(step.objective)) {
+    if (!step.objective.includes("Browser runtime contract: runtime JS must use ES modules consistently")) {
       ;(step as { objective: string }).objective = `${step.objective}\n\n${browserModuleInstruction}`
     }
 
-    if (!step.acceptanceCriteria.some(criterion => /browser-compatible|type="module"|window\.|module\.exports|require\(/i.test(criterion))) {
+    if (!step.acceptanceCriteria.includes("Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals.")) {
       ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
         ...step.acceptanceCriteria,
-        "Uses a browser-compatible module boundary consistently; no CommonJS exports in browser-loaded runtime files.",
+        "Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals.",
+      ]
+    }
+  }
+}
+
+function injectHelperDependencyContracts(plan: Plan): void {
+  const codeWriterSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  ).filter(step =>
+    step.executionContext.targetArtifacts.some(artifact =>
+      /\.(?:js|jsx|mjs|cjs|ts|tsx|py|rb|php|java|cs|go|rs|swift|kt)$/i.test(artifact),
+    ),
+  )
+
+  for (const step of codeWriterSteps) {
+    if (!/defined in the same file|imported explicitly|dangling references|undefined helper/i.test(step.objective)) {
+      ;(step as { objective: string }).objective =
+        `${step.objective}\n\n` +
+        `Dependency closure contract: every non-builtin symbol this step's code calls or references must be either defined in the same file or imported explicitly from declared dependency artifacts. ` +
+        `Do NOT leave dangling helper calls, undefined constants, or placeholder cross-file references.`
+    }
+
+    if (!step.acceptanceCriteria.some(criterion => /defined in the same file|imported explicitly|dangling helper|undefined helper|dependency closure/i.test(criterion))) {
+      ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+        ...step.acceptanceCriteria,
+        "Every non-builtin symbol used by the produced code is either defined in the same file or imported explicitly from declared dependency artifacts; no dangling helper references remain.",
+      ]
+    }
+  }
+}
+
+function injectVisualStyleContracts(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  const styleSteps = subagentSteps.filter(step =>
+    step.executionContext.targetArtifacts.some(artifact => /\.(?:css|scss|sass|less)$/i.test(artifact)),
+  )
+  const browserSteps = subagentSteps.filter(step =>
+    step.executionContext.targetArtifacts.some(artifact => /\.(?:html?|js|jsx|ts|tsx|mjs)$/i.test(artifact)),
+  )
+
+  if (styleSteps.length === 0 || browserSteps.length === 0) return
+
+  for (const step of browserSteps) {
+    if (!/interaction state|visual feedback|css classes|row\/column parity|nth-child/i.test(step.objective)) {
+      ;(step as { objective: string }).objective =
+        `${step.objective}\n\n` +
+        `Visual integration contract: every CSS class referenced by the HTML/JS for interaction state or visual feedback must have matching stylesheet rules in the related CSS artifacts. ` +
+        `For 2D board/grid cell alternation, use coordinate-aware parity (row/column or equivalent data model), not flat nth-child striping across a linear DOM list.`
+    }
+
+    if (!step.acceptanceCriteria.some(criterion => /css class|visual feedback|row\/column parity|nth-child|interaction state/i.test(criterion))) {
+      ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+        ...step.acceptanceCriteria,
+        "Interaction-state and visual-feedback CSS classes referenced by the UI are defined in related stylesheets, and 2D alternating board/grid visuals use coordinate-aware parity rather than flat nth-child striping.",
       ]
     }
   }
@@ -1252,6 +1311,8 @@ export async function executePlannerPath(
   // state owner and propagate a typed contract to all writer steps.
   injectSharedStateOwnershipContract(plan)
   injectBrowserRuntimeContracts(plan)
+  injectHelperDependencyContracts(plan)
+  injectVisualStyleContracts(plan)
 
   // Contract-First Architecture: auto-inject a blueprint step as step 0 for
   // multi-file projects. This step generates a BLUEPRINT.md with function

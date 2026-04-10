@@ -9,6 +9,8 @@
  */
 
 
+import { posix as pathPosix } from "node:path"
+
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import {
     buildContractSpec,
@@ -1042,6 +1044,32 @@ export async function runDeterministicProbes(
                   `Missing helper dependency/dependencies in "${artifact}": ${unresolvedHelpers.join("; ")}`,
                 )
               }
+              const useBeforeDeclaration = detectPotentialUseBeforeDeclaration(content)
+              if (useBeforeDeclaration.length > 0) {
+                issues.push(
+                  `Potential temporal-dead-zone/use-before-declaration issue in "${artifact}": ${useBeforeDeclaration.join("; ")}`,
+                )
+              }
+            }
+          } catch { /* already flagged */ }
+        }
+
+        const styleArtifacts = sa.executionContext.targetArtifacts.filter(
+          a => /\.(?:css|scss|sass|less)$/i.test(a),
+        )
+        for (const artifact of styleArtifacts) {
+          const cached = probeCache.get(artifact)
+          if (!cached?.found) continue
+          try {
+            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
+            if (typeof content === "string" && content.length > 0) {
+              executedModalities.add("artifact-review")
+              const stripingIssues = detectPotentialLinearGridStriping(content)
+              if (stripingIssues.length > 0) {
+                issues.push(
+                  `Potential 2D grid styling bug in "${artifact}": ${stripingIssues.join("; ")}`,
+                )
+              }
             }
           } catch { /* already flagged */ }
         }
@@ -1339,6 +1367,8 @@ async function runIntegrationProbes(
   const probes: readonly IntegrationProbe[] = [
     probeWebEntrypointRuntimeWiring,
     probeBrowserModuleCompatibility,
+    probeCssClassContracts,
+    probeLocalModuleImportBindings,
     probeCrossFileFunctionSignatures,
   ]
   for (const probe of probes) {
@@ -1356,6 +1386,13 @@ interface IntegrationProbeContext {
   toolMap: Map<string, Tool>
   assessments: VerifierStepAssessment[]
   allArtifacts: readonly IntegrationArtifact[]
+}
+
+interface ModuleImportRef {
+  readonly specifier: string
+  readonly importedNames: readonly string[]
+  readonly defaultImport?: string
+  readonly namespaceImport?: string
 }
 
 interface BlueprintFunctionSpec {
@@ -1508,12 +1545,13 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
     if (relatedJs.length === 0) continue
 
     const scriptRefs = extractHtmlScriptRefs(htmlContent)
+    const relatedJsContent = await readIntegrationArtifactContents(relatedJs, readFile, runCommand)
+    const reachableRuntimeArtifacts = collectReachableRuntimeArtifacts(htmlEntry.path, scriptRefs, relatedJs, relatedJsContent)
 
     const missingScripts: string[] = []
     for (const jsEntry of relatedJs) {
-      const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
-      const hasScriptTag = scriptRefs.some(ref => ref.src.includes(jsBasename))
-      if (!hasScriptTag) {
+      if (!reachableRuntimeArtifacts.has(normalizeSpecPath(jsEntry.path))) {
+        const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
         missingScripts.push(jsBasename)
       }
     }
@@ -1521,7 +1559,7 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
     if (missingScripts.length > 0) {
       // Find the assessment for the HTML-owning step and replace it with integration issue
       const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
-      const issue = `Integration gap: entry artifact "${htmlEntry.path}" does not wire related runtime artifacts: ${missingScripts.join(", ")}. Runtime code will never load.`
+      const issue = `Integration gap: entry artifact "${htmlEntry.path}" does not reach related runtime artifacts through module scripts/imports: ${missingScripts.join(", ")}. Runtime code will never load.`
       if (idx >= 0) {
         const existing = assessments[idx]
         assessments[idx] = {
@@ -1568,33 +1606,39 @@ async function probeBrowserModuleCompatibility(ctx: IntegrationProbeContext): Pr
     if (relatedJs.length === 0) continue
 
     const scriptRefs = extractHtmlScriptRefs(htmlContent)
+    const relatedJsContent = await readIntegrationArtifactContents(relatedJs, readFile, runCommand)
+    const reachableRuntimeArtifacts = collectReachableRuntimeArtifacts(htmlEntry.path, scriptRefs, relatedJs, relatedJsContent)
     const htmlIssues: string[] = []
 
-    for (const jsEntry of relatedJs) {
-      const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
-      const scriptRef = scriptRefs.find(ref => ref.src.includes(jsBasename))
-      if (!scriptRef) continue
-
-      let jsContent = ""
-      try {
-        const raw = await readArtifactContent(readFile, jsEntry.path, runCommand)
-        if (typeof raw === "string") jsContent = raw
-      } catch {
-        continue
+    for (const scriptRef of scriptRefs) {
+      const resolved = resolveArtifactReference(htmlEntry.path, scriptRef.src, relatedJs)
+      if (!resolved || !/\.js$/i.test(resolved.path)) continue
+      if (!scriptRef.isModule) {
+        htmlIssues.push(
+          `Browser module mismatch: "${htmlEntry.path}" loads "${resolved.basename}" without type="module". Browser runtime JS must be loaded via ES module scripts.`,
+        )
       }
+    }
+
+    for (const jsEntry of relatedJs) {
+      const normalizedPath = normalizeSpecPath(jsEntry.path)
+      if (!reachableRuntimeArtifacts.has(normalizedPath)) continue
+
+      const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
+      const jsContent = relatedJsContent.get(normalizedPath) ?? ""
       if (!jsContent) continue
 
       const usesCommonJs = /\bmodule\.exports\b|\bexports\.[A-Za-z_$]\w*\b|\brequire\s*\(/.test(jsContent)
-      const usesEsModule = /(^|\n)\s*export\s+|(^|\n)\s*import\s+/.test(jsContent)
+      const usesWindowGlobals = /\bwindow\.[A-Za-z_$]\w*\s*=/.test(jsContent)
 
       if (usesCommonJs) {
         htmlIssues.push(
-          `Browser module mismatch: "${htmlEntry.path}" loads "${jsBasename}" directly, but that file uses CommonJS (module.exports/require). Browser-loaded runtime files must use ES modules or explicit window globals.`,
+          `Browser module mismatch: "${htmlEntry.path}" reaches "${jsBasename}", but that file uses CommonJS (module.exports/require). Browser runtime files must use ES modules only.`,
         )
       }
-      if (usesEsModule && !scriptRef.isModule) {
+      if (usesWindowGlobals) {
         htmlIssues.push(
-          `Browser module mismatch: "${htmlEntry.path}" loads "${jsBasename}" without type="module", but the file uses ESM import/export syntax.`,
+          `Browser module mismatch: "${htmlEntry.path}" reaches "${jsBasename}", but that file assigns browser globals instead of using ESM imports/exports.`,
         )
       }
     }
@@ -1614,6 +1658,54 @@ async function probeBrowserModuleCompatibility(ctx: IntegrationProbeContext): Pr
   }
 }
 
+async function probeCssClassContracts(ctx: IntegrationProbeContext): Promise<void> {
+  const { plan, toolMap, assessments, allArtifacts } = ctx
+  const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
+  if (!readFile) return
+
+  const cssArtifacts = allArtifacts.filter(a => /\.(?:css|scss|sass|less)$/i.test(a.path))
+  const codeArtifacts = allArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|mjs|html?)$/i.test(a.path))
+  if (cssArtifacts.length === 0 || codeArtifacts.length === 0) return
+
+  const cssContents = await readIntegrationArtifactContents(cssArtifacts, readFile, runCommand)
+  if (cssContents.size === 0) return
+
+  const definedClasses = new Set<string>()
+  for (const content of cssContents.values()) {
+    for (const cls of extractDefinedCssClasses(content)) definedClasses.add(cls)
+  }
+
+  for (const artifact of codeArtifacts) {
+    const wsRoot = findWsRootForStep(plan, artifact.stepName)
+    const probe = await probeArtifact(readFile, artifact.path, [], wsRoot, runCommand)
+    if (!probe.found) continue
+    const content = await readArtifactContent(readFile, probe.resolvedPath, runCommand)
+    if (typeof content !== "string" || content.length === 0) continue
+
+    const referencedClasses = /\.html?$/i.test(artifact.path)
+      ? extractReferencedCssClassesFromHtml(content)
+      : extractReferencedCssClassesFromScript(content)
+    const missingClasses = referencedClasses.filter(cls => !definedClasses.has(cls))
+    if (missingClasses.length === 0) continue
+
+    const idx = assessments.findIndex(a => a.stepName === artifact.stepName)
+    if (idx < 0) continue
+
+    const existing = assessments[idx]
+    const issues = missingClasses.map(cls =>
+      `Style integration gap: "${artifact.path}" references CSS class ".${cls}" for UI structure/state, but no related stylesheet defines it.`,
+    )
+    assessments[idx] = {
+      stepName: existing.stepName,
+      outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+      confidence: existing.outcome === "pass" ? 0.45 : existing.confidence,
+      issues: [...existing.issues, ...issues.filter(issue => !existing.issues.includes(issue))],
+      retryable: true,
+    }
+  }
+}
+
 function extractHtmlScriptRefs(htmlContent: string): Array<{ src: string; isModule: boolean }> {
   const refs: Array<{ src: string; isModule: boolean }> = []
   const scriptTagRe = /<script\b([^>]*)src\s*=\s*["']([^"']+)["']([^>]*)>/gi
@@ -1626,6 +1718,242 @@ function extractHtmlScriptRefs(htmlContent: string): Array<{ src: string; isModu
     })
   }
   return refs
+}
+
+async function probeLocalModuleImportBindings(ctx: IntegrationProbeContext): Promise<void> {
+  const { toolMap, assessments, allArtifacts } = ctx
+  const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
+  if (!readFile) return
+
+  const codeArtifacts = allArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|mjs|cjs)$/i.test(a.path))
+  if (codeArtifacts.length < 2) return
+
+  const fileContents = await readIntegrationArtifactContents(codeArtifacts, readFile, runCommand)
+  if (fileContents.size < 2) return
+
+  const exportMap = new Map<string, { named: Set<string>; hasDefault: boolean }>()
+  for (const artifact of codeArtifacts) {
+    const normalizedPath = normalizeSpecPath(artifact.path)
+    const content = fileContents.get(normalizedPath)
+    if (!content) continue
+    exportMap.set(normalizedPath, extractModuleExports(content))
+  }
+
+  for (const artifact of codeArtifacts) {
+    const normalizedPath = normalizeSpecPath(artifact.path)
+    const content = fileContents.get(normalizedPath)
+    if (!content) continue
+
+    const issues: string[] = []
+    const imports = extractModuleImports(content)
+    for (const imported of imports) {
+      const resolved = resolveArtifactImport(normalizedPath, imported.specifier, codeArtifacts)
+      if (!resolved) continue
+      const exports = exportMap.get(resolved.path)
+      if (!exports) continue
+
+      if (imported.defaultImport && !exports.hasDefault) {
+        issues.push(`Import/export mismatch: ${artifact.path} imports default from ${resolved.basename}, but that module has no default export`)
+      }
+      for (const importedName of imported.importedNames) {
+        if (!exports.named.has(importedName)) {
+          issues.push(`Import/export mismatch: ${artifact.path} imports ${importedName} from ${resolved.basename}, but that export is missing`)
+        }
+      }
+    }
+
+    if (issues.length === 0) continue
+    const idx = assessments.findIndex(a => a.stepName === artifact.stepName)
+    if (idx >= 0) {
+      const existing = assessments[idx]
+      assessments[idx] = {
+        stepName: existing.stepName,
+        outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+        confidence: existing.outcome === "pass" ? 0.35 : existing.confidence,
+        issues: [...existing.issues, ...issues.filter(issue => !existing.issues.includes(issue))],
+        retryable: true,
+      }
+    }
+  }
+}
+
+async function readIntegrationArtifactContents(
+  artifacts: readonly IntegrationArtifact[],
+  readFile: Tool,
+  runCommand?: Tool,
+): Promise<Map<string, string>> {
+  const contents = new Map<string, string>()
+  for (const artifact of artifacts) {
+    try {
+      const raw = await readArtifactContent(readFile, artifact.path, runCommand)
+      if (typeof raw === "string" && raw.length > 0) {
+        contents.set(normalizeSpecPath(artifact.path), raw)
+      }
+    } catch {
+      // ignore unreadable artifacts here; other probes surface missing artifact failures
+    }
+  }
+  return contents
+}
+
+function collectReachableRuntimeArtifacts(
+  htmlPath: string,
+  scriptRefs: readonly { src: string; isModule: boolean }[],
+  relatedJs: readonly IntegrationArtifact[],
+  contents: ReadonlyMap<string, string>,
+): Set<string> {
+  const reachable = new Set<string>()
+  const queue: string[] = []
+
+  for (const scriptRef of scriptRefs) {
+    const resolved = resolveArtifactReference(htmlPath, scriptRef.src, relatedJs)
+    if (!resolved) continue
+    if (!reachable.has(resolved.path)) {
+      reachable.add(resolved.path)
+      queue.push(resolved.path)
+    }
+  }
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    const content = contents.get(current)
+    if (!content) continue
+    for (const imported of extractModuleImports(content)) {
+      const resolved = resolveArtifactImport(current, imported.specifier, relatedJs)
+      if (!resolved || reachable.has(resolved.path)) continue
+      reachable.add(resolved.path)
+      queue.push(resolved.path)
+    }
+  }
+
+  return reachable
+}
+
+function resolveArtifactReference(
+  fromArtifactPath: string,
+  reference: string,
+  artifacts: readonly IntegrationArtifact[],
+): { path: string; basename: string } | null {
+  const normalizedRef = reference.trim().replace(/^\.\//, "")
+  if (!normalizedRef) return null
+  const normalizedFrom = normalizeSpecPath(fromArtifactPath)
+  const byRelativePath = normalizeSpecPath(pathPosix.join(pathPosix.dirname(normalizedFrom), normalizedRef))
+  const candidates = [normalizedRef, byRelativePath]
+
+  for (const candidate of candidates) {
+    const match = artifacts.find(artifact => normalizeSpecPath(artifact.path) === candidate)
+    if (match) {
+      return { path: normalizeSpecPath(match.path), basename: match.path.split("/").pop() ?? match.path }
+    }
+  }
+
+  const basename = normalizedRef.split("/").pop() ?? normalizedRef
+  const basenameMatches = artifacts.filter(artifact => (artifact.path.split("/").pop() ?? artifact.path) === basename)
+  if (basenameMatches.length === 1) {
+    const match = basenameMatches[0]
+    return { path: normalizeSpecPath(match.path), basename }
+  }
+  return null
+}
+
+function resolveArtifactImport(
+  fromArtifactPath: string,
+  specifier: string,
+  artifacts: readonly IntegrationArtifact[],
+): { path: string; basename: string } | null {
+  if (!specifier.startsWith(".")) return null
+  return resolveArtifactReference(fromArtifactPath, specifier, artifacts)
+}
+
+function extractModuleImports(code: string): ModuleImportRef[] {
+  const imports: ModuleImportRef[] = []
+  const importFromRe = /import\s+([^;\n]+?)\s+from\s+["']([^"']+)["']/g
+  const sideEffectImportRe = /import\s+["']([^"']+)["']/g
+  const exportFromRe = /export\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/g
+  const exportAllFromRe = /export\s+\*\s+from\s+["']([^"']+)["']/g
+  const dynamicImportRe = /import\(\s*["']([^"']+)["']\s*\)/g
+
+  let match: RegExpExecArray | null
+  while ((match = importFromRe.exec(code)) !== null) {
+    const clause = (match[1] ?? "").trim()
+    const specifier = match[2]
+    const importedNames: string[] = []
+    let defaultImport: string | undefined
+    let namespaceImport: string | undefined
+
+    if (clause.startsWith("{")) {
+      importedNames.push(...parseNamedImports(clause))
+    } else if (clause.startsWith("* as ")) {
+      namespaceImport = clause.replace(/^\*\s+as\s+/, "").trim()
+    } else if (clause.includes(",")) {
+      const [first, second] = clause.split(",", 2)
+      defaultImport = first.trim() || undefined
+      const rest = second.trim()
+      if (rest.startsWith("{")) importedNames.push(...parseNamedImports(rest))
+      if (rest.startsWith("* as ")) namespaceImport = rest.replace(/^\*\s+as\s+/, "").trim()
+    } else {
+      defaultImport = clause.trim() || undefined
+    }
+
+    imports.push({ specifier, importedNames, defaultImport, namespaceImport })
+  }
+
+  while ((match = sideEffectImportRe.exec(code)) !== null) {
+    const specifier = match[1]
+    if (!imports.some(entry => entry.specifier === specifier && entry.importedNames.length === 0 && !entry.defaultImport && !entry.namespaceImport)) {
+      imports.push({ specifier, importedNames: [] })
+    }
+  }
+
+  while ((match = exportFromRe.exec(code)) !== null) {
+    imports.push({ specifier: match[2], importedNames: parseNamedImports(`{${match[1]}}`) })
+  }
+
+  while ((match = exportAllFromRe.exec(code)) !== null) {
+    imports.push({ specifier: match[1], importedNames: [] })
+  }
+
+  while ((match = dynamicImportRe.exec(code)) !== null) {
+    imports.push({ specifier: match[1], importedNames: [] })
+  }
+
+  return imports
+}
+
+function parseNamedImports(clause: string): string[] {
+  const body = clause.replace(/^\{/, "").replace(/\}$/, "")
+  return body
+    .split(",")
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map(entry => entry.split(/\s+as\s+/i)[0]?.trim() ?? "")
+    .filter(Boolean)
+}
+
+function extractModuleExports(code: string): { named: Set<string>; hasDefault: boolean } {
+  const named = new Set<string>()
+  let hasDefault = false
+
+  const exportFunctionRe = /export\s+(?:async\s+)?function\s+([A-Za-z_$]\w*)\s*\(/g
+  const exportClassRe = /export\s+class\s+([A-Za-z_$]\w*)\b/g
+  const exportDeclRe = /export\s+(?:const|let|var)\s+([A-Za-z_$]\w*)\b/g
+  const exportNamedRe = /export\s+\{([^}]+)\}/g
+  const exportDefaultRe = /export\s+default\b/g
+
+  let match: RegExpExecArray | null
+  while ((match = exportFunctionRe.exec(code)) !== null) named.add(match[1])
+  while ((match = exportClassRe.exec(code)) !== null) named.add(match[1])
+  while ((match = exportDeclRe.exec(code)) !== null) named.add(match[1])
+  while ((match = exportNamedRe.exec(code)) !== null) {
+    for (const entry of match[1].split(",")) {
+      const localName = entry.split(/\s+as\s+/i)[0]?.trim()
+      if (localName) named.add(localName)
+    }
+  }
+  while (exportDefaultRe.exec(code) !== null) hasDefault = true
+
+  return { named, hasDefault }
 }
 
 /**
@@ -2522,6 +2850,87 @@ function detectUnresolvedBareHelpers(code: string): string[] {
   }
 
   return unresolved.slice(0, 5)
+}
+
+function detectPotentialUseBeforeDeclaration(code: string): string[] {
+  const issues: string[] = []
+  const lines = code.split("\n")
+  const declarations = new Map<string, number>()
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    for (const match of line.matchAll(/\b(?:const|let)\s+([A-Za-z_$]\w*)\b/g)) {
+      const name = match[1]
+      if (name && !declarations.has(name)) declarations.set(name, i)
+    }
+  }
+
+  for (const [name, declLine] of declarations) {
+    for (let i = 0; i < declLine; i++) {
+      const line = lines[i]
+      if (/^\s*(?:\/\/|\*)/.test(line)) continue
+      const re = new RegExp(`(^|[^.\\w$])${escapeRegExp(name)}(?=[^\\w$]|$)`)
+      if (!re.test(line)) continue
+      if (new RegExp(`\b(?:const|let|var|function|class)\s+${escapeRegExp(name)}\b`).test(line)) continue
+      issues.push(`${name} is referenced before its const/let declaration (line ${i + 1} before line ${declLine + 1})`)
+      break
+    }
+  }
+
+  return issues.slice(0, 5)
+}
+
+function extractDefinedCssClasses(css: string): string[] {
+  const classes: string[] = []
+  for (const match of css.matchAll(/\.([A-Za-z_-][\w-]*)\b/g)) {
+    const cls = match[1]
+    if (cls) classes.push(cls)
+  }
+  return uniqueStrings(classes)
+}
+
+function extractReferencedCssClassesFromScript(code: string): string[] {
+  const classes: string[] = []
+  for (const match of code.matchAll(/\bclassList\.(?:add|remove|toggle|contains)\s*\(([^)]*)\)/g)) {
+    const args = match[1] ?? ""
+    for (const str of args.matchAll(/["'`]([A-Za-z_-][\w-]*)["'`]/g)) {
+      if (str[1]) classes.push(str[1])
+    }
+  }
+  for (const match of code.matchAll(/\bclassName\s*=\s*["'`]([^"'`]+)["'`]/g)) {
+    const raw = match[1] ?? ""
+    for (const token of raw.split(/\s+/)) {
+      if (/^[A-Za-z_-][\w-]*$/.test(token)) classes.push(token)
+    }
+  }
+  return uniqueStrings(classes)
+}
+
+function extractReferencedCssClassesFromHtml(html: string): string[] {
+  const classes: string[] = []
+  for (const match of html.matchAll(/\bclass\s*=\s*["'`]([^"'`]+)["'`]/g)) {
+    const raw = match[1] ?? ""
+    for (const token of raw.split(/\s+/)) {
+      if (/^[A-Za-z_-][\w-]*$/.test(token)) classes.push(token)
+    }
+  }
+  return uniqueStrings(classes)
+}
+
+function detectPotentialLinearGridStriping(css: string): string[] {
+  const issues: string[] = []
+  const hasGridColumns = /grid-template-columns\s*:\s*repeat\s*\(\s*([2-9]|\d{2,})\s*,/i.test(css)
+    || /grid-template-columns\s*:\s*(?:[^;]*\s){1,}[0-9.]+(?:fr|px|rem|em|%)\b/i.test(css)
+  const usesFlatOddEven = /:nth-child\(odd\)/i.test(css) && /:nth-child\(even\)/i.test(css)
+  const usesCoordinateAwareSelectors = /:nth-child\(\s*\d+n\s*[+-]\s*\d+\s*\)/i.test(css)
+    || /\[(?:data-|aria-)[^\]]*(?:row|col|x|y|cell)/i.test(css)
+    || /--(?:row|col|x|y)/i.test(css)
+
+  if (hasGridColumns && usesFlatOddEven && !usesCoordinateAwareSelectors) {
+    issues.push("alternating cell styling appears to rely on flat :nth-child(odd/even) selectors inside a multi-column grid, which often produces striping instead of true 2D alternation")
+  }
+
+  return issues
 }
 
 // ============================================================================
