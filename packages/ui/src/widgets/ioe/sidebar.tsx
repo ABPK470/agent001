@@ -2,12 +2,15 @@
  * IOE sidebar panels — Runs, Compare, Details.
  */
 
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { api } from "../../api"
+import { useStore } from "../../store"
 import type {
     AgentDefinition,
     PolicyRule,
     Run,
     ToolInfo,
+    WorkspaceDiff,
 } from "../../types"
 import { fmtTokens, timeAgo } from "../../util"
 import {
@@ -61,6 +64,8 @@ export function DetailsPanel({
           <div className="px-4 py-1" style={{ color: C.dim }}>No active run</div>
         )}
       </TreeSection>
+
+      {run && <WorkspaceChangesSection run={run} />}
 
       <TreeSection title="System" defaultOpen>
         {llm && (
@@ -129,6 +134,101 @@ export function DetailsPanel({
         ))}
       </TreeSection>
     </div>
+  )
+}
+
+// ── Workspace Changes — diff + apply inline ──────────────────────
+
+function WorkspaceChangesSection({ run }: { run: Run }) {
+  const upsertRun = useStore((s) => s.upsertRun)
+  const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const busyRef = useRef(false)
+  const autoKey = useRef<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setLoading(true)
+    setResult(null)
+    try {
+      const d = await api.getRunWorkspaceDiff(run.id)
+      setDiff(d)
+      upsertRun({ id: run.id, pendingWorkspaceChanges: d.total })
+      autoKey.current = `${run.id}:${d.total}`
+    } catch {
+      setDiff(null)
+      upsertRun({ id: run.id, pendingWorkspaceChanges: 0 })
+    } finally {
+      busyRef.current = false
+      setLoading(false)
+    }
+  }, [run.id, upsertRun])
+
+  const apply = useCallback(async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setLoading(true)
+    setResult(null)
+    try {
+      const r = await api.applyRunWorkspaceDiff(run.id)
+      const total = r.applied.added + r.applied.modified + r.applied.deleted
+      setResult(`Applied ${total} file changes`)
+      setDiff(null)
+      upsertRun({ id: run.id, pendingWorkspaceChanges: 0 })
+      autoKey.current = null
+    } catch {
+      setResult("Failed to apply changes")
+    } finally {
+      busyRef.current = false
+      setLoading(false)
+    }
+  }, [run.id, upsertRun])
+
+  // Auto-load diff when pending changes exist
+  useEffect(() => {
+    const pending = run.pendingWorkspaceChanges ?? 0
+    if (pending <= 0) { setDiff(null); autoKey.current = null; return }
+    const key = `${run.id}:${pending}`
+    if (autoKey.current === key) return
+    refresh().catch(() => {})
+  }, [run.id, run.pendingWorkspaceChanges, refresh])
+
+  const pending = diff?.total ?? run.pendingWorkspaceChanges ?? 0
+
+  return (
+    <TreeSection title="Workspace Changes" defaultOpen={pending > 0}>
+      {pending > 0 ? (
+        <div className="px-4 py-1 space-y-1.5">
+          <div className="text-[12px]" style={{ color: C.warning }}>{pending} pending changes</div>
+          {diff && (
+            <div className="text-[12px] font-mono space-y-0.5" style={{ color: C.muted }}>
+              {diff.added.length > 0 && <div style={{ color: C.success }}>+ {diff.added.join(", ")}</div>}
+              {diff.modified.length > 0 && <div style={{ color: C.warning }}>~ {diff.modified.join(", ")}</div>}
+              {diff.deleted.length > 0 && <div style={{ color: C.coral }}>- {diff.deleted.join(", ")}</div>}
+            </div>
+          )}
+          <div className="flex gap-1.5 pt-0.5">
+            <button
+              className="px-2 py-1 text-[11px] rounded transition-colors"
+              style={{ color: C.accent, background: `${C.accent}18`, border: `1px solid ${C.accent}30` }}
+              onClick={refresh}
+              disabled={loading}
+            >{loading ? "..." : "Refresh"}</button>
+            <button
+              className="px-2 py-1 text-[11px] rounded transition-colors"
+              style={{ color: C.success, background: `${C.success}18`, border: `1px solid ${C.success}30` }}
+              onClick={apply}
+              disabled={loading}
+            >Apply</button>
+          </div>
+          {result && <div className="text-[11px]" style={{ color: C.dim }}>{result}</div>}
+        </div>
+      ) : (
+        <div className="px-4 py-1" style={{ color: C.dim }}>No pending changes</div>
+      )}
+    </TreeSection>
   )
 }
 

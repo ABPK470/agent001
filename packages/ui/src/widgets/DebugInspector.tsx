@@ -13,7 +13,7 @@
  */
 
 import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -178,9 +178,14 @@ type FilterKind = "all" | "llm" | "tools" | "prompt"
 export function DebugInspector() {
   const trace = useStore((s) => s.trace)
   const activeRunId = useStore((s) => s.activeRunId)
-  const [filter, setFilter] = useState<FilterKind>("all")
+  const [filter, setFilter] = useState<FilterKind>("llm")
   const [search, setSearch] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when trace updates
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [trace.length])
 
   // Extract the 4 debug entry types
   const systemPrompt = useMemo(
@@ -330,92 +335,115 @@ export function DebugInspector() {
           }
 
           return (
-            <div key={i} className="border border-border/40 rounded-lg overflow-hidden">
-              {/* Call header */}
-              <div className="flex items-center gap-3 px-3 py-2 bg-elevated/20">
-                <span className="text-[14px] font-semibold text-[#6CB4EE]">LLM Call #{i + 1}</span>
-                <span className="text-[13px] font-mono text-text-muted">
-                  iteration {req.iteration + 1}
-                </span>
-                <span className="text-[13px] font-mono text-text-muted">
-                  {req.messageCount} msgs → LLM → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text response") : "pending..."}
-                </span>
-                {res && (
-                  <span className={`text-[13px] font-mono ml-auto ${res.durationMs > 5000 ? "text-error" : res.durationMs > 2000 ? "text-warning" : "text-success"}`}>
-                    {res.durationMs}ms
+            <LlmCallEntry key={i} call={call} index={i} />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Collapsible LLM call entry — click header to expand/collapse */
+function LlmCallEntry({ call, index }: {
+  call: { request: Extract<TraceEntry, { kind: "llm-request" }>; response: Extract<TraceEntry, { kind: "llm-response" }> | null }
+  index: number
+}) {
+  const [open, setOpen] = useState(false)
+  const req = call.request
+  const res = call.response
+
+  return (
+    <div className="border border-border/40 rounded-lg overflow-hidden">
+      {/* Clickable call header */}
+      <button
+        className="flex items-center gap-3 px-3 py-2 bg-elevated/20 w-full text-left cursor-pointer hover:bg-elevated/40 transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
+        <span className="text-[14px] font-semibold text-[#6CB4EE]">LLM Call #{index + 1}</span>
+        <span className="text-[13px] font-mono text-text-muted">
+          iteration {req.iteration + 1}
+        </span>
+        <span className="text-[13px] font-mono text-text-muted">
+          {req.messageCount} msgs → LLM → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text response") : "pending..."}
+        </span>
+        {res && (
+          <span className={`text-[13px] font-mono ml-auto ${res.durationMs > 5000 ? "text-error" : res.durationMs > 2000 ? "text-warning" : "text-success"}`}>
+            {res.durationMs}ms
+          </span>
+        )}
+      </button>
+
+      {/* Collapsible body */}
+      {open && (
+        <>
+          {/* Request: full message array */}
+          <div className="px-3 py-2 border-t border-border/20">
+            <div className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
+              Request — {req.messageCount} messages, {req.toolCount} tool definitions
+            </div>
+            <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+              {req.messages.map((msg, mi) => (
+                <MessageBubble key={mi} msg={msg} index={mi} />
+              ))}
+            </div>
+          </div>
+
+          {/* Response */}
+          {res && (
+            <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider">Response</span>
+                {res.usage && (
+                  <span className="text-[13px] font-mono text-text-muted/40">
+                    {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} completion = {fmtTokens(res.usage.totalTokens)} total
                   </span>
                 )}
               </div>
 
-              {/* Request: full message array */}
-              <div className="px-3 py-2 border-t border-border/20">
-                <div className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
-                  Request — {req.messageCount} messages, {req.toolCount} tool definitions
-                </div>
-                <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                  {req.messages.map((msg, mi) => (
-                    <MessageBubble key={mi} msg={msg} index={mi} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Response */}
-              {res && (
-                <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
-                  <div className="flex items-center gap-3 mb-1.5">
-                    <span className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider">Response</span>
-                    {res.usage && (
-                      <span className="text-[13px] font-mono text-text-muted/40">
-                        {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} completion = {fmtTokens(res.usage.totalTokens)} total
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Response content */}
-                  {res.content && (
-                    <div className="mb-2">
-                      <div className="text-[12px] text-text-muted/40 mb-0.5">content:</div>
-                      <pre className="text-[13px] font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed">
-                        {res.content}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* Response tool calls */}
-                  {res.toolCalls.length > 0 && (
-                    <div>
-                      <div className="text-[12px] text-text-muted/40 mb-0.5">tool calls:</div>
-                      <div className="space-y-1">
-                        {res.toolCalls.map((tc) => (
-                          <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[13px] font-mono font-semibold text-warning">{tc.name}</span>
-                              <span className="text-[12px] text-text-muted/30 font-mono">{tc.id}</span>
-                            </div>
-                            <pre className="text-[13px] font-mono text-text-muted whitespace-pre-wrap break-words mt-0.5">
-                              {JSON.stringify(tc.arguments, null, 2)}
-                            </pre>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* No tool calls and no content = weird */}
-                  {res.toolCalls.length === 0 && !res.content && (
-                    <div className="text-[13px] text-error/50 italic">Empty response — no content and no tool calls</div>
-                  )}
-
-                  {/* Final answer indicator */}
-                  {res.toolCalls.length === 0 && res.content && (
-                    <div className="text-[13px] text-success/60 mt-1">↳ No tool calls — this became the final answer</div>
-                  )}
+              {/* Response content */}
+              {res.content && (
+                <div className="mb-2">
+                  <div className="text-[12px] text-text-muted/40 mb-0.5">content:</div>
+                  <pre className="text-[13px] font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed">
+                    {res.content}
+                  </pre>
                 </div>
               )}
+
+              {/* Response tool calls */}
+              {res.toolCalls.length > 0 && (
+                <div>
+                  <div className="text-[12px] text-text-muted/40 mb-0.5">tool calls:</div>
+                  <div className="space-y-1">
+                    {res.toolCalls.map((tc) => (
+                      <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-mono font-semibold text-warning">{tc.name}</span>
+                          <span className="text-[12px] text-text-muted/30 font-mono">{tc.id}</span>
+                        </div>
+                        <pre className="text-[13px] font-mono text-text-muted whitespace-pre-wrap break-words mt-0.5">
+                          {JSON.stringify(tc.arguments, null, 2)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* No tool calls and no content = weird */}
+              {res.toolCalls.length === 0 && !res.content && (
+                <div className="text-[13px] text-error/50 italic">Empty response — no content and no tool calls</div>
+              )}
+
+              {/* Final answer indicator */}
+              {res.toolCalls.length === 0 && res.content && (
+                <div className="text-[13px] text-success/60 mt-1">↳ No tool calls — this became the final answer</div>
+              )}
             </div>
-          )
-        })}
-      </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

@@ -56,6 +56,12 @@ export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
     re: /^\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+|get\w+|on\w+|handle\w+)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*|\/\*[^*]*\*\/[\s\n]*)+return\s+(true|false|\[\]|\{\}|null|undefined|0|"")\s*;?\s*\}/gim,
     label: "stub method (comment + trivial return)",
   },
+  // Named function with a comment then returning a STRING LITERAL (e.g. return 'ongoing')
+  // This catches checkGameStatus() { // comment \n return 'ongoing'; }
+  {
+    re: /function\s+(check\w*|get\w+Status\w*|get\w+State\w*|calculate\w*|compute\w*|determine\w*)\s*\([^)]*\)\s*\{[\s\n]*(?:\/\/[^\n]*[\s\n]*|\/\*[^*]*\*\/[\s\n]*)+return\s+['"][^'"]{1,30}['"]\s*;?\s*\}/gi,
+    label: "stub function (comment + hardcoded string return)",
+  },
   // Functions whose ENTIRE body is `/* comment */ return [];` or `return {};`
   {
     re: /function\s+\w+\s*\([^)]*\)\s*\{[\s\n]*(?:\/\*[^*]*\*\/[\s\n]*|\/\/[^\n]*[\s\n]*)*(return\s+\[\]\s*;?)\s*\}/gi,
@@ -206,7 +212,16 @@ export function detectCatchAllReturns(code: string): string[] {
       const hasBranches = /\b(?:if|switch|case)\b/.test(body)
       if (hasBranches) {
         const hasExhaustiveLoop = /\bfor\s*\(/.test(body)
-        if (!hasExhaustiveLoop && bodyLines.length < 10) {
+        // Count distinct non-builtin function calls in the body.
+        // If the function delegates to 3+ helpers, it's doing real work — not a stub.
+        const builtins = new Set(["if", "for", "while", "switch", "return", "new", "typeof", "catch", "throw", "delete", "void", "Math", "console", "String", "Number", "Boolean", "Array", "Object", "JSON", "parseInt", "parseFloat", "isNaN", "isFinite"])
+        const callMatches = body.match(/\b([a-zA-Z_]\w*)\s*\(/g) || []
+        const trailingParen = /\s*\($/
+        const helperCalls = new Set(
+          callMatches.map(c => c.replace(trailingParen, "").trim()).filter(n => !builtins.has(n)),
+        )
+        const hasManyHelpers = helperCalls.size >= 3
+        if (!hasExhaustiveLoop && !hasManyHelpers && bodyLines.length < 20) {
           findings.push(`catch-all "return true" in ${funcName}() — handles some cases but falls through to true for the rest`)
         }
       }

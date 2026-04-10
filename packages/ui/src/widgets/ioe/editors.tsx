@@ -1712,13 +1712,20 @@ function PipelineBlock({ pipeline: p }: { pipeline: PipelineGroup }) {
           {en && (
             <FlatRow
               label={en.status} labelColor={statusColor}
-              detail={`${en.completedSteps}/${en.totalSteps} steps`}
+              detail={`${en.completedSteps} of ${en.totalSteps} steps completed`}
             />
           )}
-          {p.verification && <VerificationBlock verification={p.verification} />}
-          {p.aftermath.map((e, i) => (
-            <PreambleRow key={`aft-${i}`} entry={e} />
-          ))}
+          {(p.verification || p.aftermath.length > 0) && (
+            <div className="mt-1 pt-1" style={{ borderTop: `1px solid ${C.dim}30` }}>
+              <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: C.dim }}>
+                post-pipeline
+              </div>
+              {p.verification && <VerificationBlock verification={p.verification} />}
+              {p.aftermath.map((e, i) => (
+                <PreambleRow key={`aft-${i}`} entry={e} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1785,6 +1792,15 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
   const detail = [s.start.stepType, status !== "running" ? status : null, duration != null ? `${duration}ms` : null]
     .filter(Boolean).join(" · ")
 
+  // Show failure reason from validation code or error
+  const failReason = en && status === "failed"
+    ? (en.validationCode ? remediationHintForValidationCode(en.validationCode) : en.error ?? null)
+    : null
+
+  // Did the child report "done" but pipeline validation rejected it?
+  const childClaimedDone = s.childEnd?.status === "done"
+  const overridden = childClaimedDone && status === "failed"
+
   return (
     <div className="mb-0.5">
       <TreeRow onClick={() => setOpen(!open)} open={open}
@@ -1796,6 +1812,17 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
         <div className="ml-4">
           {s.childStart && (
             <PlannerChildBlock start={s.childStart} end={s.childEnd} iterations={s.iterations} />
+          )}
+          {overridden && failReason && (
+            <div className="py-0.5 px-2 text-[12px] flex items-start gap-1.5" style={{ color: C.coral }}>
+              <span className="font-semibold shrink-0">VALIDATION REJECTED</span>
+              <span style={{ color: C.dim }}>{failReason}</span>
+            </div>
+          )}
+          {!overridden && failReason && (
+            <div className="py-0.5 px-2 text-[12px]" style={{ color: C.coral }}>
+              {failReason}
+            </div>
           )}
           {s.events.map((e, i) => (
             <IterEventRow key={`ev-${i}`} entry={e} />
@@ -1826,13 +1853,32 @@ function PlannerChildBlock({ start, end, iterations }: {
             <PlannerIterBlock key={ii} iter={iter} />
           ))}
           {end && (
-            <FlatRow
-              label={ok ? "done" : (end.status ?? "error")}
-              labelColor={ok ? C.success : C.coral}
-              detail={truncate(end.answer || end.error || "", 80)}
-            />
+            <ChildResultRow ok={ok} end={end} />
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+/** Expandable child agent result — shows full answer/error text on click */
+function ChildResultRow({ ok, end }: {
+  ok: boolean
+  end: Extract<TraceEntry, { kind: "planner-delegation-end" }>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const fullText = end.answer || end.error || ""
+  return (
+    <div>
+      <TreeRow
+        onClick={() => setExpanded(!expanded)}
+        open={expanded}
+        label={ok ? "done" : (end.status ?? "error")}
+        labelColor={ok ? C.success : C.coral}
+        detail={!expanded ? truncate(fullText, 80) : undefined}
+      />
+      {expanded && fullText && (
+        <div className="ml-5 py-0.5"><Pane text={fullText} maxH={400} /></div>
       )}
     </div>
   )

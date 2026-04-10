@@ -65,8 +65,9 @@ PIPELINE AWARENESS — CRITICAL:
 - You are NOT the only agent. Other agents have run before you and may run after you.
 - Files listed in Source Files ALREADY EXIST with working code. Do NOT recreate or overwrite them.
 - Your job is to ADD your piece to the project, not rebuild everything from scratch.
-- If Source Files include a BLUEPRINT.md, it defines the function signatures you MUST follow exactly.
+- If Source Files include a BLUEPRINT.md, it defines the function signatures AND algorithmic contracts you MUST follow exactly.
 - Use the exact function names, parameter names, and return types from the blueprint or existing source files.
+- The blueprint's ALGORITHMIC CONTRACTS tell you exactly what each function must implement — which cases to handle, which rules to enforce, which edge cases to cover. A function called validateMove with a contract listing 6 piece types MUST implement movement validation for ALL 6 piece types. A function with a contract listing castling, en passant, and promotion MUST handle ALL three special moves. Implementing only 1-2 cases and returning a default for the rest is a STUB that will be REJECTED.
 
 Critical rules:
 - You are NOT in a conversation. There is no human. NEVER say "let me know", "shall I proceed", "would you like me to", or similar. These are FORBIDDEN.
@@ -697,6 +698,16 @@ export async function spawnChildForPlan(
   }
 
   goalParts.push(`## Objective\n${step.objective}`)
+
+  // If a BLUEPRINT.md is in source artifacts, add an explicit contract enforcement reminder
+  const hasBlueprintSource = normalizedEnvelope.requiredSourceArtifacts.some(
+    a => /BLUEPRINT\.md$/i.test(a),
+  )
+  if (hasBlueprintSource) {
+    goalParts.push(
+      `## BLUEPRINT CONTRACT — MANDATORY\nThe BLUEPRINT.md file in your Source Files defines function signatures AND algorithmic contracts.\nYou MUST implement EVERY case listed in each function's contract. A function named "validateMove" that lists 6 piece types means you implement ALL 6 — not 1-2 with a catch-all return.\nA function named "checkGameStatus" that lists checkmate, stalemate, and draw conditions means you implement ALL of them — not just "return 'ongoing'".\nFailing to implement all contract cases = STUB = REJECTION.`,
+    )
+  }
 
   if (step.inputContract) {
     goalParts.push(`## Input Context\n${step.inputContract}`)
