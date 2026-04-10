@@ -82,13 +82,19 @@ async function probeArtifact(
   runCommand?: Tool,
   allowedWriteRoots?: readonly string[],
 ): Promise<{ found: boolean; resolvedPath: string }> {
-  // Build candidate paths: planned path both bare and prefixed with workspaceRoot
-  const candidates: string[] = [plannedPath]
+  // Build candidate paths. When workspaceRoot is absolute, prioritize the
+  // workspace-rooted path and avoid probing bare relative paths first, because
+  // bare paths can accidentally match host-workspace files with same names.
+  const candidates: string[] = []
+  const hasAbsoluteWsRoot = Boolean(workspaceRoot && workspaceRoot.startsWith("/"))
   if (workspaceRoot && !plannedPath.startsWith(workspaceRoot)) {
     const rooted = workspaceRoot.endsWith("/")
       ? `${workspaceRoot}${plannedPath}`
       : `${workspaceRoot}/${plannedPath}`
-    candidates.unshift(rooted) // try workspace-rooted path first
+    candidates.push(rooted)
+  }
+  if (!hasAbsoluteWsRoot || plannedPath.startsWith("/")) {
+    candidates.push(plannedPath)
   }
 
   // Also try write-root-scoped paths: if allowedWriteRoots is a subdir of
@@ -114,6 +120,19 @@ async function probeArtifact(
         return { found: true, resolvedPath: candidate }
       }
     } catch { /* fall through */ }
+
+    // Fallback existence probe via shell for cross-root paths that read_file
+    // may not be allowed to access directly.
+    if (runCommand) {
+      try {
+        const exists = await runCommand.execute({
+          command: `if [ -f ${JSON.stringify(candidate)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
+        })
+        if (/__FOUND__/.test(exists)) {
+          return { found: true, resolvedPath: candidate }
+        }
+      } catch { /* fall through */ }
+    }
   }
 
   // 2. Try to match against paths the child actually wrote
@@ -147,6 +166,16 @@ async function probeArtifact(
             return { found: true, resolvedPath: fp }
           }
         } catch { /* fall through */ }
+        if (runCommand) {
+          try {
+            const exists = await runCommand.execute({
+              command: `if [ -f ${JSON.stringify(fp)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
+            })
+            if (/__FOUND__/.test(exists)) {
+              return { found: true, resolvedPath: fp }
+            }
+          } catch { /* fall through */ }
+        }
       }
     } catch { /* fall through */ }
   }
@@ -168,11 +197,48 @@ async function probeArtifact(
             return { found: true, resolvedPath: fp }
           }
         } catch { /* fall through */ }
+        if (runCommand) {
+          try {
+            const exists = await runCommand.execute({
+              command: `if [ -f ${JSON.stringify(fp)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
+            })
+            if (/__FOUND__/.test(exists)) {
+              return { found: true, resolvedPath: fp }
+            }
+          } catch { /* fall through */ }
+        }
       }
     } catch { /* fall through */ }
   }
 
   return { found: false, resolvedPath: plannedPath }
+}
+
+async function readArtifactContent(
+  readFile: Tool,
+  path: string,
+  runCommand?: Tool,
+): Promise<string | null> {
+  try {
+    const content = await readFile.execute({ path })
+    // Treat read_file transport errors as unreadable, but allow legitimate
+    // file contents that happen to start with "Error:".
+    if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(content)) {
+      throw new Error(content)
+    }
+    return content
+  } catch {
+    if (!runCommand) return null
+    try {
+      const raw = await runCommand.execute({
+        command: `if [ -f ${JSON.stringify(path)} ]; then cat ${JSON.stringify(path)}; else echo __MISSING__; fi`,
+      })
+      if (raw.trim() === "__MISSING__") return null
+      return raw
+    } catch {
+      return null
+    }
+  }
 }
 
 /**
@@ -221,6 +287,10 @@ export async function runDeterministicProbes(
           probeCache.set(artifact, probe)
           if (!probe.found) {
             issues.push(`Target artifact "${artifact}" not found`)
+          } else {
+            // probeArtifact performs a deterministic read check; count it as
+            // artifact review coverage for modality checks.
+            executedModalities.add("artifact-review")
           }
         }
       }
@@ -254,12 +324,20 @@ export async function runDeterministicProbes(
       // Check if the child wrote to files NOT in its targetArtifacts.
       // This catches scope explosion (e.g. HTML step creating placeholder JS files).
       const targetSet = new Set(sa.executionContext.targetArtifacts.map(a => a.replace(/^\.\//, "")))
+      const allowedIntegrationWriteSet = new Set(
+        sa.executionContext.requiredSourceArtifacts.map(a => a.replace(/^\.\//, "")),
+      )
       for (const actual of actualPaths) {
         const normActual = actual.replace(/^\.\//, "")
         // Strip workspace root prefix for comparison
         const stripped = wsRoot
           ? normActual.replace(new RegExp(`^${wsRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?`), "")
           : normActual
+        if (allowedIntegrationWriteSet.has(stripped) || allowedIntegrationWriteSet.has(normActual)) {
+          // Integration wiring edits are allowed only when the artifact was
+          // explicitly declared as required source context for this step.
+          continue
+        }
         if (!targetSet.has(stripped) && !targetSet.has(normActual)) {
           // Only flag if this is a file owned by a DIFFERENT step
           const ownedByOtherStep = plan.steps.some(s => {
@@ -342,7 +420,7 @@ export async function runDeterministicProbes(
           const cached = probeCache.get(artifact)
           if (!cached?.found) continue // already flagged by existence check
           try {
-            const content = await readFile.execute({ path: cached.resolvedPath })
+            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
             if (typeof content === "string" && content.length > 0) {
               executedModalities.add("artifact-review")
               // Check for placeholder patterns
@@ -413,7 +491,7 @@ export async function runDeterministicProbes(
           const cached = probeCache.get(artifact)
           if (!cached?.found) continue
           try {
-            const content = await readFile.execute({ path: cached.resolvedPath })
+              const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
             if (typeof content === "string" && content.length > 0) {
               executedModalities.add("artifact-review")
               const htmlIssues = detectHtmlCorruption(content)
@@ -479,7 +557,7 @@ export async function runDeterministicProbes(
           if (!cached?.found) continue
           if (!/\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(artifact)) continue
           try {
-            const content = await readFile.execute({ path: cached.resolvedPath })
+            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
             if (typeof content === "string") {
               totalCodeLines += content.split("\n").filter(l => l.trim().length > 0 && !l.trim().startsWith("//") && !l.trim().startsWith("/*") && !l.trim().startsWith("*")).length
             }
@@ -507,7 +585,7 @@ export async function runDeterministicProbes(
           const cached = probeCache.get(artifact)
           if (!cached?.found) continue
           try {
-            const content = await readFile.execute({ path: cached.resolvedPath })
+            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
             if (typeof content === "string") allCode += "\n" + content
           } catch { /* skip */ }
         }
@@ -740,7 +818,7 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
 
     let htmlContent: string
     try {
-      const raw = await readFile.execute({ path: probe.resolvedPath })
+      const raw = await readArtifactContent(readFile, probe.resolvedPath, runCommand)
       if (typeof raw !== "string" || raw.length === 0) continue
       htmlContent = raw
     } catch { continue }
@@ -1111,8 +1189,8 @@ export async function verify(
         )
         if (probe.found) {
           try {
-            const content = await readFile.execute({ path: probe.resolvedPath })
-            if (typeof content === "string" && content.length > 0 && !content.startsWith("Error:")) {
+            const content = await readArtifactContent(readFile, probe.resolvedPath, runCommand)
+            if (typeof content === "string" && content.length > 0) {
               artifactContents.set(artifact, content)
             }
           } catch { /* skip */ }

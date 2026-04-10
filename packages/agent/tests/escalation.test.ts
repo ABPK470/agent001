@@ -92,8 +92,20 @@ describe("resolveEscalation", () => {
   })
 
   describe("fail verdict", () => {
-    it("escalates on hard fail", () => {
-      const result = resolveEscalation(makeInput({ verdict: "fail" }))
+    it("revises on fail when a revision path exists", () => {
+      const result = resolveEscalation(makeInput({ verdict: "fail", revisionAvailable: true }))
+      expect(result.action).toBe("revise")
+      expect(result.reason).toBe("needs_revision")
+    })
+
+    it("escalates on fail when no revision path exists", () => {
+      const result = resolveEscalation(makeInput({ verdict: "fail", revisionAvailable: false }))
+      expect(result.action).toBe("escalate")
+      expect(result.reason).toBe("retries_exhausted")
+    })
+
+    it("escalates on repeated fail even if revision path exists", () => {
+      const result = resolveEscalation(makeInput({ verdict: "fail", revisionAvailable: true, attempt: 1 }))
       expect(result.action).toBe("escalate")
       expect(result.reason).toBe("retries_exhausted")
     })

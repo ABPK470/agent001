@@ -762,8 +762,25 @@ export async function spawnChildForPlan(
     (normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0 ? 1 : 0)
   ))
   const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
+  const codeArtifactCount = normalizedEnvelope.targetArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)).length
+  const isWriterStep = normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0
+  // Adaptive extension for complex writer tasks:
+  // - many acceptance criteria usually require multiple debug/repair cycles
+  // - code artifacts often need iterative syntax/runtime fixes
+  const complexityBoost = isWriterStep
+    ? Math.min(30,
+      (step.acceptanceCriteria.length >= 8 ? 12 : step.acceptanceCriteria.length >= 6 ? 8 : step.acceptanceCriteria.length >= 4 ? 5 : 0) +
+      (codeArtifactCount >= 3 ? 9 : codeArtifactCount >= 2 ? 6 : codeArtifactCount === 1 ? 3 : 0) +
+      (normalizedEnvelope.verificationMode !== "none" ? 4 : 0),
+    )
+    : 0
+  const adaptiveBudget = parsedBudget + complexityBoost
+  const complexWriterFloor =
+    isWriterStep && step.acceptanceCriteria.length >= 6 && normalizedEnvelope.verificationMode !== "none"
+      ? 40
+      : 0
   // Use whichever is larger: the parsed budget hint or the contract floor, capped at MAX_CHILD_ITERATIONS
-  const maxIter = Math.min(Math.max(parsedBudget, contractFloor), MAX_CHILD_ITERATIONS)
+  const maxIter = Math.min(Math.max(parsedBudget, contractFloor, adaptiveBudget, complexWriterFloor), MAX_CHILD_ITERATIONS)
 
   ctx.onChildTrace?.({
     kind: "planner-delegation-start",

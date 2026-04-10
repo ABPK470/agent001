@@ -192,6 +192,11 @@ export async function executePipeline(
       const feedback = rawFeedback?.filter(f => !isGibberishIssue(f))
       if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
         const sa = effectiveStep as SubagentTaskStep
+        const priorStep = opts?.priorResults?.get(name)
+        const priorReplaceMisses = (priorStep?.toolCalls ?? []).filter(
+          c => c.name === "replace_in_file" && /old_string not found/i.test(c.result),
+        ).length
+        const avoidReplaceInFile = priorReplaceMisses >= 2
         // Add target artifacts as source files — these files already exist from
         // the previous attempt and MUST be read before modifying.
         const existingSource = new Set(sa.executionContext.requiredSourceArtifacts)
@@ -209,7 +214,9 @@ export async function executePipeline(
 
         const hasReplaceInFile = toolMap.has("replace_in_file")
         const retryRules = hasReplaceInFile
-          ? "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions"
+          ? (avoidReplaceInFile
+            ? "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. replace_in_file appears brittle in this step (repeated old_string misses). Use write_file with FULL-FILE preservation instead.\n3. Build from the latest file content: keep all existing working code and apply only the requested fixes.\n4. write_file REPLACES the entire file — never output partial fragments.\n5. Do not introduce placeholders, stubs, or narrative comments in code."
+            : "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions")
           : "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. replace_in_file is unavailable in this environment. Use write_file carefully and preserve all existing code.\n3. write_file REPLACES the entire file — include the full current file plus your fix, never partial fragments.\n4. Make the smallest targeted correction needed for the listed issues.\n5. Do not introduce placeholders, stubs, or narrative comments in code."
 
         effectiveStep = {
@@ -373,7 +380,23 @@ async function executeDeterministicStep(
         delete (args as Record<string, unknown>).url
       }
 
-      const output = await toolExecFn(step.tool, args)
+      let output = await toolExecFn(step.tool, args)
+
+      // Recovery: some plans use write_file for directory scaffolding.
+      // If write_file hits EISDIR and content is empty, treat this as an
+      // implicit mkdir request and run mkdir -p through run_command.
+      if (
+        step.tool === "write_file" &&
+        typeof args.path === "string" &&
+        /EISDIR|illegal operation on a directory/i.test(output) &&
+        String(args.content ?? "").trim().length === 0
+      ) {
+        const mkdirCmd = `mkdir -p ${JSON.stringify(String(args.path))}`
+        const mkdirOutput = await toolExecFn("run_command", { command: mkdirCmd })
+        if (!mkdirOutput.startsWith("Error:")) {
+          output = `Recovered directory scaffold via run_command: ${mkdirCmd}`
+        }
+      }
 
       // Check if the output indicates an error
       if (output.startsWith("Error:")) {
@@ -470,6 +493,85 @@ async function executeSubagentStep(
       validationCtx,
     )
     if (strictFailure) {
+      // Recovery path: if the child produced no successful file mutations,
+      // run one focused retry with explicit write-first instructions.
+      if (
+        strictFailure.code === "missing_file_mutation_evidence" &&
+        step.executionContext.targetArtifacts.length > 0
+      ) {
+        const retryStep: SubagentTaskStep = {
+          ...step,
+          objective:
+            `${step.objective}\n\n` +
+            `[MANDATORY RETRY — WRITE EVIDENCE REQUIRED]\n` +
+            `You must create or modify the target artifacts in this attempt.\n` +
+            `Use write_file (or replace_in_file after reading the existing file) on the exact target paths.\n` +
+            `Do not stop at analysis or narrative summary. Produce real file mutations before finishing.`,
+        }
+
+        const retryResult = await delegateFn(retryStep, retryStep.executionContext)
+        const retryOutput = retryResult.output
+        const retryCalls = retryResult.toolCalls
+
+        if (retryOutput.startsWith("Delegation failed:")) {
+          const isSpawnError = retryOutput.includes("not found") || retryOutput.includes("spawn")
+          return {
+            name: step.name,
+            status: "failed",
+            error: retryOutput,
+            failureClass: isSpawnError ? "spawn_error" : "unknown",
+            durationMs: Date.now() - t0,
+            toolCalls: retryCalls,
+          }
+        }
+        if (retryOutput.includes("DELEGATION INCOMPLETE")) {
+          return {
+            name: step.name,
+            status: "failed",
+            error: retryOutput,
+            failureClass: "budget_exceeded",
+            durationMs: Date.now() - t0,
+            toolCalls: retryCalls,
+          }
+        }
+        if (retryOutput.includes("stuck in a tool loop")) {
+          return {
+            name: step.name,
+            status: "failed",
+            error: retryOutput,
+            failureClass: "tool_misuse",
+            durationMs: Date.now() - t0,
+            toolCalls: retryCalls,
+          }
+        }
+
+        const retryStrictFailure = await validateSubagentCompletion(
+          step,
+          retryOutput,
+          retryCalls,
+          validationCtx,
+        )
+        if (!retryStrictFailure) {
+          return {
+            name: step.name,
+            status: "completed",
+            output: retryOutput,
+            durationMs: Date.now() - t0,
+            toolCalls: retryCalls,
+          }
+        }
+
+        return {
+          name: step.name,
+          status: "failed",
+          error: retryStrictFailure.message,
+          failureClass: "unknown",
+          durationMs: Date.now() - t0,
+          toolCalls: retryCalls,
+          validationCode: retryStrictFailure.code,
+        }
+      }
+
       return {
         name: step.name,
         status: "failed",

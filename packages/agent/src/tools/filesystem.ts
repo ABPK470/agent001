@@ -366,8 +366,11 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
       )
       return warnings // Early return — no point checking further
     }
-    // Detect code-mixed-with-gibberish: closing brace/paren followed by random English words
-    const brokenCodeRe = /[})\]][\s]*[a-z]{3,}\s+[a-z]{3,}\s+[a-z]{3,}/i
+    // Detect code-mixed-with-gibberish: closing brace/paren followed by a
+    // trailing plain-language phrase (no typical code punctuation afterward).
+    // This avoids false positives for valid lines like:
+    //   if (!piece) throw new Error(`No piece at ${from}`);
+    const brokenCodeRe = /[})\]][\s]*[a-z]{3,}(?:\s+[a-z]{3,}){2,}\s*$/i
     const lines = content.split("\n")
     for (const line of lines) {
       const trimmed = line.trim()

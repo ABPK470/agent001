@@ -21,9 +21,11 @@
 export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
   // Explicit stubs — keyword can appear ANYWHERE in the comment, not just at the start.
   // LLMs write "// Basic legal move logic placeholder" or "// Handle X (placeholder for now)".
-  { re: /\/\/.*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
-  { re: /\/\*[^*]*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
-  { re: /#.*\b(?:placeholder|todo|fixme|implement|stub)\b/gi, label: "placeholder comment" },
+  // Keep this strict to avoid false positives on normal comments like
+  // "Implementation details" that describe real code.
+  { re: /\/\/.*\b(?:placeholder|todo|fixme|stub|tbd)\b/gi, label: "placeholder comment" },
+  { re: /\/\*[^*]*\b(?:placeholder|todo|fixme|stub|tbd)\b/gi, label: "placeholder comment" },
+  { re: /#.*\b(?:placeholder|todo|fixme|stub|tbd)\b/gi, label: "placeholder comment" },
   // "TO BE IMPLEMENTED" / "TO BE ADDED" / "NOT YET IMPLEMENTED" deferred stubs
   { re: /\/\/\s*(?:\w+\s+)*(?:to\s+be\s+implemented|to\s+be\s+added|not\s+yet\s+implemented)\b/gi, label: "stub comment" },
   // LLM degeneration: references "existing" code instead of writing it

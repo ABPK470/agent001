@@ -334,6 +334,21 @@ describe("write_file: corruption detection", () => {
 
     expect(result).not.toContain("GIBBERISH")
   })
+
+  it("does not flag throw new Error lines as gibberish", async () => {
+    const result = await writeFileTool.execute({
+      path: "valid-throw.js",
+      content: [
+        "function move(from) {",
+        "  const piece = null;",
+        "  if (!piece) throw new Error(`No piece at ${from}`);",
+        "  return piece;",
+        "}",
+      ].join("\n"),
+    })
+
+    expect(result).toBe("Successfully wrote to valid-throw.js")
+  })
 })
 
 // ============================================================================

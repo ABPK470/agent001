@@ -1125,6 +1125,79 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(htmlStep).toBeDefined()
     expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
   })
+
+  it("does not flag scope violation when writing declared required source artifact", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("implement-js", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: ["tmp/index.html"],
+            targetArtifacts: ["tmp/chess.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "implement-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/index.html", durationMs: 1 }],
+        ["implement-js", {
+          name: "implement-js",
+          status: "completed",
+          output: "Updated `tmp/index.html` and wrote `tmp/chess.js`",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/index.html" }, result: "<html></html>", isError: false },
+            { name: "write_file", args: { path: "tmp/index.html", content: "<html><script src=\"chess.js\"></script></html>" }, result: "ok", isError: false },
+            { name: "write_file", args: { path: "tmp/chess.js", content: "console.log('ok')" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("tmp/index.html")) return "<html><script src=\"chess.js\"></script></html>"
+          if (path.endsWith("tmp/chess.js")) return "console.log('ok')"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const jsStep = assessments.find(a => a.stepName === "implement-js")
+    expect(jsStep).toBeDefined()
+    expect(jsStep?.issues.some(i => i.includes("SCOPE VIOLATION"))).toBe(false)
+  })
 })
 
 // ============================================================================
@@ -1157,6 +1230,45 @@ describe("Pipeline: executePipeline", () => {
 
     expect(result.status).toBe("completed")
     expect(calls).toEqual(["first", "second"])
+  })
+
+  it("recovers write_file EISDIR as directory scaffold", async () => {
+    const commands: string[] = []
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "write",
+      parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } } },
+      async execute() {
+        return "Error: EISDIR: illegal operation on a directory, open 'tmp/game'"
+      },
+    }
+    const runCommandTool: Tool = {
+      name: "run_command",
+      description: "run",
+      parameters: { type: "object", properties: { command: { type: "string" } } },
+      async execute(args) {
+        commands.push(String(args.command ?? ""))
+        return "ok"
+      },
+    }
+
+    const plan = makePlan({
+      steps: [
+        {
+          name: "scaffold-dir",
+          stepType: "deterministic_tool",
+          tool: "write_file",
+          args: { path: "tmp/game", content: "" },
+        },
+      ],
+      edges: [],
+    })
+
+    const result = await executePipeline(plan, [writeFileTool, runCommandTool], async () => ({ output: "" }))
+
+    expect(result.status).toBe("completed")
+    expect(commands).toContain('mkdir -p "tmp/game"')
+    expect(result.stepResults.get("scaffold-dir")?.status).toBe("completed")
   })
 
   it("skips downstream steps when upstream fails", async () => {
@@ -1380,6 +1492,65 @@ describe("Pipeline: executePipeline", () => {
     expect(step?.error).toContain("zero tool-call evidence")
   })
 
+  it("retries once with write-first guidance on missing_file_mutation_evidence", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("build-game", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["write_file", "read_file"],
+          requiredSourceArtifacts: [],
+          targetArtifacts: ["game.js"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    let calls = 0
+    let secondObjective = ""
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        calls += 1
+        if (calls === 1) {
+          return {
+            output: "Done.",
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "game.js" },
+                result: "// existing",
+                isError: false,
+              },
+            ],
+          }
+        }
+        secondObjective = step.objective
+        return {
+          output: "Wrote game.js",
+          toolCalls: [
+            {
+              name: "write_file",
+              args: { path: "game.js", content: "export const ready = true" },
+              result: "Successfully wrote to game.js",
+              isError: false,
+            },
+          ],
+        }
+      },
+    )
+
+    expect(calls).toBe(2)
+    expect(secondObjective).toContain("MANDATORY RETRY")
+    expect(result.status).toBe("failed")
+    expect(result.stepResults.get("build-game")?.status).toBe("failed")
+  })
+
   it("respects abort signal", async () => {
     const controller = new AbortController()
     controller.abort()
@@ -1427,6 +1598,77 @@ describe("Pipeline: executePipeline", () => {
     expect(result.status).toBe("completed")
     // step-1 should NOT be re-executed (it was in priorResults)
     expect(calls).toEqual(["second"])
+  })
+
+  it("switches retry guidance away from replace_in_file after repeated old_string misses", async () => {
+    let seenObjective = ""
+    const plan = makePlan({
+      steps: [makeSubagentStep("fix-ui")],
+      edges: [],
+    })
+
+    const priorResults = new Map([
+      [
+        "fix-ui",
+        {
+          name: "fix-ui",
+          status: "failed" as const,
+          error: "previous attempt failed",
+          durationMs: 1,
+          toolCalls: [
+            {
+              name: "replace_in_file",
+              args: { path: "ui.js", old_string: "a", new_string: "b" },
+              result: "Error: old_string not found in \"ui.js\"",
+              isError: false,
+            },
+            {
+              name: "replace_in_file",
+              args: { path: "ui.js", old_string: "c", new_string: "d" },
+              result: "Error: old_string not found in \"ui.js\"",
+              isError: false,
+            },
+          ],
+        },
+      ],
+    ])
+
+    const retryFeedback = new Map<string, readonly string[]>([
+      ["fix-ui", ["Preserve working code while fixing UI click behavior"]],
+    ])
+
+    const result = await executePipeline(
+      plan,
+      [
+        {
+          name: "replace_in_file",
+          description: "replace",
+          parameters: { type: "object", properties: {} },
+          async execute() {
+            return "ok"
+          },
+        },
+      ],
+      async (step) => {
+        seenObjective = step.objective
+        return {
+          output: "done",
+          toolCalls: [
+            {
+              name: "write_file",
+              args: { path: "game.js", content: "export const ok = true" },
+              result: "Successfully wrote to game.js",
+              isError: false,
+            },
+          ],
+        }
+      },
+      { priorResults, retryFeedback },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(seenObjective).toContain("replace_in_file appears brittle")
+    expect(seenObjective).toContain("Use write_file with FULL-FILE preservation")
   })
 })
 

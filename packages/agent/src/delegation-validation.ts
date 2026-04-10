@@ -159,7 +159,7 @@ const CONTEXT_SENSITIVE_MARKERS: Array<{ re: RegExp; label: string }> = [
 /** File mutation tool names — tools that create/modify/delete files. */
 const FILE_MUTATION_TOOLS = new Set([
   "write_file", "create_file", "append_file", "delete_file",
-  "edit_file", "patch_file",
+  "edit_file", "patch_file", "replace_in_file",
 ])
 
 /** File reading tool names. */
@@ -208,7 +208,7 @@ const BLOCKED_PHASE_RE =
 
 /** Output text that indicates the child is handing off unfinished implementation. */
 const UNRESOLVED_HANDOFF_RE =
-  /\b(?:would you like to (?:proceed|continue)|should i (?:proceed|continue)|let me know if you (?:want|would like) me to (?:continue|proceed|implement)|partial(?:ly)? logic|partial(?:ly)? implementation|foundational partial implementation|this (?:project|implementation) is (?:a )?foundation|further refinements can be made|missing game mechanics)\b/i
+  /\b(?:would you like to (?:proceed|continue)|should i (?:proceed|continue)|let me know if you (?:want|would like) me to (?:continue|proceed|implement)|partial(?:ly)? logic|partial(?:ly)? implementation|foundational partial implementation|this (?:project|implementation) is (?:a )?foundation|further refinements can be made|missing game mechanics|full compliance may require|may require additional (?:delegation|work|implementation)|not fully (?:implemented|complete)|deep validation(?:.*)?appears)\b/i
 
 /** Narrative file claims without tool evidence. */
 const NARRATIVE_FILE_CLAIM_RE =

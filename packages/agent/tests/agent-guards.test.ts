@@ -154,6 +154,26 @@ describe("Agent loop guards", () => {
     expect(answer).toBe("Now truly done")
   })
 
+  it("fires premature-handoff nudge on partial completion language", async () => {
+    const nudges: string[] = []
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
+      { content: "Core logic is implemented, but full compliance may require additional work.", toolCalls: [] },
+      { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "finish" } }] },
+      { content: "Completed with verified evidence.", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("build implementation")
+
+    expect(nudges).toContain("premature-handoff")
+    expect(answer).toBe("Completed with verified evidence.")
+  })
+
   it("completion-validator is one-shot — does not fire twice", async () => {
     let validatorCallCount = 0
 

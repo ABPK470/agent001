@@ -162,7 +162,11 @@ function isLikelyFailureText(text: string): boolean {
     lower.includes("error executing tool") ||
     lower.includes("tool not found:") ||
     lower.includes("command not found") ||
-    lower.includes("no such file")
+    lower.includes("no such file") ||
+    lower.includes("write rejected") ||
+    lower.includes("written with errors") ||
+    lower.includes("written with issues") ||
+    lower.includes("issues detected")
   )
 }
 

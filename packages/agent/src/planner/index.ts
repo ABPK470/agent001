@@ -514,16 +514,13 @@ export async function executePlannerPath(
       diagnostics: errors,
     })
     const reason = `Validation failed: ${errors.map(d => d.message).join("; ")}`
+    ctx.onTrace?.({
+      kind: "planner-fallback-direct-loop",
+      stage: "validation",
+      reason,
+    })
     return {
-      handled: true,
-      answer: buildPlannerFailurePayload({
-        stage: "validation",
-        reason,
-        diagnostics: errors,
-        score: decision.score,
-        plannerReason: decision.reason,
-      }),
-      plan,
+      handled: false,
       skipReason: reason,
     }
   }

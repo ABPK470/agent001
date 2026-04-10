@@ -134,6 +134,16 @@ describe("validateDelegatedOutputContract", () => {
       })
       expect(result.ok).toBe(true)
     })
+
+    it("rejects outputs that defer completion with full-compliance language", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec(),
+        output: "Implemented core files and critical logic. Full compliance may require additional delegation and deep validation appears pending.",
+        toolCalls: [makeToolCall()],
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe("unresolved_handoff_output")
+    })
   })
 
   describe("tool evidence checks", () => {
@@ -200,6 +210,28 @@ describe("validateDelegatedOutputContract", () => {
         ],
       })
       expect(result.ok).toBe(true)
+    })
+
+    it("accepts replace_in_file as mutation evidence", () => {
+      const result = validateDelegatedOutputContract({
+        spec: makeSpec({ targetArtifacts: ["tmp/chess/game.js"] }),
+        output: "Read and updated tmp/chess/game.js. Board renders 8x8 grid and pieces can be dragged.",
+        toolCalls: [
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "previous code",
+            isError: false,
+          }),
+          makeToolCall({
+            name: "replace_in_file",
+            args: { path: "tmp/chess/game.js", old_string: "x", new_string: "y" },
+            result: "Successfully replaced in tmp/chess/game.js",
+            isError: false,
+          }),
+        ],
+      })
+      expect(result.code).not.toBe("missing_file_mutation_evidence")
     })
 
     it("skips file mutation check for readonly contracts", () => {

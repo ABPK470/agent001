@@ -818,6 +818,10 @@ export class Agent {
     const writtenButNotReread = new Set<string>()
     // One-shot: only fire WRITE-WITHOUT-REVIEW nudge once.
     let writeReviewNudged = false
+    // Bounded retries: guard against premature handoff/finalization when
+    // output still admits missing work. Allow a few nudges, then fall through
+    // near iteration budget to avoid infinite loops.
+    let prematureHandoffNudges = 0
     // Track if the agent is in the "post-delegation verification" phase.
     // Set true when the verification guard fires, cleared after the verification round.
     let inPostDelegationVerification = false
@@ -1071,6 +1075,25 @@ export class Agent {
         }
 
         const answer = response.content ?? "(no response)"
+
+        const asksToContinue = /\b(?:would you like me to|do you want me to|should i (?:continue|proceed|implement|fix))\b/i.test(answer)
+        const unresolvedGaps = /\b(?:unimplemented|not implemented|missing|placeholder|issues and deficiencies|plan for fixes|further refinements?|full compliance may require|may require additional|not fully (?:implemented|complete)|deep validation|additional delegation)\b/i.test(answer)
+        if (
+          this.toolList.length > 0 &&
+          (asksToContinue || unresolvedGaps) &&
+          prematureHandoffNudges < 3 &&
+          i < this.config.maxIterations - 1
+        ) {
+          prematureHandoffNudges += 1
+          messages.push({ role: "assistant", content: answer, section: "history" })
+          const continueMsg =
+              "PREMATURE HANDOFF DETECTED: Do not ask the user whether to continue and do not stop at partial completion language. " +
+              "Use tools now to implement and verify any missing parts, then return a completed result with concrete evidence."
+          messages.push({ role: "system", content: continueMsg, section: "history" })
+          this.config.onNudge?.({ tag: "premature-handoff", message: continueMsg, iteration: i })
+          continue
+        }
+
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
       }
@@ -1190,12 +1213,24 @@ export class Agent {
           trackToolCallFailureState(true, semanticKey, toolLoopState)
         } else {
           const enriched = enrichResult(execResult.result, {})
+          const semanticFailure = didToolCallFail(false, enriched)
           if (this.config.verbose) log.logToolResult(enriched)
           messages.push({ role: "tool", toolCallId: call.id, content: enriched, section: "history" })
-          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: enriched, isError: false })
+          roundToolCalls.push({
+            name: call.name,
+            args: call.arguments as Record<string, unknown>,
+            result: enriched,
+            isError: semanticFailure,
+          })
+
+          // Semantic failures (e.g. write rejected, tool-reported failure text)
+          // must count as round failures so stuck detection can trigger.
+          if (semanticFailure) {
+            failuresThisRound++
+          }
 
           // Circuit breaker: clear on success, record if "success" is a semantic failure
-          if (didToolCallFail(false, enriched)) {
+          if (semanticFailure) {
             circuitBreaker.recordFailure(semanticKey, call.name)
             trackToolCallFailureState(true, semanticKey, toolLoopState)
           } else {

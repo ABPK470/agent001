@@ -81,10 +81,11 @@ export interface EscalationDecision {
  *   4. verdict === "pass" → pass
  *   5. disagreements >= maxDisagreements → escalate
  *   6. No attempts remaining → escalate (retries_exhausted)
- *   7. verdict === "fail" → escalate (can't recover from hard fail)
- *   8. verdict === "retry" + revision available → revise
- *   9. verdict === "retry" + reexecute mode → retry
- *  10. verdict === "retry" + neither → escalate (revision_unavailable)
+ *   7. verdict === "fail" + revision available → revise
+ *   8. verdict === "fail" + no revision path → escalate
+ *   9. verdict === "retry" + revision available → revise
+ *  10. verdict === "retry" + reexecute mode → retry
+ *  11. verdict === "retry" + neither → escalate (revision_unavailable)
  */
 export function resolveEscalation(input: EscalationInput): EscalationDecision {
   // Hard stops — these override everything
@@ -113,8 +114,12 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
     return { action: "escalate", reason: "retries_exhausted" }
   }
 
-  // Hard fail — can't retry after fundamental failure
+  // Fail verdict — allow ONE targeted revision on first failure, then escalate.
+  // This prevents long fail->revise loops when the same hard failure repeats.
   if (input.verdict === "fail") {
+    if (input.revisionAvailable && input.attempt === 0) {
+      return { action: "revise", reason: "needs_revision" }
+    }
     return { action: "escalate", reason: "retries_exhausted" }
   }
 
