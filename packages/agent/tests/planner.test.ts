@@ -1467,7 +1467,7 @@ describe("Pipeline: executePipeline", () => {
     expect(result.status).toBe("failed")
     const step = result.stepResults.get("build-game")
     expect(step?.status).toBe("failed")
-    expect(step?.error).toContain("write-integrity violations")
+    expect(step?.error).toContain("integrity violations")
   })
 
   it("fails subagent step when delegation contract evidence is missing", async () => {

@@ -23,30 +23,30 @@ config({
 })
 
 import {
-    closeMssqlPool,
-    setBasePath,
-    setBrowserCheckCwd,
-    setBrowserCheckExecutor,
-    setMssqlConfig,
-    setMssqlWriteEnabled,
-    setSearchBasePath,
-    setShellCwd,
-    setShellExecutor,
-    setShellSandboxStrict,
+  closeMssqlPool,
+  setBasePath,
+  setBrowserCheckCwd,
+  setBrowserCheckExecutor,
+  setMssqlConfig,
+  setMssqlWriteEnabled,
+  setSearchBasePath,
+  setShellCwd,
+  setShellExecutor,
+  setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-    MessageQueue,
-    MessageRouter,
-    MessengerChannel,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    WhatsAppChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  MessengerChannel,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  WhatsAppChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -64,7 +64,7 @@ import { registerWebhookRoutes } from "./routes/webhooks.js"
 import { initSandbox } from "./sandbox.js"
 import { addClient, broadcast } from "./ws.js"
 
-const PORT = Number(process.env["PORT"] ?? 3001)
+const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
 
 async function main() {

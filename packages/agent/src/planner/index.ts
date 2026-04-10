@@ -41,7 +41,7 @@ import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
-import type { PipelineResult, Plan, PlanDiagnostic, PlanStep, SubagentTaskStep, VerifierDecision } from "./types.js"
+import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
 import { verify } from "./verifier.js"
 
@@ -299,6 +299,315 @@ function injectDependencyWiringCriteria(plan: Plan): void {
   }
 }
 
+// ============================================================================
+// Contract-First: Blueprint step injection
+// ============================================================================
+
+/**
+ * Auto-inject a "blueprint" step as step 0 for multi-file code generation plans.
+ *
+ * The blueprint step creates a BLUEPRINT.md file that defines:
+ *   - Every file to be created and its purpose
+ *   - Every exported function/class with EXACT signatures (params + return types)
+ *   - Shared data structures with field names and types
+ *   - Inter-file dependencies
+ *
+ * All subsequent implementation steps receive BLUEPRINT.md as a requiredSourceArtifact,
+ * ensuring every child agent follows the same API contract.
+ *
+ * This directly addresses the "Variable Drift" problem from agentic systems where
+ * Agent A calls it `movePiece(from, to)` and Agent B calls it `movePiece(piece, src, dst)`.
+ */
+function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir: string | null): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  // Inject for any multi-step plan (2+ subagent steps with files to produce).
+  // Previously gated on 2+ "code-file" steps, which missed web projects where
+  // HTML/CSS steps don't count as "code". The blueprint is valuable whenever
+  // multiple agents need to coordinate on shared interfaces.
+  const stepsWithArtifacts = subagentSteps.filter(s =>
+    s.executionContext.targetArtifacts.length > 0,
+  )
+  if (stepsWithArtifacts.length < 2) return
+
+  // Don't double-inject if a blueprint step already exists
+  if (plan.steps.some(s => s.name === "generate_blueprint" || s.name.includes("blueprint"))) return
+
+  // Determine output directory from existing steps
+  const outputDir = forcedOutputDir ?? inferOutputDir(subagentSteps) ?? "tmp"
+  const blueprintPath = `${outputDir}/BLUEPRINT.md`
+
+  // Collect all target artifacts across all steps for the blueprint objective
+  const allArtifacts = subagentSteps.flatMap(s => s.executionContext.targetArtifacts)
+  const artifactList = [...new Set(allArtifacts)].join(", ")
+
+  const blueprintStep: SubagentTaskStep = {
+    name: "generate_blueprint",
+    stepType: "subagent_task",
+    dependsOn: [],
+    objective:
+      `Create a detailed architectural blueprint file at "${blueprintPath}" for a multi-file project.\n\n` +
+      `The project will contain these files: ${artifactList}\n\n` +
+      `The BLUEPRINT.md must define:\n` +
+      `1. **File Structure**: List every file with a one-line purpose description\n` +
+      `2. **Function Signatures**: For EVERY exported function and class method, define the EXACT signature:\n` +
+      `   - Function name\n` +
+      `   - Parameter names and types (e.g., \`board: string[][], fromRow: number, fromCol: number\`)\n` +
+      `   - Return type\n` +
+      `   - One-line description of what it does\n` +
+      `3. **Shared Data Types**: Define every data structure shared between files:\n` +
+      `   - Object shapes with field names and types\n` +
+      `   - Enum/constant values\n` +
+      `   - State shape (if applicable)\n` +
+      `4. **Inter-File Dependencies**: Which file imports/uses what from which other file\n` +
+      `5. **Initialization Order**: Which module initializes first and how they connect\n\n` +
+      `Format each function signature as:\n` +
+      `\`\`\`\n` +
+      `function functionName(param1: type, param2: type): returnType\n` +
+      `  // Brief description\n` +
+      `\`\`\`\n\n` +
+      `Think carefully about the COMPLETE set of functions needed. For a chess game, this means ALL move validation, ` +
+      `ALL piece-specific movement, king safety, check/checkmate/stalemate detection, UI rendering, event handling, etc.\n` +
+      `Do NOT write implementation code. ONLY write the blueprint document with signatures and types.`,
+    inputContract: "Project goal and file list",
+    acceptanceCriteria: [
+      "Defines complete function signatures for ALL planned modules — every function that will be called across files must appear with exact parameter names and types",
+      "Specifies shared data types used across files — board representation, piece types, game state shape",
+      "Lists inter-file dependencies — which file exports what and which file imports it",
+      "Function signatures are specific enough that two independent developers could implement compatible code from them alone",
+      "No implementation code — only signatures, types, and descriptions",
+    ],
+    requiredToolCapabilities: ["write_file", "think"],
+    contextRequirements: [],
+    executionContext: {
+      workspaceRoot,
+      allowedReadRoots: [workspaceRoot],
+      allowedWriteRoots: [`${workspaceRoot}/${outputDir}`],
+      allowedTools: ["write_file", "read_file", "think"],
+      requiredSourceArtifacts: [],
+      targetArtifacts: [blueprintPath],
+      effectClass: "filesystem_write",
+      verificationMode: "none",
+      artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
+      role: "writer",
+    },
+    maxBudgetHint: "10 iterations",
+    canRunParallel: false,
+    workflowStep: {
+      role: "grounding",
+      artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
+    },
+  }
+
+  // Insert blueprint step at the beginning
+  ;(plan as unknown as { steps: PlanStep[] }).steps = [blueprintStep, ...plan.steps]
+
+  // Add edges: blueprint → every other step
+  const newEdges = [...plan.edges]
+  for (const step of plan.steps) {
+    if (step.name === "generate_blueprint") continue
+    newEdges.push({ from: "generate_blueprint", to: step.name })
+  }
+  ;(plan as unknown as { edges: PlanEdge[] }).edges = newEdges
+
+  // Add dependsOn to every implementation step + add blueprint as required source
+  for (const step of subagentSteps) {
+    const deps = step.dependsOn ? [...step.dependsOn] : []
+    if (!deps.includes("generate_blueprint")) {
+      deps.push("generate_blueprint")
+    }
+    ;(step as unknown as { dependsOn: string[] }).dependsOn = deps
+
+    // Add BLUEPRINT.md as required source artifact
+    const sources = new Set(step.executionContext.requiredSourceArtifacts)
+    sources.add(blueprintPath)
+    ;(step.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [...sources]
+
+    // Augment objective to reference the blueprint
+    ;(step as { objective: string }).objective =
+      `${step.objective}\n\n` +
+      `📋 MANDATORY: Read "${blueprintPath}" FIRST. Follow the function signatures defined there EXACTLY — ` +
+      `same function names, same parameter names, same parameter order, same return types. ` +
+      `Do NOT invent new function signatures or rename parameters. The blueprint is the Single Source of Truth.`
+  }
+}
+
+/** Infer the output directory from existing subagent steps' target artifacts. */
+function inferOutputDir(steps: readonly SubagentTaskStep[]): string | null {
+  const dirs: string[] = []
+  for (const step of steps) {
+    for (const artifact of step.executionContext.targetArtifacts) {
+      const normalized = artifact.replace(/^\.\//, "")
+      const slash = normalized.lastIndexOf("/")
+      if (slash > 0) {
+        const topDir = normalized.split("/")[0]
+        if (topDir) dirs.push(topDir)
+      }
+    }
+  }
+  return mostFrequent(dirs) ?? null
+}
+
+// ============================================================================
+// Integration Stitcher — cross-file wiring repair
+// ============================================================================
+
+interface StitcherResult {
+  applied: boolean
+  mismatches: number
+  fixed: number
+}
+
+/**
+ * After the pipeline runs but BEFORE verification, scan all produced JS/TS files
+ * for cross-file function call mismatches (call site uses different name/arity
+ * than the definition). If mismatches are found, spawn a targeted "stitcher"
+ * child agent whose ONLY job is reading all project files and fixing the wiring.
+ *
+ * This is the "Integrator/Stitcher" from the 6-point architecture.
+ */
+async function runIntegrationStitcher(
+  plan: Plan,
+  pipelineResult: PipelineResult,
+  delegateFn: DelegateFn,
+  ctx: {
+    workspaceRoot: string
+    tools: readonly Tool[]
+    signal?: AbortSignal
+    onTrace?: (evt: Record<string, unknown>) => void
+  },
+  forcedOutputDir: string | null,
+): Promise<StitcherResult | null> {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+  if (subagentSteps.length < 2) return null
+
+  // Collect all code artifacts that were actually produced
+  const codeArtifacts: string[] = []
+  for (const step of subagentSteps) {
+    const stepResult = pipelineResult.stepResults.get(step.name)
+    if (!stepResult || stepResult.status !== "completed") continue
+    for (const artifact of step.executionContext.targetArtifacts) {
+      if (/\.(js|jsx|ts|tsx)$/i.test(artifact)) {
+        codeArtifacts.push(artifact)
+      }
+    }
+  }
+  if (codeArtifacts.length < 2) return null
+
+  // Read all code files and extract function definitions and calls
+  const { readFileSync, existsSync } = await import("node:fs")
+  const definitions = new Map<string, { file: string; params: number }>()
+  const calls = new Map<string, { file: string; args: number }[]>()
+  const fileContents = new Map<string, string>()
+
+  for (const artifact of codeArtifacts) {
+    let fullPath = artifact
+    if (!fullPath.startsWith("/")) {
+      fullPath = `${ctx.workspaceRoot}/${artifact}`
+    }
+    if (!existsSync(fullPath)) continue
+
+    const content = readFileSync(fullPath, "utf8")
+    fileContents.set(artifact, content)
+
+    // Extract function definitions: function name(p1, p2, ...) or const name = (p1, ...) =>
+    const defRegex = /(?:function\s+(\w+)\s*\(([^)]*)\)|(?:const|let|var)\s+(\w+)\s*=\s*(?:\([^)]*\)|[^=])*=>\s*|(\w+)\s*:\s*function\s*\(([^)]*)\))/g
+    let match: RegExpExecArray | null
+    while ((match = defRegex.exec(content)) !== null) {
+      const name = match[1] ?? match[3] ?? match[4]
+      const paramsStr = match[2] ?? match[5] ?? ""
+      if (!name || name.length < 2) continue
+      const paramCount = paramsStr.trim() === "" ? 0 : paramsStr.split(",").length
+      definitions.set(name, { file: artifact, params: paramCount })
+    }
+  }
+
+  // Now scan for cross-file function calls (calls to functions defined in other files)
+  const mismatches: string[] = []
+  for (const [artifact, content] of fileContents) {
+    // Look for function calls: identifier(args)
+    const callRegex = /\b(\w+)\s*\(([^)]*)\)/g
+    let match: RegExpExecArray | null
+    while ((match = callRegex.exec(content)) !== null) {
+      const name = match[1]
+      const argsStr = match[2]
+      if (!name || name.length < 2) continue
+      // Skip common built-ins and DOM methods
+      if (/^(if|for|while|switch|return|catch|new|typeof|import|require|console|document|window|Math|Array|Object|String|Date|JSON|Promise|setTimeout|setInterval|requestAnimationFrame|parseInt|parseFloat|alert|querySelector|querySelectorAll|getElementById|createElement|addEventListener|removeEventListener|appendChild|classList|length|forEach|map|filter|push|pop|includes|indexOf|join|slice|splice)$/i.test(name)) continue
+
+      const def = definitions.get(name)
+      if (!def || def.file === artifact) continue
+
+      const argCount = argsStr.trim() === "" ? 0 : argsStr.split(",").length
+      if (def.params !== argCount) {
+        mismatches.push(
+          `Function "${name}" defined in ${def.file} with ${def.params} param(s) but called from ${artifact} with ${argCount} arg(s)`,
+        )
+      }
+    }
+  }
+
+  if (mismatches.length === 0) return { applied: false, mismatches: 0, fixed: 0 }
+
+  // We have mismatches — spawn a stitcher agent to fix them
+  const outputDir = forcedOutputDir ?? inferOutputDir(subagentSteps) ?? "tmp"
+  const allFilesList = codeArtifacts.join(", ")
+  const mismatchReport = mismatches.join("\n")
+
+  const stitcherStep: SubagentTaskStep = {
+    name: "integration_stitcher",
+    stepType: "subagent_task",
+    dependsOn: [],
+    objective:
+      `You are an INTEGRATION STITCHER agent. Your ONLY job is to fix cross-file function call mismatches.\n\n` +
+      `The following mismatches were detected between files:\n${mismatchReport}\n\n` +
+      `Files in the project: ${allFilesList}\n\n` +
+      `Instructions:\n` +
+      `1. Read ALL the above files\n` +
+      `2. For each mismatch, determine the CORRECT signature by looking at the function definition\n` +
+      `3. Fix the CALL SITES (not the definitions) to match the correct signatures\n` +
+      `4. If a call site passes fewer arguments, add the missing arguments with sensible defaults\n` +
+      `5. If a call site passes more arguments, remove the extra arguments\n` +
+      `6. Write the corrected files back\n\n` +
+      `Do NOT change any logic, styling, or structure. ONLY fix the function call argument mismatches.`,
+    inputContract: "Cross-file mismatch report + file list",
+    acceptanceCriteria: [
+      "All listed function call mismatches are resolved",
+      "No new syntax errors introduced",
+      "No logic changes — only argument list fixes",
+    ],
+    requiredToolCapabilities: ["read_file", "write_file"],
+    contextRequirements: [],
+    executionContext: {
+      workspaceRoot: ctx.workspaceRoot,
+      allowedReadRoots: [ctx.workspaceRoot],
+      allowedWriteRoots: [`${ctx.workspaceRoot}/${outputDir}`],
+      allowedTools: ["read_file", "write_file", "think"],
+      requiredSourceArtifacts: codeArtifacts,
+      targetArtifacts: codeArtifacts,
+      effectClass: "filesystem_write",
+      verificationMode: "none",
+      artifactRelations: codeArtifacts.map(a => ({ relationType: "write_owner" as const, artifactPath: a })),
+      role: "writer",
+    },
+    maxBudgetHint: "15 iterations",
+    canRunParallel: false,
+  }
+
+  try {
+    const result = await delegateFn(stitcherStep, stitcherStep.executionContext)
+    const didFix = !result.output.startsWith("Delegation failed:")
+    return { applied: true, mismatches: mismatches.length, fixed: didFix ? mismatches.length : 0 }
+  } catch {
+    // Stitcher failed — continue to verifier anyway, it will catch the issues
+    return { applied: true, mismatches: mismatches.length, fixed: 0 }
+  }
+}
+
 /**
  * Apply deterministic remediations for specific blocking validation errors.
  * Returns true when the plan was modified and should be re-validated.
@@ -545,6 +854,12 @@ export async function executePlannerPath(
   // state owner and propagate a typed contract to all writer steps.
   injectSharedStateOwnershipContract(plan)
 
+  // Contract-First Architecture: auto-inject a blueprint step as step 0 for
+  // multi-file projects. This step generates a BLUEPRINT.md with function
+  // signatures, data types, and inter-file contracts that all implementation
+  // steps must follow. This prevents Variable Drift across child agents.
+  injectBlueprintStep(plan, ctx.workspaceRoot, forcedOutputDir)
+
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks
   // Build step profiles for the delegation decision system
   const subagentSteps = plan.steps.filter(
@@ -691,6 +1006,27 @@ export async function executePlannerPath(
         effectiveBudget: budgetState.effectiveBudget,
         extensions: budgetState.extensions,
       })
+    }
+
+    // Step 4b: Integration Stitching (cross-file wiring check)
+    // After all pipeline steps complete, validate cross-file function calls
+    // match actual definitions. If mismatches are found, spawn a targeted
+    // stitcher agent to fix them BEFORE the expensive verification cycle.
+    if (pipelineResult.status === "completed" || pipelineResult.completedSteps > 0) {
+      const stitcherResult = await runIntegrationStitcher(
+        plan,
+        pipelineResult,
+        delegateFn,
+        ctx,
+        forcedOutputDir,
+      )
+      if (stitcherResult?.applied) {
+        ctx.onTrace?.({
+          kind: "planner-stitcher",
+          mismatches: stitcherResult.mismatches,
+          fixed: stitcherResult.fixed,
+        })
+      }
     }
 
     // Step 5: Verify

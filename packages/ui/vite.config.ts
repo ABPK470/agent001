@@ -10,11 +10,11 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/api": {
-        target: "http://localhost:3001",
+        target: "http://localhost:3102",
         configure: (proxy) => { proxy.on("error", () => {}) },
       },
       "/ws": {
-        target: "ws://localhost:3001",
+        target: "ws://localhost:3102",
         ws: true,
         configure: (proxy) => { proxy.on("error", () => {}) },
       },

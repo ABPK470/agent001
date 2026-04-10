@@ -34,13 +34,13 @@ import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
 /** Default iteration budget for a child agent. */
-const DEFAULT_CHILD_ITERATIONS = 20
+const DEFAULT_CHILD_ITERATIONS = 35
 
 /**
  * Hard cap on child iterations.
  * agenc-core uses dynamic budgets based on contract shape, but always has a generous cap.
  */
-const MAX_CHILD_ITERATIONS = 50
+const MAX_CHILD_ITERATIONS = 80
 
 /**
  * Dedicated system prompt for child worker agents.
@@ -51,15 +51,22 @@ const MAX_CHILD_ITERATIONS = 50
  *   - Strong emphasis on completing the FULL goal, not just scaffolding
  *   - Self-verification required before finishing
  */
-const CHILD_SYSTEM_PROMPT = `You are an autonomous worker agent. You receive a goal and work independently until it is FULLY accomplished.
+const CHILD_SYSTEM_PROMPT = `You are an autonomous worker agent in a PIPELINE. Other agents may have already completed prior steps and created files. You receive a goal and work independently until it is FULLY accomplished.
 
 Task execution protocol:
 1. Start by reading the ## Workspace section of your goal to know WHERE you are working.
-2. If your goal lists Source Files, read those files FIRST with read_file to understand the current state.
+2. If your goal lists Source Files, read ALL of them FIRST with read_file. These files were created by prior pipeline steps — they contain working code you must build on top of.
 3. Start working on the objective immediately — do NOT run exploratory commands like \`find\` or \`ls\` on the workspace root. Your goal already tells you exactly which files to read and which files to create/modify.
 4. Use the right tool in your first real action — NEVER end a turn without a tool call.
 5. If a command fails, read the error, fix the code, and retry — do NOT stop and report the error.
 6. Keep iterating until the task succeeds or you have genuinely exhausted options.
+
+PIPELINE AWARENESS — CRITICAL:
+- You are NOT the only agent. Other agents have run before you and may run after you.
+- Files listed in Source Files ALREADY EXIST with working code. Do NOT recreate or overwrite them.
+- Your job is to ADD your piece to the project, not rebuild everything from scratch.
+- If Source Files include a BLUEPRINT.md, it defines the function signatures you MUST follow exactly.
+- Use the exact function names, parameter names, and return types from the blueprint or existing source files.
 
 Critical rules:
 - You are NOT in a conversation. There is no human. NEVER say "let me know", "shall I proceed", "would you like me to", or similar. These are FORBIDDEN.
@@ -685,7 +692,7 @@ export async function spawnChildForPlan(
 
   if (normalizedEnvelope.requiredSourceArtifacts.length > 0) {
     goalParts.push(
-      `## Source Files — READ THESE FIRST\nThese files should already exist (created by prior steps). Read them before doing anything:\n${normalizedEnvelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
+      `## Source Files — READ THESE FIRST (MANDATORY)\nThese files ALREADY EXIST on disk, created by prior steps. You are BUILDING ON TOP of this work.\nYou MUST read each of these files with read_file BEFORE writing any code.\nDo NOT rewrite or replace these files unless they are also listed in your Target Files.\n${normalizedEnvelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n")}`,
     )
   }
 
@@ -754,7 +761,7 @@ export async function spawnChildForPlan(
   //   + acceptanceCriteria count (each may need verification)
   //   + source artifacts (each needs a read)
   //   + verificationMode pass if applicable
-  const contractFloor = Math.min(12, Math.max(1,
+  const contractFloor = Math.min(20, Math.max(1,
     normalizedEnvelope.targetArtifacts.length +
     step.acceptanceCriteria.length +
     normalizedEnvelope.requiredSourceArtifacts.length +
@@ -764,23 +771,17 @@ export async function spawnChildForPlan(
   const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
   const codeArtifactCount = normalizedEnvelope.targetArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)).length
   const isWriterStep = normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0
-  // Adaptive extension for complex writer tasks:
-  // - many acceptance criteria usually require multiple debug/repair cycles
-  // - code artifacts often need iterative syntax/runtime fixes
+  // Adaptive boost: code-heavy steps need more iterations for write/read/fix cycles
   const complexityBoost = isWriterStep
     ? Math.min(30,
-      (step.acceptanceCriteria.length >= 8 ? 12 : step.acceptanceCriteria.length >= 6 ? 8 : step.acceptanceCriteria.length >= 4 ? 5 : 0) +
+      (step.acceptanceCriteria.length >= 6 ? 8 : step.acceptanceCriteria.length >= 4 ? 4 : 0) +
       (codeArtifactCount >= 3 ? 9 : codeArtifactCount >= 2 ? 6 : codeArtifactCount === 1 ? 3 : 0) +
       (normalizedEnvelope.verificationMode !== "none" ? 4 : 0),
     )
     : 0
   const adaptiveBudget = parsedBudget + complexityBoost
-  const complexWriterFloor =
-    isWriterStep && step.acceptanceCriteria.length >= 6 && normalizedEnvelope.verificationMode !== "none"
-      ? 40
-      : 0
   // Use whichever is larger: the parsed budget hint or the contract floor, capped at MAX_CHILD_ITERATIONS
-  const maxIter = Math.min(Math.max(parsedBudget, contractFloor, adaptiveBudget, complexWriterFloor), MAX_CHILD_ITERATIONS)
+  const maxIter = Math.min(Math.max(parsedBudget, contractFloor, adaptiveBudget), MAX_CHILD_ITERATIONS)
 
   ctx.onChildTrace?.({
     kind: "planner-delegation-start",

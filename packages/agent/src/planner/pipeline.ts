@@ -17,24 +17,23 @@
 
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../code-quality.js"
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    validateDelegatedOutputContract,
-    type DelegationOutputValidationCode,
+  buildContractSpec,
+  getCorrectionGuidance,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  validateDelegatedOutputContract,
+  type DelegationOutputValidationCode,
 } from "../delegation-validation.js"
 import type { ToolCallRecord } from "../recovery.js"
 import type { Tool } from "../types.js"
 import type {
-    DeterministicToolStep,
-    ExecutionEnvelope,
-    PipelineResult,
-    PipelineStepResult,
-    PipelineStepStatus,
-    Plan,
-    PlanStep,
-    SubagentTaskStep,
+  DeterministicToolStep,
+  ExecutionEnvelope,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  PlanStep,
+  SubagentTaskStep
 } from "./types.js"
 
 // ============================================================================
@@ -229,26 +228,6 @@ export async function executePipeline(
         }
       }
 
-      // ── Pre-retry snapshot: save target artifact contents ──
-      // If this is a retry step (has feedback), snapshot all target artifacts
-      // BEFORE the child runs. After execution, check if the retry made things
-      // WORSE (syntax errors, lost functions). If so, rollback to the snapshot
-      // and fail the step — never allow retries to degrade working code.
-      let preRetrySnapshots: Map<string, string> | undefined
-      if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
-        const sa = effectiveStep as SubagentTaskStep
-        const rfTool = toolMap.get("read_file")
-        if (rfTool) {
-          preRetrySnapshots = new Map()
-          for (const artifact of sa.executionContext.targetArtifacts) {
-            const content = await tryReadArtifact(rfTool, artifact, opts?.workspaceRoot)
-            if (content !== null) {
-              preRetrySnapshots.set(artifact, content)
-            }
-          }
-        }
-      }
-
       const result = await executeStep(
         effectiveStep,
         toolExecFn,
@@ -260,29 +239,6 @@ export async function executePipeline(
           knownProjectArtifacts,
         },
       )
-
-      // ── Post-retry regression check ──
-      // If we have snapshots and the step "completed", verify the retry
-      // didn't introduce regressions (syntax errors, lost functions, corruption).
-      if (preRetrySnapshots && preRetrySnapshots.size > 0 && result.status === "completed" && effectiveStep.stepType === "subagent_task") {
-        const sa = effectiveStep as SubagentTaskStep
-        const rfTool = toolMap.get("read_file")
-        const wfTool = toolMap.get("write_file")
-        if (rfTool && wfTool) {
-          const regressions = await detectRetryRegressions(preRetrySnapshots, sa, rfTool, opts?.workspaceRoot)
-          if (regressions.length > 0) {
-            // ROLLBACK: restore pre-retry file contents
-            for (const [artifact, oldContent] of preRetrySnapshots) {
-              const artifactPath = resolveArtifactPath(artifact, opts?.workspaceRoot)
-              try { await wfTool.execute({ path: artifactPath, content: oldContent }) } catch { /* best effort */ }
-            }
-            // Override result to failed with regression details
-            ;(result as { status: PipelineStepStatus }).status = "failed"
-            ;(result as { error?: string }).error = `Retry caused regression — reverted to pre-retry state: ${regressions.join("; ")}`
-            ;(result as { failureClass?: string }).failureClass = "unknown"
-          }
-        }
-      }
 
       stepResults.set(name, result)
       opts?.onStepEnd?.(step, result)
@@ -583,6 +539,26 @@ async function executeSubagentStep(
       }
     }
 
+    // ── Post-step syntax validation ──
+    // Run `node --check` on all .js files this step produced BEFORE marking
+    // the step as completed. This catches syntax errors at the source step,
+    // preventing broken JS from cascading to downstream steps that depend on it.
+    const syntaxErrors = await runPostStepSyntaxValidation(
+      step,
+      childToolCalls ?? [],
+      validationCtx,
+    )
+    if (syntaxErrors.length > 0) {
+      return {
+        name: step.name,
+        status: "failed",
+        error: `Syntax validation failed after step completion:\n${syntaxErrors.join("\n")}`,
+        failureClass: "unknown",
+        durationMs: Date.now() - t0,
+        toolCalls: childToolCalls,
+      }
+    }
+
     return {
       name: step.name,
       status: "completed",
@@ -631,15 +607,23 @@ async function validateSubagentCompletion(
 ): Promise<SubagentValidationFailure | null> {
   const calls = toolCalls ?? []
 
-  // Hard fail if child produced explicit write-integrity warnings.
-  const writeWarning = calls.find((c) => {
-    if (c.name !== "write_file" && c.name !== "replace_in_file") return false
-    return /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result)
-  })
-  if (writeWarning) {
+  // Hard fail if child's FINAL write to a file produced explicit write-integrity warnings.
+  // Only check the LAST write to each file path — earlier rejected writes that the child
+  // subsequently fixed should not block completion.
+  const lastWriteByPath = new Map<string, ToolCallRecord>()
+  for (const c of calls) {
+    if (c.name !== "write_file" && c.name !== "replace_in_file") continue
+    const path = typeof c.args.path === "string" ? c.args.path : ""
+    if (path) lastWriteByPath.set(path, c)
+  }
+  const finalWriteWarning = [...lastWriteByPath.values()].find(c =>
+    /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result),
+  )
+  if (finalWriteWarning) {
+    const path = typeof finalWriteWarning.args.path === "string" ? finalWriteWarning.args.path : "(unknown)"
     return {
       message:
-        `Step "${step.name}" produced write-integrity violations via ${writeWarning.name}. ` +
+        `Step "${step.name}" final write to "${path}" has integrity violations via ${finalWriteWarning.name}. ` +
         `The step is rejected until file writes are clean and free of placeholder/corruption warnings.`,
     }
   }
@@ -847,7 +831,7 @@ function injectPriorContext(
   // Build augmented inputContract with prior context
   let augmentedInput = step.inputContract || ""
   if (priorSections.length > 0) {
-    augmentedInput = `## Context from completed prior steps\n\n${priorSections.join("\n\n")}\n\n${augmentedInput}`
+    augmentedInput = `## Context from completed prior steps\nThese steps have ALREADY RUN and their output files EXIST on disk. You are continuing their work — do NOT redo what they did.\n\n${priorSections.join("\n\n")}\n\n${augmentedInput}`
   }
 
   // Override workspaceRoot in execution context with actual value
@@ -921,7 +905,7 @@ function injectPriorContext(
     if (priorArtifacts.length > 0) {
       // Deduplicate
       const uniqueArtifacts = [...new Set(priorArtifacts)]
-      objective = `${objective}\n\nIMPORTANT: Prior steps should have created these files: ${uniqueArtifacts.join(", ")}. Start by reading them with read_file using these EXACT paths to verify they exist and understand their contents before making changes.`
+      objective = `${objective}\n\n⚠️ PRIOR WORK EXISTS — DO NOT START FROM SCRATCH:\nPrior steps have ALREADY created these files: ${uniqueArtifacts.join(", ")}.\nYou MUST:\n1. Use read_file with these EXACT paths to read each file\n2. Understand what they contain and what functions/variables they export\n3. Build ON TOP of this existing code — reference their functions, use their data structures\n4. Do NOT recreate, overwrite, or duplicate any file that is not in YOUR target files`
 
       // Also update requiredSourceArtifacts in the execution context so that
       // spawnChildForPlan's "Source Files" section uses the ACTUAL paths
@@ -1016,65 +1000,78 @@ async function tryReadArtifact(readFileTool: Tool, artifact: string, wsRoot?: st
 }
 
 /** Extract function/class/const definition names from source code (lightweight regex). */
-function extractNames(code: string): Set<string> {
-  const names = new Set<string>()
-  for (const m of code.matchAll(/\bfunction\s+([a-zA-Z_$][\w$]*)\s*\(/g)) if (m[1]) names.add(m[1])
-  for (const m of code.matchAll(/\bclass\s+([a-zA-Z_$][\w$]*)/g)) if (m[1]) names.add(m[1])
-  for (const m of code.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:function|\(|[a-zA-Z_$][\w$]*\s*=>)/g)) if (m[1]) names.add(m[1])
-  return names
-}
+// ── Post-step syntax validation ──────────────────────────────────
 
 /**
- * Detect regressions introduced by a retry — compare pre-retry snapshots with
- * the current file state. Returns a list of regression descriptions (empty = OK).
+ * Run `node --check` on all .js files produced by a completed subagent step.
  *
- * Checks:
- *   1. Function/class loss — if the retry removed definitions that existed before
- *   2. Brace imbalance — if the old file had balanced braces but the new one doesn't
- *   3. Content destruction — if the new file is dramatically shorter (< 40% of old)
+ * This catches syntax errors immediately after the step completes, BEFORE
+ * downstream steps that depend on these files are executed. Without this,
+ * a syntax error in step A's output would only be caught during the final
+ * verification pass, by which point step B may have already tried and failed
+ * to work with the broken file.
+ *
+ * Returns an array of syntax error descriptions (empty = all files OK).
  */
-async function detectRetryRegressions(
-  snapshots: ReadonlyMap<string, string>,
+async function runPostStepSyntaxValidation(
   step: SubagentTaskStep,
-  readFileTool: Tool,
-  wsRoot?: string,
+  toolCalls: readonly ToolCallRecord[],
+  validationCtx?: SubagentStepValidationContext,
 ): Promise<string[]> {
-  const regressions: string[] = []
+  const errors: string[] = []
+  const wsRoot = validationCtx?.workspaceRoot
 
-  for (const artifact of step.executionContext.targetArtifacts) {
-    const oldContent = snapshots.get(artifact)
-    if (!oldContent) continue
+  // Collect .js files from targetArtifacts AND actually mutated paths
+  const jsTargets = step.executionContext.targetArtifacts.filter(a => /\.js$/i.test(a))
+  const mutatedJsPaths = new Set<string>()
 
-    const newContent = await tryReadArtifact(readFileTool, artifact, wsRoot)
-    if (!newContent) {
-      regressions.push(`"${artifact}" was DELETED by retry`)
-      continue
+  for (const c of toolCalls) {
+    if (c.isError) continue
+    if (c.name !== "write_file" && c.name !== "replace_in_file") continue
+    const path = typeof c.args.path === "string" ? c.args.path : ""
+    if (/\.js$/i.test(path)) mutatedJsPaths.add(path)
+  }
+
+  // Combine: check targetArtifacts + actually written paths
+  const pathsToCheck = new Set<string>([...jsTargets, ...mutatedJsPaths])
+  if (pathsToCheck.size === 0) return errors
+
+  // We need run_command — if not available through validationCtx, try to
+  // use a lightweight approach. For now, use the same pattern as the verifier.
+  // Since we don't have direct access to run_command here, use the simpler
+  // approach of checking via child_process if we're in a Node environment.
+  const { execSync } = await import("node:child_process")
+
+  for (const artifact of pathsToCheck) {
+    let checkPath = artifact
+    if (wsRoot && !checkPath.startsWith("/")) {
+      checkPath = wsRoot.endsWith("/") ? `${wsRoot}${checkPath}` : `${wsRoot}/${checkPath}`
     }
 
-    // 1. Function/class loss
-    const oldNames = extractNames(oldContent)
-    const newNames = extractNames(newContent)
-    const lost = [...oldNames].filter(n => !newNames.has(n))
-    if (lost.length > 0) {
-      regressions.push(`"${artifact}": lost ${lost.length} definition(s): ${lost.slice(0, 5).join(", ")}`)
-    }
+    try {
+      // Check if file exists first
+      const { accessSync } = await import("node:fs")
+      accessSync(checkPath)
 
-    // 2. Brace imbalance: old file was balanced, new file isn't
-    const oldBalance = (oldContent.match(/{/g)?.length ?? 0) - (oldContent.match(/}/g)?.length ?? 0)
-    const newBalance = (newContent.match(/{/g)?.length ?? 0) - (newContent.match(/}/g)?.length ?? 0)
-    if (Math.abs(oldBalance) <= 1 && Math.abs(newBalance) > 2) {
-      regressions.push(`"${artifact}": brace imbalance introduced (${newBalance > 0 ? newBalance + " unclosed" : Math.abs(newBalance) + " extra closing"})`)
-    }
-
-    // 3. Content destruction: new file is dramatically shorter
-    const oldLines = oldContent.split("\n").length
-    const newLines = newContent.split("\n").length
-    if (oldLines > 20 && newLines < oldLines * 0.4) {
-      regressions.push(`"${artifact}": content shrunk from ${oldLines} to ${newLines} lines (${Math.round(newLines / oldLines * 100)}% of original)`)
+      // Run node --check
+      execSync(`node --check ${JSON.stringify(checkPath)}`, {
+        encoding: "utf8",
+        timeout: 10_000,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? (err as { stderr?: string }).stderr ?? err.message : String(err)
+      // Only flag genuine syntax errors, not file-not-found
+      if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(errMsg)) {
+        const errorLines = errMsg.trim().split("\n").slice(0, 5).join(" | ")
+        errors.push(`Syntax error in "${artifact}": ${errorLines}`)
+      }
+      // File not found is OK — the file might be at a different resolved path
+      // and the verifier will catch it later
     }
   }
 
-  return regressions
+  return errors
 }
 
 // ── Gibberish issue detection ────────────────────────────────────
