@@ -3097,6 +3097,89 @@ describe("Pipeline: executePipeline", () => {
     expect(seenObjective).toContain("Python: preserve function names and call contracts exactly")
   })
 
+  it("keeps foreign-artifact findings as reference context instead of primary retry work", async () => {
+    let seenObjective = ""
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair-ui", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["read_file", "write_file", "browser_check"],
+          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+          targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const retryFeedback = new Map<string, readonly string[]>([
+      ["repair-ui", [
+        "Browser check for \"tmp/index.html\" reported errors: SyntaxError: Unexpected token ':'",
+        'Syntax error in "tmp/chess_logic.js": Unexpected identifier',
+      ]],
+    ])
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        seenObjective = step.objective
+        return { output: "done", toolCalls: [] }
+      },
+      { retryFeedback },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(seenObjective).toContain("[RETRY — fix these step-owned issues from the previous attempt]")
+    expect(seenObjective).toContain('Browser check for "tmp/index.html" reported errors')
+    expect(seenObjective).toContain("Reference context from verifier")
+    expect(seenObjective).toContain('Syntax error in "tmp/chess_logic.js"')
+  })
+
+  it("does not tell markup steps to implement runtime functions for spec mismatches", async () => {
+    let seenObjective = ""
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair-ui", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["read_file", "write_file"],
+          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+          targetArtifacts: ["tmp/index.html"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const retryFeedback = new Map<string, readonly string[]>([
+      ["repair-ui", [
+        "SPEC FUNCTION MISMATCH: tmp/index.html is missing blueprint functions initializeBoard, handlePieceMove from tmp/BLUEPRINT.md",
+      ]],
+    ])
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        seenObjective = step.objective
+        return { output: "done", toolCalls: [] }
+      },
+      { retryFeedback },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(seenObjective).toContain("Do NOT implement runtime functions in tmp/index.html")
+    expect(seenObjective).not.toContain("implement exactly these missing functions in tmp/index.html")
+  })
+
   it("adds shell-specific autonomous retry guidance for PowerShell and Windows CMD artifacts", async () => {
     let seenObjective = ""
     const plan = makePlan({

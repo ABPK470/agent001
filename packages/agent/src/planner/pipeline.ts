@@ -17,29 +17,30 @@
 
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../code-quality.js"
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    validateDelegatedOutputContract,
-    type DelegationOutputValidationCode,
+  buildContractSpec,
+  getCorrectionGuidance,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  validateDelegatedOutputContract,
+  type DelegationOutputValidationCode,
 } from "../delegation-validation.js"
 import type { ToolCallRecord } from "../recovery.js"
 import { normalizeToolExecutionOutput } from "../tool-utils.js"
 import type { Tool } from "../types.js"
 import {
-    buildBlueprintSeedTemplate,
-    getPlannedBlueprintArtifacts,
-    validateBlueprintArtifactContract,
+  buildBlueprintSeedTemplate,
+  getPlannedBlueprintArtifacts,
+  uniqueStrings,
+  validateBlueprintArtifactContract,
 } from "./blueprint-contract.js"
 import type {
-    DeterministicToolStep,
-    ExecutionEnvelope,
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    PlanStep,
-    SubagentTaskStep
+  DeterministicToolStep,
+  ExecutionEnvelope,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  PlanStep,
+  SubagentTaskStep
 } from "./types.js"
 
 // ============================================================================
@@ -152,7 +153,59 @@ function buildLanguageRepairGuidance(families: ReadonlySet<ArtifactFamily>): str
   return guidance
 }
 
-function buildIssueRepairActions(feedback: readonly string[]): string[] {
+function extractIssuePaths(issue: string): string[] {
+  const matches = issue.match(/(?:[A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})/g) ?? []
+  return uniqueStrings(matches.map(match => match.replace(/^['"`]+|['"`]+$/g, "").replace(/^\[[0-9;]*m/g, "")))
+}
+
+function buildStepArtifactAliases(step: SubagentTaskStep): Set<string> {
+  const aliases = new Set<string>()
+  const allArtifacts = [
+    ...step.executionContext.targetArtifacts,
+    ...step.executionContext.requiredSourceArtifacts,
+  ]
+
+  for (const artifact of allArtifacts) {
+    const normalized = artifact.replace(/^\.\//, "")
+    aliases.add(normalized)
+    const base = normalized.split("/").pop()
+    if (base) aliases.add(base)
+  }
+
+  return aliases
+}
+
+function partitionRetryFeedback(
+  step: SubagentTaskStep,
+  feedback: readonly string[],
+): { primary: string[]; reference: string[] } {
+  const ownedArtifacts = buildStepArtifactAliases(step)
+  const primary: string[] = []
+  const reference: string[] = []
+
+  for (const issue of feedback) {
+    const referencedPaths = extractIssuePaths(issue)
+    const mentionsStep = issue.includes(step.name)
+    const ownedPathMatch = referencedPaths.some((path) => {
+      const normalized = path.replace(/^\.\//, "")
+      const base = normalized.split("/").pop() ?? normalized
+      return ownedArtifacts.has(normalized) || ownedArtifacts.has(base)
+    })
+
+    if (referencedPaths.length === 0 || mentionsStep || ownedPathMatch) {
+      primary.push(issue)
+    } else {
+      reference.push(issue)
+    }
+  }
+
+  return {
+    primary: primary.length > 0 ? primary : [...feedback],
+    reference,
+  }
+}
+
+function buildIssueRepairActions(step: SubagentTaskStep, feedback: readonly string[]): string[] {
   const actions: string[] = []
 
   for (const issue of feedback) {
@@ -161,7 +214,14 @@ function buildIssueRepairActions(feedback: readonly string[]): string[] {
     if (/SPEC FUNCTION MISMATCH:/i.test(cleanIssue)) {
       const match = cleanIssue.match(/SPEC FUNCTION MISMATCH:\s+(.+?)\s+is missing blueprint functions\s+(.+?)\s+from\s+(.+)$/i)
       if (match) {
-        actions.push(`Read ${match[3]} and ${match[1]}, then implement exactly these missing functions in ${match[1]}: ${match[2]}`)
+        const artifactPath = match[1].trim()
+        if (/\.(?:html?|css|scss|sass|less|md|markdown|txt|rst|adoc)$/i.test(artifactPath)) {
+          actions.push(
+            `Do NOT implement runtime functions in ${artifactPath}; reconcile the contract and wiring so ${artifactPath} only carries structure/presentation responsibilities and the missing functions are owned by executable source artifacts.`,
+          )
+        } else {
+          actions.push(`Read ${match[3]} and ${artifactPath}, then implement exactly these missing functions in ${artifactPath}: ${match[2]}`)
+        }
       } else {
         actions.push("Read the blueprint and target artifact, then implement every missing function signature exactly as declared")
       }
@@ -241,7 +301,7 @@ function buildAutonomousRepairBlock(
   step: SubagentTaskStep,
   feedback: readonly string[],
 ): string {
-  const actions = buildIssueRepairActions(feedback)
+  const actions = buildIssueRepairActions(step, feedback)
   const languageGuidance = buildLanguageRepairGuidance(detectArtifactFamilies(step.executionContext.targetArtifacts))
   if (actions.length === 0 && languageGuidance.length === 0) return ""
 
@@ -472,6 +532,7 @@ export async function executePipeline(
       const feedback = rawFeedback?.filter(f => !isGibberishIssue(f))
       if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
         const sa = effectiveStep as SubagentTaskStep
+        const { primary: primaryFeedback, reference: referenceFeedback } = partitionRetryFeedback(sa, feedback)
         const priorStep = opts?.priorResults?.get(name)
         const priorReplaceMisses = (priorStep?.toolCalls ?? []).filter(
           c => c.name === "replace_in_file" && /old_string not found/i.test(c.result),
@@ -491,13 +552,16 @@ export async function executePipeline(
         const stubRemediationBlock = hasStubIssues
           ? `\n\n⚠️ STUB FUNCTION REMEDIATION — THIS IS YOUR PRIMARY TASK:\nThe verifier detected functions that are stubs or contain degeneration comments (e.g. "// Other code as per existing logic", "// rest of the code here", "// same as above"). These comments mean NO CODE WAS ACTUALLY WRITTEN — the function body is empty/incomplete.\nFor EACH stub/degenerated function you MUST:\n1. Read the file that contains it\n2. Locate the function by name\n3. Replace the stub body with a REAL, COMPLETE algorithm — DO NOT use comments like "existing logic" or "same as above"\n4. The function NAME tells you WHAT it must do — implement the FULL algorithm. Example: "getLegalMoves" must compute legal moves for ALL piece types with proper board bounds checking.\n5. Do NOT change the function signature — only replace the body\n6. After implementing, re-read the file and verify the stub is gone`
           : ""
-        const autonomousRepairBlock = buildAutonomousRepairBlock(sa, feedback)
+        const autonomousRepairBlock = buildAutonomousRepairBlock(sa, primaryFeedback)
+        const contextualFeedbackBlock = referenceFeedback.length > 0
+          ? `\n\nReference context from verifier (do not treat these as your primary owned fixes unless you confirm they require integration work from your step):\n${referenceFeedback.map(f => `- ${f}`).join("\n")}`
+          : ""
 
         const hasReplaceInFile = toolMap.has("replace_in_file")
         const docsOnlyTargets = sa.executionContext.targetArtifacts.length > 0 &&
           sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
         const blueprintRetryGuidance = docsOnlyTargets || /blueprint/i.test(sa.name)
-          ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, feedback)}`
+          ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, primaryFeedback)}`
           : ""
         const retryRules = hasReplaceInFile
           ? (avoidReplaceInFile
@@ -507,7 +571,7 @@ export async function executePipeline(
 
         effectiveStep = {
           ...sa,
-          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${autonomousRepairBlock}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
+          objective: `${sa.objective}\n\n[RETRY — fix these step-owned issues from the previous attempt]:\n${primaryFeedback.map(f => `- ${f}`).join("\n")}${contextualFeedbackBlock}${autonomousRepairBlock}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
           executionContext: {
             ...sa.executionContext,
             requiredSourceArtifacts: [...existingSource],
