@@ -115,6 +115,9 @@ interface AppState {
 export interface IoeLayout {
   sidebarSection: string
   sidebarVisible: boolean
+  sidebarSplit: boolean
+  sidebarBottomSection: string
+  sidebarSplitRatio: number
   bottomVisible: boolean
   chatVisible: boolean
   editorTab: string
@@ -129,11 +132,14 @@ export interface IoeLayout {
 }
 
 const DEFAULT_IOE_LAYOUT: IoeLayout = {
-  sidebarSection: "runs",
+  sidebarSection: "details",
   sidebarVisible: true,
+  sidebarSplit: false,
+  sidebarBottomSection: "runs",
+  sidebarSplitRatio: 0.5,
   bottomVisible: true,
   chatVisible: true,
-  editorTab: "trace",
+  editorTab: "tool-timeline",
   editorSplit: false,
   editorRightTab: "llm-calls",
   bottomTab: "output",

@@ -377,6 +377,9 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
       "Specifies shared data types used across files — board representation, piece types, game state shape",
       "Lists inter-file dependencies — which file exports what and which file imports it",
       "Function signatures are specific enough that two independent developers could implement compatible code from them alone",
+      "Each function handling complex logic includes a complete algorithmic contract listing all cases/rules it must handle",
+      "Shared data structures include all metadata needed for the declared rules and edge cases",
+      "No function contract is a one-line summary like 'returns true if valid' — every contract specifies what makes the result correct",
       "No implementation code — only signatures, types, and descriptions",
     ],
     requiredToolCapabilities: ["write_file", "think"],
@@ -431,6 +434,67 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
       `📋 MANDATORY: Read "${blueprintPath}" FIRST. Follow the function signatures defined there EXACTLY — ` +
       `same function names, same parameter names, same parameter order, same return types. ` +
       `Do NOT invent new function signatures or rename parameters. The blueprint is the Single Source of Truth.`
+  }
+}
+
+function isBlueprintLikeStep(step: PlanStep): step is SubagentTaskStep {
+  if (step.stepType !== "subagent_task") return false
+  const sa = step as SubagentTaskStep
+  if (/blueprint/i.test(sa.name)) return true
+  return sa.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+}
+
+function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: string, forcedOutputDir: string | null): void {
+  const blueprintSteps = plan.steps.filter(isBlueprintLikeStep)
+  if (blueprintSteps.length === 0) return
+
+  const outputDir = forcedOutputDir ?? inferOutputDir(blueprintSteps) ?? "tmp"
+  const blueprintPath = blueprintSteps[0].executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+    ?? `${outputDir}/BLUEPRINT.md`
+
+  for (const step of blueprintSteps) {
+    const criteria = new Set(step.acceptanceCriteria)
+    criteria.add("Defines complete function signatures for ALL planned modules — every function that will be called across files must appear with exact parameter names and types")
+    criteria.add("Specifies shared data types used across files — including all state metadata needed for the declared rules and edge cases")
+    criteria.add("Each function handling complex logic includes a complete algorithmic contract listing all cases/rules it must handle")
+    criteria.add("No function contract is a one-line summary like 'returns true if valid' — every contract specifies what makes the result correct")
+
+    ;(step as unknown as { acceptanceCriteria: string[] }).acceptanceCriteria = [...criteria]
+    if (!step.objective.includes("BLUEPRINT DEPTH REQUIREMENTS:")) {
+      ;(step as unknown as { objective: string }).objective =
+        `${step.objective}\n\n` +
+        `BLUEPRINT DEPTH REQUIREMENTS:\n` +
+        `- This is a CONTRACT document, not implementation code.\n` +
+        `- For every non-trivial function, enumerate the full algorithmic contract: all cases, rules, constraints, and edge cases.\n` +
+        `- Do NOT add fake runtime-verification sections, test plans, or execution-history prose.\n` +
+        `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.`
+    }
+    ;(step.executionContext as unknown as { workspaceRoot: string }).workspaceRoot = step.executionContext.workspaceRoot || workspaceRoot
+    if (!step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))) {
+      ;(step.executionContext as unknown as { targetArtifacts: string[] }).targetArtifacts = [blueprintPath, ...step.executionContext.targetArtifacts]
+    }
+    if (!step.executionContext.allowedTools.includes("read_file")) {
+      ;(step.executionContext as unknown as { allowedTools: string[] }).allowedTools = [...step.executionContext.allowedTools, "read_file"]
+    }
+    if (!step.requiredToolCapabilities.includes("read_file")) {
+      ;(step as unknown as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [...step.requiredToolCapabilities, "read_file"]
+    }
+    ;(step.executionContext as unknown as { verificationMode: "none" | "basic" | "strict" }).verificationMode = "none"
+  }
+
+  for (const step of plan.steps) {
+    if (step.stepType !== "subagent_task") continue
+    if (blueprintSteps.some((blueprint) => blueprint.name === step.name)) continue
+    const sa = step as SubagentTaskStep
+    const deps = sa.dependsOn ? [...sa.dependsOn] : []
+    if (!deps.includes(blueprintSteps[0].name)) {
+      deps.push(blueprintSteps[0].name)
+    }
+    ;(sa as unknown as { dependsOn: string[] }).dependsOn = deps
+
+    const sources = new Set(sa.executionContext.requiredSourceArtifacts)
+    sources.add(blueprintPath)
+    ;(sa.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [...sources]
   }
 }
 
@@ -859,6 +923,7 @@ export async function executePlannerPath(
   // signatures, data types, and inter-file contracts that all implementation
   // steps must follow. This prevents Variable Drift across child agents.
   injectBlueprintStep(plan, ctx.workspaceRoot, forcedOutputDir)
+  strengthenExistingBlueprintSteps(plan, ctx.workspaceRoot, forcedOutputDir)
 
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks
   // Build step profiles for the delegation decision system

@@ -2,9 +2,10 @@
  * IOE editor-area panels — Trace (DAG-style), LLM Calls, Map, EditorTabs.
  */
 
+import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { AgentDefinition, Run, TraceEntry } from "../../types"
-import { fmtTokens, remediationHintForValidationCode, truncate } from "../../util"
+import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
+import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
   C,
   fmtK,
@@ -212,40 +213,21 @@ export function EditorTabs({
   current,
   onChange,
   trace,
+  stepCount,
 }: {
   current: EditorTab
   onChange: (tab: EditorTab) => void
   trace: TraceEntry[]
+  stepCount?: number
 }) {
-  const visibleTraceCount = useMemo(() =>
-    trace.filter((e) =>
-      e.kind === "goal" || e.kind === "iteration" || e.kind === "thinking" ||
-      e.kind === "tool-call" || e.kind === "tool-result" || e.kind === "tool-error" ||
-      e.kind === "answer" || e.kind === "error" || e.kind === "usage" ||
-      e.kind === "delegation-start" || e.kind === "delegation-end" || e.kind === "delegation-iteration" ||
-      e.kind === "delegation-parallel-start" || e.kind === "delegation-parallel-end" ||
-      e.kind === "planner-decision" || e.kind === "planner-plan-generated" ||
-      e.kind === "planner-step-start" || e.kind === "planner-step-end" ||
-      e.kind === "planner-pipeline-start" || e.kind === "planner-pipeline-end" ||
-      e.kind === "planner-verification" || e.kind === "planner-retry" ||
-      e.kind === "planner-output-root-forced" || e.kind === "planner-validation-warnings" ||
-      e.kind === "planner-delegation-decision" || e.kind === "planner-budget-extended" ||
-      e.kind === "planner-escalation" || e.kind === "planner-retry-abort" ||
-      e.kind === "planner-retry-skip" ||
-      e.kind === "planner-delegation-start" || e.kind === "planner-delegation-iteration" || e.kind === "planner-delegation-end" ||
-      e.kind === "workspace_diff" || e.kind === "workspace_diff_applied"
-    ).length,
-    [trace],
-  )
-
   const llmCallCount = useMemo(() => {
     // Show total meaningful events count — covers both chat and planner modes
     return trace.length
   }, [trace])
 
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
-    { id: "trace", label: "Trace", count: visibleTraceCount },
-    { id: "llm-calls", label: "Agent Loop", count: llmCallCount },
+    { id: "llm-calls", label: "Trace", count: llmCallCount },
+    { id: "tool-timeline", label: "Tool Timeline", count: stepCount },
     { id: "map", label: "Map" },
   ]
 
@@ -272,6 +254,134 @@ export function EditorTabs({
         </button>
       ))}
     </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ToolTimelinePanel — vertical timeline of tool calls (live)
+// ═══════════════════════════════════════════════════════════════════
+
+export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [steps.length])
+
+  if (steps.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-[13px]" style={{ color: C.dim }}>
+        No steps yet
+      </div>
+    )
+  }
+
+  return (
+    <div ref={ref} className="h-full overflow-y-auto p-3 space-y-0">
+      {steps.map((step, i) => {
+        const isLast = i === steps.length - 1
+        const isRunning = step.status === "running"
+        const duration = step.startedAt && step.completedAt
+          ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
+          : null
+
+        const StatusIcon = isRunning
+          ? Loader2
+          : step.status === "completed"
+          ? CheckCircle2
+          : step.status === "failed"
+          ? XCircle
+          : Circle
+
+        const iconColor = isRunning
+          ? C.accent
+          : step.status === "completed"
+          ? C.success
+          : step.status === "failed"
+          ? C.error
+          : C.dim
+
+        return (
+          <div key={step.id} className="flex gap-3">
+            {/* Timeline line + icon */}
+            <div className="flex flex-col items-center shrink-0">
+              <StatusIcon
+                size={18}
+                className={`mt-0.5 ${isRunning ? "animate-spin" : ""}`}
+                style={{ color: iconColor }}
+              />
+              {!isLast && (
+                <div className="w-px flex-1 my-1" style={{ background: C.elevated }} />
+              )}
+            </div>
+
+            {/* Content */}
+            <div
+              className="flex-1 pb-3 cursor-pointer select-none"
+              onClick={() => setExpanded(expanded === step.id ? null : step.id)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium" style={{ color: C.text }}>{step.name}</span>
+                {duration !== null && (
+                  <span className="text-[13px] font-mono" style={{ color: C.dim }}>
+                    {formatMs(duration)}
+                  </span>
+                )}
+              </div>
+              <div className="text-[13px] mt-0.5" style={{ color: C.dim }}>
+                {step.action}
+                {step.error && (
+                  <span className="ml-2" style={{ color: C.error }}>{String(step.error)}</span>
+                )}
+                {(() => {
+                  const attempts = step.output && Number((step.output as Record<string, unknown>)["attempts"]);
+                  return attempts && attempts > 1 ? (
+                    <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded" style={{ background: `${C.warning}19`, color: C.warning }}>
+                      <RotateCcw size={10} className="inline mr-0.5 -mt-0.5" />
+                      {attempts} attempts
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+
+              {/* Expanded detail */}
+              {expanded === step.id && (
+                <div className="mt-2 space-y-2">
+                  {step.input && Object.keys(step.input).length > 0 && (
+                    <div>
+                      <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Input</span>
+                      <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
+                        style={{ color: C.textSecondary, background: C.base }}>
+                        {JSON.stringify(step.input, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {step.output && Object.keys(step.output).length > 0 && (
+                    <div>
+                      <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Output</span>
+                      <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
+                        style={{ color: C.textSecondary, background: C.base }}>
+                        {JSON.stringify(step.output, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {step.error && (
+                    <div>
+                      <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Error</span>
+                      <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap break-all"
+                        style={{ color: C.error, background: C.base }}>
+                        {step.error}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1428,9 +1538,9 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
                   <span className="font-semibold" style={{ color: sColor }}>{s.outcome}</span>
                   <span className="ml-2" style={{ color: C.text }}>{s.stepName}</span>
                   {s.issues.length > 0 && (
-                    <div className="ml-4">
+                    <div className="ml-4 mt-1 space-y-1">
                       {s.issues.map((issue: string, ii: number) => (
-                        <div key={ii} style={{ color: C.dim }}>• {issue}</div>
+                        <ExpandableMessage key={ii} label="ISSUE" text={issue} color={C.dim} />
                       ))}
                     </div>
                   )}
@@ -1763,11 +1873,9 @@ function VerificationBlock({ verification: v }: { verification: VerificationGrou
                       <span style={{ color: C.text }}>{s.stepName}</span>
                     </div>
                     {s.issues.length > 0 && (
-                      <div className="ml-2 mt-0.5">
+                      <div className="ml-2 mt-0.5 space-y-1">
                         {s.issues.map((issue, ii) => (
-                          <div key={ii} style={{ color: C.dim }}>
-                            • {issue}
-                          </div>
+                          <ExpandableMessage key={ii} label="ISSUE" text={issue} color={C.dim} />
                         ))}
                       </div>
                     )}
@@ -1794,7 +1902,10 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
 
   // Show failure reason from validation code or error
   const failReason = en && status === "failed"
-    ? (en.validationCode ? remediationHintForValidationCode(en.validationCode) : en.error ?? null)
+    ? (en.error ?? (en.validationCode ? remediationHintForValidationCode(en.validationCode) : null))
+    : null
+  const failHint = en && status === "failed" && en.validationCode
+    ? remediationHintForValidationCode(en.validationCode)
     : null
 
   // Did the child report "done" but pipeline validation rejected it?
@@ -1814,14 +1925,19 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
             <PlannerChildBlock start={s.childStart} end={s.childEnd} iterations={s.iterations} />
           )}
           {overridden && failReason && (
-            <div className="py-0.5 px-2 text-[12px] flex items-start gap-1.5" style={{ color: C.coral }}>
-              <span className="font-semibold shrink-0">VALIDATION REJECTED</span>
-              <span style={{ color: C.dim }}>{failReason}</span>
+            <div className="py-0.5 px-2 text-[12px] space-y-1" style={{ color: C.coral }}>
+              <ExpandableMessage label="VALIDATION REJECTED" text={failReason} color={C.coral} />
+              {failHint && failHint !== failReason && (
+                <div className="pl-1" style={{ color: C.dim }}>{failHint}</div>
+              )}
             </div>
           )}
           {!overridden && failReason && (
-            <div className="py-0.5 px-2 text-[12px]" style={{ color: C.coral }}>
-              {failReason}
+            <div className="py-0.5 px-2 text-[12px] space-y-1" style={{ color: C.coral }}>
+              <ExpandableMessage label="FAIL" text={failReason} color={C.coral} />
+              {failHint && failHint !== failReason && (
+                <div className="pl-1" style={{ color: C.dim }}>{failHint}</div>
+              )}
             </div>
           )}
           {s.events.map((e, i) => (
@@ -2364,6 +2480,35 @@ function FlatRow({ label, labelColor, detail }: {
   )
 }
 
+function ExpandableMessage({
+  label,
+  text,
+  color,
+  preview = 140,
+}: {
+  label?: string
+  text: string
+  color: string
+  preview?: number
+}) {
+  const compact = text.length > preview ? truncate(text, preview) : text
+  return (
+    <details className="rounded" style={{ border: `1px solid ${C.border}`, background: C.base }}>
+      <summary className="cursor-pointer list-none px-2 py-1.5 text-[12px]" style={{ color }}>
+        {label ? <span className="font-semibold mr-1.5">{label}</span> : null}
+        <span>{compact}</span>
+        {text.length > preview ? <span style={{ color: C.dim }}> click to expand</span> : null}
+      </summary>
+      <pre
+        className="whitespace-pre-wrap break-words px-2 pb-2 text-[12px] overflow-auto"
+        style={{ color, maxHeight: 220 }}
+      >
+        {text}
+      </pre>
+    </details>
+  )
+}
+
 /** Scrollable content pane */
 function Pane({ text, maxH = 400, color }: { text: string; maxH?: number; color?: string }) {
   return (
@@ -2447,6 +2592,7 @@ export function MapPanel({
   const zoomBaseRef = useRef(1)
   const animPhaseRef = useRef(0)
   const rafRef = useRef<number>(0)
+  const autoFitTimerRef = useRef<number | null>(null)
 
   const isRunning = run?.status === "running"
   const activeAgentId = run?.agentId ?? null
@@ -2848,6 +2994,12 @@ export function MapPanel({
     return { nodes, links }
   }, [agents, traceDelegations, tracePlanSteps, tracePlannerChildren, activeAgentId, involvedToolIds, planDag, planStepStatuses])
 
+  const graphFingerprint = useMemo(() => {
+    const nodeCount = graphData.nodes.length
+    const linkCount = graphData.links.length
+    return `${planDag ? "dag" : "force"}:${nodeCount}:${linkCount}`
+  }, [graphData.links.length, graphData.nodes.length, planDag])
+
   // Set of currently-running tool IDs (for highlighting)
   const activeToolSet = useMemo(() => {
     const set = new Set<string>()
@@ -2909,20 +3061,32 @@ export function MapPanel({
     }
   }, [planDag]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fit to view
+  // Fit to view whenever the map panel size or graph content meaningfully changes.
+  // The old behavior only fit on agent-count changes, so the graph could stay stuck
+  // in an old viewport after editor/sidebar resizes and leave large unused space.
   useEffect(() => {
     const fg = graphRef.current
-    if (!fg || agents.length === 0) return
-    const timer = setTimeout(() => {
-      fg.zoomToFit(400, 60)
-      setTimeout(() => {
+    if (!fg || size.w <= 0 || size.h <= 0 || graphData.nodes.length === 0) return
+
+    if (autoFitTimerRef.current != null) window.clearTimeout(autoFitTimerRef.current)
+
+    autoFitTimerRef.current = window.setTimeout(() => {
+      const padding = planDag ? 80 : 60
+      fg.zoomToFit(350, padding)
+      window.setTimeout(() => {
         const z = fg.zoom()
         zoomBaseRef.current = z
         setZoomLevel(100)
-      }, 450)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [agents.length, planDag])
+      }, 380)
+    }, 120)
+
+    return () => {
+      if (autoFitTimerRef.current != null) {
+        window.clearTimeout(autoFitTimerRef.current)
+        autoFitTimerRef.current = null
+      }
+    }
+  }, [graphFingerprint, size.h, size.w, planDag, graphData.nodes.length])
 
   // Track zoom
   const handleZoom = useCallback((transform: { k: number }) => {
@@ -3292,6 +3456,7 @@ export function MapPanel({
     <div ref={containerRef} className="relative w-full h-full overflow-hidden select-none" style={{ background: C.base }}>
       {/* Force-directed graph */}
       <div className="absolute inset-0" style={{ cursor: "grab" }}>
+        {size.w > 0 && size.h > 0 && (
         <ForceGraph2D
           key={planDag ? "dag" : "force"}
           ref={graphRef}
@@ -3319,6 +3484,7 @@ export function MapPanel({
           dagMode={planDag ? "td" : undefined}
           dagLevelDistance={planDag ? 70 : 80}
         />
+        )}
       </div>
 
       {/* Zoom controls — bottom center */}

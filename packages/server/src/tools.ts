@@ -10,6 +10,7 @@ import {
     askUserTool,
     browserCheckTool,
     browseWebTool,
+    createDelegateTools,
     fetchUrlTool,
     listDirectoryTool,
     mssqlSchemaTool,
@@ -20,8 +21,10 @@ import {
     shellTool,
     thinkTool,
     writeFileTool,
+    type LLMClient,
     type Tool,
 } from "@agent001/agent"
+import { AgentBus, createBusTools } from "./agent-bus.js"
 
 export { thinkTool }
 
@@ -50,6 +53,36 @@ const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
 // so existing agent definitions that reference it don't crash.
 toolMap.set(thinkTool.name, thinkTool)
 
+const catalogLlm: LLMClient = {
+  async chat() {
+    return {
+      content: "",
+      toolCalls: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    }
+  },
+}
+
+function listRuntimeCatalogTools(): Tool[] {
+  const catalog = new Map<string, Tool>()
+
+  for (const tool of toolMap.values()) catalog.set(tool.name, tool)
+
+  const delegateTools = createDelegateTools({
+    llm: catalogLlm,
+    availableTools: [...ALL_TOOLS],
+    depth: 0,
+    maxDepth: 1,
+    resolveAgent: () => null,
+  })
+  for (const tool of delegateTools) catalog.set(tool.name, tool)
+
+  const busTools = createBusTools(new AgentBus("catalog"), "catalog", "Catalog Agent")
+  for (const tool of busTools) catalog.set(tool.name, tool)
+
+  return [...catalog.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /** Get all registered tools as a Map. */
 export function getToolMap(): ReadonlyMap<string, Tool> {
   return toolMap
@@ -66,7 +99,7 @@ export function resolveTools(names: string[]): Tool[] {
 
 /** List all available tool names + descriptions (for API/UI). */
 export function listAvailableTools(): ToolInfo[] {
-  return ALL_TOOLS.map((t) => ({ name: t.name, description: t.description }))
+  return listRuntimeCatalogTools().map((t) => ({ name: t.name, description: t.description }))
 }
 
 /** Get all registered tools as an array. */

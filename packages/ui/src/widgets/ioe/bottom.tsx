@@ -66,14 +66,18 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
     return <div className="px-3 py-2" style={{ color: C.success }}>No problems detected</div>
   }
   return (
-    <div className="px-3 py-1">
+    <div className="px-3 py-2 space-y-2 overflow-y-auto h-full">
       {problems.map((p, i) => (
-        <div key={i} className="flex items-start gap-2 py-0.5">
+        <div
+          key={i}
+          className="grid grid-cols-[14px_56px_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-md px-2 py-1.5"
+          style={{ background: `${C.coral}0f`, border: `1px solid ${C.coral}22` }}
+        >
           <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: C.coral }} />
-          <span className="text-[13px] shrink-0 uppercase w-12" style={{ color: C.dim }}>{p.source}</span>
-          <span style={{ color: C.coral }}>{p.text}</span>
+          <span className="text-[11px] leading-5 shrink-0 uppercase tracking-wide" style={{ color: C.dim }}>{p.source}</span>
+          <span className="min-w-0 break-words leading-5" style={{ color: C.coral }}>{p.text}</span>
           {p.time && (
-            <span className="ml-auto shrink-0" style={{ color: C.dim }}>{ts(p.time)}</span>
+            <span className="shrink-0 text-[11px] leading-5 text-right" style={{ color: C.dim }}>{ts(p.time)}</span>
           )}
         </div>
       ))}

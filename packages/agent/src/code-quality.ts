@@ -36,6 +36,8 @@ export const PLACEHOLDER_PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /\/\/\s*(?:same|similar|code continues?)\s+(?:as\s+)?(?:above|before|previously|existing)\b/gi, label: "degeneration comment (references code that should be written)" },
   { re: /\/\/\s*(?:as\s+per|as\s+in)\s+(?:existing|previous|above|the\s+original)\b/gi, label: "degeneration comment (references code that should be written)" },
   { re: /\/\/\s*\.{3}\s*(?:remaining|rest|other|more)\b/gi, label: "degeneration comment (elided code)" },
+  { re: /\/\/\s*add(?:\s+more)?\s+.*\b(?:logic|handling|implementation|checks?)\s+here\b/gi, label: "placeholder comment (asks to add logic later)" },
+  { re: /\/\/\s*for\s+now\b.*\b(?:assume|always|return)\b/gi, label: "deferred-work comment (temporary behavior)" },
   // Trivially-returning validation functions — both `function` declarations AND class methods
   {
     re: /function\s+(is\w+|validate\w*|check\w*|compute\w*|calculate\w*|can\w+)\s*\([^)]*\)\s*\{[\s\n]*return\s+(true|false)\s*;?\s*\}/gi,

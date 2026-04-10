@@ -34,7 +34,7 @@ export const C = {
 // ── Layout types ─────────────────────────────────────────────────
 
 export type SidebarSection = "runs" | "compare" | "details"
-export type EditorTab = "trace" | "llm-calls" | "map"
+export type EditorTab = "tool-timeline" | "llm-calls" | "map"
 export type BottomTab = "output" | "audit" | "problems"
 export type PanelSide = "left" | "right"
 

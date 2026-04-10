@@ -17,23 +17,23 @@
 
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../code-quality.js"
 import {
-  buildContractSpec,
-  getCorrectionGuidance,
-  specRequiresFileMutationEvidence,
-  specRequiresSuccessfulToolEvidence,
-  validateDelegatedOutputContract,
-  type DelegationOutputValidationCode,
+    buildContractSpec,
+    getCorrectionGuidance,
+    specRequiresFileMutationEvidence,
+    specRequiresSuccessfulToolEvidence,
+    validateDelegatedOutputContract,
+    type DelegationOutputValidationCode,
 } from "../delegation-validation.js"
 import type { ToolCallRecord } from "../recovery.js"
 import type { Tool } from "../types.js"
 import type {
-  DeterministicToolStep,
-  ExecutionEnvelope,
-  PipelineResult,
-  PipelineStepResult,
-  Plan,
-  PlanStep,
-  SubagentTaskStep
+    DeterministicToolStep,
+    ExecutionEnvelope,
+    PipelineResult,
+    PipelineStepResult,
+    Plan,
+    PlanStep,
+    SubagentTaskStep
 } from "./types.js"
 
 // ============================================================================
@@ -212,6 +212,11 @@ export async function executePipeline(
           : ""
 
         const hasReplaceInFile = toolMap.has("replace_in_file")
+        const docsOnlyTargets = sa.executionContext.targetArtifacts.length > 0 &&
+          sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
+        const blueprintRetryGuidance = docsOnlyTargets || /blueprint/i.test(sa.name)
+          ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.`
+          : ""
         const retryRules = hasReplaceInFile
           ? (avoidReplaceInFile
             ? "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. replace_in_file appears brittle in this step (repeated old_string misses). Use write_file with FULL-FILE preservation instead.\n3. Build from the latest file content: keep all existing working code and apply only the requested fixes.\n4. write_file REPLACES the entire file — never output partial fragments.\n5. Do not introduce placeholders, stubs, or narrative comments in code."
@@ -220,7 +225,7 @@ export async function executePipeline(
 
         effectiveStep = {
           ...sa,
-          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}\n\n${retryRules}`,
+          objective: `${sa.objective}\n\n[RETRY — fix these issues from the previous attempt]:\n${feedback.map(f => `- ${f}`).join("\n")}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
           executionContext: {
             ...sa.executionContext,
             requiredSourceArtifacts: [...existingSource],

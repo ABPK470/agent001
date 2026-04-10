@@ -6,19 +6,23 @@
  */
 
 import {
-    CircleDot,
-    Columns2,
-    Download,
-    GitCompareArrows,
-    History,
-    Info,
-    MessageSquare,
-    PanelBottom,
-    Search,
-    Square,
-    Terminal,
-    X,
-    type LucideIcon
+  CheckCircle2,
+  Circle,
+  Columns2,
+  Download,
+  GitCompareArrows,
+  History,
+  Info,
+  Loader2,
+  MessageSquare,
+  PanelBottom,
+  Rows2,
+  Search,
+  Square,
+  Terminal,
+  X,
+  XCircle,
+  type LucideIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -28,27 +32,27 @@ import { fmtTokens } from "../util"
 import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel } from "./ioe/chat"
 import {
-    C,
-    buildChatMessages,
-    buildProblems,
-    buildSearchResults,
-    dur,
-    fmtK,
-    statusDot,
-    type BottomTab,
-    type EditorTab,
-    type HealthData,
-    type LlmConfig,
-    type SidebarSection,
-    type UsageData
+  C,
+  buildChatMessages,
+  buildProblems,
+  buildSearchResults,
+  dur,
+  fmtK,
+  statusDot,
+  type BottomTab,
+  type EditorTab,
+  type HealthData,
+  type LlmConfig,
+  type SidebarSection,
+  type UsageData
 } from "./ioe/constants"
-import { EditorTabs, LlmCallsPanel, MapPanel, TracePanel, exportAgentLoop } from "./ioe/editors"
+import { EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
-    ComparePanel,
-    DetailsPanel,
-    RunsPanel,
-    SearchResultsList,
+  ComparePanel,
+  DetailsPanel,
+  RunsPanel,
+  SearchResultsList,
 } from "./ioe/sidebar"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -93,6 +97,11 @@ export function OperatorEnvironment() {
   const setSidebarSection = useCallback((v: SidebarSection) => setIoeLayout({ sidebarSection: v }), [setIoeLayout])
   const sidebarVisible = ioeLayout.sidebarVisible
   const setSidebarVisible = useCallback((v: boolean) => setIoeLayout({ sidebarVisible: v }), [setIoeLayout])
+  const sidebarSplit = ioeLayout.sidebarSplit
+  const setSidebarSplit = useCallback((v: boolean) => setIoeLayout({ sidebarSplit: v }), [setIoeLayout])
+  const sidebarBottomSection = (ioeLayout.sidebarBottomSection ?? "runs") as SidebarSection
+  const setSidebarBottomSection = useCallback((v: SidebarSection) => setIoeLayout({ sidebarBottomSection: v }), [setIoeLayout])
+  const sidebarSplitRatio = ioeLayout.sidebarSplitRatio ?? 0.5
   const bottomVisible = ioeLayout.bottomVisible
   const setBottomVisible = useCallback((v: boolean) => setIoeLayout({ bottomVisible: v }), [setIoeLayout])
   const chatVisible = ioeLayout.chatVisible
@@ -138,7 +147,7 @@ export function OperatorEnvironment() {
     api.getUsage().then(setUsage).catch(() => {})
     api.getLlmConfig().then(setLlm).catch(() => {})
     api.health().then(setHealth).catch(() => {})
-  }, [runs.length])
+  }, [runs.length, activeRunId])
 
   // ── Auto-scroll logs ──────────────────────────────────────────
   useEffect(() => {
@@ -303,6 +312,61 @@ export function OperatorEnvironment() {
     { id: "details", Icon: Info, label: "Details" },
   ]
 
+  const renderSidebarTabs = (
+    current: SidebarSection,
+    onChange: (section: SidebarSection) => void,
+    showSplitToggle = false,
+  ) => (
+    <div className="flex items-stretch shrink-0 min-h-[34px]" style={{ borderBottom: `1px solid ${C.border}` }}>
+      <div className="flex min-w-0 flex-1 overflow-x-auto">
+        {activityItems.map((item) => {
+          const active = current === item.id
+          return (
+            <button
+              key={item.id}
+              className="px-3 text-[12px] uppercase tracking-wide whitespace-nowrap transition-colors cursor-pointer border-r last:border-r-0"
+              style={{
+                color: active ? C.text : C.muted,
+                background: active ? C.base : "transparent",
+                borderBottom: active ? `1px solid ${C.accent}` : "1px solid transparent",
+                borderRightColor: C.border,
+              }}
+              onClick={() => onChange(item.id)}
+              title={item.label}
+            >
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+      {showSplitToggle && (
+        <button
+          className="px-2 mx-1 my-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+          style={{ color: editorSplit ? C.text : C.dim }}
+          // style={{ color: sidebarSplit ? C.text : C.dim, background: sidebarSplit ? C.base : "transparent" }}
+          onClick={() => setSidebarSplit(!sidebarSplit)}
+          title={sidebarSplit ? "Unsplit sidebar" : "Split sidebar"}
+        >
+          <Rows2 size={14} />
+        </button>
+      )}
+    </div>
+  )
+
+  const objectiveStatus = useMemo(() => {
+    if (!activeRun) return { Icon: Circle, color: C.dim, spin: false }
+    if (activeRun.status === "running" || activeRun.status === "planning") {
+      return { Icon: Loader2, color: statusDot(activeRun.status), spin: true }
+    }
+    if (activeRun.status === "completed") {
+      return { Icon: CheckCircle2, color: statusDot(activeRun.status), spin: false }
+    }
+    if (activeRun.status === "failed" || activeRun.status === "cancelled") {
+      return { Icon: XCircle, color: statusDot(activeRun.status), spin: false }
+    }
+    return { Icon: Circle, color: statusDot(activeRun.status), spin: false }
+  }, [activeRun])
+
   // ═════════════════════════════════════════════════════════════════
   //  RENDER
   // ═════════════════════════════════════════════════════════════════
@@ -342,11 +406,12 @@ export function OperatorEnvironment() {
   }
 
   const renderEditorContent = (tab: EditorTab) => {
-    if (tab === "trace") return <TracePanel trace={trace} />
+    if (tab === "tool-timeline") return <ToolTimelinePanel steps={steps} />
     if (tab === "llm-calls") return <LlmCallsPanel trace={trace} />
     if (tab === "map")
       return <MapPanel trace={trace} run={activeRun} agents={agents} />
-    return null
+    // Fallback for old persisted "trace" → show tool-timeline
+    return <ToolTimelinePanel steps={steps} />
   }
 
   return (
@@ -461,16 +526,50 @@ export function OperatorEnvironment() {
             style={{ width: sidebar.size, borderRight: `1px solid ${C.borderSolid}`, background: C.surface }}
           >
           <TipProvider>
-            <div
-              className="flex items-center justify-between px-3 py-1.5 text-[13px] uppercase tracking-wider shrink-0 select-none cursor-default"
-              style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}
+            {/* ── Sidebar top panel ─── */}
+            <div className={sidebarSplit ? "flex flex-col min-h-0 overflow-hidden" : "flex flex-col flex-1 min-h-0 overflow-hidden"}
+              style={sidebarSplit ? { height: `${sidebarSplitRatio * 100}%` } : undefined}
             >
-              <span>{sidebarSection}</span>
+              {renderSidebarTabs(sidebarSection, setSidebarSection, true)}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {renderSidebarSection(sidebarSection)}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {renderSidebarSection(sidebarSection)}
-            </div>
+            {/* ── Sidebar split divider + bottom panel ─── */}
+            {sidebarSplit && (
+              <>
+                <div
+                  className="h-1 cursor-row-resize shrink-0 hover:bg-accent/30 active:bg-accent/50 transition-colors"
+                  style={{ borderTop: `1px solid ${C.border}` }}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    const parent = (e.target as HTMLElement).closest("[data-sidebar-panel]")
+                    if (!parent) return
+                    const startY = e.clientY
+                    const startRatio = sidebarSplitRatio
+                    const totalH = parent.getBoundingClientRect().height
+                    const onMove = (ev: MouseEvent) => {
+                      const delta = ev.clientY - startY
+                      const newRatio = Math.max(0.15, Math.min(0.85, startRatio + delta / totalH))
+                      setIoeLayout({ sidebarSplitRatio: newRatio })
+                    }
+                    const onUp = () => {
+                      document.removeEventListener("mousemove", onMove)
+                      document.removeEventListener("mouseup", onUp)
+                    }
+                    document.addEventListener("mousemove", onMove)
+                    document.addEventListener("mouseup", onUp)
+                  }}
+                />
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  {renderSidebarTabs(sidebarBottomSection, setSidebarBottomSection)}
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {renderSidebarSection(sidebarBottomSection)}
+                  </div>
+                </div>
+              </>
+            )}
           </TipProvider>
           </div>
         )}
@@ -488,7 +587,11 @@ export function OperatorEnvironment() {
             className="flex items-center gap-2 px-3 py-1.5 shrink-0 text-[13px]"
             style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}
           >
-            <CircleDot size={14} style={{ color: activeRun ? statusDot(activeRun.status) : C.dim }} />
+            <objectiveStatus.Icon
+              size={14}
+              className={objectiveStatus.spin ? "animate-spin" : undefined}
+              style={{ color: objectiveStatus.color }}
+            />
             <span className="truncate flex-1" style={{ color: activeRun ? C.text : C.muted }}>
               {activeRun ? activeRun.goal : "No active run — submit a goal below"}
             </span>
@@ -572,6 +675,7 @@ export function OperatorEnvironment() {
                   current={editorTab}
                   onChange={setEditorTab}
                   trace={trace}
+                  stepCount={steps.length}
                 />
                 <div className="flex-1" />
                 {editorTab === "llm-calls" && trace.length > 0 && (
@@ -610,6 +714,7 @@ export function OperatorEnvironment() {
                       current={editorRightTab}
                       onChange={setEditorRightTab}
                       trace={trace}
+                      stepCount={steps.length}
                     />
                     <div className="flex-1" />
                     {editorRightTab === "llm-calls" && trace.length > 0 && (
@@ -692,7 +797,7 @@ export function OperatorEnvironment() {
                   onClick={() => setBottomSplit(!bottomSplit)}
                   title="Split bottom panel"
                 >
-                  <Columns2 size={13} />
+                  <Columns2 size={14} />
                 </button>
               </div>
 

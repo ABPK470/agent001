@@ -49,6 +49,7 @@ export function DetailsPanel({
       <TreeSection title="Active Run" defaultOpen>
         {run ? (
           <>
+            <TreeItem label="Run ID" value={run.id} />
             <TreeItem label="Status" value={run.status} valueColor={statusDot(run.status)} />
             <TreeItem label="Goal" value={run.goal} />
             <TreeItem label="Steps" value={String(run.stepCount)} />
@@ -67,7 +68,7 @@ export function DetailsPanel({
 
       {run && <WorkspaceChangesSection run={run} />}
 
-      <TreeSection title="System" defaultOpen>
+      <TreeSection title="System">
         {llm && (
           <>
             <TreeItem label="Provider" value={llm.provider} />
@@ -92,7 +93,7 @@ export function DetailsPanel({
         )}
       </TreeSection>
 
-      <TreeSection title={`Agents (${agents.length})`} defaultOpen>
+      <TreeSection title={`Agents (${agents.length})`}>
         {agents.map((a) => (
           <div key={a.id} className="px-4 py-1 min-w-0">
             <div className="truncate" style={{ color: C.text }}>{a.name}</div>
@@ -106,7 +107,7 @@ export function DetailsPanel({
         ))}
       </TreeSection>
 
-      <TreeSection title={`Tools (${tools.length})`} defaultOpen>
+      <TreeSection title={`Tools (${tools.length})`}>
         {tools.map((t) => (
           <div key={t.name} className="px-4 py-1 min-w-0">
             <div className="truncate" style={{ color: C.accent }}>{t.name}</div>
@@ -198,7 +199,7 @@ function WorkspaceChangesSection({ run }: { run: Run }) {
   const pending = diff?.total ?? run.pendingWorkspaceChanges ?? 0
 
   return (
-    <TreeSection title="Workspace Changes" defaultOpen={pending > 0}>
+    <TreeSection title="Workspace Changes" defaultOpen>
       {pending > 0 ? (
         <div className="px-4 py-1 space-y-1.5">
           <div className="text-[12px]" style={{ color: C.warning }}>{pending} pending changes</div>
