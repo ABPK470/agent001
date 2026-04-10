@@ -30,17 +30,17 @@ import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
-  RoundStuckState,
-  ToolLoopState,
-  ToolRoundProgressSummary,
+    RoundStuckState,
+    ToolLoopState,
+    ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-  checkToolLoopStuckDetection,
-  enrichToolResultMetadata as enrichResult,
-  evaluateToolRoundBudgetExtension,
-  executeToolWithTimeout,
-  summarizeToolRoundProgress,
-  trackToolCallFailureState,
+    checkToolLoopStuckDetection,
+    enrichToolResultMetadata as enrichResult,
+    evaluateToolRoundBudgetExtension,
+    executeToolWithTimeout,
+    summarizeToolRoundProgress,
+    trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -689,6 +689,8 @@ export class Agent {
     // through to the direct tool loop. This produces structured plans with
     // typed execution envelopes for higher delegation quality.
     if (this.config.enablePlanner && !resume && this.config.plannerDelegateFn) {
+      this.config.onPlannerTrace?.({ kind: "planning_preflight", mode: "planner-first" })
+
       const plannerCtx: PlannerContext = {
         llm: this.llm,
         tools: this.toolList,
@@ -715,6 +717,8 @@ export class Agent {
         log.logError(`Planner skipped: ${plannerResult.skipReason}`)
       }
 
+      let directLoopFallbackSource: "planner_declined" | "planner_verifier_low_complexity" = "planner_declined"
+
       // If the planner tried but verification failed, prefer a second
       // structured planner pass over falling through to an unstructured loop.
       if (plannerResult.verifierDecision && plannerResult.verifierDecision.overall !== "pass") {
@@ -723,7 +727,18 @@ export class Agent {
           .flatMap(s => s.issues.filter(i => !i.startsWith("[non-blocking]")))
 
         const planStepCount = plannerResult.plan?.steps.length ?? 0
-        const isComplexPlannerRun = planStepCount >= 2 || plannerResult.verifierDecision.steps.length >= 2
+        const uniqueTargetArtifacts = new Set(
+          (plannerResult.plan?.steps ?? [])
+            .flatMap((step) => step.stepType === "subagent_task"
+              ? step.executionContext.targetArtifacts
+              : [])
+            .map((artifact) => artifact.replace(/^\.\//, "")),
+        )
+        const isSmallSingleArtifactFallback =
+          planStepCount <= 1
+          && plannerResult.verifierDecision.steps.length <= 1
+          && uniqueTargetArtifacts.size <= 1
+        const isComplexPlannerRun = !isSmallSingleArtifactFallback
 
         if (isComplexPlannerRun) {
           const remediationContext =
@@ -760,6 +775,7 @@ export class Agent {
 
         // Low-complexity fallback: inject tool-aware repair context for direct loop.
         if (unresolvedIssues.length > 0) {
+          directLoopFallbackSource = "planner_verifier_low_complexity"
           const hasReplaceInFile = this.toolList.some(t => t.name === "replace_in_file")
           const editInstruction = hasReplaceInFile
             ? "3. Use replace_in_file for surgical fixes — do NOT rewrite entire files"
@@ -778,6 +794,12 @@ export class Agent {
           messages.push({ role: "user", content: repairMsg })
         }
       }
+
+      this.config.onPlannerTrace?.({
+        kind: "direct_loop_fallback",
+        source: directLoopFallbackSource,
+        reason: plannerResult.skipReason ?? "Planner declined — continuing in the direct tool loop.",
+      })
     }
 
     // ── Direct tool loop ────────────────────────────────────────

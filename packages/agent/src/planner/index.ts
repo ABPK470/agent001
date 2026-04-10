@@ -350,6 +350,19 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
     objective:
       `Create a detailed architectural blueprint file at "${blueprintPath}" for a multi-file project.\n\n` +
       `The project will contain these files: ${artifactList}\n\n` +
+      `CRITICAL FILE CONTRACT: The blueprint MUST declare the EXACT same artifact paths listed above. ` +
+      `Do NOT rename files, move them into a different directory, or invent extra modules. ` +
+      `If the plan says \`tmp/game_logic.js\`, the blueprint must declare \`tmp/game_logic.js\` exactly, not \`game/rules.js\` or any other substitute.\n\n` +
+      `The BLUEPRINT.md MUST include this exact machine-readable block so artifact paths can be validated deterministically:\n` +
+      `\`\`\`blueprint-contract\n` +
+      `{\n` +
+      `  "version": 1,\n` +
+      `  "files": [\n` +
+      `    { "path": "first/exact/path.ext", "purpose": "one-line purpose" }\n` +
+      `  ]\n` +
+      `}\n` +
+      `\`\`\`\n` +
+      `Replace the example file entries with the EXACT planned artifact paths listed above and include every planned artifact exactly once.\n\n` +
       `The BLUEPRINT.md must define:\n` +
       `1. **File Structure**: List every file with a one-line purpose description\n` +
       `2. **Function Signatures**: For EVERY exported function and class method, define the EXACT signature:\n` +
@@ -370,10 +383,12 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
       `\`\`\`\n\n` +
       `Think carefully about the COMPLETE set of functions needed. For a chess game, this means ALL move validation, ` +
       `ALL piece-specific movement, king safety, check/checkmate/stalemate detection, UI rendering, event handling, etc.\n` +
-      `Do NOT write implementation code. ONLY write the blueprint document with signatures and types.`,
+      `Do NOT write implementation code. ONLY write the blueprint document with signatures and types. ` +
+      `The blueprint is invalid if its declared file list does not match the planned artifact list exactly.`,
     inputContract: "Project goal and file list",
     acceptanceCriteria: [
       "Defines complete function signatures for ALL planned modules — every function that will be called across files must appear with exact parameter names and types",
+      `Declares the exact planned artifact paths and only those paths: ${artifactList}`,
       "Specifies shared data types used across files — board representation, piece types, game state shape",
       "Lists inter-file dependencies — which file exports what and which file imports it",
       "Function signatures are specific enough that two independent developers could implement compatible code from them alone",
@@ -466,6 +481,8 @@ function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: string, for
         `BLUEPRINT DEPTH REQUIREMENTS:\n` +
         `- This is a CONTRACT document, not implementation code.\n` +
         `- For every non-trivial function, enumerate the full algorithmic contract: all cases, rules, constraints, and edge cases.\n` +
+        `- The declared file structure MUST match the planned targetArtifacts exactly; do NOT rename paths or invent extra modules.\n` +
+        `- Include a \`blueprint-contract\` JSON block with \`version: 1\` and the EXACT planned artifact paths; this block is the machine-readable source of truth.\n` +
         `- Do NOT add fake runtime-verification sections, test plans, or execution-history prose.\n` +
         `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.`
     }
@@ -795,6 +812,12 @@ function buildPlannerFailurePayload(params: {
  *
  * Returns { handled: true, answer } if the planner handled it,
  * or { handled: false, skipReason } if the task should go to the direct tool loop.
+ *
+ * Important: once a task is accepted into structured planning, unrepaired plan
+ * validation failures are treated as terminal planner failures rather than
+ * downgrading into the direct loop. Falling back after detecting an invalid
+ * multi-step plan causes the exact overwrite regressions the validator exists
+ * to prevent.
  */
 export async function executePlannerPath(
   goal: string,
@@ -887,13 +910,16 @@ export async function executePlannerPath(
       diagnostics: errors,
     })
     const reason = `Validation failed: ${errors.map(d => d.message).join("; ")}`
-    ctx.onTrace?.({
-      kind: "planner-fallback-direct-loop",
-      stage: "validation",
-      reason,
-    })
     return {
-      handled: false,
+      handled: true,
+      answer: buildPlannerFailurePayload({
+        stage: "validation",
+        reason,
+        diagnostics: errors,
+        score: decision.score,
+        plannerReason: decision.reason,
+      }),
+      plan,
       skipReason: reason,
     }
   }

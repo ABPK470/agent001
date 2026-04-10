@@ -29,10 +29,10 @@ export {
     createEngineServices, createToolStep, governTool, printGovernanceReport,
     runGoverned
 } from "./governance.js"
-export type { EngineServices, GovernedResult, GovernToolOptions, RunState } from "./governance.js"
+export type { EngineServices, GovernToolOptions, GovernedResult, RunState } from "./governance.js"
 
 // Retry
-export { isRetryableError, TOOL_RETRY_POLICY, withToolRetry } from "./retry.js"
+export { TOOL_RETRY_POLICY, isRetryableError, withToolRetry } from "./retry.js"
 export type { ToolRetryPolicy, ToolRetryResult } from "./retry.js"
 
 // Recovery & resilience (ported from agenc-core)
@@ -101,26 +101,26 @@ export type { ChatCallUsageRecord, StopReason, ToolKillManager } from "./types.j
 
 // Engine (re-export governance infrastructure for server)
 export {
-    approvalRequired, AuditService, cancelRun,
-    completeRun,
-    completeStep,
-    createRun,
-    failRun,
-    failStep, Learner,
+    AuditService, Learner,
     MemoryAuditRepository,
     MemoryEventBus,
     MemoryExecutionRecordRepository,
     MemoryRunRepository,
     PolicyEffect,
     PolicyViolationError,
-    RulePolicyEvaluator, runCompleted,
+    RulePolicyEvaluator, RunStatus, StepStatus, approvalRequired, cancelRun,
+    completeRun,
+    completeStep,
+    createRun,
+    failRun,
+    failStep, runCompleted,
     runFailed,
-    runStarted, RunStatus, startPlanning,
+    runStarted, startPlanning,
     startRunning,
     startStep,
     stepCompleted,
     stepFailed,
-    stepStarted, StepStatus
+    stepStarted
 } from "./engine/index.js"
 export type {
     AgentRun,
@@ -146,7 +146,7 @@ export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./to
 export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
 export { fetchUrlTool } from "./tools/fetch-url.js"
 export {
-    listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
+    appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
 export {
     closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled

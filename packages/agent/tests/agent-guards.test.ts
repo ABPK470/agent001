@@ -316,4 +316,31 @@ describe("Agent loop guards", () => {
     expect(typeof answer).toBe("string")
     expect(answer.length).toBeGreaterThan(0)
   })
+
+  it("emits planner preflight before direct-loop fallback", async () => {
+    const plannerTrace: Array<Record<string, unknown>> = []
+    const llm = scriptedLLM([
+      { content: "done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [], {
+      verbose: false,
+      enablePlanner: true,
+      plannerDelegateFn: async () => "unused",
+      onPlannerTrace: (entry) => plannerTrace.push(entry),
+    })
+
+    const answer = await agent.run("simple task")
+
+    expect(answer).toBe("done")
+    expect(plannerTrace.map((entry) => entry.kind)).toEqual([
+      "planning_preflight",
+      "planner-decision",
+      "direct_loop_fallback",
+    ])
+    expect(plannerTrace[2]).toMatchObject({
+      kind: "direct_loop_fallback",
+      source: "planner_declined",
+    })
+  })
 })

@@ -6,14 +6,11 @@
  */
 
 import {
-  CheckCircle2,
-  Circle,
   Columns2,
   Download,
   GitCompareArrows,
   History,
   Info,
-  Loader2,
   MessageSquare,
   PanelBottom,
   Rows2,
@@ -21,7 +18,6 @@ import {
   Square,
   Terminal,
   X,
-  XCircle,
   type LucideIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -38,7 +34,6 @@ import {
   buildSearchResults,
   dur,
   fmtK,
-  statusDot,
   type BottomTab,
   type EditorTab,
   type HealthData,
@@ -317,14 +312,14 @@ export function OperatorEnvironment() {
     onChange: (section: SidebarSection) => void,
     showSplitToggle = false,
   ) => (
-    <div className="flex items-stretch shrink-0 min-h-[34px]" style={{ borderBottom: `1px solid ${C.border}` }}>
+    <div className="flex h-9 items-stretch shrink-0" style={{ borderBottom: `1px solid ${C.border}` }}>
       <div className="flex min-w-0 flex-1 overflow-x-auto">
         {activityItems.map((item) => {
           const active = current === item.id
           return (
             <button
               key={item.id}
-              className="px-3 text-[12px] uppercase tracking-wide whitespace-nowrap transition-colors cursor-pointer border-r last:border-r-0"
+              className="h-full px-3 text-[12px] uppercase tracking-wide whitespace-nowrap transition-colors cursor-pointer border-r last:border-r-0"
               style={{
                 color: active ? C.text : C.muted,
                 background: active ? C.base : "transparent",
@@ -352,20 +347,6 @@ export function OperatorEnvironment() {
       )}
     </div>
   )
-
-  const objectiveStatus = useMemo(() => {
-    if (!activeRun) return { Icon: Circle, color: C.dim, spin: false }
-    if (activeRun.status === "running" || activeRun.status === "planning") {
-      return { Icon: Loader2, color: statusDot(activeRun.status), spin: true }
-    }
-    if (activeRun.status === "completed") {
-      return { Icon: CheckCircle2, color: statusDot(activeRun.status), spin: false }
-    }
-    if (activeRun.status === "failed" || activeRun.status === "cancelled") {
-      return { Icon: XCircle, color: statusDot(activeRun.status), spin: false }
-    }
-    return { Icon: Circle, color: statusDot(activeRun.status), spin: false }
-  }, [activeRun])
 
   // ═════════════════════════════════════════════════════════════════
   //  RENDER
@@ -584,14 +565,9 @@ export function OperatorEnvironment() {
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Objective bar */}
           <div
-            className="flex items-center gap-2 px-3 py-1.5 shrink-0 text-[13px]"
+            className="flex h-9 items-center gap-2 px-3 shrink-0 text-[13px]"
             style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}
           >
-            <objectiveStatus.Icon
-              size={14}
-              className={objectiveStatus.spin ? "animate-spin" : undefined}
-              style={{ color: objectiveStatus.color }}
-            />
             <span className="truncate flex-1" style={{ color: activeRun ? C.text : C.muted }}>
               {activeRun ? activeRun.goal : "No active run — submit a goal below"}
             </span>
@@ -670,7 +646,7 @@ export function OperatorEnvironment() {
             {/* Left panel */}
             <div className="flex flex-col flex-1 min-w-0 min-h-0">
               {/* Left tab bar */}
-              <div className="flex items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+              <div className="flex h-9 items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
                 <EditorTabs
                   current={editorTab}
                   onChange={setEditorTab}
@@ -709,7 +685,7 @@ export function OperatorEnvironment() {
                 {/* Right panel */}
                 <div className="flex flex-col flex-1 min-w-0 min-h-0">
                   {/* Right tab bar (same structure as left) */}
-                  <div className="flex items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+                  <div className="flex h-9 items-center shrink-0 select-none" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
                     <EditorTabs
                       current={editorRightTab}
                       onChange={setEditorRightTab}

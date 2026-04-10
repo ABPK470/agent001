@@ -76,7 +76,7 @@ export function ChatPanel({
     <div className="flex flex-col h-full" style={{ background: C.surface }}>
       {/* Header with mode toggle */}
       <div
-        className="shrink-0 px-3 py-2 text-[13px] font-semibold flex items-center gap-2"
+        className="shrink-0 h-9 px-3 text-[13px] font-semibold flex items-center gap-2"
         style={{ borderBottom: `1px solid ${C.borderSolid}`, color: C.text }}
       >
         <MessageSquare size={16} style={{ color: C.accent }} />

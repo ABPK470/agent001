@@ -114,10 +114,11 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
     return { action: "escalate", reason: "retries_exhausted" }
   }
 
-  // Fail verdict — allow ONE targeted revision on first failure, then escalate.
-  // This prevents long fail->revise loops when the same hard failure repeats.
+  // Fail verdict — if a repair path exists, keep revising until attempts are exhausted
+  // or the caller marks the run as stuck. Syntax errors and similar structural defects
+  // are often fixable in a second or third pass and should not escalate after one try.
   if (input.verdict === "fail") {
-    if (input.revisionAvailable && input.attempt === 0) {
+    if (input.revisionAvailable) {
       return { action: "revise", reason: "needs_revision" }
     }
     return { action: "escalate", reason: "retries_exhausted" }

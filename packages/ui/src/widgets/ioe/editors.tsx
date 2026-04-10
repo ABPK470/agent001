@@ -71,6 +71,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "error": return `${p}ERROR\n${p}${e.text}`
     case "usage": return `${p}USAGE  +${fmtK(e.iterationTokens)} tk · total ${fmtK(e.totalTokens)} · ${e.llmCalls} calls`
 
+    case "planning_preflight": return `${p}PLANNER PREFLIGHT  ${e.mode}`
     case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}`
     case "planner-generating": return `${p}GENERATING PLAN...`
     case "planner-plan-generated":
@@ -81,6 +82,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-validation-failed": return `${p}VALIDATION FAILED`
     case "planner-validation-remediated": return `${p}VALIDATION AUTO-REMEDIATED`
     case "planner-validation-warnings": return `${p}VALIDATION WARNINGS  ${e.warningCount}`
+    case "direct_loop_fallback": return `${p}DIRECT LOOP FALLBACK  ${e.source}  ${e.reason}`
     case "planner-delegation-decision":
       return `${p}DELEGATION GATE  ${e.shouldDelegate ? "delegate" : "local"}  ${e.reason}`
     case "planner-pipeline-start": return `${p}PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`
@@ -100,7 +102,8 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-retry-abort": return `${p}RETRY ABORT  ${e.reason}`
     case "planner-retry-skip": return `${p}RETRY SKIP  ${e.stepName}  ${e.reason}`
 
-    case "planner-delegation-start": return `${p}CHILD AGENT  ${e.stepName}\n${p}  ${e.goal}`
+    case "planner-delegation-start":
+      return `${p}CHILD AGENT  ${e.stepName}  budget ${e.budget.computedMaxIterations} (hint ${e.budget.parsedHint} + boost ${e.budget.complexityBoost})\n${p}  ${e.goal}`
     case "planner-delegation-iteration": return `${p}${e.stepName}  ITER ${e.iteration}/${e.maxIterations}`
     case "planner-delegation-end": return `${p}CHILD DONE  ${e.stepName}  ${e.status}\n${p}  ${e.answer || e.error || ""}`
 
@@ -247,7 +250,7 @@ export function EditorTabs({
         >
           {tab.label}
           {tab.count != null && tab.count > 0 && (
-            <span className="text-[12px] px-1 rounded" style={{ background: C.elevated, color: C.dim }}>
+            <span className="text-[13px] px-1 rounded" style={{ background: C.elevated, color: C.dim }}>
               {tab.count}
             </span>
           )}
@@ -265,6 +268,22 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
   const ref = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
+  const stepKey = (step: Step, index: number) => step.id || `${step.order}:${step.name}:${index}`
+
+  const hasDetail = (value: unknown) => {
+    if (value == null) return false
+    if (typeof value === "string") return value.length > 0
+    if (Array.isArray(value)) return value.length > 0
+    if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0
+    return true
+  }
+
+  const formatDetail = (value: unknown) => {
+    if (typeof value === "string") return value
+    if (value == null) return ""
+    return JSON.stringify(value, null, 2)
+  }
+
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
   }, [steps.length])
@@ -280,8 +299,10 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
   return (
     <div ref={ref} className="h-full overflow-y-auto p-3 space-y-0">
       {steps.map((step, i) => {
+        const key = stepKey(step, i)
         const isLast = i === steps.length - 1
         const isRunning = step.status === "running"
+        const isExpanded = expanded === key
         const duration = step.startedAt && step.completedAt
           ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
           : null
@@ -303,7 +324,7 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
           : C.dim
 
         return (
-          <div key={step.id} className="flex gap-3">
+          <div key={key} className="flex gap-3">
             {/* Timeline line + icon */}
             <div className="flex flex-col items-center shrink-0">
               <StatusIcon
@@ -319,15 +340,30 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
             {/* Content */}
             <div
               className="flex-1 pb-3 cursor-pointer select-none"
-              onClick={() => setExpanded(expanded === step.id ? null : step.id)}
+              onClick={() => setExpanded(isExpanded ? null : key)}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium" style={{ color: C.text }}>{step.name}</span>
+                <span className="text-[13px] font-medium" style={{ color: C.text }}>{step.name}</span>
                 {duration !== null && (
                   <span className="text-[13px] font-mono" style={{ color: C.dim }}>
                     {formatMs(duration)}
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="ml-auto text-[13px] px-1.5 py-0.5 rounded border cursor-pointer"
+                  style={{
+                    color: isExpanded ? C.text : C.dim,
+                    borderColor: C.border,
+                    background: isExpanded ? C.elevated : "transparent",
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setExpanded(current => current === key ? null : key)
+                  }}
+                >
+                  {isExpanded ? "Hide details" : "Show details"}
+                </button>
               </div>
               <div className="text-[13px] mt-0.5" style={{ color: C.dim }}>
                 {step.action}
@@ -337,7 +373,7 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
                 {(() => {
                   const attempts = step.output && Number((step.output as Record<string, unknown>)["attempts"]);
                   return attempts && attempts > 1 ? (
-                    <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded" style={{ background: `${C.warning}19`, color: C.warning }}>
+                    <span className="ml-2 text-[13px] px-1.5 py-0.5 rounded" style={{ background: `${C.warning}19`, color: C.warning }}>
                       <RotateCcw size={10} className="inline mr-0.5 -mt-0.5" />
                       {attempts} attempts
                     </span>
@@ -346,23 +382,23 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
               </div>
 
               {/* Expanded detail */}
-              {expanded === step.id && (
+              {isExpanded && (
                 <div className="mt-2 space-y-2">
-                  {step.input && Object.keys(step.input).length > 0 && (
+                  {hasDetail(step.input) && (
                     <div>
                       <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Input</span>
                       <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
                         style={{ color: C.textSecondary, background: C.base }}>
-                        {JSON.stringify(step.input, null, 2)}
+                        {formatDetail(step.input)}
                       </pre>
                     </div>
                   )}
-                  {step.output && Object.keys(step.output).length > 0 && (
+                  {hasDetail(step.output) && (
                     <div>
                       <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Output</span>
                       <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
                         style={{ color: C.textSecondary, background: C.base }}>
-                        {JSON.stringify(step.output, null, 2)}
+                        {formatDetail(step.output)}
                       </pre>
                     </div>
                   )}
@@ -373,6 +409,11 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
                         style={{ color: C.error, background: C.base }}>
                         {step.error}
                       </pre>
+                    </div>
+                  )}
+                  {!hasDetail(step.input) && !hasDetail(step.output) && !step.error && (
+                    <div className="text-[13px] px-2 py-1.5 rounded" style={{ color: C.dim, background: C.base }}>
+                      No input/output payload captured for this step.
                     </div>
                   )}
                 </div>
@@ -440,7 +481,12 @@ function groupTraceByIteration(trace: TraceEntry[]): TraceGroupData[] {
     } else if (e.kind === "error") {
       groups.push({ type: "error", header: e, children: [], delegationDepth: delegDepth })
       current = null
-    } else if (e.kind === "planner-decision" || e.kind === "planner-pipeline-start") {
+    } else if (
+      e.kind === "planning_preflight"
+      || e.kind === "planner-decision"
+      || e.kind === "planner-pipeline-start"
+      || e.kind === "direct_loop_fallback"
+    ) {
       // Planner phases get their own group so they appear at top level
       current = { type: "iteration", header: e, children: [], delegationDepth: 0 }
       groups.push(current)
@@ -469,7 +515,7 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
         {/* Node dot */}
         <div className="absolute left-[7px] top-1.5 w-2.5 h-2.5 rounded-full" style={{ background: C.accent }} />
         <div className="pb-1">
-          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.accent }}>GOAL</span>
+          <span className="text-[13px] font-mono font-semibold mr-2" style={{ color: C.accent }}>GOAL</span>
           <span className="text-[13px]" style={{ color: C.text }}>{goalEntry.text}</span>
         </div>
       </div>
@@ -483,7 +529,7 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
       <div className="relative pl-6 pt-1 pb-2">
         <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.success }} />
         <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
-          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.success }}>DONE</span>
+          <span className="text-[13px] font-mono font-semibold mr-2" style={{ color: C.success }}>DONE</span>
           <div className="text-[13px] whitespace-pre-wrap leading-relaxed mt-1" style={{ color: C.textSecondary }}>{ansEntry.text}</div>
         </div>
       </div>
@@ -497,7 +543,7 @@ function TraceGroup({ group: g, isLast }: { group: TraceGroupData; isLast: boole
       <div className="relative pl-6 pt-1 pb-2">
         <div className="absolute left-[7px] top-2.5 w-2.5 h-2.5 rounded-full" style={{ background: C.coral }} />
         <div className="pt-1" style={{ borderTop: `1px dashed ${C.border}` }}>
-          <span className="text-[12px] font-mono font-semibold mr-2" style={{ color: C.coral }}>FAIL</span>
+          <span className="text-[13px] font-mono font-semibold mr-2" style={{ color: C.coral }}>FAIL</span>
           <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{errEntry.text}</span>
         </div>
       </div>
@@ -513,15 +559,27 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
   const indent = g.delegationDepth * 16
 
   // Determine header text based on entry kind
-  const isPlannerHeader = g.header.kind === "planner-decision" || g.header.kind === "planner-pipeline-start"
+  const isPlannerHeader = g.header.kind === "planning_preflight"
+    || g.header.kind === "planner-decision"
+    || g.header.kind === "planner-pipeline-start"
+    || g.header.kind === "direct_loop_fallback"
   const headerColor = isPlannerHeader ? "#C084FC" : C.accent
 
   let headerLabel: string
   let headerBadge: string
-  if (g.header.kind === "planner-decision") {
+  if (g.header.kind === "planning_preflight") {
+    headerLabel = "PLANNER PREFLIGHT"
+    headerBadge = "P0"
+  } else if (g.header.kind === "planner-decision") {
     const pd = g.header as Extract<TraceEntry, { kind: "planner-decision" }>
     headerLabel = pd.shouldPlan ? `PLAN ▶ score ${pd.score.toFixed(2)}` : `PLAN ▷ skipped`
     headerBadge = "P"
+  } else if (g.header.kind === "direct_loop_fallback") {
+    const fallback = g.header as Extract<TraceEntry, { kind: "direct_loop_fallback" }>
+    headerLabel = fallback.source === "planner_verifier_low_complexity"
+      ? "DIRECT LOOP FALLBACK · low-complexity repair"
+      : "DIRECT LOOP FALLBACK · planner declined"
+    headerBadge = "D"
   } else if (g.header.kind === "planner-pipeline-start") {
     const ps = g.header as Extract<TraceEntry, { kind: "planner-pipeline-start" }>
     headerLabel = `PIPELINE attempt ${ps.attempt}/${ps.maxRetries}`
@@ -561,14 +619,14 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
             {headerBadge}
           </span>
         </div>
-        <span className="text-[12px] font-mono" style={{ color: C.muted }}>
+        <span className="text-[13px] font-mono" style={{ color: C.muted }}>
           {headerLabel}
         </span>
         {toolCalls > 0 && (
-          <span className="text-[12px] font-mono" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.warning }}>{toolCalls} tool{toolCalls > 1 ? "s" : ""}</span>
         )}
         {usage && (
-          <span className="text-[12px] font-mono" style={{ color: C.dim }}>+{fmtK(usage.iterationTokens)} tk</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>+{fmtK(usage.iterationTokens)} tk</span>
         )}
         <span className="text-[10px] ml-auto" style={{ color: C.dim }}>
           {collapsed ? "▸" : "▾"}
@@ -593,7 +651,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "thinking") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.accent}30` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.accent }}>LLM</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: C.accent }}>LLM</span>
         <span className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
@@ -606,7 +664,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.warning }} />
-          <span className="text-[12px] font-mono font-semibold" style={{ color: C.warning }}>CALL</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: C.warning }}>CALL</span>
           <span className="text-[13px] font-mono" style={{ color: C.warning }}>{e.tool}</span>
           {!expanded && e.argsSummary && (
             <span className="text-[13px] truncate" style={{ color: C.dim }}>{e.argsSummary}</span>
@@ -615,7 +673,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         </div>
         {expanded && (
           <pre
-            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
+            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.argsFormatted}
@@ -632,7 +690,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1 h-1 rounded-full shrink-0" style={{ background: C.success + "80" }} />
-          <span className="text-[12px] font-mono font-semibold" style={{ color: C.success }}>RSLT</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: C.success }}>RSLT</span>
           {!expanded && (
             <span className="text-[13px] truncate" style={{ color: C.muted }}>
               {e.text.length > 100 ? e.text.slice(0, 100) + "..." : e.text}
@@ -641,7 +699,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         </div>
         {expanded && (
           <pre
-            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
+            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.text}
@@ -654,14 +712,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-3">
         <span className="w-1 h-1 rounded-full inline-block mr-1.5" style={{ background: C.coral }} />
-        <span className="text-[12px] font-mono font-semibold mr-1" style={{ color: C.coral }}>ERR</span>
+        <span className="text-[13px] font-mono font-semibold mr-1" style={{ color: C.coral }}>ERR</span>
         <span className="text-[13px]" style={{ color: C.coral, opacity: 0.8 }}>{e.text}</span>
       </div>
     )
   }
   if (e.kind === "usage") {
     return (
-      <div className="flex items-center gap-3 py-0.5 text-[12px] font-mono" style={{ color: C.dim }}>
+      <div className="flex items-center gap-3 py-0.5 text-[13px] font-mono" style={{ color: C.dim }}>
         <span>+{fmtK(e.iterationTokens)} tk (total {fmtK(e.totalTokens)})</span>
         <span>{e.llmCalls} calls</span>
       </div>
@@ -671,14 +729,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#6CB4EE" }}>DELEG ▶</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#6CB4EE" }}>DELEG ▶</span>
           {e.agentName && <span className="text-[13px]" style={{ color: C.textSecondary }}>[{e.agentName}]</span>}
-          <span className="text-[12px] font-mono" style={{ color: C.dim }}>d{e.depth}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>d{e.depth}</span>
         </div>
         <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
           {e.goal.length > 200 ? e.goal.slice(0, 200) + "..." : e.goal}
         </div>
-        <div className="text-[12px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
+        <div className="text-[13px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
           tools: {e.tools.slice(0, 6).join(", ")}{e.tools.length > 6 ? ` +${e.tools.length - 6}` : ""}
         </div>
       </div>
@@ -687,8 +745,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-end") {
     return (
       <div className="py-1 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>DELEG ◀</span>
-        <span className="text-[12px] font-mono" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>DELEG ◀</span>
+        <span className="text-[13px] font-mono" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
         {e.answer && (
           <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
             {e.answer.length > 150 ? e.answer.slice(0, 150) + "..." : e.answer}
@@ -702,7 +760,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   }
   if (e.kind === "delegation-iteration") {
     return (
-      <div className="text-[12px] font-mono pl-4 py-0.5" style={{ color: C.dim }}>
+      <div className="text-[13px] font-mono pl-4 py-0.5" style={{ color: C.dim }}>
         ↳ ITER {e.iteration}/{e.maxIterations}
       </div>
     )
@@ -710,8 +768,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-start") {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ▶</span>
-        <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.taskCount} tasks</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ▶</span>
+        <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.taskCount} tasks</span>
         {e.goals.map((goal, i) => (
           <div key={i} className="pl-4 text-[13px]" style={{ color: C.muted }}>• {truncate(goal, 80)}</div>
         ))}
@@ -721,15 +779,15 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-end") {
     return (
       <div className="py-0.5 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ◀</span>
-        <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ◀</span>
+        <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
       </div>
     )
   }
   if (e.kind === "user-input-request") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.warning }}>ASK</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: C.warning }}>ASK</span>
         <span className="text-[13px]" style={{ color: C.text }}>{e.question}</span>
       </div>
     )
@@ -737,7 +795,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "user-input-response") {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>REPLY</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>REPLY</span>
         <span className="text-[13px]" style={{ color: C.textSecondary }}>{e.text}</span>
       </div>
     )
@@ -750,10 +808,10 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <span className="text-[12px] font-mono font-semibold" style={{ color: C.dim }}>?</span>
-          <span className="text-[12px] font-mono" style={{ color: C.muted }}>system-prompt</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: C.dim }}>?</span>
+          <span className="text-[13px] font-mono" style={{ color: C.muted }}>system-prompt</span>
           {!expanded && (
-            <span className="text-[12px] truncate" style={{ color: C.dim }}>
+            <span className="text-[13px] truncate" style={{ color: C.dim }}>
               {e.text.length > 80 ? e.text.slice(0, 80) + "…" : e.text}
             </span>
           )}
@@ -761,7 +819,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         </div>
         {expanded && (
           <pre
-            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-60 overflow-auto whitespace-pre-wrap"
+            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-60 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.text}
@@ -771,23 +829,36 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     )
   }
   // ── Planner events ──
+  if (e.kind === "planning_preflight") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PREFLIGHT</span>
+          <span className="text-[13px] font-mono" style={{ color: "#C084FC" }}>{e.mode}</span>
+        </div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>
+          Planner routing is evaluated before direct-loop iteration numbering begins.
+        </div>
+      </div>
+    )
+  }
   if (e.kind === "planner-decision") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[12px] font-mono" style={{ color: e.shouldPlan ? "#C084FC" : C.dim }}>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: e.shouldPlan ? "#C084FC" : C.dim }}>
             {e.shouldPlan ? "▶ activated" : "▷ skipped"}
           </span>
-          <span className="text-[11px] font-mono" style={{ color: C.dim }}>score {e.score.toFixed(2)}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>score {e.score.toFixed(2)}</span>
         </div>
-        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
       </div>
     )
   }
   if (e.kind === "planner-generating") {
     return (
-      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: "#C084FC80" }}>
+      <div className="py-0.5 pl-4 text-[13px] font-mono" style={{ color: "#C084FC80" }}>
         ⟳ generating plan…
       </div>
     )
@@ -796,11 +867,11 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[12px] font-mono" style={{ color: "#C084FC" }}>✓ {e.stepCount} steps</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: "#C084FC" }}>✓ {e.stepCount} steps</span>
         </div>
-        <div className="text-[12px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
-        <div className="text-[11px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
+        <div className="text-[13px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
           {e.steps.map(s => s.name).join(" → ")}
         </div>
       </div>
@@ -810,13 +881,13 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.coral}40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[12px] font-mono" style={{ color: C.coral }}>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: C.coral }}>
             ✗ {e.kind === "planner-generation-failed" ? "generation" : "validation"} failed
           </span>
         </div>
         {e.diagnostics.map((d, i) => (
-          <div key={i} className="text-[12px] mt-0.5 pl-2" style={{ color: C.coral + "B0" }}>
+          <div key={i} className="text-[13px] mt-0.5 pl-2" style={{ color: C.coral + "B0" }}>
             [{d.code}] {d.message}
           </div>
         ))}
@@ -827,22 +898,35 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.success}40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[12px] font-mono" style={{ color: C.success }}>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: C.success }}>
             ✓ validation auto-remediated
           </span>
         </div>
         {e.diagnostics.map((d, i) => (
-          <div key={i} className="text-[12px] mt-0.5 pl-2" style={{ color: C.success + "B0" }}>
+          <div key={i} className="text-[13px] mt-0.5 pl-2" style={{ color: C.success + "B0" }}>
             [{d.code}] {d.message}
           </div>
         ))}
       </div>
     )
   }
+  if (e.kind === "direct_loop_fallback") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: C.warning }}>DIRECT</span>
+          <span className="text-[13px] font-mono" style={{ color: C.warning }}>
+            fallback from {e.source === "planner_verifier_low_complexity" ? "low-complexity planner repair" : "planner decline"}
+          </span>
+        </div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
+      </div>
+    )
+  }
   if (e.kind === "planner-pipeline-start") {
     return (
-      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: "#C084FC80" }}>
+      <div className="py-0.5 pl-4 text-[13px] font-mono" style={{ color: "#C084FC80" }}>
         ▶ pipeline attempt {e.attempt}/{e.maxRetries}
       </div>
     )
@@ -850,23 +934,23 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "planner-step-start") {
     return (
       <div className="py-0.5 pl-4">
-        <span className="text-[12px] font-mono" style={{ color: C.muted }}>⟩ {e.stepName}</span>
-        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>({e.stepType})</span>
+        <span className="text-[13px] font-mono" style={{ color: C.muted }}>⟩ {e.stepName}</span>
+        <span className="text-[13px] font-mono ml-1" style={{ color: C.dim }}>({e.stepType})</span>
       </div>
     )
   }
   if (e.kind === "planner-step-end") {
     return (
       <div className="py-0.5 pl-4">
-        <span className="text-[12px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
+        <span className="text-[13px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
           {e.status === "completed" ? "✓" : "✗"} {e.stepName}
         </span>
-        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms</span>
+        <span className="text-[13px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms</span>
         {e.validationCode && (
-          <span className="text-[11px] font-mono ml-1" style={{ color: C.warning }}>[{e.validationCode}]</span>
+          <span className="text-[13px] font-mono ml-1" style={{ color: C.warning }}>[{e.validationCode}]</span>
         )}
         {e.status !== "completed" && (
-          <div className="text-[11px] mt-0.5 pl-2" style={{ color: C.warning }}>
+          <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.warning }}>
             fix: {remediationHintForValidationCode(e.validationCode)}
           </div>
         )}
@@ -876,11 +960,11 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "planner-pipeline-end") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#C084FC" }}>PIPE</span>
-        <span className="text-[12px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#C084FC" }}>PIPE</span>
+        <span className="text-[13px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
           ◀ {e.status}
         </span>
-        <span className="text-[11px] font-mono ml-1" style={{ color: C.dim }}>
+        <span className="text-[13px] font-mono ml-1" style={{ color: C.dim }}>
           {e.completedSteps}/{e.totalSteps} steps
         </span>
       </div>
@@ -890,14 +974,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#C084FC" }}>VRFY</span>
-          <span className="text-[12px] font-mono" style={{ color: e.overall === "pass" ? C.success : e.overall === "partial" ? C.warning : C.coral }}>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>VRFY</span>
+          <span className="text-[13px] font-mono" style={{ color: e.overall === "pass" ? C.success : e.overall === "partial" ? C.warning : C.coral }}>
             {e.overall}
           </span>
-          <span className="text-[11px] font-mono" style={{ color: C.dim }}>{(e.confidence * 100).toFixed(0)}%</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>{(e.confidence * 100).toFixed(0)}%</span>
         </div>
         {e.steps.filter(s => s.issues.length > 0).map((s, i) => (
-          <div key={i} className="text-[11px] mt-0.5 pl-2" style={{ color: C.dim }}>
+          <div key={i} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
             {s.stepName}: {s.issues.join("; ")}
           </div>
         ))}
@@ -906,7 +990,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   }
   if (e.kind === "planner-retry") {
     return (
-      <div className="py-0.5 pl-4 text-[12px] font-mono" style={{ color: C.warning }}>
+      <div className="py-0.5 pl-4 text-[13px] font-mono" style={{ color: C.warning }}>
         ↻ retry attempt {e.attempt}: {e.reason}
       </div>
     )
@@ -915,8 +999,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
     return (
       <div className="py-1 pl-2" style={{ borderLeft: "2px solid #22d3ee66" }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: "#22d3ee" }}>DIFF</span>
-        <span className="text-[12px] font-mono" style={{ color: C.textSecondary }}>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#22d3ee" }}>DIFF</span>
+        <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>
           {total} pending (+{e.diff.added.length} ~{e.diff.modified.length} -{e.diff.deleted.length})
         </span>
       </div>
@@ -926,8 +1010,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     const total = e.summary.added + e.summary.modified + e.summary.deleted
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.success}66` }}>
-        <span className="text-[12px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>APPLY</span>
-        <span className="text-[12px] font-mono" style={{ color: C.textSecondary }}>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: C.success }}>APPLY</span>
+        <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>
           {total} repository changes applied (+{e.summary.added} ~{e.summary.modified} -{e.summary.deleted})
         </span>
       </div>
@@ -940,10 +1024,10 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <span className="text-[12px] font-mono font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
-          <span className="text-[12px] font-mono" style={{ color: C.muted }}>{e.tag}</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
+          <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.tag}</span>
           {!expanded && (
-            <span className="text-[12px] truncate" style={{ color: C.dim }}>
+            <span className="text-[13px] truncate" style={{ color: C.dim }}>
               {e.message.length > 80 ? e.message.slice(0, 80) + "…" : e.message}
             </span>
           )}
@@ -951,7 +1035,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         </div>
         {expanded && (
           <pre
-            className="text-[12px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
+            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
             style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
           >
             {e.message}
@@ -1500,10 +1584,16 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
           label={`CHILD AGENT · ${e.stepName}`} labelColor={"#E879A8"}
-          detail={!open ? truncate(e.goal, 80) : `d${e.depth} · ${e.tools.length} tools`}
+          detail={!open ? `budget ${e.budget.computedMaxIterations} · ${truncate(e.goal, 56)}` : `d${e.depth} · ${e.tools.length} tools · hint ${e.budget.parsedHint} · floor ${e.budget.contractFloor} · boost ${e.budget.complexityBoost}`}
         />
         {open && (
           <div className="ml-5 space-y-1 py-0.5">
+            <div style={{ color: C.dim }}>
+              budget: computed {e.budget.computedMaxIterations} · base {e.budget.baseBudget} · floor {e.budget.contractFloor} · boost {e.budget.complexityBoost}
+            </div>
+            <div style={{ color: C.dim }}>
+              shape: {e.budget.acceptanceCriteriaCount} criteria · {e.budget.targetArtifactCount} targets · {e.budget.requiredSourceArtifactCount} sources · {e.budget.codeArtifactCount} code files{e.budget.hasBlueprintSource ? " · blueprint" : ""}{e.budget.hasComplexImplementation ? " · complex" : ""}
+            </div>
             <div style={{ color: C.dim }}>tools: {e.tools.join(", ")}</div>
             <Pane text={e.goal} maxH={400} />
           </div>
@@ -1565,7 +1655,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
           <div className="ml-5 py-0.5">
             {e.reason && <Pane text={e.reason} maxH={300} />}
             {((e as Record<string, unknown>).skippedSteps != null || (e as Record<string, unknown>).retrySteps != null) && (
-              <div className="mt-1" style={{ color: C.dim, fontSize: 12 }}>
+              <div className="mt-1" style={{ color: C.dim, fontSize: 13 }}>
                 {(e as Record<string, unknown>).retrySteps != null && <span>retrying {String((e as Record<string, unknown>).retrySteps)} step(s)</span>}
                 {(e as Record<string, unknown>).skippedSteps != null && <span className="ml-2">· {String((e as Record<string, unknown>).skippedSteps)} skipped</span>}
               </div>
@@ -1792,7 +1882,12 @@ function PlannerView({ trace }: { trace: TraceEntry[] }) {
         <PreambleRow key={`pre-${i}`} entry={e} />
       ))}
       {grouped.pipelines.map((p, pi) => (
-        <PipelineBlock key={`pipe-${pi}`} pipeline={p} />
+        <div key={`pipe-${pi}`}>
+          <PipelineBlock pipeline={p} />
+          {(p.verification || p.aftermath.length > 0) && (
+            <PostPipelineBlock pipeline={p} />
+          )}
+        </div>
       ))}
       {grouped.trailing.length > 0 && (
         <TrailingSection events={grouped.trailing} />
@@ -1825,17 +1920,29 @@ function PipelineBlock({ pipeline: p }: { pipeline: PipelineGroup }) {
               detail={`${en.completedSteps} of ${en.totalSteps} steps completed`}
             />
           )}
-          {(p.verification || p.aftermath.length > 0) && (
-            <div className="mt-1 pt-1" style={{ borderTop: `1px solid ${C.dim}30` }}>
-              <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: C.dim }}>
-                post-pipeline
-              </div>
-              {p.verification && <VerificationBlock verification={p.verification} />}
-              {p.aftermath.map((e, i) => (
-                <PreambleRow key={`aft-${i}`} entry={e} />
-              ))}
-            </div>
-          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PostPipelineBlock({ pipeline: p }: { pipeline: PipelineGroup }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="mb-1">
+      <TreeRow
+        onClick={() => setOpen(!open)}
+        open={open}
+        label={`POST-PIPELINE · after attempt ${p.start.attempt}/${p.start.maxRetries}`}
+        labelColor={C.dim}
+      />
+      {open && (
+        <div className="ml-4">
+          {p.verification && <VerificationBlock verification={p.verification} />}
+          {p.aftermath.map((e, i) => (
+            <PreambleRow key={`aft-${p.start.attempt}-${i}`} entry={e} />
+          ))}
         </div>
       )}
     </div>
@@ -1925,7 +2032,7 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
             <PlannerChildBlock start={s.childStart} end={s.childEnd} iterations={s.iterations} />
           )}
           {overridden && failReason && (
-            <div className="py-0.5 px-2 text-[12px] space-y-1" style={{ color: C.coral }}>
+            <div className="py-0.5 px-2 text-[13px] space-y-1" style={{ color: C.coral }}>
               <ExpandableMessage label="VALIDATION REJECTED" text={failReason} color={C.coral} />
               {failHint && failHint !== failReason && (
                 <div className="pl-1" style={{ color: C.dim }}>{failHint}</div>
@@ -1933,7 +2040,7 @@ function PlannerStepBlock({ step: s, index }: { step: StepGroup; index: number }
             </div>
           )}
           {!overridden && failReason && (
-            <div className="py-0.5 px-2 text-[12px] space-y-1" style={{ color: C.coral }}>
+            <div className="py-0.5 px-2 text-[13px] space-y-1" style={{ color: C.coral }}>
               <ExpandableMessage label="FAIL" text={failReason} color={C.coral} />
               {failHint && failHint !== failReason && (
                 <div className="pl-1" style={{ color: C.dim }}>{failHint}</div>
@@ -2494,13 +2601,13 @@ function ExpandableMessage({
   const compact = text.length > preview ? truncate(text, preview) : text
   return (
     <details className="rounded" style={{ border: `1px solid ${C.border}`, background: C.base }}>
-      <summary className="cursor-pointer list-none px-2 py-1.5 text-[12px]" style={{ color }}>
+      <summary className="cursor-pointer list-none px-2 py-1.5 text-[13px]" style={{ color }}>
         {label ? <span className="font-semibold mr-1.5">{label}</span> : null}
         <span>{compact}</span>
         {text.length > preview ? <span style={{ color: C.dim }}> click to expand</span> : null}
       </summary>
       <pre
-        className="whitespace-pre-wrap break-words px-2 pb-2 text-[12px] overflow-auto"
+        className="whitespace-pre-wrap break-words px-2 pb-2 text-[13px] overflow-auto"
         style={{ color, maxHeight: 220 }}
       >
         {text}
@@ -3491,12 +3598,12 @@ export function MapPanel({
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-lg px-1 py-0.5" style={{ background: C.surface + "cc" }}>
         <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 0.7, 200) }}>
-          <span className="text-sm">−</span>
+          <span className="text-[13px]">−</span>
         </button>
         <span className="text-[10px] font-mono w-8 text-center" style={{ color: C.muted }}>{zoomLevel}%</span>
         <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 1.4, 200) }}>
-          <span className="text-sm">+</span>
+          <span className="text-[13px]">+</span>
         </button>
         <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
           onClick={() => {
@@ -3506,13 +3613,13 @@ export function MapPanel({
             for (const n of nodes) { cx += (n as NodeObject<MapNode>).x ?? 0; cy += (n as NodeObject<MapNode>).y ?? 0 }
             fg.centerAt(cx / nodes.length, cy / nodes.length, 400)
           }}>
-          <span className="text-[11px]">⊕</span>
+          <span className="text-[13px]">⊕</span>
         </button>
       </div>
 
       {/* Status indicator — top left */}
       {run && (
-        <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px]" style={{ background: C.surface + "cc" }}>
+        <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px]" style={{ background: C.surface + "cc" }}>
           <span className={`w-2 h-2 rounded-full ${isRunning ? "animate-pulse" : ""}`} style={{ background: isRunning ? C.success : statusDot(run.status) }} />
           <span style={{ color: isRunning ? C.success : C.muted }}>{run.status}</span>
           {trace.length > 0 && <span style={{ color: C.dim }}>{trace.filter(e => e.kind === "tool-call").length} calls</span>}
@@ -3527,7 +3634,7 @@ export function MapPanel({
             <button className="opacity-40 hover:opacity-100 ml-3 leading-none text-[16px] cursor-pointer" style={{ color: C.muted }} onClick={() => setSelectedNode(null)}>×</button>
           </div>
           {detailInfo.lines.map((line, i) => (
-            <div key={i} className="flex justify-between gap-4 text-[11px] leading-relaxed">
+            <div key={i} className="flex justify-between gap-4 text-[13px] leading-relaxed">
               <span style={{ color: C.muted }}>{line.label}</span>
               <span className="font-medium">{line.value}</span>
             </div>

@@ -12,19 +12,26 @@ import { basename } from "node:path"
 
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    validateDelegatedOutputContract
+  buildContractSpec,
+  getCorrectionGuidance,
+  validateDelegatedOutputContract
 } from "../delegation-validation.js"
+import {
+  normalizeBasename,
+  normalizeSpecPath,
+  parseBlueprintContractBlock,
+  uniqueStrings,
+  validateBlueprintArtifactContract,
+} from "./blueprint-contract.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierDecision,
-    VerifierOutcome,
-    VerifierStepAssessment,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierDecision,
+  VerifierOutcome,
+  VerifierStepAssessment,
 } from "./types.js"
 
 // ============================================================================
@@ -44,10 +51,10 @@ const HALLUCINATION_CLAIM_RE = /(according to|as seen in|from the logs|based on)
 const SOURCE_LIKE_PATH_RE =
   /(?:^|\/)(?:src|lib|app|server|client|cmd|pkg|include|internal|tests?|spec)(?:\/|$)|\.(?:c|cc|cpp|cxx|h|hpp|rs|go|py|rb|php|java|kt|swift|cs|js|jsx|ts|tsx|json|toml|yaml|yml|xml|sh|zsh|bash)$/i
 /** Shell mutation pattern — commands that indicate workspace modifications. */
-// const SHELL_MUTATION_RE =
-//   /(?:^|[;&|]\s*|\n)\s*(?:cp|mv|rm|mkdir|touch|tee|sed|perl|python|node|ruby|go|cargo|npm|pnpm|yarn|make|cmake)\b|>>?/i
+const SHELL_MUTATION_RE =
+  /(?:^|[;&|]\s*|\n)\s*(?:cp|mv|rm|mkdir|touch|tee|sed|perl|python|node|ruby|go|cargo|npm|pnpm|yarn|make|cmake|cat|echo|printf)\b|>>?/i
 /** Direct mutation tool names. */
-// const DIRECT_MUTATION_TOOLS = new Set(["write_file", "delete"])
+const DIRECT_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "delete"])
 
 // ============================================================================
 // Deterministic probes
@@ -244,26 +251,199 @@ async function readArtifactContent(
   }
 }
 
-function normalizeSpecPath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/^\.\//, "").trim()
-}
-
-function normalizeBasename(value: string): string {
-  return basename(normalizeSpecPath(value)).toLowerCase()
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function normalizeStructuralMarker(kind: string, value: string): string {
+  return `${kind}:${value.trim().toLowerCase()}`
+}
+
+function collectRegexMarkers(content: string, kind: string, pattern: RegExp, group = 1): string[] {
+  const markers: string[] = []
+  for (const match of content.matchAll(pattern)) {
+    const value = match[group]
+    if (typeof value === "string" && value.trim().length > 0) {
+      markers.push(normalizeStructuralMarker(kind, value))
+    }
+  }
+  return markers
+}
+
+const BLUEPRINT_FILE_PATH_RE = /`([^`]*?(?:index\.[A-Za-z0-9]+|[\w./-]+\.(?:[A-Za-z0-9]{1,8})))`/u
+const BLUEPRINT_TREE_FILE_RE = /^[|`'\-+*\\/ ]*([A-Za-z0-9_./-]+\.(?:[A-Za-z0-9]{1,8}))$/u
+
+function extractStructureMarkersFromText(text: string): string[] {
+  const markers: string[] = []
+
+  const snippets = [text, ...(Array.from(text.matchAll(/`([^`]+)`/g), match => match[1]))]
+  for (const snippet of snippets) {
+    for (const match of snippet.matchAll(/<([a-z][a-z0-9-]*)\b/giu)) {
+      markers.push(normalizeStructuralMarker("tag", match[1]))
+    }
+    for (const match of snippet.matchAll(/(^|\s)#([a-z][\w-]*)/giu)) {
+      markers.push(normalizeStructuralMarker("id", match[2]))
+    }
+    for (const match of snippet.matchAll(/(^|\s)\.([a-z][\w-]*)/giu)) {
+      markers.push(normalizeStructuralMarker("class", match[2]))
+    }
+    for (const match of snippet.matchAll(/\b(data-[a-z0-9-]+)\b/giu)) {
+      markers.push(normalizeStructuralMarker("data", match[1]))
+    }
+    for (const match of snippet.matchAll(/\[\s*(data-[a-z0-9-]+)(?:=[^\]]+)?\]/giu)) {
+      markers.push(normalizeStructuralMarker("data", match[1]))
+    }
+    for (const match of snippet.matchAll(/\b([A-Z][A-Za-z0-9]*(?:Panel|View|Component|Layout|Widget|Page|Dialog|Modal|Card|List|Form|Header|Footer|Sidebar|Board|Canvas|Grid))\b/g)) {
+      markers.push(normalizeStructuralMarker("component", match[1]))
+    }
+    for (const match of snippet.matchAll(/\b(?:function|method|proc(?:edure)?|subroutine|def|fn|lambda|handler|command|cmdlet|label|target)\s+`?([A-Za-z_.$@?-][\w.$@-]*)`?/giu)) {
+      markers.push(normalizeStructuralMarker("function", match[1]))
+    }
+    for (const match of snippet.matchAll(/\b(?:class|struct|interface|trait|enum|record|module|namespace|package|type)\s+`?([A-Za-z_.$@?-][\w.$@-]*)`?/giu)) {
+      markers.push(normalizeStructuralMarker("type", match[1]))
+    }
+  }
+
+  return uniqueStrings(markers)
+}
+
+function extractHtmlStructureMarkers(content: string): string[] {
+  const markers: string[] = []
+
+  for (const match of content.matchAll(/<([a-z][a-z0-9-]*)\b/giu)) {
+    markers.push(normalizeStructuralMarker("tag", match[1]))
+  }
+  for (const match of content.matchAll(/\sid=["']([^"']+)["']/giu)) {
+    markers.push(...match[1].split(/\s+/).filter(Boolean).map(value => normalizeStructuralMarker("id", value)))
+  }
+  for (const match of content.matchAll(/\sclass=["']([^"']+)["']/giu)) {
+    markers.push(...match[1].split(/\s+/).filter(Boolean).map(value => normalizeStructuralMarker("class", value)))
+  }
+  for (const match of content.matchAll(/\s(data-[a-z0-9-]+)(?:=["'][^"']*["'])?/giu)) {
+    markers.push(normalizeStructuralMarker("data", match[1]))
+  }
+  for (const match of content.matchAll(/<script[^>]+src=["']([^"']+)["']/giu)) {
+    markers.push(normalizeStructuralMarker("script", normalizeSpecPath(match[1])))
+  }
+  for (const match of content.matchAll(/<link[^>]+href=["']([^"']+)["']/giu)) {
+    markers.push(normalizeStructuralMarker("asset", normalizeSpecPath(match[1])))
+  }
+
+  return uniqueStrings(markers)
+}
+
+function extractCodeStructureMarkers(content: string): string[] {
+  const markers: string[] = []
+
+  markers.push(...collectRegexMarkers(content, "function", /export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*def\s+([A-Za-z_][\w]*)\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*func\s+(?:\([^)]*\)\s*)?([A-Za-z_][\w]*)\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*fn\s+([A-Za-z_][\w]*)\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*(?:public|private|protected|internal|static|final|virtual|override|abstract|sealed|async|partial|inline|constexpr|synchronized|extern|unsafe|new|shared|friend|mut|pub|open|operator|default|class)?(?:\s+(?:public|private|protected|internal|static|final|virtual|override|abstract|sealed|async|partial|inline|constexpr|synchronized|extern|unsafe|new|shared|friend|mut|pub|open|operator|default))*\s*[A-Za-z_][\w<>,.?\[\]]*\s+([A-Za-z_][\w]*)\s*\([^;\n{}]*\)\s*(?:\{|=>)/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*function\s+([A-Za-z_][\w-]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*([A-Za-z_][\w-]*)\s*\(\)\s*\{/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*function\s+([A-Za-z_][\w-]*)\s*\{/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*function\s+([A-Za-z_][\w-]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*sub\s+([A-Za-z_][\w]*)\b/gi))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*proc(?:edure)?\s+([A-Za-z_][\w]*)\b/gi))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*\.?(?:globl|global)\s+([A-Za-z_.$@?][\w.$@?]*)/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*([A-Za-z_.$@?][\w.$@?]*)\s*:/g))
+  markers.push(...collectRegexMarkers(content, "function", /\(defun\s+([A-Za-z_.*:+!<>?-][^\s()]*)/g))
+  markers.push(...collectRegexMarkers(content, "function", /\(defmacro\s+([A-Za-z_.*:+!<>?-][^\s()]*)/g))
+  markers.push(...collectRegexMarkers(content, "function", /\(define\s+\(([A-Za-z_.*:+!<>?-][^\s()]*)/g))
+  markers.push(...collectRegexMarkers(content, "function", /(?:^|\n)\s*(?:function|filter|workflow)\s+([A-Za-z_][\w-]*)\b/gi))
+
+  markers.push(...collectRegexMarkers(content, "type", /export\s+class\s+([A-Za-z_$][\w$]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "type", /(?:^|\n)\s*(?:class|struct|interface|trait|enum|record|module|namespace|package)\s+([A-Za-z_][\w.]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "type", /(?:^|\n)\s*(?:public|private|protected|internal)?\s*(?:abstract\s+|final\s+|sealed\s+)?(?:class|interface|enum|record)\s+([A-Za-z_][\w]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "type", /(?:^|\n)\s*type\s+([A-Za-z_][\w]*)\s+(?:struct|interface|=)/g))
+  markers.push(...collectRegexMarkers(content, "type", /(?:^|\n)\s*New-Alias\s+-Name\s+([A-Za-z_][\w-]*)\b/gi))
+
+  markers.push(...collectRegexMarkers(content, "component", /(?:^|\n)\s*const\s+([A-Z][A-Za-z0-9_$]*)\s*=\s*\([^)]*\)\s*=>\s*</g))
+  markers.push(...collectRegexMarkers(content, "component", /(?:^|\n)\s*function\s+([A-Z][A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{?[\s\S]{0,120}?return\s*\(/g))
+  markers.push(...collectRegexMarkers(content, "component", /<([A-Z][A-Za-z0-9_]*)\b/g))
+  markers.push(...collectRegexMarkers(content, "tag", /<([a-z][a-z0-9-]*)\b/g))
+
+  return uniqueStrings(markers)
+}
+
+function detectStructuralMarkersInArtifact(path: string, content: string): string[] {
+  if (/\.html?$/i.test(path)) return extractHtmlStructureMarkers(content)
+  if (/\.(?:tsx|jsx)$/i.test(path)) return uniqueStrings([...extractHtmlStructureMarkers(content), ...extractCodeStructureMarkers(content)])
+  if (/\.(?:ts|js|mjs|cjs|mts|cts|py|go|rs|java|kt|kts|cs|vb|php|rb|swift|scala|sh|bash|zsh|fish|ps1|psm1|psd1|pl|pm|lua|r|jl|clj|cljs|cljc|lisp|el|asm|s|S|c|cc|cpp|cxx|h|hpp|hh)$/i.test(path)) return extractCodeStructureMarkers(content)
+  if (/\.(?:xml|xaml|csproj|fsproj|vbproj|gradle|properties|toml|yaml|yml|json|ini|cfg|conf|sql|md|txt)$/i.test(path)) return uniqueStrings([...extractStructureMarkersFromText(content), ...extractCodeStructureMarkers(content)])
+  return []
+}
+
+function collectSpecAuditIssues(
+  step: SubagentTaskStep,
+  stepResult: PipelineStepResult,
+  blueprintPath: string,
+): string[] {
+  const calls = stepResult.toolCalls ?? []
+  const normalizedBlueprint = normalizeSpecPath(blueprintPath)
+  const issues: string[] = []
+
+  const firstBlueprintReadIndex = calls.findIndex(call => {
+    if (call.name !== "read_file") return false
+    const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
+    return path === normalizedBlueprint || /(?:^|\/)BLUEPRINT\.md$/i.test(path)
+  })
+
+  if (firstBlueprintReadIndex === -1) {
+    issues.push(`PROCESS AUDIT FAILED: step ${step.name} never read ${blueprintPath}`)
+    return issues
+  }
+
+  const firstMutationIndex = calls.findIndex(call => {
+    if (DIRECT_MUTATION_TOOLS.has(call.name)) return true
+    if (call.name !== "run_command") return false
+    const command = typeof call.args.command === "string" ? call.args.command : ""
+    return SHELL_MUTATION_RE.test(command)
+  })
+
+  if (firstMutationIndex !== -1 && firstBlueprintReadIndex > firstMutationIndex) {
+    issues.push(
+      `PROCESS AUDIT FAILED: step ${step.name} read ${blueprintPath} only after starting file mutations`,
+    )
+  }
+
+  const targetReads = new Set(
+    calls.flatMap(call => {
+      if (call.name !== "read_file") return []
+      const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
+      return path ? [path] : []
+    }),
+  )
+  const replaceInFileTargets = new Set(
+    calls.flatMap(call => {
+      if (call.name !== "replace_in_file") return []
+      const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
+      return path ? [path] : []
+    }),
+  )
+  const readRequiredTargets = new Set(step.executionContext.requiredSourceArtifacts.map(normalizeSpecPath))
+  const missingTargetReads = step.executionContext.targetArtifacts
+    .map(normalizeSpecPath)
+    .filter(path => readRequiredTargets.has(path) || replaceInFileTargets.has(path))
+    .filter(path => !targetReads.has(path))
+
+  if (missingTargetReads.length > 0) {
+    issues.push(
+      `PROCESS AUDIT WEAK: step ${step.name} mutated or produced artifacts without reading target files first (${missingTargetReads.slice(0, 4).join(", ")})`,
+    )
+  }
+
+  return issues
 }
 
 function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSpec {
   const fileMap = new Map<string, BlueprintFileSpec>()
   const sharedTypes = new Set<string>()
   const algorithmicContracts = new Set<string>()
+  const contractBlock = parseBlueprintContractBlock(content)
   let currentFile: string | null = null
   let inSharedTypes = false
   let inAlgorithmSection = false
@@ -276,6 +456,7 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
       declaredPath: normalizedPath,
       basename: normalizeBasename(normalizedPath),
       functions: [],
+      structuralMarkers: [],
     }
     fileMap.set(normalizedPath, created)
     return created
@@ -291,6 +472,25 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
     })
   }
 
+  const appendStructuralMarkers = (declaredPath: string, markers: readonly string[]) => {
+    const normalizedPath = normalizeSpecPath(declaredPath)
+    const existing = ensureFile(normalizedPath)
+    fileMap.set(normalizedPath, {
+      ...existing,
+      structuralMarkers: uniqueStrings([...existing.structuralMarkers, ...markers]),
+    })
+  }
+
+  for (const contractFile of contractBlock.files) {
+    ensureFile(contractFile.declaredPath)
+    if (contractFile.functions.length > 0) {
+      for (const spec of contractFile.functions) appendFunction(contractFile.declaredPath, spec)
+    }
+    if (contractFile.structuralMarkers.length > 0) {
+      appendStructuralMarkers(contractFile.declaredPath, contractFile.structuralMarkers)
+    }
+  }
+
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim()
     if (!line) continue
@@ -302,19 +502,24 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
       currentFile = null
     }
 
-    const inlineFileMatch = line.match(/`([^`]*?(?:index\.(?:html|tsx?|jsx?)|[\w./-]+\.(?:ts|tsx|js|jsx|css|scss|html)))`/u)
+    const inlineFileMatch = line.match(BLUEPRINT_FILE_PATH_RE)
     if (inlineFileMatch) {
       currentFile = normalizeSpecPath(inlineFileMatch[1])
       ensureFile(currentFile)
     }
 
-    const treeMatch = line.match(/^[|`'\-+*\\/ ]*([A-Za-z0-9_./-]+\.(?:ts|tsx|js|jsx|css|scss|html))$/u)
+    const treeMatch = line.match(BLUEPRINT_TREE_FILE_RE)
     if (treeMatch) {
       currentFile = normalizeSpecPath(treeMatch[1])
       ensureFile(currentFile)
     }
 
-    const functionMatch = line.match(/(?:^[-*]\s*|^\d+\.\s*)?`?([A-Za-z_$][\w$]*)\s*\(([^)]*)\)`?/u)
+    if (currentFile) {
+      const markers = extractStructureMarkersFromText(line)
+      if (markers.length > 0) appendStructuralMarkers(currentFile, markers)
+    }
+
+    const functionMatch = line.match(/(?:^[-*]\s*|^\d+\.\s*)?(?:(?:function|method|proc(?:edure)?|subroutine|handler|command|cmdlet|def|fn|lambda|label|target)\s+)?`?([A-Za-z_.$@?-][\w.$@?-]*)\s*\(([^)]*)\)`?/iu)
     if (functionMatch && currentFile) {
       appendFunction(currentFile, {
         name: functionMatch[1],
@@ -335,6 +540,9 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
   return {
     blueprintPath,
     files: Array.from(fileMap.values()),
+    contractFiles: contractBlock.files,
+    contractBlockPresent: contractBlock.present,
+    contractBlockErrors: Array.from(contractBlock.errors),
     sharedTypes: Array.from(sharedTypes),
     algorithmicContracts: Array.from(algorithmicContracts),
   }
@@ -360,7 +568,11 @@ function collectSourceReadEvidence(stepResult: PipelineStepResult, blueprintPath
 function findBlueprintForStep(step: SubagentTaskStep): string | null {
   return step.executionContext.requiredSourceArtifacts.find(
     (artifact: string) => /(^|\/)BLUEPRINT\.md$/iu.test(artifact),
-  ) ?? null
+  )
+    ?? step.executionContext.targetArtifacts.find(
+      (artifact: string) => /(^|\/)BLUEPRINT\.md$/iu.test(artifact),
+    )
+    ?? null
 }
 
 function detectFunctionsInArtifact(
@@ -382,8 +594,10 @@ function detectFunctionsInArtifact(
 async function buildStepSpecEvidence(
   step: SubagentTaskStep,
   stepResult: PipelineStepResult,
+  plan: Plan,
   readFile: Tool,
   runCommand?: Tool,
+  actualPaths: string[] = [],
 ): Promise<StepSpecEvidence | null> {
   const blueprintPath = findBlueprintForStep(step)
   if (!blueprintPath) return null
@@ -396,6 +610,7 @@ async function buildStepSpecEvidence(
       sourceReads: collectSourceReadEvidence(stepResult, blueprintPath),
       mappings: [],
       structuralIssues: [`SPEC INGESTION FAILED: could not read ${blueprintPath} for step ${step.name}`],
+      processAuditIssues: collectSpecAuditIssues(step, stepResult, blueprintPath),
     }
   }
 
@@ -403,6 +618,7 @@ async function buildStepSpecEvidence(
   const structuralIssues: string[] = []
   const mappings: ArtifactSpecMapping[] = []
   const sourceReads = collectSourceReadEvidence(stepResult, blueprintPath)
+  const processAuditIssues = collectSpecAuditIssues(step, stepResult, blueprintPath)
 
   if (sourceReads.length === 0) {
     structuralIssues.push(
@@ -416,6 +632,8 @@ async function buildStepSpecEvidence(
     )
   }
 
+  structuralIssues.push(...buildBlueprintArtifactCoverageIssues(step, spec, plan, blueprintPath))
+
   for (const artifact of step.executionContext.targetArtifacts) {
     const normalizedArtifact = normalizeSpecPath(artifact)
     const exactMatch = spec.files.find(file => normalizeSpecPath(file.declaredPath) === normalizedArtifact)
@@ -423,17 +641,35 @@ async function buildStepSpecEvidence(
       ? null
       : spec.files.find(file => file.basename === normalizeBasename(normalizedArtifact))
     const matchedSpec = exactMatch ?? basenameMatch ?? null
-    const content = await readArtifactContent(readFile, artifact, runCommand)
+    const probe = await probeArtifact(
+      readFile,
+      artifact,
+      actualPaths,
+      step.executionContext.workspaceRoot || undefined,
+      runCommand,
+      step.executionContext.allowedWriteRoots,
+    )
+    const resolvedArtifactPath = probe.found ? probe.resolvedPath : null
+    const content = resolvedArtifactPath
+      ? await readArtifactContent(readFile, resolvedArtifactPath, runCommand)
+      : null
     const functionEvidence = matchedSpec && content
       ? detectFunctionsInArtifact(content, matchedSpec.functions)
       : { found: [], missing: matchedSpec?.functions.map(fn => fn.name) ?? [] }
+    const actualStructuralMarkers = content ? detectStructuralMarkersInArtifact(artifact, content) : []
+    const requiredStructuralMarkers = matchedSpec?.structuralMarkers ?? []
+    const foundStructuralMarkers = requiredStructuralMarkers.filter(marker => actualStructuralMarkers.includes(marker))
+    const missingStructuralMarkers = requiredStructuralMarkers.filter(marker => !actualStructuralMarkers.includes(marker))
 
     mappings.push({
       targetArtifact: artifact,
+      actualArtifactPath: resolvedArtifactPath,
       matchedSpecPath: matchedSpec?.declaredPath ?? null,
       pathMatch: exactMatch ? "exact" : basenameMatch ? "basename" : "none",
       foundFunctions: functionEvidence.found,
       missingFunctions: functionEvidence.missing,
+      foundStructuralMarkers,
+      missingStructuralMarkers,
     })
 
     if (!matchedSpec) {
@@ -454,6 +690,12 @@ async function buildStepSpecEvidence(
         `SPEC FUNCTION MISMATCH: ${artifact} is missing blueprint functions ${functionEvidence.missing.join(", ")} from ${matchedSpec.declaredPath}`,
       )
     }
+
+    if (content && missingStructuralMarkers.length > 0) {
+      structuralIssues.push(
+        `SPEC STRUCTURE MISMATCH: ${artifact} is missing blueprint structure markers ${missingStructuralMarkers.join(", ")} from ${matchedSpec.declaredPath}`,
+      )
+    }
   }
 
   return {
@@ -462,6 +704,7 @@ async function buildStepSpecEvidence(
     sourceReads,
     mappings,
     structuralIssues,
+    processAuditIssues,
   }
 }
 
@@ -520,9 +763,10 @@ export async function runDeterministicProbes(
       }
 
       if (readFile) {
-        const specEvidence = await buildStepSpecEvidence(sa, stepResult, readFile, runCommand)
+        const specEvidence = await buildStepSpecEvidence(sa, stepResult, plan, readFile, runCommand, actualPaths)
         if (specEvidence) {
           issues.push(...specEvidence.structuralIssues)
+          issues.push(...specEvidence.processAuditIssues)
         }
       }
 
@@ -804,53 +1048,9 @@ export async function runDeterministicProbes(
         }
       }
 
-      // ── Acceptance criteria ↔ code evidence check ──
-      // For each acceptance criterion, extract distinctive keywords and verify
-      // at least one appears somewhere in the code artifacts.  If none of a
-      // criterion's keywords are found, the feature is likely unimplemented —
-      // even if the child claims otherwise.
-      if (readFile && sa.acceptanceCriteria.length > 0) {
-        // Gather all code content (already read by earlier probes — reuse probeCache)
-        let allCode = ""
-        const toolCalls = stepResult.toolCalls ?? []
-        const normalizedRequiredSources = new Set(sa.executionContext.requiredSourceArtifacts.map((artifact) => artifact.replace(/^\.\//, "")))
-        for (const artifact of sa.executionContext.targetArtifacts) {
-          const cached = probeCache.get(artifact)
-          if (!cached?.found) continue
-          try {
-            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
-            if (typeof content === "string") allCode += "\n" + content
-          } catch { /* skip */ }
-        }
-
-        if (allCode.length > 0) {
-          const codeLower = allCode.toLowerCase()
-          const missingCriteria: string[] = []
-
-          for (const criterion of sa.acceptanceCriteria) {
-            if (criterionSatisfiedBySourceArtifactUsage(criterion, sa.executionContext.requiredSourceArtifacts, toolCalls, normalizedRequiredSources)) {
-              continue
-            }
-            const keywords = extractCriterionKeywords(criterion)
-            if (keywords.length === 0) continue
-            // A criterion is "covered" if at least one of its keywords appears in code
-            const covered = keywords.some(kw => codeLower.includes(kw))
-            if (!covered) {
-              missingCriteria.push(`"${criterion.slice(0, 80)}" (expected: ${keywords.join(", ")})`)
-            }
-          }
-
-          if (missingCriteria.length > 0) {
-            issues.push(
-              `CRITERIA PROOF MISSING: acceptance criteria with no code evidence (${missingCriteria.length}/${sa.acceptanceCriteria.length}): ` +
-              missingCriteria.slice(0, 5).join("; "),
-            )
-          }
-        }
-      }
-
       // Runtime-facing criteria require runtime proof, not only static code checks.
       const runtimeCriterionRe = /\b(?:click|submit|drag|drop|keyboard|mouse|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end|api|request|response|endpoint|fetch|http|query|database|sql|persist|sync|auth|login)\b/i
+      const complexRuleCriterionRe = /\b(?:all rules|special moves|castling|en passant|promotion|checkmate|stalemate|king safety|piece[- ]specific|illegal move|turn[- ]based|full game logic|complete logic|algorithmic contract)\b/i
       const docsOnlyArtifacts = sa.executionContext.targetArtifacts.length > 0 &&
         sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
       if (!docsOnlyArtifacts && !executedModalities.has("runtime")) {
@@ -858,6 +1058,18 @@ export async function runDeterministicProbes(
         if (runtimeCriteria.length > 0) {
           issues.push(
             `CRITERIA PROOF MISSING: runtime criteria were declared but no runtime probe executed (${runtimeCriteria.length}/${sa.acceptanceCriteria.length})`,
+          )
+        }
+      }
+
+      const role = sa.executionContext.role ?? "writer"
+      if (role !== "writer") {
+        const complexCriteria = sa.acceptanceCriteria.filter(c => complexRuleCriterionRe.test(c))
+        const blanketComplexClaim = /\b(?:all|fully|complete(?:ly)?|properly)\b.{0,80}\b(?:rules|logic|workflow|constraints|requirements)\b/i.test(outputText)
+        const runtimeOnlyEvidence = executedModalities.has("runtime") && !executedModalities.has("tests")
+        if (complexCriteria.length > 0 && runtimeOnlyEvidence && blanketComplexClaim) {
+          issues.push(
+            `CRITERIA PROOF MISSING: validator/reviewer claimed complex rule coverage from broad runtime evidence only (${complexCriteria.length} complex criteria). Require criterion-by-criterion evidence from code review or executable tests, not just a successful browser/render pass.`,
           )
         }
       }
@@ -875,7 +1087,6 @@ export async function runDeterministicProbes(
       }
 
       // ── Role-specific validation (agenc-core pattern) ──
-      const role = sa.executionContext.role ?? "writer"
       if (role === "writer") {
         // Writer steps must actually produce files — verify they exist and have content
         let mutationConfirmed = false
@@ -917,8 +1128,9 @@ export async function runDeterministicProbes(
         "Missing method", "Browser check", "catch-all", "empty function",
         "deferred-work", "explicit failure", "all tool calls failed",
         "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
-        "degeneration", "no code evidence", "PATH MISMATCH", "SCOPE VIOLATION",
+        "degeneration", "PATH MISMATCH", "SCOPE VIOLATION",
         "VERIFICATION MODALITY GAP", "CRITERIA PROOF MISSING",
+        "SPEC ", "PROCESS AUDIT", "BLUEPRINT ARTIFACT",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -1031,21 +1243,28 @@ interface BlueprintFileSpec {
   readonly declaredPath: string
   readonly basename: string
   readonly functions: readonly BlueprintFunctionSpec[]
+  readonly structuralMarkers: readonly string[]
 }
 
 interface BlueprintSpec {
   readonly blueprintPath: string
   readonly files: readonly BlueprintFileSpec[]
+  readonly contractFiles: readonly BlueprintFileSpec[]
+  readonly contractBlockPresent: boolean
+  readonly contractBlockErrors: readonly string[]
   readonly sharedTypes: readonly string[]
   readonly algorithmicContracts: readonly string[]
 }
 
 interface ArtifactSpecMapping {
   readonly targetArtifact: string
+  readonly actualArtifactPath: string | null
   readonly matchedSpecPath: string | null
   readonly pathMatch: "exact" | "basename" | "none"
   readonly foundFunctions: readonly string[]
   readonly missingFunctions: readonly string[]
+  readonly foundStructuralMarkers: readonly string[]
+  readonly missingStructuralMarkers: readonly string[]
 }
 
 interface StepSpecEvidence {
@@ -1054,6 +1273,60 @@ interface StepSpecEvidence {
   readonly sourceReads: readonly string[]
   readonly mappings: readonly ArtifactSpecMapping[]
   readonly structuralIssues: readonly string[]
+  readonly processAuditIssues: readonly string[]
+}
+
+function isBlueprintLikeStepForVerifier(step: SubagentTaskStep): boolean {
+  return /blueprint/i.test(step.name)
+    || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+}
+
+function collectPlannedBlueprintArtifacts(plan: Plan): string[] {
+  return uniqueStrings(
+    plan.steps
+      .filter((step): step is SubagentTaskStep => step.stepType === "subagent_task")
+      .filter((step) => !isBlueprintLikeStepForVerifier(step))
+      .flatMap((step) => step.executionContext.targetArtifacts)
+      .map(normalizeSpecPath)
+      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact)),
+  )
+}
+
+function buildBlueprintArtifactCoverageIssues(
+  step: SubagentTaskStep,
+  spec: BlueprintSpec,
+  plan: Plan,
+  blueprintPath: string,
+): string[] {
+  if (!isBlueprintLikeStepForVerifier(step)) return []
+  if (!spec.contractBlockPresent) {
+    return [
+      `BLUEPRINT CONTRACT MISSING: ${blueprintPath} must include a machine-readable \`blueprint-contract\` JSON block with the exact planned artifact paths before implementation steps can run`,
+    ]
+  }
+  if (spec.contractBlockErrors.length > 0) return [...spec.contractBlockErrors]
+
+  const declaredArtifacts = uniqueStrings(
+    spec.contractFiles
+      .map((file) => normalizeSpecPath(file.declaredPath))
+      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact)),
+  )
+  const plannedArtifacts = collectPlannedBlueprintArtifacts(plan)
+  const missingPlanned = plannedArtifacts.filter((artifact) => !declaredArtifacts.includes(artifact))
+  const undeclaredExtras = declaredArtifacts.filter((artifact) => !plannedArtifacts.includes(artifact))
+
+  const issues: string[] = []
+  if (missingPlanned.length > 0) {
+    issues.push(
+      `BLUEPRINT ARTIFACT COVERAGE FAILED: ${blueprintPath} is missing planned artifact declarations ${missingPlanned.join(", ")}`,
+    )
+  }
+  if (undeclaredExtras.length > 0) {
+    issues.push(
+      `BLUEPRINT ARTIFACT DRIFT: ${blueprintPath} declares files not present in the plan targetArtifacts (${undeclaredExtras.join(", ")})`,
+    )
+  }
+  return issues
 }
 
 type IntegrationProbe = (ctx: IntegrationProbeContext) => Promise<void>
@@ -1341,7 +1614,9 @@ Rules:
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
 - When "specEvidence" is provided for a step, treat it as the structured contract extracted from BLUEPRINT.md. Use its source-read evidence, file mappings, and missing-function findings when deciding whether the step actually followed the spec.
+- When "specEvidence" is provided for a step, also use its structural markers and process-audit findings. If the child read BLUEPRINT.md only after mutating files, or never read it at all, treat that as strong evidence the spec was not actually used.
 - EXPLICIT MAPPING REQUIRED: If a step claims to follow BLUEPRINT.md but the provided spec evidence shows unmapped target artifacts, path mismatches, or missing blueprint functions, do NOT mark the step as pass unless the actual code clearly satisfies the contract another way and you can explain that reasoning in the issues.
+- STRUCTURAL FIRST: Use the blueprint's declared structural markers in a language-agnostic way. Depending on the artifact type, these may represent tags/components, functions/methods, classes/structs/interfaces, modules/packages/namespaces, shell commands, labels, or other named program structure. Missing structural markers are deterministic evidence against a pass, even if the child summary sounds plausible.
 - GUARD ORDERING: Check that early-return guards in event handlers or dispatchers don't block valid interactions. Example: \`if (item.owner !== currentUser) return;\` at the top of a click handler prevents clicking on opponent items to interact with them (e.g. capture). The guard should be conditional on current state (e.g. only reject when no item is already selected).
 - HELPER FUNCTION TRACING: For each key acceptance criterion, identify the function(s) that implement it and the helpers they call. Pick ONE concrete scenario and mentally trace the code path step by step, including into helper functions. Verify each helper returns the correct value for that scenario. A helper whose name implies a semantic (e.g. "isSameTeam", "isValid", "hasPermission", "belongsTo") must actually implement that semantic correctly — don't assume it works just because it has a body. Pay special attention to comparisons that erase important distinctions (e.g. case-insensitive comparison on data where case carries meaning).
 - MISSING FEATURE DETECTION: For each acceptance criterion, verify there is ACTUAL CODE implementing it — not just a function with a matching name, but real logic. If a criterion requires session expiration logic but no code checks timestamps, that criterion is NOT met. If a criterion requires duplicate suppression but no code tracks prior ids, it is NOT met. List every criterion that is NOT implemented.
@@ -1392,12 +1667,16 @@ export async function runLLMVerification(
         sourceReads: specEvidence.sourceReads,
         mappings: specEvidence.mappings.map(mapping => ({
           targetArtifact: mapping.targetArtifact,
+          actualArtifactPath: mapping.actualArtifactPath,
           matchedSpecPath: mapping.matchedSpecPath,
           pathMatch: mapping.pathMatch,
           foundFunctions: mapping.foundFunctions,
           missingFunctions: mapping.missingFunctions,
+          foundStructuralMarkers: mapping.foundStructuralMarkers,
+          missingStructuralMarkers: mapping.missingStructuralMarkers,
         })),
         structuralIssues: specEvidence.structuralIssues,
+        processAuditIssues: specEvidence.processAuditIssues,
       } : undefined,
     }
   })
@@ -1582,7 +1861,8 @@ export async function verify(
       const sa = step as SubagentTaskStep
       const stepResult = pipelineResult.stepResults.get(step.name)
       if (stepResult?.status === "completed") {
-        const specEvidence = await buildStepSpecEvidence(sa, stepResult, readFile, runCommand)
+        const actualPaths = stepResult.output ? extractActualPaths(stepResult.output) : []
+        const specEvidence = await buildStepSpecEvidence(sa, stepResult, plan, readFile, runCommand, actualPaths)
         if (specEvidence) stepSpecEvidence.set(step.name, specEvidence)
       }
       // Gather actual paths from child output for better probe resolution
@@ -1987,104 +2267,9 @@ function safeParseJson(text: string): Record<string, unknown> | null {
   }
 }
 
-// ============================================================================
-// Acceptance criteria keyword extraction
-// ============================================================================
-
-/**
- * Common words that should NOT be used as criterion keywords because they
- * appear in almost any codebase and provide no signal.
- */
-const CRITERION_STOP_WORDS = new Set([
-  // Generic programming terms
-  "must", "should", "implement", "function", "method", "code", "logic",
-  "data", "value", "values", "return", "check", "that", "this", "with",
-  "when", "each", "from", "have", "correctly", "properly", "displayed",
-  "support", "allow", "prevent", "include", "system", "state", "valid",
-  "invalid", "true", "false", "click", "selected", "display", "area",
-  "type", "rule", "rules", "handle", "event", "user", "item", "items",
-  "file", "error", "result", "input", "output", "update", "action",
-])
-
-/**
- * Extract distinctive keywords from an acceptance criterion.
- *
- * These keywords represent specific features or concepts that should appear
- * somewhere in the code if the criterion is actually implemented.
- *
- * Strategy:
- * - Split on word boundaries, split camelCase
- * - Keep words ≥4 chars that are not stop words
- * - Also detect multi-word technical phrases ("access control" → "permission", "authorize")
- * - Return lowercase keywords
- *
- * Examples:
- *   "token refresh must work correctly" → ["token", "refresh"]
- *   "duplicate event suppression" → ["duplic", "suppres"]
- *   "access control enforcement" → ["permission", "authorize", "access"]
- *   "drag and drop ordering" → ["drag", "drop", "order"]
- */
-export function extractCriterionKeywords(criterion: string): string[] {
-  const lower = criterion.toLowerCase()
-  const keywords: string[] = []
-
-  // Extract multi-word technical phrases first
-  const PHRASE_PATTERNS: Array<{ re: RegExp; stems: string[] }> = [
-    { re: /drag\s*(?:and|&)\s*drop/i, stems: ["drag", "drop"] },
-    { re: /right[\s-]click/i, stems: ["rightclick", "contextmenu"] },
-    { re: /double[\s-]click/i, stems: ["dblclick", "doubleclick"] },
-    { re: /access[\s-]control/i, stems: ["permission", "authorize", "access"] },
-  ]
-  for (const { re, stems } of PHRASE_PATTERNS) {
-    if (re.test(lower)) {
-      keywords.push(...stems)
-    }
-  }
-
-  // Extract individual words, split camelCase, keep distinctive ones
-  const words = lower.split(/[\s,;:.()\[\]{}'"\/\\]+/).filter(w => w.length >= 4)
-  for (const word of words) {
-    if (CRITERION_STOP_WORDS.has(word)) continue
-    // Use word stems (prefix) for matching to handle variants like
-    // "validation" matching "validat" and "promotion" matching "promot".
-    const stem = word.length > 6 ? word.slice(0, Math.max(5, Math.ceil(word.length * 0.7))) : word
-    if (stem.length >= 4 && !CRITERION_STOP_WORDS.has(stem)) {
-      keywords.push(stem)
-    }
-  }
-
-  // Deduplicate
-  return [...new Set(keywords)]
-}
-
 function isBlockingCriteriaProofGap(issue: string): boolean {
   if (!issue.includes("CRITERIA PROOF MISSING")) return false
   return /runtime criteria were declared but no runtime probe executed|shared-state contract requires/i.test(issue)
-}
-
-function criterionSatisfiedBySourceArtifactUsage(
-  criterion: string,
-  requiredSourceArtifacts: readonly string[],
-  toolCalls: readonly { name: string; arguments?: unknown }[],
-  normalizedRequiredSources: ReadonlySet<string>,
-): boolean {
-  const lower = criterion.toLowerCase()
-  const referencesBlueprint = /blueprint\.md|blueprint|contract|defined in the ['"]?blueprint/i.test(lower)
-  const referencesSourceStructure = /adheres? to the structure|follows? the structure|matches? the structure|uses? the structure/i.test(lower)
-  if (!referencesBlueprint && !referencesSourceStructure) return false
-
-  const hasBlueprintSource = requiredSourceArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
-  if (!hasBlueprintSource) return false
-
-  const readBlueprint = toolCalls.some((call) => {
-    if (call.name !== "read_file") return false
-    const args = (call.arguments ?? {}) as Record<string, unknown>
-    const path = typeof args.path === "string" ? args.path.replace(/^\.\//, "") : ""
-    if (!path) return false
-    return /(?:^|\/)BLUEPRINT\.md$/i.test(path) || normalizedRequiredSources.has(path)
-  })
-
-  return readBlueprint
 }
 
 // ============================================================================

@@ -542,6 +542,9 @@ export const useStore = create<AppState>()(
               id: data["stepId"] as string,
               name: data["name"] as string ?? "Step",
               action: data["action"] as string ?? "",
+              input,
+              output: {},
+              error: null,
               status: "running",
               startedAt: timestamp,
             } as Step)
@@ -554,6 +557,11 @@ export const useStore = create<AppState>()(
             store.addTrace({ kind: "tool-result", text: result })
             store.upsertStep({
               id: data["stepId"] as string,
+              name: data["name"] as string ?? "Step",
+              action: data["action"] as string ?? "",
+              input: (data["input"] as Record<string, unknown>) ?? {},
+              output,
+              error: null,
               status: "completed",
               completedAt: timestamp,
             } as Step)
@@ -565,8 +573,12 @@ export const useStore = create<AppState>()(
             store.addTrace({ kind: "tool-error", text: errText })
             store.upsertStep({
               id: data["stepId"] as string,
+              name: data["name"] as string ?? "Step",
+              action: data["action"] as string ?? "",
+              input: (data["input"] as Record<string, unknown>) ?? {},
+              output: (data["output"] as Record<string, unknown>) ?? {},
               status: "failed",
-              error: data["error"] as string,
+              error: errText,
               completedAt: timestamp,
             } as Step)
             break

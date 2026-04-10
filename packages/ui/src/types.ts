@@ -102,6 +102,7 @@ export type TraceEntry =
   | { kind: "user-input-request"; question: string; options?: string[]; sensitive?: boolean }
   | { kind: "user-input-response"; text: string }
   // Planner entries (agenc-core planner-first routing)
+  | { kind: "planning_preflight"; mode: "planner-first" }
   | { kind: "planner-decision"; score: number; shouldPlan: boolean; reason: string }
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
@@ -110,6 +111,7 @@ export type TraceEntry =
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "direct_loop_fallback"; source: "planner_declined" | "planner_verifier_low_complexity"; reason: string }
   | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
   | { kind: "planner-step-start"; stepName: string; stepType: string }
@@ -128,7 +130,29 @@ export type TraceEntry =
   // Per-step retry skip (repeated failure / stub regression)
   | { kind: "planner-retry-skip"; stepName: string; reason: string }
   // Planner delegation entries (child agents spawned by planner)
-  | { kind: "planner-delegation-start"; goal: string; stepName: string; depth: number; tools: string[]; envelope: { workspaceRoot?: string; effectClass?: string; verificationMode?: string; targetArtifacts?: string[] } }
+  | {
+    kind: "planner-delegation-start"
+    goal: string
+    stepName: string
+    depth: number
+    tools: string[]
+    budget: {
+      hint: string
+      parsedHint: number
+      baseBudget: number
+      contractFloor: number
+      complexityBoost: number
+      computedMaxIterations: number
+      targetArtifactCount: number
+      requiredSourceArtifactCount: number
+      acceptanceCriteriaCount: number
+      codeArtifactCount: number
+      hasComplexImplementation: boolean
+      hasBlueprintSource: boolean
+      verificationMode: string
+    }
+    envelope: { workspaceRoot?: string; effectClass?: string; verificationMode?: string; targetArtifacts?: string[] }
+  }
   | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number }
   | { kind: "planner-delegation-end"; stepName: string; depth: number; status: "done" | "error"; answer?: string; error?: string }
   // Debug/inspector entries

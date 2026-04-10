@@ -2,16 +2,16 @@
  * Planner subsystem tests — decision routing, plan validation,
  * pipeline execution, and circuit breaker behavior.
  */
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
 import { isValidArtifactPath } from "../src/planner/generate.js"
-import { inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
+import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
-import { extractCriterionKeywords, isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
-import type { Tool } from "../src/types.js"
+import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
+import type { LLMClient, Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -64,6 +64,17 @@ function makeSubagentStep(name: string, overrides: Partial<SubagentTaskStep> = {
     },
     ...overrides,
   }
+}
+
+function makeBlueprintContract(paths: readonly string[]): string {
+  return [
+    "```blueprint-contract",
+    JSON.stringify({
+      version: 1,
+      files: paths.map(path => ({ path, purpose: `Purpose for ${path}` })),
+    }, null, 2),
+    "```",
+  ].join("\n")
 }
 
 // ============================================================================
@@ -205,6 +216,88 @@ describe("Planner output-root inference", () => {
   it("returns null when goal does not specify a strict output directory", () => {
     const goal = "Implement a dashboard with tests and API integration."
     expect(inferForcedOutputDirectoryFromGoal(goal)).toBeNull()
+  })
+})
+
+describe("Planner path execution", () => {
+  it("halts on unrepaired validation failures instead of falling back to the direct loop", async () => {
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "split html and interaction work",
+          confidence: 0.92,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "implement_board_rendering",
+              stepType: "subagent_task",
+              objective: "Create tmp/index.html with the board markup and full static structure",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["Board renders", "HTML structure is complete"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+              },
+            },
+            {
+              name: "integrate_ui_interactions",
+              stepType: "subagent_task",
+              objective: "Update tmp/index.html with interaction hooks and final UI behavior",
+              inputContract: "Board markup exists",
+              acceptanceCriteria: ["Interactions work", "HTML wiring is complete"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: ["needs previous output"],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: ["tmp/index.html"],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+              },
+            },
+          ],
+          edges: [{ from: "implement_board_rendering", to: "integrate_ui_interactions" }],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    const traces: Array<Record<string, unknown>> = []
+    const result = await executePlannerPath(
+      "Build a complete playable chess game in tmp with multiple coordinated files and interactions.",
+      {
+        llm,
+        tools: [echoTool("write_file"), echoTool("read_file")],
+        workspaceRoot: ".",
+        history: [],
+        onTrace: (entry) => traces.push(entry),
+      },
+      async () => ({ output: "unused" }),
+    )
+
+    expect(result.handled).toBe(true)
+    expect(result.answer).toContain('"stage": "validation"')
+    expect(result.answer).toContain("shared_target_artifact")
+    expect(result.plan).toBeDefined()
+    expect(traces.some((entry) => entry.kind === "planner-validation-failed")).toBe(true)
+    expect(traces.some((entry) => entry.kind === "planner-fallback-direct-loop")).toBe(false)
   })
 })
 
@@ -1670,6 +1763,92 @@ describe("Pipeline: executePipeline", () => {
     expect(seenObjective).toContain("replace_in_file appears brittle")
     expect(seenObjective).toContain("Use write_file with FULL-FILE preservation")
   })
+
+  it("compiles verifier findings into an autonomous repair plan for code/spec mismatches", async () => {
+    let seenObjective = ""
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair-engine", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["read_file", "write_file"],
+          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+          targetArtifacts: ["tmp/engine.py"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const retryFeedback = new Map<string, readonly string[]>([
+      ["repair-engine", [
+        "SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move, apply_move from tmp/BLUEPRINT.md",
+        "PROCESS AUDIT FAILED: step repair-engine read tmp/BLUEPRINT.md only after starting file mutations",
+      ]],
+    ])
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        seenObjective = step.objective
+        return { output: "done", toolCalls: [] }
+      },
+      { retryFeedback },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(seenObjective).toContain("AUTONOMOUS REPAIR PLAN")
+    expect(seenObjective).toContain("implement exactly these missing functions")
+    expect(seenObjective).toContain("Reorder the workflow: read spec first")
+    expect(seenObjective).toContain("Python: preserve function names and call contracts exactly")
+  })
+
+  it("adds shell-specific autonomous retry guidance for PowerShell and Windows CMD artifacts", async () => {
+    let seenObjective = ""
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair-shell", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["read_file", "write_file"],
+          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+          targetArtifacts: ["tmp/install.ps1", "tmp/bootstrap.cmd"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const retryFeedback = new Map<string, readonly string[]>([
+      ["repair-shell", [
+        "SPEC MAPPING MISSING: target artifact tmp/install.ps1 does not map to any file declared in tmp/BLUEPRINT.md",
+        "Syntax error in \"tmp/bootstrap.cmd\": unexpected token",
+      ]],
+    ])
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        seenObjective = step.objective
+        return { output: "done", toolCalls: [] }
+      },
+      { retryFeedback },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(seenObjective).toContain("Map each target artifact to a concrete blueprint file/section")
+    expect(seenObjective).toContain("Fix syntax and parse errors first")
+    expect(seenObjective).toContain("PowerShell: preserve cmdlet/function names")
+    expect(seenObjective).toContain("Windows CMD: use cmd.exe syntax")
+  })
 })
 
 // ============================================================================
@@ -1733,53 +1912,451 @@ describe("ToolFailureCircuitBreaker", () => {
 })
 
 // ============================================================================
-// Acceptance criteria keyword extraction
+// Spec-driven verifier evidence
 // ============================================================================
 
-describe("extractCriterionKeywords", () => {
-  it("extracts keyword stems from a token refresh criterion", () => {
-    const kws = extractCriterionKeywords("token refresh must work correctly")
-    expect(kws.some(kw => "refresh".includes(kw))).toBe(true)
+describe("Verifier: spec-driven structural and process evidence", () => {
+  it("fails blueprint steps that declare a different artifact set than the plan", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md",
+          acceptanceCriteria: ["Blueprint declares the planned files exactly"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_game_logic", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/game_logic.js", "tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["generate_blueprint", {
+          name: "generate_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+        ["implement_game_logic", {
+          name: "implement_game_logic",
+          status: "completed",
+          output: "wrote tmp/game_logic.js and tmp/index.html",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) {
+            return [
+              "# Chess Blueprint",
+              "",
+              makeBlueprintContract(["game/index.html", "game/rules.js"]),
+              "",
+              "`game/index.html`",
+              "- browser shell",
+              "`game/rules.js`",
+              "- chess rules engine",
+            ].join("\n")
+          }
+          if (path.endsWith("game_logic.js")) return "export function validateMove() { return true }"
+          if (path.endsWith("index.html")) return "<main>Chess</main>"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("BLUEPRINT ARTIFACT COVERAGE FAILED") && i.includes("tmp/game_logic.js"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("BLUEPRINT ARTIFACT DRIFT") && i.includes("game/rules.js"))).toBe(true)
   })
 
-  it("extracts access-control multi-word phrase", () => {
-    const kws = extractCriterionKeywords("access control must be enforced")
-    expect(kws).toContain("permission")
-    expect(kws).toContain("authorize")
+  it("detects missing blueprint functions for non-web languages like Python", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("engine-step", {
+          objective: "Implement the Python engine from BLUEPRINT.md",
+          acceptanceCriteria: ["Engine follows the contracts defined in BLUEPRINT.md"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.py"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["engine-step", {
+          name: "engine-step",
+          status: "completed",
+          output: "wrote tmp/engine.py",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+            { name: "write_file", args: { path: "tmp/engine.py", content: "def render_board(board):\n    return board\n" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) {
+            return [
+              "# Engine Blueprint",
+              "",
+              "`tmp/engine.py`",
+              "- function `validate_move(board, move)` validates legal moves",
+              "- function `render_board(board)` renders the board state",
+            ].join("\n")
+          }
+          if (path.endsWith("engine.py")) return "def render_board(board):\n    return board\n"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "engine-step")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("SPEC FUNCTION MISMATCH") && i.includes("validate_move"))).toBe(true)
   })
 
-  it("extracts drag-and-drop phrase", () => {
-    const kws = extractCriterionKeywords("drag and drop reordering should work")
-    expect(kws).toContain("drag")
-    expect(kws).toContain("drop")
+  it("flags blueprint structure mismatches from structural markers instead of keyword heuristics", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("ui-step", {
+          objective: "Build the UI from BLUEPRINT.md",
+          acceptanceCriteria: ["All rendering adheres to the structure defined in BLUEPRINT.md"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["ui-step", {
+          name: "ui-step",
+          status: "completed",
+          output: "wrote tmp/index.html",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+            { name: "write_file", args: { path: "tmp/index.html", content: "<main><div id='board'></div></main>" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) {
+            return [
+              "# UI Blueprint",
+              "",
+              "`tmp/index.html`",
+              "- Root layout uses `<main>`",
+              "- Board container is `#board`",
+              "- Reset control is `.reset-button`",
+            ].join("\n")
+          }
+          if (path.endsWith("index.html")) return "<main><div id='board'></div></main>"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "ui-step")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("SPEC STRUCTURE MISMATCH"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("acceptance criteria with no code evidence"))).toBe(false)
   })
 
-  it("extracts promotion-related keywords", () => {
-    const kws = extractCriterionKeywords("plan promotion to approved status")
-    expect(kws.some(kw => "promotion".includes(kw))).toBe(true)
-    expect(kws.some(kw => "status".includes(kw))).toBe(true)
+  it("fails process audit when BLUEPRINT.md is read only after file mutation begins", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("ui-step", {
+          objective: "Implement blueprint-aligned UI",
+          acceptanceCriteria: ["All rendering adheres to the structure defined in BLUEPRINT.md"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["ui-step", {
+          name: "ui-step",
+          status: "completed",
+          output: "wrote tmp/index.html",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/index.html", content: "<main></main>" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) return "`tmp/index.html`\n- Root layout uses `<main>`"
+          if (path.endsWith("index.html")) return "<main></main>"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "ui-step")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("PROCESS AUDIT FAILED"))).toBe(true)
   })
 
-  it("filters out stop words", () => {
-    const kws = extractCriterionKeywords("must implement the code with this value")
-    // All words are stop words → empty
-    expect(kws.length).toBe(0)
+  it("rejects validator blanket claims for complex rule coverage from runtime-only evidence", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("runtime_verification", {
+          objective: "Verify the chess game in the browser",
+          acceptanceCriteria: [
+            "All chess rules including castling, en passant, promotion, and checkmate are verified",
+            "The game renders and accepts interaction",
+          ],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "browser_check"],
+            requiredSourceArtifacts: ["tmp/game_logic.js", "tmp/index.html"],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "readonly",
+            verificationMode: "browser_check",
+            artifactRelations: [],
+            role: "validator",
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["runtime_verification", {
+          name: "runtime_verification",
+          status: "completed",
+          output: "The chess game renders successfully in the browser and all chess rules are implemented properly.",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/game_logic.js" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/index.html" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<main><button>Play</button></main>"
+          if (path.endsWith("game_logic.js")) return "export function validateMove() { return true }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "browser_check",
+        description: "browser",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute() {
+          return "No errors"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "runtime_verification")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("validator/reviewer claimed complex rule coverage from broad runtime evidence only"))).toBe(true)
   })
 
-  it("handles non-game criteria (auth, API)", () => {
-    const kws = extractCriterionKeywords("access control with role-based permissions")
-    expect(kws).toContain("permission")
-    expect(kws).toContain("authorize")
-  })
+  it("fails closed before downstream work when the generated blueprint contract paths do not match the plan", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md",
+          acceptanceCriteria: ["Blueprint declares the planned files exactly"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("implement_game_logic", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/game_logic.js", "tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }],
+    })
 
-  it("handles criteria with highlighting and selection", () => {
-    const kws = extractCriterionKeywords("clicking an item highlights valid actions in the interface")
-    expect(kws.some(kw => "highlight".includes(kw))).toBe(true)
-  })
+    let delegateCalls = 0
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "read",
+      parameters: { type: "object", properties: { path: { type: "string" } } },
+      async execute(args) {
+        const path = String(args.path)
+        if (path.endsWith("BLUEPRINT.md")) {
+          return [
+            "# Broken Blueprint",
+            "",
+            makeBlueprintContract(["game/rules.js", "game/index.html"]),
+          ].join("\n")
+        }
+        return "Error: not found"
+      },
+    }
 
-  it("returns empty for very short generic criteria", () => {
-    const kws = extractCriterionKeywords("it is ok")
-    expect(kws.length).toBe(0)
+    const result = await executePipeline(
+      plan,
+      [readFileTool],
+      async (step) => {
+        delegateCalls += 1
+        return {
+          output: `done ${step.name}`,
+          toolCalls: [
+            { name: "write_file", args: { path: step.executionContext.targetArtifacts[0], content: "ok" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }
+      },
+      { workspaceRoot: "." },
+    )
+
+    expect(delegateCalls).toBe(1)
+    expect(result.status).toBe("failed")
+    expect(result.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
+    expect(result.stepResults.get("generate_blueprint")?.error).toContain("BLUEPRINT ARTIFACT COVERAGE FAILED")
+    expect(result.stepResults.get("implement_game_logic")?.status).toBe("skipped")
   })
 })
 

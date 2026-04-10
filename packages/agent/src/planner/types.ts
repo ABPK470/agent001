@@ -232,6 +232,8 @@ export type SubagentFailureClass =
   | "timeout"
   | "budget_exceeded"
   | "tool_misuse"
+  | "blueprint_contract"
+  | "syntax_error"
   | "spawn_error"
   | "cancelled"
   | "transient_provider_error"

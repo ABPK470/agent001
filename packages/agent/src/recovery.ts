@@ -956,8 +956,8 @@ function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
         key: "delegation-budget-exhausted",
         message:
           "The child agent exhausted its iteration budget. The task was too large. " +
-          "Split it into smaller, more focused tasks with narrower scope. " +
-          "Each child should be able to complete its goal in 15-20 iterations.",
+          "Increase the child budget when the work is a single cohesive owned implementation, or split only along real ownership boundaries when the task mixes unrelated concerns. " +
+          "Do NOT micro-split solely to chase a tiny iteration count.",
       }
     }
   }

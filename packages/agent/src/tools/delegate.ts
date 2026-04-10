@@ -34,13 +34,15 @@ import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
 /** Default iteration budget for a child agent. */
-const DEFAULT_CHILD_ITERATIONS = 35
+const DEFAULT_CHILD_ITERATIONS = 50
 
 /**
  * Hard cap on child iterations.
  * agenc-core uses dynamic budgets based on contract shape, but always has a generous cap.
  */
-const MAX_CHILD_ITERATIONS = 80
+const MAX_CHILD_ITERATIONS = 180
+
+const COMPLEX_IMPLEMENTATION_RE = /\b(?:game|rules?|engine|validator|workflow|state machine|parser|compiler|algorithm|reconciliation|move validation|checkmate|castling|en passant|promotion|scheduling|constraint|domain logic|business logic)\b/i
 
 /**
  * Dedicated system prompt for child worker agents.
@@ -97,16 +99,15 @@ PREFER replace_in_file FOR FIXES:
 - replace_in_file takes old_string (exact text to find) and new_string (replacement), leaving all other content untouched.
 - This ELIMINATES the risk of accidentally removing other functions during a rewrite.
 - Use write_file for CREATING new files. Use replace_in_file for MODIFYING existing files.
+- Use append_file only for true append-only artifacts such as logs, notes, or markdown sections. Do NOT use append_file to patch functions inside existing code files.
 - Only use write_file to modify an existing file when you need to change MORE THAN HALF of its content.
 
-MODULAR FILE ARCHITECTURE — MANDATORY FOR CODE > 200 LINES:
-- If the total code you need to write exceeds ~200 lines of logic, you MUST split it across multiple files.
-- Do not write one giant script. Use focused modules (e.g. domain-model.js, rules.js, controller.js, ui.js, index.html, styles.css).
-- Each file should be <200 lines and handle ONE concern.
-- Load files via multiple \`<script src="file.js">\` tags in dependency order in index.html.
-- Share data between files via global variables (e.g. \`window.Board = { ... }\`).
-- This is NOT over-engineering — it's the ONLY way to write reliable code at this scale. A single 800-line file will degenerate during writes.
-- WRITE EACH FILE COMPLETELY IN ONE write_file CALL. Do not write a skeleton and then fill it in — write ALL the logic for that file at once.
+FILE ARCHITECTURE — CHOOSE BY OWNERSHIP AND COHESION, NOT ARBITRARY LINE CAPS:
+- Split work into multiple files when the target artifacts or blueprint already define multiple owned modules, or when separate concerns reduce overwrite risk.
+- If the contract clearly calls for one cohesive owned file, it is acceptable to write several hundred lines in that file. Do NOT invent extra modules just to keep files short.
+- A large coherent file is acceptable; an incomplete file is not. Preserve exact target paths and file ownership.
+- If you do use multiple browser files, load them via multiple \`<script src="file.js">\` tags in dependency order in index.html.
+- WRITE EACH OWNED FILE COMPLETELY IN ONE mutation. Do not write a skeleton and then fill it in later.
 
 Browser projects:
 - For browser-based HTML/JS/CSS projects, put ALL code in plain \`<script>\` tags — do NOT use ES module \`import\`/\`export\` syntax. Use multiple \`<script src="file.js">\` tags loaded in dependency order, sharing via globals.
@@ -257,7 +258,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
               agentId: { type: "string", description: "Optional agent definition ID." },
               instructions: { type: "string", description: "Optional child instructions." },
               tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
-              maxIterations: { type: "number", description: `Max iterations (default: 15, max: ${MAX_CHILD_ITERATIONS}).` },
+              maxIterations: { type: "number", description: `Max iterations (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).` },
             },
             required: ["goal"],
           },
@@ -346,6 +347,81 @@ interface CanonicalPathMap {
   readonly targets: readonly string[]
   readonly targetSet: ReadonlySet<string>
   readonly byBasename: ReadonlyMap<string, readonly string[]>
+}
+
+export interface PlannerChildBudgetMetrics {
+  readonly hint: string
+  readonly parsedHint: number
+  readonly baseBudget: number
+  readonly contractFloor: number
+  readonly complexityBoost: number
+  readonly computedMaxIterations: number
+  readonly targetArtifactCount: number
+  readonly requiredSourceArtifactCount: number
+  readonly acceptanceCriteriaCount: number
+  readonly codeArtifactCount: number
+  readonly hasComplexImplementation: boolean
+  readonly hasBlueprintSource: boolean
+  readonly verificationMode: ExecutionEnvelope["verificationMode"]
+}
+
+export function computePlannerChildBudgetMetrics(
+  step: SubagentTaskStep,
+  envelope: ExecutionEnvelope,
+): PlannerChildBudgetMetrics {
+  const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
+  const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
+  const baseBudget = Math.max(parsedBudget, DEFAULT_CHILD_ITERATIONS)
+  const codeArtifactCount = envelope.targetArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)).length
+  const isWriterStep = envelope.effectClass !== "readonly" && envelope.targetArtifacts.length > 0
+  const combinedContractText = `${step.objective} ${step.acceptanceCriteria.join(" ")}`
+  const hasComplexImplementation = COMPLEX_IMPLEMENTATION_RE.test(combinedContractText)
+  const hasBlueprintSource = envelope.requiredSourceArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+
+  const contractFloor = Math.min(60, Math.max(18,
+    envelope.targetArtifacts.length * 2 +
+    step.acceptanceCriteria.length * 3 +
+    envelope.requiredSourceArtifacts.length +
+    (envelope.verificationMode !== "none" ? 6 : 0) +
+    (isWriterStep ? 8 : 0),
+  ))
+
+  const complexityBoost = isWriterStep
+    ? Math.min(100,
+      (step.acceptanceCriteria.length >= 8 ? 34 : step.acceptanceCriteria.length >= 6 ? 24 : step.acceptanceCriteria.length >= 4 ? 12 : 0) +
+      (codeArtifactCount >= 4 ? 26 : codeArtifactCount >= 2 ? 16 : codeArtifactCount === 1 ? 8 : 0) +
+      (envelope.requiredSourceArtifacts.length >= 4 ? 16 : envelope.requiredSourceArtifacts.length >= 2 ? 8 : envelope.requiredSourceArtifacts.length === 1 ? 4 : 0) +
+      (envelope.verificationMode !== "none" ? 10 : 0) +
+      (hasComplexImplementation ? 36 : 0) +
+      (hasBlueprintSource ? 10 : 0),
+    )
+    : 0
+
+  const adaptiveBudget = baseBudget + complexityBoost
+  const computedMaxIterations = Math.min(Math.max(baseBudget, contractFloor, adaptiveBudget), MAX_CHILD_ITERATIONS)
+
+  return {
+    hint: step.maxBudgetHint,
+    parsedHint: parsedBudget,
+    baseBudget,
+    contractFloor,
+    complexityBoost,
+    computedMaxIterations,
+    targetArtifactCount: envelope.targetArtifacts.length,
+    requiredSourceArtifactCount: envelope.requiredSourceArtifacts.length,
+    acceptanceCriteriaCount: step.acceptanceCriteria.length,
+    codeArtifactCount,
+    hasComplexImplementation,
+    hasBlueprintSource,
+    verificationMode: envelope.verificationMode,
+  }
+}
+
+export function computePlannerChildMaxIterations(
+  step: SubagentTaskStep,
+  envelope: ExecutionEnvelope,
+): number {
+  return computePlannerChildBudgetMetrics(step, envelope).computedMaxIterations
 }
 
 function normalizeRelativePath(path: string, workspaceRoot?: string): string {
@@ -738,7 +814,7 @@ export async function spawnChildForPlan(
   // even if the LLM plan forgot to list them. Without these the child
   // cannot self-review and gets stuck in write-only loops.
   if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass !== "readonly") {
-    for (const essential of ["read_file", "replace_in_file", "list_directory", "browser_check", "run_command"]) {
+    for (const essential of ["read_file", "append_file", "replace_in_file", "list_directory", "browser_check", "run_command"]) {
       allowedToolNames.add(essential)
     }
   }
@@ -764,35 +840,8 @@ export async function spawnChildForPlan(
 
   childTools = wrapPlannerChildToolsForWriteScope(childTools, normalizedEnvelope)
 
-  // Parse max iterations from budget hint
-  const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
-  // agenc-core pattern: contract-shaped budget floor.
-  // Estimate minimum iterations from the step's contract shape:
-  //   + targetArtifacts count (each needs at least 1 write)
-  //   + acceptanceCriteria count (each may need verification)
-  //   + source artifacts (each needs a read)
-  //   + verificationMode pass if applicable
-  const contractFloor = Math.min(20, Math.max(1,
-    normalizedEnvelope.targetArtifacts.length +
-    step.acceptanceCriteria.length +
-    normalizedEnvelope.requiredSourceArtifacts.length +
-    (normalizedEnvelope.verificationMode !== "none" ? 1 : 0) +
-    (normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0 ? 1 : 0)
-  ))
-  const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
-  const codeArtifactCount = normalizedEnvelope.targetArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)).length
-  const isWriterStep = normalizedEnvelope.effectClass !== "readonly" && normalizedEnvelope.targetArtifacts.length > 0
-  // Adaptive boost: code-heavy steps need more iterations for write/read/fix cycles
-  const complexityBoost = isWriterStep
-    ? Math.min(30,
-      (step.acceptanceCriteria.length >= 6 ? 8 : step.acceptanceCriteria.length >= 4 ? 4 : 0) +
-      (codeArtifactCount >= 3 ? 9 : codeArtifactCount >= 2 ? 6 : codeArtifactCount === 1 ? 3 : 0) +
-      (normalizedEnvelope.verificationMode !== "none" ? 4 : 0),
-    )
-    : 0
-  const adaptiveBudget = parsedBudget + complexityBoost
-  // Use whichever is larger: the parsed budget hint or the contract floor, capped at MAX_CHILD_ITERATIONS
-  const maxIter = Math.min(Math.max(parsedBudget, contractFloor, adaptiveBudget), MAX_CHILD_ITERATIONS)
+  const budgetMetrics = computePlannerChildBudgetMetrics(step, normalizedEnvelope)
+  const maxIter = budgetMetrics.computedMaxIterations
 
   ctx.onChildTrace?.({
     kind: "planner-delegation-start",
@@ -800,6 +849,7 @@ export async function spawnChildForPlan(
     stepName: step.name,
     depth: ctx.depth + 1,
     tools: childTools.map(t => t.name),
+    budget: budgetMetrics,
     envelope: {
         workspaceRoot: normalizedEnvelope.workspaceRoot,
         effectClass: normalizedEnvelope.effectClass,

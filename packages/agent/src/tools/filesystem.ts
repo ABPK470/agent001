@@ -15,7 +15,7 @@
  *   write_file only creates/overwrites — no unlink/rmdir.
  */
 
-import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
+import { appendFile, lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve, sep } from "node:path"
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { Tool } from "../types.js"
@@ -311,6 +311,66 @@ export const writeFileTool: Tool = {
       }
 
       return `Successfully wrote to ${filePath}`
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`
+    }
+  },
+}
+
+// ── append_file ──────────────────────────────────────────────────
+
+export const appendFileTool: Tool = {
+  name: "append_file",
+  description:
+    "Append content to the end of a file. Creates the file if it doesn't exist. " +
+    "Use this only for true append-only artifacts such as logs, notes, markdown sections, or generated transcripts. " +
+    "Do NOT use this to patch existing code — prefer replace_in_file for surgical edits or write_file for full rewrites.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Path to append to" },
+      content: { type: "string", description: "Content to append" },
+    },
+    required: ["path", "content"],
+  },
+
+  async execute(args) {
+    try {
+      const target = await safePathResolved(String(args.path))
+      const filePath = String(args.path)
+      const content = String(args.content)
+      const parentDir = dirname(target)
+
+      await mkdir(parentDir, { recursive: true })
+
+      let existing = ""
+      try {
+        existing = await readFile(target, "utf-8")
+      } catch {
+        existing = ""
+      }
+
+      const combined = existing + content
+      const integrityWarnings = checkWriteIntegrity(filePath, combined)
+
+      if (hasStructuralIntegrityIssue(integrityWarnings)) {
+        return (
+          `Append rejected for ${filePath} — update was NOT saved due to structural issues:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
+          `Use read_file to inspect the current file, then retry with corrected content.`
+        )
+      }
+
+      await appendFile(target, content, "utf-8")
+
+      if (integrityWarnings.length > 0) {
+        return (
+          `Appended to ${filePath}, but issues were detected in the resulting file:\n` +
+          integrityWarnings.map(w => `  - ${w}`).join("\n")
+        )
+      }
+
+      return `Successfully appended to ${filePath}`
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }

@@ -368,21 +368,40 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
 
 export function buildProblems(trace: TraceEntry[], steps: Step[]): Problem[] {
   const items: Problem[] = []
+  const seen = new Set<string>()
+
+  const addProblem = (problem: Problem) => {
+    const key = `${problem.source}::${problem.text}`
+    if (seen.has(key)) return
+    seen.add(key)
+    items.push(problem)
+  }
+
   for (const e of trace) {
-    if (e.kind === "error") items.push({ text: e.text, source: "run" })
-    else if (e.kind === "tool-error") items.push({ text: e.text.slice(0, 200), source: "tool" })
+    if (e.kind === "error") addProblem({ text: e.text, source: "run" })
+    else if (e.kind === "tool-error") addProblem({ text: e.text.slice(0, 200), source: "tool" })
     else if (e.kind === "planner-generation-failed") {
-      for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
+      for (const d of e.diagnostics) addProblem({ text: `[${d.code}] ${d.message}`, source: "planner" })
     } else if (e.kind === "planner-validation-failed") {
-      for (const d of e.diagnostics) items.push({ text: `[${d.code}] ${d.message}`, source: "planner" })
+      for (const d of e.diagnostics) addProblem({ text: `[${d.code}] ${d.message}`, source: "planner" })
     } else if (e.kind === "planner-validation-remediated") {
-      for (const d of e.diagnostics) items.push({ text: `[${d.code}] auto-remediated: ${d.message}`, source: "planner" })
+      for (const d of e.diagnostics) addProblem({ text: `[${d.code}] auto-remediated: ${d.message}`, source: "planner" })
+    } else if (e.kind === "planner-step-end" && e.status !== "completed") {
+      if (e.error) addProblem({ text: `${e.stepName}: ${e.error}`, source: "planner" })
+      else if (e.validationCode) addProblem({ text: `${e.stepName}: ${e.validationCode}`, source: "planner" })
     } else if (e.kind === "planner-pipeline-end" && e.status === "failed") {
-      items.push({ text: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed`, source: "planner" })
+      addProblem({ text: `Pipeline ${e.status}: ${e.completedSteps}/${e.totalSteps} steps completed`, source: "planner" })
+    } else if (e.kind === "planner-verification") {
+      for (const step of e.steps) {
+        for (const issue of step.issues) {
+          if (/^\[non-blocking\]/i.test(issue)) continue
+          addProblem({ text: `${step.stepName}: ${issue}`, source: "verifier" })
+        }
+      }
     }
   }
   for (const s of steps) {
-    if (s.status === "failed" && s.error) items.push({ text: s.error, source: s.name, time: s.completedAt ?? undefined })
+    if (s.status === "failed" && s.error) addProblem({ text: s.error, source: s.name, time: s.completedAt ?? undefined })
   }
   return items
 }
