@@ -8,35 +8,39 @@
  * @module
  */
 
-import { basename } from "node:path"
 
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import {
-  buildContractSpec,
-  getCorrectionGuidance,
-  validateDelegatedOutputContract
+    buildContractSpec,
+    getCorrectionGuidance,
+    validateDelegatedOutputContract
 } from "../delegation-validation.js"
-import {
-  normalizeBasename,
-  normalizeSpecPath,
-  parseBlueprintContractBlock,
-  uniqueStrings,
-  validateBlueprintArtifactContract,
-} from "./blueprint-contract.js"
+import { normalizeToolExecutionOutput } from "../tool-utils.js"
 import type { LLMClient, Message, Tool } from "../types.js"
+import {
+    type BlueprintSharedTypeSpec,
+    normalizeBasename,
+    normalizeSpecPath,
+    parseBlueprintContractBlock,
+    uniqueStrings
+} from "./blueprint-contract.js"
 import type {
-  PipelineResult,
-  PipelineStepResult,
-  Plan,
-  SubagentTaskStep,
-  VerifierDecision,
-  VerifierOutcome,
-  VerifierStepAssessment,
+    PipelineResult,
+    PipelineStepResult,
+    Plan,
+    SubagentTaskStep,
+    VerifierDecision,
+    VerifierOutcome,
+    VerifierStepAssessment,
 } from "./types.js"
 
 // ============================================================================
 // Constants (ported from agenc-core chat-executor-verifier.ts)
 // ============================================================================
+
+async function executeToolForText(tool: Tool, args: Record<string, unknown>): Promise<string> {
+  return normalizeToolExecutionOutput(await tool.execute(args)).result
+}
 
 /** Min verifier confidence for accepting subagent outputs. */
 const DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE = 0.65
@@ -125,7 +129,7 @@ async function probeArtifact(
   // 1. Try planned path (and workspace-rooted variant)
   for (const candidate of candidates) {
     try {
-      const content = await readFile.execute({ path: candidate })
+      const content = await executeToolForText(readFile, { path: candidate })
       if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
         return { found: true, resolvedPath: candidate }
       }
@@ -135,7 +139,7 @@ async function probeArtifact(
     // may not be allowed to access directly.
     if (runCommand) {
       try {
-        const exists = await runCommand.execute({
+        const exists = await executeToolForText(runCommand, {
           command: `if [ -f ${JSON.stringify(candidate)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
         })
         if (/__FOUND__/.test(exists)) {
@@ -150,7 +154,7 @@ async function probeArtifact(
   for (const actual of actualPaths) {
     if (actual === plannedPath || actual.endsWith(`/${plannedPath}`) || actual.endsWith(`/${basename}`)) {
       try {
-        const content = await readFile.execute({ path: actual })
+        const content = await executeToolForText(readFile, { path: actual })
         if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
           return { found: true, resolvedPath: actual }
         }
@@ -162,7 +166,7 @@ async function probeArtifact(
   if (runCommand && basename) {
     try {
       const searchRoot = workspaceRoot || "."
-      const findResult = await runCommand.execute({
+      const findResult = await executeToolForText(runCommand, {
         command: `find ${JSON.stringify(searchRoot)} -maxdepth 5 -name ${JSON.stringify(basename)} -type f -not -path "*/node_modules/*" -not -path "*/dist/*" -not -path "*/.git/*" 2>/dev/null | head -5`,
       })
       // Accept both absolute and relative paths from find ("./tmp/file.js")
@@ -171,14 +175,14 @@ async function probeArtifact(
         .map((p: string) => p.replace(/^\.\//,  ""))
       for (const fp of foundPaths) {
         try {
-          const content = await readFile.execute({ path: fp })
+          const content = await executeToolForText(readFile, { path: fp })
           if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
             return { found: true, resolvedPath: fp }
           }
         } catch { /* fall through */ }
         if (runCommand) {
           try {
-            const exists = await runCommand.execute({
+            const exists = await executeToolForText(runCommand, {
               command: `if [ -f ${JSON.stringify(fp)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
             })
             if (/__FOUND__/.test(exists)) {
@@ -194,7 +198,7 @@ async function probeArtifact(
   //    the absolute-path find returns no output due to CWD/sandbox differences.
   if (runCommand && basename) {
     try {
-      const findResult2 = await runCommand.execute({
+      const findResult2 = await executeToolForText(runCommand, {
         command: `find . -maxdepth 6 -name ${JSON.stringify(basename)} -type f -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null | head -5`,
       })
       const foundPaths2 = findResult2.trim().split("\n")
@@ -202,14 +206,14 @@ async function probeArtifact(
         .map((p: string) => p.replace(/^\.\//,  ""))
       for (const fp of foundPaths2) {
         try {
-          const content = await readFile.execute({ path: fp })
+          const content = await executeToolForText(readFile, { path: fp })
           if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
             return { found: true, resolvedPath: fp }
           }
         } catch { /* fall through */ }
         if (runCommand) {
           try {
-            const exists = await runCommand.execute({
+            const exists = await executeToolForText(runCommand, {
               command: `if [ -f ${JSON.stringify(fp)} ]; then echo __FOUND__; else echo __MISSING__; fi`,
             })
             if (/__FOUND__/.test(exists)) {
@@ -230,7 +234,7 @@ async function readArtifactContent(
   runCommand?: Tool,
 ): Promise<string | null> {
   try {
-    const content = await readFile.execute({ path })
+    const content = await executeToolForText(readFile, { path })
     // Treat read_file transport errors as unreadable, but allow legitimate
     // file contents that happen to start with "Error:".
     if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(content)) {
@@ -240,7 +244,7 @@ async function readArtifactContent(
   } catch {
     if (!runCommand) return null
     try {
-      const raw = await runCommand.execute({
+      const raw = await executeToolForText(runCommand, {
         command: `if [ -f ${JSON.stringify(path)} ]; then cat ${JSON.stringify(path)}; else echo __MISSING__; fi`,
       })
       if (raw.trim() === "__MISSING__") return null
@@ -441,9 +445,9 @@ function collectSpecAuditIssues(
 
 function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSpec {
   const fileMap = new Map<string, BlueprintFileSpec>()
-  const sharedTypes = new Set<string>()
-  const algorithmicContracts = new Set<string>()
   const contractBlock = parseBlueprintContractBlock(content)
+  const sharedTypes = new Set<string>(contractBlock.sharedTypes.map((type) => type.name))
+  const algorithmicContracts = new Set<string>()
   let currentFile: string | null = null
   let inSharedTypes = false
   let inAlgorithmSection = false
@@ -541,6 +545,7 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
     blueprintPath,
     files: Array.from(fileMap.values()),
     contractFiles: contractBlock.files,
+    contractSharedTypes: contractBlock.sharedTypes,
     contractBlockPresent: contractBlock.present,
     contractBlockErrors: Array.from(contractBlock.errors),
     sharedTypes: Array.from(sharedTypes),
@@ -591,6 +596,106 @@ function detectFunctionsInArtifact(
   return { found, missing }
 }
 
+function isCodeLikeBlueprintArtifact(path: string): boolean {
+  return /\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts|py|go|rs|java|kt|kts|cs|php|rb|swift|scala|sh|bash|zsh|ps1)$/i.test(path)
+}
+
+function isWeakFunctionContract(spec: BlueprintFunctionSpec): boolean {
+  const signature = spec.signature.trim()
+  if (!signature) return true
+  if (signature === `${spec.name}()`) return true
+  if (/\b(?:todo|tbd|placeholder)\b|\.\.\./i.test(signature)) return true
+  return false
+}
+
+function buildBlueprintFunctionContractIssues(
+  step: SubagentTaskStep,
+  spec: BlueprintSpec,
+  blueprintPath: string,
+): string[] {
+  if (!isBlueprintLikeStepForVerifier(step)) return []
+
+  const issues: string[] = []
+  const mergedFiles = new Map(spec.files.map((file) => [normalizeSpecPath(file.declaredPath), file]))
+
+  for (const contractFile of spec.contractFiles) {
+    const normalizedPath = normalizeSpecPath(contractFile.declaredPath)
+    const merged = mergedFiles.get(normalizedPath)
+    const contractNames = new Set(contractFile.functions.map((fn) => fn.name))
+    const proseOnlyFunctions = (merged?.functions ?? []).filter((fn) => !contractNames.has(fn.name))
+    const weakFunctions = contractFile.functions.filter((fn) => isWeakFunctionContract(fn))
+
+    if (proseOnlyFunctions.length > 0) {
+      issues.push(
+        `BLUEPRINT FUNCTION CONTRACT DRIFT: machine contract for ${contractFile.declaredPath} omits functions declared elsewhere in ${blueprintPath} (${proseOnlyFunctions.map((fn) => fn.name).join(", ")})`,
+      )
+    }
+
+    if (weakFunctions.length > 0 && isCodeLikeBlueprintArtifact(contractFile.declaredPath)) {
+      issues.push(
+        `BLUEPRINT FUNCTION CONTRACT WEAK: ${contractFile.declaredPath} contains underspecified machine contract signatures (${weakFunctions.map((fn) => fn.signature).join(", ")})`,
+      )
+    }
+  }
+
+  return issues
+}
+
+function buildBlueprintSharedTypeContractIssues(
+  step: SubagentTaskStep,
+  spec: BlueprintSpec,
+  plan: Plan,
+  blueprintPath: string,
+): string[] {
+  if (!isBlueprintLikeStepForVerifier(step)) return []
+
+  const issues: string[] = []
+  const plannedArtifacts = new Set(collectPlannedBlueprintArtifacts(plan))
+  const declaredArtifacts = new Set(
+    spec.contractFiles
+      .map((file) => normalizeSpecPath(file.declaredPath))
+      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact)),
+  )
+  const contractTypeNames = new Set(spec.contractSharedTypes.map((type) => type.name))
+  const proseOnlyTypes = spec.sharedTypes.filter((type) => !contractTypeNames.has(type))
+
+  if (proseOnlyTypes.length > 0) {
+    issues.push(
+      `BLUEPRINT SHARED TYPE DRIFT: ${blueprintPath} describes shared types outside the machine contract (${proseOnlyTypes.join(", ")})`,
+    )
+  }
+
+  const weakSharedTypes = spec.contractSharedTypes.filter((type) => !type.definition.trim() || type.usedBy.length === 0)
+  if (weakSharedTypes.length > 0) {
+    issues.push(
+      `BLUEPRINT SHARED TYPE CONTRACT WEAK: sharedTypes entries must include a concrete definition and usedBy paths (${weakSharedTypes.map((type) => type.name).join(", ")})`,
+    )
+  }
+
+  const driftedUsage = spec.contractSharedTypes.filter((type) =>
+    type.usedBy.some((path) => {
+      const normalized = normalizeSpecPath(path)
+      return !declaredArtifacts.has(normalized) && !plannedArtifacts.has(normalized)
+    }),
+  )
+  if (driftedUsage.length > 0) {
+    issues.push(
+      `BLUEPRINT SHARED TYPE DRIFT: sharedTypes.usedBy references undeclared artifacts (${driftedUsage.map((type) => type.name).join(", ")})`,
+    )
+  }
+
+  const sharedTypeRequired = /\bshared\s+(?:data|types?|state|schema|model|structure|contract)\b/i.test(
+    [step.objective, ...step.acceptanceCriteria].join(" "),
+  )
+  if (sharedTypeRequired && spec.contractSharedTypes.length === 0) {
+    issues.push(
+      `BLUEPRINT SHARED TYPE CONTRACT WEAK: ${blueprintPath} declares no sharedTypes even though the blueprint contract requires shared data coordination`,
+    )
+  }
+
+  return issues
+}
+
 async function buildStepSpecEvidence(
   step: SubagentTaskStep,
   stepResult: PipelineStepResult,
@@ -609,6 +714,9 @@ async function buildStepSpecEvidence(
       blueprintPath,
       sourceReads: collectSourceReadEvidence(stepResult, blueprintPath),
       mappings: [],
+      contractSharedTypes: [],
+      sharedTypes: [],
+      algorithmicContracts: [],
       structuralIssues: [`SPEC INGESTION FAILED: could not read ${blueprintPath} for step ${step.name}`],
       processAuditIssues: collectSpecAuditIssues(step, stepResult, blueprintPath),
     }
@@ -633,6 +741,8 @@ async function buildStepSpecEvidence(
   }
 
   structuralIssues.push(...buildBlueprintArtifactCoverageIssues(step, spec, plan, blueprintPath))
+  structuralIssues.push(...buildBlueprintFunctionContractIssues(step, spec, blueprintPath))
+  structuralIssues.push(...buildBlueprintSharedTypeContractIssues(step, spec, plan, blueprintPath))
 
   for (const artifact of step.executionContext.targetArtifacts) {
     const normalizedArtifact = normalizeSpecPath(artifact)
@@ -703,6 +813,9 @@ async function buildStepSpecEvidence(
     blueprintPath,
     sourceReads,
     mappings,
+    contractSharedTypes: spec.contractSharedTypes,
+    sharedTypes: spec.sharedTypes,
+    algorithmicContracts: spec.algorithmicContracts,
     structuralIssues,
     processAuditIssues,
   }
@@ -851,7 +964,7 @@ export async function runDeterministicProbes(
             }
             try {
               executedModalities.add("runtime")
-              const result = await browserCheck.execute({ path: browserPath })
+              const result = await executeToolForText(browserCheck, { path: browserPath })
               if (/error|fail|exception/i.test(result) && !/no errors/i.test(result)) {
                 issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
                 anyBrowserFailure = true
@@ -875,7 +988,7 @@ export async function runDeterministicProbes(
         if (runCmd) {
           try {
             executedModalities.add("runtime")
-            const result = await runCmd.execute({ command: "npm test 2>&1 || exit 0" })
+            const result = await executeToolForText(runCmd, { command: "npm test 2>&1 || exit 0" })
             // Only flag real test failures ("X failed", "FAIL"), not incidental mentions of error/fail
             if (/\d+\s+fail|FAIL\s|tests?\s+failed/i.test(result) && !/0 failed/i.test(result)) {
               issues.push(`Test run reported failures: ${result.slice(0, 300)}`)
@@ -923,6 +1036,12 @@ export async function runDeterministicProbes(
                   )
                 }
               }
+              const unresolvedHelpers = detectUnresolvedBareHelpers(content)
+              if (unresolvedHelpers.length > 0) {
+                issues.push(
+                  `Missing helper dependency/dependencies in "${artifact}": ${unresolvedHelpers.join("; ")}`,
+                )
+              }
             }
           } catch { /* already flagged */ }
         }
@@ -941,7 +1060,7 @@ export async function runDeterministicProbes(
               checkPath = wsRoot.endsWith("/") ? `${wsRoot}${checkPath}` : `${wsRoot}/${checkPath}`
             }
             try {
-              const result = await runCommand.execute({
+              const result = await executeToolForText(runCommand, {
                 command: `node --check ${JSON.stringify(checkPath)} 2>&1`,
               })
               executedModalities.add("syntax")
@@ -1131,6 +1250,7 @@ export async function runDeterministicProbes(
         "degeneration", "PATH MISMATCH", "SCOPE VIOLATION",
         "VERIFICATION MODALITY GAP", "CRITERIA PROOF MISSING",
         "SPEC ", "PROCESS AUDIT", "BLUEPRINT ARTIFACT",
+        "BLUEPRINT FUNCTION CONTRACT", "BLUEPRINT SHARED TYPE",
       ]
       const structuralIssues = issues.filter(i =>
         STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
@@ -1216,7 +1336,11 @@ async function runIntegrationProbes(
     allArtifacts,
   }
 
-  const probes: readonly IntegrationProbe[] = [probeWebEntrypointRuntimeWiring, probeCrossFileFunctionSignatures]
+  const probes: readonly IntegrationProbe[] = [
+    probeWebEntrypointRuntimeWiring,
+    probeBrowserModuleCompatibility,
+    probeCrossFileFunctionSignatures,
+  ]
   for (const probe of probes) {
     await probe(ctx)
   }
@@ -1250,6 +1374,7 @@ interface BlueprintSpec {
   readonly blueprintPath: string
   readonly files: readonly BlueprintFileSpec[]
   readonly contractFiles: readonly BlueprintFileSpec[]
+  readonly contractSharedTypes: readonly BlueprintSharedTypeSpec[]
   readonly contractBlockPresent: boolean
   readonly contractBlockErrors: readonly string[]
   readonly sharedTypes: readonly string[]
@@ -1272,6 +1397,9 @@ interface StepSpecEvidence {
   readonly blueprintPath: string
   readonly sourceReads: readonly string[]
   readonly mappings: readonly ArtifactSpecMapping[]
+  readonly contractSharedTypes: readonly BlueprintSharedTypeSpec[]
+  readonly sharedTypes: readonly string[]
+  readonly algorithmicContracts: readonly string[]
   readonly structuralIssues: readonly string[]
   readonly processAuditIssues: readonly string[]
 }
@@ -1379,12 +1507,12 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
 
     if (relatedJs.length === 0) continue
 
+    const scriptRefs = extractHtmlScriptRefs(htmlContent)
+
     const missingScripts: string[] = []
     for (const jsEntry of relatedJs) {
       const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
-      // Check both src="filename.js" and src="./subdir/filename.js" patterns
-      const hasScriptTag = htmlContent.includes(jsBasename) &&
-        /<script\b[^>]*src\s*=\s*["'][^"']*/.test(htmlContent)
+      const hasScriptTag = scriptRefs.some(ref => ref.src.includes(jsBasename))
       if (!hasScriptTag) {
         missingScripts.push(jsBasename)
       }
@@ -1406,6 +1534,98 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
       }
     }
   }
+}
+
+async function probeBrowserModuleCompatibility(ctx: IntegrationProbeContext): Promise<void> {
+  const { plan, toolMap, assessments, allArtifacts } = ctx
+  const readFile = toolMap.get("read_file")
+  const runCommand = toolMap.get("run_command")
+  if (!readFile) return
+
+  const htmlArtifacts = allArtifacts.filter(a => /\.(?:html?|xhtml)$/i.test(a.path))
+  const jsArtifacts = allArtifacts.filter(a => /\.js$/i.test(a.path))
+  if (htmlArtifacts.length === 0 || jsArtifacts.length === 0) return
+
+  for (const htmlEntry of htmlArtifacts) {
+    const wsRoot = findWsRootForStep(plan, htmlEntry.stepName)
+    const htmlProbe = await probeArtifact(readFile, htmlEntry.path, [], wsRoot, runCommand)
+    if (!htmlProbe.found) continue
+
+    let htmlContent: string
+    try {
+      const raw = await readArtifactContent(readFile, htmlProbe.resolvedPath, runCommand)
+      if (typeof raw !== "string" || raw.length === 0) continue
+      htmlContent = raw
+    } catch {
+      continue
+    }
+
+    const htmlDir = htmlEntry.path.replace(/[^/]+$/, "")
+    const relatedJs = jsArtifacts.filter(js => {
+      const jsDir = js.path.replace(/[^/]+$/, "")
+      return jsDir.startsWith(htmlDir) || htmlDir.startsWith(jsDir)
+    })
+    if (relatedJs.length === 0) continue
+
+    const scriptRefs = extractHtmlScriptRefs(htmlContent)
+    const htmlIssues: string[] = []
+
+    for (const jsEntry of relatedJs) {
+      const jsBasename = jsEntry.path.split("/").pop() ?? jsEntry.path
+      const scriptRef = scriptRefs.find(ref => ref.src.includes(jsBasename))
+      if (!scriptRef) continue
+
+      let jsContent = ""
+      try {
+        const raw = await readArtifactContent(readFile, jsEntry.path, runCommand)
+        if (typeof raw === "string") jsContent = raw
+      } catch {
+        continue
+      }
+      if (!jsContent) continue
+
+      const usesCommonJs = /\bmodule\.exports\b|\bexports\.[A-Za-z_$]\w*\b|\brequire\s*\(/.test(jsContent)
+      const usesEsModule = /(^|\n)\s*export\s+|(^|\n)\s*import\s+/.test(jsContent)
+
+      if (usesCommonJs) {
+        htmlIssues.push(
+          `Browser module mismatch: "${htmlEntry.path}" loads "${jsBasename}" directly, but that file uses CommonJS (module.exports/require). Browser-loaded runtime files must use ES modules or explicit window globals.`,
+        )
+      }
+      if (usesEsModule && !scriptRef.isModule) {
+        htmlIssues.push(
+          `Browser module mismatch: "${htmlEntry.path}" loads "${jsBasename}" without type="module", but the file uses ESM import/export syntax.`,
+        )
+      }
+    }
+
+    if (htmlIssues.length === 0) continue
+    const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
+    if (idx >= 0) {
+      const existing = assessments[idx]
+      assessments[idx] = {
+        stepName: existing.stepName,
+        outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+        confidence: existing.outcome === "pass" ? 0.35 : existing.confidence,
+        issues: [...existing.issues, ...htmlIssues.filter(issue => !existing.issues.includes(issue))],
+        retryable: true,
+      }
+    }
+  }
+}
+
+function extractHtmlScriptRefs(htmlContent: string): Array<{ src: string; isModule: boolean }> {
+  const refs: Array<{ src: string; isModule: boolean }> = []
+  const scriptTagRe = /<script\b([^>]*)src\s*=\s*["']([^"']+)["']([^>]*)>/gi
+  let match: RegExpExecArray | null
+  while ((match = scriptTagRe.exec(htmlContent)) !== null) {
+    const attrs = `${match[1] ?? ""} ${match[3] ?? ""}`
+    refs.push({
+      src: match[2],
+      isModule: /\btype\s*=\s*["']module["']/i.test(attrs),
+    })
+  }
+  return refs
 }
 
 /**
@@ -1665,6 +1885,13 @@ export async function runLLMVerification(
       specEvidence: specEvidence ? {
         blueprintPath: specEvidence.blueprintPath,
         sourceReads: specEvidence.sourceReads,
+        contractSharedTypes: specEvidence.contractSharedTypes.map((type) => ({
+          name: type.name,
+          definition: type.definition,
+          usedBy: type.usedBy,
+        })),
+        sharedTypes: specEvidence.sharedTypes,
+        algorithmicContracts: specEvidence.algorithmicContracts,
         mappings: specEvidence.mappings.map(mapping => ({
           targetArtifact: mapping.targetArtifact,
           actualArtifactPath: mapping.actualArtifactPath,
@@ -2185,6 +2412,17 @@ const BUILTIN_METHODS = new Set([
   "log", "warn", "error", "info",
 ])
 
+const RESERVED_CALL_IDENTIFIERS = new Set([
+  "if", "for", "while", "switch", "catch", "return", "typeof", "new", "delete", "void",
+  "function", "class", "super", "this", "await", "yield", "import", "export", "default",
+  "require", "console", "document", "window", "globalThis", "Math", "JSON", "Object", "Array",
+  "String", "Number", "Boolean", "Date", "Promise", "Map", "Set", "WeakMap", "WeakSet", "Symbol",
+  "RegExp", "Error", "URL", "fetch", "parseInt", "parseFloat", "isNaN", "isFinite", "setTimeout",
+  "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
+  "addEventListener", "removeEventListener", "querySelector", "querySelectorAll", "getElementById",
+  "createElement", "alert", "confirm", "prompt",
+])
+
 /**
  * Detect unresolved method references in class-based JS/TS code.
  *
@@ -2235,6 +2473,55 @@ function detectUnresolvedMethods(code: string): string[] {
     }
   }
   return unresolved.slice(0, 5)  // Cap at 5 to keep output actionable
+}
+
+function detectUnresolvedBareHelpers(code: string): string[] {
+  const definitions = new Set<string>()
+  const imports = new Set<string>()
+
+  const functionDeclRe = /function\s+([a-zA-Z_$]\w*)\s*\(/g
+  const classDeclRe = /class\s+([a-zA-Z_$]\w*)\b/g
+  const variableDeclRe = /(?:const|let|var)\s+([a-zA-Z_$]\w*)\s*=/g
+  const methodLikeRe = /(^|\n)\s*(?:export\s+)?(?:async\s+)?([a-zA-Z_$]\w*)\s*\([^)]*\)\s*\{/g
+  const importNamedRe = /import\s*\{([^}]+)\}\s*from\s*["'][^"']+["']/g
+  const importDefaultRe = /import\s+([a-zA-Z_$]\w*)(?:\s*,\s*\{[^}]+\})?\s*from\s*["'][^"']+["']/g
+  const importNamespaceRe = /import\s+\*\s+as\s+([a-zA-Z_$]\w*)\s+from\s*["'][^"']+["']/g
+
+  let match: RegExpExecArray | null
+  while ((match = functionDeclRe.exec(code)) !== null) definitions.add(match[1])
+  while ((match = classDeclRe.exec(code)) !== null) definitions.add(match[1])
+  while ((match = variableDeclRe.exec(code)) !== null) definitions.add(match[1])
+  while ((match = methodLikeRe.exec(code)) !== null) {
+    const name = match[2]
+    if (name && !RESERVED_CALL_IDENTIFIERS.has(name)) definitions.add(name)
+  }
+  while ((match = importNamedRe.exec(code)) !== null) {
+    const entries = match[1].split(",")
+    for (const entry of entries) {
+      const localName = entry.split(/\s+as\s+/i).pop()?.trim()
+      if (localName) imports.add(localName)
+    }
+  }
+  while ((match = importDefaultRe.exec(code)) !== null) imports.add(match[1])
+  while ((match = importNamespaceRe.exec(code)) !== null) imports.add(match[1])
+
+  const unresolved: string[] = []
+  const bareCallRe = /([a-zA-Z_$]\w*)\s*\(/g
+  while ((match = bareCallRe.exec(code)) !== null) {
+    const name = match[1]
+    if (!name) continue
+    const prevChar = code[Math.max(0, match.index - 1)]
+    if (prevChar && /[.\w$]/.test(prevChar)) continue
+    if (definitions.has(name) || imports.has(name) || RESERVED_CALL_IDENTIFIERS.has(name) || BUILTIN_METHODS.has(name)) continue
+
+    const before = code.slice(Math.max(0, match.index - 24), match.index + name.length + 1)
+    if (/(?:function|class|new|if|for|while|switch|catch)\s+$/.test(before)) continue
+
+    const issue = `${name}() called but not defined or imported in file`
+    if (!unresolved.includes(issue)) unresolved.push(issue)
+  }
+
+  return unresolved.slice(0, 5)
 }
 
 // ============================================================================

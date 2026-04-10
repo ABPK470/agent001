@@ -30,17 +30,17 @@ import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
-    RoundStuckState,
-    ToolLoopState,
-    ToolRoundProgressSummary,
+  RoundStuckState,
+  ToolLoopState,
+  ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-    checkToolLoopStuckDetection,
-    enrichToolResultMetadata as enrichResult,
-    evaluateToolRoundBudgetExtension,
-    executeToolWithTimeout,
-    summarizeToolRoundProgress,
-    trackToolCallFailureState,
+  checkToolLoopStuckDetection,
+  enrichToolResultMetadata as enrichResult,
+  evaluateToolRoundBudgetExtension,
+  executeToolWithTimeout,
+  summarizeToolRoundProgress,
+  trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -64,6 +64,11 @@ function estimateTokens(messages: Message[]): number {
 
 /** Max token budget for the request body. */
 const MAX_CONTEXT_TOKENS = 64000
+const FILE_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])
+
+function normalizeArtifactPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\//, "").trim()
+}
 
 // ============================================================================
 // Progressive context compaction
@@ -294,17 +299,16 @@ function compactToolResult(toolName: string, filePath: string | null, content: s
   const lineCount = content.split("\n").length
   const charCount = content.length
   const pathLabel = filePath ? ` ${filePath}` : ""
+  const semanticSuffix = buildCompactedSemanticSuffix(filePath, content)
 
   switch (toolName) {
     case "read_file":
-      return `[compacted] read_file${pathLabel}: ${lineCount} lines, ${charCount} chars`
+      return `[compacted] read_file${pathLabel}: ${lineCount} lines, ${charCount} chars${semanticSuffix}`
     case "write_file": {
-      // Extract function/class names if it looks like code
-      const defs = extractDefinitionSummary(content)
-      return `[compacted] write_file${pathLabel}: ${lineCount} lines` + (defs ? ` — defines: ${defs}` : "")
+      return `[compacted] write_file${pathLabel}: ${lineCount} lines, ${charCount} chars${semanticSuffix}`
     }
     case "replace_in_file":
-      return `[compacted] replace_in_file${pathLabel}: replacement applied (${charCount} chars in result)`
+      return `[compacted] replace_in_file${pathLabel}: replacement applied (${charCount} chars in result)${semanticSuffix}`
     case "run_command": {
       // Keep first and last few lines (often the error or summary)
       const lines = content.split("\n")
@@ -323,10 +327,31 @@ function compactToolResult(toolName: string, filePath: string | null, content: s
       return content.slice(0, 800) + `\n... (${charCount - 800} chars omitted)`
     }
     default:
-      // Generic compaction: keep first 200 chars as summary
       if (charCount < 500) return content
-      return `[compacted] ${toolName}${pathLabel} (${charCount} chars): ${content.slice(0, 200)}...`
+      return `[compacted] ${toolName}${pathLabel} (${charCount} chars)${semanticSuffix || `: ${extractCompactExcerpt(content)}`}`
   }
+}
+
+function buildCompactedSemanticSuffix(filePath: string | null, content: string): string {
+  const defs = extractDefinitionSummary(content)
+  if (defs) return ` — symbols: ${defs}`
+  const excerpt = extractCompactExcerpt(content)
+  if (!excerpt) return ""
+  const label = filePath && /\.(?:json|ya?ml|toml|md|txt|rst|adoc)$/i.test(filePath)
+    ? "summary"
+    : "excerpt"
+  return ` — ${label}: ${excerpt}`
+}
+
+function extractCompactExcerpt(content: string, maxLen = 160): string {
+  const firstMeaningfulLine = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 8 && !/^[/#*\-_=]{3,}$/.test(line))
+    ?? ""
+  if (!firstMeaningfulLine) return ""
+  const normalized = firstMeaningfulLine.replace(/\s+/g, " ")
+  return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}...` : normalized
 }
 
 /**
@@ -334,14 +359,29 @@ function compactToolResult(toolName: string, filePath: string | null, content: s
  */
 function extractDefinitionSummary(code: string): string | null {
   const names: string[] = []
-  const re = /(?:function|class|const|let|var|export\s+(?:function|class|const|let|var))\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g
-  let match
-  while ((match = re.exec(code)) !== null) {
-    if (!names.includes(match[1])) names.push(match[1])
+  const patterns = [
+    /export\s+default\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
+    /export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
+    /(?:^|\n)\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
+    /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function\b)/g,
+    /(?:^|\n)\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(|function\b)/g,
+    /export\s+class\s+([A-Za-z_$][\w$]*)/g,
+    /(?:^|\n)\s*class\s+([A-Za-z_$][\w$]*)/g,
+    /export\s+(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/g,
+    /(?:^|\n)\s*(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/g,
+    /(?:^|\n)\s*def\s+([A-Za-z_][\w]*)\s*\(/g,
+    /(?:^|\n)\s*class\s+([A-Za-z_][\w]*)\s*(?:\(|:)/g,
+  ]
+
+  for (const re of patterns) {
+    let match
+    while ((match = re.exec(code)) !== null) {
+      if (!names.includes(match[1])) names.push(match[1])
+    }
   }
   if (names.length === 0) return null
-  if (names.length <= 8) return names.join(", ")
-  return names.slice(0, 8).join(", ") + ` (+${names.length - 8} more)`
+  if (names.length <= 10) return names.join(", ")
+  return names.slice(0, 10).join(", ") + ` (+${names.length - 10} more)`
 }
 
 /**
@@ -480,14 +520,21 @@ function dropOldestHistory(messages: Message[]): Message[] {
  */
 function buildDroppedHistorySummary(dropped: Message[]): string {
   const actions: string[] = []
+  const notableResults: string[] = []
   const filesWritten = new Set<string>()
   const filesRead = new Set<string>()
+  const toolCallMeta = new Map<string, { name: string; path: string | null; command: string | null }>()
 
   for (const m of dropped) {
     if (m.role !== "assistant" || !m.toolCalls) continue
     for (const tc of m.toolCalls) {
       const args = tc.arguments as Record<string, unknown>
       const path = extractFilePath(tc.name, args)
+      toolCallMeta.set(tc.id, {
+        name: tc.name,
+        path,
+        command: typeof args.command === "string" ? args.command : null,
+      })
 
       switch (tc.name) {
         case "write_file":
@@ -525,7 +572,31 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
     }
   }
 
-  if (actions.length === 0) {
+  for (const m of dropped) {
+    if (m.role !== "tool" || !m.toolCallId || !m.content) continue
+    const meta = toolCallMeta.get(m.toolCallId)
+    if (!meta) continue
+    const normalized = m.content.replace(/\s+/g, " ").trim()
+    const short = normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized
+    const pathLabel = meta.path ? ` ${meta.path}` : ""
+
+    if (/^Error:|\b(?:failed|exception|traceback|syntax error|enoent|eacces|permission denied)\b/i.test(normalized) && !/\bno errors\b/i.test(normalized)) {
+      notableResults.push(`${meta.name}${pathLabel} failed: ${short}`)
+      continue
+    }
+
+    if (meta.name === "browser_check" && /\bno errors\b|\bpassed\b/i.test(normalized)) {
+      notableResults.push(`browser_check${pathLabel} passed`)
+      continue
+    }
+
+    if (meta.name === "run_command" && /\b(?:passed|success|0 failed|build succeeded|compiled successfully)\b/i.test(normalized)) {
+      const commandLabel = meta.command ? meta.command.slice(0, 50) : "command"
+      notableResults.push(`run_command succeeded: ${commandLabel}`)
+    }
+  }
+
+  if (actions.length === 0 && notableResults.length === 0) {
     return "[Earlier conversation truncated to save context budget.]"
   }
 
@@ -533,10 +604,16 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
   const displayed = actions.length <= 15
     ? actions
     : [...actions.slice(0, 12), `... and ${actions.length - 12} more actions`]
+  const displayedResults = notableResults.length <= 8
+    ? notableResults
+    : [...notableResults.slice(0, 6), `... and ${notableResults.length - 6} more notable results`]
 
   return (
     "[Earlier conversation truncated. Here is what you already did:]\n" +
-    displayed.map((a) => `- ${a}`).join("\n") +
+    (displayed.length > 0 ? displayed.map((a) => `- ${a}`).join("\n") : "- no retained action summary") +
+    (displayedResults.length > 0
+      ? `\n[Notable results:]\n${displayedResults.map((item) => `- ${item}`).join("\n")}`
+      : "") +
     "\n[Do NOT repeat these actions. Continue from where you left off.]"
   )
 }
@@ -838,6 +915,8 @@ export class Agent {
     // browser_check checks for JS errors but NOT logical correctness.
     // This set is only cleared when the child reads back the specific file.
     const writtenButNotReread = new Set<string>()
+    const artifactsRequiringReadBeforeMutation = new Set<string>()
+    const fatalArtifactFailureCounts = new Map<string, number>()
     // One-shot: only fire WRITE-WITHOUT-REVIEW nudge once.
     let writeReviewNudged = false
     // Bounded retries: guard against premature handoff/finalization when
@@ -1132,6 +1211,8 @@ export class Agent {
       let failuresThisRound = 0
       let delegationThisRound = false
       const roundToolCalls: ToolCallRecord[] = []
+      let forcedAbortRoundMessage: string | null = null
+      let forcedAbortLoopMessage: string | null = null
 
       // Circuit breaker check — stop retrying if breaker is open
       const circuitStatus = circuitBreaker.getActiveCircuit()
@@ -1171,6 +1252,38 @@ export class Agent {
           roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: errMsg, isError: true })
           failuresThisRound++
           continue
+        }
+
+        const requestedPath = typeof (call.arguments as Record<string, unknown>).path === "string"
+          ? normalizeArtifactPath(String((call.arguments as Record<string, unknown>).path))
+          : ""
+        if (FILE_MUTATION_TOOLS.has(call.name) && requestedPath && artifactsRequiringReadBeforeMutation.has(requestedPath)) {
+          const blockedMsg =
+            `MUTATION BLOCKED for ${requestedPath} — you must read the current artifact before attempting another mutation.\n` +
+            "  - The previous mutation on this artifact produced a structured integrity failure.\n" +
+            "  - Use read_file on the exact same path first, then plan a targeted repair from the current file state."
+          if (this.config.verbose) log.logToolError(blockedMsg)
+          messages.push({ role: "tool", toolCallId: call.id, content: blockedMsg, section: "history" })
+          roundToolCalls.push({
+            name: call.name,
+            args: call.arguments as Record<string, unknown>,
+            result: blockedMsg,
+            isError: true,
+            outcome: {
+              ok: false,
+              summary: `MUTATION BLOCKED for ${requestedPath}`,
+              severity: "recoverable",
+              directive: "abort_round",
+              errorCode: "artifact_inspection_required",
+              details: [
+                "Use read_file on the same artifact before any further write/replace/append attempt.",
+              ],
+              artifacts: [{ path: requestedPath, preservedExisting: true, requiresReadBeforeMutation: true }],
+            },
+          })
+          failuresThisRound++
+          forcedAbortRoundMessage = `Artifact guard triggered for ${requestedPath}. Read the current file before retrying any mutation.`
+          break
         }
 
         // Execute with timeout racing + transport-failure retry (agenc-core pattern)
@@ -1229,13 +1342,13 @@ export class Agent {
         if (execResult.isError) {
           if (this.config.verbose) log.logToolError(execResult.result)
           messages.push({ role: "tool", toolCallId: call.id, content: execResult.result, section: "history" })
-          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: execResult.result, isError: true })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: execResult.result, isError: true, outcome: execResult.outcome })
           failuresThisRound++
           circuitBreaker.recordFailure(semanticKey, call.name)
           trackToolCallFailureState(true, semanticKey, toolLoopState)
         } else {
           const enriched = enrichResult(execResult.result, {})
-          const semanticFailure = didToolCallFail(false, enriched)
+          const semanticFailure = execResult.outcome ? !execResult.outcome.ok : didToolCallFail(false, enriched)
           if (this.config.verbose) log.logToolResult(enriched)
           messages.push({ role: "tool", toolCallId: call.id, content: enriched, section: "history" })
           roundToolCalls.push({
@@ -1243,6 +1356,7 @@ export class Agent {
             args: call.arguments as Record<string, unknown>,
             result: enriched,
             isError: semanticFailure,
+            outcome: execResult.outcome,
           })
 
           // Semantic failures (e.g. write rejected, tool-reported failure text)
@@ -1264,6 +1378,30 @@ export class Agent {
             delegationThisRound = true
           }
 
+          for (const artifact of execResult.outcome?.artifacts ?? []) {
+            const normalizedPath = normalizeArtifactPath(artifact.path)
+            if (!normalizedPath) continue
+            if (artifact.requiresReadBeforeMutation) {
+              artifactsRequiringReadBeforeMutation.add(normalizedPath)
+            } else {
+              artifactsRequiringReadBeforeMutation.delete(normalizedPath)
+              fatalArtifactFailureCounts.delete(normalizedPath)
+            }
+          }
+
+          if (execResult.outcome?.severity === "fatal") {
+            for (const artifact of execResult.outcome.artifacts ?? []) {
+              const normalizedPath = normalizeArtifactPath(artifact.path)
+              if (!normalizedPath) continue
+              const count = (fatalArtifactFailureCounts.get(normalizedPath) ?? 0) + 1
+              fatalArtifactFailureCounts.set(normalizedPath, count)
+              if (count >= 2) {
+                forcedAbortLoopMessage =
+                  `Repeated fatal mutation failures on ${normalizedPath}. Stopping this agent attempt so the parent can retry or replan from a clean state.`
+              }
+            }
+          }
+
           // Track write-without-verify: if the child writes code/HTML, mark as unverified.
           // read_file, run_command, AND browser_check clear the flag.
           // browser_check launches a real browser that checks for JS errors — this counts
@@ -1271,7 +1409,8 @@ export class Agent {
           // get a spurious WRITE-WITHOUT-VERIFY nudge, wasting iterations.
           if (call.name === "write_file") {
             const writePath = String((call.arguments as Record<string, unknown>).path ?? "")
-            if (/\.(js|jsx|ts|tsx|py|html?|css|json)$/i.test(writePath)) {
+            const preservedExisting = execResult.outcome?.artifacts?.some((artifact) => artifact.preservedExisting) ?? false
+            if (/\.(js|jsx|ts|tsx|py|html?|css|json)$/i.test(writePath) && !preservedExisting) {
               wroteUnverifiedFiles = true
               // Track for code review: only read_file on this specific file clears it
               if (/\.(js|jsx|ts|tsx|py)$/i.test(writePath)) {
@@ -1284,15 +1423,42 @@ export class Agent {
             // Clear the specific file from the re-read tracking
             const readPath = String((call.arguments as Record<string, unknown>).path ?? "")
             writtenButNotReread.delete(readPath)
+            const normalizedReadPath = normalizeArtifactPath(readPath)
+            artifactsRequiringReadBeforeMutation.delete(normalizedReadPath)
           }
           if (call.name === "run_command" || call.name === "browser_check") {
             wroteUnverifiedFiles = false
+          }
+
+          if (execResult.outcome?.directive === "abort_loop" && !forcedAbortLoopMessage) {
+            forcedAbortLoopMessage = execResult.outcome.summary
+          } else if (execResult.outcome?.directive === "abort_round" && !forcedAbortRoundMessage) {
+            forcedAbortRoundMessage = execResult.outcome.summary
+          }
+
+          if (forcedAbortLoopMessage || forcedAbortRoundMessage) {
+            break
           }
         }
       }
 
       // ── Accumulate tool calls for parent access ──
       this.allToolCalls.push(...roundToolCalls)
+
+      if (forcedAbortLoopMessage) {
+        messages.push({ role: "system", content: forcedAbortLoopMessage, section: "history" })
+        this.config.onNudge?.({ tag: "fatal-tool-outcome", message: forcedAbortLoopMessage, iteration: i })
+        if (this.config.verbose) log.logError(forcedAbortLoopMessage)
+        return forcedAbortLoopMessage
+      }
+
+      if (forcedAbortRoundMessage) {
+        messages.push({ role: "system", content: forcedAbortRoundMessage, section: "history" })
+        this.config.onNudge?.({ tag: "abort-round-tool-outcome", message: forcedAbortRoundMessage, iteration: i })
+        if (this.config.verbose) log.logError(forcedAbortRoundMessage)
+        this.config.onStep?.(messages, i)
+        continue
+      }
 
       // ── Structured stuck detection (3-level, agenc-core pattern) ──
       const stuckResult = checkToolLoopStuckDetection(

@@ -6,19 +6,19 @@
  */
 
 import {
-  Columns2,
-  Download,
-  GitCompareArrows,
-  History,
-  Info,
-  MessageSquare,
-  PanelBottom,
-  Rows2,
-  Search,
-  Square,
-  Terminal,
-  X,
-  type LucideIcon
+    Columns2,
+    Download,
+    GitCompareArrows,
+    History,
+    Info,
+    MessageSquare,
+    PanelBottom,
+    Rows2,
+    Search,
+    Square,
+    Terminal,
+    X,
+    type LucideIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -28,26 +28,26 @@ import { fmtTokens } from "../util"
 import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel } from "./ioe/chat"
 import {
-  C,
-  buildChatMessages,
-  buildProblems,
-  buildSearchResults,
-  dur,
-  fmtK,
-  type BottomTab,
-  type EditorTab,
-  type HealthData,
-  type LlmConfig,
-  type SidebarSection,
-  type UsageData
+    C,
+    buildChatMessages,
+    buildProblems,
+    buildSearchResults,
+    dur,
+    fmtK,
+    type BottomTab,
+    type EditorTab,
+    type HealthData,
+    type LlmConfig,
+    type SidebarSection,
+    type UsageData
 } from "./ioe/constants"
 import { EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
-  ComparePanel,
-  DetailsPanel,
-  RunsPanel,
-  SearchResultsList,
+    ComparePanel,
+    DetailsPanel,
+    RunsPanel,
+    SearchResultsList,
 } from "./ioe/sidebar"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -60,6 +60,7 @@ export function OperatorEnvironment() {
   const runs = useStore((s) => s.runs) ?? []
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
+  const upsertRun = useStore((s) => s.upsertRun)
   const steps = useStore((s) => s.steps)
   const logs = useStore((s) => s.logs)
   const audit = useStore((s) => s.audit)
@@ -129,6 +130,8 @@ export function OperatorEnvironment() {
   const [goalInput, setGoalInput] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
+  const [workspaceMsg, setWorkspaceMsg] = useState<string | null>(null)
+  const [applyingWorkspace, setApplyingWorkspace] = useState(false)
   const [rolledBack, setRolledBack] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -172,6 +175,7 @@ export function OperatorEnvironment() {
   const isRunning = activeRun?.status === "running"
   const isFailed = activeRun?.status === "failed"
   const isCancelled = activeRun?.status === "cancelled"
+  const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
 
   const currentIteration = useMemo(() => {
     for (let i = trace.length - 1; i >= 0; i--) {
@@ -274,6 +278,26 @@ export function OperatorEnvironment() {
     }
   }, [activeRun])
 
+  const handleApplyWorkspace = useCallback(async () => {
+    if (!activeRun || applyingWorkspace) return
+    setApplyingWorkspace(true)
+    setWorkspaceMsg(null)
+    try {
+      const result = await api.applyRunWorkspaceDiff(activeRun.id)
+      if (!result) {
+        setWorkspaceMsg("nothing to apply")
+        return
+      }
+      const total = result.applied.added + result.applied.modified + result.applied.deleted
+      upsertRun({ id: activeRun.id, pendingWorkspaceChanges: 0 })
+      setWorkspaceMsg(`applied ${total} change${total === 1 ? "" : "s"}`)
+    } catch {
+      setWorkspaceMsg("apply failed")
+    } finally {
+      setApplyingWorkspace(false)
+    }
+  }, [activeRun, applyingWorkspace, upsertRun])
+
   // Reset rolledBack state when switching runs
   useEffect(() => { setRolledBack(false) }, [activeRunId])
 
@@ -283,6 +307,12 @@ export function OperatorEnvironment() {
     const timer = setTimeout(() => setRollbackMsg(null), 8000)
     return () => clearTimeout(timer)
   }, [rollbackMsg])
+
+  useEffect(() => {
+    if (!workspaceMsg) return
+    const timer = setTimeout(() => setWorkspaceMsg(null), 8000)
+    return () => clearTimeout(timer)
+  }, [workspaceMsg])
 
   // ── Comparison state ───────────────────────────────────────────
   const [compareResult, setCompareResult] = useState<{
@@ -582,11 +612,21 @@ export function OperatorEnvironment() {
               {(activeRun?.status === "completed" || isFailed || isCancelled) && (
                 <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
               )}
+              {pendingWorkspaceChanges > 0 && (
+                <ActionBtn
+                  label={applyingWorkspace ? "APPLYING" : `APPROVE${pendingWorkspaceChanges > 0 ? ` ${pendingWorkspaceChanges}` : ""}`}
+                  color={C.success}
+                  onClick={handleApplyWorkspace}
+                />
+              )}
               {(activeRun?.status === "completed" || isFailed || isCancelled) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (
                 <span className="text-[13px] ml-1" style={{ color: C.warning }}>{rollbackMsg}</span>
+              )}
+              {workspaceMsg && (
+                <span className="text-[13px] ml-1" style={{ color: C.success }}>{workspaceMsg}</span>
               )}
             </div>
           </div>

@@ -116,6 +116,45 @@ describe("Context compaction", () => {
     expect(lastResult.content).toContain("function foo")
   })
 
+  it("preserves symbol-level meaning in compacted read_file summaries", () => {
+    const oldRead = tc("read_file", { path: "engine.ts" })
+    const engineSource = [
+      "export interface GameState { turn: 'white' | 'black' }",
+      "export function validateMove(state: GameState, move: string): boolean {",
+      "  return !!state && move.length > 0",
+      "}",
+      "export class Engine {",
+      "  run(): void {}",
+      "}",
+    ].join("\n").repeat(12)
+
+    const newerA = tc("read_file", { path: "a.js" })
+    const newerB = tc("read_file", { path: "b.js" })
+    const newerC = tc("read_file", { path: "c.js" })
+    const newerD = tc("read_file", { path: "d.js" })
+    const messages: Message[] = [
+      { role: "system", content: "You are an agent", section: "system_anchor" },
+      { role: "user", content: "Read files", section: "user" },
+      assistantWithTools(oldRead),
+      toolResult(oldRead, engineSource),
+      assistantWithTools(newerA),
+      toolResult(newerA, "a"),
+      assistantWithTools(newerB),
+      toolResult(newerB, "b"),
+      assistantWithTools(newerC),
+      toolResult(newerC, "c"),
+      assistantWithTools(newerD),
+      toolResult(newerD, "d"),
+    ]
+
+    const result = compactMessages(messages)
+    const summary = result.find(m => m.toolCallId === oldRead.id)!
+    expect(summary.content).toContain("symbols:")
+    expect(summary.content).toContain("GameState")
+    expect(summary.content).toContain("validateMove")
+    expect(summary.content).toContain("Engine")
+  })
+
   it("never compacts small results", () => {
     const call = tc("read_file", { path: "tiny.js" })
 

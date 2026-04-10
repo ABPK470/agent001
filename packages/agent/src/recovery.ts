@@ -18,6 +18,8 @@
  * @module
  */
 
+import type { ToolResultEnvelope } from "./types.js"
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -34,6 +36,7 @@ export interface ToolCallRecord {
   args: Record<string, unknown>
   result: string
   isError: boolean
+  outcome?: ToolResultEnvelope
 }
 
 // ============================================================================

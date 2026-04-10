@@ -50,6 +50,7 @@ import {
     stepStarted
 } from "./engine/index.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "./retry.js"
+import { normalizeToolExecutionOutput } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
@@ -219,7 +220,7 @@ export function governTool(
         const retryResult = await withToolRetry(async () => {
           // Race: tool execution vs timeout vs abort
           const racers: Promise<string>[] = [
-            tool.execute(args),
+            tool.execute(args).then(value => normalizeToolExecutionOutput(value).result),
             new Promise<never>((_, reject) => {
               const id = setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
               // If tool finishes first, prevent dangling timer

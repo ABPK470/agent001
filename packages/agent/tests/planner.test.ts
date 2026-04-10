@@ -4,6 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest"
 import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
+import * as delegationDecision from "../src/delegation-decision.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
 import { isValidArtifactPath } from "../src/planner/generate.js"
 import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
@@ -71,7 +72,8 @@ function makeBlueprintContract(paths: readonly string[]): string {
     "```blueprint-contract",
     JSON.stringify({
       version: 1,
-      files: paths.map(path => ({ path, purpose: `Purpose for ${path}` })),
+      files: paths.map(path => ({ path, purpose: `Purpose for ${path}`, functions: [] })),
+      sharedTypes: [],
     }, null, 2),
     "```",
   ].join("\n")
@@ -220,7 +222,7 @@ describe("Planner output-root inference", () => {
 })
 
 describe("Planner path execution", () => {
-  it("halts on unrepaired validation failures instead of falling back to the direct loop", async () => {
+  it("auto-remediates dependent shared target ownership before execution", async () => {
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
         content: JSON.stringify({
@@ -293,11 +295,423 @@ describe("Planner path execution", () => {
     )
 
     expect(result.handled).toBe(true)
+    expect(result.answer).not.toContain('"stage": "validation"')
+    expect(result.plan).toBeDefined()
+    const htmlOwners = result.plan?.steps
+      .filter((step): step is SubagentTaskStep => step.stepType === "subagent_task")
+      .filter((step) => step.executionContext.targetArtifacts.includes("tmp/index.html"))
+    expect(htmlOwners).toHaveLength(1)
+    expect(htmlOwners?.[0]?.executionContext.verificationMode).not.toBe("browser_check")
+    expect(traces.some((entry) => entry.kind === "planner-validation-remediated")).toBe(true)
+    expect(traces.some((entry) => entry.kind === "planner-fallback-direct-loop")).toBe(false)
+  })
+
+  it("halts on unrepaired validation failures instead of falling back to the direct loop", async () => {
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "two unrelated writers collide on the same html file",
+          confidence: 0.92,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "implement_static_files",
+              stepType: "subagent_task",
+              objective: "Create tmp/index.html and CSS shell",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["Static files exist"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+              },
+            },
+            {
+              name: "rewrite_index_for_overlay",
+              stepType: "subagent_task",
+              objective: "Rewrite tmp/index.html for a different overlay experiment",
+              inputContract: "Independent overlay requirements",
+              acceptanceCriteria: ["Overlay markup exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: true,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+              },
+            },
+          ],
+          edges: [],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    const traces: Array<Record<string, unknown>> = []
+    const result = await executePlannerPath(
+      "Build a complete playable chess game in tmp with multiple coordinated files and interactions.",
+      {
+        llm,
+        tools: [echoTool("write_file"), echoTool("read_file")],
+        workspaceRoot: ".",
+        history: [],
+        onTrace: (entry) => traces.push(entry),
+      },
+      async () => ({ output: "unused" }),
+    )
+
+    expect(result.handled).toBe(true)
     expect(result.answer).toContain('"stage": "validation"')
     expect(result.answer).toContain("shared_target_artifact")
     expect(result.plan).toBeDefined()
     expect(traces.some((entry) => entry.kind === "planner-validation-failed")).toBe(true)
     expect(traces.some((entry) => entry.kind === "planner-fallback-direct-loop")).toBe(false)
+  })
+
+  it("aborts before the first implementation child when the generated blueprint contract is broken", async () => {
+    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: true,
+      reason: "approved",
+      threshold: 0.2,
+      utilityScore: 0.8,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.2,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.1,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {},
+    })
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "write blueprint before implementation",
+          confidence: 0.95,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "generate_blueprint",
+              stepType: "subagent_task",
+              objective: "Create tmp/BLUEPRINT.md that specifies tmp/game_logic.js exactly",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["Blueprint contract exactly matches the planned artifact list"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/BLUEPRINT.md"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }],
+              },
+            },
+            {
+              name: "implement_logic",
+              stepType: "subagent_task",
+              objective: "Create tmp/game_logic.js with full rules logic",
+              inputContract: "Blueprint exists",
+              acceptanceCriteria: ["Rules are implemented"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: ["follow blueprint"],
+              maxBudgetHint: "20 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+                targetArtifacts: ["tmp/game_logic.js"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game_logic.js" }],
+              },
+            },
+          ],
+          edges: [{ from: "generate_blueprint", to: "implement_logic" }],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    const delegatedSteps: string[] = []
+    try {
+      const result = await executePlannerPath(
+        "Build a multi-file game in tmp with coordinated rules and UI.",
+        {
+          llm,
+          tools: [
+            echoTool("write_file"),
+            echoTool("think"),
+            {
+              name: "read_file",
+              description: "read",
+              parameters: { type: "object", properties: { path: { type: "string" } } },
+              async execute(args) {
+                const path = String(args.path)
+                if (path.endsWith("BLUEPRINT.md")) {
+                  return [
+                    "# Broken Blueprint",
+                    "",
+                    makeBlueprintContract(["game/index.html", "game/rules.js"]),
+                  ].join("\n")
+                }
+                return "Error: not found"
+              },
+            },
+          ],
+          workspaceRoot: ".",
+          history: [],
+        },
+        async (step) => {
+          delegatedSteps.push(step.name)
+          return {
+            output: `done ${step.name}`,
+            toolCalls: [
+              { name: "write_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md", content: "ok" }, result: "ok", isError: false },
+              { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+            ],
+          }
+        },
+      )
+
+      expect(delegatedSteps.length).toBeGreaterThan(0)
+      expect(delegatedSteps.every((name) => name === "generate_blueprint")).toBe(true)
+      expect(result.handled).toBe(true)
+      expect(result.pipelineResult?.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
+      expect(result.pipelineResult?.stepResults.get("implement_logic")?.status).toBe("skipped")
+    } finally {
+      delegationSpy.mockRestore()
+    }
+  })
+
+  it("seeds injected blueprint steps with an exact template and read-back repair instructions", async () => {
+    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: true,
+      reason: "approved",
+      threshold: 0.2,
+      utilityScore: 0.8,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.2,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.1,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {},
+    })
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "multi-file implementation",
+          confidence: 0.9,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "build_markup",
+              stepType: "subagent_task",
+              objective: "Create tmp/index.html",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["HTML exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [],
+              },
+            },
+            {
+              name: "build_logic",
+              stepType: "subagent_task",
+              objective: "Create tmp/game_logic.js",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["Logic exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/game_logic.js"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [],
+              },
+            },
+          ],
+          edges: [{ from: "build_markup", to: "build_logic" }],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    let capturedBlueprintObjective = ""
+    try {
+      await executePlannerPath(
+        "Build a tmp web app with markup and logic.",
+        {
+          llm,
+          tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
+          workspaceRoot: ".",
+          history: [],
+        },
+        async (step) => {
+          if (step.name === "generate_blueprint") {
+            capturedBlueprintObjective = step.objective
+          }
+          return {
+            output: `done ${step.name}`,
+            toolCalls: [
+              { name: "write_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md", content: "ok" }, result: "ok", isError: false },
+              { name: "read_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md" }, result: makeBlueprintContract(["tmp/index.html", "tmp/game_logic.js"]), isError: false },
+            ],
+          }
+        },
+      )
+    } finally {
+      delegationSpy.mockRestore()
+    }
+
+    expect(capturedBlueprintObjective).toContain("MANDATORY TEMPLATE")
+    expect(capturedBlueprintObjective).toContain("```blueprint-contract")
+    expect(capturedBlueprintObjective).toContain("tmp/index.html")
+    expect(capturedBlueprintObjective).toContain("tmp/game_logic.js")
+    expect(capturedBlueprintObjective).toContain("Immediately read \"tmp/BLUEPRINT.md\" back with read_file")
+  })
+
+  it("injects browser runtime wiring and module-boundary contracts into HTML and JS steps", async () => {
+    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision")
+    delegationSpy.mockReturnValue({
+      shouldDelegate: true,
+      reason: "approved",
+      utilityScore: 0.9,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.2,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.1,
+      threshold: 0.2,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {},
+    })
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "browser app",
+          confidence: 0.9,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "build_browser_app",
+              stepType: "subagent_task",
+              objective: "Create tmp/index.html and tmp/game_logic.js",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["HTML exists", "Logic exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/index.html", "tmp/game_logic.js"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [],
+              },
+            },
+          ],
+          edges: [],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    let capturedMarkupObjective = ""
+    let capturedLogicObjective = ""
+    let capturedMarkupCriteria: readonly string[] = []
+    let capturedLogicCriteria: readonly string[] = []
+
+    try {
+      await executePlannerPath(
+        "Build a tmp browser app with index.html and game logic.",
+        {
+          llm,
+          tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
+          workspaceRoot: ".",
+          history: [],
+        },
+        async (step) => {
+          if (step.executionContext.targetArtifacts.includes("tmp/index.html")) {
+            capturedMarkupObjective = step.objective
+            capturedMarkupCriteria = [...step.acceptanceCriteria]
+          }
+          if (step.executionContext.targetArtifacts.includes("tmp/game_logic.js")) {
+            capturedLogicObjective = step.objective
+            capturedLogicCriteria = [...step.acceptanceCriteria]
+          }
+          const primaryArtifact = step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md"
+          return {
+            output: `done ${step.name}`,
+            toolCalls: [
+              { name: "write_file", args: { path: primaryArtifact, content: "ok" }, result: "ok", isError: false },
+              { name: "read_file", args: { path: primaryArtifact }, result: `content for ${primaryArtifact}`, isError: false },
+            ],
+          }
+        },
+      )
+    } finally {
+      delegationSpy.mockRestore()
+    }
+
+    expect(capturedMarkupObjective).toContain("Entrypoint wiring contract")
+    expect(capturedMarkupCriteria.some((criterion) => criterion.includes("game_logic.js"))).toBe(true)
+    expect(capturedLogicCriteria).toContain("Uses a browser-compatible module boundary consistently; no CommonJS exports in browser-loaded runtime files.")
   })
 })
 
@@ -1219,6 +1633,144 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
   })
 
+  it("flags browser module mismatch when HTML loads a CommonJS runtime file directly", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/game-logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/game-logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("index.html")) return "<html><body><script src='game-logic.js'></script></body></html>"
+          if (path.endsWith("game-logic.js")) return "function initializeBoard() { return [] }\nmodule.exports = { initializeBoard }"
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch") && i.includes("CommonJS"))).toBe(true)
+    expect(htmlStep?.outcome).not.toBe("pass")
+  })
+
+  it("flags unresolved helper dependencies inside a JS artifact", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("implement-rules", {
+          objective: "Implement move validation",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/game_logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 1,
+      stepResults: new Map([
+        ["implement-rules", { name: "implement-rules", status: "completed", output: "wrote tmp/game_logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("game_logic.js")) {
+            return [
+              "function validateMove(board, move) {",
+              "  if (hasObstacles(board, move)) return false",
+              "  return isKingUnderThreat(board, move) === false",
+              "}",
+            ].join("\n")
+          }
+          return "Error: not found"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "ok"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "implement-rules")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("Missing helper dependency/dependencies") && i.includes("hasObstacles()") && i.includes("isKingUnderThreat()"))).toBe(true)
+  })
+
   it("does not flag scope violation when writing declared required source artifact", async () => {
     const plan = makePlan({
       steps: [
@@ -2081,6 +2633,219 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     expect(step?.issues.some(i => i.includes("SPEC FUNCTION MISMATCH") && i.includes("validate_move"))).toBe(true)
   })
 
+  it("flags weak machine function contracts and prose drift inside BLUEPRINT.md", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md with exact function contracts",
+          acceptanceCriteria: ["Blueprint defines exact signatures for every exported function"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.ts"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["generate_blueprint", {
+          name: "generate_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+        ["implement_engine", {
+          name: "implement_engine",
+          status: "completed",
+          output: "wrote tmp/engine.ts",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+            { name: "write_file", args: { path: "tmp/engine.ts", content: "export function validateMove(state, move) { return true }" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) {
+            return [
+              "# Engine Blueprint",
+              "",
+              "```blueprint-contract",
+              JSON.stringify({
+                version: 1,
+                files: [
+                  {
+                    path: "tmp/engine.ts",
+                    purpose: "Move validation engine",
+                    functions: [{ name: "validateMove", signature: "validateMove()" }],
+                  },
+                ],
+                sharedTypes: [],
+              }, null, 2),
+              "```",
+              "",
+              "`tmp/engine.ts`",
+              "- function `validateMove(state: GameState, move: Move): boolean` validates whether a move is legal",
+              "- function `applyMove(state: GameState, move: Move): GameState` returns the next state",
+            ].join("\n")
+          }
+          if (path.endsWith("engine.ts")) return "export function validateMove(state, move) { return true }"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("BLUEPRINT FUNCTION CONTRACT WEAK") && i.includes("validateMove()"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("BLUEPRINT FUNCTION CONTRACT DRIFT") && i.includes("applyMove"))).toBe(true)
+  })
+
+  it("surfaces shared-type contract drift and weak shared-type metadata deterministically", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md with shared data contracts",
+          acceptanceCriteria: ["Blueprint declares shared data types used across files"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.ts", "tmp/ui.ts"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["generate_blueprint", {
+          name: "generate_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+        ["implement_engine", {
+          name: "implement_engine",
+          status: "completed",
+          output: "wrote tmp/engine.ts and tmp/ui.ts",
+          durationMs: 1,
+          toolCalls: [
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (path.endsWith("BLUEPRINT.md")) {
+            return [
+              "# Shared Data Blueprint",
+              "",
+              "```blueprint-contract",
+              JSON.stringify({
+                version: 1,
+                files: [
+                  { path: "tmp/engine.ts", purpose: "Rules engine", functions: [] },
+                  { path: "tmp/ui.ts", purpose: "UI renderer", functions: [] },
+                ],
+                sharedTypes: [
+                  { name: "GameState", definition: "", usedBy: [] },
+                ],
+              }, null, 2),
+              "```",
+              "",
+              "## Shared Data Types",
+              "- `GameState` stores the canonical board and turn metadata",
+              "- `Move` carries from/to coordinates and promotion intent",
+            ].join("\n")
+          }
+          if (path.endsWith("engine.ts")) return "export const engine = {}"
+          if (path.endsWith("ui.ts")) return "export const ui = {}"
+          return "Error: not found"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE CONTRACT WEAK") && i.includes("GameState"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE DRIFT") && i.includes("Move"))).toBe(true)
+  })
+
   it("flags blueprint structure mismatches from structural markers instead of keyword heuristics", async () => {
     const plan = makePlan({
       steps: [
@@ -2352,10 +3117,86 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       { workspaceRoot: "." },
     )
 
-    expect(delegateCalls).toBe(1)
+    expect(delegateCalls).toBe(2)
     expect(result.status).toBe("failed")
     expect(result.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
     expect(result.stepResults.get("generate_blueprint")?.error).toContain("BLUEPRINT ARTIFACT COVERAGE FAILED")
+    expect(result.stepResults.get("implement_game_logic")?.status).toBe("skipped")
+  })
+
+  it("fails blueprint steps when the machine-readable contract omits sharedTypes", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md",
+          acceptanceCriteria: ["Blueprint declares exact artifacts and shared types contract"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("implement_game_logic", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/game_logic.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }],
+    })
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "read",
+      parameters: { type: "object", properties: { path: { type: "string" } } },
+      async execute(args) {
+        const path = String(args.path)
+        if (path.endsWith("BLUEPRINT.md")) {
+          return [
+            "# Incomplete Blueprint Contract",
+            "",
+            "```blueprint-contract",
+            JSON.stringify({
+              version: 1,
+              files: [{ path: "tmp/game_logic.js", purpose: "Rules engine", functions: [] }],
+            }, null, 2),
+            "```",
+          ].join("\n")
+        }
+        return "Error: not found"
+      },
+    }
+
+    const result = await executePipeline(
+      plan,
+      [readFileTool],
+      async (step) => ({
+        output: `done ${step.name}`,
+        toolCalls: [
+          { name: "write_file", args: { path: step.executionContext.targetArtifacts[0], content: "ok" }, result: "ok", isError: false },
+          { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+        ],
+      }),
+      { workspaceRoot: "." },
+    )
+
+    expect(result.status).toBe("failed")
+    expect(result.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
+    expect(result.stepResults.get("generate_blueprint")?.error).toContain("sharedTypes")
     expect(result.stepResults.get("implement_game_logic")?.status).toBe("skipped")
   })
 })

@@ -16,6 +16,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { Agent } from "../src/agent.js"
 import { detectPlaceholderPatterns } from "../src/code-quality.js"
+import { normalizeToolExecutionOutput } from "../src/tool-utils.js"
 import { listDirectoryTool, readFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
@@ -45,6 +46,10 @@ function scriptedLLM(responses: LLMResponse[]): LLMClient {
 }
 
 const fsTools = [readFileTool, writeFileTool, listDirectoryTool]
+
+function toToolText(value: string | object): string {
+  return normalizeToolExecutionOutput(value as string).result
+}
 
 // ============================================================================
 // Scenario 1: Simple file creation — write a single file, done
@@ -365,7 +370,12 @@ describe("E2E: inline stub detection during write", () => {
           },
         }],
       },
-      // Iter 1: presumably the LLM sees the warning and rewrites
+      // Iter 1: the new artifact guard requires a read before another mutation
+      {
+        content: "Inspecting the current file before repair",
+        toolCalls: [{ id: "tc-read-logic", name: "read_file", arguments: { path: "logic.js" } }],
+      },
+      // Iter 2: repair after inspection
       {
         content: "Fixing the stubs",
         toolCalls: [{
@@ -385,7 +395,7 @@ describe("E2E: inline stub detection during write", () => {
           },
         }],
       },
-      // Iter 2: reads to verify
+      // Iter 3: reads to verify
       {
         content: null,
         toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "logic.js" } }],
@@ -398,7 +408,7 @@ describe("E2E: inline stub detection during write", () => {
       ...writeFileTool,
       async execute(args) {
         const result = await writeFileTool.execute(args)
-        toolResults.push(result)
+        toolResults.push(toToolText(result as string | object))
         return result
       },
     }
@@ -418,9 +428,7 @@ describe("E2E: inline stub detection during write", () => {
 // ============================================================================
 
 describe("E2E: function loss prevention", () => {
-  it("warns when a rewrite drops existing functions", async () => {
-    const toolResults: string[] = []
-
+  it("prevents a rewrite from deleting existing functions", async () => {
     const llm = scriptedLLM([
       // Iter 0: writes 3 functions
       {
@@ -429,7 +437,7 @@ describe("E2E: function loss prevention", () => {
           id: "tc1", name: "write_file",
           arguments: {
             path: "game.js",
-            content: "function initBoard() { return []; }\nfunction movePiece(from, to) { board[to] = board[from]; board[from] = null; }\nfunction renderBoard() { console.log(board); }",
+            content: "function initBoard() { return []; }\nfunction movePiece(from, to) { board[to] = board[from]; board[from] = null; }\nfunction renderBoard() { const el = document.getElementById('board'); el.textContent = JSON.stringify(board); }",
           },
         }],
       },
@@ -444,7 +452,12 @@ describe("E2E: function loss prevention", () => {
           },
         }],
       },
-      // Iter 2: reads to check
+      // Iter 2: read current file before retrying mutation on the same artifact
+      {
+        content: "Inspecting the current file after the failed rewrite",
+        toolCalls: [{ id: "tc2b", name: "read_file", arguments: { path: "game.js" } }],
+      },
+      // Iter 3: reads to check
       {
         content: null,
         toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "game.js" } }],
@@ -452,21 +465,12 @@ describe("E2E: function loss prevention", () => {
       { content: "Done", toolCalls: [] },
     ])
 
-    const wrappedWriteFile: Tool = {
-      ...writeFileTool,
-      async execute(args) {
-        const result = await writeFileTool.execute(args)
-        toolResults.push(result)
-        return result
-      },
-    }
-
-    const agent = new Agent(llm, [wrappedWriteFile, readFileTool], { verbose: false })
+    const agent = new Agent(llm, [writeFileTool, readFileTool], { verbose: false })
     await agent.run("Improve the game")
 
-    // Second write should warn about lost function
-    expect(toolResults[1]).toContain("FUNCTION LOSS")
-    expect(toolResults[1]).toContain("movePiece")
+    const finalCode = await readFile(join(tempDir, "game.js"), "utf-8")
+    expect(finalCode).toContain("movePiece")
+    expect(finalCode).toContain("renderBoard")
   })
 })
 
@@ -506,7 +510,7 @@ describe("E2E: corruption detection", () => {
       ...writeFileTool,
       async execute(args) {
         const result = await writeFileTool.execute(args)
-        toolResults.push(result)
+        toolResults.push(toToolText(result as string | object))
         return result
       },
     }
@@ -514,7 +518,8 @@ describe("E2E: corruption detection", () => {
     const agent = new Agent(llm, [wrappedWriteFile], { verbose: false })
     await agent.run("Write some code")
 
-    expect(toolResults[0]).toContain("CORRUPTED")
+    expect(toolResults[0]).toContain("WRITE REJECTED")
+    expect(toolResults[0]).toContain("gibberish")
   })
 })
 

@@ -80,6 +80,28 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
+export type ToolOutcomeSeverity = "info" | "recoverable" | "fatal"
+
+export type ToolControlDirective = "continue" | "retry_after_inspection" | "abort_round" | "abort_loop"
+
+export interface ToolResultArtifactState {
+  readonly path: string
+  readonly preservedExisting?: boolean
+  readonly requiresReadBeforeMutation?: boolean
+}
+
+export interface ToolResultEnvelope {
+  readonly ok: boolean
+  readonly summary: string
+  readonly severity?: ToolOutcomeSeverity
+  readonly directive?: ToolControlDirective
+  readonly errorCode?: string
+  readonly retryable?: boolean
+  readonly details?: readonly string[]
+  readonly artifacts?: readonly ToolResultArtifactState[]
+  readonly data?: Record<string, unknown>
+}
+
 /**
  * A tool the agent can use.
  *
@@ -93,7 +115,7 @@ export interface Tool {
   readonly name: string
   readonly description: string
   readonly parameters: Record<string, unknown>
-  execute(args: Record<string, unknown>): Promise<string>
+  execute(args: Record<string, unknown>): Promise<string | ToolResultEnvelope>
 }
 
 // ── LLM client ───────────────────────────────────────────────────

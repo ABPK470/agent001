@@ -216,7 +216,7 @@ function WorkspaceChangesSection({ run }: { run: Run }) {
               style={{ color: C.accent, background: `${C.accent}18`, border: `1px solid ${C.accent}30` }}
               onClick={refresh}
               disabled={loading}
-            >{loading ? "..." : "Refresh"}</button>
+            >{loading ? "..." : "Refresh Diff"}</button>
             <button
               className="px-2 py-1 text-[11px] rounded transition-colors"
               style={{ color: C.success, background: `${C.success}18`, border: `1px solid ${C.success}30` }}

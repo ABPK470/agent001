@@ -24,9 +24,14 @@ import {
     validateDelegatedOutputContract,
     type DelegationOutputValidationCode,
 } from "../delegation-validation.js"
-import { validateBlueprintArtifactContract } from "./blueprint-contract.js"
 import type { ToolCallRecord } from "../recovery.js"
+import { normalizeToolExecutionOutput } from "../tool-utils.js"
 import type { Tool } from "../types.js"
+import {
+    buildBlueprintSeedTemplate,
+    getPlannedBlueprintArtifacts,
+    validateBlueprintArtifactContract,
+} from "./blueprint-contract.js"
 import type {
     DeterministicToolStep,
     ExecutionEnvelope,
@@ -252,9 +257,121 @@ function buildAutonomousRepairBlock(
   return `\n\n${lines.join("\n")}`
 }
 
+function normalizeToolCallPath(value: unknown): string {
+  return typeof value === "string" ? value.replace(/^\.\//, "") : ""
+}
+
+function buildBlueprintRetryGuidance(
+  step: SubagentTaskStep,
+  plan: Plan,
+  feedback: readonly string[],
+): string {
+  if (!isBlueprintLikeStep(step)) return ""
+  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  if (!blueprintPath) return ""
+  const plannedArtifacts = getPlannedBlueprintArtifacts(plan)
+  const template = buildBlueprintSeedTemplate(blueprintPath, plannedArtifacts)
+  const exactTargetList = plannedArtifacts.map((artifact, index) => `${index + 1}. ${artifact}`).join("\n")
+
+  return [
+    "",
+    "⚠️ BLUEPRINT CONTRACT REPAIR — FOLLOW THESE INSTRUCTIONS EXACTLY:",
+    `- Rewrite only \"${blueprintPath}\".`,
+    "- REQUIRED machine-readable fence name: `blueprint-contract`.",
+    "- REQUIRED exact planned artifact paths:",
+    exactTargetList,
+    "- REQUIRED top-level machine fields: `version`, `files`, and `sharedTypes`.",
+    "- REQUIRED per-file machine fields: `path`, `purpose`, and `functions` (use [] when no exported functions exist).",
+    "- Remove any invented file paths or substitute module names from the prior attempt.",
+    "- After writing the file, immediately call read_file on the same BLUEPRINT.md and compare the read-back content against the exact path list above.",
+    "- If the read-back file is missing the `blueprint-contract` fence, any path differs, or any required field is omitted, rewrite it and read it again before finishing.",
+    ...(feedback.length > 0
+      ? ["- Previous failure details:", ...feedback.map((item) => `  - ${item}`)]
+      : []),
+    "",
+    "MANDATORY TEMPLATE TO FILL:",
+    template,
+  ].join("\n")
+}
+
+function hasSuccessfulReadBackAfterWrite(
+  calls: readonly ToolCallRecord[],
+  targetPath: string,
+): boolean {
+  const normalizedTarget = normalizeToolCallPath(targetPath)
+  const basename = normalizedTarget.split("/").pop() ?? normalizedTarget
+  let lastWriteIndex = -1
+
+  for (let index = 0; index < calls.length; index += 1) {
+    const call = calls[index]
+    if (call.isError) continue
+    if (call.name !== "write_file" && call.name !== "replace_in_file") continue
+    const callPath = normalizeToolCallPath(call.args.path)
+    if (callPath === normalizedTarget || callPath === basename) {
+      lastWriteIndex = index
+    }
+  }
+
+  if (lastWriteIndex < 0) return false
+
+  for (let index = lastWriteIndex + 1; index < calls.length; index += 1) {
+    const call = calls[index]
+    if (call.isError || call.name !== "read_file") continue
+    const callPath = normalizeToolCallPath(call.args.path)
+    if (callPath === normalizedTarget || callPath === basename) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function validateBlueprintStepCompletion(
+  step: SubagentTaskStep,
+  calls: readonly ToolCallRecord[],
+  validationCtx?: SubagentStepValidationContext,
+): Promise<SubagentValidationFailure | null> {
+  if (!isBlueprintLikeStep(step)) return null
+  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  const readFileTool = validationCtx?.readFileTool
+  if (!blueprintPath || !readFileTool) return null
+
+  if (!hasSuccessfulReadBackAfterWrite(calls, blueprintPath)) {
+    return {
+      code: "acceptance_evidence_missing",
+      message:
+        `BLUEPRINT SELF-CHECK MISSING: Step \"${step.name}\" must read back ${blueprintPath} after writing it and repair the same file until the \`blueprint-contract\` fence and exact planned targetArtifacts are present.`,
+    }
+  }
+
+  const blueprintContent = await executeToolForText(readFileTool, { path: blueprintPath })
+  if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(blueprintContent)) {
+    return {
+      code: "acceptance_evidence_missing",
+      message: `BLUEPRINT CONTRACT UNREADABLE: could not read ${blueprintPath} after generation (${blueprintContent})`,
+    }
+  }
+
+  if (validationCtx) {
+    const blueprintIssues = validateBlueprintArtifactContract(step, validationCtx.plan, blueprintPath, blueprintContent)
+    if (blueprintIssues.length > 0) {
+      return {
+        code: "acceptance_evidence_missing",
+        message: blueprintIssues.join("; "),
+      }
+    }
+  }
+
+  return null
+}
+
 function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
   return /blueprint/i.test(step.name)
     || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+}
+
+async function executeToolForText(tool: Tool, args: Record<string, unknown>): Promise<string> {
+  return normalizeToolExecutionOutput(await tool.execute(args)).result
 }
 
 /**
@@ -281,7 +398,7 @@ export async function executePipeline(
   const toolExecFn: ToolExecFn = async (toolName, args) => {
     const tool = toolMap.get(toolName)
     if (!tool) throw new Error(`Tool "${toolName}" not found`)
-    return tool.execute(args)
+    return executeToolForText(tool, args)
   }
 
   // Build adjacency and in-degree
@@ -380,7 +497,7 @@ export async function executePipeline(
         const docsOnlyTargets = sa.executionContext.targetArtifacts.length > 0 &&
           sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
         const blueprintRetryGuidance = docsOnlyTargets || /blueprint/i.test(sa.name)
-          ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.`
+          ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, feedback)}`
           : ""
         const retryRules = hasReplaceInFile
           ? (avoidReplaceInFile
@@ -623,9 +740,13 @@ async function executeSubagentStep(
       // Recovery path: if the child produced no successful file mutations,
       // run one focused retry with explicit write-first instructions.
       if (
-        strictFailure.code === "missing_file_mutation_evidence" &&
+        (strictFailure.code === "missing_file_mutation_evidence"
+          || (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message))) &&
         step.executionContext.targetArtifacts.length > 0
       ) {
+        const blueprintRepairBlock = validationCtx && isBlueprintLikeStep(step)
+          ? `\n\n[MANDATORY RETRY — BLUEPRINT CONTRACT REPAIR]\n${buildBlueprintRetryGuidance(step, validationCtx.plan, [strictFailure.message])}`
+          : ""
         const retryStep: SubagentTaskStep = {
           ...step,
           objective:
@@ -633,7 +754,8 @@ async function executeSubagentStep(
             `[MANDATORY RETRY — WRITE EVIDENCE REQUIRED]\n` +
             `You must create or modify the target artifacts in this attempt.\n` +
             `Use write_file (or replace_in_file after reading the existing file) on the exact target paths.\n` +
-            `Do not stop at analysis or narrative summary. Produce real file mutations before finishing.`,
+            `Do not stop at analysis or narrative summary. Produce real file mutations before finishing.` +
+            blueprintRepairBlock,
         }
 
         const retryResult = await delegateFn(retryStep, retryStep.executionContext)
@@ -692,7 +814,7 @@ async function executeSubagentStep(
           name: step.name,
           status: "failed",
           error: retryStrictFailure.message,
-          failureClass: "unknown",
+          failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(retryStrictFailure.message) ? "blueprint_contract" : "unknown",
           durationMs: Date.now() - t0,
           toolCalls: retryCalls,
           validationCode: retryStrictFailure.code,
@@ -703,7 +825,7 @@ async function executeSubagentStep(
         name: step.name,
         status: "failed",
         error: strictFailure.message,
-        failureClass: "unknown",
+        failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message) ? "blueprint_contract" : "unknown",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
         validationCode: strictFailure.code,
@@ -727,35 +849,6 @@ async function executeSubagentStep(
         failureClass: "syntax_error",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
-      }
-    }
-
-    if (isBlueprintLikeStep(step)) {
-      const blueprintPath = step.executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
-      const readFileTool = validationCtx?.readFileTool
-      if (blueprintPath && readFileTool) {
-        const blueprintContent = await readFileTool.execute({ path: blueprintPath })
-        if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(blueprintContent)) {
-          return {
-            name: step.name,
-            status: "failed",
-            error: `BLUEPRINT CONTRACT UNREADABLE: could not read ${blueprintPath} after generation (${blueprintContent})`,
-            failureClass: "blueprint_contract",
-            durationMs: Date.now() - t0,
-            toolCalls: childToolCalls,
-          }
-        }
-        const blueprintIssues = validateBlueprintArtifactContract(step, validationCtx.plan, blueprintPath, blueprintContent)
-        if (blueprintIssues.length > 0) {
-          return {
-            name: step.name,
-            status: "failed",
-            error: blueprintIssues.join("; "),
-            failureClass: "blueprint_contract",
-            durationMs: Date.now() - t0,
-            toolCalls: childToolCalls,
-          }
-        }
       }
     }
 
@@ -817,7 +910,9 @@ async function validateSubagentCompletion(
     if (path) lastWriteByPath.set(path, c)
   }
   const finalWriteWarning = [...lastWriteByPath.values()].find(c =>
-    /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result),
+    c.outcome?.severity === "fatal"
+    || c.outcome?.errorCode === "artifact_incomplete_mutation"
+    || /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result),
   )
   if (finalWriteWarning) {
     const path = typeof finalWriteWarning.args.path === "string" ? finalWriteWarning.args.path : "(unknown)"
@@ -870,6 +965,9 @@ async function validateSubagentCompletion(
 
   const readFileTool = validationCtx?.readFileTool
   if (!readFileTool) return null
+
+  const blueprintFailure = await validateBlueprintStepCompletion(step, calls, validationCtx)
+  if (blueprintFailure) return blueprintFailure
 
   // Adaptive artifact-quality gate:
   // - strict scope for verification-critical or reviewer/validator roles

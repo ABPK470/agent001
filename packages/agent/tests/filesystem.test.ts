@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { normalizeToolExecutionOutput } from "../src/tool-utils.js"
 import { readFileTool, replaceInFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
 
 let tempDir: string
@@ -21,13 +22,20 @@ afterAll(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+async function executeToolText(
+  tool: { execute(args: Record<string, unknown>): Promise<unknown> },
+  args: Record<string, unknown>,
+): Promise<string> {
+  return normalizeToolExecutionOutput(await tool.execute(args) as string).result
+}
+
 // ============================================================================
 // Inline stub detection in write_file
 // ============================================================================
 
 describe("write_file: inline stub detection", () => {
   it("warns when writing JS with placeholder comments", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "game.js",
       content: [
         "function initBoard() { return []; }",
@@ -48,7 +56,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("warns when writing JS with stub function (comment + trivial return)", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "chess.js",
       content: [
         "function renderBoard() { /* real implementation */ document.body.innerHTML = 'board'; }",
@@ -68,7 +76,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("succeeds without warnings for real implementation code", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "good-code.js",
       content: [
         "function isMoveLegal(piece, from, to) {",
@@ -91,7 +99,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("does NOT warn for non-code files (HTML, CSS, etc.)", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "page.html",
       content: [
         "<!DOCTYPE html>",
@@ -111,7 +119,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("does NOT warn for tiny files under 50 chars", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "tiny.js",
       content: "// TODO: implement",
     })
@@ -121,7 +129,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("warns when writing JS with LLM degeneration comment", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "degen.js",
       content: [
         "function getLegalMoves(row, col, piece) {",
@@ -141,7 +149,7 @@ describe("write_file: inline stub detection", () => {
   })
 
   it("uses targeted message for stub-only issues (not CORRUPTED)", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "stub-msg.js",
       content: [
         "function initBoard() { return []; }",
@@ -159,7 +167,7 @@ describe("write_file: inline stub detection", () => {
 
     expect(result).toContain("WRITTEN WITH ISSUES")
     expect(result).not.toContain("CORRUPTED")
-    expect(result).toContain("only replace the stub portions")
+    expect(result).toContain("replace only the stub portions")
   })
 })
 
@@ -170,7 +178,7 @@ describe("write_file: inline stub detection", () => {
 describe("write_file: function loss detection", () => {
   it("warns when a rewrite drops existing functions", async () => {
     // First write: has initBoard, isMoveLegal, renderBoard
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "chess-loss.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
@@ -180,7 +188,7 @@ describe("write_file: function loss detection", () => {
     })
 
     // Second write: drops isMoveLegal and renderBoard
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "chess-loss.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
@@ -195,7 +203,7 @@ describe("write_file: function loss detection", () => {
 
   it("does NOT warn when all functions are preserved", async () => {
     // First write
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "chess-ok.js",
       content: [
         "function initBoard() { return []; }",
@@ -204,7 +212,7 @@ describe("write_file: function loss detection", () => {
     })
 
     // Second write: keeps both, adds more
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "chess-ok.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
@@ -217,7 +225,7 @@ describe("write_file: function loss detection", () => {
   })
 
   it("rejects structural-corruption rewrites and keeps prior file intact", async () => {
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "chess-atomic.js",
       content: [
         "function initBoard() { return []; }",
@@ -225,7 +233,7 @@ describe("write_file: function loss detection", () => {
       ].join("\n"),
     })
 
-    const rejected = await writeFileTool.execute({
+    const rejected = await executeToolText(writeFileTool, {
       path: "chess-atomic.js",
       content: [
         "function initBoard() {",
@@ -248,7 +256,7 @@ describe("write_file: function loss detection", () => {
 
 describe("write_file: corruption detection", () => {
   it("warns on code-mixed-with-gibberish", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "corrupt.js",
       content: [
         "function init() {",
@@ -263,12 +271,12 @@ describe("write_file: corruption detection", () => {
       ].join("\n"),
     })
 
-    expect(result).toContain("CORRUPTED")
+    expect(result).toContain("WRITE REJECTED")
     expect(result).toContain("gibberish")
   })
 
   it("warns on unclosed braces (truncated output)", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "truncated.js",
       content: [
         "function outer() {",
@@ -280,12 +288,12 @@ describe("write_file: corruption detection", () => {
       ].join("\n"),
     })
 
-    expect(result).toContain("CORRUPTED")
+    expect(result).toContain("WRITE REJECTED")
     expect(result).toContain("unclosed brace")
   })
 
   it("does NOT warn on properly formatted code with matched braces", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "clean.js",
       content: [
         "function outer() {",
@@ -302,7 +310,7 @@ describe("write_file: corruption detection", () => {
   })
 
   it("rejects pure gibberish with no code keywords", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "gibberish.js",
       content: "[compacted \\u0001 full COMPL'd PROMO].THISs''. UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH. wrapper + glbal dom visualization strict bind",
     })
@@ -311,7 +319,7 @@ describe("write_file: corruption detection", () => {
   })
 
   it("rejects degenerated compaction output as gibberish", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "compacted.js",
       content: "RESET PlaceholderINTRO.Handler-container validateManyCritical success BOILER<TAG> reinstated LEGAL WORKFLOW-safe cleaned Matrix operational",
     })
@@ -320,7 +328,7 @@ describe("write_file: corruption detection", () => {
   })
 
   it("accepts valid JS with code keywords", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "valid.js",
       content: [
         "const board = [];",
@@ -336,7 +344,7 @@ describe("write_file: corruption detection", () => {
   })
 
   it("does not flag throw new Error lines as gibberish", async () => {
-    const result = await writeFileTool.execute({
+    const result = await executeToolText(writeFileTool, {
       path: "valid-throw.js",
       content: [
         "function move(from) {",
@@ -357,7 +365,7 @@ describe("write_file: corruption detection", () => {
 
 describe("replace_in_file", () => {
   it("replaces a matching section in an existing file", async () => {
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "replace-test.js",
       content: [
         "function alpha() { return 1; }",
@@ -366,7 +374,7 @@ describe("replace_in_file", () => {
       ].join("\n"),
     })
 
-    const result = await replaceInFileTool.execute({
+    const result = await executeToolText(replaceInFileTool, {
       path: "replace-test.js",
       old_string: "function beta() { return 2; }",
       new_string: "function beta() { return 42; }",
@@ -376,7 +384,7 @@ describe("replace_in_file", () => {
   })
 
   it("preserves all other content when replacing a section", async () => {
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "replace-preserve.js",
       content: [
         "function a() { return 1; }",
@@ -385,7 +393,7 @@ describe("replace_in_file", () => {
       ].join("\n"),
     })
 
-    await replaceInFileTool.execute({
+    await executeToolText(replaceInFileTool, {
       path: "replace-preserve.js",
       old_string: "function b() { return 2; }",
       new_string: "function b() { return 99; }",
@@ -400,7 +408,7 @@ describe("replace_in_file", () => {
   })
 
   it("returns error when file does not exist", async () => {
-    const result = await replaceInFileTool.execute({
+    const result = await executeToolText(replaceInFileTool, {
       path: "nonexistent-replace.js",
       old_string: "hello",
       new_string: "world",
@@ -410,12 +418,12 @@ describe("replace_in_file", () => {
   })
 
   it("returns error when old_string is not found", async () => {
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "replace-nomatch.js",
       content: "function foo() { return 1; }",
     })
 
-    const result = await replaceInFileTool.execute({
+    const result = await executeToolText(replaceInFileTool, {
       path: "replace-nomatch.js",
       old_string: "function bar() { return 2; }",
       new_string: "function bar() { return 42; }",
@@ -425,7 +433,7 @@ describe("replace_in_file", () => {
   })
 
   it("detects stubs in replacement content", async () => {
-    await writeFileTool.execute({
+    await executeToolText(writeFileTool, {
       path: "replace-stub.js",
       content: [
         "function validate(input) {",
@@ -436,7 +444,7 @@ describe("replace_in_file", () => {
       ].join("\n"),
     })
 
-    const result = await replaceInFileTool.execute({
+    const result = await executeToolText(replaceInFileTool, {
       path: "replace-stub.js",
       old_string: [
         "function validate(input) {",

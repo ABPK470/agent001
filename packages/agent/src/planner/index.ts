@@ -36,6 +36,7 @@ import { assessDelegationDecision, type DelegationDecisionInput, type Delegation
 import { getCorrectionGuidance, type DelegationOutputValidationCode } from "../delegation-validation.js"
 import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../escalation.js"
 import type { LLMClient, Message, Tool } from "../types.js"
+import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "./blueprint-contract.js"
 import { createBudgetState, maybeExtendBudget } from "./circuit-breaker.js"
 import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
@@ -102,6 +103,8 @@ function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]):
   if (codes.has("missing_dependency_wiring_criteria")) {
     injectDependencyWiringCriteria(plan)
   }
+
+  injectBrowserRuntimeContracts(plan)
 }
 
 function normalizeOutputDirToken(raw: string): string {
@@ -299,6 +302,60 @@ function injectDependencyWiringCriteria(plan: Plan): void {
   }
 }
 
+function injectBrowserRuntimeContracts(plan: Plan): void {
+  const subagentSteps = plan.steps.filter(
+    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
+  )
+
+  const htmlOwners = subagentSteps.filter(step =>
+    step.executionContext.targetArtifacts.some(artifact => /\.(?:html?|xhtml)$/i.test(artifact)),
+  )
+  const jsWriters = subagentSteps.filter(step =>
+    step.executionContext.targetArtifacts.some(artifact => /\.js$/i.test(artifact)),
+  )
+
+  if (htmlOwners.length === 0 || jsWriters.length === 0) return
+
+  const jsArtifacts = uniqueList(jsWriters.flatMap(step =>
+    step.executionContext.targetArtifacts.filter(artifact => /\.js$/i.test(artifact)),
+  ))
+  const jsBasenames = uniqueList(jsArtifacts.map(artifact => artifact.split("/").pop() ?? artifact))
+  if (jsBasenames.length === 0) return
+
+  const browserModuleInstruction =
+    `Browser runtime contract: runtime JS must use one browser-compatible module strategy consistently for ${jsBasenames.join(", ")}. ` +
+    `Use ES modules (with \`<script type="module">\`, \`export\`, and \`import\`) or classic scripts with explicit \`window.X\` globals. ` +
+    `Never use \`module.exports\` or \`require()\` in browser-loaded files.`
+
+  for (const step of htmlOwners) {
+    if (!/script|type="module"|window\.|import\s|load.*\.js/i.test(step.objective)) {
+      ;(step as { objective: string }).objective =
+        `${step.objective}\n\nEntrypoint wiring contract: this HTML entrypoint must explicitly load the exact runtime artifacts ${jsBasenames.join(", ")} with script tags. ` +
+        `If the JS uses ES modules, use type="module" on the corresponding script tag.`
+    }
+
+    if (!step.acceptanceCriteria.some(criterion => /script tag|type="module"|load.*\.js|runtime artifacts/i.test(criterion))) {
+      ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+        ...step.acceptanceCriteria,
+        `Entrypoint HTML explicitly loads the exact runtime artifacts: ${jsBasenames.join(", ")}.`,
+      ]
+    }
+  }
+
+  for (const step of jsWriters) {
+    if (!/module\.exports|require\(|type="module"|window\.|export\s|import\s/i.test(step.objective)) {
+      ;(step as { objective: string }).objective = `${step.objective}\n\n${browserModuleInstruction}`
+    }
+
+    if (!step.acceptanceCriteria.some(criterion => /browser-compatible|type="module"|window\.|module\.exports|require\(/i.test(criterion))) {
+      ;(step as unknown as { acceptanceCriteria: readonly string[] }).acceptanceCriteria = [
+        ...step.acceptanceCriteria,
+        "Uses a browser-compatible module boundary consistently; no CommonJS exports in browser-loaded runtime files.",
+      ]
+    }
+  }
+}
+
 // ============================================================================
 // Contract-First: Blueprint step injection
 // ============================================================================
@@ -339,9 +396,9 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
   const outputDir = forcedOutputDir ?? inferOutputDir(subagentSteps) ?? "tmp"
   const blueprintPath = `${outputDir}/BLUEPRINT.md`
 
-  // Collect all target artifacts across all steps for the blueprint objective
-  const allArtifacts = subagentSteps.flatMap(s => s.executionContext.targetArtifacts)
-  const artifactList = [...new Set(allArtifacts)].join(", ")
+  const plannedArtifacts = getPlannedBlueprintArtifacts(plan)
+  const artifactList = plannedArtifacts.join(", ")
+  const blueprintTemplate = buildBlueprintSeedTemplate(blueprintPath, plannedArtifacts)
 
   const blueprintStep: SubagentTaskStep = {
     name: "generate_blueprint",
@@ -353,16 +410,33 @@ function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir:
       `CRITICAL FILE CONTRACT: The blueprint MUST declare the EXACT same artifact paths listed above. ` +
       `Do NOT rename files, move them into a different directory, or invent extra modules. ` +
       `If the plan says \`tmp/game_logic.js\`, the blueprint must declare \`tmp/game_logic.js\` exactly, not \`game/rules.js\` or any other substitute.\n\n` +
+      `MANDATORY AUTHORING WORKFLOW:\n` +
+      `1. Use write_file on \"${blueprintPath}\" with the completed blueprint template below.\n` +
+      `2. Immediately read \"${blueprintPath}\" back with read_file.\n` +
+      `3. If the \`blueprint-contract\` fence is missing, if any listed path differs from the planned artifact list, or if \`sharedTypes\`/\`functions\` are omitted, rewrite the SAME file and read it again before finishing.\n` +
+      `4. Do not return success until the read-back BLUEPRINT.md contains the exact \`blueprint-contract\` block and exact planned artifact paths.\n\n` +
+      `MANDATORY TEMPLATE — fill this exact template instead of writing free-form markdown:\n` +
+      `${blueprintTemplate}\n\n` +
       `The BLUEPRINT.md MUST include this exact machine-readable block so artifact paths can be validated deterministically:\n` +
       `\`\`\`blueprint-contract\n` +
       `{\n` +
       `  "version": 1,\n` +
       `  "files": [\n` +
-      `    { "path": "first/exact/path.ext", "purpose": "one-line purpose" }\n` +
+      `    {\n` +
+      `      "path": "first/exact/path.ext",\n` +
+      `      "purpose": "one-line purpose",\n` +
+      `      "functions": [\n` +
+      `        { "name": "exportedFunctionName", "signature": "exportedFunctionName(param: Type): ReturnType" }\n` +
+      `      ]\n` +
+      `    }\n` +
+      `  ],\n` +
+      `  "sharedTypes": [\n` +
+      `    { "name": "SharedTypeName", "definition": "{ field: Type }", "usedBy": ["first/exact/path.ext"] }\n` +
       `  ]\n` +
       `}\n` +
       `\`\`\`\n` +
-      `Replace the example file entries with the EXACT planned artifact paths listed above and include every planned artifact exactly once.\n\n` +
+      `Replace the example entries with the EXACT planned artifact paths listed above, include every planned artifact exactly once, ` +
+      `declare each file's exported functions in the \"functions\" array, and declare shared data contracts in \"sharedTypes\". Use empty arrays when none exist; never omit these fields.\n\n` +
       `The BLUEPRINT.md must define:\n` +
       `1. **File Structure**: List every file with a one-line purpose description\n` +
       `2. **Function Signatures**: For EVERY exported function and class method, define the EXACT signature:\n` +
@@ -476,15 +550,19 @@ function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: string, for
 
     ;(step as unknown as { acceptanceCriteria: string[] }).acceptanceCriteria = [...criteria]
     if (!step.objective.includes("BLUEPRINT DEPTH REQUIREMENTS:")) {
+      const plannedArtifacts = getPlannedBlueprintArtifacts(plan)
+      const blueprintTemplate = buildBlueprintSeedTemplate(blueprintPath, plannedArtifacts)
       ;(step as unknown as { objective: string }).objective =
         `${step.objective}\n\n` +
         `BLUEPRINT DEPTH REQUIREMENTS:\n` +
         `- This is a CONTRACT document, not implementation code.\n` +
         `- For every non-trivial function, enumerate the full algorithmic contract: all cases, rules, constraints, and edge cases.\n` +
         `- The declared file structure MUST match the planned targetArtifacts exactly; do NOT rename paths or invent extra modules.\n` +
-        `- Include a \`blueprint-contract\` JSON block with \`version: 1\` and the EXACT planned artifact paths; this block is the machine-readable source of truth.\n` +
+        `- Include a \`blueprint-contract\` JSON block with \`version: 1\`, per-file \`functions\` arrays, and a top-level \`sharedTypes\` array; this block is the machine-readable source of truth. Use empty arrays when needed, never omit the fields.\n` +
         `- Do NOT add fake runtime-verification sections, test plans, or execution-history prose.\n` +
-        `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.`
+        `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.\n` +
+        `- Use the exact seeded template below; replace TODOs only, preserve the fence name \`blueprint-contract\`, and preserve the exact planned paths.\n\n` +
+        `${blueprintTemplate}`
     }
     ;(step.executionContext as unknown as { workspaceRoot: string }).workspaceRoot = step.executionContext.workspaceRoot || workspaceRoot
     if (!step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))) {
@@ -539,6 +617,232 @@ interface StitcherResult {
   applied: boolean
   mismatches: number
   fixed: number
+}
+
+function uniqueList(values: readonly string[]): string[] {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function mergeEffectClass(
+  left: SubagentTaskStep["executionContext"]["effectClass"],
+  right: SubagentTaskStep["executionContext"]["effectClass"],
+): SubagentTaskStep["executionContext"]["effectClass"] {
+  if (left === right) return left
+  if (left === "mixed" || right === "mixed") return "mixed"
+  if (left === "shell" || right === "shell") return "mixed"
+  if (left === "readonly") return right
+  if (right === "readonly") return left
+  if (left === "filesystem_scaffold" || right === "filesystem_scaffold") return "filesystem_scaffold"
+  return "filesystem_write"
+}
+
+function mergeVerificationMode(
+  left: SubagentTaskStep["executionContext"]["verificationMode"],
+  right: SubagentTaskStep["executionContext"]["verificationMode"],
+): SubagentTaskStep["executionContext"]["verificationMode"] {
+  const precedence: readonly SubagentTaskStep["executionContext"]["verificationMode"][] = [
+    "browser_check",
+    "run_tests",
+    "deterministic_followup",
+    "mutation_required",
+    "none",
+  ]
+  for (const mode of precedence) {
+    if (left === mode || right === mode) return mode
+  }
+  return left
+}
+
+function buildPlannerDependencyMap(plan: Plan): Map<string, Set<string>> {
+  const deps = new Map<string, Set<string>>()
+  for (const step of plan.steps) {
+    deps.set(step.name, new Set(step.dependsOn ?? []))
+  }
+  for (const edge of plan.edges) {
+    const set = deps.get(edge.to) ?? new Set<string>()
+    set.add(edge.from)
+    deps.set(edge.to, set)
+  }
+  return deps
+}
+
+function stepTransitivelyDependsOn(plan: Plan, stepName: string, targetName: string): boolean {
+  if (stepName === targetName) return false
+  const deps = buildPlannerDependencyMap(plan)
+  const seen = new Set<string>()
+  const stack = [...(deps.get(stepName) ?? [])]
+
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    if (current === targetName) return true
+    if (seen.has(current)) continue
+    seen.add(current)
+    stack.push(...(deps.get(current) ?? []))
+  }
+
+  return false
+}
+
+function replaceStepName(values: readonly string[] | undefined, from: string, to: string): string[] | undefined {
+  if (!values || values.length === 0) return values ? [...values] : undefined
+  const replaced = uniqueList(values.map((value) => value === from ? to : value).filter((value) => value !== to || from !== to))
+  return replaced.length > 0 ? replaced : undefined
+}
+
+function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepName: string): boolean {
+  if (primaryStepName === secondaryStepName) return false
+
+  const mutableSteps = plan.steps as PlanStep[]
+  const primaryIndex = mutableSteps.findIndex((step) => step.name === primaryStepName)
+  const secondaryIndex = mutableSteps.findIndex((step) => step.name === secondaryStepName)
+  if (primaryIndex < 0 || secondaryIndex < 0) return false
+
+  const primary = mutableSteps[primaryIndex]
+  const secondary = mutableSteps[secondaryIndex]
+  if (primary.stepType !== "subagent_task" || secondary.stepType !== "subagent_task") return false
+
+  const mergedDependsOn = uniqueList([
+    ...(primary.dependsOn ?? []),
+    ...(secondary.dependsOn ?? []),
+  ].filter((name) => name !== primary.name && name !== secondary.name))
+
+  const mergedTargetArtifacts = uniqueList([
+    ...primary.executionContext.targetArtifacts,
+    ...secondary.executionContext.targetArtifacts,
+  ])
+
+  const mergedExecutionContext: SubagentTaskStep["executionContext"] = {
+    ...primary.executionContext,
+    allowedReadRoots: uniqueList([
+      ...primary.executionContext.allowedReadRoots,
+      ...secondary.executionContext.allowedReadRoots,
+    ]),
+    allowedWriteRoots: uniqueList([
+      ...primary.executionContext.allowedWriteRoots,
+      ...secondary.executionContext.allowedWriteRoots,
+    ]),
+    allowedTools: uniqueList([
+      ...primary.executionContext.allowedTools,
+      ...secondary.executionContext.allowedTools,
+    ]),
+    requiredSourceArtifacts: uniqueList([
+      ...primary.executionContext.requiredSourceArtifacts,
+      ...secondary.executionContext.requiredSourceArtifacts,
+    ]),
+    targetArtifacts: mergedTargetArtifacts,
+    effectClass: mergeEffectClass(primary.executionContext.effectClass, secondary.executionContext.effectClass),
+    verificationMode: mergeVerificationMode(primary.executionContext.verificationMode, secondary.executionContext.verificationMode),
+    artifactRelations: [
+      ...new Map(
+        [
+          ...primary.executionContext.artifactRelations,
+          ...secondary.executionContext.artifactRelations,
+          ...mergedTargetArtifacts.map((artifactPath) => ({ relationType: "write_owner" as const, artifactPath })),
+        ].map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation]),
+      ).values(),
+    ],
+    role: primary.executionContext.role ?? secondary.executionContext.role,
+    sharedStateContract: primary.executionContext.sharedStateContract ?? secondary.executionContext.sharedStateContract,
+  }
+
+  const mergedWorkflowRelations = [
+    ...(primary.workflowStep?.artifactRelations ?? []),
+    ...(secondary.workflowStep?.artifactRelations ?? []),
+  ]
+
+  const mergedStep: SubagentTaskStep = {
+    ...primary,
+    dependsOn: mergedDependsOn,
+    objective: `${primary.objective}\n\nAlso complete the integration follow-up originally scoped to ${secondary.name}: ${secondary.objective}`,
+    inputContract: uniqueList([primary.inputContract, secondary.inputContract]).join("\n\n"),
+    acceptanceCriteria: uniqueList([
+      ...primary.acceptanceCriteria,
+      ...secondary.acceptanceCriteria,
+    ]),
+    requiredToolCapabilities: uniqueList([
+      ...primary.requiredToolCapabilities,
+      ...secondary.requiredToolCapabilities,
+    ]),
+    contextRequirements: uniqueList([
+      ...primary.contextRequirements,
+      ...secondary.contextRequirements,
+    ]),
+    executionContext: mergedExecutionContext,
+    maxBudgetHint: primary.maxBudgetHint,
+    canRunParallel: false,
+    workflowStep: mergedWorkflowRelations.length > 0
+      ? {
+        role: primary.workflowStep?.role ?? secondary.workflowStep?.role ?? primary.executionContext.role ?? secondary.executionContext.role ?? "writer",
+        artifactRelations: [
+          ...new Map(mergedWorkflowRelations.map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation])).values(),
+        ],
+      }
+      : primary.workflowStep,
+  }
+
+  mutableSteps[primaryIndex] = mergedStep
+  mutableSteps.splice(secondaryIndex, 1)
+
+  for (const step of mutableSteps) {
+    if (!step.dependsOn || step.dependsOn.length === 0) continue
+    const rewritten = uniqueList(step.dependsOn.map((dep) => dep === secondaryStepName ? primaryStepName : dep))
+      .filter((dep) => dep !== step.name)
+    ;(step as { dependsOn?: string[] }).dependsOn = rewritten.length > 0 ? rewritten : undefined
+  }
+
+  const mutableEdges = plan.edges as PlanEdge[]
+  const rewrittenEdges = mutableEdges
+    .map((edge) => ({
+      from: edge.from === secondaryStepName ? primaryStepName : edge.from,
+      to: edge.to === secondaryStepName ? primaryStepName : edge.to,
+    }))
+    .filter((edge) => edge.from !== edge.to)
+
+  ;(plan as unknown as { edges: PlanEdge[] }).edges = [
+    ...new Map(rewrittenEdges.map((edge) => [`${edge.from}->${edge.to}`, edge])).values(),
+  ]
+
+  return true
+}
+
+function remediateSharedTargetArtifactWriters(plan: Plan): boolean {
+  const subagentSteps = plan.steps.filter(
+    (step): step is SubagentTaskStep => step.stepType === "subagent_task",
+  )
+  const writersByArtifact = new Map<string, string[]>()
+
+  for (const step of subagentSteps) {
+    for (const artifact of step.executionContext.targetArtifacts) {
+      const writers = writersByArtifact.get(artifact) ?? []
+      if (!writers.includes(step.name)) writers.push(step.name)
+      writersByArtifact.set(artifact, writers)
+    }
+  }
+
+  let changed = false
+  for (const [artifact, writers] of writersByArtifact) {
+    if (writers.length !== 2) continue
+    const [leftName, rightName] = writers
+    const leftDependsOnRight = stepTransitivelyDependsOn(plan, leftName, rightName)
+    const rightDependsOnLeft = stepTransitivelyDependsOn(plan, rightName, leftName)
+    if (leftDependsOnRight === rightDependsOnLeft) continue
+
+    const primaryName = rightDependsOnLeft ? leftName : rightName
+    const secondaryName = rightDependsOnLeft ? rightName : leftName
+    if (mergeSubagentSteps(plan, primaryName, secondaryName)) {
+      changed = true
+    }
+
+    // Recompute after each successful merge to avoid operating on stale step names.
+    if (changed) {
+      const remainingWriters = plan.steps
+        .filter((step): step is SubagentTaskStep => step.stepType === "subagent_task")
+        .filter((step) => step.executionContext.targetArtifacts.includes(artifact))
+      if (remainingWriters.length <= 1) continue
+    }
+  }
+
+  return changed
 }
 
 /**
@@ -698,6 +1002,10 @@ function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagnostic[]
   const subagentSteps = plan.steps.filter(
     (s): s is SubagentTaskStep => s.stepType === "subagent_task",
   )
+
+  if (errors.some((e) => e.code === "shared_target_artifact")) {
+    changed = remediateSharedTargetArtifactWriters(plan) || changed
+  }
 
   // If an HTML step verifies with browser_check before related JS ownership,
   // defer that verification to a later owner step to avoid impossible contracts.
@@ -943,6 +1251,7 @@ export async function executePlannerPath(
   // Global hardening: for multi-file JS plans, enforce one explicit shared
   // state owner and propagate a typed contract to all writer steps.
   injectSharedStateOwnershipContract(plan)
+  injectBrowserRuntimeContracts(plan)
 
   // Contract-First Architecture: auto-inject a blueprint step as step 0 for
   // multi-file projects. This step generates a BLUEPRINT.md with function

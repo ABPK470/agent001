@@ -92,6 +92,7 @@ export function CommandCenter() {
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setActiveRun = useStore((s) => s.setActiveRun)
+  const upsertRun = useStore((s) => s.upsertRun)
 
   // API-fetched data
   const [agents, setAgents] = useState<AgentDefinition[]>([])
@@ -109,6 +110,8 @@ export function CommandCenter() {
   const [expandedDag, setExpandedDag] = useState<string | null>(null)
   const [resumeError, setResumeError] = useState<string | null>(null)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
+  const [workspaceMsg, setWorkspaceMsg] = useState<string | null>(null)
+  const [applyingWorkspace, setApplyingWorkspace] = useState(false)
   const [rolledBack, setRolledBack] = useState(false)
 
   const feedRef = useRef<HTMLDivElement>(null)
@@ -138,6 +141,7 @@ export function CommandCenter() {
   const isRunning = activeRun?.status === "running"
   const isFailed = activeRun?.status === "failed"
   const isCancelled = activeRun?.status === "cancelled"
+  const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
 
   const activeAgent = activeRun?.agentId ? agents.find((a) => a.id === activeRun.agentId) : null
 
@@ -198,6 +202,26 @@ export function CommandCenter() {
     }
   }, [activeRun])
 
+  const handleApplyWorkspace = useCallback(async () => {
+    if (!activeRun || applyingWorkspace) return
+    setApplyingWorkspace(true)
+    setWorkspaceMsg(null)
+    try {
+      const result = await api.applyRunWorkspaceDiff(activeRun.id)
+      if (!result) {
+        setWorkspaceMsg("nothing to apply")
+        return
+      }
+      const total = result.applied.added + result.applied.modified + result.applied.deleted
+      upsertRun({ id: activeRun.id, pendingWorkspaceChanges: 0 })
+      setWorkspaceMsg(`applied ${total} change${total === 1 ? "" : "s"}`)
+    } catch {
+      setWorkspaceMsg("apply failed")
+    } finally {
+      setApplyingWorkspace(false)
+    }
+  }, [activeRun, applyingWorkspace, upsertRun])
+
   // Reset rolledBack state when switching runs
   useEffect(() => { setRolledBack(false) }, [activeRunId])
 
@@ -207,6 +231,12 @@ export function CommandCenter() {
     const timer = setTimeout(() => setRollbackMsg(null), 8000)
     return () => clearTimeout(timer)
   }, [rollbackMsg])
+
+  useEffect(() => {
+    if (!workspaceMsg) return
+    const timer = setTimeout(() => setWorkspaceMsg(null), 8000)
+    return () => clearTimeout(timer)
+  }, [workspaceMsg])
 
   // ── LIVE DAG ────────────────────────────────────────────────────
 
@@ -475,6 +505,17 @@ export function CommandCenter() {
                 RESUME
               </button>
             )}
+            {pendingWorkspaceChanges > 0 && (
+              <button
+                onClick={handleApplyWorkspace}
+                className="px-2 py-0.5 rounded text-[10px] transition-colors"
+                style={{ background: C.success + "20", color: C.success, border: `1px solid ${C.success}40` }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = C.success + "40" }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = C.success + "20" }}
+              >
+                {applyingWorkspace ? "APPLYING" : `APPROVE${pendingWorkspaceChanges > 0 ? ` ${pendingWorkspaceChanges}` : ""}`}
+              </button>
+            )}
             {(activeRun.status === "completed" || isFailed || isCancelled) && !rolledBack && (
               <button
                 onClick={handleRollback}
@@ -491,6 +532,9 @@ export function CommandCenter() {
             )}
             {rollbackMsg && (
               <span className="text-[10px]" style={{ color: C.warning }}>{rollbackMsg}</span>
+            )}
+            {workspaceMsg && (
+              <span className="text-[10px]" style={{ color: C.success }}>{workspaceMsg}</span>
             )}
           </div>
         </div>

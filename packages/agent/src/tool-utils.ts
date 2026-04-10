@@ -11,6 +11,7 @@
 
 import type { RecoveryHint, ToolCallRecord } from "./recovery.js"
 import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText } from "./recovery.js"
+import type { ToolResultEnvelope } from "./types.js"
 
 // ============================================================================
 // Constants
@@ -153,6 +154,29 @@ export interface ToolExecutionResult {
   readonly retryCount: number
   readonly retrySuppressedReason?: string
   readonly durationMs: number
+  readonly outcome?: ToolResultEnvelope
+}
+
+function isToolResultEnvelope(value: unknown): value is ToolResultEnvelope {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+    && typeof (value as ToolResultEnvelope).ok === "boolean"
+    && typeof (value as ToolResultEnvelope).summary === "string"
+}
+
+function formatToolResultEnvelope(outcome: ToolResultEnvelope): string {
+  const details = outcome.details?.filter(Boolean) ?? []
+  if (details.length === 0) return outcome.summary
+  return `${outcome.summary}\n${details.map((detail) => `  - ${detail}`).join("\n")}`
+}
+
+export function normalizeToolExecutionOutput(
+  value: string | ToolResultEnvelope,
+): { result: string; outcome?: ToolResultEnvelope } {
+  if (typeof value === "string") return { result: value }
+  if (isToolResultEnvelope(value)) {
+    return { result: formatToolResultEnvelope(value), outcome: value }
+  }
+  return { result: JSON.stringify({ error: "Tool returned unsupported payload type" }) }
 }
 
 /**
@@ -166,7 +190,7 @@ export interface ToolExecutionResult {
 export async function executeToolWithTimeout(
   toolName: string,
   args: Record<string, unknown>,
-  execute: (a: Record<string, unknown>) => Promise<string>,
+  execute: (a: Record<string, unknown>) => Promise<string | ToolResultEnvelope>,
   config: ToolExecutionConfig,
 ): Promise<ToolExecutionResult> {
   const toolStart = Date.now()
@@ -176,6 +200,7 @@ export async function executeToolWithTimeout(
   let timedOut = false
   let retrySuppressedReason: string | undefined
   let retryCount = 0
+  let outcome: ToolResultEnvelope | undefined
 
   const maxRetries = Math.max(0, config.maxRetries)
 
@@ -183,17 +208,25 @@ export async function executeToolWithTimeout(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
 
     const toolCallPromise = (async (): Promise<{
-      result: string; isError: boolean; timedOut: boolean; threw: boolean
+      result: string; isError: boolean; timedOut: boolean; threw: boolean; outcome?: ToolResultEnvelope
     }> => {
       try {
         const value = await execute(args)
-        return { result: value, isError: false, timedOut: false, threw: false }
+        const normalized = normalizeToolExecutionOutput(value)
+        return {
+          result: normalized.result,
+          isError: false,
+          timedOut: false,
+          threw: false,
+          outcome: normalized.outcome,
+        }
       } catch (toolErr) {
         return {
           result: JSON.stringify({ error: (toolErr as Error).message }),
           isError: true,
           timedOut: false,
           threw: true,
+          outcome: undefined,
         }
       }
     })()
@@ -201,7 +234,7 @@ export async function executeToolWithTimeout(
     const timeoutMs = config.toolCallTimeoutMs
     const timeoutPromise = timeoutMs > 0
       ? new Promise<{
-          result: string; isError: boolean; timedOut: boolean; threw: boolean
+          result: string; isError: boolean; timedOut: boolean; threw: boolean; outcome?: ToolResultEnvelope
         }>((resolve) => {
           timeoutHandle = setTimeout(() => {
             resolve({
@@ -209,28 +242,33 @@ export async function executeToolWithTimeout(
               isError: true,
               timedOut: true,
               threw: false,
+              outcome: undefined,
             })
           }, timeoutMs)
         })
       : undefined
 
-    const outcome = timeoutPromise
+    const attemptOutcome = timeoutPromise
       ? await Promise.race([toolCallPromise, timeoutPromise])
       : await toolCallPromise
 
     if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)
 
-    result = outcome.result
-    isError = outcome.isError
-    timedOut = outcome.timedOut
+    result = attemptOutcome.result
+    isError = attemptOutcome.isError
+    timedOut = attemptOutcome.timedOut
+    const structuredOutcome = attemptOutcome.outcome
+    if (structuredOutcome) {
+      outcome = structuredOutcome
+    }
 
-    toolFailed = didToolCallFail(isError, result)
+    toolFailed = structuredOutcome ? !structuredOutcome.ok : didToolCallFail(isError, result)
 
     if (!toolFailed) break
 
     // Determine if this is a transport failure (retryable)
     const failureText = extractToolFailureText({ name: toolName, args, result, isError: true })
-    const transportFailure = timedOut || outcome.threw || isLikelyTransportFailure(failureText)
+    const transportFailure = timedOut || attemptOutcome.threw || isLikelyTransportFailure(failureText)
 
     if (!transportFailure) break
     if (attempt >= maxRetries) break
@@ -252,7 +290,7 @@ export async function executeToolWithTimeout(
   }
 
   const durationMs = Date.now() - toolStart
-  return { result, isError, toolFailed, timedOut, retryCount, retrySuppressedReason, durationMs }
+  return { result, isError, toolFailed, timedOut, retryCount, retrySuppressedReason, durationMs, outcome }
 }
 
 /**

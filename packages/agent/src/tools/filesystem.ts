@@ -18,13 +18,27 @@
 import { appendFile, lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve, sep } from "node:path"
 import { detectPlaceholderPatterns } from "../code-quality.js"
-import type { Tool } from "../types.js"
+import type { Tool, ToolResultEnvelope } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
 let _basePath = process.cwd()
 
 export function setBasePath(path: string): void {
   _basePath = resolve(path)
+}
+
+function buildToolOutcome(
+  summary: string,
+  overrides: Omit<ToolResultEnvelope, "summary"> = { ok: true },
+): ToolResultEnvelope {
+  return {
+    ...overrides,
+    ok: overrides.ok ?? true,
+    severity: overrides.severity ?? (overrides.ok === false ? "recoverable" : "info"),
+    directive: overrides.directive ?? "continue",
+    retryable: overrides.retryable ?? true,
+    summary,
+  }
 }
 
 // ── Layer 1: Input validation ────────────────────────────────────
@@ -276,11 +290,21 @@ export const writeFileTool: Tool = {
       const hasStructuralCorruption = hasStructuralIntegrityIssue(integrityWarnings)
 
       if (hasStructuralCorruption) {
-        return (
-          `⚠ WRITE REJECTED for ${filePath} — your output is CORRUPTED and was NOT saved:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
-          `The existing file was kept unchanged. ` +
-          `Use read_file to inspect current content, then write_file again with corrected code.`
+        return buildToolOutcome(
+          `WRITE REJECTED for ${filePath} — the mutation was blocked and the existing file was preserved.`,
+          {
+            ok: false,
+            severity: "fatal",
+            directive: "abort_round",
+            errorCode: "artifact_integrity_violation",
+            details: [
+              ...integrityWarnings,
+              "The existing file was kept unchanged.",
+              "Use read_file to inspect current content before any further mutation attempt.",
+            ],
+            artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
+            retryable: true,
+          },
         )
       }
 
@@ -293,24 +317,45 @@ export const writeFileTool: Tool = {
         )
 
         if (onlyStubDetections) {
-          return (
-            `\u26a0 WRITTEN WITH ISSUES to ${filePath} — stub/placeholder code detected:\n` +
-            integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
-            `The file was saved but contains incomplete code. ` +
-            `Read the file, find the specific stub locations listed above, and write_file with those stubs replaced by REAL implementation. ` +
-            `Keep ALL existing working code — only replace the stub portions.`
+          return buildToolOutcome(
+            `WRITTEN WITH ISSUES to ${filePath} — the file was saved but still contains incomplete logic.`,
+            {
+              ok: false,
+              severity: "recoverable",
+              directive: "abort_round",
+              errorCode: "artifact_incomplete_mutation",
+              details: [
+                ...integrityWarnings,
+                "Read the file you just wrote, then replace only the stub portions with real implementation.",
+              ],
+              artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
+              retryable: true,
+            },
           )
         }
-        return (
-          `\u26a0 WRITTEN WITH ERRORS to ${filePath} — your output is CORRUPTED and must be fixed:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
-          `The file was saved but contains broken/degenerated code. ` +
-          `Use read_file to see what you wrote, then write_file again with CORRECT content. ` +
-          `Keep ALL existing working code intact.`
+        return buildToolOutcome(
+          `WRITTEN WITH ERRORS to ${filePath} — the file was saved with invalid content that must be repaired before more work continues.`,
+          {
+            ok: false,
+            severity: "fatal",
+            directive: "abort_round",
+            errorCode: "artifact_corrupted_mutation",
+            details: [
+              ...integrityWarnings,
+              "Read the saved file before attempting another mutation so the next edit repairs the actual current state.",
+            ],
+            artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
+            retryable: true,
+          },
         )
       }
 
-      return `Successfully wrote to ${filePath}`
+      return buildToolOutcome(`Successfully wrote to ${filePath}`, {
+        ok: true,
+        severity: "info",
+        directive: "continue",
+        artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
+      })
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
@@ -354,23 +399,41 @@ export const appendFileTool: Tool = {
       const integrityWarnings = checkWriteIntegrity(filePath, combined)
 
       if (hasStructuralIntegrityIssue(integrityWarnings)) {
-        return (
-          `Append rejected for ${filePath} — update was NOT saved due to structural issues:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
-          `Use read_file to inspect the current file, then retry with corrected content.`
+        return buildToolOutcome(
+          `APPEND REJECTED for ${filePath} — the update was blocked due to structural integrity issues.`,
+          {
+            ok: false,
+            severity: "fatal",
+            directive: "abort_round",
+            errorCode: "artifact_integrity_violation",
+            details: [...integrityWarnings, "Use read_file to inspect the current file before any new append or rewrite."],
+            artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
+          },
         )
       }
 
       await appendFile(target, content, "utf-8")
 
       if (integrityWarnings.length > 0) {
-        return (
-          `Appended to ${filePath}, but issues were detected in the resulting file:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n")
+        return buildToolOutcome(
+          `APPENDED WITH ISSUES to ${filePath} — inspect the resulting file before continuing.`,
+          {
+            ok: false,
+            severity: "recoverable",
+            directive: "abort_round",
+            errorCode: "artifact_incomplete_mutation",
+            details: integrityWarnings,
+            artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
+          },
         )
       }
 
-      return `Successfully appended to ${filePath}`
+      return buildToolOutcome(`Successfully appended to ${filePath}`, {
+        ok: true,
+        severity: "info",
+        directive: "continue",
+        artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
+      })
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
@@ -561,23 +624,41 @@ export const replaceInFileTool: Tool = {
       }
 
       if (hasStructuralIntegrityIssue(integrityWarnings)) {
-        return (
-          `Replace rejected in ${filePath} — update was NOT saved due to structural issues:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n") + "\n" +
-          `Use read_file to inspect the current file, then retry with corrected replacement text.`
+        return buildToolOutcome(
+          `REPLACE REJECTED for ${filePath} — the replacement was blocked due to structural integrity issues.`,
+          {
+            ok: false,
+            severity: "fatal",
+            directive: "abort_round",
+            errorCode: "artifact_integrity_violation",
+            details: [...integrityWarnings, "Use read_file to inspect the current file before another replacement attempt."],
+            artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
+          },
         )
       }
 
       await writeFile(target, updated, "utf-8")
 
       if (integrityWarnings.length > 0) {
-        return (
-          `Replaced in ${filePath}, but issues detected:\n` +
-          integrityWarnings.map(w => `  - ${w}`).join("\n")
+        return buildToolOutcome(
+          `REPLACED WITH ISSUES in ${filePath} — inspect the saved file before continuing.`,
+          {
+            ok: false,
+            severity: "recoverable",
+            directive: "abort_round",
+            errorCode: "artifact_incomplete_mutation",
+            details: integrityWarnings,
+            artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
+          },
         )
       }
 
-      return `Successfully replaced in ${filePath}`
+      return buildToolOutcome(`Successfully replaced in ${filePath}`, {
+        ok: true,
+        severity: "info",
+        directive: "continue",
+        artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
+      })
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
