@@ -47,11 +47,20 @@ export type { QualityProxyInput, RecoveryHint, ToolCallRecord } from "./recovery
 export { applyToolContractGuidance, resolveToolContractGuidance } from "./tool-contract-guidance.js"
 export type { AppliedToolContractGuidance, ToolContractContext, ToolContractEnforcement, ToolContractGuidance, ToolContractLifetime } from "./tool-contract-guidance.js"
 
+// Context compaction (ArtifactCompactionState + LLMStatefulResumeAnchor)
+export {
+    applyFullCompaction,
+    buildResumeAnchorMessage,
+    extractCompactionState,
+    shouldApplyFullCompaction
+} from "./context-compaction.js"
+export type { ArtifactCompactionState, CompactedFileRecord } from "./context-compaction.js"
+
 // Delegation bandit learning (agenc-core enhancement)
 export {
     DelegationBanditTuner,
     getGlobalDelegationBanditTuner,
-    setGlobalDelegationBanditTuner,
+    setGlobalDelegationBanditTuner
 } from "./delegation-learning.js"
 export type { BanditArm, BanditArmId, DelegationTrajectoryRecord } from "./delegation-learning.js"
 

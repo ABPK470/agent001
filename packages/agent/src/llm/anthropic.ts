@@ -66,13 +66,24 @@ export class AnthropicClient implements LLMClient {
       max_tokens: 4096,
       messages: apiMessages,
     }
-    if (systemPrompt) body.system = systemPrompt
+    // Wrap system prompt as a content block with cache_control so the provider
+    // caches all tokens up to and including this block (provider-level session anchor).
+    if (systemPrompt) {
+      body.system = [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+    }
     if (tools.length > 0) {
-      body.tools = tools.map((t) => ({
+      const apiTools: Record<string, unknown>[] = tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters,
       }))
+      // cache_control on the last tool caches all tool definitions up to this point.
+      // Tools are stable across turns, so this is a reliable low-cost cache breakpoint.
+      apiTools[apiTools.length - 1] = {
+        ...apiTools[apiTools.length - 1],
+        cache_control: { type: "ephemeral" },
+      }
+      body.tools = apiTools
     }
 
     const maxRetries = 5
@@ -85,6 +96,10 @@ export class AnthropicClient implements LLMClient {
           "Content-Type": "application/json",
           "x-api-key": this.apiKey,
           "anthropic-version": "2023-06-01",
+          // Enable server-side prompt caching (LLMStatefulResumeAnchor equivalent).
+          // Anthropic caches all tokens up to each cache_control breakpoint, which
+          // we place on the system prompt and the last tool definition.
+          "anthropic-beta": "prompt-caching-2024-07-31",
         },
         body: JSON.stringify(body),
         signal: opts?.signal,
@@ -140,6 +155,7 @@ interface AnthropicBlock {
   input?: Record<string, unknown>
   tool_use_id?: string
   content?: string
+  cache_control?: { type: "ephemeral" }
 }
 
 interface AnthropicMessage {

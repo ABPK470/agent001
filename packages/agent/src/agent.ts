@@ -23,6 +23,7 @@
  */
 
 import { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
+import { applyFullCompaction, shouldApplyFullCompaction } from "./context-compaction.js"
 import * as log from "./logger.js"
 import {
   buildCoherentGenerationMessages,
@@ -1180,6 +1181,9 @@ export class Agent {
     let completionAttempted = false
     // Snapshot of tool calls from the previous iteration — used for contract guidance.
     let lastRoundToolCallsSnapshot: readonly { name: string; isError: boolean }[] = []
+    // Full history compaction: tracks when the last ArtifactCompactionState anchor was applied.
+    // Initialised to -(FULL_COMPACTION_INTERVAL) so the first eligible compaction fires immediately.
+    let lastFullCompactionIteration = -8
 
     // Fixed ceiling for adaptive budget extension.  Must be computed from the
     // ORIGINAL maxIterations BEFORE the loop mutates it so extensions can't
@@ -1216,6 +1220,23 @@ export class Agent {
       }
 
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
+
+      // ── Full history compaction (ArtifactCompactionState anchor) ──
+      // At intervals, extract a structured snapshot of the agent's progress and
+      // replace old history with a compact session anchor message. This is the
+      // primary token saver for long sessions (10+ iterations of large outputs).
+      if (shouldApplyFullCompaction(messages, i, lastFullCompactionIteration)) {
+        const { compacted: fullyCompacted, state } = applyFullCompaction(messages, i)
+        messages.splice(0, messages.length, ...fullyCompacted)
+        lastFullCompactionIteration = i
+        this.config.onNudge?.({
+          tag: "context-compaction",
+          message:
+            `Session checkpoint at iteration ${i}: ${state.writtenFiles.length} file records captured, ` +
+            `history compacted from ${messages.length + (messages.length - fullyCompacted.length)} to ${fullyCompacted.length} messages`,
+          iteration: i,
+        })
+      }
 
       // ── Context management: compact then truncate ──
       // Compaction replaces stale tool results with summaries (progressive),
