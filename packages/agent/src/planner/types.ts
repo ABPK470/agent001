@@ -73,6 +73,26 @@ export interface CoherentSolutionBundle {
   readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
+/**
+ * Confidence the routing system has in its decision.
+ *
+ * Produced by the heuristic layer. When confidence is "ambiguous", the LLM
+ * router is consulted before the final route is committed.
+ *
+ * decisive_planner  — multiple strong coordination signals; planner always wins
+ * lean_planner      — some coordination signals; planner likely correct
+ * ambiguous         — coordination score is medium but signals are weak or
+ *                     cross-sentence; LLM routing adjudicates
+ * lean_coherent     — bounded implementation, no strong coordination signals
+ * decisive_coherent — strong coherence signals and no coordination cues
+ */
+export type RoutingConfidence =
+  | "decisive_planner"
+  | "lean_planner"
+  | "ambiguous"
+  | "lean_coherent"
+  | "decisive_coherent"
+
 export interface PlannerDecision {
   readonly score: number
   readonly shouldPlan: boolean
@@ -80,6 +100,10 @@ export interface PlannerDecision {
   readonly route: PlannerRoute
   readonly coherenceNeed: PlannerNeedLevel
   readonly coordinationNeed: PlannerNeedLevel
+  /** How confident the routing system is. "ambiguous" cases use LLM routing. */
+  readonly routingConfidence: RoutingConfidence
+  /** True when LLM classification overrode the heuristic signal layer. */
+  readonly llmClassified: boolean
 }
 
 // ============================================================================

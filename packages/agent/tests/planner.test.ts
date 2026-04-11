@@ -109,25 +109,43 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
 // ============================================================================
 
 describe("Planner decision: assessPlannerDecision", () => {
-  it("routes 'build a chess game' to bounded_coherent_generation (no coordination need)", () => {
+  it("routes 'build a chess game' to bounded_coherent_generation (no coordination need)", async () => {
     // Plain phrasing — no "playable"/"complete"/"drag and drop" magic words required.
     // Uses a realistic goal length (> 20 chars) that won't hit the too_short gate.
-    const decision = assessPlannerDecision("Build a chess game with all pieces and standard rules", [])
+    const decision = await assessPlannerDecision("Build a chess game with all pieces and standard rules", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
     expect(decision.reason).toBe("bounded_coherent_generation")
   })
 
-  it("routes 'build a fully playable chess game with drag and drop' to bounded_coherent_generation", () => {
-    const decision = assessPlannerDecision("Build a fully playable chess game with drag and drop", [])
+  it("routes 'build a fully playable chess game with drag and drop' to bounded_coherent_generation", async () => {
+    const decision = await assessPlannerDecision("Build a fully playable chess game with drag and drop", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
     expect(decision.score).toBeGreaterThanOrEqual(3)
     expect(decision.reason).toBe("bounded_coherent_generation")
   })
 
-  it("routes 'create a website with multiple pages' to planner", () => {
-    const decision = assessPlannerDecision(
+  it("routes verbose chess game goal (with 'all project files' preamble) to bounded_coherent_generation", async () => {
+    // This exact pattern caused full_planner_decomposition in production:
+    // DELEGATION_RE fires on "all project files ... Build" across sentence boundaries,
+    // inflating coordinationNeed to "medium" and blocking the coherent-generation route.
+    const goal =
+      "Create a temporary working directory named tmp where all project files will be stored and organized. " +
+      "Build a browser-based chess game in JavaScript for two human players on the same device. " +
+      "Render a responsive 8x8 board with alternating colors and clearly distinguishable white and black pieces. " +
+      "Implement full standard chess rules: legal moves for all piece types, turn enforcement, captures, " +
+      "check, checkmate, stalemate, castling with all constraints, en passant, and pawn promotion to " +
+      "queen rook bishop or knight. Illegal moves and selecting opponent pieces must be prevented. " +
+      "Show check status in UI, end game on checkmate with winner display, and support click selection " +
+      "with legal move highlighting and click-to-move."
+    const decision = await assessPlannerDecision(goal, [])
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("bounded_coherent_generation")
+  })
+
+  it("routes 'create a website with multiple pages' to planner", async () => {
+    const decision = await assessPlannerDecision(
       "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
       [],
     )
@@ -136,14 +154,14 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.score).toBeGreaterThanOrEqual(3)
   })
 
-  it("routes 'build a todo app' to planner", () => {
-    const decision = assessPlannerDecision("Build a complete todo application with add, delete, and filter functionality", [])
+  it("routes 'build a todo app' to planner", async () => {
+    const decision = await assessPlannerDecision("Build a complete todo application with add, delete, and filter functionality", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
   })
 
-  it("routes 'first do X, then Y, then Z' to planner (multi-step)", () => {
-    const decision = assessPlannerDecision(
+  it("routes 'first do X, then Y, then Z' to planner (multi-step)", async () => {
+    const decision = await assessPlannerDecision(
       "First create the database schema, then implement the API endpoints, then write the frontend",
       [],
     )
@@ -151,8 +169,8 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.reason).toContain("multi_step")
   })
 
-  it("routes 'implement multiple components' to planner", () => {
-    const decision = assessPlannerDecision(
+  it("routes 'implement multiple components' to planner", async () => {
+    const decision = await assessPlannerDecision(
       "Create multiple components for the dashboard: a chart widget, a data table, and a settings panel",
       [],
     )
@@ -160,56 +178,56 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.score).toBeGreaterThanOrEqual(3)
   })
 
-  it("keeps 'hello' in direct path (simple dialogue)", () => {
-    const decision = assessPlannerDecision("hello", [])
+  it("keeps 'hello' in direct path (simple dialogue)", async () => {
+    const decision = await assessPlannerDecision("hello", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("direct")
     expect(decision.reason).toBe("simple_dialogue")
   })
 
-  it("keeps 'what is TypeScript?' in direct path (simple dialogue)", () => {
-    const decision = assessPlannerDecision("what is TypeScript?", [])
+  it("keeps 'what is TypeScript?' in direct path (simple dialogue)", async () => {
+    const decision = await assessPlannerDecision("what is TypeScript?", [])
     expect(decision.shouldPlan).toBe(false)
   })
 
-  it("keeps short messages in direct path", () => {
-    const decision = assessPlannerDecision("fix the bug", [])
+  it("keeps short messages in direct path", async () => {
+    const decision = await assessPlannerDecision("fix the bug", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.reason).toBe("too_short")
   })
 
-  it("keeps 'edit the login handler in auth.ts' in direct path", () => {
-    const decision = assessPlannerDecision("Edit the login handler in auth.ts to add rate limiting", [])
+  it("keeps 'edit the login handler in auth.ts' in direct path", async () => {
+    const decision = await assessPlannerDecision("Edit the login handler in auth.ts to add rate limiting", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("direct")
     expect(decision.reason).toBe("edit_artifact_direct_path")
   })
 
-  it("keeps 'write a plan for the migration' in direct path", () => {
-    const decision = assessPlannerDecision("Write a plan for the database migration", [])
+  it("keeps 'write a plan for the migration' in direct path", async () => {
+    const decision = await assessPlannerDecision("Write a plan for the database migration", [])
     expect(decision.shouldPlan).toBe(false)
     // May match exact_response_turn or plan_generation_direct_path depending on gate order
     expect(["exact_response_turn", "plan_generation_direct_path"]).toContain(decision.reason)
   })
 
-  it("keeps 'remember that I prefer TypeScript' in direct path", () => {
-    const decision = assessPlannerDecision("Remember that I prefer TypeScript over JavaScript", [])
+  it("keeps 'remember that I prefer TypeScript' in direct path", async () => {
+    const decision = await assessPlannerDecision("Remember that I prefer TypeScript over JavaScript", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.reason).toBe("dialogue_memory_turn")
   })
 
-  it("routes with higher score when prior tool activity is high", () => {
+  it("routes with higher score when prior tool activity is high", async () => {
     const history = Array.from({ length: 5 }, () => ({
       role: "tool" as const,
       content: "result",
     }))
-    const decision = assessPlannerDecision("Now build a game application with these components", history)
+    const decision = await assessPlannerDecision("Now build a game application with these components", history)
     expect(decision.score).toBeGreaterThanOrEqual(5)
     expect(decision.reason).toContain("prior_tool_activity")
   })
 
-  it("keeps explicit single-file full implementation in direct burst path", () => {
-    const decision = assessPlannerDecision(
+  it("keeps explicit single-file full implementation in direct burst path", async () => {
+    const decision = await assessPlannerDecision(
       "Implement the full auth flow in single file src/auth.ts with complete logic from scratch",
       [],
     )
@@ -218,8 +236,8 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.reason).toBe("single_artifact_direct_burst")
   })
 
-  it("routes bounded greenfield builds to coherence-first direct execution", () => {
-    const decision = assessPlannerDecision(
+  it("routes bounded greenfield builds to coherence-first direct execution", async () => {
+    const decision = await assessPlannerDecision(
       "Create a complete Kanban app from scratch with drag and drop and persistent state",
       [],
     )
@@ -228,8 +246,8 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.reason).toBe("bounded_coherent_generation")
   })
 
-  it("keeps planner routing for multi-page builds that already imply coordination-heavy ownership", () => {
-    const decision = assessPlannerDecision(
+  it("keeps planner routing for multi-page builds that already imply coordination-heavy ownership", async () => {
+    const decision = await assessPlannerDecision(
       "Create a website with a landing page, docs page, and admin page, then wire shared navigation and forms",
       [],
     )
@@ -237,8 +255,8 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.route).toBe("full_planner_decomposition")
   })
 
-  it("does not use bounded coherent generation for existing-code integration work", () => {
-    const decision = assessPlannerDecision(
+  it("does not use bounded coherent generation for existing-code integration work", async () => {
+    const decision = await assessPlannerDecision(
       "Build a new dashboard and integrate it into the existing auth and API flow",
       [],
     )
@@ -246,8 +264,8 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.route).toBe("full_planner_decomposition")
   })
 
-  it("routes larger greenfield systems to planner bootstrap before decomposition", () => {
-    const decision = assessPlannerDecision(
+  it("routes larger greenfield systems to planner bootstrap before decomposition", async () => {
+    const decision = await assessPlannerDecision(
       "Build a complete SaaS starter from scratch with authentication, billing, admin tooling, and shared contracts across frontend, API, and worker modules.",
       [],
     )
@@ -257,24 +275,27 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(["medium", "high"]).toContain(decision.coordinationNeed)
   })
 
-  it("does NOT use direct burst when no concrete target file is provided", () => {
-    const decision = assessPlannerDecision(
+  it("does NOT use direct burst when no concrete target file is provided", async () => {
+    const decision = await assessPlannerDecision(
       "Implement a full auth flow in a single file with complete logic from scratch",
       [],
     )
     expect(decision.shouldPlan).toBe(true)
   })
 
-  it("does NOT use direct burst for ambiguous multi-target requests", () => {
-    const decision = assessPlannerDecision(
+  it("does NOT use direct burst for ambiguous multi-target requests", async () => {
+    const decision = await assessPlannerDecision(
       "Implement a full auth flow in single file src/auth.ts and add backend service wiring",
       [],
     )
     expect(decision.shouldPlan).toBe(true)
   })
 
-  it("keeps trace-like multi-artifact game goals in planner path", () => {
-    const decision = assessPlannerDecision(
+  it("keeps trace-like multi-artifact game goals with explicit file list in planner path", async () => {
+    // Even under the simplicity-default architecture, a goal that explicitly
+    // enumerates multiple named output files signals file-by-file ownership
+    // coordination that the planner handles better than a single coherent pass.
+    const decision = await assessPlannerDecision(
       "Build a complete playable chess game and create tmp/game/index.html, tmp/game/styles.css, and tmp/game/game.js with verification.",
       [],
     )

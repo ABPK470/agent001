@@ -28,7 +28,7 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-  ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
+  ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, RoutingConfidence, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
   VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
@@ -1064,16 +1064,33 @@ function buildPlannerFailurePayload(params: {
  * downgrading into the direct loop. Falling back after detecting an invalid
  * multi-step plan causes the exact overwrite regressions the validator exists
  * to prevent.
+ *
+ * @param options.forceRoute — skip routing assessment and force a specific planner
+ *   route. Used by delay-commitment fallback when coherent generation fails.
  */
 export async function executePlannerPath(
   goal: string,
   ctx: PlannerContext,
   delegateFn: DelegateFn,
+  options?: { forceRoute?: "full_planner_decomposition" | "planner_with_coherent_bootstrap" },
 ): Promise<PlannerResult> {
   const MAX_PIPELINE_RETRIES = 2
 
   // Step 1: Should we plan?
-  const decision = assessPlannerDecision(goal, ctx.history)
+  // When forceRoute is set (delay-commitment fallback from coherent failure),
+  // skip the routing assessment and commit directly to the specified route.
+  const decision = options?.forceRoute != null
+    ? {
+        shouldPlan: true,
+        route: options.forceRoute,
+        score: 10,
+        reason: "coherent_generation_fallback_escalation",
+        coherenceNeed: "high" as const,
+        coordinationNeed: "medium" as const,
+        routingConfidence: "lean_planner" as const,
+        llmClassified: false,
+      }
+    : await assessPlannerDecision(goal, ctx.history, ctx.llm, ctx.signal)
   ctx.onTrace?.({
     kind: "planner-decision",
     score: decision.score,

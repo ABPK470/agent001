@@ -845,7 +845,14 @@ export class Agent {
         return answer
       }
 
-      const routingDecision = assessPlannerDecision(goal, messages)
+      // Layer 4 LLM routing: pass this.llm so the router can classify
+      // ambiguous tasks rather than relying on regex alone.
+      const routingDecision = await assessPlannerDecision(goal, messages, this.llm, this.config.signal)
+
+      // Track whether coherent generation fails so we can apply delay commitment:
+      // try coherent → if it produces no bundle, escalate to planner rather
+      // than dropping all the way to the unstructured direct tool loop.
+      let coherentGenerationFailed = false
 
       if (routingDecision.route === "bounded_coherent_generation") {
         this.config.onPlannerTrace?.({ kind: "coherent-generation-start", route: routingDecision.route })
@@ -981,6 +988,7 @@ export class Agent {
               stage: "materialization",
               diagnostics: [...materialized.diagnostics],
             })
+            coherentGenerationFailed = true
           }
         } else {
           this.config.onPlannerTrace?.({
@@ -988,6 +996,32 @@ export class Agent {
             stage: "bundle_parse",
             diagnostics: [...coherentParse.diagnostics],
           })
+          coherentGenerationFailed = true
+        }
+      }
+
+      // Delay commitment: if coherent generation was attempted but produced no
+      // valid bundle, escalate to the planner instead of dropping to the
+      // unstructured direct tool loop.  This is the "try coherent → verify →
+      // fallback to planner" pattern — the system only over-commits to planning
+      // when the simpler path demonstrably failed.
+      if (coherentGenerationFailed && this.config.plannerDelegateFn) {
+        this.config.onPlannerTrace?.({
+          kind: "planner-architecture-state",
+          lane: "full_planner_decomposition",
+          status: "repairing_in_place",
+          reason: "coherent_generation_failed_escalating_to_planner",
+        })
+        const escalatedResult = await executePlannerPath(
+          goal,
+          plannerCtx,
+          this.config.plannerDelegateFn,
+          { forceRoute: "full_planner_decomposition" },
+        )
+        if (escalatedResult.handled) {
+          const answer = escalatedResult.answer ?? "(planner produced no answer)"
+          if (this.config.verbose) log.logFinalAnswer(answer)
+          return answer
         }
       }
 
