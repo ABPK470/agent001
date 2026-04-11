@@ -12,8 +12,10 @@ import type {
     VerifierDecision,
     VerifierIssue,
     VerifierIssueSeverity,
+    VerifierOwnershipMode,
     VerifierRepairClass,
     VerifierStepAssessment,
+    VerifierSystemCheck,
 } from "./types.js"
 
 function uniqueStrings(values: readonly string[]): string[] {
@@ -68,6 +70,14 @@ function inferRepairClass(summary: string): VerifierRepairClass {
   return "owner_implementation"
 }
 
+function inferIssueConfidence(source: VerificationEvidence["source"], summary: string, ownershipMode: VerifierOwnershipMode, suspectedOwners: readonly string[]): number {
+  const sourceBase = source === "contract" ? 0.95 : source === "deterministic" ? 0.85 : 0.65
+  const ambiguityPenalty = ownershipMode === "deterministic_owner" ? 0 : ownershipMode === "shared_owners" ? 0.12 : ownershipMode === "integration_layer" ? 0.18 : ownershipMode === "planner_fault" ? 0.15 : 0.22
+  const ownerPenalty = suspectedOwners.length <= 1 ? 0 : Math.min(0.2, (suspectedOwners.length - 1) * 0.07)
+  const wordingPenalty = /maybe|appears|likely|suggests|possible/i.test(summary) ? 0.08 : 0
+  return Math.max(0.2, Math.min(0.99, sourceBase - ambiguityPenalty - ownerPenalty - wordingPenalty))
+}
+
 function buildEvidenceId(stepName: string, source: VerificationEvidence["source"], index: number, code: string): string {
   return `${stepName}:${source}:${index}:${code}`
 }
@@ -91,19 +101,58 @@ function inferSourceArtifacts(step: SubagentTaskStep | undefined, summary: strin
   return step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []
 }
 
-function selectOwnerStepName(
+function deriveOwnershipAttribution(
   plan: Plan,
+  source: VerificationEvidence["source"],
   assessmentStepName: string,
   affectedArtifacts: readonly string[],
   sourceArtifacts: readonly string[],
-): string {
+  summary: string,
+): { ownerStepName: string; suspectedOwners: string[]; primaryOwner?: string; ownershipMode: VerifierOwnershipMode; confidence: number } {
   const runtime = compilePlannerRuntime(plan)
-  const candidateArtifacts = [...affectedArtifacts, ...sourceArtifacts]
-  for (const artifact of candidateArtifacts) {
-    const owner = runtime.ownershipGraph.get(normalizePath(artifact))?.ownerStepName
-    if (owner) return owner
+  const candidateArtifacts = uniqueStrings([...affectedArtifacts, ...sourceArtifacts].map(normalizePath))
+  const candidateOwners = uniqueStrings(candidateArtifacts
+    .map((artifact) => runtime.ownershipGraph.get(artifact)?.ownerStepName ?? undefined)
+    .filter((owner): owner is string => Boolean(owner)))
+
+  const mentionsPlanner = /blueprint|plan|planner/i.test(summary) && /drift|missing|mapping|coverage/i.test(summary)
+  const isIntegration = /Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(summary)
+
+  let ownershipMode: VerifierOwnershipMode
+  let suspectedOwners: string[]
+  let primaryOwner: string | undefined
+
+  if (mentionsPlanner) {
+    ownershipMode = "planner_fault"
+    suspectedOwners = uniqueStrings([assessmentStepName, ...candidateOwners])
+    primaryOwner = candidateOwners[0] ?? assessmentStepName
+  } else if (isIntegration && candidateOwners.length > 1) {
+    ownershipMode = "integration_layer"
+    suspectedOwners = candidateOwners
+    primaryOwner = undefined
+  } else if (candidateOwners.length > 1) {
+    ownershipMode = "shared_owners"
+    suspectedOwners = candidateOwners
+    primaryOwner = candidateOwners[0]
+  } else if (candidateOwners.length === 1) {
+    ownershipMode = "deterministic_owner"
+    suspectedOwners = candidateOwners
+    primaryOwner = candidateOwners[0]
+  } else {
+    ownershipMode = isIntegration ? "integration_layer" : "ambiguous"
+    suspectedOwners = [assessmentStepName]
+    primaryOwner = assessmentStepName
   }
-  return assessmentStepName
+
+  const confidence = inferIssueConfidence(source, summary, ownershipMode, suspectedOwners)
+
+  return {
+    ownerStepName: primaryOwner ?? suspectedOwners[0] ?? assessmentStepName,
+    suspectedOwners,
+    primaryOwner,
+    ownershipMode,
+    confidence,
+  }
 }
 
 export function collectVerificationEvidence(
@@ -148,11 +197,16 @@ export function deriveIssuesFromEvidence(
         ? [...evidence.artifactPaths]
         : inferAffectedArtifacts(step, evidence.message)
       const sourceArtifacts = inferSourceArtifacts(step, evidence.message)
+      const attribution = deriveOwnershipAttribution(plan, evidence.source, assessment.stepName, affectedArtifacts, sourceArtifacts, evidence.message)
       return {
         code: evidence.kind,
         severity: inferSeverity(evidence.message),
         retryable: assessment.retryable,
-        ownerStepName: selectOwnerStepName(plan, assessment.stepName, affectedArtifacts, sourceArtifacts),
+        ownerStepName: attribution.ownerStepName,
+        confidence: attribution.confidence,
+        ownershipMode: attribution.ownershipMode,
+        suspectedOwners: attribution.suspectedOwners,
+        primaryOwner: attribution.primaryOwner,
         affectedArtifacts,
         sourceArtifacts,
         evidenceIds: [evidence.id],
@@ -185,7 +239,7 @@ export function enrichVerifierAssessments(
 
 export function buildIssueIdentity(assessment: VerifierStepAssessment): string {
   const typed = assessment.issueDetails?.length
-    ? assessment.issueDetails.map((issue) => `${issue.code}:${issue.severity}:${issue.affectedArtifacts.join(",")}`).sort()
+    ? assessment.issueDetails.map((issue) => `${issue.code}:${issue.severity}:${issue.primaryOwner ?? issue.ownerStepName}:${issue.ownershipMode}:${issue.affectedArtifacts.join(",")}`).sort()
     : []
   if (typed.length > 0) return typed.join("|")
   return [...assessment.issues].sort().join("|")
@@ -197,36 +251,81 @@ export function buildRepairPlan(
   decision: VerifierDecision,
 ): RepairPlan {
   const runtime = compilePlannerRuntime(plan)
-  const tasks: RepairTask[] = []
+  const taskMap = new Map<string, RepairTask>()
+  const ensureTask = (stepName: string): RepairTask => {
+    const existing = taskMap.get(stepName)
+    if (existing) return existing
+    const created: RepairTask = {
+      stepName,
+      mode: "reverify",
+      ownedIssues: [],
+      dependencyContext: [],
+      requiredAcceptedArtifacts: [],
+    }
+    taskMap.set(stepName, created)
+    return created
+  }
 
   for (const assessment of decision.steps) {
     if (assessment.outcome === "pass") continue
     const step = getSubagentStep(plan, assessment.stepName)
     const issueDetails = assessment.issueDetails ?? []
-    const ownedIssues = issueDetails.filter((issue) => issue.ownerStepName === assessment.stepName)
-    const dependencyContext = issueDetails.filter((issue) => issue.ownerStepName !== assessment.stepName)
     const stepResult = pipelineResult.stepResults.get(assessment.stepName)
-    const requiredAcceptedArtifacts = uniqueStrings([
-      ...dependencyContext.flatMap((issue) => issue.sourceArtifacts ?? []),
+    const defaultRequiredAcceptedArtifacts = uniqueStrings([
       ...(step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []),
       ...((runtime.stepAcceptedDependencies.get(assessment.stepName) ?? [])
         .flatMap((dependencyStepName) => pipelineResult.stepResults.get(dependencyStepName)?.producedArtifacts ?? [])),
     ])
 
-    const mode: RepairTask["mode"] = !assessment.retryable
-      ? "blocked"
-      : ownedIssues.length === 0 && dependencyContext.length > 0
-        ? "reverify"
-        : (stepResult?.acceptanceState === "blocked" ? "blocked" : "repair")
+    for (const issue of issueDetails) {
+      const impactedSteps = uniqueStrings(issue.suspectedOwners.length > 0 ? issue.suspectedOwners : [assessment.stepName])
+      const primaryOwner = issue.primaryOwner ?? issue.ownerStepName
+      for (const impactedStep of impactedSteps) {
+        const task = ensureTask(impactedStep)
+        const shouldOwn = issue.ownershipMode === "deterministic_owner"
+          ? primaryOwner === impactedStep
+          : issue.ownershipMode === "planner_fault"
+            ? primaryOwner === impactedStep
+            : impactedSteps.includes(impactedStep)
+        const ownedIssues = shouldOwn ? [...task.ownedIssues, issue] : [...task.ownedIssues]
+        const dependencyContext = shouldOwn
+          ? [...task.dependencyContext]
+          : [...task.dependencyContext, issue]
+        const externalSourceArtifacts = (issue.sourceArtifacts ?? []).filter((artifact) => {
+          const normalized = normalizePath(artifact)
+          const owner = runtime.ownershipGraph.get(normalized)?.ownerStepName
+          return owner != null && owner !== impactedStep
+        })
+        const requiredAcceptedArtifacts = uniqueStrings([
+          ...task.requiredAcceptedArtifacts,
+          ...(!shouldOwn ? (issue.sourceArtifacts ?? []) : externalSourceArtifacts),
+          ...defaultRequiredAcceptedArtifacts,
+        ])
+        taskMap.set(impactedStep, {
+          ...task,
+          mode: !assessment.retryable
+            ? "blocked"
+            : (stepResult?.acceptanceState === "blocked" ? "blocked" : ownedIssues.length > 0 ? "repair" : "reverify"),
+          ownedIssues,
+          dependencyContext,
+          requiredAcceptedArtifacts,
+        })
+      }
+    }
 
-    tasks.push({
-      stepName: assessment.stepName,
-      mode,
-      ownedIssues,
-      dependencyContext,
-      requiredAcceptedArtifacts,
-    })
+    if (issueDetails.length === 0) {
+      const task = ensureTask(assessment.stepName)
+      taskMap.set(assessment.stepName, {
+        ...task,
+        mode: !assessment.retryable
+          ? "blocked"
+          : (stepResult?.acceptanceState === "blocked" ? "blocked" : "repair"),
+        requiredAcceptedArtifacts: uniqueStrings([...task.requiredAcceptedArtifacts, ...defaultRequiredAcceptedArtifacts]),
+      })
+    }
   }
+
+  const tasks = [...taskMap.values()]
 
   const rerunOrder = plan.steps
     .map((step) => step.name)
@@ -252,6 +351,10 @@ function buildRepairGoal(issue: VerifierIssue): ChildRepairGoal {
     summary: issue.summary,
     severity: issue.severity,
     repairClass: issue.repairClass,
+    confidence: issue.confidence,
+    ownershipMode: issue.ownershipMode,
+    suspectedOwners: [...issue.suspectedOwners],
+    primaryOwner: issue.primaryOwner,
     affectedArtifacts: [...issue.affectedArtifacts],
     sourceArtifacts: [...(issue.sourceArtifacts ?? [])],
   }
@@ -269,4 +372,35 @@ export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
     requiredAcceptedArtifacts: [...task.requiredAcceptedArtifacts],
     unresolvedDependencyBlockers,
   }
+}
+
+export function buildSystemChecks(decision: VerifierDecision): VerifierSystemCheck[] {
+  const checks: VerifierSystemCheck[] = []
+  const allIssues = decision.steps.flatMap((step) => step.issueDetails ?? [])
+
+  const ambiguousIssues = allIssues.filter((issue) => issue.ownershipMode !== "deterministic_owner")
+  if (ambiguousIssues.length > 0) {
+    checks.push({
+      code: "system_ownership_ambiguity",
+      severity: ambiguousIssues.some((issue) => issue.severity === "fatal") ? "fatal" : "error",
+      summary: `Multiple issues have ambiguous/shared ownership (${ambiguousIssues.length} issue(s)); repair convergence depends on coordination across suspected owners.`,
+      confidence: Math.max(0.4, Math.min(0.9, ambiguousIssues.reduce((acc, issue) => acc + issue.confidence, 0) / ambiguousIssues.length)),
+      affectedStepNames: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.suspectedOwners)),
+      affectedArtifacts: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.affectedArtifacts)),
+    })
+  }
+
+  const integrationArtifacts = allIssues.filter((issue) => issue.repairClass === "integration_wiring")
+  if (integrationArtifacts.length > 1) {
+    checks.push({
+      code: "system_integration_drift",
+      severity: "error",
+      summary: `Cross-step integration invariants are failing across ${uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts)).length} artifact(s).`,
+      confidence: 0.78,
+      affectedStepNames: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.suspectedOwners)),
+      affectedArtifacts: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts)),
+    })
+  }
+
+  return checks
 }

@@ -118,9 +118,10 @@ export type TraceEntry =
   | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "direct_loop_fallback"; source: "planner_declined" | "planner_verifier_low_complexity"; reason: string }
-  | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
+  | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
   | { kind: "planner-step-start"; stepName: string; stepType: string }
+  | { kind: "planner-step-transition"; attempt: number; stepName: string; phase: "execution" | "verification" | "repair"; state: string; timestamp: number }
   | {
     kind: "planner-step-end"
     stepName: string
@@ -132,16 +133,31 @@ export type TraceEntry =
     validationCode?: string
     producedArtifacts?: string[]
     verificationAttempts?: Array<{ toolName: string; target?: string; success: boolean; summary: string }>
+    reconciliation?: { compliant: boolean; findings: Array<{ code: string; severity: string; message: string }> }
   }
   | {
     kind: "planner-verification"
     overall: string
     confidence: number
-    steps: Array<{ stepName: string; outcome: string; issues: string[]; issueCodes?: string[]; acceptanceState?: string }>
+    verifierRound?: number
+    systemChecks?: Array<{ code: string; severity: string; summary: string; confidence: number }>
+    steps: Array<{ stepName: string; outcome: string; issues: string[]; issueCodes?: string[]; acceptanceState?: string; ownershipModes?: string[]; issueConfidences?: number[] }>
+  }
+  | {
+    kind: "planner-verification-followup"
+    requestedSteps: string[]
+    reasons: Array<{ stepName: string; confidence: number; ambiguousIssues: string[] }>
+  }
+  | {
+    kind: "planner-issue-timeline"
+    attempt: number
+    verifierRound: number
+    issues: Array<{ stepName: string; code: string; confidence: number; ownershipMode: string; primaryOwner?: string; suspectedOwners: string[] }>
   }
   | {
     kind: "planner-repair-plan"
     attempt: number
+    epoch?: number
     rerunOrder: string[]
     tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
   }

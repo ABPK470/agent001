@@ -883,10 +883,10 @@ export async function spawnChildForPlan(
     goalParts.push(
       `## Structured Repair Payload\nMode: ${normalizedEnvelope.repairContext?.mode ?? "initial"}\n` +
       `Owned Repair Goals:\n${(normalizedEnvelope.repairContext?.goals.length ?? 0) > 0
-        ? normalizedEnvelope.repairContext!.goals.map(goal => `- [${goal.issueCode}] ${goal.summary} (${goal.repairClass}, ${goal.severity})`).join("\n")
+        ? normalizedEnvelope.repairContext!.goals.map(goal => `- [${goal.issueCode}] ${goal.summary} (${goal.repairClass}, ${goal.severity}, ${(goal.confidence * 100).toFixed(0)}%, owner=${goal.primaryOwner ?? "none"}, mode=${goal.ownershipMode}, suspects=${goal.suspectedOwners.join(", ") || "none"})`).join("\n")
         : "- none"}\n` +
       `Dependency Context Goals:\n${(normalizedEnvelope.repairContext?.dependencyGoals.length ?? 0) > 0
-        ? normalizedEnvelope.repairContext!.dependencyGoals.map(goal => `- [${goal.issueCode}] ${goal.summary}`).join("\n")
+        ? normalizedEnvelope.repairContext!.dependencyGoals.map(goal => `- [${goal.issueCode}] ${goal.summary} (${(goal.confidence * 100).toFixed(0)}%, mode=${goal.ownershipMode}, suspects=${goal.suspectedOwners.join(", ") || "none"})`).join("\n")
         : "- none"}\n` +
       `Required Accepted Artifacts:\n${(normalizedEnvelope.repairContext?.requiredAcceptedArtifacts.length ?? 0) > 0
         ? normalizedEnvelope.repairContext!.requiredAcceptedArtifacts.map(artifact => `- ${artifact}`).join("\n")

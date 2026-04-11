@@ -35,6 +35,7 @@ import {
 import { compilePlannerRuntime } from "./runtime-model.js"
 import type {
   ChildExecutionResult,
+  ContractReconciliationFinding,
   DeterministicToolStep,
   ExecutionEnvelope,
   PipelineResult,
@@ -323,6 +324,116 @@ function summarizeRepairTask(task: RepairTask): { primary: string[]; reference: 
 
 function normalizeToolCallPath(value: unknown): string {
   return typeof value === "string" ? value.replace(/^\.\//, "") : ""
+}
+
+function collectReportedArtifacts(stepResult: PipelineStepResult): Set<string> {
+  const artifacts = new Set<string>()
+  for (const artifact of stepResult.producedArtifacts ?? []) artifacts.add(normalizeToolCallPath(artifact))
+  for (const artifact of stepResult.modifiedArtifacts ?? []) artifacts.add(normalizeToolCallPath(artifact))
+  for (const call of stepResult.toolCalls ?? []) {
+    const path = normalizeToolCallPath(call.args.path)
+    if (!path) continue
+    if (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file") {
+      artifacts.add(path)
+    }
+  }
+  return artifacts
+}
+
+function applyPostExecutionReconciliation(
+  step: SubagentTaskStep,
+  stepResult: PipelineStepResult,
+): PipelineStepResult {
+  if (stepResult.toolCalls == null && stepResult.childResult == null) return stepResult
+
+  const findings: ContractReconciliationFinding[] = []
+  const reportedArtifacts = collectReportedArtifacts(stepResult)
+  const targetArtifacts = new Set(step.executionContext.targetArtifacts.map(normalizeToolCallPath))
+  const sourceArtifacts = new Set(step.executionContext.requiredSourceArtifacts.map(normalizeToolCallPath))
+  const forbiddenArtifacts = new Set((step.executionContext.forbiddenArtifacts ?? []).map(normalizeToolCallPath))
+
+  const forbiddenTouched = [...reportedArtifacts].filter((artifact) => forbiddenArtifacts.has(artifact))
+  if (forbiddenTouched.length > 0) {
+    findings.push({
+      code: "forbidden_artifact_write",
+      severity: "error",
+      message: `Step modified forbidden artifacts: ${forbiddenTouched.join(", ")}`,
+      artifactPaths: forbiddenTouched,
+    })
+  }
+
+  const missingOutputs = step.executionContext.effectClass !== "readonly"
+    ? [...targetArtifacts].filter((artifact) => !reportedArtifacts.has(artifact))
+    : []
+  if (missingOutputs.length > 0) {
+    findings.push({
+      code: "missing_required_output",
+      severity: "error",
+      message: `Step did not produce or modify all required target artifacts: ${missingOutputs.join(", ")}`,
+      artifactPaths: missingOutputs,
+    })
+  }
+
+  const hallucinatedArtifacts = [...reportedArtifacts].filter((artifact) => !targetArtifacts.has(artifact) && !sourceArtifacts.has(artifact))
+  if (hallucinatedArtifacts.length > 0) {
+    findings.push({
+      code: "hallucinated_artifact",
+      severity: "error",
+      message: `Step reported mutations to artifacts outside its contract: ${hallucinatedArtifacts.join(", ")}`,
+      artifactPaths: hallucinatedArtifacts,
+    })
+  }
+
+  if ((stepResult.childResult?.unresolvedBlockers.length ?? 0) > 0) {
+    findings.push({
+      code: "unresolved_blocker",
+      severity: "error",
+      message: `Step reported unresolved blockers: ${stepResult.childResult!.unresolvedBlockers.join("; ")}`,
+      artifactPaths: [],
+    })
+  }
+
+  if ((step.executionContext.requiredChecks?.length ?? 0) > 0 && (stepResult.verificationAttempts?.length ?? 0) === 0) {
+    findings.push({
+      code: "required_check_skipped",
+      severity: "warning",
+      message: "Step completed without recording any verification attempts for its required checks.",
+      artifactPaths: [],
+    })
+  }
+
+  if (findings.length === 0) {
+    return {
+      ...stepResult,
+      reconciliation: {
+        compliant: true,
+        findings: [],
+      },
+    }
+  }
+
+  const hasErrors = findings.some((finding: ContractReconciliationFinding) => finding.severity === "error")
+  if (!hasErrors) {
+    return {
+      ...stepResult,
+      reconciliation: {
+        compliant: true,
+        findings,
+      },
+    }
+  }
+
+  return {
+    ...stepResult,
+    status: "failed",
+    executionState: "failed",
+    acceptanceState: "repair_required",
+    error: [stepResult.error, ...findings.filter((finding: ContractReconciliationFinding) => finding.severity === "error").map((finding: ContractReconciliationFinding) => finding.message)].filter(Boolean).join("\n"),
+    reconciliation: {
+      compliant: false,
+      findings,
+    },
+  }
 }
 
 function buildBlueprintRetryGuidance(
@@ -617,16 +728,20 @@ export async function executePipeline(
         },
       )
 
-      stepResults.set(name, result)
-      opts?.onStepEnd?.(step, result)
+      const finalResult = effectiveStep.stepType === "subagent_task"
+        ? applyPostExecutionReconciliation(effectiveStep as SubagentTaskStep, result)
+        : result
 
-      if (result.status === "completed") {
+      stepResults.set(name, finalResult)
+      opts?.onStepEnd?.(step, finalResult)
+
+      if (finalResult.status === "completed") {
         completed.add(name)
         // Decrement in-degree of downstream steps
         for (const downstream of adj.get(name) ?? []) {
           inDegree.set(downstream, (inDegree.get(downstream) ?? 1) - 1)
         }
-      } else if (result.status === "failed") {
+      } else if (finalResult.status === "failed") {
         const onError = step.stepType === "deterministic_tool"
           ? (step as DeterministicToolStep).onError ?? "retry"
           : "abort"

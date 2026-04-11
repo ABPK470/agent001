@@ -72,6 +72,10 @@ export interface ChildRepairGoal {
   readonly summary: string
   readonly severity: VerifierIssueSeverity
   readonly repairClass: VerifierRepairClass
+  readonly confidence: number
+  readonly ownershipMode: VerifierOwnershipMode
+  readonly suspectedOwners: readonly string[]
+  readonly primaryOwner?: string
   readonly affectedArtifacts: readonly string[]
   readonly sourceArtifacts: readonly string[]
   readonly guidance?: string
@@ -329,6 +333,18 @@ export interface ChildExecutionResult {
   readonly unresolvedBlockers: readonly string[]
 }
 
+export interface ContractReconciliationFinding {
+  readonly code: "forbidden_artifact_write" | "missing_required_output" | "hallucinated_artifact" | "unresolved_blocker" | "required_check_skipped"
+  readonly severity: "warning" | "error"
+  readonly message: string
+  readonly artifactPaths: readonly string[]
+}
+
+export interface ContractReconciliationResult {
+  readonly compliant: boolean
+  readonly findings: readonly ContractReconciliationFinding[]
+}
+
 export interface PipelineStepResult {
   readonly name: string
   readonly status: PipelineStepStatus
@@ -350,6 +366,8 @@ export interface PipelineStepResult {
   readonly verificationAttempts?: readonly VerificationAttempt[]
   /** Delegation contract validation code (if validation ran). */
   readonly validationCode?: DelegationOutputValidationCode
+  /** Post-execution contract reconciliation result. */
+  readonly reconciliation?: ContractReconciliationResult
 }
 
 export type PipelineStatus = "running" | "completed" | "failed"
@@ -369,6 +387,13 @@ export interface PipelineResult {
 export type VerifierOutcome = "pass" | "retry" | "fail"
 
 export type VerifierIssueSeverity = "warning" | "error" | "fatal"
+
+export type VerifierOwnershipMode =
+  | "deterministic_owner"
+  | "shared_owners"
+  | "integration_layer"
+  | "planner_fault"
+  | "ambiguous"
 
 export type VerifierRepairClass =
   | "owner_implementation"
@@ -395,12 +420,25 @@ export interface VerifierIssue {
   readonly severity: VerifierIssueSeverity
   readonly retryable: boolean
   readonly ownerStepName: string
+  readonly confidence: number
+  readonly ownershipMode: VerifierOwnershipMode
+  readonly suspectedOwners: readonly string[]
+  readonly primaryOwner?: string
   readonly affectedArtifacts: readonly string[]
   readonly sourceArtifacts?: readonly string[]
   readonly evidenceIds: readonly string[]
   readonly repairClass: VerifierRepairClass
   readonly summary: string
   readonly details?: Record<string, unknown>
+}
+
+export interface VerifierSystemCheck {
+  readonly code: string
+  readonly severity: VerifierIssueSeverity
+  readonly summary: string
+  readonly confidence: number
+  readonly affectedStepNames: readonly string[]
+  readonly affectedArtifacts: readonly string[]
 }
 
 export interface RepairTask {
@@ -433,6 +471,7 @@ export interface VerifierDecision {
   readonly steps: readonly VerifierStepAssessment[]
   readonly unresolvedItems: readonly string[]
   readonly repairPlan?: RepairPlan
+  readonly systemChecks?: readonly VerifierSystemCheck[]
 }
 
 // ============================================================================

@@ -34,9 +34,9 @@ import type {
     VerificationEvidence,
     VerifierDecision,
     VerifierOutcome,
-    VerifierStepAssessment,
+    VerifierStepAssessment
 } from "./types.js"
-import { collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
+import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
 
 // ============================================================================
 // Constants (ported from agenc-core chat-executor-verifier.ts)
@@ -63,6 +63,89 @@ const SHELL_MUTATION_RE =
   /(?:^|[;&|]\s*|\n)\s*(?:cp|mv|rm|mkdir|touch|tee|sed|perl|python|node|ruby|go|cargo|npm|pnpm|yarn|make|cmake|cat|echo|printf)\b|>>?/i
 /** Direct mutation tool names. */
 const DIRECT_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "delete"])
+
+function needsFollowupVerification(assessments: readonly VerifierStepAssessment[]): VerifierStepAssessment[] {
+  return assessments.filter((assessment) => {
+    if (assessment.confidence < 0.7) return true
+    return (assessment.issueDetails ?? []).some((issue) => issue.confidence < 0.7 || issue.ownershipMode !== "deterministic_owner")
+  })
+}
+
+function collectFollowupEvidence(
+  plan: Plan,
+  pipelineResult: PipelineResult,
+  assessments: readonly VerifierStepAssessment[],
+): Map<string, VerificationEvidence[]> {
+  const followup = new Map<string, VerificationEvidence[]>()
+
+  for (const assessment of assessments) {
+    const step = plan.steps.find((candidate) => candidate.name === assessment.stepName)
+    if (step?.stepType !== "subagent_task") continue
+    const stepResult = pipelineResult.stepResults.get(assessment.stepName)
+    const evidence: VerificationEvidence[] = []
+    const reconciliation = stepResult?.reconciliation
+    if (reconciliation) {
+      reconciliation.findings.forEach((finding, index) => {
+        evidence.push({
+          id: `${assessment.stepName}:followup:reconciliation:${index + 1}`,
+          stepName: assessment.stepName,
+          source: "deterministic",
+          kind: finding.code,
+          message: finding.message,
+          artifactPaths: [...finding.artifactPaths],
+          details: { severity: finding.severity, phase: "reconciliation" },
+        })
+      })
+    }
+    const verificationAttempts = stepResult?.verificationAttempts ?? []
+    if (verificationAttempts.length > 0) {
+      verificationAttempts.forEach((attempt, index) => {
+        if (attempt.success) return
+        evidence.push({
+          id: `${assessment.stepName}:followup:verification:${index + 1}`,
+          stepName: assessment.stepName,
+          source: "deterministic",
+          kind: "verification_attempt_failure",
+          message: `${attempt.toolName}${attempt.target ? `:${attempt.target}` : ""} failed: ${attempt.summary}`,
+          artifactPaths: attempt.target ? [attempt.target] : [],
+          details: { phase: "followup_verification" },
+        })
+      })
+    }
+    if (evidence.length > 0) followup.set(assessment.stepName, evidence)
+  }
+
+  return followup
+}
+
+function mergeFollowupIntoAssessments(
+  plan: Plan,
+  assessments: readonly VerifierStepAssessment[],
+  followupEvidenceByStep: ReadonlyMap<string, readonly VerificationEvidence[]>,
+): VerifierStepAssessment[] {
+  const followupSeedAssessments = assessments.map((assessment) => ({
+    stepName: assessment.stepName,
+    outcome: assessment.outcome,
+    confidence: assessment.confidence,
+    issues: [...(followupEvidenceByStep.get(assessment.stepName) ?? []).map((evidence) => evidence.message)],
+    retryable: assessment.retryable,
+  }))
+  const followupIssuesByStep = deriveIssuesFromEvidence(plan, followupSeedAssessments, followupEvidenceByStep)
+
+  return assessments.map((assessment) => {
+    const followupEvidence = followupEvidenceByStep.get(assessment.stepName) ?? []
+    const followupIssues = followupIssuesByStep.get(assessment.stepName) ?? []
+    if (followupEvidence.length === 0 && followupIssues.length === 0) return assessment
+    return {
+      ...assessment,
+      confidence: Math.max(assessment.confidence, followupEvidence.length > 0 ? 0.72 : assessment.confidence),
+      issues: uniqueStrings([...assessment.issues, ...followupEvidence.map((evidence) => evidence.message)]),
+      evidence: uniqueStrings([...(assessment.evidence ?? []).map((evidence) => evidence.id), ...followupEvidence.map((evidence) => evidence.id)])
+        .map((id) => ([...(assessment.evidence ?? []), ...followupEvidence].find((evidence) => evidence.id === id)!)),
+      issueDetails: [...(assessment.issueDetails ?? []), ...followupIssues],
+    }
+  })
+}
 
 // ============================================================================
 // Deterministic probes
@@ -2360,6 +2443,22 @@ export async function verify(
       toolCalls: stepResult.toolCalls,
     })
 
+    if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
+      contractFailures.push({
+        stepName: step.name,
+        outcome: "retry",
+        confidence: 0.97,
+        issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
+        retryable: true,
+      })
+      opts?.onTrace?.({
+        kind: "verifier-reconciliation-check",
+        stepName: step.name,
+        findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
+      })
+      continue
+    }
+
     if (!contractResult.ok && contractResult.code) {
       const guidance = getCorrectionGuidance(contractResult.code)
       contractFailures.push({
@@ -2490,13 +2589,35 @@ export async function verify(
 
   const anyRetry = mergedSteps.some(s => s.outcome === "retry")
   const anyFail = mergedSteps.some(s => s.outcome === "fail")
-  const enrichedMergedSteps = finalizeAssessments(mergedSteps, "llm")
+  let enrichedMergedSteps = finalizeAssessments(mergedSteps, "llm")
+  const followupCandidates = needsFollowupVerification(enrichedMergedSteps)
+  if (followupCandidates.length > 0) {
+    opts?.onTrace?.({
+      kind: "planner-verification-followup",
+      requestedSteps: followupCandidates.map((assessment) => assessment.stepName),
+      reasons: followupCandidates.map((assessment) => ({
+        stepName: assessment.stepName,
+        confidence: assessment.confidence,
+        ambiguousIssues: (assessment.issueDetails ?? []).filter((issue) => issue.ownershipMode !== "deterministic_owner").map((issue) => issue.code),
+      })),
+    })
+    const followupEvidenceByStep = collectFollowupEvidence(plan, pipelineResult, followupCandidates)
+    enrichedMergedSteps = mergeFollowupIntoAssessments(plan, enrichedMergedSteps, followupEvidenceByStep)
+  }
+
+  const systemChecks = buildSystemChecks({
+    overall: anyFail ? "fail" : anyRetry ? "retry" : "pass",
+    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map(s => s.confidence)),
+    steps: enrichedMergedSteps,
+    unresolvedItems: decision.unresolvedItems,
+  })
 
   return {
     overall: anyFail ? "fail" : anyRetry ? "retry" : "pass",
     confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map(s => s.confidence)),
     steps: enrichedMergedSteps,
-    unresolvedItems: decision.unresolvedItems,
+    unresolvedItems: uniqueStrings([...decision.unresolvedItems, ...systemChecks.map((check) => check.summary)]),
+    systemChecks,
   }
 }
 

@@ -56,9 +56,11 @@ function applyVerificationAcceptanceStates(
   for (const assessment of verifierDecision.steps) {
     const result = nextResults.get(assessment.stepName)
     if (!result) continue
+    const hasBlueprintContractIssue = (assessment.issueDetails ?? []).some((issue) => issue.repairClass === "contract_drift" && /blueprint|spec/i.test(issue.summary))
     nextResults.set(assessment.stepName, {
       ...result,
       acceptanceState: deriveAcceptanceState(assessment, result.acceptanceState),
+      failureClass: hasBlueprintContractIssue ? "blueprint_contract" : result.failureClass,
     })
   }
 
@@ -1314,18 +1316,38 @@ export async function executePlannerPath(
           stepName: step.name,
           stepType: step.stepType,
         }),
-        onStepEnd: (step, result) => ctx.onTrace?.({
-          kind: "planner-step-end",
-          stepName: step.name,
-          status: result.status,
-          executionState: result.executionState,
-          acceptanceState: result.acceptanceState,
-          durationMs: result.durationMs,
-          error: result.error,
-          validationCode: result.validationCode,
-          producedArtifacts: result.producedArtifacts,
-          verificationAttempts: result.verificationAttempts,
-        }),
+        onStepEnd: (step, result) => {
+          ctx.onTrace?.({
+            kind: "planner-step-end",
+            stepName: step.name,
+            status: result.status,
+            executionState: result.executionState,
+            acceptanceState: result.acceptanceState,
+            durationMs: result.durationMs,
+            error: result.error,
+            validationCode: result.validationCode,
+            producedArtifacts: result.producedArtifacts,
+            verificationAttempts: result.verificationAttempts,
+            reconciliation: result.reconciliation
+              ? {
+                compliant: result.reconciliation.compliant,
+                findings: result.reconciliation.findings.map((finding) => ({
+                  code: finding.code,
+                  severity: finding.severity,
+                  message: finding.message,
+                })),
+              }
+              : undefined,
+          })
+          ctx.onTrace?.({
+            kind: "planner-step-transition",
+            attempt: attempt + 1,
+            stepName: step.name,
+            phase: "execution",
+            state: result.acceptanceState ?? result.status,
+            timestamp: Date.now(),
+          })
+        },
       },
     )
 
@@ -1367,17 +1389,49 @@ export async function executePlannerPath(
       overall: verifierDecision.overall,
       confidence: verifierDecision.confidence,
       verifierRound: verifierRounds + 1,
+      systemChecks: verifierDecision.systemChecks?.map((check) => ({
+        code: check.code,
+        severity: check.severity,
+        summary: check.summary,
+        confidence: check.confidence,
+      })),
       steps: verifierDecision.steps.map(s => ({
         stepName: s.stepName,
         outcome: s.outcome,
         issues: s.issues,
         issueCodes: s.issueDetails?.map(issue => issue.code) ?? [],
+        ownershipModes: s.issueDetails?.map(issue => issue.ownershipMode) ?? [],
+        issueConfidences: s.issueDetails?.map(issue => issue.confidence) ?? [],
         acceptanceState: pipelineResult?.stepResults.get(s.stepName)?.acceptanceState,
       })),
     })
     ctx.onTrace?.({
+      kind: "planner-issue-timeline",
+      attempt: attempt + 1,
+      verifierRound: verifierRounds + 1,
+      issues: verifierDecision.steps.flatMap((step) => (step.issueDetails ?? []).map((issue) => ({
+        stepName: step.stepName,
+        code: issue.code,
+        confidence: issue.confidence,
+        ownershipMode: issue.ownershipMode,
+        primaryOwner: issue.primaryOwner,
+        suspectedOwners: [...issue.suspectedOwners],
+      }))),
+    })
+    for (const step of verifierDecision.steps) {
+      ctx.onTrace?.({
+        kind: "planner-step-transition",
+        attempt: attempt + 1,
+        stepName: step.stepName,
+        phase: "verification",
+        state: pipelineResult?.stepResults.get(step.stepName)?.acceptanceState ?? step.outcome,
+        timestamp: Date.now(),
+      })
+    }
+    ctx.onTrace?.({
       kind: "planner-repair-plan",
       attempt: attempt + 1,
+      epoch: attempt + 1,
       rerunOrder: verifierDecision.repairPlan?.rerunOrder ?? [],
       tasks: verifierDecision.repairPlan?.tasks.map(task => ({
         stepName: task.stepName,
@@ -1526,6 +1580,16 @@ export async function executePlannerPath(
       retrySteps: retryableTaskCount,
       rerunOrder: currentRepairPlan.rerunOrder,
     })
+    for (const task of currentRepairPlan.tasks) {
+      ctx.onTrace?.({
+        kind: "planner-step-transition",
+        attempt: attempt + 1,
+        stepName: task.stepName,
+        phase: "repair",
+        state: task.mode,
+        timestamp: Date.now(),
+      })
+    }
 
     // Store retry context for next iteration
     retryOpts = { priorResults, repairPlan: currentRepairPlan }

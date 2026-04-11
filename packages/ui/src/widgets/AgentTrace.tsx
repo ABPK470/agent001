@@ -323,6 +323,11 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
               checks: {entry.verificationAttempts.map((attempt) => `${attempt.toolName}${attempt.target ? `:${attempt.target}` : ""}=${attempt.success ? "ok" : "fail"}`).join(" · ")}
             </div>
           )}
+          {entry.reconciliation && entry.reconciliation.findings.length > 0 && (
+            <div className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
+              reconcile: {entry.reconciliation.compliant ? "warning" : "failed"} · {entry.reconciliation.findings.map((finding) => `[${finding.code}] ${finding.message}`).join("; ")}
+            </div>
+          )}
           {entry.status !== "completed" && (entry.error || entry.validationCode) && (
             <div className="pl-3 mt-0.5 space-y-0.5 border-l border-error/20">
               {entry.error && (
@@ -357,13 +362,57 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
             <span className={`text-[13px] ${entry.overall === "pass" ? "text-success" : entry.overall === "partial" ? "text-warning" : "text-error"}`}>
               {entry.overall}
             </span>
+            <span className="text-text-muted text-[13px] font-mono">round {entry.verifierRound ?? "?"}</span>
             <span className="text-text-muted text-[13px] font-mono">confidence {(entry.confidence * 100).toFixed(0)}%</span>
           </div>
+          {entry.systemChecks && entry.systemChecks.length > 0 && (
+            <div className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
+              system: {entry.systemChecks.map((check) => `${check.code} ${(check.confidence * 100).toFixed(0)}%`).join(" · ")}
+            </div>
+          )}
           {entry.steps.map((s, i) => (
             <div key={i} className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
-              {s.stepName}: {s.outcome}{s.acceptanceState ? ` · ${s.acceptanceState}` : ""}{s.issueCodes && s.issueCodes.length > 0 ? ` · ${s.issueCodes.join(", ")}` : ""}{s.issues.length > 0 ? ` · ${s.issues.join("; ")}` : ""}
+              {s.stepName}: {s.outcome}{s.acceptanceState ? ` · ${s.acceptanceState}` : ""}{s.issueCodes && s.issueCodes.length > 0 ? ` · ${s.issueCodes.join(", ")}` : ""}{s.ownershipModes && s.ownershipModes.length > 0 ? ` · owners ${s.ownershipModes.join(", ")}` : ""}{s.issues.length > 0 ? ` · ${s.issues.join("; ")}` : ""}
             </div>
           ))}
+        </div>
+      )
+
+    case "planner-verification-followup":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#F59E0B]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#F59E0B] text-[13px] font-medium font-mono">FUP</span>
+            <span className="text-text-secondary text-[13px]">{entry.requestedSteps.join(", ") || "none"}</span>
+          </div>
+          {entry.reasons.map((reason, index) => (
+            <div key={index} className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+              {reason.stepName}: {(reason.confidence * 100).toFixed(0)}%{reason.ambiguousIssues.length > 0 ? ` · ambiguous ${reason.ambiguousIssues.join(", ")}` : ""}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-issue-timeline":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#34D399]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#34D399] text-[13px] font-medium font-mono">ISSUE</span>
+            <span className="text-text-secondary text-[13px]">attempt {entry.attempt}</span>
+            <span className="text-text-muted text-[13px]">round {entry.verifierRound}</span>
+          </div>
+          {entry.issues.map((issue, index) => (
+            <div key={index} className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+              {issue.stepName}: {issue.code} {(issue.confidence * 100).toFixed(0)}% · {issue.ownershipMode}{issue.primaryOwner ? ` · primary ${issue.primaryOwner}` : ""}{issue.suspectedOwners.length > 0 ? ` · suspects ${issue.suspectedOwners.join(", ")}` : ""}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-step-transition":
+      return (
+        <div className="text-text-muted text-[13px] font-mono pl-6 py-0.5">
+          ↺ {entry.stepName} [{entry.phase}] {entry.state}
         </div>
       )
 
@@ -390,6 +439,7 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
           <div className="flex items-center gap-2">
             <span className="text-[#E879A8] text-[13px] font-medium font-mono">REPAIR</span>
             <span className="text-text-secondary text-[13px]">attempt {entry.attempt}</span>
+            <span className="text-text-muted text-[13px]">epoch {entry.epoch ?? entry.attempt}</span>
             <span className="text-text-muted text-[13px]">rerun {entry.rerunOrder.join(" → ") || "none"}</span>
           </div>
           {entry.tasks.map((task, index) => (

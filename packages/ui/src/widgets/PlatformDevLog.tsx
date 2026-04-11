@@ -139,20 +139,32 @@ function summarize(event: WsEvent): string {
       const status = String(entry?.["status"] ?? "unknown")
       const code = typeof entry?.["validationCode"] === "string" ? entry["validationCode"] : undefined
       const acceptance = typeof entry?.["acceptanceState"] === "string" ? ` · ${String(entry["acceptanceState"])}` : ""
+      const reconciliation = entry?.["reconciliation"] as { compliant?: boolean; findings?: Array<{ code?: string }> } | undefined
       if (status === "completed") {
-        return `${String(entry?.["stepName"] ?? "step")} ${status}${acceptance} ${entry?.["durationMs"] ?? "?"}ms`
+        return `${String(entry?.["stepName"] ?? "step")} ${status}${acceptance}${reconciliation?.findings?.length ? ` · reconcile ${reconciliation.compliant ? "warn" : "fail"}` : ""} ${entry?.["durationMs"] ?? "?"}ms`
       }
       return `${String(entry?.["stepName"] ?? "step")} ${status}${acceptance}${code ? ` [${code}]` : ""} — ${remediationHintForValidationCode(code)}`
     }
+    if (kind === "planner-step-transition") {
+      return `${String(entry?.["stepName"] ?? "step")} ${String(entry?.["phase"] ?? "phase")} → ${String(entry?.["state"] ?? "state")}`
+    }
     if (kind === "planner-repair-plan") {
       const rerunOrder = Array.isArray(entry?.["rerunOrder"]) ? (entry["rerunOrder"] as unknown[]).join(" → ") : ""
-      return `repair plan attempt ${entry?.["attempt"] ?? "?"}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
+      return `repair epoch ${entry?.["epoch"] ?? entry?.["attempt"] ?? "?"}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
     }
     if (kind === "planner-runtime-compiled") {
       const executionSteps = Array.isArray(entry?.["executionSteps"]) ? entry["executionSteps"].length : 0
       const ownershipArtifacts = Array.isArray(entry?.["ownershipArtifacts"]) ? entry["ownershipArtifacts"].length : 0
       const runtimeEntities = Array.isArray(entry?.["runtimeEntities"]) ? entry["runtimeEntities"].length : 0
       return `runtime compiled steps=${executionSteps} artifacts=${ownershipArtifacts} entities=${runtimeEntities}`
+    }
+    if (kind === "planner-verification-followup") {
+      const steps = Array.isArray(entry?.["requestedSteps"]) ? (entry["requestedSteps"] as unknown[]).join(", ") : ""
+      return `verification follow-up ${steps || "none"}`
+    }
+    if (kind === "planner-issue-timeline") {
+      const issues = Array.isArray(entry?.["issues"]) ? entry["issues"].length : 0
+      return `issue timeline attempt=${entry?.["attempt"] ?? "?"} round=${entry?.["verifierRound"] ?? "?"} count=${issues}`
     }
     if (kind === "workspace_diff") {
       const diff = entry?.["diff"] as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined

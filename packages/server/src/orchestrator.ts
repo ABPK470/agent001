@@ -823,6 +823,19 @@ export class AgentOrchestrator {
               validationCode: entry.validationCode,
               producedArtifacts: entry.producedArtifacts,
               verificationAttempts: entry.verificationAttempts,
+              reconciliation: entry.reconciliation,
+            },
+          })
+        } else if (entry.kind === "planner-step-transition") {
+          broadcast({
+            type: "planner.step.transition",
+            data: {
+              runId,
+              attempt: entry.attempt,
+              stepName: entry.stepName,
+              phase: entry.phase,
+              state: entry.state,
+              timestamp: entry.timestamp,
             },
           })
         } else if (entry.kind === "planner-delegation-start") {
@@ -866,6 +879,8 @@ export class AgentOrchestrator {
               runId,
               overall: entry.overall,
               confidence: entry.confidence,
+              verifierRound: entry.verifierRound,
+              systemChecks: entry.systemChecks,
               steps: entry.steps,
             },
           })
@@ -876,12 +891,32 @@ export class AgentOrchestrator {
             resourceId: runId,
             detail: { overall: entry.overall, confidence: entry.confidence, steps: entry.steps },
           }).catch(() => {})
+        } else if (entry.kind === "planner-verification-followup") {
+          broadcast({
+            type: "planner.verification.followup",
+            data: {
+              runId,
+              requestedSteps: entry.requestedSteps,
+              reasons: entry.reasons,
+            },
+          })
+        } else if (entry.kind === "planner-issue-timeline") {
+          broadcast({
+            type: "planner.issue.timeline",
+            data: {
+              runId,
+              attempt: entry.attempt,
+              verifierRound: entry.verifierRound,
+              issues: entry.issues,
+            },
+          })
         } else if (entry.kind === "planner-repair-plan") {
           broadcast({
             type: "planner.repair.plan",
             data: {
               runId,
               attempt: entry.attempt,
+              epoch: entry.epoch,
               rerunOrder: entry.rerunOrder,
               tasks: entry.tasks,
             },
@@ -891,7 +926,7 @@ export class AgentOrchestrator {
             action: "planner.repair.plan",
             resourceType: "AgentRun",
             resourceId: runId,
-            detail: { attempt: entry.attempt, rerunOrder: entry.rerunOrder, tasks: entry.tasks },
+            detail: { attempt: entry.attempt, epoch: entry.epoch, rerunOrder: entry.rerunOrder, tasks: entry.tasks },
           }).catch(() => {})
         }
       },

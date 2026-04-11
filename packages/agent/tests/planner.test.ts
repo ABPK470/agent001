@@ -91,6 +91,10 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
     severity: overrides.severity ?? "error",
     retryable: overrides.retryable ?? true,
     ownerStepName: overrides.ownerStepName ?? "step",
+    confidence: overrides.confidence ?? 0.8,
+    ownershipMode: overrides.ownershipMode ?? "deterministic_owner",
+    suspectedOwners: overrides.suspectedOwners ?? [overrides.ownerStepName ?? "step"],
+    primaryOwner: overrides.primaryOwner ?? overrides.ownerStepName ?? "step",
     affectedArtifacts: overrides.affectedArtifacts ?? [],
     sourceArtifacts: overrides.sourceArtifacts ?? [],
     evidenceIds: overrides.evidenceIds ?? [],
@@ -902,6 +906,10 @@ describe("Planner path execution", () => {
               severity: "error",
               retryable: true,
               ownerStepName: "write_summary",
+              confidence: 0.8,
+              ownershipMode: "deterministic_owner",
+              suspectedOwners: ["write_summary"],
+              primaryOwner: "write_summary",
               affectedArtifacts: ["tmp/summary.txt"],
               sourceArtifacts: ["tmp/summary.txt"],
               evidenceIds: ["write_summary:llm:1:integration_wiring"],
@@ -1038,6 +1046,79 @@ describe("Planner runtime model", () => {
     expect(runtime.stepAcceptedDependencies.get("wire_ui")).toContain("write_logic")
     expect(runtime.runtimeEntities.some((entity) => entity.entityType === "verification_pass")).toBe(true)
     expect(runtime.runtimeEntities.some((entity) => entity.entityType === "repair_cycle")).toBe(true)
+  })
+
+  it("builds shared-owner repair tasks for ambiguous integration issues", () => {
+    const producer = makeSubagentStep("write_api", {
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: [],
+        targetArtifacts: ["tmp/api.ts"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
+      },
+    })
+    const consumer = makeSubagentStep("wire_ui", {
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: ["tmp/api.ts"],
+        targetArtifacts: ["tmp/ui.ts"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [
+          { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
+          { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
+        ],
+      },
+    })
+    const plan = makePlan({
+      steps: [producer, consumer],
+      edges: [{ from: "write_api", to: "wire_ui" }],
+    })
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["write_api", { name: "write_api", status: "completed", executionState: "executed", acceptanceState: "pending_verification", durationMs: 1, producedArtifacts: ["tmp/api.ts"], modifiedArtifacts: ["tmp/api.ts"] }],
+        ["wire_ui", { name: "wire_ui", status: "completed", executionState: "executed", acceptanceState: "pending_verification", durationMs: 1, producedArtifacts: ["tmp/ui.ts"], modifiedArtifacts: ["tmp/ui.ts"] }],
+      ]),
+    }
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.61,
+      unresolvedItems: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+      steps: [{
+        stepName: "wire_ui",
+        outcome: "retry",
+        confidence: 0.61,
+        issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+        issueDetails: [makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
+          code: "cross_file_signature_mismatch",
+          ownerStepName: "write_api",
+          ownershipMode: "shared_owners",
+          suspectedOwners: ["write_api", "wire_ui"],
+          primaryOwner: "write_api",
+          affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
+          sourceArtifacts: ["tmp/api.ts"],
+          repairClass: "integration_wiring",
+          confidence: 0.58,
+        })],
+        retryable: true,
+      }],
+    }
+
+    const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
+
+    expect(repairPlan.tasks.map((task) => task.stepName).sort()).toEqual(["wire_ui", "write_api"])
+    expect(repairPlan.tasks.every((task) => task.mode === "repair")).toBe(true)
   })
 })
 
@@ -1227,6 +1308,101 @@ describe("Pipeline acceptance-gated scheduling", () => {
     expect(calls).toEqual(["repair_ui"])
     expect(result.stepResults.get("repair_ui")?.status).not.toBe("skipped")
     expect(result.stepResults.get("repair_ui")?.acceptanceState).not.toBe("blocked")
+  })
+
+  it("fails completed child steps that mutate forbidden artifacts during reconciliation", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair_ui", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["tmp"],
+          allowedTools: ["write_file", "read_file"],
+          requiredSourceArtifacts: [],
+          targetArtifacts: ["tmp/index.html"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+          forbiddenArtifacts: ["tmp/game.js"],
+        },
+      })],
+      edges: [],
+    })
+
+    const result = await executePipeline(
+      plan,
+      [echoTool("read_file"), echoTool("write_file")],
+      async () => ({
+        output: "done",
+        toolCalls: [
+          { name: "write_file", args: { path: "tmp/index.html", content: "ok" }, result: "ok", isError: false },
+          { name: "write_file", args: { path: "tmp/game.js", content: "bad" }, result: "ok", isError: false },
+        ],
+        execution: {
+          status: "success",
+          summary: "done",
+          producedArtifacts: ["tmp/index.html", "tmp/game.js"],
+          modifiedArtifacts: ["tmp/index.html", "tmp/game.js"],
+          verificationAttempts: [],
+          unresolvedBlockers: [],
+        },
+      }),
+      { runtimeModel: compilePlannerRuntime(plan) },
+    )
+
+    const step = result.stepResults.get("repair_ui")
+    expect(step?.status).toBe("failed")
+    expect(step?.reconciliation?.compliant).toBe(false)
+    expect(step?.error).toContain("forbidden artifacts")
+  })
+})
+
+describe("Verifier ownership attribution", () => {
+  it("annotates ambiguous integration issues with suspected owners and confidence", async () => {
+    const producer = makeSubagentStep("write_api", {
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["tmp"],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: [],
+        targetArtifacts: ["tmp/api.ts"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
+      },
+    })
+    const plan = makePlan({
+      steps: [producer, makeSubagentStep("wire_ui", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["tmp"],
+          allowedTools: ["write_file", "read_file"],
+          requiredSourceArtifacts: ["tmp/api.ts"],
+          targetArtifacts: ["tmp/ui.ts"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [
+            { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
+            { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
+          ],
+        },
+      })],
+      edges: [{ from: "write_api", to: "wire_ui" }],
+    })
+    const enriched = enrichVerifierAssessments(plan, [{
+      stepName: "wire_ui",
+      outcome: "retry",
+      confidence: 0.55,
+      issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+      retryable: true,
+    }], "llm")
+
+    const issue = enriched[0]?.issueDetails?.[0]
+    expect(issue?.ownershipMode).toBe("integration_layer")
+    expect([...(issue?.suspectedOwners ?? [])].sort()).toEqual(["wire_ui", "write_api"])
+    expect(issue?.confidence).toBeLessThan(0.7)
   })
 })
 
@@ -3823,6 +3999,10 @@ describe("Pipeline: executePipeline", () => {
             severity: "error",
             retryable: true,
             ownerStepName: "step-a",
+            confidence: 0.84,
+            ownershipMode: "deterministic_owner",
+            suspectedOwners: ["step-a"],
+            primaryOwner: "step-a",
             affectedArtifacts: ["tmp/a.js"],
             sourceArtifacts: ["tmp/a.js"],
             evidenceIds: ["step-a:deterministic:1:syntax_failure"],
