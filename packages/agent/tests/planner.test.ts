@@ -13,7 +13,7 @@ import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
 import { compilePlannerRuntime } from "../src/planner/runtime-model.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
-import { buildRepairPlan, enrichVerifierAssessments } from "../src/planner/verification-model.js"
+import { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "../src/planner/verification-model.js"
 import * as plannerVerifier from "../src/planner/verifier.js"
 import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/delegate.js"
@@ -946,7 +946,7 @@ describe("Planner path execution", () => {
       })
 
     const traces: Array<Record<string, unknown>> = []
-    const callOrder: string[] = []
+  const callOrder: string[] = []
     const objectives: string[] = []
 
     try {
@@ -986,6 +986,17 @@ describe("Planner path execution", () => {
       expect(repairTrace?.rerunOrder).toEqual(["write_summary"])
       expect(repairTrace?.tasks?.map((task) => `${task.stepName}:${task.mode}`)).toEqual(["write_summary:repair"])
 
+      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as {
+        activePath?: string
+        diverged?: boolean
+        legacy?: { rerunOrder?: string[] }
+        repair?: { rerunOrder?: string[] }
+      } | undefined
+      expect(compatibilityTrace?.activePath).toBe("repair")
+      expect(compatibilityTrace?.diverged).toBe(false)
+      expect(compatibilityTrace?.legacy?.rerunOrder).toEqual(["write_summary"])
+      expect(compatibilityTrace?.repair?.rerunOrder).toEqual(["write_summary"])
+
       const retryTrace = traces.find((entry) => entry.kind === "planner-retry") as { rerunOrder?: string[] } | undefined
       expect(retryTrace?.rerunOrder).toEqual(["write_summary"])
 
@@ -998,6 +1009,215 @@ describe("Planner path execution", () => {
     } finally {
       delegationSpy.mockRestore()
       verifySpy.mockRestore()
+    }
+  })
+
+  it("pins shadow compatibility to legacy retries when divergence exceeds the threshold", async () => {
+    const prevMode = process.env["AGENT_PLANNER_COMPAT_MODE"]
+    const prevThreshold = process.env["AGENT_PLANNER_COMPAT_THRESHOLD"]
+    process.env["AGENT_PLANNER_COMPAT_MODE"] = "shadow"
+    process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] = "1"
+
+    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: true,
+      reason: "approved",
+      threshold: 0.2,
+      utilityScore: 0.9,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.2,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.1,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {},
+    })
+    const verifySpy = vi.spyOn(plannerVerifier, "verify")
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "split producer and consumer for integration repair",
+          confidence: 0.92,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "write_api",
+              stepType: "subagent_task",
+              objective: "Create tmp/api.ts with the API contract",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["tmp/api.ts exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/api.ts"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
+              },
+            },
+            {
+              name: "wire_ui",
+              stepType: "subagent_task",
+              objective: "Create tmp/ui.ts that consumes tmp/api.ts",
+              inputContract: "tmp/api.ts exists",
+              acceptanceCriteria: ["tmp/ui.ts exists", "tmp/ui.ts matches the API contract"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: ["tmp/api.ts"],
+                targetArtifacts: ["tmp/ui.ts"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [
+                  { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
+                  { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
+                ],
+              },
+            },
+          ],
+          edges: [{ from: "write_api", to: "wire_ui" }],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    verifySpy
+      .mockResolvedValueOnce({
+        overall: "retry",
+        confidence: 0.61,
+        unresolvedItems: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+        steps: [
+          {
+            stepName: "write_api",
+            outcome: "pass",
+            confidence: 0.9,
+            issues: [],
+            issueDetails: [],
+            evidence: [],
+            retryable: false,
+          },
+          {
+            stepName: "wire_ui",
+            outcome: "retry",
+            confidence: 0.61,
+            issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+            issueDetails: [makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
+              code: "cross_file_signature_mismatch",
+              ownerStepName: "write_api",
+              ownershipMode: "shared_owners",
+              suspectedOwners: ["write_api", "wire_ui"],
+              primaryOwner: "write_api",
+              affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
+              sourceArtifacts: ["tmp/api.ts"],
+              repairClass: "integration_wiring",
+              confidence: 0.58,
+            })],
+            evidence: [{
+              id: "wire_ui:llm:1:cross_file_signature_mismatch",
+              stepName: "wire_ui",
+              source: "llm",
+              kind: "cross_file_signature_mismatch",
+              message: "Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts",
+              artifactPaths: ["tmp/api.ts", "tmp/ui.ts"],
+            }],
+            retryable: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        overall: "pass",
+        confidence: 0.95,
+        unresolvedItems: [],
+        steps: [
+          {
+            stepName: "write_api",
+            outcome: "pass",
+            confidence: 0.9,
+            issues: [],
+            issueDetails: [],
+            evidence: [],
+            retryable: false,
+          },
+          {
+            stepName: "wire_ui",
+            outcome: "pass",
+            confidence: 0.95,
+            issues: [],
+            issueDetails: [],
+            evidence: [],
+            retryable: false,
+          },
+        ],
+      })
+
+    const traces: Array<Record<string, unknown>> = []
+    const callOrder: string[] = []
+
+    try {
+      const result = await executePlannerPath(
+        "Build tmp/api.ts and tmp/ui.ts, then repair integration mismatches until verification passes.",
+        {
+          llm,
+          tools: [echoTool("write_file"), echoTool("read_file")],
+          workspaceRoot: ".",
+          history: [],
+          onTrace: (entry) => traces.push(entry),
+        },
+        async (step) => {
+          const target = step.executionContext.targetArtifacts[0] ?? "tmp/file.txt"
+          return {
+            output: `done ${step.name}`,
+            toolCalls: [
+              { name: "write_file", args: { path: target, content: `updated ${step.name}` }, result: "ok", isError: false },
+              { name: "read_file", args: { path: target }, result: `updated ${step.name}`, isError: false },
+            ],
+            execution: {
+              status: "success",
+              summary: `done ${step.name}`,
+              producedArtifacts: step.executionContext.targetArtifacts,
+              modifiedArtifacts: step.executionContext.targetArtifacts,
+              verificationAttempts: [],
+              unresolvedBlockers: [],
+            },
+          }
+        },
+      )
+
+      expect(result.handled).toBe(true)
+
+      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as {
+        activePath?: string
+        diverged?: boolean
+        divergenceScore?: number
+        divergenceThreshold?: number
+        pinnedToLegacy?: boolean
+      } | undefined
+      expect(compatibilityTrace?.activePath).toBe("legacy")
+      expect(compatibilityTrace?.diverged).toBe(true)
+      expect(compatibilityTrace?.divergenceScore).toBeGreaterThanOrEqual(1)
+      expect(compatibilityTrace?.divergenceThreshold).toBe(1)
+      expect(compatibilityTrace?.pinnedToLegacy).toBe(true)
+    } finally {
+      delegationSpy.mockRestore()
+      verifySpy.mockRestore()
+      if (prevMode === undefined) delete process.env["AGENT_PLANNER_COMPAT_MODE"]
+      else process.env["AGENT_PLANNER_COMPAT_MODE"] = prevMode
+      if (prevThreshold === undefined) delete process.env["AGENT_PLANNER_COMPAT_THRESHOLD"]
+      else process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] = prevThreshold
     }
   })
 })
@@ -1119,6 +1339,14 @@ describe("Planner runtime model", () => {
 
     expect(repairPlan.tasks.map((task) => task.stepName).sort()).toEqual(["wire_ui", "write_api"])
     expect(repairPlan.tasks.every((task) => task.mode === "repair")).toBe(true)
+
+    const legacyPlan = buildLegacyRetryPlan(plan, pipelineResult, decision)
+    const compatibility = compareRepairPlanCompatibility("shadow", legacyPlan, repairPlan)
+
+    expect(legacyPlan.rerunOrder).toEqual(["wire_ui"])
+    expect(compatibility.activePath).toBe("repair")
+    expect(compatibility.diverged).toBe(true)
+    expect(compatibility.reasons.some((reason) => reason.includes("adds write_api"))).toBe(true)
   })
 })
 

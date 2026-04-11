@@ -455,6 +455,24 @@ export interface RepairPlan {
   readonly skippedVerifiedSteps: readonly string[]
 }
 
+export interface LegacyRetryPlan {
+  readonly tasks: readonly RepairTask[]
+  readonly rerunOrder: readonly string[]
+  readonly skippedVerifiedSteps: readonly string[]
+}
+
+export type PlannerRepairCompatibilityMode = "shadow" | "legacy" | "repair"
+
+export interface RepairPlanCompatibilityReport {
+  readonly mode: PlannerRepairCompatibilityMode
+  readonly activePath: "legacy" | "repair"
+  readonly diverged: boolean
+  readonly divergenceScore: number
+  readonly reasons: readonly string[]
+  readonly legacyPlan: LegacyRetryPlan
+  readonly repairPlan: RepairPlan
+}
+
 export interface VerifierStepAssessment {
   readonly stepName: string
   readonly outcome: VerifierOutcome

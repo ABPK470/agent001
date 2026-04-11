@@ -928,6 +928,39 @@ export class AgentOrchestrator {
             resourceId: runId,
             detail: { attempt: entry.attempt, epoch: entry.epoch, rerunOrder: entry.rerunOrder, tasks: entry.tasks },
           }).catch(() => {})
+        } else if (entry.kind === "planner-repair-compatibility") {
+          broadcast({
+            type: "planner.repair.compatibility",
+            data: {
+              runId,
+              attempt: entry.attempt,
+              mode: entry.mode,
+              activePath: entry.activePath,
+              diverged: entry.diverged,
+              divergenceScore: entry.divergenceScore,
+              divergenceThreshold: entry.divergenceThreshold,
+              pinnedToLegacy: entry.pinnedToLegacy,
+              reasons: entry.reasons,
+              legacy: entry.legacy,
+              repair: entry.repair,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.repair.compatibility",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              attempt: entry.attempt,
+              mode: entry.mode,
+              activePath: entry.activePath,
+              diverged: entry.diverged,
+              divergenceScore: entry.divergenceScore,
+              divergenceThreshold: entry.divergenceThreshold,
+              pinnedToLegacy: entry.pinnedToLegacy,
+              reasons: entry.reasons,
+            },
+          }).catch(() => {})
         }
       },
       plannerDelegateFn: (step, envelope) =>

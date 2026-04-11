@@ -361,6 +361,7 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-validation-remediated") items.push({ text: `PLAN ✓ validation auto-remediated (${e.diagnostics.length})`, color: C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
     else if (e.kind === "planner-repair-plan") items.push({ text: `REPAIR ${e.rerunOrder.join(" → ") || "none"}`, color: C.plum })
+    else if (e.kind === "planner-repair-compatibility") items.push({ text: `COMPAT ${e.activePath} ${e.diverged ? "Δ" : "="}`, color: e.diverged ? C.warning : C.success })
     else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
     else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
   }

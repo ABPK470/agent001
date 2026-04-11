@@ -100,6 +100,11 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-repair-plan":
       return `${p}REPAIR PLAN  attempt ${e.attempt}${e.rerunOrder.length ? `  rerun ${e.rerunOrder.join(" -> ")}` : ""}\n` +
         e.tasks.map(task => `${p}  ${task.stepName}: ${task.mode}${task.ownedIssueCodes.length ? ` · own ${task.ownedIssueCodes.join(",")}` : ""}${task.dependencyIssueCodes.length ? ` · deps ${task.dependencyIssueCodes.join(",")}` : ""}`).join("\n")
+    case "planner-repair-compatibility":
+      return `${p}COMPAT  attempt ${e.attempt}  mode=${e.mode}  active=${e.activePath}  ${e.diverged ? "diverged" : "aligned"}${e.divergenceScore != null || e.divergenceThreshold != null ? `  score=${e.divergenceScore ?? e.reasons.length}/${e.divergenceThreshold ?? "?"}` : ""}${e.pinnedToLegacy ? "  pinned=legacy" : ""}\n` +
+        `${p}  legacy: ${e.legacy.rerunOrder.join(" -> ") || "none"}\n` +
+        `${p}  repair: ${e.repair.rerunOrder.join(" -> ") || "none"}` +
+        (e.reasons.length ? `\n${e.reasons.map(reason => `${p}  reason: ${reason}`).join("\n")}` : "")
     case "planner-retry": return `${p}RETRY  attempt ${e.attempt}  ${e.reason}`
     case "planner-retry-skipped": return `${p}RETRY SKIPPED  ${e.reason}`
     case "planner-budget-extended": return `${p}BUDGET EXTENDED  completed ${e.completedSteps}  budget ${e.effectiveBudget}  ext ${e.extensions}`

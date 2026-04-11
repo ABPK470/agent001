@@ -28,7 +28,7 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArtifactRelation, ChildExecutionResult, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, RepairPlan, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
+    ArtifactRelation, ChildExecutionResult, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
@@ -42,10 +42,22 @@ import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
 import { compilePlannerRuntime } from "./runtime-model.js"
-import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlanStep, RepairPlan, SubagentTaskStep, VerifierDecision } from "./types.js"
+import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, SubagentTaskStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
-import { buildIssueIdentity, buildRepairPlan, deriveAcceptanceState } from "./verification-model.js"
+import { buildIssueIdentity, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, deriveAcceptanceState } from "./verification-model.js"
 import { verify } from "./verifier.js"
+
+function resolvePlannerCompatibilityMode(): PlannerRepairCompatibilityMode {
+  const raw = (process.env["AGENT_PLANNER_COMPAT_MODE"] ?? "shadow").trim().toLowerCase()
+  if (raw === "legacy" || raw === "repair" || raw === "shadow") return raw
+  return "shadow"
+}
+
+function resolvePlannerCompatibilityThreshold(): number {
+  const raw = Number(process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] ?? 3)
+  if (!Number.isFinite(raw)) return 3
+  return Math.max(1, Math.floor(raw))
+}
 
 function applyVerificationAcceptanceStates(
   pipelineResult: PipelineResult,
@@ -1271,6 +1283,9 @@ export async function executePlannerPath(
   // Retry decisions are made by the escalation graph.
   let pipelineResult: PipelineResult | undefined
   let verifierDecision: VerifierDecision | undefined
+  const compatibilityMode = resolvePlannerCompatibilityMode()
+  const compatibilityThreshold = resolvePlannerCompatibilityThreshold()
+  let legacyPinnedForRun = compatibilityMode === "legacy"
   let retryOpts: {
     priorResults?: Map<string, import("./types.js").PipelineStepResult>
     repairPlan?: RepairPlan
@@ -1378,10 +1393,29 @@ export async function executePlannerPath(
       ctx.tools as Tool[],
       { signal: ctx.signal, onTrace: ctx.onTrace },
     )
+    const computedRepairPlan = buildRepairPlan(plan, pipelineResult, verifierDecision)
     verifierDecision = {
       ...verifierDecision,
-      repairPlan: buildRepairPlan(plan, pipelineResult, verifierDecision),
+      repairPlan: computedRepairPlan,
     }
+    const legacyRetryPlan = buildLegacyRetryPlan(plan, pipelineResult, verifierDecision)
+    const repairCompatibility = compareRepairPlanCompatibility(
+      compatibilityMode,
+      legacyRetryPlan,
+      computedRepairPlan,
+    )
+    if (
+      compatibilityMode === "shadow"
+      && repairCompatibility.diverged
+      && repairCompatibility.divergenceScore >= compatibilityThreshold
+    ) {
+      legacyPinnedForRun = true
+    }
+    const activeCompatibilityPath: "legacy" | "repair" = compatibilityMode === "repair"
+      ? "repair"
+      : legacyPinnedForRun
+        ? "legacy"
+        : "repair"
     pipelineResult = applyVerificationAcceptanceStates(pipelineResult, verifierDecision)
 
     ctx.onTrace?.({
@@ -1440,6 +1474,34 @@ export async function executePlannerPath(
         dependencyIssueCodes: task.dependencyContext.map(issue => issue.code),
       })) ?? [],
     })
+    ctx.onTrace?.({
+      kind: "planner-repair-compatibility",
+      attempt: attempt + 1,
+      mode: repairCompatibility.mode,
+      activePath: activeCompatibilityPath,
+      diverged: repairCompatibility.diverged,
+      divergenceScore: repairCompatibility.divergenceScore,
+      divergenceThreshold: compatibilityThreshold,
+      pinnedToLegacy: compatibilityMode === "shadow" && legacyPinnedForRun,
+      reasons: [...repairCompatibility.reasons],
+      legacy: {
+        rerunOrder: repairCompatibility.legacyPlan.rerunOrder,
+        tasks: repairCompatibility.legacyPlan.tasks.map((task) => ({
+          stepName: task.stepName,
+          mode: task.mode,
+          ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
+        })),
+      },
+      repair: {
+        rerunOrder: repairCompatibility.repairPlan.rerunOrder,
+        tasks: repairCompatibility.repairPlan.tasks.map((task) => ({
+          stepName: task.stepName,
+          mode: task.mode,
+          ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
+          dependencyIssueCodes: task.dependencyContext.map((issue) => issue.code),
+        })),
+      },
+    })
 
     verifierRounds++
 
@@ -1488,6 +1550,13 @@ export async function executePlannerPath(
     const priorResults = new Map<string, import("./types.js").PipelineStepResult>()
     const NON_RETRYABLE_CLASSES = new Set(["cancelled", "spawn_error"])
     const currentRepairPlan = verifierDecision.repairPlan ?? buildRepairPlan(plan, pipelineResult, verifierDecision)
+    const activeRepairPlan = activeCompatibilityPath === "legacy"
+      ? {
+        tasks: legacyRetryPlan.tasks,
+        rerunOrder: legacyRetryPlan.rerunOrder,
+        skippedVerifiedSteps: legacyRetryPlan.skippedVerifiedSteps,
+      }
+      : currentRepairPlan
 
     // Detect repeated identical failures — if a step produces the same issues
     // as the previous attempt, further retries won't help (LLM is stuck).
@@ -1559,7 +1628,7 @@ export async function executePlannerPath(
     }
 
     // If every failing step has repeated identical issues, stop retrying entirely
-    const retryableTaskCount = currentRepairPlan.tasks.filter((task) => task.mode !== "blocked").length
+    const retryableTaskCount = activeRepairPlan.tasks.filter((task) => task.mode !== "blocked").length
     if (allStepsRepeatedFailure && retryableTaskCount === 0) {
       ctx.onTrace?.({
         kind: "planner-retry-abort",
@@ -1578,9 +1647,9 @@ export async function executePlannerPath(
       reason: verifierDecision.unresolvedItems.join("; "),
       skippedSteps: priorResults.size,
       retrySteps: retryableTaskCount,
-      rerunOrder: currentRepairPlan.rerunOrder,
+      rerunOrder: activeRepairPlan.rerunOrder,
     })
-    for (const task of currentRepairPlan.tasks) {
+    for (const task of activeRepairPlan.tasks) {
       ctx.onTrace?.({
         kind: "planner-step-transition",
         attempt: attempt + 1,
@@ -1592,7 +1661,7 @@ export async function executePlannerPath(
     }
 
     // Store retry context for next iteration
-    retryOpts = { priorResults, repairPlan: currentRepairPlan }
+    retryOpts = { priorResults, repairPlan: activeRepairPlan }
   }
 
   // Step 6: Synthesize final answer

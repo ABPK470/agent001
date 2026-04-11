@@ -161,6 +161,19 @@ export type TraceEntry =
     rerunOrder: string[]
     tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
   }
+  | {
+    kind: "planner-repair-compatibility"
+    attempt: number
+    mode: "shadow" | "legacy" | "repair"
+    activePath: "legacy" | "repair"
+    diverged: boolean
+    divergenceScore?: number
+    divergenceThreshold?: number
+    pinnedToLegacy?: boolean
+    reasons: string[]
+    legacy: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[] }> }
+    repair: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }> }
+  }
   | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
   | { kind: "planner-retry-skipped"; reason: string }
   // Delegation decision gate (safety, economics, hard-block)

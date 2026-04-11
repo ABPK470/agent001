@@ -6,14 +6,17 @@ import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
-import type { AgentDefinition, RollbackPreview, WorkspaceDiff } from "../types"
+import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
+
+type CompatibilityTrace = Extract<TraceEntry, { kind: "planner-repair-compatibility" }>
 
 export function RunStatus() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const steps = useStore((s) => s.steps)
   const liveUsage = useStore((s) => s.liveUsage)
+  const trace = useStore((s) => s.trace)
 
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   useEffect(() => { api.listAgents().then(setAgents).catch(() => {}) }, [])
@@ -140,6 +143,7 @@ export function RunStatus() {
   const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
   const completedSteps = steps.filter((s) => s.status === "completed").length
   const failedSteps = steps.filter((s) => s.status === "failed").length
+  const latestCompatibility = [...trace].reverse().find((entry): entry is CompatibilityTrace => entry.kind === "planner-repair-compatibility")
 
   async function handleCancel() {
     if (run) await api.cancelRun(run.id).catch(() => {})
@@ -223,6 +227,54 @@ export function RunStatus() {
           </div>
         )}
       </div>
+
+      {latestCompatibility && (
+        <div className="rounded-xl border border-[#F97316]/20 bg-[#F97316]/[0.06] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[13px] text-text-muted uppercase tracking-wide">Planner Compatibility</div>
+              <div className="text-sm text-text-secondary mt-0.5">
+                mode {latestCompatibility.mode} · active {latestCompatibility.activePath}
+              </div>
+            </div>
+            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestCompatibility.diverged ? "text-warning bg-warning/10" : "text-success bg-success/10"}`}>
+              {latestCompatibility.diverged ? "Diverged" : "Aligned"}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3 text-[13px] text-text-secondary">
+            <div>
+              <span className="text-text-muted">Score</span>
+              <div className="font-mono mt-0.5">
+                {(latestCompatibility.divergenceScore ?? latestCompatibility.reasons.length)}/{latestCompatibility.divergenceThreshold ?? "?"}
+              </div>
+            </div>
+            <div>
+              <span className="text-text-muted">Legacy Pin</span>
+              <div className={`mt-0.5 ${latestCompatibility.pinnedToLegacy ? "text-warning" : "text-text-secondary"}`}>
+                {latestCompatibility.pinnedToLegacy ? "Pinned for this run" : "Not pinned"}
+              </div>
+            </div>
+            <div>
+              <span className="text-text-muted">Legacy Rerun</span>
+              <div className="font-mono mt-0.5 break-words">{latestCompatibility.legacy.rerunOrder.join(" -> ") || "none"}</div>
+            </div>
+            <div>
+              <span className="text-text-muted">Repair Rerun</span>
+              <div className="font-mono mt-0.5 break-words">{latestCompatibility.repair.rerunOrder.join(" -> ") || "none"}</div>
+            </div>
+          </div>
+          {latestCompatibility.reasons.length > 0 && (
+            <div className="mt-3 text-[13px] text-text-secondary space-y-1">
+              {latestCompatibility.reasons.slice(0, 3).map((reason, index) => (
+                <div key={index}>{reason}</div>
+              ))}
+              {latestCompatibility.reasons.length > 3 && (
+                <div className="text-text-muted">+{latestCompatibility.reasons.length - 3} more divergence reasons</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2 mt-1">

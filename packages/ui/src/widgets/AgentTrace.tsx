@@ -452,6 +452,35 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
         </div>
       )
 
+    case "planner-repair-compatibility":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#F97316]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#F97316] text-[13px] font-medium font-mono">COMPAT</span>
+            <span className="text-text-secondary text-[13px]">attempt {entry.attempt}</span>
+            <span className="text-text-muted text-[13px]">mode {entry.mode}</span>
+            <span className="text-text-muted text-[13px]">active {entry.activePath}</span>
+            <span className={`text-[13px] ${entry.diverged ? "text-warning" : "text-success"}`}>{entry.diverged ? "diverged" : "aligned"}</span>
+            {(entry.divergenceScore != null || entry.divergenceThreshold != null) && (
+              <span className="text-text-muted text-[13px]">
+                score {entry.divergenceScore ?? entry.reasons.length}/{entry.divergenceThreshold ?? "?"}
+              </span>
+            )}
+            {entry.pinnedToLegacy && (
+              <span className="text-warning text-[13px]">pinned legacy</span>
+            )}
+          </div>
+          <div className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+            legacy {entry.legacy.rerunOrder.join(" → ") || "none"} · repair {entry.repair.rerunOrder.join(" → ") || "none"}
+          </div>
+          {entry.reasons.map((reason, index) => (
+            <div key={index} className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+              {reason}
+            </div>
+          ))}
+        </div>
+      )
+
     case "planner-retry":
       return (
         <div className="text-warning text-[13px] font-mono pl-6 py-0.5">

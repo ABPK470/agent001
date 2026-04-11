@@ -123,6 +123,14 @@ function summarize(event: WsEvent): string {
     const rerunOrder = Array.isArray(d["rerunOrder"]) ? (d["rerunOrder"] as unknown[]).join(" → ") : ""
     return `repair plan attempt ${d["attempt"]}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
   }
+  if (event.type === "planner.repair.compatibility") {
+    const activePath = String(d["activePath"] ?? "repair")
+    const diverged = Boolean(d["diverged"])
+    const score = Number(d["divergenceScore"] ?? 0)
+    const threshold = Number(d["divergenceThreshold"] ?? 0)
+    const pinned = Boolean(d["pinnedToLegacy"])
+    return `compat ${activePath} ${diverged ? `diverged ${score}/${threshold || "?"}` : "aligned"}${pinned ? " pinned" : ""}`
+  }
   if (event.type === "planner.runtime.compiled") {
     const executionSteps = Array.isArray(d["executionSteps"]) ? d["executionSteps"].length : 0
     const ownershipArtifacts = Array.isArray(d["ownershipArtifacts"]) ? d["ownershipArtifacts"].length : 0
@@ -151,6 +159,15 @@ function summarize(event: WsEvent): string {
     if (kind === "planner-repair-plan") {
       const rerunOrder = Array.isArray(entry?.["rerunOrder"]) ? (entry["rerunOrder"] as unknown[]).join(" → ") : ""
       return `repair epoch ${entry?.["epoch"] ?? entry?.["attempt"] ?? "?"}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
+    }
+    if (kind === "planner-repair-compatibility") {
+      const activePath = String(entry?.["activePath"] ?? "repair")
+      const diverged = Boolean(entry?.["diverged"])
+      const reasons = Array.isArray(entry?.["reasons"]) ? entry["reasons"].length : 0
+      const score = Number(entry?.["divergenceScore"] ?? reasons)
+      const threshold = Number(entry?.["divergenceThreshold"] ?? 0)
+      const pinned = Boolean(entry?.["pinnedToLegacy"])
+      return `compat ${activePath} ${diverged ? `diverged(${score}${threshold > 0 ? `/${threshold}` : ""})` : "aligned"}${pinned ? " pinned" : ""}`
     }
     if (kind === "planner-runtime-compiled") {
       const executionSteps = Array.isArray(entry?.["executionSteps"]) ? entry["executionSteps"].length : 0
