@@ -4300,6 +4300,59 @@ describe("Pipeline: executePipeline", () => {
     expect(repairPlan.tasks[0]?.ownedIssues[0]?.code).toBe("syntax_failure")
     expect(repairPlan.skippedVerifiedSteps).toEqual(["step-b"])
   })
+
+  it("keeps blueprint contract repair ownership on the blueprint-writing step", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create_project_blueprint", {
+          executionContext: {
+            ...makeSubagentStep("create_project_blueprint").executionContext,
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+          },
+        }),
+        makeSubagentStep("integrate_game_logic_with_ui", {
+          executionContext: {
+            ...makeSubagentStep("integrate_game_logic_with_ui").executionContext,
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/game_integration.js"],
+          },
+        }),
+      ],
+      edges: [{ from: "create_project_blueprint", to: "integrate_game_logic_with_ui" }],
+    })
+
+    const enriched = enrichVerifierAssessments(plan, [{
+      stepName: "create_project_blueprint",
+      outcome: "fail",
+      confidence: 0.28,
+      issues: ["BLUEPRINT FUNCTION CONTRACT WEAK: tmp/game_integration.js contains underspecified machine contract signatures (handleUserMove())"],
+      retryable: true,
+    }], "deterministic")
+
+    expect(enriched[0]?.issueDetails?.[0]?.ownerStepName).toBe("create_project_blueprint")
+    expect(enriched[0]?.issueDetails?.[0]?.ownershipMode).toBe("planner_fault")
+
+    const pipelineResult: PipelineResult = {
+      status: "failed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create_project_blueprint", { name: "create_project_blueprint", status: "completed", executionState: "executed", acceptanceState: "repair_required", output: "done", durationMs: 1 }],
+        ["integrate_game_logic_with_ui", { name: "integrate_game_logic_with_ui", status: "pending", executionState: "pending", acceptanceState: "blocked", output: "", durationMs: 0 }],
+      ]),
+    }
+
+    const repairPlan = buildRepairPlan(plan, pipelineResult, {
+      overall: "retry",
+      confidence: 0.28,
+      unresolvedItems: ["blueprint contract weak"],
+      steps: enriched,
+    })
+
+    expect(repairPlan.rerunOrder).toEqual(["create_project_blueprint"])
+    expect(repairPlan.tasks.map((task) => task.stepName)).toEqual(["create_project_blueprint"])
+    expect(repairPlan.tasks[0]?.ownedIssues[0]?.ownershipMode).toBe("planner_fault")
+  })
 })
 
 // ============================================================================
@@ -4743,6 +4796,93 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     expect(step).toBeDefined()
     expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE CONTRACT WEAK") && i.includes("GameState"))).toBe(true)
     expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE DRIFT") && i.includes("Move"))).toBe(true)
+  })
+
+  it("does not emit spec-mapping-missing for the blueprint file itself", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("generate_blueprint", {
+          objective: "Create BLUEPRINT.md for the implementation",
+          acceptanceCriteria: ["Blueprint declares implementation artifacts"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.ts"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "failed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["generate_blueprint", {
+          name: "generate_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [{
+      name: "read_file",
+      description: "read",
+      parameters: { type: "object", properties: { path: { type: "string" } } },
+      async execute(args) {
+        const path = String(args.path)
+        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+        return [
+          "# Engine Blueprint",
+          "",
+          "```blueprint-contract",
+          JSON.stringify({
+            version: 1,
+            files: [
+              {
+                path: "tmp/engine.ts",
+                purpose: "Move validation engine",
+                functions: [{ name: "validateMove", signature: "validateMove(state: GameState, move: Move): boolean" }],
+              },
+            ],
+            sharedTypes: [],
+          }, null, 2),
+          "```",
+        ].join("\n")
+      },
+    }]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find((assessment) => assessment.stepName === "generate_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some((issue) => issue.includes("SPEC MAPPING MISSING") && issue.includes("tmp/BLUEPRINT.md"))).toBe(false)
   })
 
   it("flags blueprint structure mismatches from structural markers instead of keyword heuristics", async () => {

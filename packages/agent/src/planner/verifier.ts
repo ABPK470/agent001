@@ -833,6 +833,9 @@ async function buildStepSpecEvidence(
 
   for (const artifact of step.executionContext.targetArtifacts) {
     const normalizedArtifact = normalizeSpecPath(artifact)
+    if (isBlueprintLikeStepForVerifier(step) && normalizedArtifact === normalizeSpecPath(blueprintPath)) {
+      continue
+    }
     const exactMatch = spec.files.find(file => normalizeSpecPath(file.declaredPath) === normalizedArtifact)
     const basenameMatch = exactMatch
       ? null

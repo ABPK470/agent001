@@ -96,6 +96,9 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-validation-failed": return `${p}VALIDATION FAILED`
     case "planner-validation-remediated": return `${p}VALIDATION AUTO-REMEDIATED`
     case "planner-validation-warnings": return `${p}VALIDATION WARNINGS  ${e.warningCount}`
+    case "planner-runtime-compiled":
+      return `${p}RUNTIME COMPILED  steps=${e.executionSteps.length}  artifacts=${e.ownershipArtifacts.length}  entities=${e.runtimeEntities.length}\n` +
+        e.executionSteps.map((step) => `${p}  ${step.stepName}: deps=${step.dependsOn.join(", ") || "none"}  next=${step.downstream.join(", ") || "none"}`).join("\n")
     case "direct_loop_fallback": return `${p}DIRECT LOOP FALLBACK  ${e.source}  ${e.reason}`
     case "planner-delegation-decision":
       return `${p}DELEGATION GATE  ${e.shouldDelegate ? "delegate" : "local"}  ${e.reason}`
@@ -111,6 +114,12 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-verification":
       return `${p}VERIFY  ${e.overall}  ${(e.confidence * 100).toFixed(0)}% confidence\n` +
         e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.acceptanceState ? ` · ${s.acceptanceState}` : ""}${s.issueCodes?.length ? ` · ${s.issueCodes.join(",")}` : ""}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
+    case "planner-verification-followup":
+      return `${p}VERIFY FOLLOW-UP  ${e.requestedSteps.join(", ") || "none"}\n` +
+        e.reasons.map((reason) => `${p}  ${reason.stepName}: conf=${reason.confidence.toFixed(2)}${reason.ambiguousIssues.length ? `  ambiguous=${reason.ambiguousIssues.join(", ")}` : ""}`).join("\n")
+    case "planner-issue-timeline":
+      return `${p}ISSUE TIMELINE  attempt=${e.attempt}  round=${e.verifierRound}  count=${e.issues.length}\n` +
+        e.issues.map((issue) => `${p}  ${issue.stepName}: ${issue.code}  conf=${issue.confidence.toFixed(2)}  owner=${issue.ownershipMode}${issue.primaryOwner ? `  primary=${issue.primaryOwner}` : ""}${issue.suspectedOwners.length ? `  suspects=${issue.suspectedOwners.join(", ")}` : ""}`).join("\n")
     case "planner-repair-plan":
       return `${p}REPAIR PLAN  attempt ${e.attempt}${e.rerunOrder.length ? `  rerun ${e.rerunOrder.join(" -> ")}` : ""}\n` +
         e.tasks.map(task => `${p}  ${task.stepName}: ${task.mode}${task.ownedIssueCodes.length ? ` · own ${task.ownedIssueCodes.join(",")}` : ""}${task.dependencyIssueCodes.length ? ` · deps ${task.dependencyIssueCodes.join(",")}` : ""}`).join("\n")
@@ -125,6 +134,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-escalation": return `${p}ESCALATION  ${e.action}  ${e.reason}`
     case "planner-retry-abort": return `${p}RETRY ABORT  ${e.reason}`
     case "planner-retry-skip": return `${p}RETRY SKIP  ${e.stepName}  ${e.reason}`
+    case "planner-step-transition": return `${p}STEP TRANSITION  ${e.stepName}  ${e.phase} -> ${e.state}  t=${e.timestamp}`
 
     case "planner-delegation-start":
       return `${p}CHILD AGENT  ${e.stepName}  budget ${e.budget.computedMaxIterations} (hint ${e.budget.parsedHint} + boost ${e.budget.complexityBoost})\n${p}  ${e.goal}`
@@ -901,6 +911,32 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       </div>
     )
   }
+  if (e.kind === "planner-runtime-compiled") {
+    return (
+      <div>
+        <TreeRow onClick={() => setExpanded(!expanded)} open={expanded}
+          label={`RUNTIME · ${e.executionSteps.length} steps`}
+          labelColor={"#60A5FA"}
+          detail={!expanded ? `${e.ownershipArtifacts.length} artifacts · ${e.runtimeEntities.length} entities` : undefined}
+        />
+        {expanded && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            {e.executionSteps.map((step, index) => (
+              <div key={index} style={{ color: C.dim }}>{step.stepName}: deps {step.dependsOn.join(", ") || "none"} · next {step.downstream.join(", ") || "none"}</div>
+            ))}
+            {e.ownershipArtifacts.length > 0 && (
+              <div style={{ color: C.muted }}>
+                ownership: {e.ownershipArtifacts.map((artifact) => `${artifact.artifactPath}→${artifact.ownerStepName ?? "none"}`).join(" · ")}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+  if (e.kind === "planner-output-root-forced") {
+    return <FlatRow label="OUTPUT ROOT" labelColor={"#C084FC"} detail={e.outputRoot} />
+  }
   if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.coral}40` }}>
@@ -913,6 +949,21 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         {e.diagnostics.map((d, i) => (
           <div key={i} className="text-[13px] mt-0.5 pl-2" style={{ color: C.coral + "B0" }}>
             [{d.code}] {d.message}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-validation-warnings") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: C.warning }}>warnings {e.warningCount}</span>
+        </div>
+        {e.diagnostics.map((diagnostic, index) => (
+          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
+            [{diagnostic.code}] {diagnostic.message}
           </div>
         ))}
       </div>
@@ -982,6 +1033,9 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       </div>
     )
   }
+  if (e.kind === "planner-step-transition") {
+    return <FlatRow label={`STEP TRANSITION · ${e.stepName}`} labelColor={"#C084FC"} detail={`${e.phase} → ${e.state}`} />
+  }
   if (e.kind === "planner-pipeline-end") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
@@ -1007,8 +1061,80 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         </div>
         {e.steps.filter(s => s.issues.length > 0).map((s, i) => (
           <div key={i} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
-            {s.stepName}: {s.issues.join("; ")}
+            {s.stepName}: {s.outcome}{s.acceptanceState ? ` · ${s.acceptanceState}` : ""}{s.issueCodes?.length ? ` · ${s.issueCodes.join(", ")}` : ""}{s.ownershipModes?.length ? ` · owners ${s.ownershipModes.join(", ")}` : ""}{s.issues.length ? ` · ${s.issues.join("; ")}` : ""}
           </div>
+        ))}
+        {e.systemChecks && e.systemChecks.length > 0 && (
+          <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>
+            system: {e.systemChecks.map((check) => `${check.code} ${(check.confidence * 100).toFixed(0)}%`).join(" · ")}
+          </div>
+        )}
+      </div>
+    )
+  }
+  if (e.kind === "planner-verification-followup") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: C.warning }}>FOLLOWUP</span>
+          <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>{e.requestedSteps.join(", ") || "none"}</span>
+        </div>
+        {e.reasons.map((reason, index) => (
+          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
+            {reason.stepName}: {(reason.confidence * 100).toFixed(0)}%{reason.ambiguousIssues.length ? ` · ambiguous ${reason.ambiguousIssues.join(", ")}` : ""}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-issue-timeline") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #34D39940` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#34D399" }}>ISSUES</span>
+          <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>round {e.verifierRound}</span>
+        </div>
+        {e.issues.map((issue, index) => (
+          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
+            {issue.stepName}: {issue.code} {(issue.confidence * 100).toFixed(0)}% · {issue.ownershipMode}{issue.primaryOwner ? ` · primary ${issue.primaryOwner}` : ""}{issue.suspectedOwners.length ? ` · suspects ${issue.suspectedOwners.join(", ")}` : ""}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-repair-plan") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #E879A840` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#E879A8" }}>REPAIR</span>
+          <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>epoch {e.epoch ?? e.attempt}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>rerun {e.rerunOrder.join(" → ") || "none"}</span>
+        </div>
+        {e.tasks.map((task, index) => (
+          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
+            {task.stepName}: {task.mode}{task.ownedIssueCodes.length ? ` · own ${task.ownedIssueCodes.join(", ")}` : ""}{task.dependencyIssueCodes.length ? ` · deps ${task.dependencyIssueCodes.join(", ")}` : ""}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-repair-compatibility") {
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #F9731640` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "#F97316" }}>COMPAT</span>
+          <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>mode {e.mode}</span>
+          <span className="text-[13px] font-mono" style={{ color: C.dim }}>active {e.activePath}</span>
+          <span className="text-[13px] font-mono" style={{ color: e.diverged ? C.warning : C.success }}>{e.diverged ? "diverged" : "aligned"}</span>
+        </div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
+          legacy {e.legacy.rerunOrder.join(" → ") || "none"} · repair {e.repair.rerunOrder.join(" → ") || "none"}
+        </div>
+        {e.reasons.map((reason, index) => (
+          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{reason}</div>
         ))}
       </div>
     )
@@ -1019,6 +1145,21 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
         ↻ retry attempt {e.attempt}: {e.reason}
       </div>
     )
+  }
+  if (e.kind === "planner-retry-skipped") {
+    return <FlatRow label="RETRY SKIPPED" labelColor={C.warning} detail={e.reason} />
+  }
+  if (e.kind === "planner-budget-extended") {
+    return <FlatRow label="BUDGET EXTENDED" labelColor={"#C084FC"} detail={`completed ${e.completedSteps} · budget ${e.effectiveBudget} · ext ${e.extensions}`} />
+  }
+  if (e.kind === "planner-escalation") {
+    return <FlatRow label={`ESCALATION · ${e.action}`} labelColor={C.coral} detail={e.reason} />
+  }
+  if (e.kind === "planner-retry-abort") {
+    return <FlatRow label="RETRY ABORT" labelColor={C.coral} detail={e.reason} />
+  }
+  if (e.kind === "planner-retry-skip") {
+    return <FlatRow label={`RETRY SKIP · ${e.stepName}`} labelColor={C.warning} detail={e.reason} />
   }
   if (e.kind === "workspace_diff") {
     const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
@@ -1526,9 +1667,97 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
           labelColor={e.shouldPlan ? "#C084FC" : C.dim}
           detail={`score ${e.score.toFixed(2)}`}
         />
-        {open && <div className="ml-5 py-0.5" style={{ color: C.muted }}>{e.reason}</div>}
+        {open && (
+          <div className="ml-5 py-0.5" style={{ color: C.muted }}>
+            {e.reason}
+            {e.route ? ` · route ${e.route}` : ""}
+            {e.coherenceNeed ? ` · coherence ${e.coherenceNeed}` : ""}
+            {e.coordinationNeed ? ` · coordination ${e.coordinationNeed}` : ""}
+          </div>
+        )}
       </div>
     )
+  }
+
+  if (e.kind === "planner-coherent-bootstrap") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`BOOTSTRAP · ${e.decompositionStrategy}`}
+          labelColor={"#C084FC"}
+          detail={`${e.artifactCount} artifacts`}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            <div style={{ color: C.muted }}>{e.decompositionReasons.join(" · ") || "architecture frozen before decomposition"}</div>
+            {e.sharedContracts.length > 0 && <div style={{ color: C.dim }}>contracts: {e.sharedContracts.join(" · ")}</div>}
+            {e.invariants.length > 0 && <div style={{ color: C.dim }}>invariants: {e.invariants.join(" · ")}</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-architecture-state") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`ARCHITECTURE · ${e.status}`}
+          labelColor={e.status === "abandoned" ? C.coral : e.status === "repairing_in_place" ? C.warning : C.success}
+          detail={`lane ${e.lane}`}
+        />
+        {open && <div className="ml-5 py-0.5" style={{ color: C.muted }}>{e.reason}{e.architecture ? ` · ${e.architecture}` : ""}</div>}
+      </div>
+    )
+  }
+
+  if (e.kind === "coherent-generation-start") {
+    return <FlatRow label="COHERENT START" labelColor={C.success} detail={`route ${e.route}`} />
+  }
+
+  if (e.kind === "coherent-generation-bundle") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`COHERENT BUNDLE · ${e.artifactCount} artifacts`}
+          labelColor={C.success}
+          detail={!open ? e.artifacts.map((artifact) => artifact.path).join(", ") : undefined}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            {e.artifacts.map((artifact, index) => (
+              <div key={index} style={{ color: C.dim }}>{artifact.path} · {artifact.purpose}</div>
+            ))}
+            {e.sharedContracts.length > 0 && <div style={{ color: C.muted }}>contracts: {e.sharedContracts.join(" · ")}</div>}
+            {e.invariants.length > 0 && <div style={{ color: C.muted }}>invariants: {e.invariants.join(" · ")}</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "coherent-generation-materialized") {
+    return <FlatRow label={`COHERENT MATERIALIZED · ${e.artifactCount} files`} labelColor={C.success} detail={`read-back ${e.readBackArtifacts.length}`} />
+  }
+
+  if (e.kind === "coherent-generation-verified") {
+    return <FlatRow label={`COHERENT VERIFY · ${e.overall}`} labelColor={e.overall === "pass" ? C.success : e.overall === "retry" ? C.warning : C.coral} detail={`conf ${(e.confidence * 100).toFixed(0)}% · issues ${e.issueCount} · system ${e.systemCheckCount}`} />
+  }
+
+  if (e.kind === "coherent-generation-repair-needed") {
+    return <FlatRow label={`COHERENT REPAIR · attempt ${e.repairAttempt}`} labelColor={C.warning} detail={`${e.issueCount} issues${e.affectedArtifacts.length ? ` · ${e.affectedArtifacts.join(", ")}` : ""}`} />
+  }
+
+  if (e.kind === "coherent-generation-escalated") {
+    return <FlatRow label={`COHERENT ESCALATED · ${e.target}`} labelColor={C.coral} detail={e.reason} />
+  }
+
+  if (e.kind === "coherent-generation-handoff") {
+    return <FlatRow label={`COHERENT HANDOFF · ${e.verificationRoute}`} labelColor={C.success} detail={`${e.artifactCount} artifacts`} />
+  }
+
+  if (e.kind === "coherent-generation-failed") {
+    return <FlatRow label={`COHERENT FAILED · ${e.stage}`} labelColor={C.coral} detail={`${e.diagnostics.length} diagnostics`} />
   }
 
   if (e.kind === "planner-plan-generated") {

@@ -90,6 +90,12 @@ function getSubagentStep(plan: Plan, stepName: string): SubagentTaskStep | undef
   return step?.stepType === "subagent_task" ? step as SubagentTaskStep : undefined
 }
 
+function isBlueprintLikeStep(step: SubagentTaskStep | undefined): boolean {
+  if (!step) return false
+  return /blueprint/i.test(step.name)
+    || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+}
+
 function getArchitectureRepairContext(plan: Plan): {
   preserveArchitecture: true
   architectureSummary: string
@@ -128,19 +134,25 @@ function deriveOwnershipAttribution(
   summary: string,
 ): { ownerStepName: string; suspectedOwners: string[]; primaryOwner?: string; ownershipMode: VerifierOwnershipMode; confidence: number } {
   const runtime = compilePlannerRuntime(plan)
+  const assessmentStep = getSubagentStep(plan, assessmentStepName)
   const candidateArtifacts = uniqueStrings([...affectedArtifacts, ...sourceArtifacts].map(normalizePath))
   const candidateOwners = uniqueStrings(candidateArtifacts
     .map((artifact) => runtime.ownershipGraph.get(artifact)?.ownerStepName ?? undefined)
     .filter((owner): owner is string => Boolean(owner)))
 
-  const mentionsPlanner = /blueprint|plan|planner/i.test(summary) && /drift|missing|mapping|coverage/i.test(summary)
+  const mentionsPlanner = /blueprint|plan|planner/i.test(summary) && /drift|missing|mapping|coverage|contract|weak/i.test(summary)
+  const blueprintContractIssue = /^BLUEPRINT\b/i.test(summary)
   const isIntegration = /Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(summary)
 
   let ownershipMode: VerifierOwnershipMode
   let suspectedOwners: string[]
   let primaryOwner: string | undefined
 
-  if (mentionsPlanner) {
+  if (blueprintContractIssue && isBlueprintLikeStep(assessmentStep)) {
+    ownershipMode = "planner_fault"
+    suspectedOwners = [assessmentStepName]
+    primaryOwner = assessmentStepName
+  } else if (mentionsPlanner) {
     ownershipMode = "planner_fault"
     suspectedOwners = uniqueStrings([assessmentStepName, ...candidateOwners])
     primaryOwner = candidateOwners[0] ?? assessmentStepName
@@ -270,6 +282,15 @@ export function buildRepairPlan(
 ): RepairPlan {
   const runtime = compilePlannerRuntime(plan)
   const architectureContext = getArchitectureRepairContext(plan)
+  const defaultAcceptedArtifactsByStep = new Map<string, string[]>()
+  for (const assessment of decision.steps) {
+    const step = getSubagentStep(plan, assessment.stepName)
+    defaultAcceptedArtifactsByStep.set(assessment.stepName, uniqueStrings([
+      ...(step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []),
+      ...((runtime.stepAcceptedDependencies.get(assessment.stepName) ?? [])
+        .flatMap((dependencyStepName) => pipelineResult.stepResults.get(dependencyStepName)?.producedArtifacts ?? [])),
+    ]))
+  }
   const taskMap = new Map<string, RepairTask>()
   const ensureTask = (stepName: string): RepairTask => {
     const existing = taskMap.get(stepName)
@@ -291,20 +312,17 @@ export function buildRepairPlan(
 
   for (const assessment of decision.steps) {
     if (assessment.outcome === "pass") continue
-    const step = getSubagentStep(plan, assessment.stepName)
     const issueDetails = assessment.issueDetails ?? []
     const stepResult = pipelineResult.stepResults.get(assessment.stepName)
-    const defaultRequiredAcceptedArtifacts = uniqueStrings([
-      ...(step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []),
-      ...((runtime.stepAcceptedDependencies.get(assessment.stepName) ?? [])
-        .flatMap((dependencyStepName) => pipelineResult.stepResults.get(dependencyStepName)?.producedArtifacts ?? [])),
-    ])
+    const defaultRequiredAcceptedArtifacts = defaultAcceptedArtifactsByStep.get(assessment.stepName) ?? []
 
     for (const issue of issueDetails) {
       const impactedSteps = uniqueStrings(issue.suspectedOwners.length > 0 ? issue.suspectedOwners : [assessment.stepName])
       const primaryOwner = issue.primaryOwner ?? issue.ownerStepName
       for (const impactedStep of impactedSteps) {
         const task = ensureTask(impactedStep)
+        const impactedStepResult = pipelineResult.stepResults.get(impactedStep)
+        const impactedDefaultRequiredAcceptedArtifacts = defaultAcceptedArtifactsByStep.get(impactedStep) ?? []
         const shouldOwn = issue.ownershipMode === "deterministic_owner"
           ? primaryOwner === impactedStep
           : issue.ownershipMode === "planner_fault"
@@ -322,13 +340,13 @@ export function buildRepairPlan(
         const requiredAcceptedArtifacts = uniqueStrings([
           ...task.requiredAcceptedArtifacts,
           ...(!shouldOwn ? (issue.sourceArtifacts ?? []) : externalSourceArtifacts),
-          ...defaultRequiredAcceptedArtifacts,
+          ...impactedDefaultRequiredAcceptedArtifacts,
         ])
         taskMap.set(impactedStep, {
           ...task,
           mode: !assessment.retryable
             ? "blocked"
-            : (stepResult?.acceptanceState === "blocked" ? "blocked" : ownedIssues.length > 0 ? "repair" : "reverify"),
+            : (impactedStepResult?.acceptanceState === "blocked" ? "blocked" : ownedIssues.length > 0 ? "repair" : "reverify"),
           ownedIssues,
           dependencyContext,
           requiredAcceptedArtifacts,
