@@ -87,6 +87,18 @@ const DIALOGUE_MEMORY_RE =
   /\b(?:remember|memorize|save\s+(?:this|that)|store\s+(?:this|that)|note\s+that|keep\s+in\s+mind)\b/i
 const DIALOGUE_RECALL_RE =
   /\b(?:what\s+did\s+(?:I|you|we)|recall|do\s+you\s+remember|earlier\s+(?:I|you|we))\b/i
+/** Second guard for recall gate: must reference a prior turn, not just contain the word */
+const DIALOGUE_RECALL_REFERENCE_RE =
+  /\b(?:from\s+(?:earlier|before|above|prior|previous|last\s+turn|prior\s+turn)|(?:you|i)\s+(?:stored|memorized|remembered|told)|those\s+facts|these\s+facts|the\s+facts|last\s+turn|prior\s+turn|previous\s+turn|continuity\s+test)\b/i
+
+/**
+ * Explicit environment action cue: the message asks the agent to DO something
+ * in the environment (use a tool, build, write, run, etc.).
+ * Used to guard dialogue-only gates — if this fires, the message is NOT
+ * a pure dialogue turn even if memory/recall/exact-response cues also fired.
+ */
+const EXPLICIT_ENV_ACTION_RE =
+  /\b(?:use|call|invoke|run|start|stop|create|write|edit|save|open|navigate|click|search|browse|inspect|read|check|verify|delegate|spawn|launch|post|publish|deploy|install|build|implement|refactor|migrate|continue)\b[\s\S]{0,96}\b(?:tool|tools|file|files|server|process|service|api|endpoint|project|tests?|[a-z][\w-]*\.[a-z][\w.-]*)\b/i
 
 /** Edit artifact: simple read-edit-write cycle that one agent handles better */
 const EDIT_ARTIFACT_RE =
@@ -121,7 +133,14 @@ const TARGET_FILE_RE = /\b[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|s
 
 /** Conflicting multi-target cues */
 const MULTI_TARGET_CUE_RE =
-  /\b(?:and|plus|along with|together with)\b[\s\S]{0,40}\b(?:file|module|component|page|script|api|service|backend|frontend|database|schema|tests?)\b/i
+  /\b(?:and|plus|along with|together with)\b[\s\S]{0,40}\b(?:files?|modules?|components?|pages?|scripts?|api|services?|backend|frontend|database|schema|tests?)\b/i
+
+/**
+ * Prior no-progress signal: the direct tool loop already failed and left a
+ * recovery hint in the history. Scoring this up pushes toward planner routing
+ * (the simple path failed — escalate). Mirrors agenc-core's hasPriorNoProgressSignal.
+ */
+const RECOVERY_HINT_RE = /\[recovery\]|no[_\s]progress|stuck|repeated[_\s]failure|escalat/i
 
 // ============================================================================
 // Layer 2: Advisory heuristic patterns (signals, not decisions)
@@ -169,6 +188,8 @@ interface RequestSignals {
   readonly structuredBulletCount: number
   readonly priorToolMessages: number
   readonly targetFilePaths: readonly string[]
+  /** True when recent history contains a no-progress / recovery marker → favour planner */
+  readonly hasPriorNoProgressSignal: boolean
 }
 
 interface RoutingAxes {
@@ -184,7 +205,11 @@ function collectSignals(messageText: string, history: readonly Message[]): Reque
     + (normalized.match(/^\s*\d+[.)]\s/gm) ?? []).length
 
   const priorToolMessages = history.filter(m => m.role === "tool").length
-  const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//, "")))]
+  const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//,"")))]
+  const historyTail = history.slice(-10)
+  const hasPriorNoProgressSignal = historyTail.some(
+    m => typeof m.content === "string" && RECOVERY_HINT_RE.test(m.content),
+  )
 
   return {
     normalized,
@@ -197,6 +222,7 @@ function collectSignals(messageText: string, history: readonly Message[]): Reque
     structuredBulletCount: bulletCount,
     priorToolMessages,
     targetFilePaths,
+    hasPriorNoProgressSignal,
   }
 }
 
@@ -470,10 +496,13 @@ export async function assessPlannerDecision(
   if (signals.hasVerificationCue && signals.hasImplementationScopeCue) { score += 1; reasons.push("verification_on_impl") }
   if (signals.longTask) { score += 1; reasons.push("long_or_structured") }
   if (signals.priorToolMessages >= 4) { score += 2; reasons.push("prior_tool_activity") }
+  if (signals.hasPriorNoProgressSignal) { score += 2; reasons.push("prior_no_progress") }
 
   // ── Layer 1: Hard semantic gates ─────────────────────────────
   // These are definitive: a pattern match resolves the route with no further
   // analysis. Regex accuracy here is high (not advisory — truly decisive).
+  // Each dialogue gate is double-gated with EXPLICIT_ENV_ACTION_RE: if the
+  // message says "remember X, now build Y", it is NOT a pure dialogue turn.
   if (SIMPLE_DIALOGUE_RE.test(signals.normalized)) {
     return makeDecision("direct", score, "simple_dialogue", axes, "decisive_coherent", false)
   }
@@ -483,13 +512,17 @@ export async function assessPlannerDecision(
   if (signals.normalized.length < 20) {
     return makeDecision("direct", score, "too_short", axes, "decisive_coherent", false)
   }
-  if (EXACT_RESPONSE_RE.test(signals.normalized)) {
+  if (EXACT_RESPONSE_RE.test(signals.normalized) && !EXPLICIT_ENV_ACTION_RE.test(signals.normalized)) {
     return makeDecision("direct", score, "exact_response_turn", axes, "decisive_coherent", false)
   }
-  if (DIALOGUE_MEMORY_RE.test(signals.normalized)) {
+  if (DIALOGUE_MEMORY_RE.test(signals.normalized) && !EXPLICIT_ENV_ACTION_RE.test(signals.normalized)) {
     return makeDecision("direct", score, "dialogue_memory_turn", axes, "decisive_coherent", false)
   }
-  if (DIALOGUE_RECALL_RE.test(signals.normalized)) {
+  if (
+    DIALOGUE_RECALL_RE.test(signals.normalized)
+    && DIALOGUE_RECALL_REFERENCE_RE.test(signals.normalized)
+    && !EXPLICIT_ENV_ACTION_RE.test(signals.normalized)
+  ) {
     return makeDecision("direct", score, "dialogue_recall_turn", axes, "decisive_coherent", false)
   }
   if (EDIT_ARTIFACT_RE.test(signals.normalized) && !signals.hasDelegationCue) {

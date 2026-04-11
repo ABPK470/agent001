@@ -4763,18 +4763,40 @@ describe("ToolFailureCircuitBreaker", () => {
     cb.recordFailure("key1", "tool1")
 
     expect(cb.getActiveCircuit()).toBeNull()
+    expect(cb.isKeyBlocked("key1")).toBeNull()
   })
 
-  it("opens after reaching threshold", () => {
+  it("blocks specific key at threshold (not global circuit)", () => {
     const cb = new ToolFailureCircuitBreaker({ threshold: 3, windowMs: 60_000 })
 
     cb.recordFailure("key1", "tool1")
     cb.recordFailure("key1", "tool1")
     const reason = cb.recordFailure("key1", "tool1")
 
+    // Per-key blocked — reason returned by recordFailure
     expect(reason).toBeDefined()
-    expect(reason).toContain("Circuit breaker opened")
+    expect(reason).toContain("tool1")
+    // Per-key check returns the block
+    expect(cb.isKeyBlocked("key1")).not.toBeNull()
+    expect(cb.isKeyBlocked("key1")?.reason).toContain("tool1")
+    // Global circuit stays closed (only 1 key blocked, default threshold = 3)
+    expect(cb.getActiveCircuit()).toBeNull()
+  })
+
+  it("opens global circuit when many distinct keys fail", () => {
+    // globalCircuitThreshold = 2 for easy testing
+    const cb = new ToolFailureCircuitBreaker({ threshold: 2, windowMs: 60_000, globalCircuitThreshold: 2 })
+
+    // Trip key1
+    cb.recordFailure("key1", "tool1")
+    cb.recordFailure("key1", "tool1")
+    expect(cb.getActiveCircuit()).toBeNull()  // Only 1 key blocked
+
+    // Trip key2 — now 2 distinct keys blocked → global circuit opens
+    cb.recordFailure("key2", "tool2")
+    cb.recordFailure("key2", "tool2")
     expect(cb.getActiveCircuit()).not.toBeNull()
+    expect(cb.getActiveCircuit()?.reason).toContain("systemic")
   })
 
   it("tracks different keys independently", () => {
@@ -4786,18 +4808,25 @@ describe("ToolFailureCircuitBreaker", () => {
     cb.recordFailure("key2", "tool2")
 
     expect(cb.getActiveCircuit()).toBeNull()
+    expect(cb.isKeyBlocked("key1")).toBeNull()  // below threshold
+    expect(cb.isKeyBlocked("key2")).toBeNull()  // below threshold
   })
 
-  it("clears pattern on success", () => {
+  it("clears pattern and per-key block on success", () => {
     const cb = new ToolFailureCircuitBreaker({ threshold: 3, windowMs: 60_000 })
 
     cb.recordFailure("key1", "tool1")
     cb.recordFailure("key1", "tool1")
-    cb.clearPattern("key1")
     cb.recordFailure("key1", "tool1")
+    expect(cb.isKeyBlocked("key1")).not.toBeNull()
 
-    // Only 1 failure after clear, not 3
+    cb.clearPattern("key1")
+    expect(cb.isKeyBlocked("key1")).toBeNull()  // cleared
+
+    cb.recordFailure("key1", "tool1")
+    // Only 1 failure after clear — not blocked
     expect(cb.getActiveCircuit()).toBeNull()
+    expect(cb.isKeyBlocked("key1")).toBeNull()
   })
 
   it("does nothing when disabled", () => {
@@ -4808,6 +4837,7 @@ describe("ToolFailureCircuitBreaker", () => {
     cb.recordFailure("key1", "tool1")
 
     expect(cb.getActiveCircuit()).toBeNull()
+    expect(cb.isKeyBlocked("key1")).toBeNull()
   })
 })
 

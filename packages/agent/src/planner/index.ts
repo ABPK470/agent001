@@ -1017,6 +1017,12 @@ export interface PlannerContext {
   readonly signal?: AbortSignal
   /** Called with trace events for UI. */
   readonly onTrace?: (entry: Record<string, unknown>) => void
+  /**
+   * Optional delegation bandit tuner.
+   * When provided, UCB1 arm selection adjusts the effective score threshold
+   * for delegation decisions and records outcomes for online learning.
+   */
+  readonly delegationBanditTuner?: import("../delegation-learning.js").DelegationBanditTuner
 }
 
 export interface PlannerResult {
@@ -1075,6 +1081,12 @@ export async function executePlannerPath(
   options?: { forceRoute?: "full_planner_decomposition" | "planner_with_coherent_bootstrap" },
 ): Promise<PlannerResult> {
   const MAX_PIPELINE_RETRIES = 2
+
+  // Bandit tuner trajectory tracked across the function scope so we can
+  // record the outcome at any of the final return sites.
+  const banditTuner = ctx.delegationBanditTuner
+  let banditTrajectory: import("../delegation-learning.js").DelegationTrajectoryRecord | undefined
+  const pipelineStartMs = Date.now()
 
   // Step 1: Should we plan?
   // When forceRoute is set (delay-commitment fallback from coherent failure),
@@ -1311,6 +1323,14 @@ export async function executePlannerPath(
   })
 
   if (subagentProfiles.length > 0) {
+    // ── Bandit tuner: select arm and adjust threshold ──────────────────────
+    let banditArmId: import("../delegation-learning.js").BanditArmId | undefined
+    let banditThresholdAdjustment = 0
+    if (banditTuner) {
+      banditArmId = banditTuner.selectArm()
+      banditThresholdAdjustment = banditTuner.getThresholdAdjustment(banditArmId)
+    }
+
     const delegationInput: DelegationDecisionInput = {
       messageText: goal,
       plannerConfidence: decision.score / 10,
@@ -1321,9 +1341,25 @@ export async function executePlannerPath(
       // When the planner already chose full_planner_decomposition, this IS an explicit
       // delegation decision — weight decompositionBenefit accordingly.
       explicitDelegationRequested: decision.route === "full_planner_decomposition",
+      config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined,
     }
 
     const delegationDecision = assessDelegationDecision(delegationInput)
+
+    // Record pre-pipeline trajectory for bandit learning
+    if (banditTuner && banditArmId) {
+      banditTrajectory = banditTuner.buildTrajectory({
+        armId: banditArmId,
+        appliedThreshold: 0.2 + banditThresholdAdjustment,
+        complexityScore: decision.score,
+        fanoutCount: subagentProfiles.length,
+        stepCount: plan.steps.length,
+        nestingDepth: 1,
+        parallelFraction: subagentProfiles.filter(s => s.canRunParallel).length / Math.max(1, subagentProfiles.length),
+        shouldDelegate: delegationDecision.shouldDelegate,
+        utilityScore: delegationDecision.utilityScore,
+      })
+    }
 
     ctx.onTrace?.({
       kind: "planner-delegation-decision",
@@ -1333,6 +1369,8 @@ export async function executePlannerPath(
       safetyRisk: delegationDecision.safetyRisk,
       confidence: delegationDecision.confidence,
       hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass,
+      banditArmId,
+      banditThresholdAdjustment,
     })
 
     if (!delegationDecision.shouldDelegate) {
@@ -1772,6 +1810,20 @@ export async function executePlannerPath(
   }
 
   const answer = synthesizeAnswer(plan, pipelineResult!, verifierDecision!)
+
+  // Record bandit outcome now that we have a verifier decision and final pipeline state
+  if (banditTuner && banditTrajectory) {
+    const failedSteps = [...pipelineResult!.stepResults.values()].filter(r => r.status === "failed").length
+    const verifierPassed = verifierDecision!.overall === "pass"
+    const qualityProxy = verifierPassed ? verifierDecision!.confidence : (verifierDecision!.overall === "partial" ? 0.4 : 0.1)
+    banditTuner.recordOutcome(banditTrajectory, {
+      durationMs: Date.now() - pipelineStartMs,
+      tokenCount: 0,  // not available at this layer
+      errorCount: failedSteps,
+      qualityProxy,
+      verifierPassed,
+    })
+  }
 
   // Contract-governed-first behavior: if verification didn't pass after all
   // retries, DO NOT fall through to the unstructured direct tool loop.

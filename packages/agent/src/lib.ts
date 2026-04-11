@@ -43,6 +43,18 @@ export type { PromptBudgetAllocationResult, PromptBudgetConfig, PromptBudgetDiag
 export { buildRecoveryHints, buildSemanticToolCallKey, computeQualityProxy, didToolCallFail, extractToolFailureText } from "./recovery.js"
 export type { QualityProxyInput, RecoveryHint, ToolCallRecord } from "./recovery.js"
 
+// Tool contract guidance (agenc-core enhancement)
+export { applyToolContractGuidance, resolveToolContractGuidance } from "./tool-contract-guidance.js"
+export type { AppliedToolContractGuidance, ToolContractContext, ToolContractEnforcement, ToolContractGuidance, ToolContractLifetime } from "./tool-contract-guidance.js"
+
+// Delegation bandit learning (agenc-core enhancement)
+export {
+    DelegationBanditTuner,
+    getGlobalDelegationBanditTuner,
+    setGlobalDelegationBanditTuner,
+} from "./delegation-learning.js"
+export type { BanditArm, BanditArmId, DelegationTrajectoryRecord } from "./delegation-learning.js"
+
 // Tool utils (ported from agenc-core tool-loop + tool-utils)
 export {
     checkToolLoopStuckDetection,

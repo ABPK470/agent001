@@ -25,14 +25,14 @@
 import { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
 import * as log from "./logger.js"
 import {
-    buildCoherentGenerationMessages,
-    buildCoherentPlannerEscalationGoal,
-    buildCoherentRepairInstructions,
-    buildCoherentVerificationPipelineResult,
-    buildCoherentVerificationPlan,
-    materializeCoherentSolutionBundle,
-    parseCoherentSolutionBundle,
-    summarizeCoherentVerifierDecision,
+  buildCoherentGenerationMessages,
+  buildCoherentPlannerEscalationGoal,
+  buildCoherentRepairInstructions,
+  buildCoherentVerificationPipelineResult,
+  buildCoherentVerificationPlan,
+  materializeCoherentSolutionBundle,
+  parseCoherentSolutionBundle,
+  summarizeCoherentVerifierDecision,
 } from "./planner/coherent.js"
 import { assessPlannerDecision } from "./planner/decision.js"
 import type { PlannerContext } from "./planner/index.js"
@@ -42,18 +42,19 @@ import { verify } from "./planner/verifier.js"
 import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
+import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "./tool-contract-guidance.js"
 import type {
-    RoundStuckState,
-    ToolLoopState,
-    ToolRoundProgressSummary,
+  RoundStuckState,
+  ToolLoopState,
+  ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-    checkToolLoopStuckDetection,
-    enrichToolResultMetadata as enrichResult,
-    evaluateToolRoundBudgetExtension,
-    executeToolWithTimeout,
-    summarizeToolRoundProgress,
-    trackToolCallFailureState,
+  checkToolLoopStuckDetection,
+  enrichToolResultMetadata as enrichResult,
+  evaluateToolRoundBudgetExtension,
+  executeToolWithTimeout,
+  summarizeToolRoundProgress,
+  trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -1177,6 +1178,8 @@ export class Agent {
     // Track whether the model has made at least one completion attempt
     // (response with zero tool calls). Used by optional deferred-nudge mode.
     let completionAttempted = false
+    // Snapshot of tool calls from the previous iteration — used for contract guidance.
+    let lastRoundToolCallsSnapshot: readonly { name: string; isError: boolean }[] = []
 
     // Fixed ceiling for adaptive budget extension.  Must be computed from the
     // ORIGINAL maxIterations BEFORE the loop mutates it so extensions can't
@@ -1246,11 +1249,41 @@ export class Agent {
         })
       }
 
+      // ── Tool contract guidance ──
+      // Resolve per-turn guidance from the priority-sorted resolver chain and
+      // apply it before the LLM call:  filter the tool list for "block_other_tools"
+      // contracts, and inject a transient system instruction for "suggestion" contracts.
+      const contractCtx: ToolContractContext = {
+        iteration: i,
+        availableToolNames: this.toolList.map(t => t.name),
+        lastRoundHadDelegation,
+        inPostDelegationVerification,
+        artifactsRequiringReadBeforeMutation,
+        wroteUnverifiedFiles,
+        writtenButNotReread,
+        lastRoundToolCalls: lastRoundToolCallsSnapshot,
+        isKeyBlocked: (key) => circuitBreaker.isKeyBlocked(key) !== null,
+      }
+      const contractGuidance = resolveToolContractGuidance(contractCtx)
+      let chatToolsForLLM = this.toolList
+      const contractMessages = [...chatMessages]
+      if (contractGuidance) {
+        const applied = applyToolContractGuidance(contractGuidance, this.toolList.map(t => t.name))
+        const nameSet = new Set(applied.filteredToolNames)
+        chatToolsForLLM = this.toolList.filter(t => nameSet.has(t.name))
+        if (applied.injectedInstruction && contractMessages.length > 0) {
+          contractMessages.push({ role: "system", content: applied.injectedInstruction, section: "history" })
+        }
+        if (this.config.verbose) {
+          log.logError(`[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`)
+        }
+      }
+
       // Notify listener before LLM call (for debug/trace)
       this.config.onLlmCall?.({
         phase: "request",
-        messages: chatMessages,
-        tools: this.toolList,
+        messages: contractMessages,
+        tools: chatToolsForLLM,
         iteration: i,
       })
 
@@ -1258,7 +1291,7 @@ export class Agent {
       const t0 = Date.now()
       let response
       try {
-        response = await this.llm.chat(chatMessages, this.toolList, { signal: this.config.signal })
+        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal })
       } catch (err) {
         // Recover from truncated responses — nudge the LLM to break work into smaller pieces
         if (err instanceof Error && err.message.includes("finish_reason=length")) {
@@ -1585,6 +1618,19 @@ export class Agent {
         if (this.config.verbose) log.logToolCall(call.name, call.arguments)
 
         const semanticKey = buildSemanticToolCallKey(call.name, call.arguments as Record<string, unknown>)
+
+        // Per-key circuit breaker check — skip this specific call pattern if it has
+        // been blocked by repeated failures, while allowing other calls in the round.
+        const keyBlock = circuitBreaker.isKeyBlocked(semanticKey)
+        if (keyBlock) {
+          const keyBlockMsg = `SKIPPED (circuit blocked): ${keyBlock.reason} Try a different approach for this call.`
+          if (this.config.verbose) log.logToolError(keyBlockMsg)
+          messages.push({ role: "tool", toolCallId: call.id, content: keyBlockMsg, section: "history" })
+          roundToolCalls.push({ name: call.name, args: call.arguments as Record<string, unknown>, result: keyBlockMsg, isError: true })
+          failuresThisRound++
+          continue
+        }
+
         const tool = this.tools.get(call.name)
         if (!tool) {
           const errMsg = `Unknown tool "${call.name}". Available: ${[...this.tools.keys()].join(", ")}`
@@ -1934,6 +1980,7 @@ export class Agent {
 
       // Checkpoint after tool execution round
       lastRoundHadDelegation = delegationThisRound
+      lastRoundToolCallsSnapshot = roundToolCalls.map(c => ({ name: c.name, isError: c.isError }))
 
       // Recovery hints: scan for known failure patterns and inject targeted advice
       const recoveryHints = buildRecoveryHints(roundToolCalls, emittedRecoveryHints)

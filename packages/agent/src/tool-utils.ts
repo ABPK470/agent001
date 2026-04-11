@@ -458,6 +458,7 @@ export interface ToolRoundProgressSummary {
   readonly newVerificationFailureDiagnosticKeys: number
   readonly hadSuccessfulMutation: boolean
   readonly hadVerificationCall: boolean
+  readonly hadReadCall: boolean
   readonly hadMaterialProgress: boolean
 }
 
@@ -481,6 +482,7 @@ export function summarizeToolRoundProgress(
   let newVerificationFailureDiagnosticKeys = 0
   let hadSuccessfulMutation = false
   let hadVerificationCall = false
+  let hadReadCall = false
 
   for (const call of roundCalls) {
     if (isVerificationToolCall(call)) {
@@ -492,6 +494,9 @@ export function summarizeToolRoundProgress(
           newVerificationFailureDiagnosticKeys++
         }
       }
+    }
+    if (call.name === "read_file" && !didToolCallFail(call.isError, call.result)) {
+      hadReadCall = true
     }
     if (isSuccessfulMutationToolCall(call)) {
       hadSuccessfulMutation = true
@@ -513,6 +518,7 @@ export function summarizeToolRoundProgress(
     newVerificationFailureDiagnosticKeys,
     hadSuccessfulMutation,
     hadVerificationCall,
+    hadReadCall,
     hadMaterialProgress: newSuccessfulSemanticKeys > 0 || newVerificationFailureDiagnosticKeys > 0,
   }
 }
@@ -608,38 +614,82 @@ export interface ToolRoundBudgetExtensionResult {
   readonly extensionReason?: string
   readonly recentProgressRate: number
   readonly latestRoundHadMaterialProgress: boolean
+  readonly repairCycleDetected: boolean
 }
+
+/** Geometric decay weight applied to older rounds: newest = 1.0, second = DECAY, third = DECAY^2. */
+const PROGRESS_RATE_DECAY = 0.7
 
 /**
  * Evaluate whether the tool round budget should be extended based on
  * recent progress metrics.
  *
- * Extension happens when:
- *   1. Recent rounds show material progress (new semantic keys or verification diagnostics)
- *   2. The latest round had mutations + verification (active repair cycle)
- *   3. Not already at the hard cap
+ * Enhancement over baseline (agenc-core patterns):
+ *  - Weighted progress rate: recent rounds count more (geometric decay).
+ *  - Cross-round repair cycle detection: (read) → (verify) → (mutation) across up to 3 rounds.
+ *  - Wall clock gate: optional hard deadline — don't extend when time is almost up.
+ *  - Extension size: repair_episode → 3 rounds, sustained_progress → 2 rounds.
  */
 export function evaluateToolRoundBudgetExtension(params: {
   readonly currentLimit: number
   readonly maxAbsoluteLimit: number
   readonly recentRounds: readonly ToolRoundProgressSummary[]
   readonly remainingToolBudget: number
+  /** Optional: wall clock start time. Combined with maxWallClockMs for deadline gate. */
+  readonly startTimeMs?: number
+  /** Optional: total allowed wall clock ms. Extension is suppressed at 85% of budget consumed. */
+  readonly maxWallClockMs?: number
 }): ToolRoundBudgetExtensionResult {
   const { currentLimit, maxAbsoluteLimit, recentRounds, remainingToolBudget } = params
 
   if (currentLimit >= maxAbsoluteLimit) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false }
+    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
   }
   if (recentRounds.length === 0) {
-    return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false }
+    return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
+  }
+
+  // Wall clock gate — don't extend if we're close to the deadline
+  if (params.startTimeMs != null && params.maxWallClockMs != null) {
+    const elapsedMs = Date.now() - params.startTimeMs
+    if (elapsedMs > params.maxWallClockMs * 0.85) {
+      return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
+    }
   }
 
   const latestRound = recentRounds[recentRounds.length - 1]
-  const recentProgressRate = recentRounds.filter(r => r.hadMaterialProgress).length / recentRounds.length
 
-  // Extension: if recent progress is being made, extend by 2-4 more rounds
-  const isRepairCycleOpen = latestRound.hadSuccessfulMutation && latestRound.hadVerificationCall
-  const shouldExtend = recentProgressRate >= 0.5 || isRepairCycleOpen
+  // Weighted progress rate: newest round has weight 1.0, each older round decays by DECAY factor
+  let weightedProgressSum = 0
+  let weightTotal = 0
+  for (let j = 0; j < recentRounds.length; j++) {
+    const weight = Math.pow(PROGRESS_RATE_DECAY, recentRounds.length - 1 - j)
+    weightedProgressSum += weight * (recentRounds[j].hadMaterialProgress ? 1 : 0)
+    weightTotal += weight
+  }
+  const recentProgressRate = weightTotal > 0 ? weightedProgressSum / weightTotal : 0
+
+  // Cross-round repair cycle: detect read → verify → mutation sequence across last 3 rounds
+  // Pattern: prev-prev had a read call, prev had a verification call, latest has a mutation
+  let repairCycleDetected = false
+  if (recentRounds.length >= 3) {
+    const prev2 = recentRounds[recentRounds.length - 3]
+    const prev1 = recentRounds[recentRounds.length - 2]
+    if (prev2.hadReadCall && prev1.hadVerificationCall && latestRound.hadSuccessfulMutation) {
+      repairCycleDetected = true
+    }
+  }
+  // Also detect a shorter 2-round pattern: verify → mutation (the mutation is the repair)
+  if (!repairCycleDetected && recentRounds.length >= 2) {
+    const prev1 = recentRounds[recentRounds.length - 2]
+    if (prev1.hadVerificationCall && latestRound.hadSuccessfulMutation) {
+      repairCycleDetected = true
+    }
+  }
+  // In-round repair: mutation + verification in the same round (existing logic, kept for compatibility)
+  const isInRoundRepair = latestRound.hadSuccessfulMutation && latestRound.hadVerificationCall
+
+  const shouldExtend = recentProgressRate >= 0.5 || repairCycleDetected || isInRoundRepair
 
   if (!shouldExtend) {
     return {
@@ -648,28 +698,29 @@ export function evaluateToolRoundBudgetExtension(params: {
       newLimit: currentLimit,
       recentProgressRate,
       latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
+      repairCycleDetected,
     }
   }
 
-  // Extension size: 2 base + 1 if repair cycle is active + 1 if remaining budget allows
-  let extensionRounds = 2
-  if (isRepairCycleOpen) extensionRounds++
+  // Extension size: repair episode gets 3 rounds, sustained progress gets 2, +1 if budget allows
+  let extensionRounds = repairCycleDetected ? 3 : 2
   if (remainingToolBudget > 10) extensionRounds++
 
   const newLimit = Math.min(currentLimit + extensionRounds, maxAbsoluteLimit)
   extensionRounds = newLimit - currentLimit
 
   if (extensionRounds <= 0) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate, latestRoundHadMaterialProgress: latestRound.hadMaterialProgress }
+    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate, latestRoundHadMaterialProgress: latestRound.hadMaterialProgress, repairCycleDetected }
   }
 
   return {
     decision: "extended",
     extensionRounds,
     newLimit,
-    extensionReason: isRepairCycleOpen ? "repair_cycle_active" : "material_progress",
+    extensionReason: repairCycleDetected ? "repair_episode" : (isInRoundRepair ? "repair_cycle_active" : "sustained_progress"),
     recentProgressRate,
     latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
+    repairCycleDetected,
   }
 }
 
