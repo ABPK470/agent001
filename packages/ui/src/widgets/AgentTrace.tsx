@@ -299,14 +299,30 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
       return (
         <div className="text-[13px] font-mono pl-6 py-0.5">
           <div>
-            <span className={entry.status === "completed" ? "text-success" : "text-error"}>
-              {entry.status === "completed" ? "✓" : "✗"} {entry.stepName}
+            <span className={entry.acceptanceState === "accepted" || (entry.status === "completed" && !entry.acceptanceState) ? "text-success" : entry.acceptanceState === "pending_verification" || entry.acceptanceState === "repair_required" ? "text-warning" : "text-error"}>
+              {entry.acceptanceState === "accepted" || (entry.status === "completed" && !entry.acceptanceState) ? "✓" : entry.acceptanceState === "pending_verification" || entry.acceptanceState === "repair_required" ? "⚠" : "✗"} {entry.stepName}
             </span>
             <span className="text-text-muted/50 ml-2">{entry.durationMs}ms</span>
+            {entry.executionState && (
+              <span className="text-text-muted/50 ml-2">exec {entry.executionState}</span>
+            )}
+            {entry.acceptanceState && (
+              <span className="text-text-muted/50 ml-2">accept {entry.acceptanceState}</span>
+            )}
             {entry.validationCode && (
               <span className="text-warning/90 ml-2">[{entry.validationCode}]</span>
             )}
           </div>
+          {entry.producedArtifacts && entry.producedArtifacts.length > 0 && (
+            <div className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
+              artifacts: {entry.producedArtifacts.join(", ")}
+            </div>
+          )}
+          {entry.verificationAttempts && entry.verificationAttempts.length > 0 && (
+            <div className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
+              checks: {entry.verificationAttempts.map((attempt) => `${attempt.toolName}${attempt.target ? `:${attempt.target}` : ""}=${attempt.success ? "ok" : "fail"}`).join(" · ")}
+            </div>
+          )}
           {entry.status !== "completed" && (entry.error || entry.validationCode) && (
             <div className="pl-3 mt-0.5 space-y-0.5 border-l border-error/20">
               {entry.error && (
@@ -343,9 +359,44 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
             </span>
             <span className="text-text-muted text-[13px] font-mono">confidence {(entry.confidence * 100).toFixed(0)}%</span>
           </div>
-          {entry.steps.filter(s => s.issues.length > 0).map((s, i) => (
+          {entry.steps.map((s, i) => (
             <div key={i} className="text-text-muted/60 text-[13px] ml-5 mt-0.5">
-              {s.stepName}: {s.issues.join("; ")}
+              {s.stepName}: {s.outcome}{s.acceptanceState ? ` · ${s.acceptanceState}` : ""}{s.issueCodes && s.issueCodes.length > 0 ? ` · ${s.issueCodes.join(", ")}` : ""}{s.issues.length > 0 ? ` · ${s.issues.join("; ")}` : ""}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-runtime-compiled":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#60A5FA]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#60A5FA] text-[13px] font-medium font-mono">RTM</span>
+            <span className="text-text-secondary text-[13px]">{entry.executionSteps.length} steps</span>
+            <span className="text-text-muted text-[13px]">{entry.ownershipArtifacts.length} artifacts</span>
+            <span className="text-text-muted text-[13px]">{entry.runtimeEntities.length} entities</span>
+          </div>
+          {entry.executionSteps.map((step, i) => (
+            <div key={i} className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+              {step.stepName}: deps {step.dependsOn.join(", ") || "none"} · next {step.downstream.join(", ") || "none"}
+            </div>
+          ))}
+        </div>
+      )
+
+    case "planner-repair-plan":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#E879A8]/40">
+          <div className="flex items-center gap-2">
+            <span className="text-[#E879A8] text-[13px] font-medium font-mono">REPAIR</span>
+            <span className="text-text-secondary text-[13px]">attempt {entry.attempt}</span>
+            <span className="text-text-muted text-[13px]">rerun {entry.rerunOrder.join(" → ") || "none"}</span>
+          </div>
+          {entry.tasks.map((task, index) => (
+            <div key={index} className="text-text-muted/70 text-[13px] ml-5 mt-0.5">
+              {task.stepName}: {task.mode}
+              {task.ownedIssueCodes.length > 0 ? ` · own ${task.ownedIssueCodes.join(", ")}` : ""}
+              {task.dependencyIssueCodes.length > 0 ? ` · deps ${task.dependencyIssueCodes.join(", ")}` : ""}
             </div>
           ))}
         </div>
@@ -354,7 +405,7 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
     case "planner-retry":
       return (
         <div className="text-warning text-[13px] font-mono pl-6 py-0.5">
-          ↻ retry attempt {entry.attempt}: {entry.reason}
+          ↻ retry attempt {entry.attempt}: {entry.reason}{entry.rerunOrder && entry.rerunOrder.length > 0 ? ` · rerun ${entry.rerunOrder.join(" → ")}` : ""}
         </div>
       )
 

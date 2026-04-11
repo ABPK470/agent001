@@ -7,10 +7,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
-  C,
-  fmtK,
-  statusDot,
-  type EditorTab,
+    C,
+    fmtK,
+    statusDot,
+    type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -90,11 +90,16 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-step-start": return `${p}STEP  ${e.stepName}  ${e.stepType}`
     case "planner-step-end":
       return `${p}STEP END  ${e.stepName}  ${e.status}${e.validationCode ? ` [${e.validationCode}]` : ""}  ${e.durationMs}ms${
+        e.executionState ? `  exec=${e.executionState}` : ""
+      }${e.acceptanceState ? `  accept=${e.acceptanceState}` : ""}${
         e.status !== "completed" ? `\n${p}  fix: ${remediationHintForValidationCode(e.validationCode)}` : ""
       }`
     case "planner-verification":
       return `${p}VERIFY  ${e.overall}  ${(e.confidence * 100).toFixed(0)}% confidence\n` +
-        e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
+        e.steps.map(s => `${p}  ${s.stepName}: ${s.outcome}${s.acceptanceState ? ` · ${s.acceptanceState}` : ""}${s.issueCodes?.length ? ` · ${s.issueCodes.join(",")}` : ""}${s.issues.length ? " — " + s.issues.join("; ") : ""}`).join("\n")
+    case "planner-repair-plan":
+      return `${p}REPAIR PLAN  attempt ${e.attempt}${e.rerunOrder.length ? `  rerun ${e.rerunOrder.join(" -> ")}` : ""}\n` +
+        e.tasks.map(task => `${p}  ${task.stepName}: ${task.mode}${task.ownedIssueCodes.length ? ` · own ${task.ownedIssueCodes.join(",")}` : ""}${task.dependencyIssueCodes.length ? ` · deps ${task.dependencyIssueCodes.join(",")}` : ""}`).join("\n")
     case "planner-retry": return `${p}RETRY  attempt ${e.attempt}  ${e.reason}`
     case "planner-retry-skipped": return `${p}RETRY SKIPPED  ${e.reason}`
     case "planner-budget-extended": return `${p}BUDGET EXTENDED  completed ${e.completedSteps}  budget ${e.effectiveBudget}  ext ${e.extensions}`
@@ -940,12 +945,13 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     )
   }
   if (e.kind === "planner-step-end") {
+    const acceptance = e.acceptanceState ? ` · ${e.acceptanceState}` : ""
     return (
       <div className="py-0.5 pl-4">
-        <span className="text-[13px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
-          {e.status === "completed" ? "✓" : "✗"} {e.stepName}
+        <span className="text-[13px] font-mono" style={{ color: e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? C.success : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? C.warning : C.coral }}>
+          {e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? "✓" : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? "⚠" : "✗"} {e.stepName}
         </span>
-        <span className="text-[13px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms</span>
+        <span className="text-[13px] font-mono ml-1" style={{ color: C.dim }}>{e.durationMs}ms{acceptance}</span>
         {e.validationCode && (
           <span className="text-[13px] font-mono ml-1" style={{ color: C.warning }}>[{e.validationCode}]</span>
         )}
@@ -1621,12 +1627,14 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
         />
         {open && e.steps.length > 0 && (
           <div className="ml-5 space-y-0.5 py-0.5">
-            {e.steps.map((s: { stepName: string; outcome: string; issues: string[] }, si: number) => {
+            {e.steps.map((s: { stepName: string; outcome: string; issues: string[]; issueCodes?: string[]; acceptanceState?: string }, si: number) => {
               const sColor = s.outcome === "pass" ? C.success : s.outcome === "fail" ? C.coral : C.warning
               return (
                 <div key={si}>
                   <span className="font-semibold" style={{ color: sColor }}>{s.outcome}</span>
                   <span className="ml-2" style={{ color: C.text }}>{s.stepName}</span>
+                  {s.acceptanceState && <span className="ml-2" style={{ color: C.dim }}>{s.acceptanceState}</span>}
+                  {s.issueCodes && s.issueCodes.length > 0 && <span className="ml-2" style={{ color: C.dim }}>{s.issueCodes.join(", ")}</span>}
                   {s.issues.length > 0 && (
                     <div className="ml-4 mt-1 space-y-1">
                       {s.issues.map((issue: string, ii: number) => (
@@ -1637,6 +1645,29 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (e.kind === "planner-repair-plan") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`REPAIR PLAN · attempt ${e.attempt}`} labelColor={"#E879A8"}
+          detail={e.rerunOrder.length > 0 ? `rerun ${e.rerunOrder.join(" → ")}` : "no reruns"}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5">
+            {e.tasks.map((task, ti) => (
+              <div key={ti}>
+                <span className="font-semibold" style={{ color: "#E879A8" }}>{task.mode}</span>
+                <span className="ml-2" style={{ color: C.text }}>{task.stepName}</span>
+                {task.ownedIssueCodes.length > 0 && <div className="ml-4" style={{ color: C.dim }}>own: {task.ownedIssueCodes.join(", ")}</div>}
+                {task.dependencyIssueCodes.length > 0 && <div className="ml-4" style={{ color: C.dim }}>deps: {task.dependencyIssueCodes.join(", ")}</div>}
+              </div>
+            ))}
           </div>
         )}
       </div>

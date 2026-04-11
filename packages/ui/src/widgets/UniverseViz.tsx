@@ -387,9 +387,11 @@ function classify(ev: WsEvent): DRow {
     return {
       ...base,
       lane: 9,
-      label: `step done: ${trunc(String(d.stepName ?? ""), 22)} ${d.status}${d.status === "completed" ? "" : d.validationCode ? ` [${trunc(String(d.validationCode), 20)}]` : ""}`,
-      color: d.status === "completed" ? P.ok : P.err,
+      label: `step done: ${trunc(String(d.stepName ?? ""), 22)} ${d.status}${d.acceptanceState ? ` · ${trunc(String(d.acceptanceState), 18)}` : ""}${d.status === "completed" ? "" : d.validationCode ? ` [${trunc(String(d.validationCode), 20)}]` : ""}`,
+      color: d.acceptanceState === "accepted" || (d.status === "completed" && !d.acceptanceState) ? P.ok : d.acceptanceState === "pending_verification" || d.acceptanceState === "repair_required" ? P.warn : P.err,
     }
+  if (t === "planner.repair.plan")
+    return { ...base, lane: 9, label: `repair: ${Array.isArray(d.rerunOrder) && d.rerunOrder.length > 0 ? d.rerunOrder.join(" → ") : "none"}`, color: P.delegate, arrow: 9 }
   if (t === "planner.delegation.started")
     return { ...base, lane: 9, label: `child start: ${trunc(String(d.stepName ?? ""), 24)}`, color: P.delegate, arrow: 3 }
   if (t === "planner.delegation.iteration")

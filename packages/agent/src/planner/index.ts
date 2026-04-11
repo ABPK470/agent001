@@ -28,12 +28,11 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArtifactRelation, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationMode, VerifierDecision, VerifierOutcome,
+    ArtifactRelation, ChildExecutionResult, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlanStep, RepairPlan, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
 import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../delegation-decision.js"
-import { getCorrectionGuidance, type DelegationOutputValidationCode } from "../delegation-validation.js"
 import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../escalation.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "./blueprint-contract.js"
@@ -42,9 +41,32 @@ import { assessPlannerDecision } from "./decision.js"
 import { generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
-import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep, VerifierDecision } from "./types.js"
+import { compilePlannerRuntime } from "./runtime-model.js"
+import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlanStep, RepairPlan, SubagentTaskStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
+import { buildIssueIdentity, buildRepairPlan, deriveAcceptanceState } from "./verification-model.js"
 import { verify } from "./verifier.js"
+
+function applyVerificationAcceptanceStates(
+  pipelineResult: PipelineResult,
+  verifierDecision: VerifierDecision,
+): PipelineResult {
+  const nextResults = new Map(pipelineResult.stepResults)
+
+  for (const assessment of verifierDecision.steps) {
+    const result = nextResults.get(assessment.stepName)
+    if (!result) continue
+    nextResults.set(assessment.stepName, {
+      ...result,
+      acceptanceState: deriveAcceptanceState(assessment, result.acceptanceState),
+    })
+  }
+
+  return {
+    ...pipelineResult,
+    stepResults: nextResults,
+  }
+}
 
 // ============================================================================
 // Warning injection — augment step objectives with validation warnings
@@ -668,16 +690,6 @@ function inferOutputDir(steps: readonly SubagentTaskStep[]): string | null {
   return mostFrequent(dirs) ?? null
 }
 
-// ============================================================================
-// Integration Stitcher — cross-file wiring repair
-// ============================================================================
-
-interface StitcherResult {
-  applied: boolean
-  mismatches: number
-  fixed: number
-}
-
 function uniqueList(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))]
 }
@@ -740,12 +752,6 @@ function stepTransitivelyDependsOn(plan: Plan, stepName: string, targetName: str
   }
 
   return false
-}
-
-function replaceStepName(values: readonly string[] | undefined, from: string, to: string): string[] | undefined {
-  if (!values || values.length === 0) return values ? [...values] : undefined
-  const replaced = uniqueList(values.map((value) => value === from ? to : value).filter((value) => value !== to || from !== to))
-  return replaced.length > 0 ? replaced : undefined
 }
 
 function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepName: string): boolean {
@@ -902,154 +908,6 @@ function remediateSharedTargetArtifactWriters(plan: Plan): boolean {
   }
 
   return changed
-}
-
-/**
- * After the pipeline runs but BEFORE verification, scan all produced JS/TS files
- * for cross-file function call mismatches (call site uses different name/arity
- * than the definition). If mismatches are found, spawn a targeted "stitcher"
- * child agent whose ONLY job is reading all project files and fixing the wiring.
- *
- * This is the "Integrator/Stitcher" from the 6-point architecture.
- */
-async function runIntegrationStitcher(
-  plan: Plan,
-  pipelineResult: PipelineResult,
-  delegateFn: DelegateFn,
-  ctx: {
-    workspaceRoot: string
-    tools: readonly Tool[]
-    signal?: AbortSignal
-    onTrace?: (evt: Record<string, unknown>) => void
-  },
-  forcedOutputDir: string | null,
-): Promise<StitcherResult | null> {
-  const subagentSteps = plan.steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
-  if (subagentSteps.length < 2) return null
-
-  // Collect all code artifacts that were actually produced
-  const codeArtifacts: string[] = []
-  for (const step of subagentSteps) {
-    const stepResult = pipelineResult.stepResults.get(step.name)
-    if (!stepResult || stepResult.status !== "completed") continue
-    for (const artifact of step.executionContext.targetArtifacts) {
-      if (/\.(js|jsx|ts|tsx)$/i.test(artifact)) {
-        codeArtifacts.push(artifact)
-      }
-    }
-  }
-  if (codeArtifacts.length < 2) return null
-
-  // Read all code files and extract function definitions and calls
-  const { readFileSync, existsSync } = await import("node:fs")
-  const definitions = new Map<string, { file: string; params: number }>()
-  const calls = new Map<string, { file: string; args: number }[]>()
-  const fileContents = new Map<string, string>()
-
-  for (const artifact of codeArtifacts) {
-    let fullPath = artifact
-    if (!fullPath.startsWith("/")) {
-      fullPath = `${ctx.workspaceRoot}/${artifact}`
-    }
-    if (!existsSync(fullPath)) continue
-
-    const content = readFileSync(fullPath, "utf8")
-    fileContents.set(artifact, content)
-
-    // Extract function definitions: function name(p1, p2, ...) or const name = (p1, ...) =>
-    const defRegex = /(?:function\s+(\w+)\s*\(([^)]*)\)|(?:const|let|var)\s+(\w+)\s*=\s*(?:\([^)]*\)|[^=])*=>\s*|(\w+)\s*:\s*function\s*\(([^)]*)\))/g
-    let match: RegExpExecArray | null
-    while ((match = defRegex.exec(content)) !== null) {
-      const name = match[1] ?? match[3] ?? match[4]
-      const paramsStr = match[2] ?? match[5] ?? ""
-      if (!name || name.length < 2) continue
-      const paramCount = paramsStr.trim() === "" ? 0 : paramsStr.split(",").length
-      definitions.set(name, { file: artifact, params: paramCount })
-    }
-  }
-
-  // Now scan for cross-file function calls (calls to functions defined in other files)
-  const mismatches: string[] = []
-  for (const [artifact, content] of fileContents) {
-    // Look for function calls: identifier(args)
-    const callRegex = /\b(\w+)\s*\(([^)]*)\)/g
-    let match: RegExpExecArray | null
-    while ((match = callRegex.exec(content)) !== null) {
-      const name = match[1]
-      const argsStr = match[2]
-      if (!name || name.length < 2) continue
-      // Skip common built-ins and DOM methods
-      if (/^(if|for|while|switch|return|catch|new|typeof|import|require|console|document|window|Math|Array|Object|String|Date|JSON|Promise|setTimeout|setInterval|requestAnimationFrame|parseInt|parseFloat|alert|querySelector|querySelectorAll|getElementById|createElement|addEventListener|removeEventListener|appendChild|classList|length|forEach|map|filter|push|pop|includes|indexOf|join|slice|splice)$/i.test(name)) continue
-
-      const def = definitions.get(name)
-      if (!def || def.file === artifact) continue
-
-      const argCount = argsStr.trim() === "" ? 0 : argsStr.split(",").length
-      if (def.params !== argCount) {
-        mismatches.push(
-          `Function "${name}" defined in ${def.file} with ${def.params} param(s) but called from ${artifact} with ${argCount} arg(s)`,
-        )
-      }
-    }
-  }
-
-  if (mismatches.length === 0) return { applied: false, mismatches: 0, fixed: 0 }
-
-  // We have mismatches — spawn a stitcher agent to fix them
-  const outputDir = forcedOutputDir ?? inferOutputDir(subagentSteps) ?? "tmp"
-  const allFilesList = codeArtifacts.join(", ")
-  const mismatchReport = mismatches.join("\n")
-
-  const stitcherStep: SubagentTaskStep = {
-    name: "integration_stitcher",
-    stepType: "subagent_task",
-    dependsOn: [],
-    objective:
-      `You are an INTEGRATION STITCHER agent. Your ONLY job is to fix cross-file function call mismatches.\n\n` +
-      `The following mismatches were detected between files:\n${mismatchReport}\n\n` +
-      `Files in the project: ${allFilesList}\n\n` +
-      `Instructions:\n` +
-      `1. Read ALL the above files\n` +
-      `2. For each mismatch, determine the CORRECT signature by looking at the function definition\n` +
-      `3. Fix the CALL SITES (not the definitions) to match the correct signatures\n` +
-      `4. If a call site passes fewer arguments, add the missing arguments with sensible defaults\n` +
-      `5. If a call site passes more arguments, remove the extra arguments\n` +
-      `6. Write the corrected files back\n\n` +
-      `Do NOT change any logic, styling, or structure. ONLY fix the function call argument mismatches.`,
-    inputContract: "Cross-file mismatch report + file list",
-    acceptanceCriteria: [
-      "All listed function call mismatches are resolved",
-      "No new syntax errors introduced",
-      "No logic changes — only argument list fixes",
-    ],
-    requiredToolCapabilities: ["read_file", "write_file"],
-    contextRequirements: [],
-    executionContext: {
-      workspaceRoot: ctx.workspaceRoot,
-      allowedReadRoots: [ctx.workspaceRoot],
-      allowedWriteRoots: [`${ctx.workspaceRoot}/${outputDir}`],
-      allowedTools: ["read_file", "write_file", "think"],
-      requiredSourceArtifacts: codeArtifacts,
-      targetArtifacts: codeArtifacts,
-      effectClass: "filesystem_write",
-      verificationMode: "none",
-      artifactRelations: codeArtifacts.map(a => ({ relationType: "write_owner" as const, artifactPath: a })),
-      role: "writer",
-    },
-    maxBudgetHint: "15 iterations",
-    canRunParallel: false,
-  }
-
-  try {
-    const result = await delegateFn(stitcherStep, stitcherStep.executionContext)
-    const didFix = !result.output.startsWith("Delegation failed:")
-    return { applied: true, mismatches: mismatches.length, fixed: didFix ? mismatches.length : 0 }
-  } catch {
-    // Stitcher failed — continue to verifier anyway, it will catch the issues
-    return { applied: true, mismatches: mismatches.length, fixed: 0 }
-  }
 }
 
 /**
@@ -1320,6 +1178,22 @@ export async function executePlannerPath(
   // steps must follow. This prevents Variable Drift across child agents.
   injectBlueprintStep(plan, ctx.workspaceRoot, forcedOutputDir)
   strengthenExistingBlueprintSteps(plan, ctx.workspaceRoot, forcedOutputDir)
+  const runtimeModel = compilePlannerRuntime(plan)
+
+  ctx.onTrace?.({
+    kind: "planner-runtime-compiled",
+    executionSteps: [...runtimeModel.executionGraph.values()].map((node) => ({
+      stepName: node.stepName,
+      dependsOn: [...node.dependsOn],
+      downstream: [...node.downstream],
+    })),
+    ownershipArtifacts: [...runtimeModel.ownershipGraph.values()].map((node) => ({
+      artifactPath: node.artifactPath,
+      ownerStepName: node.ownerStepName,
+      consumerStepNames: [...node.consumerStepNames],
+    })),
+    runtimeEntities: runtimeModel.runtimeEntities,
+  })
 
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks
   // Build step profiles for the delegation decision system
@@ -1397,7 +1271,7 @@ export async function executePlannerPath(
   let verifierDecision: VerifierDecision | undefined
   let retryOpts: {
     priorResults?: Map<string, import("./types.js").PipelineStepResult>
-    retryFeedback?: Map<string, string[]>
+    repairPlan?: RepairPlan
   } = {}
   let verifierRounds = 0
   // Track issues per step across attempts to detect repeated identical failures
@@ -1432,7 +1306,8 @@ export async function executePlannerPath(
         maxParallel: 4,
         workspaceRoot: ctx.workspaceRoot,
         priorResults: retryOpts.priorResults,
-        retryFeedback: retryOpts.retryFeedback,
+        repairPlan: retryOpts.repairPlan,
+        runtimeModel,
         signal: ctx.signal,
         onStepStart: (step) => ctx.onTrace?.({
           kind: "planner-step-start",
@@ -1443,9 +1318,13 @@ export async function executePlannerPath(
           kind: "planner-step-end",
           stepName: step.name,
           status: result.status,
+          executionState: result.executionState,
+          acceptanceState: result.acceptanceState,
           durationMs: result.durationMs,
           error: result.error,
           validationCode: result.validationCode,
+          producedArtifacts: result.producedArtifacts,
+          verificationAttempts: result.verificationAttempts,
         }),
       },
     )
@@ -1469,27 +1348,6 @@ export async function executePlannerPath(
       })
     }
 
-    // Step 4b: Integration Stitching (cross-file wiring check)
-    // After all pipeline steps complete, validate cross-file function calls
-    // match actual definitions. If mismatches are found, spawn a targeted
-    // stitcher agent to fix them BEFORE the expensive verification cycle.
-    if (pipelineResult.status === "completed" || pipelineResult.completedSteps > 0) {
-      const stitcherResult = await runIntegrationStitcher(
-        plan,
-        pipelineResult,
-        delegateFn,
-        ctx,
-        forcedOutputDir,
-      )
-      if (stitcherResult?.applied) {
-        ctx.onTrace?.({
-          kind: "planner-stitcher",
-          mismatches: stitcherResult.mismatches,
-          fixed: stitcherResult.fixed,
-        })
-      }
-    }
-
     // Step 5: Verify
     verifierDecision = await verify(
       ctx.llm,
@@ -1498,6 +1356,11 @@ export async function executePlannerPath(
       ctx.tools as Tool[],
       { signal: ctx.signal, onTrace: ctx.onTrace },
     )
+    verifierDecision = {
+      ...verifierDecision,
+      repairPlan: buildRepairPlan(plan, pipelineResult, verifierDecision),
+    }
+    pipelineResult = applyVerificationAcceptanceStates(pipelineResult, verifierDecision)
 
     ctx.onTrace?.({
       kind: "planner-verification",
@@ -1508,7 +1371,20 @@ export async function executePlannerPath(
         stepName: s.stepName,
         outcome: s.outcome,
         issues: s.issues,
+        issueCodes: s.issueDetails?.map(issue => issue.code) ?? [],
+        acceptanceState: pipelineResult?.stepResults.get(s.stepName)?.acceptanceState,
       })),
+    })
+    ctx.onTrace?.({
+      kind: "planner-repair-plan",
+      attempt: attempt + 1,
+      rerunOrder: verifierDecision.repairPlan?.rerunOrder ?? [],
+      tasks: verifierDecision.repairPlan?.tasks.map(task => ({
+        stepName: task.stepName,
+        mode: task.mode,
+        ownedIssueCodes: task.ownedIssues.map(issue => issue.code),
+        dependencyIssueCodes: task.dependencyContext.map(issue => issue.code),
+      })) ?? [],
     })
 
     verifierRounds++
@@ -1528,7 +1404,7 @@ export async function executePlannerPath(
     let prelimAllStepsRepeatedFailure = true
     for (const stepAssessment of verifierDecision.steps) {
       if (stepAssessment.outcome === "pass") continue
-      const issueKey = [...stepAssessment.issues].sort().join("|")
+      const issueKey = buildIssueIdentity(stepAssessment)
       if (priorStepIssues.get(stepAssessment.stepName) !== issueKey) {
         prelimAllStepsRepeatedFailure = false
         break
@@ -1556,8 +1432,8 @@ export async function executePlannerPath(
 
     // Build targeted retry context from verifier feedback
     const priorResults = new Map<string, import("./types.js").PipelineStepResult>()
-    const retryFeedback = new Map<string, string[]>()
     const NON_RETRYABLE_CLASSES = new Set(["cancelled", "spawn_error"])
+    const currentRepairPlan = verifierDecision.repairPlan ?? buildRepairPlan(plan, pipelineResult, verifierDecision)
 
     // Detect repeated identical failures — if a step produces the same issues
     // as the previous attempt, further retries won't help (LLM is stuck).
@@ -1573,7 +1449,7 @@ export async function executePlannerPath(
       const stepResult = pipelineResult.stepResults.get(stepAssessment.stepName)
 
       // Check if this step's issues are identical to the previous attempt
-      const issueKey = [...stepAssessment.issues].sort().join("|")
+      const issueKey = buildIssueIdentity(stepAssessment)
       const prevIssueKey = priorStepIssues.get(stepAssessment.stepName)
 
       // Count stub-specific issues for regression tracking
@@ -1608,19 +1484,6 @@ export async function executePlannerPath(
             priorResults.set(stepAssessment.stepName, stepResult)
           }
         } else {
-          // Inject correction guidance for contract validation failures
-          const enrichedIssues = [...stepAssessment.issues]
-          for (const issue of stepAssessment.issues) {
-            const contractMatch = issue.match(/^\[contract:(\w+)\]/)
-            if (contractMatch) {
-              const code = contractMatch[1] as DelegationOutputValidationCode
-              const guidance = getCorrectionGuidance(code)
-              if (guidance && !enrichedIssues.includes(`[correction] ${guidance}`)) {
-                enrichedIssues.push(`[correction] ${guidance}`)
-              }
-            }
-          }
-          retryFeedback.set(stepAssessment.stepName, enrichedIssues)
           allStepsRepeatedFailure = false
         }
 
@@ -1642,7 +1505,8 @@ export async function executePlannerPath(
     }
 
     // If every failing step has repeated identical issues, stop retrying entirely
-    if (allStepsRepeatedFailure && retryFeedback.size === 0) {
+    const retryableTaskCount = currentRepairPlan.tasks.filter((task) => task.mode !== "blocked").length
+    if (allStepsRepeatedFailure && retryableTaskCount === 0) {
       ctx.onTrace?.({
         kind: "planner-retry-abort",
         reason: "All failing steps have repeated identical issues — aborting retries",
@@ -1659,11 +1523,12 @@ export async function executePlannerPath(
       attempt: attempt + 1,
       reason: verifierDecision.unresolvedItems.join("; "),
       skippedSteps: priorResults.size,
-      retrySteps: retryFeedback.size,
+      retrySteps: retryableTaskCount,
+      rerunOrder: currentRepairPlan.rerunOrder,
     })
 
     // Store retry context for next iteration
-    retryOpts = { priorResults, retryFeedback }
+    retryOpts = { priorResults, repairPlan: currentRepairPlan }
   }
 
   // Step 6: Synthesize final answer
@@ -1727,11 +1592,27 @@ export function synthesizeAnswer(
   for (const step of plan.steps) {
     const result = pipelineResult.stepResults.get(step.name)
     const stepVerification = verifierDecision.steps.find(s => s.stepName === step.name)
-    // Reflect verifier assessment in step status — a step that the pipeline
-    // marked "completed" but the verifier flagged is NOT truly complete.
-    const hasUnresolvedIssues = stepVerification && stepVerification.issues.length > 0 && stepVerification.outcome !== "pass"
-    const status = hasUnresolvedIssues ? "incomplete" : (result?.status ?? "unknown")
-    const icon = hasUnresolvedIssues ? "⚠" : status === "completed" ? "✓" : status === "failed" ? "✗" : "⊘"
+    const acceptanceState = result?.acceptanceState
+    const effectiveAcceptance = acceptanceState
+      ?? (stepVerification?.outcome === "pass"
+        ? "accepted"
+        : stepVerification?.outcome === "retry" || stepVerification?.outcome === "fail"
+          ? "repair_required"
+          : undefined)
+    const status = effectiveAcceptance === "accepted"
+      ? "verified"
+      : effectiveAcceptance === "repair_required"
+        ? "incomplete"
+        : effectiveAcceptance === "rejected"
+          ? "rejected"
+          : (result?.status ?? "unknown")
+    const icon = effectiveAcceptance === "accepted"
+      ? "✓"
+      : effectiveAcceptance === "repair_required"
+        ? "⚠"
+        : status === "failed" || effectiveAcceptance === "rejected"
+          ? "✗"
+          : "⊘"
     parts.push(`${icon} ${step.name} (${step.stepType}): ${status}`)
 
     // Include output summary for completed subagent tasks
@@ -1750,6 +1631,14 @@ export function synthesizeAnswer(
       for (const issue of stepVerification.issues) {
         parts.push(`  ! ${issue}`)
       }
+    }
+  }
+
+  if (verifierDecision.repairPlan && verifierDecision.repairPlan.tasks.length > 0) {
+    parts.push("")
+    parts.push("Repair Plan:")
+    for (const task of verifierDecision.repairPlan.tasks) {
+      parts.push(`  - ${task.stepName}: ${task.mode}`)
     }
   }
 

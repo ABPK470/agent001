@@ -30,18 +30,23 @@ import type { Tool } from "../types.js"
 import {
   buildBlueprintSeedTemplate,
   getPlannedBlueprintArtifacts,
-  uniqueStrings,
   validateBlueprintArtifactContract,
 } from "./blueprint-contract.js"
+import { compilePlannerRuntime } from "./runtime-model.js"
 import type {
+  ChildExecutionResult,
   DeterministicToolStep,
   ExecutionEnvelope,
   PipelineResult,
   PipelineStepResult,
   Plan,
   PlanStep,
+  PlannerRuntimeModel,
+  RepairPlan,
+  RepairTask,
   SubagentTaskStep
 } from "./types.js"
+import { buildChildRepairPayload } from "./verification-model.js"
 
 // ============================================================================
 // Delegation function signature
@@ -54,6 +59,8 @@ export interface DelegateResult {
   readonly output: string
   /** All tool calls the child agent made during execution. */
   readonly toolCalls?: readonly ToolCallRecord[]
+  /** Structured execution summary for planner-aware children. */
+  readonly execution?: ChildExecutionResult
 }
 
 /**
@@ -90,8 +97,10 @@ export interface PipelineExecutorOptions {
   onStepEnd?: (step: PlanStep, result: PipelineStepResult) => void
   /** Steps that passed verification — reuse their results instead of re-running. */
   priorResults?: ReadonlyMap<string, PipelineStepResult>
-  /** Per-step feedback from verifier to inject into retry attempts. */
-  retryFeedback?: ReadonlyMap<string, readonly string[]>
+  /** Typed repair plan built from verifier issues. */
+  repairPlan?: RepairPlan
+  /** Explicit compiled runtime model for ownership and acceptance gating. */
+  runtimeModel?: PlannerRuntimeModel
 }
 
 interface SubagentStepValidationContext {
@@ -153,59 +162,7 @@ function buildLanguageRepairGuidance(families: ReadonlySet<ArtifactFamily>): str
   return guidance
 }
 
-function extractIssuePaths(issue: string): string[] {
-  const matches = issue.match(/(?:[A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,8})/g) ?? []
-  return uniqueStrings(matches.map(match => match.replace(/^['"`]+|['"`]+$/g, "").replace(/^\[[0-9;]*m/g, "")))
-}
-
-function buildStepArtifactAliases(step: SubagentTaskStep): Set<string> {
-  const aliases = new Set<string>()
-  const allArtifacts = [
-    ...step.executionContext.targetArtifacts,
-    ...step.executionContext.requiredSourceArtifacts,
-  ]
-
-  for (const artifact of allArtifacts) {
-    const normalized = artifact.replace(/^\.\//, "")
-    aliases.add(normalized)
-    const base = normalized.split("/").pop()
-    if (base) aliases.add(base)
-  }
-
-  return aliases
-}
-
-function partitionRetryFeedback(
-  step: SubagentTaskStep,
-  feedback: readonly string[],
-): { primary: string[]; reference: string[] } {
-  const ownedArtifacts = buildStepArtifactAliases(step)
-  const primary: string[] = []
-  const reference: string[] = []
-
-  for (const issue of feedback) {
-    const referencedPaths = extractIssuePaths(issue)
-    const mentionsStep = issue.includes(step.name)
-    const ownedPathMatch = referencedPaths.some((path) => {
-      const normalized = path.replace(/^\.\//, "")
-      const base = normalized.split("/").pop() ?? normalized
-      return ownedArtifacts.has(normalized) || ownedArtifacts.has(base)
-    })
-
-    if (referencedPaths.length === 0 || mentionsStep || ownedPathMatch) {
-      primary.push(issue)
-    } else {
-      reference.push(issue)
-    }
-  }
-
-  return {
-    primary: primary.length > 0 ? primary : [...feedback],
-    reference,
-  }
-}
-
-function buildIssueRepairActions(step: SubagentTaskStep, feedback: readonly string[]): string[] {
+function buildIssueRepairActions(_step: SubagentTaskStep, feedback: readonly string[]): string[] {
   const actions: string[] = []
 
   for (const issue of feedback) {
@@ -297,6 +254,46 @@ function buildIssueRepairActions(step: SubagentTaskStep, feedback: readonly stri
   return [...new Set(actions)]
 }
 
+function collectAcceptedArtifacts(
+  priorResults: ReadonlyMap<string, PipelineStepResult> | undefined,
+  stepResults: ReadonlyMap<string, PipelineStepResult>,
+): Set<string> {
+  const accepted = new Set<string>()
+  const append = (result: PipelineStepResult | undefined) => {
+    if (!result || result.acceptanceState !== "accepted") return
+    for (const artifact of result.producedArtifacts ?? []) accepted.add(artifact)
+    for (const artifact of result.modifiedArtifacts ?? []) accepted.add(artifact)
+  }
+  if (priorResults) {
+    for (const result of priorResults.values()) append(result)
+  }
+  for (const result of stepResults.values()) append(result)
+  return accepted
+}
+
+function getRepairTaskForStep(repairPlan: RepairPlan | undefined, stepName: string): RepairTask | undefined {
+  return repairPlan?.tasks.find((task) => task.stepName === stepName)
+}
+
+function getUnresolvedAcceptanceBlockers(
+  stepName: string,
+  runtimeModel: PlannerRuntimeModel,
+  repairTask: RepairTask | undefined,
+  acceptedArtifacts: ReadonlySet<string>,
+): string[] {
+  const requiredAcceptedArtifacts = new Set<string>(repairTask?.requiredAcceptedArtifacts ?? [])
+  const acceptedDependencySteps = runtimeModel.stepAcceptedDependencies.get(stepName) ?? []
+
+  for (const dependencyStepName of acceptedDependencySteps) {
+    const dependencyArtifacts = [...runtimeModel.ownershipGraph.values()]
+      .filter((artifact) => artifact.ownerStepName === dependencyStepName)
+      .map((artifact) => artifact.artifactPath)
+    for (const artifact of dependencyArtifacts) requiredAcceptedArtifacts.add(artifact)
+  }
+
+  return [...requiredAcceptedArtifacts].filter((artifact) => !acceptedArtifacts.has(artifact))
+}
+
 function buildAutonomousRepairBlock(
   step: SubagentTaskStep,
   feedback: readonly string[],
@@ -315,6 +312,13 @@ function buildAutonomousRepairBlock(
   ]
 
   return `\n\n${lines.join("\n")}`
+}
+
+function summarizeRepairTask(task: RepairTask): { primary: string[]; reference: string[] } {
+  return {
+    primary: task.ownedIssues.map((issue) => issue.summary),
+    reference: task.dependencyContext.map((issue) => issue.summary),
+  }
 }
 
 function normalizeToolCallPath(value: unknown): string {
@@ -447,6 +451,7 @@ export async function executePipeline(
 ): Promise<PipelineResult> {
   const maxParallel = opts?.maxParallel ?? 4
   const stepResults = new Map<string, PipelineStepResult>()
+  const runtimeModel = opts?.runtimeModel ?? compilePlannerRuntime(plan)
   const knownProjectArtifacts = plan.steps
     .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
     .flatMap((s) => s.executionContext.targetArtifacts)
@@ -486,23 +491,36 @@ export async function executePipeline(
       return buildResult(stepResults, plan.steps.length, "failed", "Pipeline aborted")
     }
 
-    // Find ready steps: in-degree 0 and not yet processed
+    const acceptedArtifacts = collectAcceptedArtifacts(opts?.priorResults, stepResults)
+
+    // Find ready steps: in-degree 0 and not yet processed.
+    // On repair cycles, steps with unresolved accepted-artifact blockers do not run yet.
     const ready: string[] = []
     for (const [name, deg] of inDegree) {
       if (deg === 0 && !completed.has(name) && !failed.has(name) && !stepResults.has(name)) {
-        ready.push(name)
+        const repairTask = getRepairTaskForStep(opts?.repairPlan, name)
+        const blockers = getUnresolvedAcceptanceBlockers(name, runtimeModel, repairTask, acceptedArtifacts)
+        if (blockers.length === 0) {
+          ready.push(name)
+        }
       }
     }
 
     if (ready.length === 0) {
       // No progress possible — remaining steps have unsatisfied deps (due to failures upstream)
-      // Mark them as skipped
+      // or acceptance blockers during repair. Mark them as skipped/blocked.
       for (const step of plan.steps) {
         if (!stepResults.has(step.name)) {
+          const repairTask = getRepairTaskForStep(opts?.repairPlan, step.name)
+          const blockers = getUnresolvedAcceptanceBlockers(step.name, runtimeModel, repairTask, acceptedArtifacts)
           stepResults.set(step.name, {
             name: step.name,
             status: "skipped",
-            error: "Upstream dependency failed",
+            executionState: "skipped",
+            acceptanceState: "blocked",
+            error: blockers.length > 0
+              ? `Waiting on accepted upstream artifacts: ${blockers.join(", ")}`
+              : "Upstream dependency failed",
             durationMs: 0,
           })
         }
@@ -526,13 +544,12 @@ export async function executePipeline(
       // Inject verifier feedback into subagent steps on retry.
       // Critical: also promote target artifacts to source files so the child
       // reads its own prior work instead of rewriting from scratch.
-      const rawFeedback = opts?.retryFeedback?.get(name)
-      // Filter out gibberish/degenerated verifier reasons — the LLM verifier
-      // sometimes produces word-salad that confuses retry children.
-      const feedback = rawFeedback?.filter(f => !isGibberishIssue(f))
-      if (feedback && feedback.length > 0 && effectiveStep.stepType === "subagent_task") {
+      const repairTask = opts?.repairPlan?.tasks.find((task) => task.stepName === name)
+      if (repairTask && effectiveStep.stepType === "subagent_task") {
         const sa = effectiveStep as SubagentTaskStep
-        const { primary: primaryFeedback, reference: referenceFeedback } = partitionRetryFeedback(sa, feedback)
+        const typedFeedback = summarizeRepairTask(repairTask)
+        const primaryFeedback = typedFeedback.primary.filter((issue) => !isGibberishIssue(issue))
+        const referenceFeedback = typedFeedback.reference.filter((issue) => !isGibberishIssue(issue))
         const priorStep = opts?.priorResults?.get(name)
         const priorReplaceMisses = (priorStep?.toolCalls ?? []).filter(
           c => c.name === "replace_in_file" && /old_string not found/i.test(c.result),
@@ -546,7 +563,7 @@ export async function executePipeline(
         }
 
         // Check if issues mention stub functions — build targeted remediation list
-        const hasStubIssues = feedback.some(f =>
+        const hasStubIssues = primaryFeedback.some(f =>
           /stub|placeholder|empty array|empty object|returns constant|catch-all|trivial return|degeneration/i.test(f),
         )
         const stubRemediationBlock = hasStubIssues
@@ -569,12 +586,20 @@ export async function executePipeline(
             : "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. Use replace_in_file for SURGICAL fixes to specific functions — this preserves all other code automatically.\n3. NEVER call write_file with a complete file rewrite. Your prior code is 90%+ correct. Find the specific broken part and fix ONLY that.\n4. write_file REPLACES the entire file — if you rewrite from scratch, you WILL lose working functions and create new bugs\n5. If you must use write_file, include ALL existing code plus your fix — do not drop any existing functions")
           : "⚠️ CRITICAL RETRY RULES (violating these = instant rejection):\n1. read_file EVERY target file FIRST — do NOT skip this step\n2. replace_in_file is unavailable in this environment. Use write_file carefully and preserve all existing code.\n3. write_file REPLACES the entire file — include the full current file plus your fix, never partial fragments.\n4. Make the smallest targeted correction needed for the listed issues.\n5. Do not introduce placeholders, stubs, or narrative comments in code."
 
+        const unresolvedDependencyBlockers = getUnresolvedAcceptanceBlockers(name, runtimeModel, repairTask, acceptedArtifacts)
         effectiveStep = {
           ...sa,
           objective: `${sa.objective}\n\n[RETRY — fix these step-owned issues from the previous attempt]:\n${primaryFeedback.map(f => `- ${f}`).join("\n")}${contextualFeedbackBlock}${autonomousRepairBlock}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
           executionContext: {
             ...sa.executionContext,
             requiredSourceArtifacts: [...existingSource],
+            forbiddenArtifacts: [...new Set([...runtimeModel.ownershipGraph.values()]
+              .filter((artifact) => artifact.ownerStepName && artifact.ownerStepName !== sa.name)
+              .map((artifact) => artifact.artifactPath))],
+            requiredChecks: [sa.executionContext.verificationMode, ...sa.acceptanceCriteria],
+            upstreamAcceptedArtifacts: [...acceptedArtifacts],
+            unresolvedDependencyBlockers,
+            repairContext: buildChildRepairPayload(repairTask),
           },
         }
       }
@@ -620,6 +645,8 @@ export async function executePipeline(
               stepResults.set(s.name, {
                 name: s.name,
                 status: "skipped",
+                executionState: "skipped",
+                acceptanceState: "blocked",
                 error: `Pipeline aborted: step "${name}" failed`,
                 durationMs: 0,
               })
@@ -675,7 +702,14 @@ async function executeDeterministicStep(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (signal?.aborted) {
-      return { name: step.name, status: "failed", error: "Aborted", durationMs: Date.now() - t0 }
+      return {
+        name: step.name,
+        status: "failed",
+        executionState: "failed",
+        acceptanceState: "rejected",
+        error: "Aborted",
+        durationMs: Date.now() - t0,
+      }
     }
 
     try {
@@ -715,6 +749,8 @@ async function executeDeterministicStep(
       return {
         name: step.name,
         status: "completed",
+        executionState: "executed",
+        acceptanceState: "accepted",
         output,
         durationMs: Date.now() - t0,
       }
@@ -726,6 +762,8 @@ async function executeDeterministicStep(
   return {
     name: step.name,
     status: "failed",
+    executionState: "failed",
+    acceptanceState: "rejected",
     error: lastError ?? "Unknown error",
     durationMs: Date.now() - t0,
   }
@@ -746,6 +784,7 @@ async function executeSubagentStep(
     const delegateResult = await delegateFn(step, step.executionContext)
     const output = delegateResult.output
     const childToolCalls = delegateResult.toolCalls
+    const childExecution = delegateResult.execution
 
     // agenc-core pattern: typed failure classification.
     // Classify delegation output to determine retry policy.
@@ -754,10 +793,16 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "rejected",
         error: output,
         failureClass: isSpawnError ? "spawn_error" : "unknown",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
       }
     }
 
@@ -765,10 +810,16 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "repair_required",
         error: output,
         failureClass: "budget_exceeded",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
       }
     }
 
@@ -776,10 +827,16 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "repair_required",
         error: output,
         failureClass: "tool_misuse",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
       }
     }
 
@@ -787,10 +844,16 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "rejected",
         error: output,
         failureClass: "cancelled",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
       }
     }
 
@@ -831,30 +894,48 @@ async function executeSubagentStep(
           return {
             name: step.name,
             status: "failed",
+            executionState: "failed",
+            acceptanceState: "rejected",
             error: retryOutput,
             failureClass: isSpawnError ? "spawn_error" : "unknown",
             durationMs: Date.now() - t0,
             toolCalls: retryCalls,
+            childResult: retryResult.execution,
+            producedArtifacts: retryResult.execution?.producedArtifacts,
+            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
+            verificationAttempts: retryResult.execution?.verificationAttempts,
           }
         }
         if (retryOutput.includes("DELEGATION INCOMPLETE")) {
           return {
             name: step.name,
             status: "failed",
+            executionState: "failed",
+            acceptanceState: "repair_required",
             error: retryOutput,
             failureClass: "budget_exceeded",
             durationMs: Date.now() - t0,
             toolCalls: retryCalls,
+            childResult: retryResult.execution,
+            producedArtifacts: retryResult.execution?.producedArtifacts,
+            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
+            verificationAttempts: retryResult.execution?.verificationAttempts,
           }
         }
         if (retryOutput.includes("stuck in a tool loop")) {
           return {
             name: step.name,
             status: "failed",
+            executionState: "failed",
+            acceptanceState: "repair_required",
             error: retryOutput,
             failureClass: "tool_misuse",
             durationMs: Date.now() - t0,
             toolCalls: retryCalls,
+            childResult: retryResult.execution,
+            producedArtifacts: retryResult.execution?.producedArtifacts,
+            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
+            verificationAttempts: retryResult.execution?.verificationAttempts,
           }
         }
 
@@ -868,19 +949,31 @@ async function executeSubagentStep(
           return {
             name: step.name,
             status: "completed",
+            executionState: "executed",
+            acceptanceState: "pending_verification",
             output: retryOutput,
             durationMs: Date.now() - t0,
             toolCalls: retryCalls,
+            childResult: retryResult.execution,
+            producedArtifacts: retryResult.execution?.producedArtifacts,
+            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
+            verificationAttempts: retryResult.execution?.verificationAttempts,
           }
         }
 
         return {
           name: step.name,
           status: "failed",
+          executionState: "failed",
+          acceptanceState: "repair_required",
           error: retryStrictFailure.message,
           failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(retryStrictFailure.message) ? "blueprint_contract" : "unknown",
           durationMs: Date.now() - t0,
           toolCalls: retryCalls,
+          childResult: retryResult.execution,
+          producedArtifacts: retryResult.execution?.producedArtifacts,
+          modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
+          verificationAttempts: retryResult.execution?.verificationAttempts,
           validationCode: retryStrictFailure.code,
         }
       }
@@ -888,10 +981,16 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "repair_required",
         error: strictFailure.message,
         failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message) ? "blueprint_contract" : "unknown",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
         validationCode: strictFailure.code,
       }
     }
@@ -909,19 +1008,31 @@ async function executeSubagentStep(
       return {
         name: step.name,
         status: "failed",
+        executionState: "failed",
+        acceptanceState: "repair_required",
         error: `Syntax validation failed after step completion:\n${syntaxErrors.join("\n")}`,
         failureClass: "syntax_error",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
+        childResult: childExecution,
+        producedArtifacts: childExecution?.producedArtifacts,
+        modifiedArtifacts: childExecution?.modifiedArtifacts,
+        verificationAttempts: childExecution?.verificationAttempts,
       }
     }
 
     return {
       name: step.name,
       status: "completed",
+      executionState: "executed",
+      acceptanceState: "pending_verification",
       output,
       durationMs: Date.now() - t0,
       toolCalls: childToolCalls,
+      childResult: childExecution,
+      producedArtifacts: childExecution?.producedArtifacts,
+      modifiedArtifacts: childExecution?.modifiedArtifacts,
+      verificationAttempts: childExecution?.verificationAttempts,
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
@@ -929,6 +1040,8 @@ async function executeSubagentStep(
     return {
       name: step.name,
       status: "failed",
+      executionState: "failed",
+      acceptanceState: "rejected",
       error: errMsg,
       failureClass: isTransient ? "transient_provider_error" : "unknown",
       durationMs: Date.now() - t0,

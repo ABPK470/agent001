@@ -316,6 +316,7 @@ function buildMessages(showPhase: Set<string>): Msg[] {
   add({ kind: "call", from: "planner", to: "llm", label: "verify(plan, results)", detail: "planner/verifier.ts — 2-phase check", color: P.llm, phase: "planner" })
   add({ kind: "return", from: "llm", to: "planner", label: "VerifierDecision { overall, confidence }", dashed: true, color: P.llm, phase: "planner" })
   add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-verification')", detail: "overall, confidence, steps", phase: "planner" })
+  add({ kind: "call", from: "planner", to: "ws", label: "onTrace('planner-repair-plan')", detail: "rerunOrder, tasks, issue codes", phase: "planner" })
   add({ kind: "call", from: "planner", to: "audit", label: "auditService.log('planner.verified')", detail: "audit.ts → INSERT audit_log", phase: "planner" })
 
   add({ kind: "alt-else", from: "planner", to: "planner", label: "else [validation failed → fallback]", phase: "planner" })

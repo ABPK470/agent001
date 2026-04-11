@@ -67,6 +67,24 @@ export interface SharedStateContract {
   readonly mutationPolicy: "owner-only"
 }
 
+export interface ChildRepairGoal {
+  readonly issueCode: string
+  readonly summary: string
+  readonly severity: VerifierIssueSeverity
+  readonly repairClass: VerifierRepairClass
+  readonly affectedArtifacts: readonly string[]
+  readonly sourceArtifacts: readonly string[]
+  readonly guidance?: string
+}
+
+export interface ChildRepairPayload {
+  readonly mode: "initial" | "repair" | "reverify" | "blocked"
+  readonly goals: readonly ChildRepairGoal[]
+  readonly dependencyGoals: readonly ChildRepairGoal[]
+  readonly requiredAcceptedArtifacts: readonly string[]
+  readonly unresolvedDependencyBlockers: readonly string[]
+}
+
 /**
  * The execution envelope: scoped permissions and contracts for a child agent.
  * This is what makes agenc-core's children produce quality work.
@@ -94,6 +112,16 @@ export interface ExecutionEnvelope {
   readonly role?: StepRole
   /** Optional shared-state contract for multi-file workflows. */
   readonly sharedStateContract?: SharedStateContract
+  /** Explicit write forbiddance beyond owned artifacts. */
+  readonly forbiddenArtifacts?: readonly string[]
+  /** Deterministic checks the child should run before completion. */
+  readonly requiredChecks?: readonly string[]
+  /** Upstream artifacts already accepted by verification and safe to rely on. */
+  readonly upstreamAcceptedArtifacts?: readonly string[]
+  /** Dependency blockers that prevent this step from completing. */
+  readonly unresolvedDependencyBlockers?: readonly string[]
+  /** Typed repair context for retries/reverification. */
+  readonly repairContext?: ChildRepairPayload
 }
 
 // ============================================================================
@@ -191,6 +219,34 @@ export interface Plan {
   readonly edges: readonly PlanEdge[]
 }
 
+export interface ExecutionGraphNode {
+  readonly stepName: string
+  readonly stepType: PlanStep["stepType"]
+  readonly dependsOn: readonly string[]
+  readonly downstream: readonly string[]
+}
+
+export interface ArtifactOwnershipNode {
+  readonly artifactPath: string
+  readonly ownerStepName: string | null
+  readonly consumerStepNames: readonly string[]
+  readonly relationTypes: readonly ArtifactRelation["relationType"][]
+}
+
+export interface RuntimeEntityDescriptor {
+  readonly id: string
+  readonly entityType: "planner_run" | "pipeline_step" | "delegated_worker" | "verification_pass" | "repair_cycle"
+  readonly parentId?: string
+  readonly stepName?: string
+}
+
+export interface PlannerRuntimeModel {
+  readonly executionGraph: ReadonlyMap<string, ExecutionGraphNode>
+  readonly ownershipGraph: ReadonlyMap<string, ArtifactOwnershipNode>
+  readonly stepAcceptedDependencies: ReadonlyMap<string, readonly string[]>
+  readonly runtimeEntities: readonly RuntimeEntityDescriptor[]
+}
+
 // ============================================================================
 // Plan validation
 // ============================================================================
@@ -224,6 +280,21 @@ export type PipelineStepStatus =
   | "failed"
   | "skipped"
 
+export type PipelineStepExecutionState =
+  | "pending"
+  | "running"
+  | "executed"
+  | "failed"
+  | "skipped"
+
+export type StepAcceptanceState =
+  | "pending"
+  | "pending_verification"
+  | "accepted"
+  | "repair_required"
+  | "blocked"
+  | "rejected"
+
 /**
  * Typed failure classes for child agent failures (agenc-core pattern).
  * Used by the retry policy to determine appropriate recovery strategy.
@@ -242,9 +313,27 @@ export type SubagentFailureClass =
 import type { DelegationOutputValidationCode } from "../delegation-validation.js"
 import type { ToolCallRecord } from "../recovery.js"
 
+export interface VerificationAttempt {
+  readonly toolName: string
+  readonly target?: string
+  readonly success: boolean
+  readonly summary: string
+}
+
+export interface ChildExecutionResult {
+  readonly status: "success" | "failed" | "blocked"
+  readonly summary: string
+  readonly producedArtifacts: readonly string[]
+  readonly modifiedArtifacts: readonly string[]
+  readonly verificationAttempts: readonly VerificationAttempt[]
+  readonly unresolvedBlockers: readonly string[]
+}
+
 export interface PipelineStepResult {
   readonly name: string
   readonly status: PipelineStepStatus
+  readonly executionState?: PipelineStepExecutionState
+  readonly acceptanceState?: StepAcceptanceState
   readonly output?: string
   readonly error?: string
   /** Typed failure class for diagnostic/retry purposes. */
@@ -252,6 +341,13 @@ export interface PipelineStepResult {
   readonly durationMs: number
   /** Structured tool call records from the child agent (if available). */
   readonly toolCalls?: readonly ToolCallRecord[]
+  /** Child execution summary derived from tool activity. */
+  readonly childResult?: ChildExecutionResult
+  /** Artifacts created or modified by the step. */
+  readonly producedArtifacts?: readonly string[]
+  readonly modifiedArtifacts?: readonly string[]
+  /** Verification attempts observed during step execution. */
+  readonly verificationAttempts?: readonly VerificationAttempt[]
   /** Delegation contract validation code (if validation ran). */
   readonly validationCode?: DelegationOutputValidationCode
 }
@@ -272,11 +368,62 @@ export interface PipelineResult {
 
 export type VerifierOutcome = "pass" | "retry" | "fail"
 
+export type VerifierIssueSeverity = "warning" | "error" | "fatal"
+
+export type VerifierRepairClass =
+  | "owner_implementation"
+  | "integration_wiring"
+  | "contract_drift"
+  | "path_scope"
+  | "runtime_failure"
+  | "syntax_failure"
+  | "placeholder_logic"
+  | "verification_gap"
+
+export interface VerificationEvidence {
+  readonly id: string
+  readonly stepName: string
+  readonly source: "contract" | "deterministic" | "llm"
+  readonly kind: string
+  readonly message: string
+  readonly artifactPaths: readonly string[]
+  readonly details?: Record<string, unknown>
+}
+
+export interface VerifierIssue {
+  readonly code: string
+  readonly severity: VerifierIssueSeverity
+  readonly retryable: boolean
+  readonly ownerStepName: string
+  readonly affectedArtifacts: readonly string[]
+  readonly sourceArtifacts?: readonly string[]
+  readonly evidenceIds: readonly string[]
+  readonly repairClass: VerifierRepairClass
+  readonly summary: string
+  readonly details?: Record<string, unknown>
+}
+
+export interface RepairTask {
+  readonly stepName: string
+  readonly mode: "repair" | "reverify" | "blocked"
+  readonly ownedIssues: readonly VerifierIssue[]
+  readonly dependencyContext: readonly VerifierIssue[]
+  readonly requiredAcceptedArtifacts: readonly string[]
+}
+
+export interface RepairPlan {
+  readonly tasks: readonly RepairTask[]
+  readonly rerunOrder: readonly string[]
+  readonly skippedVerifiedSteps: readonly string[]
+}
+
 export interface VerifierStepAssessment {
   readonly stepName: string
   readonly outcome: VerifierOutcome
   readonly confidence: number
   readonly issues: readonly string[]
+  readonly issueDetails?: readonly VerifierIssue[]
+  readonly evidence?: readonly VerificationEvidence[]
   readonly retryable: boolean
 }
 
@@ -285,6 +432,7 @@ export interface VerifierDecision {
   readonly confidence: number
   readonly steps: readonly VerifierStepAssessment[]
   readonly unresolvedItems: readonly string[]
+  readonly repairPlan?: RepairPlan
 }
 
 // ============================================================================

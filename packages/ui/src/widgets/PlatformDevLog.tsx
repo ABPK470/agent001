@@ -114,9 +114,20 @@ function summarize(event: WsEvent): string {
   if (event.type === "planner.step.completed") {
     const status = String(d["status"] ?? "unknown")
     const code = typeof d["validationCode"] === "string" ? d["validationCode"] : undefined
-    if (status === "completed") return `${d["stepName"]} ${status} ${d["durationMs"]}ms`
+    const acceptance = typeof d["acceptanceState"] === "string" ? ` · ${d["acceptanceState"]}` : ""
+    if (status === "completed") return `${d["stepName"]} ${status}${acceptance} ${d["durationMs"]}ms`
     const hint = remediationHintForValidationCode(code)
-    return `${d["stepName"]} ${status}${code ? ` [${code}]` : ""} — ${hint}`
+    return `${d["stepName"]} ${status}${acceptance}${code ? ` [${code}]` : ""} — ${hint}`
+  }
+  if (event.type === "planner.repair.plan") {
+    const rerunOrder = Array.isArray(d["rerunOrder"]) ? (d["rerunOrder"] as unknown[]).join(" → ") : ""
+    return `repair plan attempt ${d["attempt"]}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
+  }
+  if (event.type === "planner.runtime.compiled") {
+    const executionSteps = Array.isArray(d["executionSteps"]) ? d["executionSteps"].length : 0
+    const ownershipArtifacts = Array.isArray(d["ownershipArtifacts"]) ? d["ownershipArtifacts"].length : 0
+    const runtimeEntities = Array.isArray(d["runtimeEntities"]) ? d["runtimeEntities"].length : 0
+    return `runtime compiled steps=${executionSteps} artifacts=${ownershipArtifacts} entities=${runtimeEntities}`
   }
   if (event.type === "planner.delegation.started") return `child ${d["stepName"]} depth=${d["depth"]}`
   if (event.type === "planner.delegation.iteration") return `${d["stepName"]} iter ${d["iteration"]}/${d["maxIterations"]}`
@@ -127,10 +138,21 @@ function summarize(event: WsEvent): string {
     if (kind === "planner-step-end") {
       const status = String(entry?.["status"] ?? "unknown")
       const code = typeof entry?.["validationCode"] === "string" ? entry["validationCode"] : undefined
+      const acceptance = typeof entry?.["acceptanceState"] === "string" ? ` · ${String(entry["acceptanceState"])}` : ""
       if (status === "completed") {
-        return `${String(entry?.["stepName"] ?? "step")} ${status} ${entry?.["durationMs"] ?? "?"}ms`
+        return `${String(entry?.["stepName"] ?? "step")} ${status}${acceptance} ${entry?.["durationMs"] ?? "?"}ms`
       }
-      return `${String(entry?.["stepName"] ?? "step")} ${status}${code ? ` [${code}]` : ""} — ${remediationHintForValidationCode(code)}`
+      return `${String(entry?.["stepName"] ?? "step")} ${status}${acceptance}${code ? ` [${code}]` : ""} — ${remediationHintForValidationCode(code)}`
+    }
+    if (kind === "planner-repair-plan") {
+      const rerunOrder = Array.isArray(entry?.["rerunOrder"]) ? (entry["rerunOrder"] as unknown[]).join(" → ") : ""
+      return `repair plan attempt ${entry?.["attempt"] ?? "?"}${rerunOrder ? ` rerun=${rerunOrder}` : ""}`
+    }
+    if (kind === "planner-runtime-compiled") {
+      const executionSteps = Array.isArray(entry?.["executionSteps"]) ? entry["executionSteps"].length : 0
+      const ownershipArtifacts = Array.isArray(entry?.["ownershipArtifacts"]) ? entry["ownershipArtifacts"].length : 0
+      const runtimeEntities = Array.isArray(entry?.["runtimeEntities"]) ? entry["runtimeEntities"].length : 0
+      return `runtime compiled steps=${executionSteps} artifacts=${ownershipArtifacts} entities=${runtimeEntities}`
     }
     if (kind === "workspace_diff") {
       const diff = entry?.["diff"] as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined

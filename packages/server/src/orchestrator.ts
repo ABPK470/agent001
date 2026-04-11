@@ -11,36 +11,36 @@
  */
 
 import {
-  Agent,
-  askUserTool,
-  cancelRun,
-  completeRun,
-  createDelegateTools,
-  createEngineServices,
-  createRun,
-  failRun,
-  governTool,
-  PolicyEffect,
-  runCompleted,
-  runFailed,
-  runStarted,
-  setBasePath,
-  setBrowserCheckCwd,
-  setSearchBasePath,
-  setShellCwd,
-  setShellSignal,
-  spawnChildForPlan,
-  startPlanning,
-  startRunning,
-  type DelegateContext,
-  type DomainEvent,
-  type EngineServices,
-  type LLMClient,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
-  type ToolKillManager,
+    Agent,
+    askUserTool,
+    cancelRun,
+    completeRun,
+    createDelegateTools,
+    createEngineServices,
+    createRun,
+    failRun,
+    governTool,
+    PolicyEffect,
+    runCompleted,
+    runFailed,
+    runStarted,
+    setBasePath,
+    setBrowserCheckCwd,
+    setSearchBasePath,
+    setShellCwd,
+    setShellSignal,
+    spawnChildForPlan,
+    startPlanning,
+    startRunning,
+    type DelegateContext,
+    type DomainEvent,
+    type EngineServices,
+    type LLMClient,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
+    type ToolKillManager,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
@@ -51,13 +51,13 @@ import { consolidate, extractProcedural, ingestRunTurns, migrateMemory, retrieve
 import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "./prompt-builder.js"
 import { RunQueue, type RunPriority } from "./queue.js"
 import {
-  applyWorkspaceDiff,
-  cleanupRunWorkspace,
-  cleanupStaleRunWorkspaces,
-  computeWorkspaceDiff,
-  prepareRunWorkspace,
-  type RunWorkspaceContext,
-  type WorkspaceDiff,
+    applyWorkspaceDiff,
+    cleanupRunWorkspace,
+    cleanupStaleRunWorkspaces,
+    computeWorkspaceDiff,
+    prepareRunWorkspace,
+    type RunWorkspaceContext,
+    type WorkspaceDiff,
 } from "./run-workspace.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
@@ -783,6 +783,27 @@ export class AgentOrchestrator {
             resourceId: runId,
             detail: { diagnostics: entry.diagnostics },
           }).catch(() => {})
+        } else if (entry.kind === "planner-runtime-compiled") {
+          broadcast({
+            type: "planner.runtime.compiled",
+            data: {
+              runId,
+              executionSteps: entry.executionSteps,
+              ownershipArtifacts: entry.ownershipArtifacts,
+              runtimeEntities: entry.runtimeEntities,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.runtime.compiled",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              executionSteps: entry.executionSteps,
+              ownershipArtifacts: entry.ownershipArtifacts,
+              runtimeEntities: entry.runtimeEntities,
+            },
+          }).catch(() => {})
         } else if (entry.kind === "planner-step-start") {
           broadcast({
             type: "planner.step.started",
@@ -795,9 +816,13 @@ export class AgentOrchestrator {
               runId,
               stepName: entry.stepName,
               status: entry.status,
+              executionState: entry.executionState,
+              acceptanceState: entry.acceptanceState,
               durationMs: entry.durationMs,
               error: entry.error,
               validationCode: entry.validationCode,
+              producedArtifacts: entry.producedArtifacts,
+              verificationAttempts: entry.verificationAttempts,
             },
           })
         } else if (entry.kind === "planner-delegation-start") {
@@ -835,12 +860,38 @@ export class AgentOrchestrator {
             },
           })
         } else if (entry.kind === "planner-verification") {
+          broadcast({
+            type: "planner.verification",
+            data: {
+              runId,
+              overall: entry.overall,
+              confidence: entry.confidence,
+              steps: entry.steps,
+            },
+          })
           services.auditService.log({
             actor: "agent",
             action: "planner.verified",
             resourceType: "AgentRun",
             resourceId: runId,
-            detail: { overall: entry.overall, confidence: entry.confidence },
+            detail: { overall: entry.overall, confidence: entry.confidence, steps: entry.steps },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-repair-plan") {
+          broadcast({
+            type: "planner.repair.plan",
+            data: {
+              runId,
+              attempt: entry.attempt,
+              rerunOrder: entry.rerunOrder,
+              tasks: entry.tasks,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.repair.plan",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { attempt: entry.attempt, rerunOrder: entry.rerunOrder, tasks: entry.tasks },
           }).catch(() => {})
         }
       },

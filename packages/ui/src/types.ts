@@ -106,6 +106,12 @@ export type TraceEntry =
   | { kind: "planner-decision"; score: number; shouldPlan: boolean; reason: string }
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
+  | {
+    kind: "planner-runtime-compiled"
+    executionSteps: Array<{ stepName: string; dependsOn: string[]; downstream: string[] }>
+    ownershipArtifacts: Array<{ artifactPath: string; ownerStepName: string | null; consumerStepNames: string[] }>
+    runtimeEntities: Array<{ id: string; entityType: string; parentId?: string; stepName?: string }>
+  }
   | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-output-root-forced"; outputRoot: string }
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
@@ -115,9 +121,31 @@ export type TraceEntry =
   | { kind: "planner-pipeline-start"; attempt: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
   | { kind: "planner-step-start"; stepName: string; stepType: string }
-  | { kind: "planner-step-end"; stepName: string; status: string; durationMs: number; error?: string; validationCode?: string }
-  | { kind: "planner-verification"; overall: string; confidence: number; steps: Array<{ stepName: string; outcome: string; issues: string[] }> }
-  | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number }
+  | {
+    kind: "planner-step-end"
+    stepName: string
+    status: string
+    executionState?: string
+    acceptanceState?: string
+    durationMs: number
+    error?: string
+    validationCode?: string
+    producedArtifacts?: string[]
+    verificationAttempts?: Array<{ toolName: string; target?: string; success: boolean; summary: string }>
+  }
+  | {
+    kind: "planner-verification"
+    overall: string
+    confidence: number
+    steps: Array<{ stepName: string; outcome: string; issues: string[]; issueCodes?: string[]; acceptanceState?: string }>
+  }
+  | {
+    kind: "planner-repair-plan"
+    attempt: number
+    rerunOrder: string[]
+    tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
+  }
+  | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
   | { kind: "planner-retry-skipped"; reason: string }
   // Delegation decision gate (safety, economics, hard-block)
   | { kind: "planner-delegation-decision"; shouldDelegate: boolean; reason: string; utilityScore: number; safetyRisk: number; confidence: number; hardBlockedTaskClass: string | null }

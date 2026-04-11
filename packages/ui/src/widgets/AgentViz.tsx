@@ -57,6 +57,7 @@ const SPINE_COLORS: Record<string, string> = {
   "planner-step-end": "#C084FC",
   "planner-pipeline-end": "#C084FC",
   "planner-verification": "#C084FC",
+  "planner-repair-plan": "#E879A8",
   answer:             C.success,
   error:              C.coral,
 }
@@ -321,7 +322,7 @@ export function AgentViz() {
       } else if (e.kind === "planner-step-end") {
         for (let j = all.length - 1; j >= 0; j--) {
           if (all[j].name === e.stepName && all[j].status === "active") {
-            all[j].status = e.status === "completed" ? "done" : "error"
+            all[j].status = e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? "done" : "error"
             break
           }
         }

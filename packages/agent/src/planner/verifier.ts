@@ -31,10 +31,12 @@ import type {
     PipelineStepResult,
     Plan,
     SubagentTaskStep,
+    VerificationEvidence,
     VerifierDecision,
     VerifierOutcome,
     VerifierStepAssessment,
 } from "./types.js"
+import { collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
 
 // ============================================================================
 // Constants (ported from agenc-core chat-executor-verifier.ts)
@@ -1965,7 +1967,7 @@ function extractModuleExports(code: string): { named: Set<string>; hasDefault: b
  * but Agent B calls `movePiece(piece, fromRow, fromCol, toRow, toCol)`.
  */
 async function probeCrossFileFunctionSignatures(ctx: IntegrationProbeContext): Promise<void> {
-  const { plan, toolMap, assessments, allArtifacts } = ctx
+  const { toolMap, assessments, allArtifacts } = ctx
   const readFile = toolMap.get("read_file")
   if (!readFile) return
 
@@ -2318,6 +2320,19 @@ export async function verify(
   tools: readonly Tool[],
   opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
 ): Promise<VerifierDecision> {
+  const finalizeAssessments = (
+    assessments: readonly VerifierStepAssessment[],
+    source: VerificationEvidence["source"],
+  ): VerifierStepAssessment[] => {
+    const evidenceByStep = collectVerificationEvidence(plan, assessments, source)
+    const issuesByStep = deriveIssuesFromEvidence(plan, assessments, evidenceByStep)
+    return assessments.map((assessment) => ({
+      ...assessment,
+      evidence: [...(evidenceByStep.get(assessment.stepName) ?? [])],
+      issueDetails: [...(issuesByStep.get(assessment.stepName) ?? [])],
+    }))
+  }
+
   const knownProjectArtifacts = plan.steps
     .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
     .flatMap((s) => s.executionContext.targetArtifacts)
@@ -2382,16 +2397,20 @@ export async function verify(
         }
       }
     }
+    const enrichedSteps = finalizeAssessments(allSteps, "contract")
     return {
       overall: "retry",
-      confidence: Math.min(...allSteps.map(s => s.confidence)),
-      steps: allSteps,
+      confidence: Math.min(...enrichedSteps.map(s => s.confidence)),
+      steps: enrichedSteps,
       unresolvedItems: contractFailures.map(cf => cf.issues[0]),
     }
   }
 
   // Phase 1: Deterministic probes
-  const detAssessments = await runDeterministicProbes(plan, pipelineResult, tools)
+  const detAssessments = finalizeAssessments(
+    await runDeterministicProbes(plan, pipelineResult, tools),
+    "deterministic",
+  )
 
   // If deterministic probes already show clear failure, skip LLM verification
   const detFails = detAssessments.filter(a => a.outcome === "fail" || a.outcome === "retry")
@@ -2471,11 +2490,12 @@ export async function verify(
 
   const anyRetry = mergedSteps.some(s => s.outcome === "retry")
   const anyFail = mergedSteps.some(s => s.outcome === "fail")
+  const enrichedMergedSteps = finalizeAssessments(mergedSteps, "llm")
 
   return {
     overall: anyFail ? "fail" : anyRetry ? "retry" : "pass",
-    confidence: Math.min(decision.confidence, ...mergedSteps.map(s => s.confidence)),
-    steps: mergedSteps,
+    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map(s => s.confidence)),
+    steps: enrichedMergedSteps,
     unresolvedItems: decision.unresolvedItems,
   }
 }

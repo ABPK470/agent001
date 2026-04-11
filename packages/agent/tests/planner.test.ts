@@ -10,8 +10,11 @@ import { assessPlannerDecision } from "../src/planner/decision.js"
 import { generatePlan, isValidArtifactPath } from "../src/planner/generate.js"
 import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
 import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
-import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision } from "../src/planner/types.js"
+import { compilePlannerRuntime } from "../src/planner/runtime-model.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/planner/types.js"
 import { validatePlan } from "../src/planner/validate.js"
+import { buildRepairPlan, enrichVerifierAssessments } from "../src/planner/verification-model.js"
+import * as plannerVerifier from "../src/planner/verifier.js"
 import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/delegate.js"
 import type { LLMClient, Tool } from "../src/types.js"
@@ -79,6 +82,22 @@ function makeBlueprintContract(paths: readonly string[]): string {
     }, null, 2),
     "```",
   ].join("\n")
+}
+
+function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): VerifierIssue {
+  const derivedCode = summary.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "issue"
+  return {
+    code: overrides.code ?? derivedCode,
+    severity: overrides.severity ?? "error",
+    retryable: overrides.retryable ?? true,
+    ownerStepName: overrides.ownerStepName ?? "step",
+    affectedArtifacts: overrides.affectedArtifacts ?? [],
+    sourceArtifacts: overrides.sourceArtifacts ?? [],
+    evidenceIds: overrides.evidenceIds ?? [],
+    repairClass: overrides.repairClass ?? "owner_implementation",
+    summary,
+    details: overrides.details,
+  }
 }
 
 // ============================================================================
@@ -812,6 +831,402 @@ describe("Planner path execution", () => {
     expect(capturedMarkupCriteria.some((criterion) => criterion.includes("game_logic.js"))).toBe(true)
     expect(capturedLogicObjective).toContain("runtime JS must use ES modules consistently")
     expect(capturedLogicCriteria).toContain("Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals.")
+  })
+
+  it("reruns only repair-plan steps across planner retries and updates acceptance state after verification", async () => {
+    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: true,
+      reason: "approved",
+      threshold: 0.2,
+      utilityScore: 0.9,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.2,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.1,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {},
+    })
+    const verifySpy = vi.spyOn(plannerVerifier, "verify")
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "single-step repairable implementation",
+          confidence: 0.92,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "write_summary",
+              stepType: "subagent_task",
+              objective: "Create tmp/summary.txt with the final integrated summary",
+              inputContract: "Empty workspace",
+              acceptanceCriteria: ["tmp/summary.txt exists", "Contains the required integration marker"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/summary.txt"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [],
+              },
+            },
+          ],
+          edges: [],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    verifySpy
+      .mockResolvedValueOnce({
+        overall: "retry",
+        confidence: 0.68,
+        unresolvedItems: ["Missing integration marker in tmp/summary.txt"],
+        steps: [
+          {
+            stepName: "write_summary",
+            outcome: "retry",
+            confidence: 0.68,
+            issues: ["Missing integration marker in tmp/summary.txt"],
+            issueDetails: [{
+              code: "integration_wiring",
+              severity: "error",
+              retryable: true,
+              ownerStepName: "write_summary",
+              affectedArtifacts: ["tmp/summary.txt"],
+              sourceArtifacts: ["tmp/summary.txt"],
+              evidenceIds: ["write_summary:llm:1:integration_wiring"],
+              repairClass: "integration_wiring",
+              summary: "Missing integration marker in tmp/summary.txt",
+            }],
+            evidence: [{
+              id: "write_summary:llm:1:integration_wiring",
+              stepName: "write_summary",
+              source: "llm",
+              kind: "integration_wiring",
+              message: "Missing integration marker in tmp/summary.txt",
+              artifactPaths: ["tmp/summary.txt"],
+            }],
+            retryable: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        overall: "pass",
+        confidence: 0.93,
+        unresolvedItems: [],
+        steps: [
+          {
+            stepName: "write_summary",
+            outcome: "pass",
+            confidence: 0.9,
+            issues: [],
+            issueDetails: [],
+            evidence: [],
+            retryable: false,
+          },
+        ],
+      })
+
+    const traces: Array<Record<string, unknown>> = []
+    const callOrder: string[] = []
+    const objectives: string[] = []
+
+    try {
+      const result = await executePlannerPath(
+        "First create tmp/summary.txt, then verify it, then repair it until verification passes and the final integrated summary is complete.",
+        {
+          llm,
+          tools: [echoTool("write_file"), echoTool("read_file")],
+          workspaceRoot: ".",
+          history: [],
+          onTrace: (entry) => traces.push(entry),
+        },
+        async (step) => {
+          callOrder.push(step.name)
+          objectives.push(step.objective)
+          const attempt = callOrder.length
+          const content = attempt >= 2
+            ? "summary complete\nintegration marker present"
+            : "summary draft"
+          return {
+            output: `done ${step.name}`,
+            toolCalls: [
+              { name: "write_file", args: { path: "tmp/summary.txt", content }, result: "ok", isError: false },
+              { name: "read_file", args: { path: "tmp/summary.txt" }, result: content, isError: false },
+            ],
+          }
+        },
+      )
+
+      expect(result.handled).toBe(true)
+      expect(callOrder).toEqual(["write_summary", "write_summary"])
+      expect(objectives[1]).toContain("[RETRY — fix these step-owned issues from the previous attempt]")
+      expect(objectives[1]).toContain("Missing integration marker in tmp/summary.txt")
+      expect(result.pipelineResult?.stepResults.get("write_summary")?.acceptanceState).toBe("accepted")
+
+      const repairTrace = traces.find((entry) => entry.kind === "planner-repair-plan") as { rerunOrder?: string[]; tasks?: Array<{ stepName: string; mode: string }> } | undefined
+      expect(repairTrace?.rerunOrder).toEqual(["write_summary"])
+      expect(repairTrace?.tasks?.map((task) => `${task.stepName}:${task.mode}`)).toEqual(["write_summary:repair"])
+
+      const retryTrace = traces.find((entry) => entry.kind === "planner-retry") as { rerunOrder?: string[] } | undefined
+      expect(retryTrace?.rerunOrder).toEqual(["write_summary"])
+
+      const verificationTraces = traces.filter((entry) => entry.kind === "planner-verification") as Array<{
+        steps: Array<{ stepName: string; acceptanceState?: string }>
+      }>
+      expect(verificationTraces).toHaveLength(2)
+      expect(verificationTraces[0]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState).toBe("repair_required")
+      expect(verificationTraces[1]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState).toBe("accepted")
+    } finally {
+      delegationSpy.mockRestore()
+      verifySpy.mockRestore()
+    }
+  })
+})
+
+describe("Planner runtime model", () => {
+  it("compiles explicit execution and ownership graphs", () => {
+    const owner = makeSubagentStep("write_logic", {
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: [],
+        targetArtifacts: ["tmp/game.js"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game.js" }],
+      },
+    })
+    const consumer = makeSubagentStep("wire_ui", {
+      dependsOn: ["write_logic"],
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: ["tmp/game.js"],
+        targetArtifacts: ["tmp/index.html"],
+        effectClass: "filesystem_write",
+        verificationMode: "browser_check",
+        artifactRelations: [
+          { relationType: "read_dependency", artifactPath: "tmp/game.js" },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" },
+        ],
+      },
+    })
+
+    const runtime = compilePlannerRuntime(makePlan({
+      steps: [owner, consumer],
+      edges: [{ from: "write_logic", to: "wire_ui" }],
+    }))
+
+    expect(runtime.executionGraph.get("wire_ui")?.dependsOn).toEqual(["write_logic"])
+    expect(runtime.ownershipGraph.get("tmp/game.js")?.ownerStepName).toBe("write_logic")
+    expect(runtime.ownershipGraph.get("tmp/game.js")?.consumerStepNames).toContain("wire_ui")
+    expect(runtime.stepAcceptedDependencies.get("wire_ui")).toContain("write_logic")
+    expect(runtime.runtimeEntities.some((entity) => entity.entityType === "verification_pass")).toBe(true)
+    expect(runtime.runtimeEntities.some((entity) => entity.entityType === "repair_cycle")).toBe(true)
+  })
+})
+
+describe("Pipeline acceptance-gated scheduling", () => {
+  it("blocks consumer repair steps until required upstream artifacts are accepted", async () => {
+    const calls: string[] = []
+    const consumer = makeSubagentStep("repair_ui", {
+      dependsOn: ["repair_logic"],
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: ["tmp/game.js"],
+        targetArtifacts: ["tmp/index.html"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [
+          { relationType: "read_dependency", artifactPath: "tmp/game.js" },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" },
+        ],
+      },
+    })
+    const plan = makePlan({
+      steps: [{
+        name: "repair_logic",
+        stepType: "deterministic_tool",
+        tool: "write_file",
+        args: { path: "tmp/game.js", content: "ok" },
+      }, consumer],
+      edges: [{ from: "repair_logic", to: "repair_ui" }],
+    })
+    const runtimeModel = compilePlannerRuntime(plan)
+
+    const result = await executePipeline(
+      plan,
+      [echoTool("read_file"), echoTool("write_file")],
+      async (step) => {
+        calls.push(step.name)
+        return {
+          output: `Successfully updated ${step.executionContext.targetArtifacts.join(", ")}`,
+          toolCalls: [
+            {
+              name: "read_file",
+              args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt" },
+              result: "ok",
+              isError: false,
+            },
+            {
+              name: "write_file",
+              args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt", content: "ok" },
+              result: "ok",
+              isError: false,
+            },
+          ],
+          execution: {
+            status: "success",
+            summary: `done ${step.name}`,
+            producedArtifacts: step.executionContext.targetArtifacts,
+            modifiedArtifacts: step.executionContext.targetArtifacts,
+            verificationAttempts: [],
+            unresolvedBlockers: [],
+          },
+        }
+      },
+      {
+        runtimeModel,
+        repairPlan: {
+          tasks: [
+            {
+              stepName: "repair_logic",
+              mode: "repair",
+              ownedIssues: [],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: [],
+            },
+            {
+              stepName: "repair_ui",
+              mode: "repair",
+              ownedIssues: [],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: ["tmp/game.js"],
+            },
+          ],
+          rerunOrder: ["repair_logic", "repair_ui"],
+          skippedVerifiedSteps: [],
+        },
+      },
+    )
+
+    expect(calls).toEqual([])
+    expect(result.stepResults.get("repair_ui")?.status).toBe("skipped")
+    expect(result.stepResults.get("repair_ui")?.acceptanceState).toBe("blocked")
+    expect(result.stepResults.get("repair_ui")?.error).toContain("accepted upstream artifacts")
+  })
+
+  it("allows repair consumers once upstream artifacts are already accepted", async () => {
+    const calls: string[] = []
+    const consumer = makeSubagentStep("repair_ui", {
+      dependsOn: ["repair_logic"],
+      executionContext: {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: ["write_file", "read_file"],
+        requiredSourceArtifacts: ["tmp/game.js"],
+        targetArtifacts: ["tmp/index.html"],
+        effectClass: "filesystem_write",
+        verificationMode: "none",
+        artifactRelations: [
+          { relationType: "read_dependency", artifactPath: "tmp/game.js" },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" },
+        ],
+      },
+    })
+    const plan = makePlan({
+      steps: [{
+        name: "repair_logic",
+        stepType: "deterministic_tool",
+        tool: "write_file",
+        args: { path: "tmp/game.js", content: "ok" },
+      }, consumer],
+      edges: [{ from: "repair_logic", to: "repair_ui" }],
+    })
+    const runtimeModel = compilePlannerRuntime(plan)
+
+    const result = await executePipeline(
+      plan,
+      [echoTool("read_file"), echoTool("write_file")],
+      async (step) => {
+        calls.push(step.name)
+        return {
+          output: `Successfully updated ${step.executionContext.targetArtifacts.join(", ")}`,
+          toolCalls: [
+            {
+              name: "read_file",
+              args: { path: step.executionContext.requiredSourceArtifacts[0] ?? step.executionContext.targetArtifacts[0] ?? "tmp/file.txt" },
+              result: "ok",
+              isError: false,
+            },
+            {
+              name: "write_file",
+              args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt", content: "ok" },
+              result: "ok",
+              isError: false,
+            },
+          ],
+          execution: {
+            status: "success",
+            summary: `done ${step.name}`,
+            producedArtifacts: step.executionContext.targetArtifacts,
+            modifiedArtifacts: step.executionContext.targetArtifacts,
+            verificationAttempts: [],
+            unresolvedBlockers: [],
+          },
+        }
+      },
+      {
+        runtimeModel,
+        priorResults: new Map([
+          ["repair_logic", {
+            name: "repair_logic",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "accepted",
+            durationMs: 1,
+            producedArtifacts: ["tmp/game.js"],
+            modifiedArtifacts: ["tmp/game.js"],
+          }],
+        ]),
+        repairPlan: {
+          tasks: [
+            {
+              stepName: "repair_ui",
+              mode: "repair",
+              ownedIssues: [],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: ["tmp/game.js"],
+            },
+          ],
+          rerunOrder: ["repair_ui"],
+          skippedVerifiedSteps: ["repair_logic"],
+        },
+      },
+    )
+
+    expect(calls).toEqual(["repair_ui"])
+    expect(result.stepResults.get("repair_ui")?.status).not.toBe("skipped")
+    expect(result.stepResults.get("repair_ui")?.acceptanceState).not.toBe("blocked")
   })
 })
 
@@ -2875,6 +3290,52 @@ describe("Pipeline: executePipeline", () => {
     expect(step?.error).toContain("zero tool-call evidence")
   })
 
+  it("records execution and acceptance state for successful subagent steps", async () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("build-ui")],
+      edges: [],
+    })
+
+    const result = await executePipeline(
+      plan,
+      [],
+      async () => ({
+        output: "Built UI",
+        toolCalls: [
+          {
+            name: "write_file",
+            args: { path: "game.js", content: "export const ok = true" },
+            result: "Successfully wrote to game.js",
+            isError: false,
+          },
+          {
+            name: "browser_check",
+            args: { path: "index.html" },
+            result: "No errors",
+            isError: false,
+          },
+        ],
+        execution: {
+          status: "success",
+          summary: "Built UI",
+          producedArtifacts: ["game.js"],
+          modifiedArtifacts: ["game.js"],
+          verificationAttempts: [
+            { toolName: "browser_check", target: "index.html", success: true, summary: "No errors" },
+          ],
+          unresolvedBlockers: [],
+        },
+      }),
+    )
+
+    expect(result.status).toBe("completed")
+    const step = result.stepResults.get("build-ui")
+    expect(step?.executionState).toBe("executed")
+    expect(step?.acceptanceState).toBe("pending_verification")
+    expect(step?.producedArtifacts).toEqual(["game.js"])
+    expect(step?.verificationAttempts?.[0]?.toolName).toBe("browser_check")
+  })
+
   it("retries once with write-first guidance on missing_file_mutation_evidence", async () => {
     const plan = makePlan({
       steps: [makeSubagentStep("build-game", {
@@ -3016,10 +3477,6 @@ describe("Pipeline: executePipeline", () => {
       ],
     ])
 
-    const retryFeedback = new Map<string, readonly string[]>([
-      ["fix-ui", ["Preserve working code while fixing UI click behavior"]],
-    ])
-
     const result = await executePipeline(
       plan,
       [
@@ -3046,7 +3503,20 @@ describe("Pipeline: executePipeline", () => {
           ],
         }
       },
-      { priorResults, retryFeedback },
+      {
+        priorResults,
+        repairPlan: {
+          tasks: [{
+            stepName: "fix-ui",
+            mode: "repair",
+            ownedIssues: [makeIssue("Preserve working code while fixing UI click behavior", { ownerStepName: "fix-ui" })],
+            dependencyContext: [],
+            requiredAcceptedArtifacts: [],
+          }],
+          rerunOrder: ["fix-ui"],
+          skippedVerifiedSteps: [],
+        },
+      },
     )
 
     expect(result.status).toBe("failed")
@@ -3073,13 +3543,6 @@ describe("Pipeline: executePipeline", () => {
       edges: [],
     })
 
-    const retryFeedback = new Map<string, readonly string[]>([
-      ["repair-engine", [
-        "SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move, apply_move from tmp/BLUEPRINT.md",
-        "PROCESS AUDIT FAILED: step repair-engine read tmp/BLUEPRINT.md only after starting file mutations",
-      ]],
-    ])
-
     const result = await executePipeline(
       plan,
       [],
@@ -3087,7 +3550,31 @@ describe("Pipeline: executePipeline", () => {
         seenObjective = step.objective
         return { output: "done", toolCalls: [] }
       },
-      { retryFeedback },
+      {
+        repairPlan: {
+          tasks: [{
+            stepName: "repair-engine",
+            mode: "repair",
+            ownedIssues: [
+              makeIssue("SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move, apply_move from tmp/BLUEPRINT.md", {
+                ownerStepName: "repair-engine",
+                affectedArtifacts: ["tmp/engine.py"],
+                sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                repairClass: "contract_drift",
+              }),
+              makeIssue("PROCESS AUDIT FAILED: step repair-engine read tmp/BLUEPRINT.md only after starting file mutations", {
+                ownerStepName: "repair-engine",
+                sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                repairClass: "owner_implementation",
+              }),
+            ],
+            dependencyContext: [],
+            requiredAcceptedArtifacts: [],
+          }],
+          rerunOrder: ["repair-engine"],
+          skippedVerifiedSteps: [],
+        },
+      },
     )
 
     expect(result.status).toBe("failed")
@@ -3116,13 +3603,6 @@ describe("Pipeline: executePipeline", () => {
       edges: [],
     })
 
-    const retryFeedback = new Map<string, readonly string[]>([
-      ["repair-ui", [
-        "Browser check for \"tmp/index.html\" reported errors: SyntaxError: Unexpected token ':'",
-        'Syntax error in "tmp/chess_logic.js": Unexpected identifier',
-      ]],
-    ])
-
     const result = await executePipeline(
       plan,
       [],
@@ -3130,7 +3610,31 @@ describe("Pipeline: executePipeline", () => {
         seenObjective = step.objective
         return { output: "done", toolCalls: [] }
       },
-      { retryFeedback },
+      {
+        repairPlan: {
+          tasks: [{
+            stepName: "repair-ui",
+            mode: "repair",
+            ownedIssues: [
+              makeIssue("Browser check for \"tmp/index.html\" reported errors: SyntaxError: Unexpected token ':'", {
+                ownerStepName: "repair-ui",
+                affectedArtifacts: ["tmp/index.html"],
+                repairClass: "runtime_failure",
+              }),
+            ],
+            dependencyContext: [
+              makeIssue('Syntax error in "tmp/chess_logic.js": Unexpected identifier', {
+                ownerStepName: "repair-logic",
+                affectedArtifacts: ["tmp/chess_logic.js"],
+                repairClass: "syntax_failure",
+              }),
+            ],
+            requiredAcceptedArtifacts: [],
+          }],
+          rerunOrder: ["repair-ui"],
+          skippedVerifiedSteps: [],
+        },
+      },
     )
 
     expect(result.status).toBe("failed")
@@ -3159,12 +3663,6 @@ describe("Pipeline: executePipeline", () => {
       edges: [],
     })
 
-    const retryFeedback = new Map<string, readonly string[]>([
-      ["repair-ui", [
-        "SPEC FUNCTION MISMATCH: tmp/index.html is missing blueprint functions initializeBoard, handlePieceMove from tmp/BLUEPRINT.md",
-      ]],
-    ])
-
     const result = await executePipeline(
       plan,
       [],
@@ -3172,7 +3670,24 @@ describe("Pipeline: executePipeline", () => {
         seenObjective = step.objective
         return { output: "done", toolCalls: [] }
       },
-      { retryFeedback },
+      {
+        repairPlan: {
+          tasks: [{
+            stepName: "repair-ui",
+            mode: "repair",
+            ownedIssues: [makeIssue("SPEC FUNCTION MISMATCH: tmp/index.html is missing blueprint functions initializeBoard, handlePieceMove from tmp/BLUEPRINT.md", {
+              ownerStepName: "repair-ui",
+              affectedArtifacts: ["tmp/index.html"],
+              sourceArtifacts: ["tmp/BLUEPRINT.md"],
+              repairClass: "contract_drift",
+            })],
+            dependencyContext: [],
+            requiredAcceptedArtifacts: [],
+          }],
+          rerunOrder: ["repair-ui"],
+          skippedVerifiedSteps: [],
+        },
+      },
     )
 
     expect(result.status).toBe("failed")
@@ -3199,13 +3714,6 @@ describe("Pipeline: executePipeline", () => {
       edges: [],
     })
 
-    const retryFeedback = new Map<string, readonly string[]>([
-      ["repair-shell", [
-        "SPEC MAPPING MISSING: target artifact tmp/install.ps1 does not map to any file declared in tmp/BLUEPRINT.md",
-        "Syntax error in \"tmp/bootstrap.cmd\": unexpected token",
-      ]],
-    ])
-
     const result = await executePipeline(
       plan,
       [],
@@ -3213,7 +3721,31 @@ describe("Pipeline: executePipeline", () => {
         seenObjective = step.objective
         return { output: "done", toolCalls: [] }
       },
-      { retryFeedback },
+      {
+        repairPlan: {
+          tasks: [{
+            stepName: "repair-shell",
+            mode: "repair",
+            ownedIssues: [
+              makeIssue("SPEC MAPPING MISSING: target artifact tmp/install.ps1 does not map to any file declared in tmp/BLUEPRINT.md", {
+                ownerStepName: "repair-shell",
+                affectedArtifacts: ["tmp/install.ps1"],
+                sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                repairClass: "contract_drift",
+              }),
+              makeIssue("Syntax error in \"tmp/bootstrap.cmd\": unexpected token", {
+                ownerStepName: "repair-shell",
+                affectedArtifacts: ["tmp/bootstrap.cmd"],
+                repairClass: "syntax_failure",
+              }),
+            ],
+            dependencyContext: [],
+            requiredAcceptedArtifacts: [],
+          }],
+          rerunOrder: ["repair-shell"],
+          skippedVerifiedSteps: [],
+        },
+      },
     )
 
     expect(result.status).toBe("failed")
@@ -3221,6 +3753,99 @@ describe("Pipeline: executePipeline", () => {
     expect(seenObjective).toContain("Fix syntax and parse errors first")
     expect(seenObjective).toContain("PowerShell: preserve cmdlet/function names")
     expect(seenObjective).toContain("Windows CMD: use cmd.exe syntax")
+  })
+
+  it("enriches verifier assessments with typed issue metadata and evidence", () => {
+    const plan = makePlan({
+      steps: [makeSubagentStep("repair-engine", {
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["read_file", "write_file"],
+          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+          targetArtifacts: ["tmp/engine.py"],
+          effectClass: "filesystem_write",
+          verificationMode: "none",
+          artifactRelations: [],
+        },
+      })],
+      edges: [],
+    })
+
+    const assessments: VerifierStepAssessment[] = [
+      {
+        stepName: "repair-engine",
+        outcome: "retry",
+        confidence: 0.9,
+        issues: ["SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move from tmp/BLUEPRINT.md"],
+        retryable: true,
+      },
+    ]
+
+    const enriched = enrichVerifierAssessments(plan, assessments, "deterministic")
+    expect(enriched[0]?.issueDetails?.[0]?.code).toBe("spec_function_mismatch")
+    expect(enriched[0]?.issueDetails?.[0]?.affectedArtifacts).toContain("tmp/engine.py")
+    expect(enriched[0]?.evidence?.[0]?.source).toBe("deterministic")
+  })
+
+  it("builds a repair plan from typed verifier issues", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("step-a", { executionContext: { ...makeSubagentStep("step-a").executionContext, targetArtifacts: ["tmp/a.js"] } }),
+        makeSubagentStep("step-b", { executionContext: { ...makeSubagentStep("step-b").executionContext, targetArtifacts: ["tmp/b.js"] } }),
+      ],
+      edges: [{ from: "step-a", to: "step-b" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "failed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["step-a", { name: "step-a", status: "completed", executionState: "executed", acceptanceState: "pending_verification", output: "done", durationMs: 1 }],
+        ["step-b", { name: "step-b", status: "completed", executionState: "executed", acceptanceState: "pending_verification", output: "done", durationMs: 1 }],
+      ]),
+    }
+
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.7,
+      unresolvedItems: ["step-a broken"],
+      steps: [
+        {
+          stepName: "step-a",
+          outcome: "retry",
+          confidence: 0.7,
+          issues: ["Syntax error in \"tmp/a.js\": Unexpected token"],
+          issueDetails: [{
+            code: "syntax_failure",
+            severity: "error",
+            retryable: true,
+            ownerStepName: "step-a",
+            affectedArtifacts: ["tmp/a.js"],
+            sourceArtifacts: ["tmp/a.js"],
+            evidenceIds: ["step-a:deterministic:1:syntax_failure"],
+            repairClass: "syntax_failure",
+            summary: "Syntax error in \"tmp/a.js\": Unexpected token",
+          }],
+          retryable: true,
+        },
+        {
+          stepName: "step-b",
+          outcome: "pass",
+          confidence: 0.9,
+          issues: [],
+          retryable: false,
+        },
+      ],
+    }
+
+    const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
+    expect(repairPlan.rerunOrder).toEqual(["step-a"])
+    expect(repairPlan.tasks[0]?.stepName).toBe("step-a")
+    expect(repairPlan.tasks[0]?.ownedIssues[0]?.code).toBe("syntax_failure")
+    expect(repairPlan.skippedVerifiedSteps).toEqual(["step-b"])
   })
 })
 

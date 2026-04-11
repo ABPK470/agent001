@@ -30,7 +30,12 @@ import { resolve as pathResolve } from "node:path"
 import { Agent } from "../agent.js"
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { DelegateResult } from "../planner/pipeline.js"
-import type { ExecutionEnvelope, SubagentTaskStep } from "../planner/types.js"
+import type {
+    ChildExecutionResult,
+    ExecutionEnvelope,
+    SubagentTaskStep,
+    VerificationAttempt,
+} from "../planner/types.js"
 import type { LLMClient, TokenUsage, Tool } from "../types.js"
 
 /** Default iteration budget for a child agent. */
@@ -352,6 +357,47 @@ interface CanonicalPathMap {
   readonly byBasename: ReadonlyMap<string, readonly string[]>
 }
 
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function buildVerificationAttempts(toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]): VerificationAttempt[] {
+  return toolCalls
+    .filter((call) => call.name === "browser_check" || call.name === "read_file" || call.name === "run_command")
+    .map((call) => ({
+      toolName: call.name,
+      target: typeof call.args.path === "string"
+        ? call.args.path
+        : typeof call.args.command === "string"
+          ? call.args.command
+          : undefined,
+      success: !call.isError && !/^Error:/i.test(call.result) && !/\b(?:Uncaught Exceptions|Console Errors|Network Failures|SyntaxError|failed?)\b/i.test(call.result),
+      summary: call.result.slice(0, 240),
+    }))
+}
+
+function buildChildExecutionResult(output: string, toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]): ChildExecutionResult {
+  const mutatedArtifacts = uniqueStrings(toolCalls
+    .filter((call) => !call.isError && (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file"))
+    .map((call) => typeof call.args.path === "string" ? call.args.path : "")
+    .map((path) => path.replace(/^\.\//, "")))
+
+  const blockers = uniqueStrings(toolCalls
+    .filter((call) => call.isError || /^Error:/i.test(call.result))
+    .map((call) => `${call.name}: ${call.result.slice(0, 240)}`))
+
+  return {
+    status: blockers.length > 0
+      ? (mutatedArtifacts.length > 0 ? "blocked" : "failed")
+      : "success",
+    summary: output.slice(0, 400),
+    producedArtifacts: mutatedArtifacts,
+    modifiedArtifacts: mutatedArtifacts,
+    verificationAttempts: buildVerificationAttempts(toolCalls),
+    unresolvedBlockers: blockers,
+  }
+}
+
 export interface PlannerChildBudgetMetrics {
   readonly hint: string
   readonly parsedHint: number
@@ -574,6 +620,17 @@ function canonicalizeEnvelope(envelope: ExecutionEnvelope): ExecutionEnvelope {
     ...envelope,
     targetArtifacts,
     requiredSourceArtifacts: [...new Set(requiredSourceArtifacts)],
+    forbiddenArtifacts: [...new Set(envelope.forbiddenArtifacts ?? [])],
+    requiredChecks: [...new Set(envelope.requiredChecks ?? [])],
+    upstreamAcceptedArtifacts: [...new Set(envelope.upstreamAcceptedArtifacts ?? [])],
+    unresolvedDependencyBlockers: [...new Set(envelope.unresolvedDependencyBlockers ?? [])],
+    repairContext: envelope.repairContext
+      ? {
+        ...envelope.repairContext,
+        requiredAcceptedArtifacts: [...new Set(envelope.repairContext.requiredAcceptedArtifacts)],
+        unresolvedDependencyBlockers: [...new Set(envelope.repairContext.unresolvedDependencyBlockers)],
+      }
+      : undefined,
   }
 }
 
@@ -804,6 +861,52 @@ export async function spawnChildForPlan(
     )
   }
 
+  if ((normalizedEnvelope.upstreamAcceptedArtifacts?.length ?? 0) > 0) {
+    goalParts.push(
+      `## Accepted Upstream Artifacts\nThese artifacts are already verified and safe to rely on:\n${normalizedEnvelope.upstreamAcceptedArtifacts!.map(a => `- ${a}`).join("\n")}`,
+    )
+  }
+
+  if ((normalizedEnvelope.unresolvedDependencyBlockers?.length ?? 0) > 0) {
+    goalParts.push(
+      `## Dependency Blockers\nDo NOT claim completion for work that depends on these unresolved blockers:\n${normalizedEnvelope.unresolvedDependencyBlockers!.map(item => `- ${item}`).join("\n")}`,
+    )
+  }
+
+  if ((normalizedEnvelope.requiredChecks?.length ?? 0) > 0) {
+    goalParts.push(
+      `## Required Checks Before Completion\nYou must run or reason through these checks before finishing:\n${normalizedEnvelope.requiredChecks!.map(item => `- ${item}`).join("\n")}`,
+    )
+  }
+
+  if ((normalizedEnvelope.repairContext?.goals.length ?? 0) > 0 || (normalizedEnvelope.repairContext?.dependencyGoals.length ?? 0) > 0) {
+    goalParts.push(
+      `## Structured Repair Payload\nMode: ${normalizedEnvelope.repairContext?.mode ?? "initial"}\n` +
+      `Owned Repair Goals:\n${(normalizedEnvelope.repairContext?.goals.length ?? 0) > 0
+        ? normalizedEnvelope.repairContext!.goals.map(goal => `- [${goal.issueCode}] ${goal.summary} (${goal.repairClass}, ${goal.severity})`).join("\n")
+        : "- none"}\n` +
+      `Dependency Context Goals:\n${(normalizedEnvelope.repairContext?.dependencyGoals.length ?? 0) > 0
+        ? normalizedEnvelope.repairContext!.dependencyGoals.map(goal => `- [${goal.issueCode}] ${goal.summary}`).join("\n")
+        : "- none"}\n` +
+      `Required Accepted Artifacts:\n${(normalizedEnvelope.repairContext?.requiredAcceptedArtifacts.length ?? 0) > 0
+        ? normalizedEnvelope.repairContext!.requiredAcceptedArtifacts.map(artifact => `- ${artifact}`).join("\n")
+        : "- none"}`,
+    )
+  }
+
+  goalParts.push(
+    `## Step Contract\n` +
+    `Step Name: ${step.name}\n` +
+    `Role: ${normalizedEnvelope.role ?? "writer"}\n` +
+    `Effect Class: ${normalizedEnvelope.effectClass}\n` +
+    `Verification Mode: ${normalizedEnvelope.verificationMode}\n` +
+    `Owned Artifacts:\n${normalizedEnvelope.targetArtifacts.map(a => `- ${a}`).join("\n") || "- none"}\n` +
+    `Readable Context Artifacts:\n${normalizedEnvelope.requiredSourceArtifacts.map(a => `- ${a}`).join("\n") || "- none"}\n` +
+    `Forbidden Writes:\n${(normalizedEnvelope.forbiddenArtifacts?.length ?? 0) > 0
+      ? normalizedEnvelope.forbiddenArtifacts!.map(a => `- ${a}`).join("\n")
+      : "- any artifact not listed under Owned Artifacts unless explicitly allowed as integration context."}`,
+  )
+
   const goal = goalParts.join("\n\n")
 
   // Filter tools based on the envelope's allowedTools / requiredToolCapabilities
@@ -858,6 +961,9 @@ export async function spawnChildForPlan(
         effectClass: normalizedEnvelope.effectClass,
         verificationMode: normalizedEnvelope.verificationMode,
         targetArtifacts: normalizedEnvelope.targetArtifacts,
+      upstreamAcceptedArtifacts: normalizedEnvelope.upstreamAcceptedArtifacts,
+      unresolvedDependencyBlockers: normalizedEnvelope.unresolvedDependencyBlockers,
+      repairContext: normalizedEnvelope.repairContext,
     },
   })
 
@@ -980,13 +1086,19 @@ export async function spawnChildForPlan(
     })
 
     if (hitLimit) {
+      const execution = buildChildExecutionResult(answer, child.allToolCalls)
       return {
         output: `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`,
         toolCalls: child.allToolCalls,
+        execution,
       }
     }
 
-    return { output: answer, toolCalls: child.allToolCalls }
+    return {
+      output: answer,
+      toolCalls: child.allToolCalls,
+      execution: buildChildExecutionResult(answer, child.allToolCalls),
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     ctx.onChildTrace?.({
@@ -996,7 +1108,12 @@ export async function spawnChildForPlan(
       status: "error",
       error: errMsg,
     })
-    return { output: `Delegation failed: ${errMsg}`, toolCalls: child.allToolCalls }
+    const output = `Delegation failed: ${errMsg}`
+    return {
+      output,
+      toolCalls: child.allToolCalls,
+      execution: buildChildExecutionResult(output, child.allToolCalls),
+    }
   } finally {
     releaseSlot?.()
   }

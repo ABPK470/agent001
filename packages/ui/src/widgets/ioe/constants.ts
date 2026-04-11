@@ -356,10 +356,11 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-decision" && e.shouldPlan) items.push({ text: `PLAN ▶ score ${e.score.toFixed(2)}`, color: C.plum })
     else if (e.kind === "planner-plan-generated") items.push({ text: `PLAN ✓ ${e.stepCount} steps: ${e.steps.map(s => s.name).join(" → ")}`, color: C.plum })
     else if (e.kind === "planner-step-start") items.push({ text: `STEP ⟩ ${e.stepName}`, color: C.dim })
-    else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.status === "completed" ? "✓" : "✗"} ${e.stepName} (${e.durationMs}ms)`, color: e.status === "completed" ? C.success : C.coral })
+    else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? "✓" : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? "⚠" : "✗"} ${e.stepName} (${e.durationMs}ms${e.acceptanceState ? ` · ${e.acceptanceState}` : ""})`, color: e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? C.success : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? C.warning : C.coral })
     else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-validation-remediated") items.push({ text: `PLAN ✓ validation auto-remediated (${e.diagnostics.length})`, color: C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
+    else if (e.kind === "planner-repair-plan") items.push({ text: `REPAIR ${e.rerunOrder.join(" → ") || "none"}`, color: C.plum })
     else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
     else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
   }
@@ -397,6 +398,10 @@ export function buildProblems(trace: TraceEntry[], steps: Step[]): Problem[] {
           if (/^\[non-blocking\]/i.test(issue)) continue
           addProblem({ text: `${step.stepName}: ${issue}`, source: "verifier" })
         }
+      }
+    } else if (e.kind === "planner-repair-plan") {
+      for (const task of e.tasks) {
+        if (task.mode === "blocked") addProblem({ text: `${task.stepName}: repair blocked`, source: "planner" })
       }
     }
   }
