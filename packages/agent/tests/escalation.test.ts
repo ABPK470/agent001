@@ -104,10 +104,21 @@ describe("resolveEscalation", () => {
       expect(result.reason).toBe("retries_exhausted")
     })
 
-    it("escalates on repeated fail even if revision path exists", () => {
+    it("keeps revising on fail while attempts remain", () => {
       const result = resolveEscalation(makeInput({ verdict: "fail", revisionAvailable: true, attempt: 1 }))
+      expect(result.action).toBe("revise")
+      expect(result.reason).toBe("needs_revision")
+    })
+
+    it("escalates on repeated fail when the run is marked stuck", () => {
+      const result = resolveEscalation(makeInput({
+        verdict: "fail",
+        revisionAvailable: true,
+        attempt: 1,
+        allStepsStuck: true,
+      }))
       expect(result.action).toBe("escalate")
-      expect(result.reason).toBe("retries_exhausted")
+      expect(result.reason).toBe("all_steps_stuck")
     })
   })
 

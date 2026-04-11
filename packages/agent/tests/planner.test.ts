@@ -111,9 +111,10 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
 describe("Planner decision: assessPlannerDecision", () => {
   it("routes 'build a chess game' to planner (implementation scope)", () => {
     const decision = assessPlannerDecision("Build a fully playable chess game with drag and drop", [])
-    expect(decision.shouldPlan).toBe(true)
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("bounded_coherent_generation")
     expect(decision.score).toBeGreaterThanOrEqual(3)
-    expect(decision.reason).toContain("implementation_scope")
+    expect(decision.reason).toBe("bounded_coherent_generation")
   })
 
   it("routes 'create a website with multiple pages' to planner", () => {
@@ -122,12 +123,14 @@ describe("Planner decision: assessPlannerDecision", () => {
       [],
     )
     expect(decision.shouldPlan).toBe(true)
+    expect(decision.route).toBe("full_planner_decomposition")
     expect(decision.score).toBeGreaterThanOrEqual(3)
   })
 
   it("routes 'build a todo app' to planner", () => {
     const decision = assessPlannerDecision("Build a complete todo application with add, delete, and filter functionality", [])
-    expect(decision.shouldPlan).toBe(true)
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("bounded_coherent_generation")
   })
 
   it("routes 'first do X, then Y, then Z' to planner (multi-step)", () => {
@@ -151,6 +154,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("keeps 'hello' in direct path (simple dialogue)", () => {
     const decision = assessPlannerDecision("hello", [])
     expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("direct")
     expect(decision.reason).toBe("simple_dialogue")
   })
 
@@ -168,6 +172,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("keeps 'edit the login handler in auth.ts' in direct path", () => {
     const decision = assessPlannerDecision("Edit the login handler in auth.ts to add rate limiting", [])
     expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("direct")
     expect(decision.reason).toBe("edit_artifact_direct_path")
   })
 
@@ -200,7 +205,47 @@ describe("Planner decision: assessPlannerDecision", () => {
       [],
     )
     expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("single_artifact_direct_burst")
     expect(decision.reason).toBe("single_artifact_direct_burst")
+  })
+
+  it("routes bounded greenfield builds to coherence-first direct execution", () => {
+    const decision = assessPlannerDecision(
+      "Create a complete Kanban app from scratch with drag and drop and persistent state",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("bounded_coherent_generation")
+    expect(decision.reason).toBe("bounded_coherent_generation")
+  })
+
+  it("keeps planner routing for multi-page builds that already imply coordination-heavy ownership", () => {
+    const decision = assessPlannerDecision(
+      "Create a website with a landing page, docs page, and admin page, then wire shared navigation and forms",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+    expect(decision.route).toBe("full_planner_decomposition")
+  })
+
+  it("does not use bounded coherent generation for existing-code integration work", () => {
+    const decision = assessPlannerDecision(
+      "Build a new dashboard and integrate it into the existing auth and API flow",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+    expect(decision.route).toBe("full_planner_decomposition")
+  })
+
+  it("routes larger greenfield systems to planner bootstrap before decomposition", () => {
+    const decision = assessPlannerDecision(
+      "Build a complete SaaS starter from scratch with authentication, billing, admin tooling, and shared contracts across frontend, API, and worker modules.",
+      [],
+    )
+    expect(decision.shouldPlan).toBe(true)
+    expect(decision.route).toBe("planner_with_coherent_bootstrap")
+    expect(decision.coherenceNeed).toBe("high")
+    expect(["medium", "high"]).toContain(decision.coordinationNeed)
   })
 
   it("does NOT use direct burst when no concrete target file is provided", () => {

@@ -18,8 +18,8 @@ export {
 } from "./circuit-breaker.js"
 export type { BudgetState } from "./circuit-breaker.js"
 export { assessPlannerDecision } from "./decision.js"
-export { generatePlan } from "./generate.js"
-export type { PlanGenerationContext, PlanGenerationResult } from "./generate.js"
+export { generateCoherentBootstrap, generatePlan } from "./generate.js"
+export type { CoherentBootstrapGenerationResult, PlanGenerationContext, PlanGenerationResult } from "./generate.js"
 export { executePipeline } from "./pipeline.js"
 export type { DelegateFn, DelegateResult, PipelineExecutorOptions, ToolExecFn } from "./pipeline.js"
 export { validatePlan } from "./validate.js"
@@ -28,7 +28,7 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArtifactRelation, ChildExecutionResult, CircuitBreakerState, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerDecision, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
+    ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
     VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
@@ -38,11 +38,11 @@ import type { LLMClient, Message, Tool } from "../types.js"
 import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "./blueprint-contract.js"
 import { createBudgetState, maybeExtendBudget } from "./circuit-breaker.js"
 import { assessPlannerDecision } from "./decision.js"
-import { generatePlan } from "./generate.js"
+import { generateCoherentBootstrap, generatePlan } from "./generate.js"
 import type { DelegateFn } from "./pipeline.js"
 import { executePipeline } from "./pipeline.js"
 import { compilePlannerRuntime } from "./runtime-model.js"
-import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, SubagentTaskStep, VerifierDecision } from "./types.js"
+import type { PipelineResult, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, SubagentTaskStep, VerifierDecision } from "./types.js"
 import { validatePlan } from "./validate.js"
 import { buildIssueIdentity, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, deriveAcceptanceState } from "./verification-model.js"
 import { verify } from "./verifier.js"
@@ -1071,11 +1071,61 @@ export async function executePlannerPath(
     kind: "planner-decision",
     score: decision.score,
     shouldPlan: decision.shouldPlan,
+    route: decision.route,
     reason: decision.reason,
+    coherenceNeed: decision.coherenceNeed,
+    coordinationNeed: decision.coordinationNeed,
   })
 
   if (!decision.shouldPlan) {
-    return { handled: false, skipReason: `score=${decision.score} (${decision.reason})` }
+    return { handled: false, skipReason: `route=${decision.route} score=${decision.score} (${decision.reason})` }
+  }
+
+  let coherentBootstrap: PlannerCoherentBootstrap | undefined
+  if (decision.route === "planner_with_coherent_bootstrap") {
+    const bootstrapResult = await generateCoherentBootstrap(ctx.llm, {
+      goal,
+      workspaceRoot: ctx.workspaceRoot,
+      history: ctx.history,
+    }, {
+      signal: ctx.signal,
+    })
+
+    if (!bootstrapResult.bootstrap) {
+      ctx.onTrace?.({
+        kind: "planner-generation-failed",
+        diagnostics: bootstrapResult.diagnostics,
+      })
+      const reason = `Planner bootstrap failed: ${bootstrapResult.diagnostics.map((d) => d.message).join("; ")}`
+      return {
+        handled: true,
+        answer: buildPlannerFailurePayload({
+          stage: "generation",
+          reason,
+          diagnostics: bootstrapResult.diagnostics,
+          score: decision.score,
+          plannerReason: decision.reason,
+        }),
+        skipReason: reason,
+      }
+    }
+
+    coherentBootstrap = bootstrapResult.bootstrap
+    ctx.onTrace?.({
+      kind: "planner-coherent-bootstrap",
+      artifactCount: coherentBootstrap.artifacts.length,
+      decompositionStrategy: coherentBootstrap.decompositionStrategy,
+      decompositionReasons: [...coherentBootstrap.decompositionReasons],
+      sharedContracts: coherentBootstrap.sharedContracts?.map((contract) => contract.name) ?? [],
+      invariants: coherentBootstrap.invariants?.map((invariant) => invariant.id) ?? [],
+    })
+    ctx.onTrace?.({
+      kind: "planner-architecture-state",
+      lane: decision.route,
+      status: "frozen",
+      reason: "coherent_bootstrap_generated",
+      architecture: coherentBootstrap.architecture,
+    })
   }
 
   // Step 2: Generate plan
@@ -1085,6 +1135,8 @@ export async function executePlannerPath(
     availableTools: ctx.tools,
     workspaceRoot: ctx.workspaceRoot,
     history: ctx.history,
+    route: decision.route,
+    coherentBootstrap,
   }, {
     maxAttempts: 3,
     signal: ctx.signal,
@@ -1439,6 +1491,15 @@ export async function executePlannerPath(
         acceptanceState: pipelineResult?.stepResults.get(s.stepName)?.acceptanceState,
       })),
     })
+    if (plan.coherentBootstrap) {
+      ctx.onTrace?.({
+        kind: "planner-architecture-state",
+        lane: plan.route ?? decision.route,
+        status: verifierDecision.overall === "pass" ? "preserved" : "repairing_in_place",
+        reason: verifierDecision.overall === "pass" ? "verification_passed" : "architecture_preserving_repair",
+        architecture: plan.coherentBootstrap.architecture,
+      })
+    }
     ctx.onTrace?.({
       kind: "planner-issue-timeline",
       attempt: attempt + 1,
@@ -1541,6 +1602,16 @@ export async function executePlannerPath(
       reason: escalation.reason,
       attempt: attempt + 1,
     })
+
+    if (plan.coherentBootstrap && escalation.action === "escalate") {
+      ctx.onTrace?.({
+        kind: "planner-architecture-state",
+        lane: plan.route ?? decision.route,
+        status: "abandoned",
+        reason: escalation.reason,
+        architecture: plan.coherentBootstrap.architecture,
+      })
+    }
 
     if (escalation.action === "pass" || escalation.action === "escalate") {
       break

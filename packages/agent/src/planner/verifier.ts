@@ -2401,7 +2401,7 @@ export async function verify(
   plan: Plan,
   pipelineResult: PipelineResult,
   tools: readonly Tool[],
-  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void },
+  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void; skipContractValidation?: boolean },
 ): Promise<VerifierDecision> {
   const finalizeAssessments = (
     assessments: readonly VerifierStepAssessment[],
@@ -2425,58 +2425,60 @@ export async function verify(
   // These catch empty outputs, missing file mutations, contradictory claims, etc.
   // BEFORE spending tokens on LLM verification.
   const contractFailures: VerifierStepAssessment[] = []
-  for (const step of plan.steps) {
-    if (step.stepType !== "subagent_task") continue
-    const sa = step as SubagentTaskStep
-    const stepResult = pipelineResult.stepResults.get(step.name)
-    if (!stepResult || stepResult.status === "skipped") continue
+  if (!opts?.skipContractValidation) {
+    for (const step of plan.steps) {
+      if (step.stepType !== "subagent_task") continue
+      const sa = step as SubagentTaskStep
+      const stepResult = pipelineResult.stepResults.get(step.name)
+      if (!stepResult || stepResult.status === "skipped") continue
 
-    const contractSpec = buildContractSpec(
-      sa,
-      sa.executionContext,
-      undefined,
-      knownProjectArtifacts,
-    )
-    const contractResult = validateDelegatedOutputContract({
-      spec: contractSpec,
-      output: stepResult.output ?? stepResult.error ?? "",
-      toolCalls: stepResult.toolCalls,
-    })
+      const contractSpec = buildContractSpec(
+        sa,
+        sa.executionContext,
+        undefined,
+        knownProjectArtifacts,
+      )
+      const contractResult = validateDelegatedOutputContract({
+        spec: contractSpec,
+        output: stepResult.output ?? stepResult.error ?? "",
+        toolCalls: stepResult.toolCalls,
+      })
 
-    if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
-      contractFailures.push({
-        stepName: step.name,
-        outcome: "retry",
-        confidence: 0.97,
-        issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
-        retryable: true,
-      })
-      opts?.onTrace?.({
-        kind: "verifier-reconciliation-check",
-        stepName: step.name,
-        findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
-      })
-      continue
-    }
+      if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
+        contractFailures.push({
+          stepName: step.name,
+          outcome: "retry",
+          confidence: 0.97,
+          issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
+          retryable: true,
+        })
+        opts?.onTrace?.({
+          kind: "verifier-reconciliation-check",
+          stepName: step.name,
+          findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
+        })
+        continue
+      }
 
-    if (!contractResult.ok && contractResult.code) {
-      const guidance = getCorrectionGuidance(contractResult.code)
-      contractFailures.push({
-        stepName: step.name,
-        outcome: "retry",
-        confidence: 0.95, // high confidence — deterministic check
-        issues: [
-          `[contract:${contractResult.code}] ${contractResult.message}`,
-          `[correction] ${guidance}`,
-        ],
-        retryable: true,
-      })
-      opts?.onTrace?.({
-        kind: "verifier-contract-check",
-        stepName: step.name,
-        code: contractResult.code,
-        message: contractResult.message,
-      })
+      if (!contractResult.ok && contractResult.code) {
+        const guidance = getCorrectionGuidance(contractResult.code)
+        contractFailures.push({
+          stepName: step.name,
+          outcome: "retry",
+          confidence: 0.95,
+          issues: [
+            `[contract:${contractResult.code}] ${contractResult.message}`,
+            `[correction] ${guidance}`,
+          ],
+          retryable: true,
+        })
+        opts?.onTrace?.({
+          kind: "verifier-contract-check",
+          stepName: step.name,
+          code: contractResult.code,
+          message: contractResult.message,
+        })
+      }
     }
   }
 

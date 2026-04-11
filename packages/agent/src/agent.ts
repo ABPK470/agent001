@@ -24,23 +24,36 @@
 
 import { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
 import * as log from "./logger.js"
+import {
+    buildCoherentGenerationMessages,
+    buildCoherentPlannerEscalationGoal,
+    buildCoherentRepairInstructions,
+    buildCoherentVerificationPipelineResult,
+    buildCoherentVerificationPlan,
+    materializeCoherentSolutionBundle,
+    parseCoherentSolutionBundle,
+    summarizeCoherentVerifierDecision,
+} from "./planner/coherent.js"
+import { assessPlannerDecision } from "./planner/decision.js"
 import type { PlannerContext } from "./planner/index.js"
 import { executePlannerPath } from "./planner/index.js"
+import type { CoherentSolutionBundle, Plan, VerifierDecision } from "./planner/types.js"
+import { verify } from "./planner/verifier.js"
 import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget.js"
 import type { ToolCallRecord } from "./recovery.js"
 import { buildRecoveryHints, buildSemanticToolCallKey, didToolCallFail } from "./recovery.js"
 import type {
-  RoundStuckState,
-  ToolLoopState,
-  ToolRoundProgressSummary,
+    RoundStuckState,
+    ToolLoopState,
+    ToolRoundProgressSummary,
 } from "./tool-utils.js"
 import {
-  checkToolLoopStuckDetection,
-  enrichToolResultMetadata as enrichResult,
-  evaluateToolRoundBudgetExtension,
-  executeToolWithTimeout,
-  summarizeToolRoundProgress,
-  trackToolCallFailureState,
+    checkToolLoopStuckDetection,
+    enrichToolResultMetadata as enrichResult,
+    evaluateToolRoundBudgetExtension,
+    executeToolWithTimeout,
+    summarizeToolRoundProgress,
+    trackToolCallFailureState,
 } from "./tool-utils.js"
 import type { AgentConfig, LLMClient, Message, PromptBudgetSection, TokenUsage, Tool } from "./types.js"
 import { DROP_PRIORITY } from "./types.js"
@@ -760,6 +773,56 @@ export class Agent {
     if (this.config.verbose) log.logGoal(goal)
 
     const messages: Message[] = resume?.messages ?? this.buildInitialMessages(goal)
+    const createPlannerContext = (): PlannerContext => ({
+      llm: this.llm,
+      tools: this.toolList,
+      workspaceRoot: this.config.workspaceRoot,
+      history: messages,
+      signal: this.config.signal,
+      onTrace: this.config.onPlannerTrace,
+    })
+    let coherentExecution: {
+      bundle: CoherentSolutionBundle
+      verificationPlan: Plan
+      repairAttempts: number
+      escalated: boolean
+      lastVerifierDecision?: VerifierDecision
+      lastVerifiedToolCallCount: number
+    } | null = null
+
+    const runCoherentVerification = async (force = false): Promise<VerifierDecision | null> => {
+      if (!coherentExecution) return null
+      if (!force && coherentExecution.lastVerifierDecision && coherentExecution.lastVerifiedToolCallCount === this.allToolCalls.length) {
+        return coherentExecution.lastVerifierDecision
+      }
+
+      const decision = await verify(
+        this.llm,
+        coherentExecution.verificationPlan,
+        buildCoherentVerificationPipelineResult(coherentExecution.bundle, this.allToolCalls),
+        this.toolList,
+        {
+          signal: this.config.signal,
+          onTrace: this.config.onPlannerTrace,
+          skipContractValidation: true,
+        },
+      )
+
+      coherentExecution.lastVerifierDecision = decision
+      coherentExecution.lastVerifiedToolCallCount = this.allToolCalls.length
+
+      const summary = summarizeCoherentVerifierDecision(decision)
+      this.config.onPlannerTrace?.({
+        kind: "coherent-generation-verified",
+        overall: summary.overall,
+        confidence: summary.confidence,
+        issueCount: summary.issueCount,
+        systemCheckCount: summary.systemCheckCount,
+        affectedArtifacts: [...summary.affectedArtifacts],
+      })
+
+      return decision
+    }
 
     // ── Planner-first routing (agenc-core pattern) ──────────────
     // For complex tasks (score >= 3), try the planner path BEFORE falling
@@ -768,14 +831,7 @@ export class Agent {
     if (this.config.enablePlanner && !resume && this.config.plannerDelegateFn) {
       this.config.onPlannerTrace?.({ kind: "planning_preflight", mode: "planner-first" })
 
-      const plannerCtx: PlannerContext = {
-        llm: this.llm,
-        tools: this.toolList,
-        workspaceRoot: this.config.workspaceRoot,
-        history: messages,
-        signal: this.config.signal,
-        onTrace: this.config.onPlannerTrace,
-      }
+      const plannerCtx = createPlannerContext()
 
       const plannerResult = await executePlannerPath(
         goal,
@@ -787,6 +843,152 @@ export class Agent {
         const answer = plannerResult.answer ?? "(planner produced no answer)"
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
+      }
+
+      const routingDecision = assessPlannerDecision(goal, messages)
+
+      if (routingDecision.route === "bounded_coherent_generation") {
+        this.config.onPlannerTrace?.({ kind: "coherent-generation-start", route: routingDecision.route })
+        this.config.onPlannerTrace?.({
+          kind: "planner-architecture-state",
+          lane: routingDecision.route,
+          status: "preserved",
+          reason: "coherent_lane_selected",
+        })
+
+        const coherentMessages = buildCoherentGenerationMessages(goal, this.config.workspaceRoot, messages)
+        this.config.onLlmCall?.({
+          phase: "request",
+          messages: coherentMessages,
+          tools: [],
+          iteration: 0,
+        })
+
+        const t0 = Date.now()
+        const coherentResponse = await this.llm.chat(coherentMessages, [], { signal: this.config.signal })
+        const durationMs = Date.now() - t0
+        this.llmCalls++
+        this.config.onLlmCall?.({
+          phase: "response",
+          response: coherentResponse,
+          iteration: 0,
+          durationMs,
+        })
+        if (coherentResponse.usage) {
+          this.usage.promptTokens += coherentResponse.usage.promptTokens
+          this.usage.completionTokens += coherentResponse.usage.completionTokens
+          this.usage.totalTokens += coherentResponse.usage.totalTokens
+        }
+
+        const coherentParse = parseCoherentSolutionBundle(coherentResponse.content ?? "")
+        if (coherentParse.bundle) {
+          this.config.onPlannerTrace?.({
+            kind: "coherent-generation-bundle",
+            artifactCount: coherentParse.bundle.artifacts.length,
+            artifacts: coherentParse.bundle.artifacts.map((artifact) => ({ path: artifact.path, purpose: artifact.purpose })),
+            sharedContracts: coherentParse.bundle.sharedContracts?.map((contract) => contract.name) ?? [],
+            invariants: coherentParse.bundle.invariants?.map((invariant) => invariant.id) ?? [],
+          })
+
+          const materialized = await materializeCoherentSolutionBundle(coherentParse.bundle, {
+            writeFileTool: this.tools.get("write_file"),
+            readFileTool: this.tools.get("read_file"),
+          })
+
+          for (const artifact of coherentParse.bundle.artifacts) {
+            const written = materialized.writtenArtifacts.includes(artifact.path)
+            this.allToolCalls.push({
+              name: written ? "write_file" : "write_file",
+              args: { path: artifact.path, content: artifact.content },
+              result: written ? "coherent bundle materialized" : `Error: bundle materialization skipped for ${artifact.path}`,
+              isError: !written,
+            })
+          }
+          for (const artifactPath of materialized.readBackArtifacts) {
+            this.allToolCalls.push({
+              name: "read_file",
+              args: { path: artifactPath },
+              result: "coherent bundle read-back completed",
+              isError: false,
+            })
+          }
+
+          if (materialized.diagnostics.length === 0) {
+            coherentExecution = {
+              bundle: coherentParse.bundle,
+              verificationPlan: buildCoherentVerificationPlan(coherentParse.bundle, this.config.workspaceRoot),
+              repairAttempts: 0,
+              escalated: false,
+              lastVerifiedToolCallCount: -1,
+            }
+
+            this.config.onPlannerTrace?.({
+              kind: "coherent-generation-materialized",
+              artifactCount: materialized.writtenArtifacts.length,
+              artifacts: [...materialized.writtenArtifacts],
+              readBackArtifacts: [...materialized.readBackArtifacts],
+            })
+
+            messages.push({
+              role: "assistant",
+              content:
+                `Coherent solution bundle materialized with ${materialized.writtenArtifacts.length} files. ` +
+                `Architecture: ${coherentParse.bundle.architecture}`,
+              section: "history",
+            })
+            messages.push({
+              role: "system",
+              content:
+                `A coherent multi-file solution bundle has already been written to disk for this goal.\n` +
+                `Files: ${materialized.writtenArtifacts.join(", ")}\n` +
+                `Phase 2 starts now: the coherent verifier owns acceptance. Preserve the architecture and file interfaces, and make only targeted fixes if evidence shows problems.\n` +
+                `Do NOT redesign or decompose the solution unless verification proves the architecture is broken.`,
+              section: "history",
+            })
+
+            const initialCoherentDecision = await runCoherentVerification(true)
+            if (initialCoherentDecision && initialCoherentDecision.overall !== "pass") {
+              const initialSummary = summarizeCoherentVerifierDecision(initialCoherentDecision)
+              this.config.onPlannerTrace?.({
+                kind: "coherent-generation-repair-needed",
+                repairAttempt: 1,
+                issueCount: initialSummary.issueCount,
+                issues: [...initialSummary.issues],
+                affectedArtifacts: [...initialSummary.affectedArtifacts],
+              })
+              this.config.onPlannerTrace?.({
+                kind: "planner-architecture-state",
+                lane: routingDecision.route,
+                status: "repairing_in_place",
+                reason: "coherent_verifier_requested_repair",
+                architecture: coherentParse.bundle.architecture,
+              })
+              messages.push({
+                role: "system",
+                content: buildCoherentRepairInstructions(coherentParse.bundle, initialCoherentDecision, 1),
+                section: "history",
+              })
+            }
+
+            this.config.onPlannerTrace?.({
+              kind: "coherent-generation-handoff",
+              artifactCount: materialized.writtenArtifacts.length,
+              verificationRoute: "coherent_verifier_then_direct_tool_loop",
+            })
+          } else {
+            this.config.onPlannerTrace?.({
+              kind: "coherent-generation-failed",
+              stage: "materialization",
+              diagnostics: [...materialized.diagnostics],
+            })
+          }
+        } else {
+          this.config.onPlannerTrace?.({
+            kind: "coherent-generation-failed",
+            stage: "bundle_parse",
+            diagnostics: [...coherentParse.diagnostics],
+          })
+        }
       }
 
       // Planner declined — fall through to direct tool loop
@@ -872,11 +1074,13 @@ export class Agent {
         }
       }
 
-      this.config.onPlannerTrace?.({
-        kind: "direct_loop_fallback",
-        source: directLoopFallbackSource,
-        reason: plannerResult.skipReason ?? "Planner declined — continuing in the direct tool loop.",
-      })
+      if (routingDecision.route !== "bounded_coherent_generation") {
+        this.config.onPlannerTrace?.({
+          kind: "direct_loop_fallback",
+          source: directLoopFallbackSource,
+          reason: plannerResult.skipReason ?? "Planner declined — continuing in the direct tool loop.",
+        })
+      }
     }
 
     // ── Direct tool loop ────────────────────────────────────────
@@ -1056,9 +1260,85 @@ export class Agent {
       // No tool calls → the agent is done, return the final answer
       if (response.toolCalls.length === 0) {
         completionAttempted = true
+
+        if (coherentExecution) {
+          const coherentDecision = await runCoherentVerification(false)
+          if (coherentDecision && coherentDecision.overall !== "pass") {
+            messages.push({
+              role: "assistant",
+              content: response.content,
+              section: "history",
+            })
+
+            const summary = summarizeCoherentVerifierDecision(coherentDecision)
+            const nextRepairAttempt = coherentExecution.repairAttempts + 1
+            this.config.onPlannerTrace?.({
+              kind: "coherent-generation-repair-needed",
+              repairAttempt: nextRepairAttempt,
+              issueCount: summary.issueCount,
+              issues: [...summary.issues],
+              affectedArtifacts: [...summary.affectedArtifacts],
+            })
+            this.config.onPlannerTrace?.({
+              kind: "planner-architecture-state",
+              lane: "bounded_coherent_generation",
+              status: "repairing_in_place",
+              reason: "coherent_completion_blocked_by_verifier",
+              architecture: coherentExecution.bundle.architecture,
+            })
+
+            if (coherentExecution.repairAttempts < 1) {
+              coherentExecution.repairAttempts = nextRepairAttempt
+              const repairMsg = buildCoherentRepairInstructions(coherentExecution.bundle, coherentDecision, nextRepairAttempt)
+              messages.push({ role: "system", content: repairMsg, section: "history" })
+              this.config.onNudge?.({ tag: "coherent-repair-required", message: repairMsg, iteration: i })
+              continue
+            }
+
+            if (!coherentExecution.escalated && this.config.enablePlanner && this.config.plannerDelegateFn) {
+              coherentExecution.escalated = true
+              this.config.onPlannerTrace?.({
+                kind: "coherent-generation-escalated",
+                target: "planner_repair_path",
+                issueCount: summary.issueCount,
+                reason: "coherent_repair_still_failing",
+              })
+              this.config.onPlannerTrace?.({
+                kind: "planner-architecture-state",
+                lane: "bounded_coherent_generation",
+                status: "abandoned",
+                reason: "coherent_repair_still_failing",
+                architecture: coherentExecution.bundle.architecture,
+              })
+
+              const remediationResult = await executePlannerPath(
+                buildCoherentPlannerEscalationGoal(goal, coherentExecution.bundle, coherentDecision),
+                createPlannerContext(),
+                this.config.plannerDelegateFn,
+              )
+
+              if (remediationResult.handled) {
+                const answer = remediationResult.answer ?? "(planner remediation produced no answer)"
+                if (this.config.verbose) log.logFinalAnswer(answer)
+                return answer
+              }
+            }
+
+            coherentExecution.repairAttempts = nextRepairAttempt
+            const fallbackRepairMsg = buildCoherentRepairInstructions(coherentExecution.bundle, coherentDecision, nextRepairAttempt)
+            messages.push({ role: "system", content: fallbackRepairMsg, section: "history" })
+            continue
+          }
+        }
+
         // Guard: if this is iteration 0 and the agent has tools, it likely
         // bailed without doing any work. Nudge it once to actually act.
-        if (i === 0 && this.toolList.length > 0 && !earlyExitNudged) {
+        if (
+          i === 0
+          && this.toolList.length > 0
+          && !earlyExitNudged
+          && !(coherentExecution && coherentExecution.lastVerifierDecision?.overall === "pass")
+        ) {
           earlyExitNudged = true
           messages.push({
             role: "assistant",

@@ -191,7 +191,140 @@ function TraceItem({ entry }: { entry: TraceEntry }) {
             </span>
             <span className="text-text-muted text-[13px] font-mono">score {entry.score.toFixed(2)}</span>
           </div>
-          <div className="text-text-muted text-[13px] mt-0.5 ml-5">{entry.reason}</div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">
+            {entry.reason}{entry.route ? ` · route ${entry.route}` : ""}
+            {entry.coherenceNeed ? ` · coherence ${entry.coherenceNeed}` : ""}
+            {entry.coordinationNeed ? ` · coordination ${entry.coordinationNeed}` : ""}
+          </div>
+        </div>
+      )
+
+    case "planner-coherent-bootstrap":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#C084FC]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#C084FC] text-[13px] font-medium font-mono">BOOTSTRAP</span>
+            <span className="text-[#C084FC]/80 text-[13px]">{entry.decompositionStrategy}</span>
+            <span className="text-text-muted text-[13px]">{entry.artifactCount} artifacts</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">
+            {entry.decompositionReasons.join(" · ") || "architecture frozen before decomposition"}
+          </div>
+        </div>
+      )
+
+    case "planner-architecture-state":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/30 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">ARCH</span>
+            <span className={`text-[13px] ${entry.status === "abandoned" ? "text-[#F97316]" : entry.status === "repairing_in_place" ? "text-[#F59E0B]" : "text-[#22C55E]"}`}>
+              {entry.status}
+            </span>
+            <span className="text-text-muted text-[13px]">lane {entry.lane}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">{entry.reason}{entry.architecture ? ` · ${entry.architecture}` : ""}</div>
+        </div>
+      )
+
+    case "coherent-generation-start":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-[#22C55E] text-[13px]">starting bounded coherent generation</span>
+          </div>
+        </div>
+      )
+
+    case "coherent-generation-bundle":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-[#22C55E]/80 text-[13px]">bundle ✓ {entry.artifactCount} artifacts</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">
+            {entry.artifacts.map((artifact) => artifact.path).join(" · ")}
+          </div>
+        </div>
+      )
+
+    case "coherent-generation-materialized":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-success text-[13px]">materialized {entry.artifactCount} files</span>
+            <span className="text-text-muted text-[13px]">read-back {entry.readBackArtifacts.length}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">{entry.artifacts.join(" · ")}</div>
+        </div>
+      )
+
+    case "coherent-generation-verified":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className={`text-[13px] ${entry.overall === "pass" ? "text-success" : entry.overall === "retry" ? "text-[#F97316]" : "text-error"}`}>
+              verifier {entry.overall}
+            </span>
+            <span className="text-text-muted text-[13px]">conf {entry.confidence.toFixed(2)}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">
+            issues {entry.issueCount} · system checks {entry.systemCheckCount}
+            {entry.affectedArtifacts.length > 0 ? ` · ${entry.affectedArtifacts.join(" · ")}` : ""}
+          </div>
+        </div>
+      )
+
+    case "coherent-generation-repair-needed":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#F97316]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-[#F97316] text-[13px]">repair required</span>
+            <span className="text-text-muted text-[13px]">attempt {entry.repairAttempt}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">
+            {entry.issueCount} issues{entry.affectedArtifacts.length > 0 ? ` · ${entry.affectedArtifacts.join(" · ")}` : ""}
+          </div>
+        </div>
+      )
+
+    case "coherent-generation-escalated":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#F97316]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-[#F97316] text-[13px]">escalated to {entry.target}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">{entry.reason} · {entry.issueCount} issues</div>
+        </div>
+      )
+
+    case "coherent-generation-handoff":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-[#22C55E]/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-[#22C55E]/80 text-[13px]">handoff to {entry.verificationRoute}</span>
+          </div>
+          <div className="text-text-muted text-[13px] mt-0.5 ml-5">preserving architecture across {entry.artifactCount} artifacts</div>
+        </div>
+      )
+
+    case "coherent-generation-failed":
+      return (
+        <div className="py-1 pl-3 border-l-2 border-error/40 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[#22C55E] text-[13px] font-medium font-mono">COHERENT</span>
+            <span className="text-error text-[13px]">✗ failed during {entry.stage}</span>
+          </div>
+          {entry.diagnostics.map((diag, i) => (
+            <div key={i} className="text-error/70 text-[13px] mt-0.5 ml-5">{diag}</div>
+          ))}
         </div>
       )
 

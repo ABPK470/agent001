@@ -10,7 +10,7 @@
  */
 
 import type { Message } from "../types.js"
-import type { PlannerDecision } from "./types.js"
+import type { PlannerDecision, PlannerNeedLevel } from "./types.js"
 
 // ============================================================================
 // Signal detection patterns
@@ -77,12 +77,32 @@ const SINGLE_ARTIFACT_BURST_RE =
 const COHESIVE_IMPLEMENTATION_RE =
   /\b(?:full|complete|entire|end[- ]to[- ]end|from scratch|all logic|whole implementation)\b/i
 
+/** Strong greenfield coherence cues even when the user does not say "from scratch" verbatim. */
+const COHERENCE_FIRST_RE =
+  /\b(?:playable|interactive|drag and drop|drag-and-drop|fully working|working end[- ]to[- ]end)\b/i
+
 /** Concrete file targets used for high-confidence single-artifact routing. */
 const TARGET_FILE_RE = /\b[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/gi
 
 /** Conflicting multi-target cues that should block direct burst routing. */
 const MULTI_TARGET_CUE_RE =
   /\b(?:and|plus|along with|together with)\b[\s\S]{0,40}\b(?:file|module|component|page|script|api|service|backend|frontend|database|schema|tests?)\b/i
+
+/** Bounded greenfield builds benefit from coherence before decomposition. */
+const BOUNDED_COHERENT_SCOPE_RE =
+  /\b(?:build|create|implement|develop|make|write)\b[\s\S]{0,80}\b(?:app(?:lication)?|game|website|site|tool|dashboard|widget|prototype|project|starter|platform|system)\b/i
+
+/** Larger greenfield system cues justify architecture freeze before decomposition. */
+const LARGE_GREENFIELD_BOOTSTRAP_RE =
+  /\b(?:starter|platform|system|suite|workspace|tenant|billing|worker|backend|frontend|api|service|admin)\b/i
+
+/** Existing-code coupling tends to require planner coordination, not coherence-first direct work. */
+const EXISTING_CODE_COUPLING_RE =
+  /\b(?:existing|current|already|integrat(?:e|ion)|hook\s+into|wire\s+into|refactor|migrat(?:e|ion)|extend|modify|update|patch|rename|repair)\b/i
+
+/** Explicit coordination-heavy requests should stay in planner land. */
+const COORDINATION_HEAVY_RE =
+  /\b(?:multiple|several|coordinated|shared|cross[- ]file|cross[- ]module|across|between|independent)\b[\s\S]{0,40}\b(?:files?|modules?|components?|pages?|sections?|widgets?|panels?|interactions?)\b/i
 
 // ============================================================================
 // Structured signal collection
@@ -99,6 +119,13 @@ interface RequestSignals {
   readonly structuredBulletCount: number
   readonly priorToolMessages: number
   readonly targetFilePaths: readonly string[]
+}
+
+interface RoutingAxes {
+  readonly coherenceScore: number
+  readonly coordinationScore: number
+  readonly coherenceNeed: PlannerNeedLevel
+  readonly coordinationNeed: PlannerNeedLevel
 }
 
 function collectSignals(messageText: string, history: readonly Message[]): RequestSignals {
@@ -139,6 +166,85 @@ function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): boolean {
   return signals.hasImplementationScopeCue || COHESIVE_IMPLEMENTATION_RE.test(signals.normalized)
 }
 
+function toNeedLevel(score: number): PlannerNeedLevel {
+  if (score >= 5) return "high"
+  if (score >= 3) return "medium"
+  return "low"
+}
+
+function hasRealOwnershipSeparation(signals: RequestSignals): boolean {
+  return signals.hasMultiStepCue
+    || signals.hasDelegationCue
+    || signals.structuredBulletCount > 0
+    || MULTI_TARGET_CUE_RE.test(signals.normalized)
+    || COORDINATION_HEAVY_RE.test(signals.normalized)
+}
+
+function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
+  let coherenceScore = 0
+  let coordinationScore = 0
+
+  if (signals.hasImplementationScopeCue) coherenceScore += 3
+  if (COHESIVE_IMPLEMENTATION_RE.test(signals.normalized)) coherenceScore += 2
+  if (COHERENCE_FIRST_RE.test(signals.normalized)) coherenceScore += 2
+  if (BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) coherenceScore += 1
+  if (signals.longTask) coherenceScore += 1
+  if (signals.targetFilePaths.length >= 2) coherenceScore += 1
+
+  if (signals.hasMultiStepCue) coordinationScore += 3
+  if (signals.hasDelegationCue) coordinationScore += 4
+  if (signals.structuredBulletCount > 0) coordinationScore += 2
+  if (signals.targetFilePaths.length >= 2) coordinationScore += 2
+  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) coordinationScore += 3
+  if (COORDINATION_HEAVY_RE.test(signals.normalized)) coordinationScore += 3
+  if (signals.priorToolMessages >= 4) coordinationScore += 1
+  if (MULTI_TARGET_CUE_RE.test(signals.normalized)) coordinationScore += 1
+
+  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) {
+    coherenceScore = Math.max(0, coherenceScore - 1)
+  }
+
+  return {
+    coherenceScore,
+    coordinationScore,
+    coherenceNeed: toNeedLevel(coherenceScore),
+    coordinationNeed: toNeedLevel(coordinationScore),
+  }
+}
+
+function shouldUseBoundedCoherentGeneration(signals: RequestSignals, axes: RoutingAxes): boolean {
+  if (!signals.hasImplementationScopeCue) return false
+  if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
+  if (!COHESIVE_IMPLEMENTATION_RE.test(signals.normalized) && !COHERENCE_FIRST_RE.test(signals.normalized)) return false
+
+  // This route is for coherence-heavy greenfield work, not coordination-heavy
+  // or already-in-flight repo surgery.
+  if (axes.coherenceNeed !== "high") return false
+  if (axes.coordinationNeed !== "low") return false
+  if (hasRealOwnershipSeparation(signals)) return false
+  if (signals.priorToolMessages >= 4) return false
+  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
+
+  // If the user already anchors the request to many concrete artifact targets,
+  // planner ownership often becomes more important than a single cohesive pass.
+  if (signals.targetFilePaths.length > 1) return false
+
+  return true
+}
+
+function shouldUsePlannerWithCoherentBootstrap(signals: RequestSignals, axes: RoutingAxes): boolean {
+  if (!signals.hasImplementationScopeCue) return false
+  if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
+  if (!LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized) && signals.structuredBulletCount < 3 && signals.targetFilePaths.length < 3) return false
+  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
+  if (axes.coherenceNeed !== "high") return false
+  if (axes.coordinationNeed === "low") return false
+
+  // Freeze architecture first for larger greenfield work unless ownership
+  // boundaries are already explicit enough to justify immediate decomposition.
+  return !(signals.hasDelegationCue && signals.hasMultiStepCue)
+}
+
 // ============================================================================
 // Main decision function
 // ============================================================================
@@ -154,13 +260,15 @@ function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): boolean {
  *   - Long/structured task: +1
  *   - Prior tool activity (>=4 prior tools): +2
  *
- * Score >= 3 → shouldPlan = true
+ * Score >= 3 → shouldPlan = true unless a coherence-preserving direct route
+ * is a better fit.
  */
 export function assessPlannerDecision(
   messageText: string,
   history: readonly Message[],
 ): PlannerDecision {
   const signals = collectSignals(messageText, history)
+  const axes = evaluateRoutingAxes(signals)
   let score = 0
   const reasons: string[] = []
 
@@ -198,40 +306,60 @@ export function assessPlannerDecision(
   // These detect request shapes handled better by a single agent without
   // planner decomposition overhead.
   if (SIMPLE_DIALOGUE_RE.test(signals.normalized)) {
-    return { score, shouldPlan: false, reason: "simple_dialogue" }
+    return { score, shouldPlan: false, reason: "simple_dialogue", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (REVIEW_QUESTION_RE.test(signals.normalized)) {
-    return { score, shouldPlan: false, reason: "review_question" }
+    return { score, shouldPlan: false, reason: "review_question", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (signals.normalized.length < 20) {
-    return { score, shouldPlan: false, reason: "too_short" }
+    return { score, shouldPlan: false, reason: "too_short", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (EXACT_RESPONSE_RE.test(signals.normalized)) {
-    return { score, shouldPlan: false, reason: "exact_response_turn" }
+    return { score, shouldPlan: false, reason: "exact_response_turn", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (DIALOGUE_MEMORY_RE.test(signals.normalized)) {
-    return { score, shouldPlan: false, reason: "dialogue_memory_turn" }
+    return { score, shouldPlan: false, reason: "dialogue_memory_turn", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (DIALOGUE_RECALL_RE.test(signals.normalized)) {
-    return { score, shouldPlan: false, reason: "dialogue_recall_turn" }
+    return { score, shouldPlan: false, reason: "dialogue_recall_turn", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (EDIT_ARTIFACT_RE.test(signals.normalized) && !signals.hasDelegationCue) {
-    return { score, shouldPlan: false, reason: "edit_artifact_direct_path" }
+    return { score, shouldPlan: false, reason: "edit_artifact_direct_path", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
-    return { score, shouldPlan: false, reason: "plan_generation_direct_path" }
+    return { score, shouldPlan: false, reason: "plan_generation_direct_path", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
 
   // Adaptive no-plan route: single-artifact implementation requests are usually
   // faster and higher quality in a direct cohesive coding pass than micro-planning.
   if (SINGLE_ARTIFACT_BURST_RE.test(signals.normalized) && isHighConfidenceSingleArtifactBurst(signals)) {
-    return { score, shouldPlan: false, reason: "single_artifact_direct_burst" }
+    return { score, shouldPlan: false, reason: "single_artifact_direct_burst", route: "single_artifact_direct_burst", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
+  }
+
+  // Bounded greenfield builds should preserve whole-solution coherence before
+  // they are exposed to planner decomposition.
+  if (shouldUseBoundedCoherentGeneration(signals, axes)) {
+    return { score, shouldPlan: false, reason: "bounded_coherent_generation", route: "bounded_coherent_generation", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
+  }
+
+  if (shouldUsePlannerWithCoherentBootstrap(signals, axes)) {
+    return {
+      score,
+      shouldPlan: true,
+      reason: "planner_with_coherent_bootstrap",
+      route: "planner_with_coherent_bootstrap",
+      coherenceNeed: axes.coherenceNeed,
+      coordinationNeed: axes.coordinationNeed,
+    }
   }
 
   const shouldPlan = score >= 3
   return {
     score,
     shouldPlan,
+    route: shouldPlan ? "full_planner_decomposition" : "direct",
     reason: reasons.length > 0 ? reasons.join("+") : "direct_fast_path",
+    coherenceNeed: axes.coherenceNeed,
+    coordinationNeed: axes.coordinationNeed,
   }
 }

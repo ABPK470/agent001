@@ -131,6 +131,16 @@ function summarize(event: WsEvent): string {
     const pinned = Boolean(d["pinnedToLegacy"])
     return `compat ${activePath} ${diverged ? `diverged ${score}/${threshold || "?"}` : "aligned"}${pinned ? " pinned" : ""}`
   }
+  if (event.type === "planner.coherent.started") return `route=${String(d["route"] ?? "bounded_coherent_generation")}`
+  if (event.type === "planner.coherent.bootstrap") return `${String(d["decompositionStrategy"] ?? "preserve_coherence")} ${Number(d["artifactCount"] ?? 0)} artifacts`
+  if (event.type === "planner.architecture.state") return `${String(d["lane"] ?? "planner")} ${String(d["status"] ?? "unknown")}`
+  if (event.type === "planner.coherent.bundle") return `bundle ${Number(d["artifactCount"] ?? 0)} artifacts`
+  if (event.type === "planner.coherent.materialized") return `materialized ${Number(d["artifactCount"] ?? 0)} files`
+  if (event.type === "planner.coherent.verified") return `${String(d["overall"] ?? "unknown")} conf=${Number(d["confidence"] ?? 0).toFixed(2)} issues=${Number(d["issueCount"] ?? 0)}`
+  if (event.type === "planner.coherent.repair.required") return `repair attempt ${Number(d["repairAttempt"] ?? 0)} issues=${Number(d["issueCount"] ?? 0)}`
+  if (event.type === "planner.coherent.repair.escalated") return `escalated ${String(d["target"] ?? "planner_repair_path")}`
+  if (event.type === "planner.coherent.handoff") return `handoff ${String(d["verificationRoute"] ?? "verification")}`
+  if (event.type === "planner.coherent.failed") return `${String(d["stage"] ?? "failed")} (${Array.isArray(d["diagnostics"]) ? d["diagnostics"].length : 0})`
   if (event.type === "planner.runtime.compiled") {
     const executionSteps = Array.isArray(d["executionSteps"]) ? d["executionSteps"].length : 0
     const ownershipArtifacts = Array.isArray(d["ownershipArtifacts"]) ? d["ownershipArtifacts"].length : 0
@@ -143,6 +153,40 @@ function summarize(event: WsEvent): string {
   if (event.type === "debug.trace") {
     const entry = d["entry"] as Record<string, unknown> | undefined
     const kind = entry?.["kind"]
+    if (kind === "coherent-generation-start") {
+      return "coherent generation starting"
+    }
+    if (kind === "planner-coherent-bootstrap") {
+      return `bootstrap ${String(entry?.["decompositionStrategy"] ?? "preserve_coherence")} ${Number(entry?.["artifactCount"] ?? 0)} artifacts`
+    }
+    if (kind === "planner-architecture-state") {
+      return `architecture ${String(entry?.["status"] ?? "unknown")} on ${String(entry?.["lane"] ?? "planner")}`
+    }
+    if (kind === "coherent-generation-bundle") {
+      const artifactCount = Array.isArray(entry?.["artifacts"]) ? entry["artifacts"].length : Number(entry?.["artifactCount"] ?? 0)
+      return `coherent bundle ${artifactCount} artifacts`
+    }
+    if (kind === "coherent-generation-materialized") {
+      const artifactCount = Array.isArray(entry?.["artifacts"]) ? entry["artifacts"].length : Number(entry?.["artifactCount"] ?? 0)
+      const readBack = Array.isArray(entry?.["readBackArtifacts"]) ? entry["readBackArtifacts"].length : 0
+      return `coherent materialized ${artifactCount} files · read-back ${readBack}`
+    }
+    if (kind === "coherent-generation-verified") {
+      return `coherent verifier ${String(entry?.["overall"] ?? "unknown")} (${Number(entry?.["issueCount"] ?? 0)} issues)`
+    }
+    if (kind === "coherent-generation-repair-needed") {
+      return `coherent repair attempt ${Number(entry?.["repairAttempt"] ?? 0)} (${Number(entry?.["issueCount"] ?? 0)} issues)`
+    }
+    if (kind === "coherent-generation-escalated") {
+      return `coherent escalated ${String(entry?.["target"] ?? "planner_repair_path")}`
+    }
+    if (kind === "coherent-generation-handoff") {
+      return `coherent handoff ${String(entry?.["verificationRoute"] ?? "verification")}`
+    }
+    if (kind === "coherent-generation-failed") {
+      const diagnostics = Array.isArray(entry?.["diagnostics"]) ? entry["diagnostics"].length : 0
+      return `coherent failed ${String(entry?.["stage"] ?? "unknown")} (${diagnostics})`
+    }
     if (kind === "planner-step-end") {
       const status = String(entry?.["status"] ?? "unknown")
       const code = typeof entry?.["validationCode"] === "string" ? entry["validationCode"] : undefined

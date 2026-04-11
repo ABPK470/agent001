@@ -731,13 +731,77 @@ export class AgentOrchestrator {
 
         // Key lifecycle events get dedicated WS types for audit/status widgets
         if (entry.kind === "planner-decision" && entry.shouldPlan) {
-          broadcast({ type: "planner.started", data: { runId, score: entry.score, reason: entry.reason } })
+          broadcast({
+            type: "planner.started",
+            data: {
+              runId,
+              score: entry.score,
+              reason: entry.reason,
+              route: entry.route,
+              coherenceNeed: entry.coherenceNeed,
+              coordinationNeed: entry.coordinationNeed,
+            },
+          })
           services.auditService.log({
             actor: "agent",
             action: "planner.started",
             resourceType: "AgentRun",
             resourceId: runId,
-            detail: { score: entry.score, reason: entry.reason },
+            detail: {
+              score: entry.score,
+              reason: entry.reason,
+              route: entry.route,
+              coherenceNeed: entry.coherenceNeed,
+              coordinationNeed: entry.coordinationNeed,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-coherent-bootstrap") {
+          broadcast({
+            type: "planner.coherent.bootstrap",
+            data: {
+              runId,
+              artifactCount: entry.artifactCount,
+              decompositionStrategy: entry.decompositionStrategy,
+              decompositionReasons: entry.decompositionReasons,
+              sharedContracts: entry.sharedContracts,
+              invariants: entry.invariants,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.bootstrap",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              artifactCount: entry.artifactCount,
+              decompositionStrategy: entry.decompositionStrategy,
+              decompositionReasons: entry.decompositionReasons,
+              sharedContracts: entry.sharedContracts,
+              invariants: entry.invariants,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "planner-architecture-state") {
+          broadcast({
+            type: "planner.architecture.state",
+            data: {
+              runId,
+              lane: entry.lane,
+              status: entry.status,
+              reason: entry.reason,
+              architecture: entry.architecture,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.architecture.state",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              lane: entry.lane,
+              status: entry.status,
+              reason: entry.reason,
+              architecture: entry.architecture,
+            },
           }).catch(() => {})
         } else if (entry.kind === "planner-pipeline-end") {
           broadcast({ type: "planner.completed", data: { runId, status: entry.status, completedSteps: entry.completedSteps, totalSteps: entry.totalSteps } })
@@ -802,6 +866,172 @@ export class AgentOrchestrator {
               executionSteps: entry.executionSteps,
               ownershipArtifacts: entry.ownershipArtifacts,
               runtimeEntities: entry.runtimeEntities,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-start") {
+          broadcast({
+            type: "planner.coherent.started",
+            data: {
+              runId,
+              route: entry.route,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.started",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: { route: entry.route },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-bundle") {
+          broadcast({
+            type: "planner.coherent.bundle",
+            data: {
+              runId,
+              artifactCount: entry.artifactCount,
+              artifacts: entry.artifacts,
+              sharedContracts: entry.sharedContracts,
+              invariants: entry.invariants,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.bundle",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              artifactCount: entry.artifactCount,
+              artifacts: entry.artifacts,
+              sharedContracts: entry.sharedContracts,
+              invariants: entry.invariants,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-materialized") {
+          broadcast({
+            type: "planner.coherent.materialized",
+            data: {
+              runId,
+              artifactCount: entry.artifactCount,
+              artifacts: entry.artifacts,
+              readBackArtifacts: entry.readBackArtifacts,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.materialized",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              artifactCount: entry.artifactCount,
+              artifacts: entry.artifacts,
+              readBackArtifacts: entry.readBackArtifacts,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-verified") {
+          broadcast({
+            type: "planner.coherent.verified",
+            data: {
+              runId,
+              overall: entry.overall,
+              confidence: entry.confidence,
+              issueCount: entry.issueCount,
+              systemCheckCount: entry.systemCheckCount,
+              affectedArtifacts: entry.affectedArtifacts,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.verified",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              overall: entry.overall,
+              confidence: entry.confidence,
+              issueCount: entry.issueCount,
+              systemCheckCount: entry.systemCheckCount,
+              affectedArtifacts: entry.affectedArtifacts,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-repair-needed") {
+          broadcast({
+            type: "planner.coherent.repair.required",
+            data: {
+              runId,
+              repairAttempt: entry.repairAttempt,
+              issueCount: entry.issueCount,
+              issues: entry.issues,
+              affectedArtifacts: entry.affectedArtifacts,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.repair.required",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              repairAttempt: entry.repairAttempt,
+              issueCount: entry.issueCount,
+              issues: entry.issues,
+              affectedArtifacts: entry.affectedArtifacts,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-escalated") {
+          broadcast({
+            type: "planner.coherent.repair.escalated",
+            data: {
+              runId,
+              target: entry.target,
+              issueCount: entry.issueCount,
+              reason: entry.reason,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.repair.escalated",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              target: entry.target,
+              issueCount: entry.issueCount,
+              reason: entry.reason,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-handoff") {
+          broadcast({
+            type: "planner.coherent.handoff",
+            data: {
+              runId,
+              artifactCount: entry.artifactCount,
+              verificationRoute: entry.verificationRoute,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.handoff",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              artifactCount: entry.artifactCount,
+              verificationRoute: entry.verificationRoute,
+            },
+          }).catch(() => {})
+        } else if (entry.kind === "coherent-generation-failed") {
+          broadcast({
+            type: "planner.coherent.failed",
+            data: {
+              runId,
+              stage: entry.stage,
+              diagnostics: entry.diagnostics,
+            },
+          })
+          services.auditService.log({
+            actor: "agent",
+            action: "planner.coherent.failed",
+            resourceType: "AgentRun",
+            resourceId: runId,
+            detail: {
+              stage: entry.stage,
+              diagnostics: entry.diagnostics,
             },
           }).catch(() => {})
         } else if (entry.kind === "planner-step-start") {

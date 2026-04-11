@@ -892,6 +892,21 @@ export async function spawnChildForPlan(
         ? normalizedEnvelope.repairContext!.requiredAcceptedArtifacts.map(artifact => `- ${artifact}`).join("\n")
         : "- none"}`,
     )
+
+    if (normalizedEnvelope.repairContext?.preserveArchitecture) {
+      goalParts.push(
+        `## Architecture Preservation Policy\n` +
+        `Preserve Architecture: yes\n` +
+        `Frozen Architecture: ${normalizedEnvelope.repairContext.architectureSummary ?? "unspecified"}\n` +
+        `Shared Contracts:\n${(normalizedEnvelope.repairContext.sharedContracts?.length ?? 0) > 0
+          ? normalizedEnvelope.repairContext.sharedContracts!.map((contract) => `- ${contract.name}: ${contract.description}`).join("\n")
+          : "- none"}\n` +
+        `System Invariants:\n${(normalizedEnvelope.repairContext.invariants?.length ?? 0) > 0
+          ? normalizedEnvelope.repairContext.invariants!.map((invariant) => `- ${invariant.id}: ${invariant.description}`).join("\n")
+          : "- none"}\n` +
+        `Repair policy: fix the verified issues inside the frozen architecture first. Do not redesign interfaces or redistribute ownership unless the evidence proves the architecture itself is broken.`,
+      )
+    }
   }
 
   goalParts.push(

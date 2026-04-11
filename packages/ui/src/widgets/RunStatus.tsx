@@ -10,6 +10,11 @@ import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from
 import { fmtTokens, statusColor, timeAgo } from "../util"
 
 type CompatibilityTrace = Extract<TraceEntry, { kind: "planner-repair-compatibility" }>
+type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
+type ArchitectureStateTrace = Extract<TraceEntry, { kind: "planner-architecture-state" }>
+type CoherentMaterializedTrace = Extract<TraceEntry, { kind: "coherent-generation-materialized" }>
+type CoherentVerifiedTrace = Extract<TraceEntry, { kind: "coherent-generation-verified" }>
+type CoherentRepairTrace = Extract<TraceEntry, { kind: "coherent-generation-repair-needed" }>
 
 export function RunStatus() {
   const runs = useStore((s) => s.runs)
@@ -144,6 +149,11 @@ export function RunStatus() {
   const completedSteps = steps.filter((s) => s.status === "completed").length
   const failedSteps = steps.filter((s) => s.status === "failed").length
   const latestCompatibility = [...trace].reverse().find((entry): entry is CompatibilityTrace => entry.kind === "planner-repair-compatibility")
+  const latestPlannerDecision = [...trace].reverse().find((entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision")
+  const latestArchitectureState = [...trace].reverse().find((entry): entry is ArchitectureStateTrace => entry.kind === "planner-architecture-state")
+  const latestCoherentMaterialized = [...trace].reverse().find((entry): entry is CoherentMaterializedTrace => entry.kind === "coherent-generation-materialized")
+  const latestCoherentVerified = [...trace].reverse().find((entry): entry is CoherentVerifiedTrace => entry.kind === "coherent-generation-verified")
+  const latestCoherentRepair = [...trace].reverse().find((entry): entry is CoherentRepairTrace => entry.kind === "coherent-generation-repair-needed")
 
   async function handleCancel() {
     if (run) await api.cancelRun(run.id).catch(() => {})
@@ -227,6 +237,80 @@ export function RunStatus() {
           </div>
         )}
       </div>
+
+      {latestPlannerDecision && (
+        <div className="rounded-xl border border-[#22C55E]/20 bg-[#22C55E]/[0.06] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[13px] text-text-muted uppercase tracking-wide">Execution Route</div>
+              <div className="text-sm text-text-secondary mt-0.5">
+                {latestPlannerDecision.route ?? (latestPlannerDecision.shouldPlan ? "planner" : "direct")}
+              </div>
+            </div>
+            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.route === "bounded_coherent_generation" || latestPlannerDecision.route === "planner_with_coherent_bootstrap" ? "text-success bg-success/10" : "text-text-secondary bg-white/5"}`}>
+              {latestPlannerDecision.route === "bounded_coherent_generation"
+                ? "Coherent"
+                : latestPlannerDecision.route === "planner_with_coherent_bootstrap"
+                  ? "Bootstrap Planner"
+                  : latestPlannerDecision.shouldPlan ? "Planner" : "Direct"}
+            </div>
+          </div>
+          <div className="mt-2 text-[13px] text-text-secondary">{latestPlannerDecision.reason}</div>
+          {(latestPlannerDecision.coherenceNeed || latestPlannerDecision.coordinationNeed) && (
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
+              <div>
+                <span className="text-text-muted">Coherence Need</span>
+                <div className="font-mono mt-0.5">{latestPlannerDecision.coherenceNeed ?? "—"}</div>
+              </div>
+              <div>
+                <span className="text-text-muted">Coordination Need</span>
+                <div className="font-mono mt-0.5">{latestPlannerDecision.coordinationNeed ?? "—"}</div>
+              </div>
+            </div>
+          )}
+          {latestArchitectureState && (
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
+              <div>
+                <span className="text-text-muted">Architecture</span>
+                <div className="font-mono mt-0.5">{latestArchitectureState.status}</div>
+              </div>
+              <div>
+                <span className="text-text-muted">Lane</span>
+                <div className="font-mono mt-0.5">{latestArchitectureState.lane}</div>
+              </div>
+            </div>
+          )}
+          {latestCoherentMaterialized && (
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
+              <div>
+                <span className="text-text-muted">Materialized</span>
+                <div className="font-mono mt-0.5">{latestCoherentMaterialized.artifactCount}</div>
+              </div>
+              <div>
+                <span className="text-text-muted">Read-back</span>
+                <div className="font-mono mt-0.5">{latestCoherentMaterialized.readBackArtifacts.length}</div>
+              </div>
+            </div>
+          )}
+          {latestCoherentVerified && (
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
+              <div>
+                <span className="text-text-muted">Verifier</span>
+                <div className="font-mono mt-0.5">{latestCoherentVerified.overall}</div>
+              </div>
+              <div>
+                <span className="text-text-muted">Issues</span>
+                <div className="font-mono mt-0.5">{latestCoherentVerified.issueCount}</div>
+              </div>
+            </div>
+          )}
+          {latestCoherentRepair && (
+            <div className="mt-2 text-[13px] text-[#F97316]">
+              repair attempt {latestCoherentRepair.repairAttempt} · {latestCoherentRepair.issueCount} issues
+            </div>
+          )}
+        </div>
+      )}
 
       {latestCompatibility && (
         <div className="rounded-xl border border-[#F97316]/20 bg-[#F97316]/[0.06] p-3">

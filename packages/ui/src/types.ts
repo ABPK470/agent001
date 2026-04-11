@@ -103,7 +103,17 @@ export type TraceEntry =
   | { kind: "user-input-response"; text: string }
   // Planner entries (agenc-core planner-first routing)
   | { kind: "planning_preflight"; mode: "planner-first" }
-  | { kind: "planner-decision"; score: number; shouldPlan: boolean; reason: string }
+  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: "direct" | "single_artifact_direct_burst" | "bounded_coherent_generation" | "planner_with_coherent_bootstrap" | "full_planner_decomposition"; reason: string; coherenceNeed?: "low" | "medium" | "high"; coordinationNeed?: "low" | "medium" | "high" }
+  | { kind: "coherent-generation-start"; route: "bounded_coherent_generation" }
+  | { kind: "coherent-generation-bundle"; artifactCount: number; artifacts: Array<{ path: string; purpose: string }>; sharedContracts: string[]; invariants: string[] }
+  | { kind: "coherent-generation-materialized"; artifactCount: number; artifacts: string[]; readBackArtifacts: string[] }
+  | { kind: "coherent-generation-verified"; overall: "pass" | "retry" | "fail"; confidence: number; issueCount: number; systemCheckCount: number; affectedArtifacts: string[] }
+  | { kind: "coherent-generation-repair-needed"; repairAttempt: number; issueCount: number; issues: string[]; affectedArtifacts: string[] }
+  | { kind: "coherent-generation-escalated"; target: string; issueCount: number; reason: string }
+  | { kind: "coherent-generation-handoff"; artifactCount: number; verificationRoute: string }
+  | { kind: "coherent-generation-failed"; stage: string; diagnostics: string[] }
+  | { kind: "planner-coherent-bootstrap"; artifactCount: number; decompositionStrategy: "preserve_coherence" | "decompose_by_ownership"; decompositionReasons: string[]; sharedContracts: string[]; invariants: string[] }
+  | { kind: "planner-architecture-state"; lane: "bounded_coherent_generation" | "planner_with_coherent_bootstrap" | "full_planner_decomposition" | "direct" | "single_artifact_direct_burst"; status: "frozen" | "preserved" | "repairing_in_place" | "abandoned"; reason: string; architecture?: string }
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
   | {

@@ -17,10 +17,69 @@
  * Result of assessing whether a task needs planning.
  * Score >= 3 → planner path, otherwise direct tool loop.
  */
+export type PlannerNeedLevel = "low" | "medium" | "high"
+
+export type PlannerRoute =
+  | "direct"
+  | "single_artifact_direct_burst"
+  | "bounded_coherent_generation"
+  | "planner_with_coherent_bootstrap"
+  | "full_planner_decomposition"
+
+export type ArchitecturePreservationStatus =
+  | "frozen"
+  | "preserved"
+  | "repairing_in_place"
+  | "abandoned"
+
+export interface CoherentSolutionArtifact {
+  readonly path: string
+  readonly purpose: string
+  readonly content: string
+}
+
+export interface CoherentSharedContract {
+  readonly name: string
+  readonly description: string
+}
+
+export interface CoherentSystemInvariant {
+  readonly id: string
+  readonly description: string
+}
+
+export interface CoherentArchitectureArtifact {
+  readonly path: string
+  readonly purpose: string
+}
+
+export interface PlannerCoherentBootstrap {
+  readonly summary: string
+  readonly architecture: string
+  readonly artifacts: readonly CoherentArchitectureArtifact[]
+  readonly dependencyEdges?: readonly PlanEdge[]
+  readonly sharedContracts?: readonly CoherentSharedContract[]
+  readonly invariants?: readonly CoherentSystemInvariant[]
+  readonly decompositionStrategy: "preserve_coherence" | "decompose_by_ownership"
+  readonly decompositionReasons: readonly string[]
+}
+
+export interface CoherentSolutionBundle {
+  readonly summary: string
+  readonly architecture: string
+  readonly artifacts: readonly CoherentSolutionArtifact[]
+  readonly dependencyEdges?: readonly PlanEdge[]
+  readonly sharedContracts?: readonly CoherentSharedContract[]
+  readonly invariants?: readonly CoherentSystemInvariant[]
+}
+
 export interface PlannerDecision {
   readonly score: number
   readonly shouldPlan: boolean
   readonly reason: string
+  readonly route: PlannerRoute
+  readonly coherenceNeed: PlannerNeedLevel
+  readonly coordinationNeed: PlannerNeedLevel
 }
 
 // ============================================================================
@@ -87,6 +146,10 @@ export interface ChildRepairPayload {
   readonly dependencyGoals: readonly ChildRepairGoal[]
   readonly requiredAcceptedArtifacts: readonly string[]
   readonly unresolvedDependencyBlockers: readonly string[]
+  readonly preserveArchitecture?: boolean
+  readonly architectureSummary?: string
+  readonly sharedContracts?: readonly CoherentSharedContract[]
+  readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
 /**
@@ -221,6 +284,10 @@ export interface Plan {
   readonly steps: readonly PlanStep[]
   /** Explicit dependency edges between steps. */
   readonly edges: readonly PlanEdge[]
+  /** Route that produced this plan. */
+  readonly route?: PlannerRoute
+  /** Planner bootstrap that froze architecture before decomposition. */
+  readonly coherentBootstrap?: PlannerCoherentBootstrap
 }
 
 export interface ExecutionGraphNode {
@@ -447,6 +514,10 @@ export interface RepairTask {
   readonly ownedIssues: readonly VerifierIssue[]
   readonly dependencyContext: readonly VerifierIssue[]
   readonly requiredAcceptedArtifacts: readonly string[]
+  readonly preserveArchitecture?: boolean
+  readonly architectureSummary?: string
+  readonly sharedContracts?: readonly CoherentSharedContract[]
+  readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
 export interface RepairPlan {

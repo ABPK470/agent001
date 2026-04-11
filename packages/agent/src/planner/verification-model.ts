@@ -90,6 +90,21 @@ function getSubagentStep(plan: Plan, stepName: string): SubagentTaskStep | undef
   return step?.stepType === "subagent_task" ? step as SubagentTaskStep : undefined
 }
 
+function getArchitectureRepairContext(plan: Plan): {
+  preserveArchitecture: true
+  architectureSummary: string
+  sharedContracts: NonNullable<Plan["coherentBootstrap"]>["sharedContracts"]
+  invariants: NonNullable<Plan["coherentBootstrap"]>["invariants"]
+} | null {
+  if (!plan.coherentBootstrap) return null
+  return {
+    preserveArchitecture: true,
+    architectureSummary: plan.coherentBootstrap.architecture,
+    sharedContracts: plan.coherentBootstrap.sharedContracts,
+    invariants: plan.coherentBootstrap.invariants,
+  }
+}
+
 function inferAffectedArtifacts(step: SubagentTaskStep | undefined, summary: string): string[] {
   const extracted = extractPaths(summary)
   if (extracted.length > 0) return extracted
@@ -254,6 +269,7 @@ export function buildRepairPlan(
   decision: VerifierDecision,
 ): RepairPlan {
   const runtime = compilePlannerRuntime(plan)
+  const architectureContext = getArchitectureRepairContext(plan)
   const taskMap = new Map<string, RepairTask>()
   const ensureTask = (stepName: string): RepairTask => {
     const existing = taskMap.get(stepName)
@@ -264,6 +280,10 @@ export function buildRepairPlan(
       ownedIssues: [],
       dependencyContext: [],
       requiredAcceptedArtifacts: [],
+      preserveArchitecture: architectureContext?.preserveArchitecture,
+      architectureSummary: architectureContext?.architectureSummary,
+      sharedContracts: architectureContext?.sharedContracts,
+      invariants: architectureContext?.invariants,
     }
     taskMap.set(stepName, created)
     return created
@@ -347,6 +367,7 @@ export function buildLegacyRetryPlan(
   decision: VerifierDecision,
 ): LegacyRetryPlan {
   const nonRetryableFailureClasses = new Set(["cancelled", "spawn_error"])
+  const architectureContext = getArchitectureRepairContext(plan)
   const tasks: RepairTask[] = []
 
   for (const assessment of decision.steps) {
@@ -362,6 +383,10 @@ export function buildLegacyRetryPlan(
       ownedIssues: [...(assessment.issueDetails ?? [])],
       dependencyContext: [],
       requiredAcceptedArtifacts: [],
+      preserveArchitecture: architectureContext?.preserveArchitecture,
+      architectureSummary: architectureContext?.architectureSummary,
+      sharedContracts: architectureContext?.sharedContracts,
+      invariants: architectureContext?.invariants,
     })
   }
 
@@ -469,6 +494,10 @@ export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
     dependencyGoals: task.dependencyContext.map(buildRepairGoal),
     requiredAcceptedArtifacts: [...task.requiredAcceptedArtifacts],
     unresolvedDependencyBlockers,
+    preserveArchitecture: task.preserveArchitecture,
+    architectureSummary: task.architectureSummary,
+    sharedContracts: task.sharedContracts,
+    invariants: task.invariants,
   }
 }
 

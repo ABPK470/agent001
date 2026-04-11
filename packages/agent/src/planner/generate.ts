@@ -10,7 +10,7 @@
  */
 
 import type { LLMClient, Message, Tool } from "../types.js"
-import type { DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "./types.js"
+import type { CoherentArchitectureArtifact, CoherentSharedContract, CoherentSystemInvariant, DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerRoute, PlanStep, SubagentTaskStep } from "./types.js"
 
 // ============================================================================
 // Planner system prompt
@@ -130,6 +130,99 @@ You MUST respond with valid JSON matching this schema:
 
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
 
+const COHERENT_BOOTSTRAP_SYSTEM_PROMPT = `You are freezing architecture before decomposition.
+
+Respond ONLY with valid JSON matching this schema:
+{
+  "summary": "what is being built",
+  "architecture": "the frozen high-level architecture",
+  "artifacts": [{ "path": "relative/path.ext", "purpose": "what this artifact owns" }],
+  "dependencyEdges": [{ "from": "artifactA", "to": "artifactB" }],
+  "sharedContracts": [{ "name": "contract_name", "description": "exact shared contract" }],
+  "invariants": [{ "id": "invariant_id", "description": "system invariant to preserve" }],
+  "decompositionStrategy": "preserve_coherence" | "decompose_by_ownership",
+  "decompositionReasons": ["why later decomposition is or is not justified"]
+}
+
+Rules:
+1. Freeze the architecture, shared contracts, and invariants first.
+2. Prefer preserve_coherence unless ownership separation is real and explicit.
+3. Multi-file greenfield work is NOT automatically decomposed.
+4. Artifact paths must be workspace-relative file paths.
+5. Do not include file contents here; this is an architecture bootstrap, not a code bundle.`
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  let jsonStr = raw.trim()
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch?.[1]) jsonStr = codeBlockMatch[1].trim()
+  try {
+    const parsed = JSON.parse(jsonStr) as unknown
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function parseBootstrapArtifacts(value: unknown): CoherentArchitectureArtifact[] {
+  if (!Array.isArray(value)) return []
+  const artifacts: CoherentArchitectureArtifact[] = []
+  for (const entry of value) {
+    if (!isRecord(entry)) continue
+    const path = asNonEmptyString(entry.path)
+    const purpose = asNonEmptyString(entry.purpose)
+    if (!path || !purpose) continue
+    artifacts.push({ path, purpose })
+  }
+  return artifacts
+}
+
+function parseBootstrapEdges(value: unknown): PlanEdge[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const edges: PlanEdge[] = []
+  for (const entry of value) {
+    if (!isRecord(entry)) continue
+    const from = asNonEmptyString(entry.from)
+    const to = asNonEmptyString(entry.to)
+    if (!from || !to) continue
+    edges.push({ from, to })
+  }
+  return edges.length > 0 ? edges : undefined
+}
+
+function parseBootstrapContracts(value: unknown): CoherentSharedContract[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const contracts: CoherentSharedContract[] = []
+  for (const entry of value) {
+    if (!isRecord(entry)) continue
+    const name = asNonEmptyString(entry.name)
+    const description = asNonEmptyString(entry.description)
+    if (!name || !description) continue
+    contracts.push({ name, description })
+  }
+  return contracts.length > 0 ? contracts : undefined
+}
+
+function parseBootstrapInvariants(value: unknown): CoherentSystemInvariant[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const invariants: CoherentSystemInvariant[] = []
+  for (const entry of value) {
+    if (!isRecord(entry)) continue
+    const id = asNonEmptyString(entry.id)
+    const description = asNonEmptyString(entry.description)
+    if (!id || !description) continue
+    invariants.push({ id, description })
+  }
+  return invariants.length > 0 ? invariants : undefined
+}
+
 // ============================================================================
 // Plan generation
 // ============================================================================
@@ -143,6 +236,16 @@ export interface PlanGenerationContext {
   readonly workspaceRoot: string
   /** Conversation history for context. */
   readonly history: readonly Message[]
+  /** The planner route selected by the router. */
+  readonly route?: PlannerRoute
+  /** Frozen architecture contract for bootstrap-guided planner runs. */
+  readonly coherentBootstrap?: PlannerCoherentBootstrap
+}
+
+export interface CoherentBootstrapGenerationResult {
+  readonly bootstrap: PlannerCoherentBootstrap | null
+  readonly diagnostics: readonly PlanDiagnostic[]
+  readonly rawResponse: string | null
 }
 
 export interface PlanGenerationResult {
@@ -150,6 +253,94 @@ export interface PlanGenerationResult {
   readonly diagnostics: readonly PlanDiagnostic[]
   /** Raw LLM response for debugging. */
   readonly rawResponse: string | null
+}
+
+export async function generateCoherentBootstrap(
+  llm: LLMClient,
+  ctx: Pick<PlanGenerationContext, "goal" | "workspaceRoot" | "history">,
+  opts?: { signal?: AbortSignal },
+): Promise<CoherentBootstrapGenerationResult> {
+  const messages: Message[] = [
+    { role: "system", content: COHERENT_BOOTSTRAP_SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: `Workspace root: ${ctx.workspaceRoot}\nFreeze architecture, contracts, and invariants before decomposition.`,
+    },
+    {
+      role: "user",
+      content: `Goal: ${ctx.goal}\n\nReturn the frozen architecture bootstrap JSON.`,
+    },
+  ]
+
+  const recentHistory = ctx.history.slice(-10).filter((m) => m.role === "user" || m.role === "assistant")
+  if (recentHistory.length > 0) {
+    messages.splice(2, 0, {
+      role: "system",
+      content: `Recent conversation context:\n${recentHistory.map((m) => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`,
+    })
+  }
+
+  let rawResponse: string | null = null
+  try {
+    const response = await llm.chat(messages, [], { signal: opts?.signal })
+    rawResponse = response.content
+    if (!rawResponse) {
+      return {
+        bootstrap: null,
+        rawResponse,
+        diagnostics: [{ category: "parse", severity: "error", code: "empty_bootstrap_response", message: "Planner bootstrap returned empty response" }],
+      }
+    }
+
+    const parsed = parseJsonObject(rawResponse)
+    if (!parsed) {
+      return {
+        bootstrap: null,
+        rawResponse,
+        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_json", message: "Planner bootstrap response is not valid JSON" }],
+      }
+    }
+
+    const summary = asNonEmptyString(parsed.summary)
+    const architecture = asNonEmptyString(parsed.architecture)
+    const artifacts = parseBootstrapArtifacts(parsed.artifacts)
+    const decompositionStrategy = parsed.decompositionStrategy === "decompose_by_ownership"
+      ? "decompose_by_ownership"
+      : "preserve_coherence"
+    const decompositionReasons = Array.isArray(parsed.decompositionReasons)
+      ? parsed.decompositionReasons.map((value) => asNonEmptyString(value)).filter((value): value is string => value != null)
+      : []
+
+    if (!summary || !architecture || artifacts.length === 0) {
+      return {
+        bootstrap: null,
+        rawResponse,
+        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_shape", message: "Planner bootstrap must include summary, architecture, and at least one artifact" }],
+      }
+    }
+
+    return {
+      bootstrap: {
+        summary,
+        architecture,
+        artifacts,
+        dependencyEdges: parseBootstrapEdges(parsed.dependencyEdges),
+        sharedContracts: parseBootstrapContracts(parsed.sharedContracts),
+        invariants: parseBootstrapInvariants(parsed.invariants),
+        decompositionStrategy,
+        decompositionReasons,
+      },
+      rawResponse,
+      diagnostics: [],
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    return {
+      bootstrap: null,
+      rawResponse,
+      diagnostics: [{ category: "parse", severity: "error", code: "bootstrap_llm_error", message: `Planner bootstrap failed: ${errMsg}` }],
+    }
+  }
 }
 
 /**
@@ -189,6 +380,28 @@ export async function generatePlan(
       messages.push({
         role: "system",
         content: `Recent conversation context:\n${recentHistory.map(m => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`,
+      })
+    }
+
+    if (ctx.coherentBootstrap) {
+      messages.push({
+        role: "system",
+        content:
+          `Frozen architecture bootstrap:\n` +
+          `Summary: ${ctx.coherentBootstrap.summary}\n` +
+          `Architecture: ${ctx.coherentBootstrap.architecture}\n` +
+          `Decomposition strategy: ${ctx.coherentBootstrap.decompositionStrategy}\n` +
+          `Artifacts:\n${ctx.coherentBootstrap.artifacts.map((artifact) => `- ${artifact.path}: ${artifact.purpose}`).join("\n")}\n` +
+          `Shared contracts:\n${ctx.coherentBootstrap.sharedContracts?.map((contract) => `- ${contract.name}: ${contract.description}`).join("\n") || "- none"}\n` +
+          `Invariants:\n${ctx.coherentBootstrap.invariants?.map((invariant) => `- ${invariant.id}: ${invariant.description}`).join("\n") || "- none"}\n` +
+          `Rules: preserve this architecture unless ownership separation is real. Do not decompose multi-file greenfield work automatically.`,
+      })
+    }
+
+    if (ctx.route === "planner_with_coherent_bootstrap") {
+      messages.push({
+        role: "system",
+        content: "This is a planner_with_coherent_bootstrap run. First honor the frozen architecture, then decompose only when there are real ownership boundaries and overwrite-risk reductions.",
       })
     }
 
@@ -242,7 +455,15 @@ export async function generatePlan(
       // to match the actual workspace root (don't trust LLM-generated paths)
       const normalizedPlan = normalizeWorkspaceRoots(parsed.plan, ctx.workspaceRoot)
 
-      return { plan: normalizedPlan, diagnostics, rawResponse }
+      return {
+        plan: {
+          ...normalizedPlan,
+          route: ctx.route,
+          coherentBootstrap: ctx.coherentBootstrap,
+        },
+        diagnostics,
+        rawResponse,
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       diagnostics.push({

@@ -72,7 +72,21 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "usage": return `${p}USAGE  +${fmtK(e.iterationTokens)} tk · total ${fmtK(e.totalTokens)} · ${e.llmCalls} calls`
 
     case "planning_preflight": return `${p}PLANNER PREFLIGHT  ${e.mode}`
-    case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}`
+    case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}${e.route ? `  route=${e.route}` : ""}${e.coherenceNeed ? `  coherence=${e.coherenceNeed}` : ""}${e.coordinationNeed ? `  coordination=${e.coordinationNeed}` : ""}`
+    case "planner-coherent-bootstrap": return `${p}PLANNER BOOTSTRAP  ${e.decompositionStrategy}  artifacts=${e.artifactCount}`
+    case "planner-architecture-state": return `${p}ARCHITECTURE  ${e.status}  lane=${e.lane}${e.architecture ? `  ${e.architecture}` : ""}`
+    case "coherent-generation-start": return `${p}COHERENT GENERATION START  route=${e.route}`
+    case "coherent-generation-bundle": return `${p}COHERENT BUNDLE  ${e.artifactCount} artifacts
+  ${p}  ${e.artifacts.map((artifact) => artifact.path).join(", ")}`
+    case "coherent-generation-materialized": return `${p}COHERENT MATERIALIZED  ${e.artifactCount} artifacts  read-back ${e.readBackArtifacts.length}
+  ${p}  ${e.artifacts.join(", ")}`
+    case "coherent-generation-verified": return `${p}COHERENT VERIFIED  ${e.overall}  conf=${e.confidence.toFixed(2)}  issues=${e.issueCount}  systemChecks=${e.systemCheckCount}`
+    case "coherent-generation-repair-needed": return `${p}COHERENT REPAIR REQUIRED  attempt=${e.repairAttempt}  issues=${e.issueCount}
+  ${p}  ${e.affectedArtifacts.join(", ")}`
+    case "coherent-generation-escalated": return `${p}COHERENT ESCALATED  ${e.target}  issues=${e.issueCount}  ${e.reason}`
+    case "coherent-generation-handoff": return `${p}COHERENT HANDOFF  ${e.verificationRoute}  artifacts=${e.artifactCount}`
+    case "coherent-generation-failed": return `${p}COHERENT FAILED  ${e.stage}
+  ${e.diagnostics.map((diag) => `${p}  ${diag}`).join("\n")}`
     case "planner-generating": return `${p}GENERATING PLAN...`
     case "planner-plan-generated":
       return `${p}PLAN  ${e.stepCount} steps\n${p}  ${e.reason}\n` +
