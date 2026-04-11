@@ -145,10 +145,10 @@ describe("write_file: inline stub detection", () => {
 
     expect(result).toContain("degeneration")
     expect(result).not.toContain("CORRUPTED")
-    expect(result).toContain("WRITTEN WITH ISSUES")
+    expect(result).toContain("WRITE REJECTED")
   })
 
-  it("uses targeted message for stub-only issues (not CORRUPTED)", async () => {
+  it("uses targeted rejection for stub-only issues without labeling them corrupted", async () => {
     const result = await executeToolText(writeFileTool, {
       path: "stub-msg.js",
       content: [
@@ -165,9 +165,11 @@ describe("write_file: inline stub detection", () => {
       ].join("\n"),
     })
 
-    expect(result).toContain("WRITTEN WITH ISSUES")
+    expect(result).toContain("WRITE REJECTED")
     expect(result).not.toContain("CORRUPTED")
-    expect(result).toContain("replace only the stub portions")
+
+    const readBack = await readFileTool.execute({ path: "stub-msg.js" })
+    expect(String(readBack)).toContain("ENOENT")
   })
 })
 
@@ -182,8 +184,8 @@ describe("write_file: function loss detection", () => {
       path: "chess-loss.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
-        "function isMoveLegal(from, to) { return Math.abs(from[0]-to[0]) <= 1; }",
-        "function renderBoard(board) { console.log(board); }",
+        "function isMoveLegal(from, to) { return from[0] !== to[0] || from[1] !== to[1]; }",
+        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }",
       ].join("\n"),
     })
 
@@ -225,13 +227,15 @@ describe("write_file: function loss detection", () => {
   })
 
   it("rejects structural-corruption rewrites and keeps prior file intact", async () => {
-    await executeToolText(writeFileTool, {
+    const initial = await executeToolText(writeFileTool, {
       path: "chess-atomic.js",
       content: [
-        "function initBoard() { return []; }",
-        "function renderBoard(board) { console.log(board); }",
+        "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
+        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }",
       ].join("\n"),
     })
+
+    expect(initial).toBe("Successfully wrote to chess-atomic.js")
 
     const rejected = await executeToolText(writeFileTool, {
       path: "chess-atomic.js",
@@ -461,6 +465,11 @@ describe("replace_in_file", () => {
       ].join("\n"),
     })
 
+    expect(result).toContain("REPLACE REJECTED")
     expect(result).toContain("STUB")
+
+    const content = await readFileTool.execute({ path: "replace-stub.js" })
+    expect(String(content)).toContain("return /^[a-zA-Z]+$/.test(input);")
+    expect(String(content)).not.toContain("// TODO: implement validation")
   })
 })

@@ -48,6 +48,47 @@ export function uniqueStrings(values: readonly string[]): string[] {
 }
 
 function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
+  const normalizeParameter = (parameter: unknown): string | null => {
+    if (typeof parameter === "string") {
+      const normalized = parameter.trim()
+      return normalized || null
+    }
+    if (!parameter || typeof parameter !== "object") return null
+    const rawParameter = parameter as Record<string, unknown>
+    const name = typeof rawParameter.name === "string" ? rawParameter.name.trim() : ""
+    const type = typeof rawParameter.type === "string"
+      ? rawParameter.type.trim()
+      : typeof rawParameter.schema === "string"
+        ? rawParameter.schema.trim()
+        : ""
+    if (!name && !type) return null
+    if (!name) return type || null
+    return type ? `${name}: ${type}` : name
+  }
+
+  const buildSignature = (name: string, raw: Record<string, unknown>): string => {
+    const providedSignature = typeof raw.signature === "string" ? raw.signature.trim() : ""
+    if (providedSignature) return providedSignature
+
+    const rawParameters = Array.isArray(raw.parameters)
+      ? raw.parameters
+      : Array.isArray(raw.params)
+        ? raw.params
+        : Array.isArray(raw.arguments)
+          ? raw.arguments
+          : []
+    const parameters = rawParameters
+      .map(normalizeParameter)
+      .filter((value): value is string => Boolean(value))
+    const returnType = typeof raw.returnType === "string"
+      ? raw.returnType.trim()
+      : typeof raw.returns === "string"
+        ? raw.returns.trim()
+        : ""
+    const parameterBlock = parameters.join(", ")
+    return returnType ? `${name}(${parameterBlock}): ${returnType}` : `${name}(${parameterBlock})`
+  }
+
   if (typeof input === "string") {
     const name = input.trim()
     if (!name) return null
@@ -59,15 +100,38 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
   if (!input || typeof input !== "object") return null
   const raw = input as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""
-  const signature = typeof raw.signature === "string" ? raw.signature.trim() : ""
   if (!name) return null
   return {
     name,
-    signature: signature || `${name}()`,
+    signature: buildSignature(name, raw),
   }
 }
 
 function normalizeSharedTypeSpec(input: unknown): BlueprintSharedTypeSpec | null {
+  const normalizeDefinition = (raw: Record<string, unknown>): string => {
+    if (typeof raw.definition === "string" && raw.definition.trim()) return raw.definition.trim()
+    if (typeof raw.shape === "string" && raw.shape.trim()) return raw.shape.trim()
+    if (Array.isArray(raw.properties) && raw.properties.length > 0) {
+      const propertyPairs = raw.properties.flatMap((property) => {
+        if (!property || typeof property !== "object") return []
+        const rawProperty = property as Record<string, unknown>
+        const name = typeof rawProperty.name === "string" ? rawProperty.name.trim() : ""
+        const type = typeof rawProperty.type === "string" ? rawProperty.type.trim() : "unknown"
+        return name ? [`${name}: ${type}`] : []
+      })
+      if (propertyPairs.length > 0) return `{ ${propertyPairs.join("; ")} }`
+    }
+    if (typeof raw.type === "string" && raw.type.trim()) return raw.type.trim()
+    if (raw.schema && typeof raw.schema === "object") {
+      try {
+        return JSON.stringify(raw.schema)
+      } catch {
+        return ""
+      }
+    }
+    return ""
+  }
+
   if (typeof input === "string") {
     const name = input.trim()
     if (!name) return null
@@ -80,16 +144,12 @@ function normalizeSharedTypeSpec(input: unknown): BlueprintSharedTypeSpec | null
   if (!input || typeof input !== "object") return null
   const raw = input as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""
-  const definition = typeof raw.definition === "string"
-    ? raw.definition.trim()
-    : typeof raw.shape === "string"
-      ? raw.shape.trim()
-      : ""
+  const definition = normalizeDefinition(raw)
   if (!name) return null
   return {
     name,
     definition,
-    usedBy: normalizeMarkerList(raw.usedBy),
+    usedBy: normalizeMarkerList(raw.usedBy ?? raw.used_by ?? raw.consumers ?? raw.paths),
   }
 }
 
@@ -293,6 +353,7 @@ export function buildBlueprintSeedTemplate(
     "",
     "## Shared Data Types",
     "- If none, write `None` and keep `sharedTypes: []` in the machine contract.",
+    "- In the machine contract, each sharedTypes entry should use `{ \"name\": \"TypeName\", \"definition\": \"exact shape\", \"usedBy\": [\"path/to/file\"] }`.",
     "- TODO",
     "",
     "## File Contracts",

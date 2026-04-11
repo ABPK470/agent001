@@ -476,6 +476,9 @@ function collectSpecAuditIssues(
   const calls = stepResult.toolCalls ?? []
   const normalizedBlueprint = normalizeSpecPath(blueprintPath)
   const issues: string[] = []
+  const blueprintIsTargetArtifact = step.executionContext.targetArtifacts
+    .map(normalizeSpecPath)
+    .includes(normalizedBlueprint)
 
   const firstBlueprintReadIndex = calls.findIndex(call => {
     if (call.name !== "read_file") return false
@@ -484,7 +487,9 @@ function collectSpecAuditIssues(
   })
 
   if (firstBlueprintReadIndex === -1) {
-    issues.push(`PROCESS AUDIT FAILED: step ${step.name} never read ${blueprintPath}`)
+    if (!blueprintIsTargetArtifact) {
+      issues.push(`PROCESS AUDIT FAILED: step ${step.name} never read ${blueprintPath}`)
+    }
     return issues
   }
 
@@ -495,7 +500,7 @@ function collectSpecAuditIssues(
     return SHELL_MUTATION_RE.test(command)
   })
 
-  if (firstMutationIndex !== -1 && firstBlueprintReadIndex > firstMutationIndex) {
+  if (firstMutationIndex !== -1 && firstBlueprintReadIndex > firstMutationIndex && !blueprintIsTargetArtifact) {
     issues.push(
       `PROCESS AUDIT FAILED: step ${step.name} read ${blueprintPath} only after starting file mutations`,
     )
@@ -610,7 +615,7 @@ function parseBlueprintSpec(blueprintPath: string, content: string): BlueprintSp
       if (markers.length > 0) appendStructuralMarkers(currentFile, markers)
     }
 
-    const functionMatch = line.match(/(?:^[-*]\s*|^\d+\.\s*)?(?:(?:function|method|proc(?:edure)?|subroutine|handler|command|cmdlet|def|fn|lambda|label|target)\s+)?`?([A-Za-z_.$@?-][\w.$@?-]*)\s*\(([^)]*)\)`?/iu)
+    const functionMatch = line.match(/^(?:[-*]\s*|\d+\.\s*)(?:(?:function|method|proc(?:edure)?|subroutine|handler|command|cmdlet|def|fn|lambda|label|target)\s+)?`?([A-Za-z_.$@?-][\w.$@?-]*)\s*\(([^)]*)\)`?(?::|\s|$)/iu)
     if (functionMatch && currentFile) {
       appendFunction(currentFile, {
         name: functionMatch[1],
@@ -752,14 +757,14 @@ function buildBlueprintSharedTypeContractIssues(
     )
   }
 
-  const weakSharedTypes = spec.contractSharedTypes.filter((type) => !type.definition.trim() || type.usedBy.length === 0)
+  const weakSharedTypes = spec.contractSharedTypes.filter((type) => !type.definition.trim())
   if (weakSharedTypes.length > 0) {
     issues.push(
-      `BLUEPRINT SHARED TYPE CONTRACT WEAK: sharedTypes entries must include a concrete definition and usedBy paths (${weakSharedTypes.map((type) => type.name).join(", ")})`,
+      `BLUEPRINT SHARED TYPE CONTRACT WEAK: sharedTypes entries must include a concrete definition (${weakSharedTypes.map((type) => type.name).join(", ")})`,
     )
   }
 
-  const driftedUsage = spec.contractSharedTypes.filter((type) =>
+  const driftedUsage = spec.contractSharedTypes.filter((type) => type.usedBy.length > 0 &&
     type.usedBy.some((path) => {
       const normalized = normalizeSpecPath(path)
       return !declaredArtifacts.has(normalized) && !plannedArtifacts.has(normalized)

@@ -81,6 +81,11 @@ function inferIssueConfidence(source: VerificationEvidence["source"], summary: s
   return Math.max(0.2, Math.min(0.99, sourceBase - ambiguityPenalty - ownerPenalty - wordingPenalty))
 }
 
+function isDependencyGateIssue(issue: VerifierIssue): boolean {
+  return issue.code.startsWith("waiting_on_accepted_upstream_artifacts")
+    || /^Waiting on accepted upstream artifacts:/i.test(issue.summary)
+}
+
 function buildEvidenceId(stepName: string, source: VerificationEvidence["source"], index: number, code: string): string {
   return `${stepName}:${source}:${index}:${code}`
 }
@@ -313,10 +318,12 @@ export function buildRepairPlan(
   for (const assessment of decision.steps) {
     if (assessment.outcome === "pass") continue
     const issueDetails = assessment.issueDetails ?? []
+    if (issueDetails.length > 0 && issueDetails.every(isDependencyGateIssue)) continue
     const stepResult = pipelineResult.stepResults.get(assessment.stepName)
     const defaultRequiredAcceptedArtifacts = defaultAcceptedArtifactsByStep.get(assessment.stepName) ?? []
 
     for (const issue of issueDetails) {
+      if (isDependencyGateIssue(issue)) continue
       const impactedSteps = uniqueStrings(issue.suspectedOwners.length > 0 ? issue.suspectedOwners : [assessment.stepName])
       const primaryOwner = issue.primaryOwner ?? issue.ownerStepName
       for (const impactedStep of impactedSteps) {

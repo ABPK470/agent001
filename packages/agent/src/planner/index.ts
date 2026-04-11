@@ -13,8 +13,8 @@
  */
 
 export {
-    createBudgetState, createCircuitBreaker, isBlocked, maybeExtendBudget, recordFailure,
-    recordSuccess
+  createBudgetState, createCircuitBreaker, isBlocked, maybeExtendBudget, recordFailure,
+  recordSuccess
 } from "./circuit-breaker.js"
 export type { BudgetState } from "./circuit-breaker.js"
 export { assessPlannerDecision } from "./decision.js"
@@ -28,8 +28,8 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.j
 
 // Re-export all types
 export type {
-    ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
-    VerifierStepAssessment, WorkflowStepContract
+  ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
+  VerifierStepAssessment, WorkflowStepContract
 } from "./types.js"
 
 import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../delegation-decision.js"
@@ -654,6 +654,8 @@ function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: string, for
         `- For every non-trivial function, enumerate the full algorithmic contract: all cases, rules, constraints, and edge cases.\n` +
         `- The declared file structure MUST match the planned targetArtifacts exactly; do NOT rename paths or invent extra modules.\n` +
         `- Include a \`blueprint-contract\` JSON block with \`version: 1\`, per-file \`functions\` arrays, and a top-level \`sharedTypes\` array; this block is the machine-readable source of truth. Use empty arrays when needed, never omit the fields.\n` +
+        `- For code files, each machine-contract function entry should include at least \`name\` plus a concrete \`signature\` (or equivalent \`parameters\` + \`returnType\`) and should match the prose file contract.\n` +
+        `- For sharedTypes, provide a concrete definition/shape and, when practical, list the exact \`usedBy\` artifact paths that consume the type.\n` +
         `- Do NOT add fake runtime-verification sections, test plans, or execution-history prose.\n` +
         `- Verification for a blueprint step is satisfied by writing the document and then re-reading BLUEPRINT.md with read_file to confirm the contract is present.\n` +
         `- Use the exact seeded template below; replace TODOs only, preserve the fence name \`blueprint-contract\`, and preserve the exact planned paths.\n\n` +
@@ -933,6 +935,11 @@ function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagnostic[]
   const subagentSteps = plan.steps.filter(
     (s): s is SubagentTaskStep => s.stepType === "subagent_task",
   )
+
+  if (errors.some((e) => e.code === "inconsistent_output_directory" || e.code === "mixed_root_and_subdir")) {
+    normalizePlanOutputDirectory(plan)
+    changed = true
+  }
 
   if (errors.some((e) => e.code === "shared_target_artifact")) {
     changed = remediateSharedTargetArtifactWriters(plan) || changed
@@ -1294,6 +1301,9 @@ export async function executePlannerPath(
       totalSteps: plan.steps.length,
       synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
       subagentSteps: subagentProfiles,
+      // When the planner already chose full_planner_decomposition, this IS an explicit
+      // delegation decision — weight decompositionBenefit accordingly.
+      explicitDelegationRequested: decision.route === "full_planner_decomposition",
     }
 
     const delegationDecision = assessDelegationDecision(delegationInput)

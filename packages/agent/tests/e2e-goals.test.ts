@@ -101,7 +101,7 @@ describe("E2E: simple file creation", () => {
 // ============================================================================
 
 describe("E2E: chess game with stub detection", () => {
-  it("completionValidator blocks exit when code has stubs", async () => {
+  it("blocks stubbed code before completion and only persists the repaired implementation", async () => {
     const nudges: string[] = []
 
     const stubChessCode = [
@@ -168,7 +168,7 @@ describe("E2E: chess game with stub detection", () => {
     ].join("\n")
 
     const llm = scriptedLLM([
-      // Iter 0: write stub code
+      // Iter 0: write stub code (should be rejected before commit)
       {
         content: "Writing chess game",
         toolCalls: [{
@@ -176,33 +176,23 @@ describe("E2E: chess game with stub detection", () => {
           arguments: { path: "game.js", content: stubChessCode },
         }],
       },
-      // Iter 1: read to verify (clears wroteUnverifiedFiles)
-      {
-        content: "Reviewing my code",
-        toolCalls: [{
-          id: "tc2", name: "read_file",
-          arguments: { path: "game.js" },
-        }],
-      },
-      // Iter 2: tries to exit → completionValidator fires
-      { content: "Chess game complete", toolCalls: [] },
-      // Iter 3: forced to fix — rewrites with real implementation
+      // Iter 1: fix by writing real code
       {
         content: "Fixing the stub functions",
         toolCalls: [{
-          id: "tc3", name: "write_file",
+          id: "tc2", name: "write_file",
           arguments: { path: "game.js", content: fixedChessCode },
         }],
       },
-      // Iter 4: reads to verify again
+      // Iter 2: reads to verify again
       {
         content: null,
         toolCalls: [{
-          id: "tc4", name: "read_file",
+          id: "tc3", name: "read_file",
           arguments: { path: "game.js" },
         }],
       },
-      // Iter 5: exits — validator already fired (one-shot)
+      // Iter 3: exit after clean repair
       { content: "Chess game with complete move validation", toolCalls: [] },
     ])
 
@@ -224,8 +214,8 @@ describe("E2E: chess game with stub detection", () => {
 
     const answer = await agent.run("Build a chess game")
 
-    // The completion-validator should have fired
-    expect(nudges).toContain("completion-validator")
+    expect(nudges).toContain("abort-round-tool-outcome")
+    expect(answer).toContain("complete move validation")
 
     // Final file should have real code, not stubs
     const finalCode = await readFile(join(tempDir, "game.js"), "utf-8")
@@ -250,7 +240,7 @@ describe("E2E: write-without-verify guard", () => {
         content: "Writing app.js",
         toolCalls: [{
           id: "tc1", name: "write_file",
-          arguments: { path: "app.js", content: "function main() {\n  console.log('Hello');\n}\nmain();" },
+          arguments: { path: "app.js", content: "function main() {\n  const message = 'Hello';\n  console.log(message.toUpperCase());\n}\nmain();" },
         }],
       },
       // Iter 1: tries to exit without reading
@@ -437,7 +427,7 @@ describe("E2E: function loss prevention", () => {
           id: "tc1", name: "write_file",
           arguments: {
             path: "game.js",
-            content: "function initBoard() { return []; }\nfunction movePiece(from, to) { board[to] = board[from]; board[from] = null; }\nfunction renderBoard() { const el = document.getElementById('board'); el.textContent = JSON.stringify(board); }",
+            content: "function initBoard() { return Array(64).fill(null); }\nfunction movePiece(board, from, to) { const next = [...board]; next[to] = next[from]; next[from] = null; return next; }\nfunction renderBoard(board) { const el = document.getElementById('board'); el.textContent = board.map(cell => cell ?? '.').join(''); }",
           },
         }],
       },

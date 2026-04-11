@@ -319,6 +319,51 @@ describe("Blueprint contract parsing", () => {
     expect(parsed.files[0]?.functions.map(fn => fn.name)).toEqual(["initializeGame", "validateMove"])
     expect(parsed.sharedTypes.map(type => type.name)).toEqual(["Piece", "GameState"])
   })
+
+  it("accepts richer function and shared-type schemas used by blueprint-writing children", () => {
+    const parsed = parseBlueprintContractBlock([
+      "```blueprint-contract",
+      JSON.stringify({
+        version: 1,
+        files: [
+          {
+            path: "tmp/chess_logic.js",
+            purpose: "Chess rules",
+            functions: [
+              {
+                name: "validateMove",
+                parameters: [
+                  { name: "boardState", type: "BoardState" },
+                  { name: "from", type: "Coordinate" },
+                  { name: "to", type: "Coordinate" },
+                ],
+                returnType: "boolean",
+                purpose: "Validate move legality",
+                algorithmicContract: "Rejects illegal piece movement and king-exposing moves.",
+              },
+            ],
+          },
+        ],
+        sharedTypes: [
+          {
+            name: "GameState",
+            type: "object",
+            properties: [
+              { name: "board", type: "BoardState" },
+              { name: "turn", type: "PlayerColor" },
+            ],
+            usedBy: ["tmp/chess_logic.js"],
+          },
+        ],
+      }, null, 2),
+      "```",
+    ].join("\n"))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.files[0]?.functions[0]?.signature).toBe("validateMove(boardState: BoardState, from: Coordinate, to: Coordinate): boolean")
+    expect(parsed.sharedTypes[0]?.definition).toBe("{ board: BoardState; turn: PlayerColor }")
+    expect(parsed.sharedTypes[0]?.usedBy).toEqual(["tmp/chess_logic.js"])
+  })
 })
 
 describe("Planner path execution", () => {
@@ -551,6 +596,244 @@ describe("Planner path execution", () => {
     expect(result.plan).toBeDefined()
     expect(traces.some((entry) => entry.kind === "planner-validation-failed")).toBe(true)
     expect(traces.some((entry) => entry.kind === "planner-fallback-direct-loop")).toBe(false)
+  })
+
+  it("remediates mixed output roots instead of failing validation", async () => {
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "split files across root, src, and public",
+          confidence: 0.89,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "create_blueprint",
+              stepType: "subagent_task",
+              objective: "Write the blueprint contract",
+              inputContract: "Goal only",
+              acceptanceCriteria: ["Blueprint exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["BLUEPRINT.md"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "BLUEPRINT.md" }],
+              },
+            },
+            {
+              name: "fetch_top_clients_query",
+              stepType: "subagent_task",
+              objective: "Write the query module",
+              inputContract: "Blueprint available",
+              acceptanceCriteria: ["Query module exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: ["BLUEPRINT.md"],
+                targetArtifacts: ["src/query.js"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "src/query.js" }],
+              },
+            },
+            {
+              name: "create_html_report",
+              stepType: "subagent_task",
+              objective: "Write the report page",
+              inputContract: "Query module available",
+              acceptanceCriteria: ["HTML report exists"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["."],
+                allowedTools: ["write_file", "read_file", "browser_check"],
+                requiredSourceArtifacts: ["src/query.js"],
+                targetArtifacts: ["public/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "browser_check",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "public/index.html" }],
+              },
+            },
+          ],
+          edges: [
+            { from: "create_blueprint", to: "fetch_top_clients_query" },
+            { from: "fetch_top_clients_query", to: "create_html_report" },
+          ],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    const traces: Array<Record<string, unknown>> = []
+    const result = await executePlannerPath(
+      "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
+      {
+        llm,
+        tools: [echoTool("write_file"), echoTool("read_file"), echoTool("browser_check")],
+        workspaceRoot: ".",
+        history: [],
+        onTrace: (entry) => traces.push(entry),
+      },
+      async () => ({ output: "unused" }),
+    )
+
+    expect(result.handled).toBe(true)
+    expect(result.answer).not.toContain('"stage": "validation"')
+    expect(traces.some((entry) => entry.kind === "planner-validation-remediated")).toBe(true)
+
+    const subagentSteps = result.plan?.steps.filter((step): step is SubagentTaskStep => step.stepType === "subagent_task") ?? []
+    expect(subagentSteps.length).toBeGreaterThan(0)
+    const roots = new Set(
+      subagentSteps.flatMap((step) =>
+        step.executionContext.targetArtifacts.map((artifact) => artifact.split("/")[0] ?? artifact),
+      ),
+    )
+    expect(roots.size).toBe(1)
+  })
+
+  it("does not block at the delegation gate for a sequential planner-routed plan", async () => {
+    // All three steps are serial (canRunParallel: false), reproducing the economics
+    // worst-case that scored utility=0.12 in a real run. Since the planner route is
+    // full_planner_decomposition, explicitDelegationRequested must be set to true so
+    // the decompositionBenefit term is counted and utility clears the 0.20 threshold.
+    const capturedDelegationInputs: unknown[] = []
+    const realAssess = (await import("../src/delegation-decision.js")).assessDelegationDecision
+    const delegationSpy = vi.spyOn(
+      await import("../src/delegation-decision.js"),
+      "assessDelegationDecision",
+    ).mockImplementation((input) => {
+      capturedDelegationInputs.push(input)
+      return realAssess(input)
+    })
+
+    const llm: LLMClient = {
+      chat: vi.fn().mockResolvedValue({
+        content: JSON.stringify({
+          reason: "sequential pipeline: blueprint then query then render",
+          confidence: 0.88,
+          requiresSynthesis: false,
+          steps: [
+            {
+              name: "generate_blueprint",
+              stepType: "subagent_task",
+              objective: "Write the blueprint contract file",
+              inputContract: "Goal only",
+              acceptanceCriteria: ["tmp/BLUEPRINT.md exists with full spec"],
+              requiredToolCapabilities: ["write_file", "read_file"],
+              contextRequirements: [],
+              maxBudgetHint: "5 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["tmp"],
+                allowedTools: ["write_file", "read_file"],
+                requiredSourceArtifacts: [],
+                targetArtifacts: ["tmp/BLUEPRINT.md"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }],
+              },
+            },
+            {
+              name: "query_database",
+              stepType: "subagent_task",
+              objective: "Run the SQL query and write results to tmp/data.js",
+              inputContract: "Blueprint available at tmp/BLUEPRINT.md",
+              acceptanceCriteria: ["tmp/data.js exists with query results"],
+              requiredToolCapabilities: ["write_file", "read_file", "query_mssql"],
+              contextRequirements: [],
+              maxBudgetHint: "5 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["tmp"],
+                allowedTools: ["write_file", "read_file", "query_mssql"],
+                requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+                targetArtifacts: ["tmp/data.js"],
+                effectClass: "filesystem_write",
+                verificationMode: "none",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/data.js" }],
+              },
+            },
+            {
+              name: "render_html",
+              stepType: "subagent_task",
+              objective: "Build tmp/index.html that renders the query data",
+              inputContract: "tmp/data.js available",
+              acceptanceCriteria: ["tmp/index.html loads without errors"],
+              requiredToolCapabilities: ["write_file", "read_file", "browser_check"],
+              contextRequirements: [],
+              maxBudgetHint: "10 iterations",
+              canRunParallel: false,
+              executionContext: {
+                workspaceRoot: ".",
+                allowedReadRoots: ["."],
+                allowedWriteRoots: ["tmp"],
+                allowedTools: ["write_file", "read_file", "browser_check"],
+                requiredSourceArtifacts: ["tmp/data.js"],
+                targetArtifacts: ["tmp/index.html"],
+                effectClass: "filesystem_write",
+                verificationMode: "browser_check",
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+              },
+            },
+          ],
+          edges: [
+            { from: "generate_blueprint", to: "query_database" },
+            { from: "query_database", to: "render_html" },
+          ],
+        }),
+        toolCalls: [],
+      }),
+    }
+
+    const traces: Array<Record<string, unknown>> = []
+    const result = await executePlannerPath(
+      "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
+      {
+        llm,
+        tools: [
+          echoTool("write_file"),
+          echoTool("read_file"),
+          echoTool("browser_check"),
+          echoTool("query_mssql"),
+        ],
+        workspaceRoot: ".",
+        history: [],
+        onTrace: (entry) => traces.push(entry),
+      },
+      async () => ({ output: "done" }),
+    )
+
+    delegationSpy.mockRestore()
+
+    // The delegation gate must not block execution
+    expect(result.answer).not.toContain('"stage": "delegation"')
+
+    // The captured delegation input must carry explicitDelegationRequested=true
+    expect(capturedDelegationInputs.length).toBeGreaterThan(0)
+    const input = capturedDelegationInputs[0] as Record<string, unknown>
+    expect(input.explicitDelegationRequested).toBe(true)
   })
 
   it("aborts before the first implementation child when the generated blueprint contract is broken", async () => {
@@ -4353,6 +4636,89 @@ describe("Pipeline: executePipeline", () => {
     expect(repairPlan.tasks.map((task) => task.stepName)).toEqual(["create_project_blueprint"])
     expect(repairPlan.tasks[0]?.ownedIssues[0]?.ownershipMode).toBe("planner_fault")
   })
+
+  it("omits pure upstream-wait blockers from repair tasks when the upstream owner already has the real repair work", () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create_blueprint", {
+          executionContext: {
+            ...makeSubagentStep("create_blueprint").executionContext,
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+          },
+        }),
+        makeSubagentStep("build_ui", {
+          executionContext: {
+            ...makeSubagentStep("build_ui").executionContext,
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/index.html"],
+          },
+        }),
+      ],
+      edges: [{ from: "create_blueprint", to: "build_ui" }],
+    })
+
+    const decision: VerifierDecision = {
+      overall: "retry",
+      confidence: 0.7,
+      unresolvedItems: ["create_blueprint"],
+      steps: [
+        {
+          stepName: "create_blueprint",
+          outcome: "retry",
+          confidence: 0.7,
+          issues: ["BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())"],
+          issueDetails: [makeIssue(
+            "BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())",
+            {
+              code: "blueprint_function_contract_weak",
+              ownerStepName: "create_blueprint",
+              primaryOwner: "create_blueprint",
+              suspectedOwners: ["create_blueprint"],
+              ownershipMode: "planner_fault",
+              affectedArtifacts: ["tmp/BLUEPRINT.md"],
+              sourceArtifacts: ["tmp/BLUEPRINT.md"],
+              repairClass: "contract_drift",
+            },
+          )],
+          retryable: true,
+        },
+        {
+          stepName: "build_ui",
+          outcome: "retry",
+          confidence: 0.85,
+          issues: ["Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md"],
+          issueDetails: [makeIssue(
+            "Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md",
+            {
+              code: "waiting_on_accepted_upstream_artifacts_tmp_blueprint_md",
+              ownerStepName: "create_blueprint",
+              primaryOwner: "create_blueprint",
+              suspectedOwners: ["create_blueprint"],
+              ownershipMode: "deterministic_owner",
+              affectedArtifacts: ["tmp/index.html"],
+              sourceArtifacts: ["tmp/BLUEPRINT.md"],
+              repairClass: "verification_gap",
+            },
+          )],
+          retryable: true,
+        },
+      ],
+    }
+
+    const pipelineResult: PipelineResult = {
+      status: "failed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create_blueprint", { name: "create_blueprint", status: "completed", executionState: "executed", acceptanceState: "repair_required", output: "", durationMs: 1 }],
+        ["build_ui", { name: "build_ui", status: "failed", executionState: "failed", acceptanceState: "blocked", output: "", durationMs: 1 }],
+      ]),
+    }
+
+    const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
+    expect(repairPlan.tasks.map((task) => task.stepName)).toEqual(["create_blueprint"])
+    expect(repairPlan.rerunOrder).toEqual(["create_blueprint"])
+  })
 })
 
 // ============================================================================
@@ -4774,7 +5140,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
                   { path: "tmp/ui.ts", purpose: "UI renderer", functions: [] },
                 ],
                 sharedTypes: [
-                  { name: "GameState", definition: "", usedBy: [] },
+                  { name: "GameState", definition: "", usedBy: ["tmp/ui.ts"] },
                 ],
               }, null, 2),
               "```",
@@ -4796,6 +5162,87 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     expect(step).toBeDefined()
     expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE CONTRACT WEAK") && i.includes("GameState"))).toBe(true)
     expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE DRIFT") && i.includes("Move"))).toBe(true)
+  })
+
+  it("does not fail process audit when a blueprint step writes the document and then reads it back", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create_blueprint", {
+          objective: "Create tmp/BLUEPRINT.md",
+          acceptanceCriteria: ["Blueprint declares implementation contracts"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.ts"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create_blueprint", {
+          name: "create_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [{
+      name: "read_file",
+      description: "read",
+      parameters: { type: "object", properties: { path: { type: "string" } } },
+      async execute(args) {
+        const path = String(args.path)
+        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+        return [
+          "# Engine Blueprint",
+          "",
+          "```blueprint-contract",
+          JSON.stringify({
+            version: 1,
+            files: [{ path: "tmp/engine.ts", purpose: "Rules engine", functions: [] }],
+            sharedTypes: [],
+          }, null, 2),
+          "```",
+        ].join("\n")
+      },
+    }]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find(a => a.stepName === "create_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some(i => i.includes("PROCESS AUDIT FAILED"))).toBe(false)
   })
 
   it("does not emit spec-mapping-missing for the blueprint file itself", async () => {
@@ -4883,6 +5330,114 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     const step = assessments.find((assessment) => assessment.stepName === "generate_blueprint")
     expect(step).toBeDefined()
     expect(step?.issues.some((issue) => issue.includes("SPEC MAPPING MISSING") && issue.includes("tmp/BLUEPRINT.md"))).toBe(false)
+  })
+
+  it("does not treat algorithm prose parentheticals as extra function declarations", async () => {
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create_blueprint", {
+          objective: "Create tmp/BLUEPRINT.md for a chess app",
+          acceptanceCriteria: ["Blueprint defines implementation contracts"],
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/BLUEPRINT.md"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+            role: "writer",
+          },
+        }),
+        makeSubagentStep("implement_game", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/game/main.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 1,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create_blueprint", {
+          name: "create_blueprint",
+          status: "completed",
+          output: "wrote tmp/BLUEPRINT.md",
+          durationMs: 1,
+          toolCalls: [
+            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
+            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
+          ],
+        }],
+      ]),
+    }
+
+    const tools: Tool[] = [{
+      name: "read_file",
+      description: "read",
+      parameters: { type: "object", properties: { path: { type: "string" } } },
+      async execute(args) {
+        const path = String(args.path)
+        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+        return [
+          "# Blueprint for tmp/BLUEPRINT.md",
+          "",
+          "## Planned Artifacts",
+          "- tmp/game/main.js",
+          "",
+          "## Machine Contract",
+          "```blueprint-contract",
+          JSON.stringify({
+            version: 1,
+            files: [{
+              path: "tmp/game/main.js",
+              purpose: "Coordinates interactions between UI and chess logic.",
+              functions: [
+                { name: "initializeGame", signature: "initializeGame(): void" },
+                { name: "handleMove", signature: "handleMove(from: string, to: string): void" },
+                { name: "updateUI", signature: "updateUI(gameState: GameState): void" },
+              ],
+            }],
+            sharedTypes: [{ name: "GameState", definition: "{ board: Board }", usedBy: ["tmp/game/main.js"] }],
+          }, null, 2),
+          "```",
+          "",
+          "## File Contracts",
+          "### tmp/game/main.js",
+          "- Purpose: Coordinates interactions between the UI and chess logic.",
+          "- Exports/entrypoints:",
+          "  - `initializeGame`",
+          "  - `handleMove`",
+          "  - `updateUI`",
+          "- Depends on:",
+          "  - Shared types `Board`, `Move`, `GameState`.",
+          "- Used by:",
+          "  - `tmp/game/index.html`",
+          "- Algorithmic contracts:",
+          "  - `handleMove`: Must process valid moves and reject invalid ones.",
+          "  - `updateUI`: Reflect changes in the board and game state visually, including checks (e.g., check/checkmate banners), conditions (a move that ends the game), and variables (e.g., current turn).",
+        ].join("\n")
+      },
+    }]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const step = assessments.find((assessment) => assessment.stepName === "create_blueprint")
+    expect(step).toBeDefined()
+    expect(step?.issues.some((issue) => issue.includes("BLUEPRINT FUNCTION CONTRACT DRIFT"))).toBe(false)
   })
 
   it("flags blueprint structure mismatches from structural markers instead of keyword heuristics", async () => {

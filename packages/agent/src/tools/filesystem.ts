@@ -204,14 +204,18 @@ export const writeFileTool: Tool = {
     try {
       // Use safePathResolved to prevent writing through symlinks that point outside workspace
       const target = await safePathResolved(String(args.path))
+      const filePath = String(args.path)
+      const isCodeFile = /\.(js|jsx|ts|tsx|py)$/i.test(filePath)
 
       // ── Regression guard: snapshot existing file before overwrite ──
       // If the file already exists, extract its defined names so we can detect
       // function/class loss after writing. This catches destructive rewrites
       // where the child drops existing functions that other code depends on.
       let priorNames: Set<string> | undefined
+      let hadExistingFile = false
       try {
         const existing = await readFile(target, "utf-8")
+        hadExistingFile = true
         if (existing.length > 0) {
           priorNames = extractDefinedNames(existing)
         }
@@ -254,7 +258,6 @@ export const writeFileTool: Tool = {
       // Integrity check: detect LLM degeneration in the written content.
       // If the output is corrupted, warn the child so it can fix within its own iteration budget
       // instead of silently accepting garbage that wastes a full pipeline retry.
-      const filePath = String(args.path)
       const integrityWarnings = checkWriteIntegrity(filePath, content)
 
       // ── Regression guard: detect function/class loss ──
@@ -299,10 +302,39 @@ export const writeFileTool: Tool = {
             errorCode: "artifact_integrity_violation",
             details: [
               ...integrityWarnings,
-              "The existing file was kept unchanged.",
-              "Use read_file to inspect current content before any further mutation attempt.",
+              hadExistingFile
+                ? "The existing file was kept unchanged."
+                : "No file was written because the proposed content was structurally invalid.",
+              hadExistingFile
+                ? "Use read_file to inspect current content before any further mutation attempt."
+                : "Plan a corrected full write and retry; there is no current file to inspect.",
             ],
-            artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
+            artifacts: [{ path: filePath, preservedExisting: hadExistingFile, requiresReadBeforeMutation: hadExistingFile }],
+            retryable: true,
+          },
+        )
+      }
+
+      const onlyStubDetections = integrityWarnings.length > 0 && integrityWarnings.every(w =>
+        /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w),
+      )
+
+      if (isCodeFile && onlyStubDetections) {
+        return buildToolOutcome(
+          `WRITE REJECTED for ${filePath} — incomplete placeholder/stub logic was blocked before commit.`,
+          {
+            ok: false,
+            severity: "recoverable",
+            directive: "abort_round",
+            errorCode: "artifact_incomplete_mutation",
+            details: [
+              ...integrityWarnings,
+              hadExistingFile
+                ? "The existing file was kept unchanged."
+                : "No file was written because code artifacts must not be created with placeholder logic.",
+              "Plan the full implementation first, then write or replace the completed code in one pass.",
+            ],
+            artifacts: [{ path: filePath, preservedExisting: hadExistingFile, requiresReadBeforeMutation: hadExistingFile }],
             retryable: true,
           },
         )
@@ -312,10 +344,6 @@ export const writeFileTool: Tool = {
       await writeFile(target, content, "utf-8")
 
       if (integrityWarnings.length > 0) {
-        const onlyStubDetections = !hasStructuralCorruption && integrityWarnings.every(w =>
-          /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w)
-        )
-
         if (onlyStubDetections) {
           return buildToolOutcome(
             `WRITTEN WITH ISSUES to ${filePath} — the file was saved but still contains incomplete logic.`,
@@ -574,6 +602,7 @@ export const replaceInFileTool: Tool = {
       const filePath = String(args.path)
       const oldStr = String(args.old_string)
       const newStr = String(args.new_string)
+      const isCodeFile = /\.(js|jsx|ts|tsx|py)$/i.test(filePath)
 
       // Read existing content
       let existing: string
@@ -632,6 +661,28 @@ export const replaceInFileTool: Tool = {
             directive: "abort_round",
             errorCode: "artifact_integrity_violation",
             details: [...integrityWarnings, "Use read_file to inspect the current file before another replacement attempt."],
+            artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
+          },
+        )
+      }
+
+      const onlyStubDetections = integrityWarnings.length > 0 && integrityWarnings.every(w =>
+        /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w),
+      )
+
+      if (isCodeFile && onlyStubDetections) {
+        return buildToolOutcome(
+          `REPLACE REJECTED for ${filePath} — incomplete placeholder/stub logic was blocked before commit.`,
+          {
+            ok: false,
+            severity: "recoverable",
+            directive: "abort_round",
+            errorCode: "artifact_incomplete_mutation",
+            details: [
+              ...integrityWarnings,
+              "The existing file was kept unchanged.",
+              "Read the current file and replace the incomplete section with fully implemented logic in one pass.",
+            ],
             artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
           },
         )

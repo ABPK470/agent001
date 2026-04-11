@@ -324,6 +324,110 @@ describe("Agent loop guards", () => {
     expect(answer).toContain("Repeated mutation-blocked attempts on tmp/game/chessLogic.js")
   })
 
+  it("does not reset blocked-artifact failure history just because the child reread the file", async () => {
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        return {
+          ok: false,
+          summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
+          severity: "recoverable",
+          directive: "abort_round",
+          errorCode: "artifact_incomplete_mutation",
+          details: ["STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation."],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+        }
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        return `current contents of ${String(args.path)}`
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game.js", content: "first" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game.js", content: "second" } }] },
+      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc5", name: "write_file", arguments: { path: "tmp/game.js", content: "third" } }] },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool, readFileTool], {
+      maxIterations: 8,
+      verbose: false,
+    })
+
+    const answer = await agent.run("fix tmp/game.js")
+    expect(answer).toContain("Repeated incomplete/blocked mutation failures on tmp/game.js")
+  })
+
+  it("aborts after repeated replace_in_file old_string misses on the same artifact", async () => {
+    const replaceInFileTool: Tool = {
+      name: "replace_in_file",
+      description: "Replace text in a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          old_string: { type: "string" },
+          new_string: { type: "string" },
+        },
+        required: ["path", "old_string", "new_string"],
+      },
+      async execute(args) {
+        return `Error: old_string not found in "${String(args.path)}". The text you provided does not exist in the file. Use read_file to see the current content first.`
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        return `current contents of ${String(args.path)}`
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "A", new_string: "B" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "C", new_string: "D" } }] },
+      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc5", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "E", new_string: "F" } }] },
+    ])
+
+    const agent = new Agent(llm, [replaceInFileTool, readFileTool], {
+      maxIterations: 8,
+      verbose: false,
+    })
+
+    const answer = await agent.run("repair tmp/game.js")
+    expect(answer).toContain("Repeated replace_in_file old_string misses on tmp/game.js")
+  })
+
   it("returns cancellation message when signal is aborted", async () => {
     const controller = new AbortController()
     controller.abort()

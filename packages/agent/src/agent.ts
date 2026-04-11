@@ -1643,6 +1643,30 @@ export class Agent {
           failuresThisRound++
           circuitBreaker.recordFailure(semanticKey, call.name)
           trackToolCallFailureState(true, semanticKey, toolLoopState)
+
+            const errorPath = typeof (call.arguments as Record<string, unknown>).path === "string"
+              ? normalizeArtifactPath(String((call.arguments as Record<string, unknown>).path))
+              : ""
+            if (
+              call.name === "replace_in_file"
+              && errorPath
+              && /old_string not found/i.test(execResult.result)
+            ) {
+              artifactsRequiringReadBeforeMutation.add(errorPath)
+              const repeatedMissAbort = recordBlockedArtifactFailure(
+                errorPath,
+                3,
+                "Repeated replace_in_file old_string misses",
+              )
+              if (repeatedMissAbort && !forcedAbortLoopMessage) {
+                forcedAbortLoopMessage = repeatedMissAbort
+              }
+              if (!forcedAbortRoundMessage) {
+                forcedAbortRoundMessage =
+                  `replace_in_file could not find the requested text in ${errorPath}. ` +
+                  "Read the current file and switch to an exact-match repair or full-file rewrite if the content has drifted."
+              }
+            }
         } else {
           const enriched = enrichResult(execResult.result, {})
           const semanticFailure = execResult.outcome ? !execResult.outcome.ok : didToolCallFail(false, enriched)
@@ -1660,6 +1684,30 @@ export class Agent {
           // must count as round failures so stuck detection can trigger.
           if (semanticFailure) {
             failuresThisRound++
+
+            const semanticFailurePath = typeof (call.arguments as Record<string, unknown>).path === "string"
+              ? normalizeArtifactPath(String((call.arguments as Record<string, unknown>).path))
+              : ""
+            if (
+              call.name === "replace_in_file"
+              && semanticFailurePath
+              && /old_string not found/i.test(enriched)
+            ) {
+              artifactsRequiringReadBeforeMutation.add(semanticFailurePath)
+              const repeatedMissAbort = recordBlockedArtifactFailure(
+                semanticFailurePath,
+                3,
+                "Repeated replace_in_file old_string misses",
+              )
+              if (repeatedMissAbort && !forcedAbortLoopMessage) {
+                forcedAbortLoopMessage = repeatedMissAbort
+              }
+              if (!forcedAbortRoundMessage) {
+                forcedAbortRoundMessage =
+                  `replace_in_file could not find the requested text in ${semanticFailurePath}. ` +
+                  "Read the current file and switch to an exact-match repair or full-file rewrite if the content has drifted."
+              }
+            }
           }
 
           // Circuit breaker: clear on success, record if "success" is a semantic failure
@@ -1742,7 +1790,6 @@ export class Agent {
             writtenButNotReread.delete(readPath)
             const normalizedReadPath = normalizeArtifactPath(readPath)
             artifactsRequiringReadBeforeMutation.delete(normalizedReadPath)
-            blockedArtifactFailureCounts.delete(normalizedReadPath)
           }
           if (call.name === "run_command" || call.name === "browser_check") {
             wroteUnverifiedFiles = false
