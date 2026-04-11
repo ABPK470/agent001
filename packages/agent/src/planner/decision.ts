@@ -215,11 +215,11 @@ function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
 function shouldUseBoundedCoherentGeneration(signals: RequestSignals, axes: RoutingAxes): boolean {
   if (!signals.hasImplementationScopeCue) return false
   if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  if (!COHESIVE_IMPLEMENTATION_RE.test(signals.normalized) && !COHERENCE_FIRST_RE.test(signals.normalized)) return false
 
-  // This route is for coherence-heavy greenfield work, not coordination-heavy
-  // or already-in-flight repo surgery.
-  if (axes.coherenceNeed !== "high") return false
+  // The key gate: if there is no coordination need, a single coherent agent pass
+  // is always better than planner overhead — regardless of whether the user said
+  // "fully" or "playable". Coordination need captures multi-step cues, delegation
+  // cues, bullet lists, file-count cues, coupling, and explicit cross-module work.
   if (axes.coordinationNeed !== "low") return false
   if (hasRealOwnershipSeparation(signals)) return false
   if (signals.priorToolMessages >= 4) return false

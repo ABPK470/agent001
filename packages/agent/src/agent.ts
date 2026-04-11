@@ -1329,6 +1329,18 @@ export class Agent {
             messages.push({ role: "system", content: fallbackRepairMsg, section: "history" })
             continue
           }
+
+          // Coherent verifier confirmed pass — return the answer immediately.
+          // Bypassing quality guards here is intentional: the verifier already
+          // evaluated the actual code and found no issues. Without this early
+          // return, phrases like "I've added the missing imports" in the agent's
+          // completion text can trigger the premature-handoff heuristic, causing
+          // an infinite loop of unnecessary rewrites even when work is done.
+          if (coherentDecision?.overall === "pass") {
+            const coherentAnswer = response.content ?? "(no response)"
+            if (this.config.verbose) log.logFinalAnswer(coherentAnswer)
+            return coherentAnswer
+          }
         }
 
         // Guard: if this is iteration 0 and the agent has tools, it likely

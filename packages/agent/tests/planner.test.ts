@@ -109,7 +109,16 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
 // ============================================================================
 
 describe("Planner decision: assessPlannerDecision", () => {
-  it("routes 'build a chess game' to planner (implementation scope)", () => {
+  it("routes 'build a chess game' to bounded_coherent_generation (no coordination need)", () => {
+    // Plain phrasing — no "playable"/"complete"/"drag and drop" magic words required.
+    // Uses a realistic goal length (> 20 chars) that won't hit the too_short gate.
+    const decision = assessPlannerDecision("Build a chess game with all pieces and standard rules", [])
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("bounded_coherent_generation")
+    expect(decision.reason).toBe("bounded_coherent_generation")
+  })
+
+  it("routes 'build a fully playable chess game with drag and drop' to bounded_coherent_generation", () => {
     const decision = assessPlannerDecision("Build a fully playable chess game with drag and drop", [])
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
@@ -913,7 +922,7 @@ describe("Planner path execution", () => {
     const delegatedSteps: string[] = []
     try {
       const result = await executePlannerPath(
-        "Build a multi-file game in tmp with coordinated rules and UI.",
+        "Build a game in tmp across multiple separate modules: rules engine, UI renderer, and game controller as independent components.",
         {
           llm,
           tools: [
@@ -1038,7 +1047,7 @@ describe("Planner path execution", () => {
     let capturedBlueprintObjective = ""
     try {
       await executePlannerPath(
-        "Build a tmp web app with markup and logic.",
+        "Build a tmp web app with tmp/index.html markup and tmp/game_logic.js logic.",
         {
           llm,
           tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
@@ -1129,7 +1138,7 @@ describe("Planner path execution", () => {
 
     try {
       await executePlannerPath(
-        "Build a tmp browser app with index.html and game logic.",
+        "Build a tmp browser app with tmp/index.html and tmp/game_logic.js.",
         {
           llm,
           tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
