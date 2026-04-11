@@ -29,6 +29,7 @@ Rules:
 4. File contents must be final code/content, not placeholders or TODOs.
 5. Keep shared naming, imports, and state contracts consistent across all artifacts.
 6. Do not include markdown fences around file contents.
+7. OUTPUT DIRECTORY ISOLATION: Generate all new artifacts inside a single fresh project subdirectory (e.g. \`project/\`, \`app/\`, or a semantically meaningful name like \`client-report/\`). Do NOT place files inside existing source directories such as \`packages/\`, \`src/\`, \`lib/\`, or \`dist/\` unless the goal explicitly targets modifying files that already exist there. A new standalone project must live in its own directory, not mixed into the host repository.
 
 Return JSON of this shape:
 {
@@ -199,7 +200,15 @@ export function buildCoherentGenerationMessages(
   workspaceRoot: string,
   history: readonly Message[],
 ): Message[] {
-  const baseSystemMessages = history.filter((message) => message.role === "system")
+  // Keep anchor/persona system messages but strip the workspace directory listing.
+  // The directory listing shows existing source directories (e.g. packages/ui,
+  // packages/server) which cause the LLM to write generated code into the host
+  // repo's own source tree instead of a fresh project subdirectory.
+  const baseSystemMessages = history.filter(
+    (message) =>
+      message.role === "system" &&
+      !message.content?.trimStart().startsWith("Workspace:"),
+  )
   return [
     ...baseSystemMessages,
     { role: "system", content: COHERENT_GENERATION_PROMPT, section: "system_runtime" },
@@ -416,6 +425,10 @@ export function buildCoherentRepairInstructions(
     `2. Make the smallest repair that fixes the verified issue.`,
     `3. Preserve file interfaces, imports, and contracts unless the verifier evidence proves they are wrong.`,
     `4. Re-read the repaired files and verify behavior before finishing.`,
+    `HARD CONSTRAINTS — violation causes immediate failure:`,
+    `- Do NOT start server processes (node server.js, npm start, etc.) to verify code — the backend will be started by the user separately.`,
+    `- Do NOT run package installation commands (npm install, yarn add, pnpm add, bun add, etc.) — dependencies must be declared in package.json files, not installed live.`,
+    `- If browser_check shows ERR_CONNECTION_REFUSED to a local API, that means the backend is not running — this is expected and NOT a code bug to fix.`,
     `Do not ask the user whether to continue. Repair now.`,
   ].filter(Boolean).join("\n\n")
 }

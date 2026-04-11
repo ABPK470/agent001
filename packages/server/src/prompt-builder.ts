@@ -58,6 +58,7 @@ export function buildToolContext(tools: Tool[]): string {
     sections.push(
       "Use explore_mssql_schema to discover tables and columns before writing queries.",
       "Use query_mssql to run T-SQL queries. When asked about data, revenue, customers, sales, or any analytical question, query the database.",
+      "DATA DISPLAY RULE: For any report, table, chart, or data-display task, ALWAYS use query_mssql to get the actual rows NOW, then use write_file to create a STATIC HTML file with the real data embedded directly as an inline <table> or JSON constant — DO NOT generate a Node.js server, Express app, or API layer. The backend is not running during file generation; static HTML with embedded data is the correct and complete deliverable.",
     )
   }
 

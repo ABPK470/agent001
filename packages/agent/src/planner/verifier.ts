@@ -1061,8 +1061,25 @@ export async function runDeterministicProbes(
               executedModalities.add("runtime")
               const result = await executeToolForText(browserCheck, { path: browserPath })
               if (/error|fail|exception/i.test(result) && !/no errors/i.test(result)) {
-                issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
-                anyBrowserFailure = true
+                // ERR_CONNECTION_REFUSED / Failed to fetch to localhost means a backend API
+                // server is not running during static verification.  This is expected for
+                // frontend+backend projects.  Also treat 404s on localhost/127.0.0.1 the
+                // same way: when the LLM generates an Express app that serves both static
+                // files AND API routes, browser_check's standalone static server will 404
+                // on any relative API call (e.g. /api/data) — the backend is simply not
+                // running, not a code bug.
+                const isBackendNotRunningLine = (ln: string): boolean =>
+                  /ERR_CONNECTION_REFUSED|net::ERR_CONNECTION|Failed to fetch/i.test(ln) ||
+                  // 404 on a localhost/127.0.0.1 URL → backend API endpoint, not running
+                  (/(404|Not Found)/i.test(ln) && /(localhost|127\.0\.0\.1)[:/]/i.test(ln))
+                const allErrorsAreBackendNotRunning = result
+                  .split("\n")
+                  .filter(ln => /error|fail|exception/i.test(ln))
+                  .every(ln => isBackendNotRunningLine(ln))
+                if (!allErrorsAreBackendNotRunning) {
+                  issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
+                  anyBrowserFailure = true
+                }
               }
             } catch {
               issues.push(`Browser check failed for "${browserPath}"`)
@@ -1631,8 +1648,11 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
     const htmlDir = htmlEntry.path.replace(/[^/]+$/, "")
     const relatedJs = jsArtifacts.filter(js => {
       const jsDir = js.path.replace(/[^/]+$/, "")
-      // Same directory tree: either same dir or one is a subdirectory of the other
-      return jsDir.startsWith(htmlDir) || htmlDir.startsWith(jsDir)
+      // Only consider JS files that live in the same directory or a subdirectory
+      // of the HTML file.  JS files that sit in a *parent* directory are
+      // typically Node.js backend entry points (server.js, app.js …) and are
+      // never loaded by the browser via <script> tags.
+      return jsDir.startsWith(htmlDir)
     })
 
     if (relatedJs.length === 0) continue
@@ -2217,6 +2237,171 @@ function detectVerificationModalityGaps(
 }
 
 // ============================================================================
+// Deterministic code structure analysis
+// ============================================================================
+
+/**
+ * Language keywords that are built into the language — never "missing imports".
+ * Keyed by the canonical extension group.
+ */
+const LANG_KEYWORDS: Record<string, Set<string>> = {
+  js: new Set([
+    "abstract","arguments","as","async","await","boolean","break","byte",
+    "case","catch","char","class","const","continue","debugger","default",
+    "delete","do","double","else","enum","eval","export","extends","false",
+    "final","finally","float","for","from","function","goto","if","implements",
+    "import","in","instanceof","int","interface","let","long","native","new",
+    "null","of","package","private","protected","public","return","short",
+    "static","super","switch","synchronized","this","throw","throws",
+    "transient","true","try","type","typeof","undefined","var","void",
+    "volatile","while","with","yield",
+    // TypeScript extras
+    "declare","namespace","module","readonly","keyof","infer","never",
+    "unknown","any","object","string","number","bigint","symbol","satisfies",
+  ]),
+  python: new Set([
+    "False","None","True","and","as","assert","async","await","break","class",
+    "continue","def","del","elif","else","except","finally","for","from",
+    "global","if","import","in","is","lambda","nonlocal","not","or","pass",
+    "raise","return","try","while","with","yield",
+  ]),
+}
+
+/** Browser/Node globals that are always in scope and never need importing */
+const RUNTIME_GLOBALS = new Set([
+  "console","window","document","process","global","module","exports",
+  "require","__dirname","__filename",
+  "Promise","Array","Object","String","Number","Boolean","BigInt","Symbol",
+  "Math","JSON","Date","RegExp","Error","Map","Set","WeakMap","WeakSet",
+  "Proxy","Reflect","Buffer","URL","URLSearchParams","TextEncoder","TextDecoder",
+  "setTimeout","setInterval","clearTimeout","clearInterval","setImmediate",
+  "fetch","XMLHttpRequest","FormData","Headers","Request","Response",
+  "localStorage","sessionStorage","navigator","location","history",
+  "performance","crypto","Intl","Event","CustomEvent","EventTarget",
+  "parseInt","parseFloat","isNaN","isFinite","encodeURI","decodeURI",
+  "encodeURIComponent","decodeURIComponent","atob","btoa","structuredClone",
+])
+
+interface CodeStructureAnalysis {
+  language: string
+  importedNames: string[]
+  localDeclarations: string[]
+  keywordsNote: string
+}
+
+/**
+ * Deterministically extract the import and declaration structure of a JS/TS/PY
+ * file so the LLM verifier never has to infer "is X a keyword or a missing
+ * import?" — that distinction is resolved here, in code.
+ *
+ * Returns null for file types where we have no analysis (e.g. HTML, CSS).
+ */
+function analyzeCodeStructure(filePath: string, content: string): CodeStructureAnalysis | null {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
+  const isJS = ["js", "jsx", "ts", "tsx", "mjs", "cjs"].includes(ext)
+  const isPy = ext === "py"
+
+  if (!isJS && !isPy) return null
+
+  const keywords = isJS ? LANG_KEYWORDS.js : LANG_KEYWORDS.python
+  const language = isJS ? (["ts", "tsx"].includes(ext) ? "TypeScript" : "JavaScript") : "Python"
+
+  const importedNames: string[] = []
+
+  if (isJS) {
+    // ES module: import Foo from '...'
+    for (const m of content.matchAll(/^import\s+(\w+)\s+from\s+['"][^'"]+['"]/gm))
+      importedNames.push(m[1])
+    // ES module: import { a, b as c } from '...'
+    for (const m of content.matchAll(/^import\s+(?:\w+\s*,\s*)?\{([^}]+)\}\s+from\s+['"][^'"]+['"]/gm)) {
+      for (const part of m[1].split(",")) {
+        const alias = part.trim().split(/\s+as\s+/).pop()
+        if (alias?.trim()) importedNames.push(alias.trim())
+      }
+    }
+    // ES module: import * as ns from '...'
+    for (const m of content.matchAll(/^import\s+\*\s+as\s+(\w+)\s+from\s+['"][^'"]+['"]/gm))
+      importedNames.push(m[1])
+    // CJS: const x = require('...')
+    for (const m of content.matchAll(/const\s+(\w+)\s*=\s*require\s*\(/gm))
+      importedNames.push(m[1])
+    // CJS destructure: const { a, b } = require('...')
+    for (const m of content.matchAll(/const\s+\{([^}]+)\}\s*=\s*require\s*\(/gm)) {
+      for (const part of m[1].split(",")) {
+        const alias = part.trim().split(/\s+as\s+/).pop()
+        if (alias?.trim()) importedNames.push(alias.trim())
+      }
+    }
+  }
+
+  if (isPy) {
+    // from x import a, b  /  import x as y
+    for (const m of content.matchAll(/^from\s+\S+\s+import\s+(.+)/gm)) {
+      for (const part of m[1].split(",")) {
+        const alias = part.trim().split(/\s+as\s+/).pop()
+        if (alias?.trim()) importedNames.push(alias.trim())
+      }
+    }
+    for (const m of content.matchAll(/^import\s+(\w+)(?:\s+as\s+(\w+))?/gm))
+      importedNames.push(m[2]?.trim() || m[1])
+  }
+
+  // Local declarations — functions, classes, variables and state destructuring
+  const localDeclarations: string[] = []
+  if (isJS) {
+    for (const m of content.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/g))
+      localDeclarations.push(m[1])
+    for (const m of content.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+(\w+)/g))
+      localDeclarations.push(m[1])
+    for (const m of content.matchAll(/(?:^|\n)\s*(?:export\s+)?class\s+(\w+)/g))
+      localDeclarations.push(m[1])
+    // useState / useReducer destructuring: const [x, setX] = ...
+    for (const m of content.matchAll(/const\s+\[(\w+)\s*,\s*(\w+)\]\s*=/g)) {
+      localDeclarations.push(m[1], m[2])
+    }
+  }
+  if (isPy) {
+    for (const m of content.matchAll(/(?:^|\n)\s*(?:async\s+)?def\s+(\w+)/g))
+      localDeclarations.push(m[1])
+    for (const m of content.matchAll(/(?:^|\n)\s*class\s+(\w+)/g))
+      localDeclarations.push(m[1])
+  }
+
+  const uniqueImported = [...new Set(importedNames.filter(Boolean))]
+  const uniqueLocal = [...new Set(localDeclarations.filter(Boolean))]
+  const keywordsNote =
+    `${language} built-in keywords (e.g. ${[...keywords].slice(0, 8).join(", ")}, …) ` +
+    `and runtime globals (e.g. console, process, window, …) are always defined — never "missing".`
+
+  return { language, importedNames: uniqueImported, localDeclarations: uniqueLocal, keywordsNote }
+}
+
+/**
+ * Wrap raw artifact content with its deterministic structure analysis so the
+ * LLM verifier sees clearly separated "pre-checked facts" vs "code to assess".
+ */
+function wrapArtifactWithStructureAnalysis(filePath: string, content: string): string {
+  const analysis = analyzeCodeStructure(filePath, content)
+  if (!analysis) {
+    return `### ${filePath}\n\`\`\`\n${content}\n\`\`\``
+  }
+
+  const preChecked = [
+    `Language: ${analysis.language}`,
+    `Imports (pre-verified): ${analysis.importedNames.length > 0 ? analysis.importedNames.join(", ") : "(none)"}`,
+    `Local declarations (pre-verified): ${analysis.localDeclarations.length > 0 ? analysis.localDeclarations.join(", ") : "(none)"}`,
+    `Keywords note: ${analysis.keywordsNote}`,
+  ].join("\n")
+
+  return (
+    `### ${filePath}\n` +
+    `<!-- pre-checked structure (do NOT re-analyze imports or flag keywords) -->\n` +
+    `\`\`\`\nPRE-CHECKED STRUCTURE:\n${preChecked}\n\`\`\`\n` +
+    `\`\`\`\n${content}\n\`\`\``
+  )
+}
+
+// ============================================================================
 // LLM-based verification
 // ============================================================================
 
@@ -2254,6 +2439,7 @@ Rules:
 - SHALLOW IMPLEMENTATION IS NEVER "pass": If the acceptance criteria require complex logic (e.g. validation rules, state transitions, business workflows) but the code only has trivial/generic implementations (e.g. a validate function that always returns true, a UI update function that skips required checks), mark it "retry". READ THE ACTUAL CODE carefully — don't trust the child's self-reported summary.
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE. A 50-line file that correctly implements all acceptance criteria is better than a 300-line file with stubs. Judge by correctness and completeness, NOT by line count.
 - When "Actual File Contents" are provided below the step results, YOU MUST read the actual code and verify EACH acceptance criterion is implemented with REAL logic. A function that exists but does the wrong thing is NOT passing.
+- IMPORT AND KEYWORD ANALYSIS IS PRE-CHECKED: Every code artifact in the "Actual File Contents" section has a "PRE-CHECKED STRUCTURE" block showing its language, pre-verified imports, local declarations, and a keywords note. This was produced by a static analyzer — treat it as ground truth. Do NOT re-analyze import statements, do NOT flag language keywords (async, await, function, class, const, return, …) as missing imports, and do NOT flag state bindings created by destructuring (e.g. setClients from const [clients, setClients] = useState()) as undefined. Confine your import/symbol analysis to names that are absent from both "Imports (pre-verified)" and "Local declarations (pre-verified)" in the PRE-CHECKED STRUCTURE block.
 - When "specEvidence" is provided for a step, treat it as the structured contract extracted from BLUEPRINT.md. Use its source-read evidence, file mappings, and missing-function findings when deciding whether the step actually followed the spec.
 - When "specEvidence" is provided for a step, also use its structural markers and process-audit findings. If the child read BLUEPRINT.md only after mutating files, or never read it at all, treat that as strong evidence the spec was not actually used.
 - EXPLICIT MAPPING REQUIRED: If a step claims to follow BLUEPRINT.md but the provided spec evidence shows unmapped target artifacts, path mismatches, or missing blueprint functions, do NOT mark the step as pass unless the actual code clearly satisfies the contract another way and you can explain that reasoning in the issues.
@@ -2261,14 +2447,12 @@ Rules:
 - GUARD ORDERING: Check that early-return guards in event handlers or dispatchers don't block valid interactions. Example: \`if (item.owner !== currentUser) return;\` at the top of a click handler prevents clicking on opponent items to interact with them (e.g. capture). The guard should be conditional on current state (e.g. only reject when no item is already selected).
 - HELPER FUNCTION TRACING: For each key acceptance criterion, identify the function(s) that implement it and the helpers they call. Pick ONE concrete scenario and mentally trace the code path step by step, including into helper functions. Verify each helper returns the correct value for that scenario. A helper whose name implies a semantic (e.g. "isSameTeam", "isValid", "hasPermission", "belongsTo") must actually implement that semantic correctly — don't assume it works just because it has a body. Pay special attention to comparisons that erase important distinctions (e.g. case-insensitive comparison on data where case carries meaning).
 - MISSING FEATURE DETECTION: For each acceptance criterion, verify there is ACTUAL CODE implementing it — not just a function with a matching name, but real logic. If a criterion requires session expiration logic but no code checks timestamps, that criterion is NOT met. If a criterion requires duplicate suppression but no code tracks prior ids, it is NOT met. List every criterion that is NOT implemented.
-- LANGUAGE KEYWORDS ARE NEVER MISSING IMPORTS: \`async\`, \`await\`, \`function\`, \`class\`, \`return\`, \`const\`, \`let\`, \`var\`, \`void\`, \`null\`, \`undefined\`, \`true\`, \`false\`, \`new\`, \`this\`, \`typeof\`, and all other language-reserved keywords are built into the language — they are NOT values that must be imported. Never flag a language keyword as a missing import or undefined symbol.
-- LOCAL SETTER BINDINGS ARE NOT MISSING IMPORTS: Variables created by destructuring (e.g. \`const [clients, setClients] = useState([])\`) are local variable bindings, not imports. Do not flag \`setClients\`, \`setError\`, or similar setter names as undefined unless the useState call itself is absent.
-- ARIA LABELS AND ACCESSIBILITY POLISH ARE NON-BLOCKING: The absence of ARIA labels or similar accessibility attributes is not a blocking issue unless the acceptance criteria explicitly require them. Do not use accessibility gaps to justify a "retry" verdict.
 - Be practical: if the step produced working output that meets the core objective, mark it as pass even if minor polish is possible
 - Only mark "retry" for specific, actionable issues — not vague concerns about quality
 - If deterministic probes passed for a step, strongly prefer "pass" unless you see a clear problem in the actual code
 - Evidence quality: outputs with concrete indicators (file paths, line numbers, error messages, data) are more trustworthy than vague summaries
 - Hallucination check: if output claims "according to logs" or "as seen in" but doesn't match known artifacts, flag it
+- BACKEND NOT RUNNING IS NOT A FAILURE: If browser_check shows ERR_CONNECTION_REFUSED or "Failed to fetch" to a localhost port (e.g. http://localhost:3001), this means the generated backend service is not running during verification. This is expected — it is NOT a code bug. Do NOT flag this as an issue. The generated backend code quality should be judged by reading the source, not by whether the server was started.
 - confidence is 0.0 to 1.0
 - Respond ONLY with the JSON object`
 
@@ -2333,7 +2517,11 @@ export async function runLLMVerification(
   })
 
   // Build artifact content section for code files so the LLM can assess
-  // whether the code actually implements the acceptance criteria
+  // whether the code actually implements the acceptance criteria.
+  // Each artifact is wrapped with deterministic pre-checked structure (imports,
+  // local declarations, keyword list) so the LLM never needs to infer whether
+  // an identifier is a language keyword or a missing import — that separation
+  // is resolved here, in code, before the LLM ever sees the file.
   let artifactSection = ""
   if (opts?.artifactContents && opts.artifactContents.size > 0) {
     const parts: string[] = []
@@ -2346,9 +2534,9 @@ export async function runLLMVerification(
       const truncated = content.length > perArtifactLimit
         ? content.slice(0, perArtifactLimit) + `\n... (truncated, ${content.length} chars total)`
         : content
-      parts.push(`### ${path}\n\`\`\`\n${truncated}\n\`\`\``)
+      parts.push(wrapArtifactWithStructureAnalysis(path, truncated))
     }
-    artifactSection = `\n\n## Actual File Contents\nReview these carefully against the acceptance criteria:\n\n${parts.join("\n\n")}`
+    artifactSection = `\n\n## Actual File Contents\nEach file includes a PRE-CHECKED STRUCTURE block. Trust that data — do NOT re-analyze imports or flag language keywords. Focus on semantic correctness against acceptance criteria.\n\n${parts.join("\n\n")}`
   }
 
   const messages: Message[] = [

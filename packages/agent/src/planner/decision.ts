@@ -67,6 +67,16 @@ const PLAN_CREATION_RE =
   /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
 
 /**
+ * Data-fetch pipeline: the request is fundamentally "query database → produce output".
+ * These MUST go to the direct tool-loop path because the agent can call query_mssql
+ * and write_file directly to embed real data into static HTML.  Routing them to
+ * bounded_coherent_generation causes the LLM to generate a full server+client
+ * architecture instead — because in that mode it cannot call any tools at all.
+ */
+const DATA_FETCH_PIPELINE_RE =
+  /\b(?:query|fetch|get|pull|retrieve|select|show|display|list|report\s+on|generate\s+(?:a\s+)?report)\b[\s\S]{0,80}\b(?:from\s+)?(?:database|db|mssql|sql\s+server|sql|table|data)\b|\b(?:mssql|sql\s+server|database|db)\b[\s\S]{0,80}\b(?:report|table|chart|display|html|dashboard|page|export|output|result)\b/i
+
+/**
  * High-throughput direct coding cue: user explicitly asks for single-artifact
  * implementation (one file/module/page) in a cohesive pass.
  */
@@ -328,6 +338,11 @@ export function assessPlannerDecision(
   }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return { score, shouldPlan: false, reason: "plan_generation_direct_path", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
+  }
+  // Data-fetch pipelines must use the direct tool loop so the agent can call
+  // query_mssql and write_file with real results rather than generating a server.
+  if (DATA_FETCH_PIPELINE_RE.test(signals.normalized) && !signals.hasDelegationCue) {
+    return { score, shouldPlan: false, reason: "data_fetch_pipeline_direct_path", route: "direct", coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed }
   }
 
   // Adaptive no-plan route: single-artifact implementation requests are usually

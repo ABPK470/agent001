@@ -1144,6 +1144,11 @@ export class Agent {
     // (response with zero tool calls). Used by optional deferred-nudge mode.
     let completionAttempted = false
 
+    // Fixed ceiling for adaptive budget extension.  Must be computed from the
+    // ORIGINAL maxIterations BEFORE the loop mutates it so extensions can't
+    // ratchet the cap upward indefinitely.
+    const absoluteIterationCap = this.config.maxIterations + 10
+
     const recordBlockedArtifactFailure = (artifactPath: string, threshold: number, reason: string): string | null => {
       const normalizedPath = normalizeArtifactPath(artifactPath)
       if (!normalizedPath) return null
@@ -1327,6 +1332,17 @@ export class Agent {
             coherentExecution.repairAttempts = nextRepairAttempt
             const fallbackRepairMsg = buildCoherentRepairInstructions(coherentExecution.bundle, coherentDecision, nextRepairAttempt)
             messages.push({ role: "system", content: fallbackRepairMsg, section: "history" })
+
+            // Hard exit: if the verifier has rejected the agent's completion
+            // attempt too many times in a row, stop looping and return the best
+            // answer we have.  Without this, when escalation is unavailable or
+            // fails, the loop runs until the iteration cap (which can itself
+            // grow via the budget extension).
+            if (nextRepairAttempt > 4) {
+              const bestAnswer = response.content ?? "(coherent generation completed — verifier disagreement unresolved)"
+              if (this.config.verbose) log.logFinalAnswer(bestAnswer)
+              return bestAnswer
+            }
             continue
           }
 
@@ -1870,7 +1886,7 @@ export class Agent {
       if (roundProgress.hadVerificationCall || roundProgress.hadSuccessfulMutation) {
         const budgetExt = evaluateToolRoundBudgetExtension({
           currentLimit: this.config.maxIterations,
-          maxAbsoluteLimit: this.config.maxIterations + 10,
+          maxAbsoluteLimit: absoluteIterationCap,
           recentRounds: recentRoundSummaries,
           remainingToolBudget: this.config.maxIterations - i,
         })
