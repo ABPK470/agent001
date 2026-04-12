@@ -110,6 +110,25 @@ function parseArtifacts(value: unknown, diagnostics: string[]): CoherentSolution
       continue
     }
     seenPaths.add(path)
+
+    // Reject code artifacts that contain TODO placeholders — the coherent bundle
+    // must be fully implemented. Stub code causes an unrecoverable repair loop:
+    // the write guard blocks the next write for missing functions, while the
+    // repair instructions forbid restructuring, trapping the agent in a read spin.
+    const isCodeArtifact = /\.(js|ts|jsx|tsx|mjs|cjs|py|java|go|rs|rb|php|cs|cpp|c|h|sh|bash|zsh)$/i.test(path)
+    if (isCodeArtifact) {
+      const todoLine = content.split("\n").find(l =>
+        /\/\/\s*TODO[:\s]|\/\*\s*TODO\b|#\s*TODO[:\s]/.test(l),
+      )
+      if (todoLine) {
+        diagnostics.push(
+          `Artifact "${path}" contains TODO placeholders — all coherent bundle artifacts must be fully implemented, not stubs. ` +
+          `Found: ${todoLine.trim().slice(0, 120)}`,
+        )
+        continue
+      }
+    }
+
     artifacts.push({ path, purpose, content })
   }
 
@@ -409,10 +428,25 @@ export function buildCoherentRepairInstructions(
   const sharedContracts = bundle.sharedContracts?.map((contract) => `${contract.name}: ${contract.description}`) ?? []
   const invariants = bundle.invariants?.map((invariant) => `${invariant.id}: ${invariant.description}`) ?? []
 
+  // Detect browser module architecture errors — when present, targeted repair is
+  // impossible without restructuring (the module import error is constitutional,
+  // not a logic bug). Relax the "do not redesign" constraint for those cases.
+  const allIssueText = issues.concat(focusedIssues).join(" ").toLowerCase()
+  const hasBrowserModuleError =
+    /module mismatch|cannot use import statement|import.*outside.*module|type.*module/.test(allIssueText)
+
   return [
     `COHERENT REPAIR REQUIRED — attempt ${repairAttempt}.`,
     `Preserve the existing architecture: ${bundle.architecture}`,
-    `Do NOT redesign or decompose the solution. Perform targeted repairs inside the existing coherent bundle first.`,
+    hasBrowserModuleError
+      ? [
+          `ARCHITECTURE CORRECTION REQUIRED: a browser ES module error was detected.`,
+          `You MUST fix the module loading strategy — choose one of:`,
+          `  (a) Change all HTML <script> tags for the affected files to use type="module" (e.g. <script type="module" src="chess.js">), ensuring the HTML loads every file that uses import/export as a module.`,
+          `  (b) Remove all import/export statements and inline helper code directly into the entry file — this produces a single self-contained script that works in any browser context.`,
+          `Both approaches are acceptable. Whichever you choose, make ALL affected files consistent (HTML + every JS file).`,
+        ].join("\n")
+      : `Do NOT redesign or decompose the solution. Perform targeted repairs inside the existing coherent bundle first.`,
     `Artifacts in scope: ${bundle.artifacts.map((artifact) => artifact.path).join(", ")}`,
     affectedArtifacts.length > 0 ? `Focus first on: ${affectedArtifacts.join(", ")}` : "Focus first on the artifacts implicated by the verifier findings.",
     sharedContracts.length > 0 ? `Shared contracts to preserve:\n${sharedContracts.map((item) => `- ${item}`).join("\n")}` : "",

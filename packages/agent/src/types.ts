@@ -139,7 +139,7 @@ export interface LLMResponse {
  * The agent doesn't care which model is behind this interface.
  */
 export interface LLMClient {
-  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse>
+  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number }): Promise<LLMResponse>
 }
 
 // ── Agent config ─────────────────────────────────────────────────

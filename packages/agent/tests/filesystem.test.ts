@@ -473,3 +473,48 @@ describe("replace_in_file", () => {
     expect(String(content)).not.toContain("// TODO: implement validation")
   })
 })
+
+describe("write_file: control character / unicode corruption detection", () => {
+  it("rejects a JS file whose string literals contain non-printable control characters (SOH corruption)", async () => {
+    // Reproduce the LLM unicode-encoding bug: chess symbols ♔♚ get written as
+    // \u0001 + digit instead of \u2654 / \u265a.  The byte 0x01 (SOH) landed in the
+    // PIECES object and made it to disk unnoticed until a user opened the game.
+    const corruptedContent = [
+      "const boardEl = document.getElementById('board');",
+      "let board = [];",
+      "const PIECES = {",
+      // \x01 is the SOH control character (U+0001) — the corruption we're detecting
+      "  white: { king: '\x010', queen: '\x011' },",
+      "  black: { king: '\t6', queen: '\t7' }",
+      "};",
+      "function setup() { board = []; }",
+    ].join("\n")
+
+    const result = await executeToolText(writeFileTool, {
+      path: "corrupted-chess.js",
+      content: corruptedContent,
+    })
+
+    expect(result).toContain("CORRUPTED_UNICODE")
+    expect(result).toContain("WRITE REJECTED")
+  })
+
+  it("accepts a JS file with correct Unicode chess symbols (no corruption)", async () => {
+    const cleanContent = [
+      "const PIECES = {",
+      "  white: { king: '\u2654', queen: '\u2655', rook: '\u2656' },",
+      "  black: { king: '\u265a', queen: '\u265b', rook: '\u265c' }",
+      "};",
+      "function setup() { return PIECES; }",
+    ].join("\n")
+
+    const result = await executeToolText(writeFileTool, {
+      path: "clean-chess.js",
+      content: cleanContent,
+    })
+
+    expect(result).not.toContain("CORRUPTED_UNICODE")
+    expect(result).not.toContain("WRITE REJECTED")
+    expect(result).toContain("Successfully wrote")
+  })
+})

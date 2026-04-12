@@ -63,7 +63,7 @@ export class AnthropicClient implements LLMClient {
 
     const body: Record<string, unknown> = {
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: opts?.maxTokens ?? 4096,
       messages: apiMessages,
     }
     // Wrap system prompt as a content block with cache_control so the provider

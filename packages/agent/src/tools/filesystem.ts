@@ -549,6 +549,32 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
     }
   }
 
+  if (isCode || isHtml) {
+    // ── Control character detection (Unicode symbol corruption) ──
+    // LLMs sometimes generate wrong \u escapes in write_file JSON calls — e.g.
+    // \u00010 instead of \u2654 for ♔. Node's JSON parser expands \u0001 to
+    // the SOH control byte (0x01) and leaves the trailing '0' as a literal,
+    // producing invisible/garbled characters in the browser. Catch this at
+    // write-time so the agent can fix it immediately instead of silently
+    // committing a corrupted file that defeats the whole repair cycle.
+    // eslint-disable-next-line no-control-regex
+    if (/[\x01-\x08\x0b\x0c\x0e-\x1f]/.test(content)) {
+      const m = /[\x01-\x08\x0b\x0c\x0e-\x1f]/.exec(content)
+      const pos = m ? m.index : 0
+      const ctx = content
+        .substring(Math.max(0, pos - 15), pos + 20)
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
+      warnings.push(
+        `CORRUPTED_UNICODE: File contains non-printable control character(s) near: "${ctx}". ` +
+        `This happens when a \\u JSON escape is wrong — e.g. \\u0001 instead of \\u2654 for ♔. ` +
+        `Use the correct 4-hex-digit \\uXXXX escape or embed the literal character. ` +
+        `Chess symbols: \\u2654=♔ \\u2655=♕ \\u2656=♖ \\u2657=♗ \\u2658=♘ \\u2659=♙ ` +
+        `\\u265a=♚ \\u265b=♛ \\u265c=♜ \\u265d=♝ \\u265e=♞ \\u265f=♟`
+      )
+    }
+  }
+
   if (isHtml) {
     // Detect unclosed attribute values
     const unclosedAttrRe = /\w+="[^"]{10,}(?:>|\n|$)/gm
@@ -571,7 +597,7 @@ function checkWriteIntegrity(filePath: string, content: string): string[] {
 /** Structural integrity issues must block writes to keep file state monotonic. */
 function hasStructuralIntegrityIssue(warnings: readonly string[]): boolean {
   return warnings.some(w =>
-    /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS|Unclosed HTML attribute|code garbage/i.test(w),
+    /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS|Unclosed HTML attribute|code garbage|CORRUPTED_UNICODE/i.test(w),
   )
 }
 

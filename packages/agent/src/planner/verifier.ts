@@ -1010,7 +1010,17 @@ export async function runDeterministicProbes(
       const allowedIntegrationWriteSet = new Set(
         sa.executionContext.requiredSourceArtifacts.map(a => a.replace(/^\.\//, "")),
       )
-      for (const actual of actualPaths) {
+      // For scope violation checking, use ONLY write-action patterns — not backtick
+      // mentions. A blueprint step's output text naturally contains backtick-quoted
+      // paths like `tmp/game.js` when describing planned artifacts, but those files
+      // were NOT actually written. Using the broad extractActualPaths (which catches
+      // backtick-quoted names) produces false-positive SCOPE VIOLATIONs for blueprint
+      // steps that merely mention other steps' files in their documentation.
+      const writtenPathsForScopeCheck = new Set<string>()
+      for (const m of outputText.matchAll(/(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+        if (m[1] && m[1].length < 200) writtenPathsForScopeCheck.add(m[1])
+      }
+      for (const actual of writtenPathsForScopeCheck) {
         const normActual = actual.replace(/^\.\//, "")
         // Strip workspace root prefix for comparison
         const stripped = wsRoot
@@ -1727,8 +1737,19 @@ async function probeBrowserModuleCompatibility(ctx: IntegrationProbeContext): Pr
       const resolved = resolveArtifactReference(htmlEntry.path, scriptRef.src, relatedJs)
       if (!resolved || !/\.js$/i.test(resolved.path)) continue
       if (!scriptRef.isModule) {
+        // Only flag when the JS file ACTUALLY contains ES module import/export syntax.
+        // Plain scripts (no import/export) are correctly loaded without type="module".
+        // Falsely flagging plain scripts causes agents to add type="module" which
+        // breaks execution for file:// URLs (Chrome CORS-blocks module scripts).
+        const resolvedJsContent = relatedJsContent.get(normalizeSpecPath(resolved.path)) ?? ""
+        const usesEsModuleSyntax = /\bimport\s+(?:\{|[\w*]|\*\s+as\s+\w)|\bexport\s+(?:default\b|const\b|let\b|var\b|function\b|class\b|\{)/.test(resolvedJsContent)
+        if (!usesEsModuleSyntax) continue
         htmlIssues.push(
-          `Browser module mismatch: "${htmlEntry.path}" loads "${resolved.basename}" without type="module". Browser runtime JS must be loaded via ES module scripts.`,
+          `Browser module mismatch: "${htmlEntry.path}" loads "${resolved.basename}" without type="module", ` +
+          `but the file uses ES module import/export syntax. ` +
+          `Fix one of: (a) change the HTML tag to <script type="module" src="${resolved.basename}"> and ensure imports resolve via HTTP, ` +
+          `or (b) remove all import/export statements and inline helper code into a single script file ` +
+          `(simpler and more portable for bundled games and static tools).`,
         )
       }
     }
@@ -3201,7 +3222,10 @@ function detectPotentialUseBeforeDeclaration(code: string): string[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    for (const match of line.matchAll(/\b(?:const|let)\s+([A-Za-z_$]\w*)\b/g)) {
+    // Only track module-level declarations (no leading whitespace before const/let).
+    // Function-scoped variables (indented) share common names like row, col, from, to
+    // as parameters across multiple functions — flagging them produces false positives.
+    for (const match of line.matchAll(/^(?:export\s+)?(?:const|let)\s+([A-Za-z_$]\w*)\b/gm)) {
       const name = match[1]
       if (name && !declarations.has(name)) declarations.set(name, i)
     }
@@ -3212,7 +3236,12 @@ function detectPotentialUseBeforeDeclaration(code: string): string[] {
       const line = lines[i]
       if (/^\s*(?:\/\/|\*)/.test(line)) continue
       const re = new RegExp(`(^|[^.\\w$])${escapeRegExp(name)}(?=[^\\w$]|$)`)
-      if (!re.test(line)) continue
+      const m = re.exec(line)
+      if (!m) continue
+      // Skip if the match is inside a string literal: the char preceding the
+      // identifier (group 1) is a quote. E.g. getElementById('board') should
+      // not be flagged as a reference to the `board` variable.
+      if (m[1] === "'" || m[1] === '"' || m[1] === "`") continue
       if (new RegExp(`\b(?:const|let|var|function|class)\s+${escapeRegExp(name)}\b`).test(line)) continue
       issues.push(`${name} is referenced before its const/let declaration (line ${i + 1} before line ${declLine + 1})`)
       break
@@ -3307,7 +3336,12 @@ function safeParseJson(text: string): Record<string, unknown> | null {
 
 function isBlockingCriteriaProofGap(issue: string): boolean {
   if (!issue.includes("CRITERIA PROOF MISSING")) return false
-  return /runtime criteria were declared but no runtime probe executed|shared-state contract requires/i.test(issue)
+  // Only block retryability for shared-state contract violations — these represent
+  // a design error that retrying won't fix (missing requiredSourceArtifacts).
+  // "Runtime criteria declared but no probe executed" is often a TOOL AVAILABILITY
+  // gap (browser_check missing), not an agent failure — that case should be
+  // retryable so the repair can use a different verification approach.
+  return /shared-state contract requires/i.test(issue)
 }
 
 // ============================================================================

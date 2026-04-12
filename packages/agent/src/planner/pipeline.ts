@@ -292,7 +292,18 @@ function getUnresolvedAcceptanceBlockers(
     for (const artifact of dependencyArtifacts) requiredAcceptedArtifacts.add(artifact)
   }
 
-  return [...requiredAcceptedArtifacts].filter((artifact) => !acceptedArtifacts.has(artifact))
+  return [...requiredAcceptedArtifacts].filter((artifact) => {
+    if (acceptedArtifacts.has(artifact)) return false
+    // Basename fallback: treat "index.html" as satisfied if "tmp/index.html" is accepted.
+    // Planner steps often list source artifacts without the workspace subdirectory prefix,
+    // while produced artifacts carry the full relative path. Both forms accumulate in
+    // requiredAcceptedArtifacts, producing duplicate blockers for the same file.
+    const artBase = artifact.split("/").pop() ?? artifact
+    for (const accepted of acceptedArtifacts) {
+      if ((accepted.split("/").pop() ?? accepted) === artBase) return false
+    }
+    return true
+  })
 }
 
 function buildAutonomousRepairBlock(

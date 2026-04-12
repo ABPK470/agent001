@@ -735,7 +735,7 @@ describe("Agent loop guards", () => {
             {
               path: "app.js",
               purpose: "UI/controller wiring",
-              content: "import { createGame } from './game.js'\n// TODO drag and drop\ncreateGame()\n",
+              content: "import { createGame } from './game.js'\ncreateGame()\n",
             },
             {
               path: "game.js",

@@ -56,7 +56,7 @@ export class OpenAIClient implements LLMClient {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
-      max_completion_tokens: 16384,
+      max_completion_tokens: opts?.maxTokens ?? 16384,
     }
 
     if (tools.length > 0) {

@@ -874,7 +874,7 @@ export class Agent {
         })
 
         const t0 = Date.now()
-        const coherentResponse = await this.llm.chat(coherentMessages, [], { signal: this.config.signal })
+        const coherentResponse = await this.llm.chat(coherentMessages, [], { signal: this.config.signal, maxTokens: 16384 })
         const durationMs = Date.now() - t0
         this.llmCalls++
         this.config.onLlmCall?.({
@@ -1140,6 +1140,12 @@ export class Agent {
 
     // Recovery hint dedup — each hint key emitted at most once per run
     const emittedRecoveryHints = new Set<string>()
+
+    // Coherent repair read-spin detector: counts consecutive iterations where
+    // the LLM only read files and wrote nothing. Resets on any write. When the
+    // count reaches the threshold the agent is nudged to stop reading and write.
+    let coherentRepairReadOnlyRounds = 0
+    const COHERENT_READ_ONLY_ROUND_LIMIT = 2
 
     // Circuit breaker — prevent infinite tool failure loops (ported from agenc-core)
     const circuitBreaker = new ToolFailureCircuitBreaker()
@@ -1970,6 +1976,40 @@ export class Agent {
         const answer = response.content ?? "(Agent stuck in a tool loop — terminating.)"
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
+      }
+
+      // ── Coherent repair read-spin detection ──────────────────
+      // When a coherent bundle is being repaired, track consecutive iterations
+      // with no writes. The repair loop deadlocks when the write guard blocks
+      // writes AND "do not redesign" blocks restructuring — the LLM ends up
+      // reading the same files repeatedly. After COHERENT_READ_ONLY_ROUND_LIMIT
+      // read-only rounds, inject a direct instruction to stop reading and write.
+      if (coherentExecution) {
+        const roundHadWrite = roundToolCalls.some(
+          tc => !tc.isError && (tc.name === "write_file" || tc.name === "replace_in_file"),
+        )
+        if (roundHadWrite) {
+          coherentRepairReadOnlyRounds = 0
+        } else {
+          const roundHadRead = roundToolCalls.some(tc => tc.name === "read_file")
+          if (roundHadRead) {
+            coherentRepairReadOnlyRounds++
+            if (coherentRepairReadOnlyRounds >= COHERENT_READ_ONLY_ROUND_LIMIT) {
+              coherentRepairReadOnlyRounds = 0
+              const repairFiles = coherentExecution.bundle.artifacts.map(a => a.path).join(", ")
+              const spinMsg =
+                `REPAIR STALL DETECTED: You have read files ${COHERENT_READ_ONLY_ROUND_LIMIT} iterations in a row without writing anything. ` +
+                `Stop reading and write the fix NOW.\n` +
+                `Files in scope: ${repairFiles}\n` +
+                `REQUIRED NEXT ACTION: call write_file (or replace_in_file) to apply the fix. ` +
+                `If the write guard is blocking you because a function is missing, include ALL existing functions PLUS the fix in your write. ` +
+                `If the issue requires restructuring (e.g. removing an ES module import), restructure now — rewrite the entire affected file.`
+              messages.push({ role: "system", content: spinMsg, section: "history" })
+              this.config.onNudge?.({ tag: "coherent-repair-stall", message: spinMsg, iteration: i })
+              if (this.config.verbose) log.logError(`Coherent repair stall at iteration ${i}`)
+            }
+          }
+        }
       }
 
       // ── Round progress summary + adaptive budget extension (agenc-core pattern) ──

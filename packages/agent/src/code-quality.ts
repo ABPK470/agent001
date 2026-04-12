@@ -213,7 +213,10 @@ export function detectCatchAllReturns(code: string): string[] {
     if (/^return\s+true\s*;?\s*$/.test(lastLine)) {
       const hasBranches = /\b(?:if|switch|case)\b/.test(body)
       if (hasBranches) {
-        const hasExhaustiveLoop = /\bfor\s*\(/.test(body)
+        // Both `for` and `while` loops are exhaustive traversal patterns.
+        // A `while (row !== to.row || col !== to.col)` path-check loop is
+        // just as complete as a for-loop variant — must not be flagged.
+        const hasExhaustiveLoop = /\b(?:for|while)\s*\(/.test(body)
         // Count distinct non-builtin function calls in the body.
         // If the function delegates to 3+ helpers, it's doing real work — not a stub.
         const builtins = new Set(["if", "for", "while", "switch", "return", "new", "typeof", "catch", "throw", "delete", "void", "Math", "console", "String", "Number", "Boolean", "Array", "Object", "JSON", "parseInt", "parseFloat", "isNaN", "isFinite"])

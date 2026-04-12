@@ -580,6 +580,27 @@ function isCheckmate(board, color) {
     expect(findings).toHaveLength(0)
   })
 
+  it("does NOT flag while-loop traversal functions (e.g. isPathClear)", () => {
+    // A while-loop path traversal ending in `return true` is NOT a stub —
+    // it means the loop checked every square and none was occupied.
+    const code = `
+function isPathClear(from, to) {
+    const rowStep = Math.sign(to.row - from.row);
+    const colStep = Math.sign(to.col - from.col);
+    let row = from.row + rowStep;
+    let col = from.col + colStep;
+    while (row !== to.row || col !== to.col) {
+        if (board[row][col]) return false;
+        row += rowStep;
+        col += colStep;
+    }
+    return true;
+}
+`
+    const findings = detectCatchAllReturns(code)
+    expect(findings).toHaveLength(0)
+  })
+
   it("does NOT flag functions with 10+ lines of real logic", () => {
     const code = `
 function isValidPosition(board, pos) {
