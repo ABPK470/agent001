@@ -8,6 +8,7 @@
 import { ChevronDown, ChevronRight, Search } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
+import { fmtTokens } from "../util"
 
 export function AuditTrail() {
   const audit = useStore((s) => s.audit)
@@ -68,6 +69,11 @@ export function AuditTrail() {
                 }`}>
                   {entry.action}
                 </span>
+                {typeof entry.detail.totalTokens === "number" && entry.detail.totalTokens > 0 && (
+                  <span className="ml-auto text-text-muted font-mono text-[12px] shrink-0">
+                    {fmtTokens(entry.detail.totalTokens as number)} tk · {entry.detail.llmCalls as number} calls
+                  </span>
+                )}
               </div>
 
               {/* Expanded detail */}

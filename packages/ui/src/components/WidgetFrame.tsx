@@ -16,12 +16,20 @@ import type { WidgetType } from "../types"
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
   "agent-trace": "Agent Trace",
+  "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
   "audit-trail": "Audit Trail",
   "step-timeline": "Step Timeline",
   "tool-stats": "Tool Stats",
   "run-history": "Run History",
+  "command-center": "Command Center",
+  "trajectory-replay": "Trajectory Replay",
+  "operator-env": "Operator Environment",
+  "debug-inspector": "Debug Inspector",
+  "platform-dev-log": "Platform Dev Log",
+  "universe-viz": "Sequence",
+  "code-seq-diagram": "Code Seq",
 }
 
 interface Props {

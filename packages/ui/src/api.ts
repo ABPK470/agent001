@@ -2,17 +2,29 @@
  * API client — HTTP + WebSocket communication with the server.
  */
 
-import type { PolicyRule, Run, RunDetail, SavedLayout, ViewConfig } from "./types"
+import type {
+    AgentDefinition,
+    Notification,
+    PolicyRule,
+    RollbackPreview,
+    RollbackResult,
+    Run,
+    RunDetail,
+    SavedLayout,
+    ToolInfo,
+    ViewConfig,
+    WorkspaceDiff,
+    WorkspaceDiffApplyResult,
+} from "./types"
 
 const BASE = ""
 
 // ── REST API ─────────────────────────────────────────────────────
 
 async function json<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...opts?.headers },
-  })
+  const headers: Record<string, string> = { ...opts?.headers as Record<string, string> }
+  if (opts?.body) headers["Content-Type"] = "application/json"
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers })
   return res.json() as Promise<T>
 }
 
@@ -20,18 +32,42 @@ export const api = {
   // Runs
   listRuns: () => json<Run[]>("/api/runs"),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string) => json<{ runId: string }>("/api/runs", {
-    method: "POST",
-    body: JSON.stringify({ goal }),
-  }),
+  startRun: (goal: string, agentId?: string) =>
+    json<{ runId: string }>("/api/runs", {
+      method: "POST",
+      body: JSON.stringify({ goal, ...(agentId ? { agentId } : {}) }),
+    }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {
     method: "POST",
   }),
   resumeRun: (id: string) => json<{ runId: string }>(`/api/runs/${id}/resume`, {
     method: "POST",
   }),
+  rerunRun: (id: string) => json<{ runId: string }>(`/api/runs/${id}/rerun`, {
+    method: "POST",
+  }),
+  respondToRun: (id: string, response: string) => json<{ ok: boolean }>(`/api/runs/${id}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ response }),
+  }),
+  killToolCall: (runId: string, toolCallId: string, message: string) => json<{ ok: boolean }>(`/api/runs/${runId}/kill-tool`, {
+    method: "POST",
+    body: JSON.stringify({ toolCallId, message }),
+  }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+  getRunWorkspaceDiff: (id: string) => json<WorkspaceDiff>(`/api/runs/${id}/workspace-diff`),
+  applyRunWorkspaceDiff: (id: string) => json<WorkspaceDiffApplyResult>(`/api/runs/${id}/workspace-diff/apply`, {
+    method: "POST",
+  }),
+
+  // Rollback
+  previewRollback: (runId: string) =>
+    json<RollbackPreview>(`/api/effects/${encodeURIComponent(runId)}/rollback-preview`),
+  rollbackRun: (runId: string) =>
+    json<RollbackResult>(`/api/effects/${encodeURIComponent(runId)}/rollback`, {
+      method: "POST",
+    }),
 
   // Layouts
   listLayouts: () => json<SavedLayout[]>("/api/layouts"),
@@ -57,7 +93,7 @@ export const api = {
 
   // Usage
   getUsage: () => json<{
-    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number }
+    totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number; completedRuns: number; failedRuns: number }
     runs: Array<{ runId: string; promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; model: string; createdAt: string }>
   }>("/api/usage"),
 
@@ -75,6 +111,96 @@ export const api = {
 
   // Data management
   resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),
+
+  // Workspace
+  getWorkspace: () => json<{ path: string }>("/api/workspace"),
+  setWorkspace: (path: string) =>
+    json<{ ok: boolean; path: string }>("/api/workspace", {
+      method: "PUT",
+      body: JSON.stringify({ path }),
+    }),
+
+  // LLM config
+  getLlmConfig: () =>
+    json<{
+      provider: string
+      model: string
+      hasApiKey: boolean
+      baseUrl: string
+      updatedAt: string
+      defaults: Record<string, { model: string; baseUrl: string; placeholder: string }>
+    }>("/api/llm"),
+  setLlmConfig: (cfg: { provider: string; model?: string; apiKey?: string; baseUrl?: string }) =>
+    json<{ ok: boolean; provider: string; model: string }>("/api/llm", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    }),
+
+  // Tools
+  listTools: () => json<ToolInfo[]>("/api/tools"),
+
+  // Agents
+  listAgents: () => json<AgentDefinition[]>("/api/agents"),
+  getAgent: (id: string) => json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`),
+  createAgent: (agent: { name: string; description?: string; systemPrompt: string; tools: string[] }) =>
+    json<AgentDefinition>("/api/agents", {
+      method: "POST",
+      body: JSON.stringify(agent),
+    }),
+  updateAgent: (id: string, agent: Partial<{ name: string; description: string; systemPrompt: string; tools: string[] }>) =>
+    json<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(agent),
+    }),
+  deleteAgent: (id: string) =>
+    json<{ ok: boolean }>(`/api/agents/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  // Notifications
+  listNotifications: (limit = 50) => json<Notification[]>(`/api/notifications?limit=${limit}`),
+  getUnreadCount: () => json<{ count: number }>("/api/notifications/unread-count"),
+  markNotificationRead: (id: string) => json<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => json<{ ok: boolean }>("/api/notifications/read-all", { method: "POST" }),
+  executeNotificationAction: (id: string, action: string, data?: Record<string, unknown>) =>
+    json<{ ok: boolean; runId?: string }>(`/api/notifications/${id}/action`, {
+      method: "POST",
+      body: JSON.stringify({ action, data }),
+    }),
+
+  // Trajectory
+  getTrajectory: (runId: string) =>
+    json<{ runId: string; events: Array<{ seq: number; event: Record<string, unknown>; timestamp: string }> }>(
+      `/api/trajectory/${encodeURIComponent(runId)}`,
+    ),
+  replayTrajectory: (runId: string, mutations?: Array<Record<string, unknown>>) =>
+    json<{
+      valid: boolean
+      violations: Array<{ seq: number; from: string; to: string; message: string }>
+      scorecard: Record<string, unknown>
+      eventCount: number
+    }>(`/api/trajectory/${encodeURIComponent(runId)}/replay`, {
+      method: "POST",
+      body: JSON.stringify({ mutations }),
+    }),
+  compareTrajectories: (runIdA: string, runIdB: string) =>
+    json<{
+      sameGoal: boolean
+      goalSimilarity: number
+      toolOverlap: number
+      toolCallDelta: number
+      iterationDelta: number
+      errorRateDelta: number
+      moreEfficient: "a" | "b" | "equal"
+      outcomeA: "answer" | "error" | "incomplete"
+      outcomeB: "answer" | "error" | "incomplete"
+      summary: string
+    }>("/api/trajectory/compare", {
+      method: "POST",
+      body: JSON.stringify({ runIdA, runIdB }),
+    }),
+  getTrajectorySummary: (runId: string) =>
+    json<{ summary: string }>(`/api/trajectory/${encodeURIComponent(runId)}/summary`),
 }
 
 // ── WebSocket + cross-tab relay via BroadcastChannel ─────────────
@@ -95,7 +221,11 @@ export function createWs(
   // Deduplicate events across WS + BroadcastChannel
   const seen = new Set<string>()
   function eventKey(e: { type: string; timestamp: string; data: Record<string, unknown> }): string {
-    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}`
+    // debug.trace events need entry-level uniqueness (kind + seq) since
+    // multiple entries can share the same timestamp + runId
+    const seq = e.data["seq"] ?? ""
+    const kind = e.type === "debug.trace" ? ((e.data["entry"] as Record<string, unknown>)?.["kind"] ?? "") : ""
+    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}:${kind}:${seq}`
   }
   function dedupe(event: { type: string; data: Record<string, unknown>; timestamp: string }): boolean {
     const key = eventKey(event)

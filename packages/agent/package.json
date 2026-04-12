@@ -17,9 +17,11 @@
         "lint": "tsc --noEmit"
     },
     "dependencies": {
-        "@agent001/engine": "*"
+        "mssql": "^12.2.1",
+        "puppeteer": "^24.40.0"
     },
     "devDependencies": {
+        "@types/mssql": "^9.1.11",
         "@types/node": "^22.16.4",
         "tsx": "^4.7.0",
         "typescript": "^5.8.3",

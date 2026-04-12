@@ -1,0 +1,13 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "sqlite3": true,
+        "/^cd /Users/kalko/git/agent001 && node -e \"\nconst sql = require\\('mssql'\\);\n\\(async \\(\\) => \\{\n  const pool = await sql\\.connect\\(\\{\n    server: 'localhost', port: 1433, user: 'sa',\n    password: 'Agent001_Test!', database: 'master',\n    options: \\{ encrypt: true, trustServerCertificate: true \\}\n  \\}\\);\n  // Kill all connections to AgentDWH then drop it\n  try \\{\n    await pool\\.request\\(\\)\\.query\\(\\\\\"ALTER DATABASE AgentDWH SET SINGLE_USER WITH ROLLBACK IMMEDIATE\\\\\"\\);\n  \\} catch\\(e\\) \\{\\}\n  try \\{\n    await pool\\.request\\(\\)\\.query\\('DROP DATABASE AgentDWH'\\);\n    console\\.log\\('Dropped AgentDWH'\\);\n  \\} catch\\(e\\) \\{ console\\.log\\('Drop failed:', e\\.message\\); \\}\n  await pool\\.close\\(\\);\n\\}\\)\\(\\);\n\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node scripts/build\\.mjs 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

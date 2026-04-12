@@ -20,7 +20,7 @@ export class AnthropicClient implements LLMClient {
     this.model = opts.model ?? "claude-sonnet-4-20250514"
   }
 
-  async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
+  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal }): Promise<LLMResponse> {
     // Anthropic wants system prompt as a separate param
     let systemPrompt: string | undefined
     const apiMessages: AnthropicMessage[] = []
@@ -63,34 +63,63 @@ export class AnthropicClient implements LLMClient {
 
     const body: Record<string, unknown> = {
       model: this.model,
-      max_tokens: 4096,
+      max_tokens: opts?.maxTokens ?? 4096,
       messages: apiMessages,
     }
-    if (systemPrompt) body.system = systemPrompt
+    // Wrap system prompt as a content block with cache_control so the provider
+    // caches all tokens up to and including this block (provider-level session anchor).
+    if (systemPrompt) {
+      body.system = [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+    }
     if (tools.length > 0) {
-      body.tools = tools.map((t) => ({
+      const apiTools: Record<string, unknown>[] = tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters,
       }))
+      // cache_control on the last tool caches all tool definitions up to this point.
+      // Tools are stable across turns, so this is a reliable low-cost cache breakpoint.
+      apiTools[apiTools.length - 1] = {
+        ...apiTools[apiTools.length - 1],
+        cache_control: { type: "ephemeral" },
+      }
+      body.tools = apiTools
     }
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-    })
+    const maxRetries = 5
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Anthropic API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+          // Enable server-side prompt caching (LLMStatefulResumeAnchor equivalent).
+          // Anthropic caches all tokens up to each cache_control breakpoint, which
+          // we place on the system prompt and the last tool definition.
+          "anthropic-beta": "prompt-caching-2024-07-31",
+        },
+        body: JSON.stringify(body),
+        signal: opts?.signal,
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(2000 * 2 ** attempt, 60_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`Anthropic API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       content: Array<
         | { type: "text"; text: string }
         | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
@@ -126,6 +155,7 @@ interface AnthropicBlock {
   input?: Record<string, unknown>
   tool_use_id?: string
   content?: string
+  cache_control?: { type: "ephemeral" }
 }
 
 interface AnthropicMessage {

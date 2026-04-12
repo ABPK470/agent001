@@ -2,10 +2,11 @@
  * StepTimeline — visual timeline of tool calls.
  *
  * Vertical timeline showing each step with status, duration, and details.
- * Currently running step pulses. Click to expand input/output.
+ * Currently running step pulses. Failed steps show retry info.
+ * Click to expand input/output.
  */
 
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react"
+import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useState } from "react"
 import { useStore } from "../store"
 import { formatMs } from "../util"
@@ -76,8 +77,18 @@ export function StepTimeline() {
               <div className="text-[13px] text-text-muted mt-0.5">
                 {step.action}
                 {step.error && (
-                  <span className="text-error ml-2">{step.error}</span>
+                  <span className="text-error ml-2">{String(step.error)}</span>
                 )}
+                {/* Show retry badge if step was retried (info in output) */}
+                {(() => {
+                  const attempts = step.output && Number((step.output as Record<string, unknown>)["attempts"]);
+                  return attempts && attempts > 1 ? (
+                    <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-warning/10 text-warning">
+                      <RotateCcw size={10} className="inline mr-0.5 -mt-0.5" />
+                      {attempts} attempts
+                    </span>
+                  ) : null;
+                })()}
               </div>
 
               {/* Expanded detail */}

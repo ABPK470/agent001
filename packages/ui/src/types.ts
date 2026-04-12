@@ -12,8 +12,14 @@ export interface Run {
   stepCount: number
   error: string | null
   parentRunId: string | null
+  agentId: string | null
   createdAt: string
   completedAt: string | null
+  totalTokens: number
+  promptTokens: number
+  completionTokens: number
+  llmCalls: number
+  pendingWorkspaceChanges?: number
 }
 
 export interface RunDetail extends Run {
@@ -24,6 +30,24 @@ export interface RunDetail extends Run {
   audit: AuditEntry[]
   logs: LogEntry[]
   hasCheckpoint: boolean
+}
+
+export interface WorkspaceDiff {
+  runId: string
+  added: string[]
+  modified: string[]
+  deleted: string[]
+  total: number
+}
+
+export interface WorkspaceDiffApplyResult {
+  ok: boolean
+  runId: string
+  applied: {
+    added: number
+    modified: number
+    deleted: number
+  }
 }
 
 // ── Step ─────────────────────────────────────────────────────────
@@ -69,6 +93,143 @@ export type TraceEntry =
   | { kind: "tool-error"; text: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
+  | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
+  | { kind: "delegation-start"; goal: string; depth: number; tools: string[]; agentId?: string; agentName?: string }
+  | { kind: "delegation-iteration"; depth: number; iteration: number; maxIterations: number }
+  | { kind: "delegation-end"; depth: number; status: "done" | "error"; answer?: string; error?: string }
+  | { kind: "delegation-parallel-start"; depth: number; taskCount: number; goals: string[] }
+  | { kind: "delegation-parallel-end"; depth: number; taskCount: number; fulfilled: number; rejected: number }
+  | { kind: "user-input-request"; question: string; options?: string[]; sensitive?: boolean }
+  | { kind: "user-input-response"; text: string }
+  // Planner entries (agenc-core planner-first routing)
+  | { kind: "planning_preflight"; mode: "planner-first" }
+  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: "direct" | "single_artifact_direct_burst" | "bounded_coherent_generation" | "planner_with_coherent_bootstrap" | "full_planner_decomposition"; reason: string; coherenceNeed?: "low" | "medium" | "high"; coordinationNeed?: "low" | "medium" | "high" }
+  | { kind: "coherent-generation-start"; route: "bounded_coherent_generation" }
+  | { kind: "coherent-generation-bundle"; artifactCount: number; artifacts: Array<{ path: string; purpose: string }>; sharedContracts: string[]; invariants: string[] }
+  | { kind: "coherent-generation-materialized"; artifactCount: number; artifacts: string[]; readBackArtifacts: string[] }
+  | { kind: "coherent-generation-verified"; overall: "pass" | "retry" | "fail"; confidence: number; issueCount: number; systemCheckCount: number; affectedArtifacts: string[] }
+  | { kind: "coherent-generation-repair-needed"; repairAttempt: number; issueCount: number; issues: string[]; affectedArtifacts: string[] }
+  | { kind: "coherent-generation-escalated"; target: string; issueCount: number; reason: string }
+  | { kind: "coherent-generation-handoff"; artifactCount: number; verificationRoute: string }
+  | { kind: "coherent-generation-failed"; stage: string; diagnostics: string[] }
+  | { kind: "planner-coherent-bootstrap"; artifactCount: number; decompositionStrategy: "preserve_coherence" | "decompose_by_ownership"; decompositionReasons: string[]; sharedContracts: string[]; invariants: string[] }
+  | { kind: "planner-architecture-state"; lane: "bounded_coherent_generation" | "planner_with_coherent_bootstrap" | "full_planner_decomposition" | "direct" | "single_artifact_direct_burst"; status: "frozen" | "preserved" | "repairing_in_place" | "abandoned"; reason: string; architecture?: string }
+  | { kind: "planner-generating" }
+  | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
+  | {
+    kind: "planner-runtime-compiled"
+    executionSteps: Array<{ stepName: string; dependsOn: string[]; downstream: string[] }>
+    ownershipArtifacts: Array<{ artifactPath: string; ownerStepName: string | null; consumerStepNames: string[] }>
+    runtimeEntities: Array<{ id: string; entityType: string; parentId?: string; stepName?: string }>
+  }
+  | { kind: "planner-generation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-output-root-forced"; outputRoot: string }
+  | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
+  | { kind: "direct_loop_fallback"; source: "planner_declined" | "planner_verifier_low_complexity"; reason: string }
+  | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }
+  | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
+  | { kind: "planner-step-start"; stepName: string; stepType: string }
+  | { kind: "planner-step-transition"; attempt: number; stepName: string; phase: "execution" | "verification" | "repair"; state: string; timestamp: number }
+  | {
+    kind: "planner-step-end"
+    stepName: string
+    status: string
+    executionState?: string
+    acceptanceState?: string
+    durationMs: number
+    error?: string
+    validationCode?: string
+    producedArtifacts?: string[]
+    verificationAttempts?: Array<{ toolName: string; target?: string; success: boolean; summary: string }>
+    reconciliation?: { compliant: boolean; findings: Array<{ code: string; severity: string; message: string }> }
+  }
+  | {
+    kind: "planner-verification"
+    overall: string
+    confidence: number
+    verifierRound?: number
+    systemChecks?: Array<{ code: string; severity: string; summary: string; confidence: number }>
+    steps: Array<{ stepName: string; outcome: string; issues: string[]; issueCodes?: string[]; acceptanceState?: string; ownershipModes?: string[]; issueConfidences?: number[] }>
+  }
+  | {
+    kind: "planner-verification-followup"
+    requestedSteps: string[]
+    reasons: Array<{ stepName: string; confidence: number; ambiguousIssues: string[] }>
+  }
+  | {
+    kind: "planner-issue-timeline"
+    attempt: number
+    verifierRound: number
+    issues: Array<{ stepName: string; code: string; confidence: number; ownershipMode: string; primaryOwner?: string; suspectedOwners: string[] }>
+  }
+  | {
+    kind: "planner-repair-plan"
+    attempt: number
+    epoch?: number
+    rerunOrder: string[]
+    tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
+  }
+  | {
+    kind: "planner-repair-compatibility"
+    attempt: number
+    mode: "shadow" | "legacy" | "repair"
+    activePath: "legacy" | "repair"
+    diverged: boolean
+    divergenceScore?: number
+    divergenceThreshold?: number
+    pinnedToLegacy?: boolean
+    reasons: string[]
+    legacy: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[] }> }
+    repair: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: string; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }> }
+  }
+  | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
+  | { kind: "planner-retry-skipped"; reason: string }
+  // Delegation decision gate (safety, economics, hard-block)
+  | { kind: "planner-delegation-decision"; shouldDelegate: boolean; reason: string; utilityScore: number; safetyRisk: number; confidence: number; hardBlockedTaskClass: string | null }
+  // Pipeline budget extension (planner/circuit-breaker)
+  | { kind: "planner-budget-extended"; completedSteps: number; effectiveBudget: number; extensions: number }
+  // Escalation graph
+  | { kind: "planner-escalation"; action: string; reason: string; attempt: number }
+  // Retry abort (all steps stuck)
+  | { kind: "planner-retry-abort"; reason: string }
+  // Per-step retry skip (repeated failure / stub regression)
+  | { kind: "planner-retry-skip"; stepName: string; reason: string }
+  // Planner delegation entries (child agents spawned by planner)
+  | {
+    kind: "planner-delegation-start"
+    goal: string
+    stepName: string
+    depth: number
+    tools: string[]
+    budget: {
+      hint: string
+      parsedHint: number
+      baseBudget: number
+      contractFloor: number
+      complexityBoost: number
+      computedMaxIterations: number
+      targetArtifactCount: number
+      requiredSourceArtifactCount: number
+      acceptanceCriteriaCount: number
+      codeArtifactCount: number
+      hasComplexImplementation: boolean
+      hasBlueprintSource: boolean
+      verificationMode: string
+    }
+    envelope: { workspaceRoot?: string; effectClass?: string; verificationMode?: string; targetArtifacts?: string[] }
+  }
+  | { kind: "planner-delegation-iteration"; stepName: string; depth: number; iteration: number; maxIterations: number }
+  | { kind: "planner-delegation-end"; stepName: string; depth: number; status: "done" | "error"; answer?: string; error?: string }
+  // Debug/inspector entries
+  | { kind: "system-prompt"; text: string }
+  | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }
+  | { kind: "nudge"; tag: string; message: string; iteration: number }
+  | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
+  | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
+  | { kind: "workspace_diff"; diff: { added: string[]; modified: string[]; deleted: string[] } }
+  | { kind: "workspace_diff_applied"; summary: { added: number; modified: number; deleted: number } }
 
 // ── Layout ───────────────────────────────────────────────────────
 
@@ -90,11 +251,19 @@ export type WidgetType =
   | "agent-chat"
   | "run-status"
   | "agent-trace"
+  | "agent-viz"
   | "live-logs"
   | "audit-trail"
   | "step-timeline"
   | "tool-stats"
   | "run-history"
+  | "command-center"
+  | "trajectory-replay"
+  | "operator-env"
+  | "debug-inspector"
+  | "platform-dev-log"
+  | "universe-viz"
+  | "code-seq-diagram"
 
 export interface ViewConfig {
   id: string
@@ -121,6 +290,23 @@ export interface WsEvent {
   timestamp: string
 }
 
+// ── Agent Definitions ────────────────────────────────────────────
+
+export interface AgentDefinition {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  tools: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ToolInfo {
+  name: string
+  description: string
+}
+
 // ── Policy ───────────────────────────────────────────────────────
 
 export interface PolicyRule {
@@ -129,4 +315,39 @@ export interface PolicyRule {
   condition: string
   parameters: Record<string, unknown>
   createdAt: string
+}
+
+// ── Notifications ────────────────────────────────────────────────
+
+export interface NotificationAction {
+  label: string
+  action: string
+  data?: Record<string, unknown>
+}
+
+export interface Notification {
+  id: string
+  type: string       // 'run.failed' | 'run.completed' | 'approval.required' | 'run.recovered'
+  title: string
+  message: string
+  runId: string | null
+  stepId: string | null
+  actions: NotificationAction[]
+  read: boolean
+  createdAt: string
+}
+
+// ── Rollback ─────────────────────────────────────────────────────
+
+export interface RollbackResult {
+  total: number
+  compensated: number
+  skipped: number
+  failed: Array<{ effectId: string; target: string; reason: string }>
+}
+
+export interface RollbackPreview {
+  wouldCompensate: Array<{ effectId: string; target: string; kind: string; hasSnapshot: boolean }>
+  wouldSkip: Array<{ effectId: string; target: string; reason: string }>
+  wouldFail: Array<{ effectId: string; target: string; reason: string }>
 }

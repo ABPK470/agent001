@@ -11,6 +11,14 @@
 import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@agent001/agent"
 import { execSync } from "node:child_process"
 
+function safeParseArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return { __raw: raw, __parseError: true }
+  }
+}
+
 export class CopilotClient implements LLMClient {
   private _token: string | null
   private readonly model: string
@@ -33,27 +41,41 @@ export class CopilotClient implements LLMClient {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
+      max_completion_tokens: 16384,
     }
 
     if (tools.length > 0) {
       body.tools = tools.map(formatTool)
     }
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify(body),
-    })
+    const maxRetries = 5
+    let res: Response | undefined
 
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`GitHub Models API error ${res.status}: ${text}`)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.status !== 429 || attempt === maxRetries) break
+
+      const retryAfter = res.headers.get("retry-after")
+      const waitMs = retryAfter
+        ? Number(retryAfter) * 1000
+        : Math.min(2000 * 2 ** attempt, 60_000)
+      await new Promise((r) => setTimeout(r, waitMs))
     }
 
-    const data = (await res.json()) as {
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`GitHub Models API error ${res!.status}: ${text}`)
+    }
+
+    const data = (await res!.json()) as {
       choices: Array<{
         message: {
           content: string | null
@@ -63,12 +85,22 @@ export class CopilotClient implements LLMClient {
             function: { name: string, arguments: string }
           }>
         }
+        finish_reason: string | null
       }>
       usage?: {
         prompt_tokens: number
         completion_tokens: number
         total_tokens: number
       }
+    }
+
+    const finish = data.choices[0].finish_reason
+    if (finish === "length") {
+      throw new Error(
+        "LLM response truncated (finish_reason=length). " +
+        "The model hit its completion token limit before finishing. " +
+        "This usually means a tool call argument (like file content) was too large."
+      )
     }
 
     const choice = data.choices[0].message
@@ -79,7 +111,7 @@ export class CopilotClient implements LLMClient {
         (tc): ToolCall => ({
           id: tc.id,
           name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+          arguments: safeParseArgs(tc.function.arguments),
         }),
       ),
       usage: data.usage ? {

@@ -1,0 +1,817 @@
+/**
+ * Agent loop guard tests — verify all exit guards fire correctly.
+ *
+ * Tests each guard in isolation using a scripted LLM:
+ *   1. early-exit-nudge (iter 0 exit with tools available)
+ *   2. verification-required (post-delegation)
+ *   3. write-without-verify (wrote files but didn't read/check)
+ *   4. verification-failed (verified, found errors, tried to exit)
+ *   5. completion-validator (stub detection on actual output)
+ *   6. budget-warning (iteration budget running low)
+ *   7. completionValidator fires at most once (one-shot)
+ *   8. normal exit when no guards fire
+ */
+import { describe, expect, it } from "vitest"
+import { Agent } from "../src/agent.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
+
+// ── Test helpers ─────────────────────────────────────────────────
+
+function echoTool(): Tool {
+  return {
+    name: "echo",
+    description: "Echo text back",
+    parameters: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+    },
+    async execute(args) {
+      return `echoed: ${String(args.text)}`
+    },
+  }
+}
+
+function scriptedLLM(responses: LLMResponse[]): LLMClient {
+  let callIndex = 0
+  return {
+    async chat() {
+      if (callIndex >= responses.length) {
+        return { content: "out of script", toolCalls: [] }
+      }
+      return responses[callIndex++]!
+    },
+  }
+}
+
+// ── Guard tests ──────────────────────────────────────────────────
+
+describe("Agent loop guards", () => {
+  it("fires early-exit-nudge on iteration 0 with no tool calls", async () => {
+    const nudges: string[] = []
+    const llm = scriptedLLM([
+      // Iter 0: tries to exit immediately
+      { content: "I can see the answer is 42", toolCalls: [] },
+      // Iter 1: forced to use tools, does so, then exits
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "hello" } }] },
+      { content: "Done after using tools", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("do something")
+
+    expect(nudges).toContain("early-exit-nudge")
+    expect(answer).toBe("Done after using tools")
+  })
+
+  it("fires write-without-verify when child writes files then exits", async () => {
+    const nudges: string[] = []
+
+    // Minimal write_file tool that just returns success
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        return `Successfully wrote to ${String(args.path)}`
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute() {
+        return "file contents here"
+      },
+    }
+
+    const llm = scriptedLLM([
+      // Iter 0: writes a JS file
+      { content: "Writing the file", toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "app.js", content: "console.log('hi')" } }] },
+      // Iter 1: tries to exit without verifying
+      { content: "Done!", toolCalls: [] },
+      // Iter 2: forced to verify, reads the file
+      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "app.js" } }] },
+      // Iter 3: now exits
+      { content: "Verified and done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool, readFileTool], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("write a file")
+
+    expect(nudges).toContain("write-without-verify")
+    expect(answer).toBe("Verified and done")
+  })
+
+  it("fires completion-validator when validator returns issues", async () => {
+    const nudges: string[] = []
+    let validatorCallCount = 0
+
+    const llm = scriptedLLM([
+      // Iter 0: uses a tool
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "hello" } }] },
+      // Iter 1: tries to exit — validator catches it
+      { content: "All done", toolCalls: [] },
+      // Iter 2: forced to continue, uses another tool
+      { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "fixing" } }] },
+      // Iter 3: exits — validator already fired (one-shot)
+      { content: "Now truly done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      completionValidator: async () => {
+        validatorCallCount++
+        if (validatorCallCount === 1) {
+          return "COMPLETION CHECK FAILED — your code has stub functions:\n  - isMoveLegal() returns true"
+        }
+        return null
+      },
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("build something")
+
+    expect(nudges).toContain("completion-validator")
+    expect(validatorCallCount).toBe(1) // one-shot: fires only once
+    expect(answer).toBe("Now truly done")
+  })
+
+  it("fires premature-handoff nudge on partial completion language", async () => {
+    const nudges: string[] = []
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
+      { content: "Core logic is implemented, but full compliance may require additional work.", toolCalls: [] },
+      { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "finish" } }] },
+      { content: "Completed with verified evidence.", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("build implementation")
+
+    expect(nudges).toContain("premature-handoff")
+    expect(answer).toBe("Completed with verified evidence.")
+  })
+
+  it("completion-validator is one-shot — does not fire twice", async () => {
+    let validatorCallCount = 0
+
+    const llm = scriptedLLM([
+      // Iter 0: work
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "a" } }] },
+      // Iter 1: first exit attempt → validator fires
+      { content: "exit 1", toolCalls: [] },
+      // Iter 2: more work
+      { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "b" } }] },
+      // Iter 3: second exit attempt → validator does NOT fire again
+      { content: "exit 2", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      completionValidator: async () => {
+        validatorCallCount++
+        return "STUBS FOUND"
+      },
+    })
+    const answer = await agent.run("build it")
+
+    expect(validatorCallCount).toBe(1)
+    // Second exit succeeds because validator is one-shot
+    expect(answer).toBe("exit 2")
+  })
+
+  it("completion-validator passes when returning null — agent exits normally", async () => {
+    const nudges: string[] = []
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
+      { content: "All clean", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      completionValidator: async () => null, // no issues
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("build it")
+
+    expect(nudges).not.toContain("completion-validator")
+    expect(answer).toBe("All clean")
+  })
+
+  it("completion-validator error does not block agent exit", async () => {
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "a" } }] },
+      { content: "done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      completionValidator: async () => {
+        throw new Error("validator crashed!")
+      },
+    })
+    const answer = await agent.run("build it")
+
+    expect(answer).toBe("done")
+  })
+
+  it("fires budget-warning when iterations run low", async () => {
+    const nudges: string[] = []
+
+    // With maxIterations=3, 80% = 2.4, so remaining<=1 at iter 2
+    // But budget fires when remaining <= max(ceil(3*0.2)=1, 2) = 2
+    // So it fires at iter 1 (remaining=2)
+    const llm = scriptedLLM([
+      // Iter 0: work
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "1" } }] },
+      // Iter 1: budget warning fires here (remaining=2)
+      { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "2" } }] },
+      // Iter 2: done
+      { content: "finished", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      maxIterations: 3,
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    await agent.run("quick task")
+
+    expect(nudges).toContain("budget-warning")
+  })
+
+  it("agent exits normally when no guards trigger", async () => {
+    const nudges: string[] = []
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
+      { content: "All done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag),
+    })
+    const answer = await agent.run("simple task")
+
+    expect(nudges).toHaveLength(0)
+    expect(answer).toBe("All done")
+  })
+
+  it("aborts after repeated blocked mutation failures on the same artifact", async () => {
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        return {
+          ok: false,
+          summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
+          severity: "recoverable",
+          directive: "abort_round",
+          errorCode: "artifact_incomplete_mutation",
+          details: [
+            "STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation.",
+          ],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+        }
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "first" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "second" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "third" } }] },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool], {
+      maxIterations: 6,
+      verbose: false,
+    })
+
+    const answer = await agent.run("fix the file")
+    expect(answer).toContain("Repeated mutation-blocked attempts on tmp/game/chessLogic.js")
+  })
+
+  it("does not reset blocked-artifact failure history just because the child reread the file", async () => {
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        return {
+          ok: false,
+          summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
+          severity: "recoverable",
+          directive: "abort_round",
+          errorCode: "artifact_incomplete_mutation",
+          details: ["STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation."],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+        }
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        return `current contents of ${String(args.path)}`
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game.js", content: "first" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game.js", content: "second" } }] },
+      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc5", name: "write_file", arguments: { path: "tmp/game.js", content: "third" } }] },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool, readFileTool], {
+      maxIterations: 8,
+      verbose: false,
+    })
+
+    const answer = await agent.run("fix tmp/game.js")
+    expect(answer).toContain("Repeated incomplete/blocked mutation failures on tmp/game.js")
+  })
+
+  it("aborts after repeated replace_in_file old_string misses on the same artifact", async () => {
+    const replaceInFileTool: Tool = {
+      name: "replace_in_file",
+      description: "Replace text in a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          old_string: { type: "string" },
+          new_string: { type: "string" },
+        },
+        required: ["path", "old_string", "new_string"],
+      },
+      async execute(args) {
+        return `Error: old_string not found in "${String(args.path)}". The text you provided does not exist in the file. Use read_file to see the current content first.`
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        return `current contents of ${String(args.path)}`
+      },
+    }
+
+    const llm = scriptedLLM([
+      { content: null, toolCalls: [{ id: "tc1", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "A", new_string: "B" } }] },
+      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc3", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "C", new_string: "D" } }] },
+      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
+      { content: null, toolCalls: [{ id: "tc5", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "E", new_string: "F" } }] },
+    ])
+
+    const agent = new Agent(llm, [replaceInFileTool, readFileTool], {
+      maxIterations: 8,
+      verbose: false,
+    })
+
+    const answer = await agent.run("repair tmp/game.js")
+    expect(answer).toContain("Repeated replace_in_file old_string misses on tmp/game.js")
+  })
+
+  it("returns cancellation message when signal is aborted", async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    const llm = scriptedLLM([
+      { content: "should not reach", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [], {
+      verbose: false,
+      signal: controller.signal,
+    })
+    const answer = await agent.run("anything")
+
+    expect(answer).toContain("cancelled")
+  })
+
+  it("reaches maxIterations and returns fallback answer", async () => {
+    // LLM always uses a tool, never exits
+    const responses: LLMResponse[] = Array.from({ length: 10 }, (_, i) => ({
+      content: null,
+      toolCalls: [{ id: `tc${i}`, name: "echo", arguments: { text: `iter${i}` } }],
+    }))
+
+    const llm = scriptedLLM(responses)
+    const agent = new Agent(llm, [echoTool()], {
+      maxIterations: 5,
+      verbose: false,
+    })
+    const answer = await agent.run("loop forever")
+
+    // Agent should exhaust iterations and return SOMETHING
+    expect(typeof answer).toBe("string")
+    expect(answer.length).toBeGreaterThan(0)
+  })
+
+  it("emits planner preflight before direct-loop fallback", async () => {
+    const plannerTrace: Array<Record<string, unknown>> = []
+    const llm = scriptedLLM([
+      { content: "done", toolCalls: [] },
+    ])
+
+    const agent = new Agent(llm, [], {
+      verbose: false,
+      enablePlanner: true,
+      plannerDelegateFn: async () => "unused",
+      onPlannerTrace: (entry) => plannerTrace.push(entry),
+    })
+
+    const answer = await agent.run("simple task")
+
+    expect(answer).toBe("done")
+    expect(plannerTrace.map((entry) => entry.kind)).toEqual([
+      "planning_preflight",
+      "planner-decision",
+      "direct_loop_fallback",
+    ])
+    expect(plannerTrace[2]).toMatchObject({
+      kind: "direct_loop_fallback",
+      source: "planner_declined",
+    })
+  })
+
+  it("materializes a coherent bundle before verification on bounded greenfield routes", async () => {
+    const plannerTrace: Array<Record<string, unknown>> = []
+    const writes: string[] = []
+    const reads: string[] = []
+
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        writes.push(String(args.path))
+        return `Successfully wrote to ${String(args.path)}`
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        reads.push(String(args.path))
+        return `content for ${String(args.path)}`
+      },
+    }
+
+    const browserCheckTool: Tool = {
+      name: "browser_check",
+      description: "Check an HTML artifact in a browser",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute() {
+        return "browser_check passed"
+      },
+    }
+
+    const runCommandTool: Tool = {
+      name: "run_command",
+      description: "Run a command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+      async execute() {
+        return "command passed"
+      },
+    }
+
+    const llm = scriptedLLM([
+      {
+        content: JSON.stringify({
+          summary: "Playable chess game bundle",
+          architecture: "index.html boots app.js which uses game.js for rules and state.",
+          artifacts: [
+            {
+              path: "index.html",
+              purpose: "Entrypoint HTML shell",
+              content: "<!doctype html><html><body><script type=\"module\" src=\"./app.js\"></script></body></html>",
+            },
+            {
+              path: "app.js",
+              purpose: "UI/controller wiring",
+              content: "import { createGame } from './game.js'\ncreateGame()\n",
+            },
+            {
+              path: "game.js",
+              purpose: "Game state and rules",
+              content: "export function createGame() { return { status: 'ready' } }\n",
+            },
+          ],
+          dependencyEdges: [
+            { from: "index.html", to: "app.js" },
+            { from: "app.js", to: "game.js" },
+          ],
+          sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
+          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }],
+        }),
+        toolCalls: [],
+      },
+      {
+        content: JSON.stringify({
+          overall: "pass",
+          confidence: 0.9,
+          steps: [
+            {
+              stepName: "coherent_bundle",
+              outcome: "pass",
+              confidence: 0.9,
+              issues: [],
+              retryable: false,
+            },
+          ],
+          unresolvedItems: [],
+        }),
+        toolCalls: [],
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc-verify", name: "read_file", arguments: { path: "app.js" } }],
+      },
+      {
+        content: "Verified coherent bundle",
+        toolCalls: [],
+      },
+      {
+        content: JSON.stringify({
+          overall: "pass",
+          confidence: 0.92,
+          steps: [
+            {
+              stepName: "coherent_bundle",
+              outcome: "pass",
+              confidence: 0.92,
+              issues: [],
+              retryable: false,
+            },
+          ],
+          unresolvedItems: [],
+        }),
+        toolCalls: [],
+      },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
+      verbose: false,
+      enablePlanner: true,
+      plannerDelegateFn: async () => "unused",
+      onPlannerTrace: (entry) => plannerTrace.push(entry),
+    })
+
+    await agent.run("Build a complete playable chess game with drag and drop")
+
+    expect(writes).toEqual([
+      "index.html",
+      "app.js",
+      "game.js",
+    ])
+    expect(reads).toContain("app.js")
+    const traceKinds = plannerTrace.map((entry) => entry.kind)
+    expect(traceKinds.slice(0, 6)).toEqual([
+      "planning_preflight",
+      "planner-decision",
+      "coherent-generation-start",
+      "planner-architecture-state",
+      "coherent-generation-bundle",
+      "coherent-generation-materialized",
+    ])
+    expect(traceKinds).toContain("coherent-generation-verified")
+    expect(traceKinds).toContain("coherent-generation-handoff")
+  })
+
+  it("forces an architecture-preserving coherent repair before allowing completion", async () => {
+    const plannerTrace: Array<Record<string, unknown>> = []
+    const writes: string[] = []
+    const fileContents = new Map<string, string>()
+
+    const writeFileTool: Tool = {
+      name: "write_file",
+      description: "Write a file",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+        required: ["path", "content"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        const content = String(args.content)
+        writes.push(path)
+        fileContents.set(path, content)
+        return `Successfully wrote to ${path}`
+      },
+    }
+
+    const readFileTool: Tool = {
+      name: "read_file",
+      description: "Read a file",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(args) {
+        const path = String(args.path)
+        return fileContents.get(path) ?? `content for ${path}`
+      },
+    }
+
+    const browserCheckTool: Tool = {
+      name: "browser_check",
+      description: "Check an HTML artifact in a browser",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute() {
+        return "browser_check passed"
+      },
+    }
+
+    const runCommandTool: Tool = {
+      name: "run_command",
+      description: "Run a command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+      async execute() {
+        return "command passed"
+      },
+    }
+
+    const llm = scriptedLLM([
+      {
+        content: JSON.stringify({
+          summary: "Playable chess game bundle",
+          architecture: "index.html boots app.js which uses game.js for rules and state.",
+          artifacts: [
+            {
+              path: "index.html",
+              purpose: "Entrypoint HTML shell",
+              content: "<!doctype html><html><body><script type=\"module\" src=\"./app.js\"></script></body></html>",
+            },
+            {
+              path: "app.js",
+              purpose: "UI/controller wiring",
+              content: "import { createGame } from './game.js'\ncreateGame()\n",
+            },
+            {
+              path: "game.js",
+              purpose: "Game state and rules",
+              content: "export function createGame() { return { status: 'ready' } }\n",
+            },
+          ],
+          sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
+          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }],
+        }),
+        toolCalls: [],
+      },
+      {
+        content: JSON.stringify({
+          overall: "retry",
+          confidence: 0.86,
+          steps: [
+            {
+              stepName: "coherent_bundle",
+              outcome: "retry",
+              confidence: 0.86,
+              issues: ["Drag and drop is still placeholder logic in app.js"],
+              retryable: true,
+            },
+          ],
+          unresolvedItems: ["Implement real drag and drop behavior in app.js"],
+        }),
+        toolCalls: [],
+      },
+      {
+        content: null,
+        toolCalls: [{
+          id: "tc-fix",
+          name: "write_file",
+          arguments: {
+            path: "app.js",
+            content: "import { createGame } from './game.js'\nexport function bootChessUi() { return createGame() }\nbootChessUi()\n",
+          },
+        }],
+      },
+      {
+        content: "Coherent repair complete",
+        toolCalls: [],
+      },
+      {
+        content: JSON.stringify({
+          overall: "pass",
+          confidence: 0.91,
+          steps: [
+            {
+              stepName: "coherent_bundle",
+              outcome: "pass",
+              confidence: 0.91,
+              issues: [],
+              retryable: false,
+            },
+          ],
+          unresolvedItems: [],
+        }),
+        toolCalls: [],
+      },
+    ])
+
+    const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
+      verbose: false,
+      enablePlanner: true,
+      plannerDelegateFn: async () => "unused",
+      onPlannerTrace: (entry) => plannerTrace.push(entry),
+    })
+
+    await agent.run("Build a complete playable chess game with drag and drop")
+
+    expect(writes).toContain("app.js")
+    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-verified")
+    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-repair-needed")
+    expect(plannerTrace.filter((entry) => entry.kind === "coherent-generation-verified")).toHaveLength(2)
+    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-escalated")
+  })
+})

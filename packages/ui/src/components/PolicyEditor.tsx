@@ -7,13 +7,13 @@
 
 import {
     AlertTriangle,
-    Check,
     ChevronDown,
     ChevronRight,
+    Cpu,
+    Eye,
+    EyeOff,
+    FolderOpen,
     Globe,
-    Lock,
-    Pencil,
-    Plus,
     Shield,
     ShieldCheck,
     ShieldX,
@@ -60,32 +60,41 @@ const SSRF_BLOCKED = [
   "*.local", "*.internal",
 ]
 
-type Tab = "tools" | "rules" | "security"
+type Tab = "tools" | "model" | "security"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
-
-  // New rule form
-  const [name, setName] = useState("")
-  const [effect, setEffect] = useState<Effect>("deny")
-  const [condition, setCondition] = useState("")
-  const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Inline editing
-  const [editingRule, setEditingRule] = useState<string | null>(null)
-  const [editEffect, setEditEffect] = useState<Effect>("deny")
-  const [editCondition, setEditCondition] = useState("")
 
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
   const [ssrfExpanded, setSsrfExpanded] = useState(false)
 
+  // Workspace
+  const [wsPath, setWsPath] = useState("")
+  const [wsOriginal, setWsOriginal] = useState("")
+  const [wsSaving, setWsSaving] = useState(false)
+  const [wsError, setWsError] = useState<string | null>(null)
+  const [wsSaved, setWsSaved] = useState(false)
+
   // Reset data
   const [confirmReset, setConfirmReset] = useState(false)
   const [resetting, setResetting] = useState(false)
+
+  // LLM config
+  const [llmProvider, setLlmProvider] = useState("copilot")
+  const [llmModel, setLlmModel] = useState("")
+  const [llmApiKey, setLlmApiKey] = useState("")
+  const [llmBaseUrl, setLlmBaseUrl] = useState("")
+  const [llmSaving, setLlmSaving] = useState(false)
+  const [llmSaved, setLlmSaved] = useState(false)
+  const [llmError, setLlmError] = useState<string | null>(null)
+  const [llmDefaults, setLlmDefaults] = useState<Record<string, { model: string; baseUrl: string; placeholder: string }>>({})
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [llmActiveProvider, setLlmActiveProvider] = useState("")
+  const [llmActiveModel, setLlmActiveModel] = useState("")
 
   const loadRules = useCallback(async () => {
     try {
@@ -100,6 +109,66 @@ export function PolicyEditor({ onClose }: Props) {
 
   useEffect(() => { loadRules() }, [loadRules])
 
+  // Load workspace path
+  useEffect(() => {
+    api.getWorkspace().then((w) => {
+      setWsPath(w.path)
+      setWsOriginal(w.path)
+    }).catch(() => {})
+  }, [])
+
+  // Load LLM config
+  useEffect(() => {
+    api.getLlmConfig().then((cfg) => {
+      setLlmProvider(cfg.provider)
+      setLlmModel(cfg.model)
+      setLlmBaseUrl(cfg.baseUrl ?? "")
+      setLlmDefaults(cfg.defaults ?? {})
+      setLlmActiveProvider(cfg.provider)
+      setLlmActiveModel(cfg.model)
+    }).catch(() => {})
+  }, [])
+
+  async function handleSaveLlm() {
+    setLlmSaving(true)
+    setLlmError(null)
+    setLlmSaved(false)
+    try {
+      const res = await api.setLlmConfig({
+        provider: llmProvider,
+        model: llmModel || undefined,
+        apiKey: llmApiKey || undefined,
+        baseUrl: llmBaseUrl || undefined,
+      })
+      setLlmActiveProvider(res.provider)
+      setLlmActiveModel(res.model)
+      setLlmApiKey("")
+      setLlmSaved(true)
+      setTimeout(() => setLlmSaved(false), 3000)
+    } catch {
+      setLlmError("Failed to save LLM config")
+    } finally {
+      setLlmSaving(false)
+    }
+  }
+
+  async function handleSaveWorkspace() {
+    setWsSaving(true)
+    setWsError(null)
+    setWsSaved(false)
+    try {
+      const res = await api.setWorkspace(wsPath)
+      setWsOriginal(res.path)
+      setWsPath(res.path)
+      setWsSaved(true)
+      setTimeout(() => setWsSaved(false), 3000)
+    } catch {
+      setWsError("Failed to update workspace. Check the path exists and is a directory.")
+    } finally {
+      setWsSaving(false)
+    }
+  }
+
   // Build a map of tool → rule for quick lookup
   const toolRuleMap = useMemo(() => {
     const map = new Map<string, PolicyRule>()
@@ -110,27 +179,6 @@ export function PolicyEditor({ onClose }: Props) {
     }
     return map
   }, [rules])
-
-  // Non-tool rules (amount_gt, custom conditions)
-  const customRules = useMemo(() => {
-    return rules.filter((r) => !r.condition.match(/^action:\w+$/))
-  }, [rules])
-
-  async function handleAdd() {
-    if (!name.trim() || !condition.trim()) return
-    setAdding(true)
-    setError(null)
-    try {
-      await api.createPolicy({ name: name.trim(), effect, condition: condition.trim() })
-      setName("")
-      setCondition("")
-      await loadRules()
-    } catch {
-      setError("Failed to create rule")
-    } finally {
-      setAdding(false)
-    }
-  }
 
   async function handleDelete(ruleName: string) {
     try {
@@ -166,36 +214,13 @@ export function PolicyEditor({ onClose }: Props) {
     }
   }
 
-  function startEdit(rule: PolicyRule) {
-    setEditingRule(rule.name)
-    setEditEffect(rule.effect as Effect)
-    setEditCondition(rule.condition)
-  }
-
-  async function saveEdit(originalName: string) {
-    setError(null)
-    try {
-      // Delete old rule then create updated one
-      await api.deletePolicy(originalName)
-      await api.createPolicy({
-        name: originalName,
-        effect: editEffect,
-        condition: editCondition.trim(),
-      })
-      setEditingRule(null)
-      await loadRules()
-    } catch {
-      setError("Failed to update rule")
-    }
-  }
-
   function getEffectStyle(e: string) {
     return EFFECTS.find((ef) => ef.value === e) ?? EFFECTS[1]
   }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "tools", label: "Tool Permissions" },
-    { id: "rules", label: "Custom Rules" },
+    { id: "model", label: "Model" },
     { id: "security", label: "Security" },
   ]
 
@@ -209,25 +234,25 @@ export function PolicyEditor({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center gap-2.5">
             <Shield size={20} className="text-text-muted" />
-            <h2 className="text-base font-semibold text-text">Governance & Security</h2>
+            <h2 className="text-lg font-semibold text-text">Governance & Security</h2>
           </div>
-          <button className="text-text-muted hover:text-text p-1 rounded" onClick={onClose}>
+          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 mb-4 shrink-0">
+        <div className="flex gap-1 px-6 pt-4 pb-3 shrink-0">
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`px-3 py-1.5 text-[13px] rounded-lg transition-colors ${
+              className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${
                 tab === t.id
                   ? "bg-white/10 text-text font-medium"
-                  : "text-text-muted hover:text-text-secondary hover:bg-white/5"
+                  : "text-text-muted hover:text-text-secondary hover:bg-white/[0.04]"
               }`}
               onClick={() => setTab(t.id)}
             >
@@ -250,8 +275,8 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "tools" ? (
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
-              <p className="text-[13px] text-text-muted mb-3">
-                Each tool is <span className="text-success">allowed</span> by default.
+              <p className="text-sm text-text-muted mb-4">
+                Each tool is <span className="text-success font-medium">allowed</span> by default.
                 Set a policy to restrict or gate any tool.
               </p>
               {AGENT_TOOLS.map((tool) => {
@@ -261,24 +286,26 @@ export function PolicyEditor({ onClose }: Props) {
                 const effectStyle = currentEffect ? getEffectStyle(currentEffect) : null
 
                 return (
-                  <div key={tool.name} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-base">
-                    <Icon size={16} className="text-text-muted shrink-0" />
+                  <div key={tool.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                    <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
+                      <Icon size={16} className="text-text-secondary" />
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-text font-mono">{tool.name}</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-sm font-semibold text-text font-mono">{tool.name}</span>
                         {!currentEffect && (
-                          <span className="text-[11px] uppercase font-mono text-success">allowed</span>
+                          <span className="text-[11px] uppercase font-semibold tracking-wider text-success">allowed</span>
                         )}
                         {effectStyle && (
-                          <span className={`text-[11px] uppercase font-mono ${effectStyle.color}`}>
+                          <span className={`text-[11px] uppercase font-semibold tracking-wider ${effectStyle.color}`}>
                             {effectStyle.label}
                           </span>
                         )}
                       </div>
-                      <div className="text-[12px] text-text-muted mt-0.5">{tool.desc}</div>
+                      <div className="text-[13px] text-text-muted mt-0.5">{tool.desc}</div>
                     </div>
                     <select
-                      className="bg-elevated text-text text-[12px] rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0"
+                      className="bg-white/[0.06] text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-white/[0.06]"
                       value={currentEffect ?? "none"}
                       onChange={(e) => handleToolToggle(tool.name, e.target.value as Effect | "none")}
                     >
@@ -291,175 +318,173 @@ export function PolicyEditor({ onClose }: Props) {
                 )
               })}
             </div>
-          ) : tab === "rules" ? (
-            /* ── Custom Rules tab ─────────────────────────── */
+          ) : tab === "model" ? (
+            /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
-              <p className="text-[13px] text-text-muted">
-                Custom rules for non-tool conditions (e.g. spending limits).
-                Tool-specific rules are managed in the Tool Permissions tab.
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-text-muted">Configure the LLM provider and model used by the agent.</p>
+                {llmActiveProvider && (
+                  <span className="flex items-center gap-1.5 text-[12px] text-text-muted bg-white/[0.04] border border-white/[0.06] rounded-full px-3 py-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+                    {llmActiveProvider} / {llmActiveModel}
+                  </span>
+                )}
+              </div>
 
-              {/* Existing custom rules */}
-              {customRules.length === 0 ? (
-                <div className="text-text-muted text-sm text-center py-6">
-                  No custom rules. Add one below.
+              {/* Provider selector */}
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Cpu size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Provider</span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {customRules.map((rule) => {
-                    const style = getEffectStyle(rule.effect)
-                    const RuleIcon = style.icon
-                    const isEditing = editingRule === rule.name
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  Choose the LLM backend. Switching provider updates the model and URL defaults below.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {(["copilot-chat", "copilot", "openai", "anthropic", "local"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setLlmProvider(p)
+                        setLlmModel(llmDefaults[p]?.model ?? "")
+                        setLlmBaseUrl(llmDefaults[p]?.baseUrl ?? "")
+                        setLlmApiKey("")
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                        llmProvider === p
+                          ? "bg-accent/20 text-accent border-accent/30"
+                          : "bg-white/[0.04] text-text-muted border-white/[0.06] hover:text-text hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {p === "copilot-chat" ? "Copilot Chat" : p === "copilot" ? "GitHub Models" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                    if (isEditing) {
-                      return (
-                        <div key={rule.name} className="px-4 py-3 rounded-xl bg-base space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-text">{rule.name}</span>
-                            <span className="text-[11px] text-text-muted">editing</span>
-                          </div>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <select
-                              className="bg-elevated text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
-                              value={editEffect}
-                              onChange={(e) => setEditEffect(e.target.value as Effect)}
-                            >
-                              {EFFECTS.map((e) => (
-                                <option key={e.value} value={e.value}>{e.label}</option>
-                              ))}
-                            </select>
-                            <input
-                              className="flex-1 bg-elevated rounded-lg px-3 py-2 text-sm text-text font-mono outline-none focus:ring-1 focus:ring-accent"
-                              value={editCondition}
-                              onChange={(e) => setEditCondition(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(rule.name) }}
-                            />
-                          </div>
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              className="px-3 py-1.5 text-[12px] text-text-muted hover:text-text rounded-lg hover:bg-white/5"
-                              onClick={() => setEditingRule(null)}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="flex items-center gap-1 px-3 py-1.5 text-[12px] text-success hover:bg-success/10 rounded-lg"
-                              onClick={() => saveEdit(rule.name)}
-                            >
-                              <Check size={12} /> Save
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    }
+              {/* Model + credentials combined card */}
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <Cpu size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Connection</span>
+                </div>
+                <div className="space-y-3 mb-4">
+                  {/* Model */}
+                  <div>
+                    <label className="text-[13px] text-text-muted block mb-1.5">Model</label>
+                    <input
+                      type="text"
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder={llmDefaults[llmProvider]?.model ?? "model name"}
+                      className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                    />
+                  </div>
 
-                    return (
-                      <div key={rule.name} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-base group">
-                        <RuleIcon size={16} className={style.color} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-text">{rule.name}</span>
-                            <span className={`text-[11px] uppercase font-mono ${style.color}`}>
-                              {style.label}
-                            </span>
-                          </div>
-                          <div className="text-[13px] text-text-muted font-mono mt-0.5">
-                            {rule.condition}
-                          </div>
-                        </div>
+                  {/* API Key — hidden for local */}
+                  {llmProvider !== "local" && (
+                    <div>
+                      <label className="text-[13px] text-text-muted block mb-1.5">
+                        {llmProvider === "copilot-chat" || llmProvider === "copilot" ? "GitHub Token" : llmProvider === "anthropic" ? "Anthropic API Key" : "OpenAI API Key"}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={llmApiKey}
+                          onChange={(e) => setLlmApiKey(e.target.value)}
+                          placeholder={llmDefaults[llmProvider]?.placeholder ?? "Leave blank to keep existing"}
+                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                        />
                         <button
-                          className="text-text-muted hover:text-accent sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
-                          onClick={() => startEdit(rule)}
-                          title="Edit rule"
+                          type="button"
+                          onClick={() => setShowApiKey((v) => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
                         >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="text-text-muted hover:text-error sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded"
-                          onClick={() => handleDelete(rule.name)}
-                          title="Delete rule"
-                        >
-                          <Trash2 size={14} />
+                          {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                      <p className="text-[12px] text-text-muted mt-1">Leave blank to keep the existing key.</p>
+                    </div>
+                  )}
 
-              {/* Divider */}
-              <div className="h-px bg-white/5" />
-
-              {/* Add new rule form */}
-              <div className="space-y-3">
-                <div className="text-[13px] text-text-secondary font-medium">Add Custom Rule</div>
-
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
-                    placeholder="Rule name (e.g. spending-limit)"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                  <select
-                    className="bg-base text-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer"
-                    value={effect}
-                    onChange={(e) => setEffect(e.target.value as Effect)}
-                  >
-                    {EFFECTS.map((e) => (
-                      <option key={e.value} value={e.value}>{e.label}</option>
-                    ))}
-                  </select>
+                  {/* Base URL — shown for openai and local */}
+                  {(llmProvider === "openai" || llmProvider === "local") && (
+                    <div>
+                      <label className="text-[13px] text-text-muted block mb-1.5">Base URL</label>
+                      <input
+                        type="text"
+                        value={llmBaseUrl}
+                        onChange={(e) => setLlmBaseUrl(e.target.value)}
+                        placeholder={llmDefaults[llmProvider]?.baseUrl ?? "https://api.openai.com/v1"}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                      />
+                      {llmProvider === "local" && (
+                        <p className="text-[12px] text-text-muted mt-1">Default: <code className="font-mono">http://localhost:11434/v1</code> for Ollama.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
-                    placeholder="Condition (e.g. amount_gt:1000)"
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleAdd() }}
-                  />
+                {/* Save */}
+                <div className="flex items-center gap-3">
                   <button
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text text-sm rounded-lg disabled:opacity-40"
-                    onClick={handleAdd}
-                    disabled={adding || !name.trim() || !condition.trim()}
+                    onClick={handleSaveLlm}
+                    disabled={llmSaving}
+                    className="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Plus size={14} />
-                    Add
+                    {llmSaving ? "Saving…" : "Apply"}
                   </button>
+                  {llmSaved && <span className="text-[13px] text-success">Saved — active on next run</span>}
+                  {llmError && <span className="text-[13px] text-error">{llmError}</span>}
                 </div>
               </div>
             </div>
           ) : (
             /* ── Security tab ─────────────────────────────── */
             <div className="space-y-4">
-              <p className="text-[13px] text-text-muted">
+              <p className="text-sm text-text-muted">
                 Built-in security protections. These are always active and cannot be disabled.
               </p>
 
               {/* Workspace */}
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Lock size={14} className="text-accent" />
-                  <span className="text-sm font-medium text-text">Workspace Isolation</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <FolderOpen size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Workspace</span>
                 </div>
-                <p className="text-[12px] text-text-muted">
-                  File and shell operations are scoped to the configured workspace directory.
-                  The agent cannot access files outside this boundary.
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  File and shell operations are scoped to this directory. The agent cannot access files outside.
                 </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={wsPath}
+                    onChange={(e) => setWsPath(e.target.value)}
+                    placeholder="/path/to/workspace"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                  />
+                  <button
+                    onClick={handleSaveWorkspace}
+                    disabled={wsSaving || wsPath === wsOriginal}
+                    className="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {wsSaving ? "Saving…" : "Apply"}
+                  </button>
+                </div>
+                {wsError && <p className="text-[12px] text-error mt-1.5">{wsError}</p>}
+                {wsSaved && <p className="text-[12px] text-success mt-1.5">Workspace updated</p>}
               </div>
 
               {/* Shell blocklist */}
-              <div className="px-4 py-3 rounded-xl bg-base">
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                 <button
-                  className="flex items-center gap-2 w-full text-left"
+                  className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setShellExpanded((v) => !v)}
                 >
                   {shellExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
-                  <Terminal size={14} className="text-error" />
-                  <span className="text-sm font-medium text-text">Shell Command Blocklist</span>
-                  <span className="text-[11px] text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns blocked</span>
+                  <Terminal size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Shell Command Blocklist</span>
+                  <span className="text-[12px] text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns</span>
                 </button>
                 {shellExpanded && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -476,15 +501,15 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* SSRF protection */}
-              <div className="px-4 py-3 rounded-xl bg-base">
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                 <button
-                  className="flex items-center gap-2 w-full text-left"
+                  className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setSsrfExpanded((v) => !v)}
                 >
                   {ssrfExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
-                  <Globe size={14} className="text-warning" />
-                  <span className="text-sm font-medium text-text">SSRF Protection</span>
-                  <span className="text-[11px] text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns blocked</span>
+                  <Globe size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">SSRF Protection</span>
+                  <span className="text-[12px] text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns</span>
                 </button>
                 {ssrfExpanded && (
                   <div className="mt-3">
@@ -506,12 +531,12 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Policy enforcement */}
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield size={14} className="text-success" />
-                  <span className="text-sm font-medium text-text">Policy Enforcement</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Shield size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Policy Enforcement</span>
                 </div>
-                <p className="text-[12px] text-text-muted">
+                <p className="text-[13px] text-text-muted leading-relaxed">
                   All policy rules are evaluated <strong>before every tool call</strong>.
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
@@ -519,14 +544,14 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Reset data */}
-              <div className="h-px bg-white/5 my-2" />
+              <div className="h-px bg-white/[0.06] my-1" />
 
-              <div className="px-4 py-3 rounded-xl bg-base">
-                <div className="flex items-center gap-2 mb-1">
-                  <Trash2 size={14} className="text-error" />
-                  <span className="text-sm font-medium text-text">Restore Defaults</span>
+              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Trash2 size={15} className="text-error" />
+                  <span className="text-sm font-semibold text-text">Restore Defaults</span>
                 </div>
-                <p className="text-[12px] text-text-muted mb-3">
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
                   Delete all runs, logs, audit entries, trace history, checkpoints, and token usage.
                   <strong> Policies and dashboard layout will be preserved.</strong>
                 </p>

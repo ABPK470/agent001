@@ -19,6 +19,8 @@ export function registerUsageRoutes(app: FastifyInstance): void {
         totalTokens: totals.total_tokens,
         llmCalls: totals.total_llm_calls,
         runCount: totals.run_count,
+        completedRuns: totals.completed_runs,
+        failedRuns: totals.failed_runs,
       },
       runs: perRun.map((r) => ({
         runId: r.run_id,

@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - HOST=0.0.0.0
+      - AGENT001_DATA_DIR=/data
+      - AGENT_WORKSPACE=/workspace
+      # MSSQL connection
+      - MSSQL_HOST=mssql
+      - MSSQL_PORT=1433
+      - MSSQL_USER=sa
+      - MSSQL_PASSWORD=${MSSQL_SA_PASSWORD:-Agent001_Strong!P4ss}
+      - MSSQL_DATABASE=${MSSQL_DATABASE:-AgentDWH}
+      - MSSQL_ENCRYPT=true
+      - MSSQL_TRUST_CERT=true
+      - MSSQL_WRITE_ENABLED=false
+    volumes:
+      - app-data:/data
+      - workspace:/workspace
+    depends_on:
+      mssql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mssql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-Agent001_Strong!P4ss}
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  mssql-data:
+  workspace:

@@ -14,8 +14,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
   // ── Auto-save dashboard state ────────────────────────────────
 
   app.get("/api/dashboard-state", async () => {
-    const layouts = db.getLayouts()
-    const state = layouts.find((l) => l.id === DASHBOARD_STATE_ID)
+    const state = db.getLayout(DASHBOARD_STATE_ID)
     if (!state) return null
     return JSON.parse(state.config)
   })
@@ -73,7 +72,7 @@ export function registerLayoutRoutes(app: FastifyInstance): void {
   app.put<{ Params: { id: string }, Body: { name?: string, config?: unknown } }>(
     "/api/layouts/:id",
     async (req, reply) => {
-      const existing = db.getLayouts().find((l) => l.id === req.params.id)
+      const existing = db.getLayout(req.params.id)
       if (!existing) {
         reply.code(404)
         return { error: "Layout not found" }

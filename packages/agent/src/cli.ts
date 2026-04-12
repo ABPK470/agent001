@@ -29,7 +29,7 @@ import {
 import { AnthropicClient } from "./llm/anthropic.js"
 import { OpenAIClient } from "./llm/openai.js"
 import { fetchUrlTool } from "./tools/fetch-url.js"
-import { listDirectoryTool, readFileTool, writeFileTool } from "./tools/filesystem.js"
+import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/filesystem.js"
 import { shellTool } from "./tools/shell.js"
 import { thinkTool } from "./tools/think.js"
 import type { LLMClient, Tool } from "./types.js"
@@ -67,6 +67,8 @@ function allTools(): Tool[] {
     fetchUrlTool,
     readFileTool,
     writeFileTool,
+    appendFileTool,
+    replaceInFileTool,
     listDirectoryTool,
     shellTool,
     thinkTool,
