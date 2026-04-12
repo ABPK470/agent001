@@ -1694,6 +1694,53 @@ async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Pr
         }
       }
     }
+
+    // Check that every <script src=...> and <link href=...> reference in the HTML
+    // actually exists on disk. A missing file causes a silent browser 404 that
+    // prevents the page from loading — the board never renders, JS never executes.
+    const missingRefIssues: string[] = []
+    const htmlDirForRef = htmlEntry.path.replace(/[^/]+$/, "")
+    for (const scriptRef of scriptRefs) {
+      const src = scriptRef.src
+      // Skip absolute URLs (http/https/data/blob) and protocol-relative refs
+      if (/^(?:https?|data|blob):|\/\//i.test(src)) continue
+      // Resolve relative to the HTML file's directory
+      const resolvedSrc = src.startsWith("/") ? src.replace(/^\//, "") : `${htmlDirForRef}${src}`
+      const existsProbe = await probeArtifact(readFile, resolvedSrc, [], wsRoot, runCommand)
+      if (!existsProbe.found) {
+        missingRefIssues.push(
+          `MISSING_SCRIPT_FILE: "${htmlEntry.path}" has <script src="${src}"> but "${resolvedSrc}" does not exist on disk. ` +
+          `The browser will 404 and the page will be non-functional. Either write the missing file or remove the reference.`,
+        )
+      }
+    }
+    // Also check <link rel="stylesheet" href=...> references
+    for (const match of htmlContent.matchAll(/<link[^>]+href=["']([^"']+)["'][^>]*>/giu)) {
+      const href = match[1]
+      if (/^(?:https?|data|blob):|\/\//i.test(href)) continue
+      if (href.startsWith("//fonts.googleapis") || href.startsWith("//fonts.gstatic")) continue
+      const resolvedHref = href.startsWith("/") ? href.replace(/^\//, "") : `${htmlDirForRef}${href}`
+      const existsProbe = await probeArtifact(readFile, resolvedHref, [], wsRoot, runCommand)
+      if (!existsProbe.found) {
+        missingRefIssues.push(
+          `MISSING_STYLESHEET_FILE: "${htmlEntry.path}" has <link href="${href}"> but "${resolvedHref}" does not exist on disk. ` +
+          `Styles will be missing. Either write the missing CSS file or remove the reference.`,
+        )
+      }
+    }
+    if (missingRefIssues.length > 0) {
+      const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
+      if (idx >= 0) {
+        const existing = assessments[idx]
+        assessments[idx] = {
+          stepName: existing.stepName,
+          outcome: "retry",
+          confidence: 0.0,
+          issues: [...existing.issues, ...missingRefIssues],
+          retryable: true,
+        }
+      }
+    }
   }
 }
 

@@ -163,7 +163,7 @@ function buildLanguageRepairGuidance(families: ReadonlySet<ArtifactFamily>): str
   return guidance
 }
 
-function buildIssueRepairActions(_step: SubagentTaskStep, feedback: readonly string[]): string[] {
+function buildIssueRepairActions(step: SubagentTaskStep, feedback: readonly string[]): string[] {
   const actions: string[] = []
 
   for (const issue of feedback) {
@@ -242,7 +242,30 @@ function buildIssueRepairActions(_step: SubagentTaskStep, feedback: readonly str
     }
 
     if (/SCOPE VIOLATION/i.test(cleanIssue)) {
-      actions.push("Edit only this step's owned target artifacts unless a required source artifact explicitly allows integration wiring changes")
+      // Parse the specific forbidden file out of the blocker message:
+      // "WRITE SCOPE VIOLATION — path "tmp/interactive.js" is outside this step's targetArtifacts.
+      //  Allowed targetArtifacts for this step: tmp/index.html, tmp/styles.css."
+      const forbiddenMatch = cleanIssue.match(/path\s+["']([^"']+)["']\s+is outside/i)
+      const allowedMatch = cleanIssue.match(/Allowed targetArtifacts[^:]*:\s*([^.]+)/i)
+      const ownedFiles = step.executionContext.targetArtifacts
+      if (forbiddenMatch && allowedMatch) {
+        const forbidden = forbiddenMatch[1]
+        const allowed = allowedMatch[1].trim()
+        actions.push(
+          `SCOPE CONSTRAINT VIOLATION: you tried to write "${forbidden}" which is NOT one of your target files. ` +
+          `YOUR ONLY ALLOWED TARGET FILES ARE: ${allowed}. ` +
+          `Do NOT write "${forbidden}" under any circumstances — it is owned by a different pipeline step. ` +
+          `Focus exclusively on writing: ${ownedFiles.join(", ")}.`,
+        )
+      } else if (ownedFiles.length > 0) {
+        actions.push(
+          `SCOPE CONSTRAINT: your ONLY allowed target files are: ${ownedFiles.join(", ")}. ` +
+          `Do not write or modify any other file. If the task feels incomplete without writing additional files, ` +
+          `ignore that feeling — the other files are the responsibility of a different pipeline step.`,
+        )
+      } else {
+        actions.push("Edit only this step's owned target artifacts unless a required source artifact explicitly allows integration wiring changes")
+      }
       continue
     }
 

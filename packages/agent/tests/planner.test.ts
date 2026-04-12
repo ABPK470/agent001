@@ -2994,6 +2994,94 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     expect(htmlStep?.outcome).not.toBe("pass")
   })
 
+  it("flags MISSING_SCRIPT_FILE when HTML references a <script src=...> that does not exist on disk", async () => {
+    // Simulates the chess game bug: index.html has <script src="interactive.js">
+    // but interactive.js was never written by any pipeline step.
+    const plan = makePlan({
+      steps: [
+        makeSubagentStep("create-html", {
+          objective: "Create HTML shell",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+        makeSubagentStep("create-js", {
+          objective: "Create JS logic",
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/app/chess_logic.js", "tmp/app/interactive.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [],
+          },
+        }),
+      ],
+      edges: [{ from: "create-html", to: "create-js" }],
+    })
+
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
+        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/chess_logic.js", durationMs: 1 }],
+      ]),
+    }
+
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          // index.html references BOTH chess_logic.js and interactive.js
+          if (path.includes("index.html")) {
+            return [
+              "<html><head></head><body>",
+              "<div id='board'></div>",
+              "<script type='module' src='chess_logic.js'></script>",
+              "<script type='module' src='interactive.js'></script>",
+              "</body></html>",
+            ].join("\n")
+          }
+          // chess_logic.js exists on disk
+          if (path.includes("chess_logic.js")) return "export function initializeBoard() { return [] }"
+          // interactive.js does NOT exist — returns error so probeArtifact marks it missing
+          return "Error: ENOENT: no such file or directory"
+        },
+      },
+      {
+        name: "run_command",
+        description: "run",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+        async execute() {
+          return "__MISSING__"
+        },
+      },
+    ]
+
+    const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
+    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    expect(htmlStep).toBeDefined()
+    const missingScriptIssue = htmlStep?.issues.find(i => i.includes("MISSING_SCRIPT_FILE") && i.includes("interactive.js"))
+    expect(missingScriptIssue).toBeDefined()
+    expect(htmlStep?.outcome).toBe("retry")
+  })
+
   it("flags browser module mismatch when HTML loads a CommonJS runtime file directly", async () => {
     const plan = makePlan({
       steps: [

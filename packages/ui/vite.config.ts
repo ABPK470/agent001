@@ -4,6 +4,14 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    extensions: ['.mjs', '.mts', '.ts', '.tsx', '.jsx', '.js', '.json'],
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      loader: { '.js': 'jsx' },
+    },
+  },
   server: {
     port: 5179,
     host: true,
