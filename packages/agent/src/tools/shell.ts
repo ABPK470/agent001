@@ -37,7 +37,7 @@ export interface ShellExecResult {
  * Optional executor injected by the server.
  * When set, commands route through Docker sandbox instead of host shell.
  */
-type ShellExecutor = (command: string, cwd: string) => Promise<ShellExecResult>
+type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
 let _executor: ShellExecutor | null = null
 
 /** Inject a sandbox executor (called once at server startup). */
@@ -284,7 +284,7 @@ export const shellTool: Tool = {
     // Route through sandbox executor if available
     if (_executor) {
       try {
-        const result = await _executor(command, _shellCwd)
+        const result = await _executor(command, _shellCwd, _signal ?? undefined)
         return formatResult(result)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`

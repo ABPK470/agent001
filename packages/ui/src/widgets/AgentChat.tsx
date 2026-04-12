@@ -6,7 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, ChevronDown, Mic, MicOff, Send, User } from "lucide-react"
+import { AlertCircle, Bot, ChevronDown, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -38,6 +38,7 @@ export function AgentChat() {
   const [listening, setListening] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [attachments, setAttachments] = useState<{ name: string; content: string }[]>([])
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
@@ -46,6 +47,7 @@ export function AgentChat() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
@@ -78,19 +80,52 @@ export function AgentChat() {
 
   async function handleSend() {
     const goal = input.trim()
-    if (!goal || sending) return
+    if (!goal && attachments.length === 0) return
+    if (sending) return
+
+    // Build the full goal: user text + any attached file contents
+    const parts: string[] = []
+    if (goal) parts.push(goal)
+    for (const att of attachments) {
+      parts.push(`\n---\n**Attached: ${att.name}**\n\`\`\`\n${att.content}\n\`\`\``)
+    }
+    const fullGoal = parts.join("\n")
 
     setSending(true)
     setInput("")
+    setAttachments([])
     try {
       const agentId = selectedAgent?.id
-      const { runId } = await api.startRun(goal, agentId)
+      const { runId } = await api.startRun(fullGoal, agentId)
       setActiveRun(runId)
     } catch (err) {
       console.error("Failed to start run:", err)
     } finally {
       setSending(false)
     }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    // Reset so the same file can be re-attached after removal
+    e.target.value = ""
+    for (const file of files) {
+      // Warn and skip files over 500 KB to avoid flooding the context
+      if (file.size > 500 * 1024) {
+        console.warn(`File "${file.name}" is too large (${Math.round(file.size / 1024)} KB); max 500 KB`)
+        continue
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const content = typeof reader.result === "string" ? reader.result : ""
+        setAttachments((prev) => [...prev, { name: file.name, content }])
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
   const toggleVoice = useCallback(() => {
@@ -249,6 +284,28 @@ export function AgentChat() {
           </div>
         )}
 
+        {/* Attachment chips */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {attachments.map((att, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1 text-[11px] bg-elevated text-text-secondary rounded-md pl-2 pr-1 py-0.5 max-w-[180px]"
+              >
+                <Paperclip size={10} className="shrink-0 text-accent" />
+                <span className="truncate" title={att.name}>{att.name}</span>
+                <button
+                  className="text-text-muted hover:text-error transition-colors ml-0.5 shrink-0"
+                  onClick={() => removeAttachment(i)}
+                  title="Remove"
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Input */}
         <div className="flex gap-2">
           <input
@@ -259,6 +316,21 @@ export function AgentChat() {
             onKeyDown={(e) => { if (e.key === "Enter") handleSend() }}
             disabled={sending}
           />
+          {/* Hidden file input — triggered by Paperclip button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            className="flex items-center justify-center w-11 h-11 bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach file"
+          >
+            <Paperclip size={16} />
+          </button>
           {SpeechRecognition && (
             <button
               className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${
@@ -275,7 +347,7 @@ export function AgentChat() {
           <button
             className="flex items-center justify-center w-11 h-11 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
             onClick={handleSend}
-            disabled={sending || !input.trim()}
+            disabled={sending || (!input.trim() && attachments.length === 0)}
           >
             <Send size={16} />
           </button>

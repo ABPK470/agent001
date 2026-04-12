@@ -25,7 +25,10 @@ import {
     runFailed,
     runStarted,
     setBasePath,
+    setBrowseKillSignal,
     setBrowserCheckCwd,
+    setFetchKillSignal,
+    setMssqlKillSignal,
     setSearchBasePath,
     setShellCwd,
     setShellSignal,
@@ -96,7 +99,7 @@ export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
-  private readonly pendingKills = new Map<string, { resolve: (message: string) => void }>()
+  private readonly pendingKills = new Map<string, { resolve: (message: string) => void; perToolCtrl: AbortController }>()
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
@@ -282,6 +285,7 @@ export class AgentOrchestrator {
     const key = `${runId}:${toolCallId}`
     const pending = this.pendingKills.get(key)
     if (!pending) return false
+    pending.perToolCtrl.abort() // actually kill the running process
     pending.resolve(message)
     this.pendingKills.delete(key)
     broadcast({ type: "tool_call.killed", data: { runId, toolCallId, message } })
@@ -705,14 +709,26 @@ export class AgentOrchestrator {
     // Build a per-run ToolKillManager so the user can kill individual tool calls
     const killManager: ToolKillManager = {
       register: (toolCallId: string, toolName: string) => {
+        const perToolCtrl = new AbortController()
+        // Compose the run-level abort + per-tool abort so either one kills the underlying I/O
+        const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
+        setShellSignal(composed)
+        setFetchKillSignal(composed)
+        setBrowseKillSignal(composed)
+        setMssqlKillSignal(composed)
         return new Promise<string>((resolve) => {
           const key = `${runId}:${toolCallId}`
-          this.pendingKills.set(key, { resolve })
+          this.pendingKills.set(key, { resolve, perToolCtrl })
           broadcast({ type: "tool_call.executing", data: { runId, toolCallId, toolName } })
         })
       },
       unregister: (toolCallId: string) => {
         this.pendingKills.delete(`${runId}:${toolCallId}`)
+        // Restore the run-level signals now that this tool call is done
+        setShellSignal(controller.signal)
+        setFetchKillSignal(null)
+        setBrowseKillSignal(null)
+        setMssqlKillSignal(null)
         broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
       },
     }
@@ -1303,6 +1319,9 @@ export class AgentOrchestrator {
 
     try {
       setShellSignal(controller.signal)
+      setFetchKillSignal(null)
+      setBrowseKillSignal(null)
+      setMssqlKillSignal(null)
       const answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
 
       // Check if the run was cancelled (agent returns gracefully with cancel message)
@@ -1534,6 +1553,9 @@ export class AgentOrchestrator {
       })
     } finally {
       setShellSignal(null)
+      setFetchKillSignal(null)
+      setBrowseKillSignal(null)
+      setMssqlKillSignal(null)
       releaseSlot()
       bus.dispose()
       this.pendingInputs.delete(runId)

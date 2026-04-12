@@ -25,6 +25,14 @@ let _pool: sql.ConnectionPool | null = null
 let _config: sql.config | null = null
 let _writeEnabled = false
 
+/** Per-tool-call kill signal — when aborted, cancels any in-flight query. */
+let _killSignal: AbortSignal | null = null
+
+/** Set by the orchestrator when a per-tool kill is registered/cleared. */
+export function setMssqlKillSignal(signal: AbortSignal | null): void {
+  _killSignal = signal
+}
+
 /** Configure the MSSQL connection. Called once at server startup. */
 export function setMssqlConfig(config: sql.config): void {
   _config = {
@@ -211,11 +219,22 @@ export const mssqlTool: Tool = {
 
       const request = pool.request()
 
+      // If a kill signal fires while the query is running, cancel it immediately
+      const onKill = (): void => { request.cancel() }
+      if (_killSignal) {
+        if (_killSignal.aborted) return "Error: Tool execution cancelled"
+        _killSignal.addEventListener("abort", onKill, { once: true })
+      }
+
       // If a specific database is requested, prefix with USE
       const fullQuery = db ? `USE [${db}];\n${query}` : query
 
-      const result = await request.query(fullQuery)
-      return formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+      try {
+        const result = await request.query(fullQuery)
+        return formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+      } finally {
+        _killSignal?.removeEventListener("abort", onKill)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return `SQL Error: ${msg}`
@@ -251,6 +270,14 @@ export const mssqlSchemaTool: Tool = {
       const pool = await getPool()
       const request = pool.request()
 
+      // If a kill signal fires while the query is running, cancel it immediately
+      const onKill = (): void => { request.cancel() }
+      if (_killSignal) {
+        if (_killSignal.aborted) return "Error: Tool execution cancelled"
+        _killSignal.addEventListener("abort", onKill, { once: true })
+      }
+
+      try {
       if (args.table) {
         const tableName = String(args.table)
         // Parameterize the table lookup
@@ -318,6 +345,9 @@ export const mssqlSchemaTool: Tool = {
 
       if (!result.recordset.length) return "No tables found."
       return formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+      } finally {
+        _killSignal?.removeEventListener("abort", onKill)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return `SQL Error: ${msg}`

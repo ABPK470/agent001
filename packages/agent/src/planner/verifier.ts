@@ -13,28 +13,28 @@ import { posix as pathPosix } from "node:path"
 
 import { detectPlaceholderPatterns } from "../code-quality.js"
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    validateDelegatedOutputContract
+  buildContractSpec,
+  getCorrectionGuidance,
+  validateDelegatedOutputContract
 } from "../delegation-validation.js"
 import { normalizeToolExecutionOutput } from "../tool-utils.js"
 import type { LLMClient, Message, Tool } from "../types.js"
 import {
-    type BlueprintSharedTypeSpec,
-    normalizeBasename,
-    normalizeSpecPath,
-    parseBlueprintContractBlock,
-    uniqueStrings
+  type BlueprintSharedTypeSpec,
+  normalizeBasename,
+  normalizeSpecPath,
+  parseBlueprintContractBlock,
+  uniqueStrings
 } from "./blueprint-contract.js"
 import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    SubagentTaskStep,
-    VerificationEvidence,
-    VerifierDecision,
-    VerifierOutcome,
-    VerifierStepAssessment
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  SubagentTaskStep,
+  VerificationEvidence,
+  VerifierDecision,
+  VerifierOutcome,
+  VerifierStepAssessment
 } from "./types.js"
 import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
 
@@ -1317,7 +1317,11 @@ export async function runDeterministicProbes(
 
       // Runtime-facing criteria require runtime proof, not only static code checks.
       const runtimeCriterionRe = /\b(?:click|submit|drag|drop|keyboard|mouse|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end|api|request|response|endpoint|fetch|http|query|database|sql|persist|sync|auth|login)\b/i
-      const complexRuleCriterionRe = /\b(?:all rules|special moves|castling|en passant|promotion|checkmate|stalemate|king safety|piece[- ]specific|illegal move|turn[- ]based|full game logic|complete logic|algorithmic contract)\b/i
+      // Criteria that describe deep correctness of multi-branch, rule-heavy, or
+      // algorithmically complex logic — these need more than a successful render pass.
+      // Domain-agnostic: matches any step whose criteria claim exhaustive rules/logic
+      // coverage, not just chess or any other specific domain.
+      const complexRuleCriterionRe = /\b(?:all (?:rules?|cases?|scenarios?|constraints?|edge cases?)|full(?:y)? (?:implement|support|enforce|cover|valid|correct)|complete(?:ly)? (?:implement|correct|valid|enforce|cover)|every (?:rule|case|scenario|constraint|branch|path)|algorithmic contract|criterion[- ]by[- ]criterion|exhaustive(?:ly)?|provably correct|all (?:valid|invalid) (?:moves?|inputs?|states?|transitions?)|specification[- ]complete)\b/i
       const docsOnlyArtifacts = sa.executionContext.targetArtifacts.length > 0 &&
         sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
       if (!docsOnlyArtifacts && !executedModalities.has("runtime")) {
@@ -1329,14 +1333,17 @@ export async function runDeterministicProbes(
         }
       }
 
-      const role = sa.executionContext.role ?? "writer"
-      if (role !== "writer") {
+      // Detect steps that claim exhaustive correctness from broad runtime-only evidence.
+      // Applies to all roles — a writer step that passes browser_check but whose output
+      // blanket-claims full rule/logic coverage without criterion-level proof is equally
+      // suspect as a validator doing the same thing.
+      {
         const complexCriteria = sa.acceptanceCriteria.filter(c => complexRuleCriterionRe.test(c))
         const blanketComplexClaim = /\b(?:all|fully|complete(?:ly)?|properly)\b.{0,80}\b(?:rules|logic|workflow|constraints|requirements)\b/i.test(outputText)
         const runtimeOnlyEvidence = executedModalities.has("runtime") && !executedModalities.has("tests")
         if (complexCriteria.length > 0 && runtimeOnlyEvidence && blanketComplexClaim) {
           issues.push(
-            `CRITERIA PROOF MISSING: validator/reviewer claimed complex rule coverage from broad runtime evidence only (${complexCriteria.length} complex criteria). Require criterion-by-criterion evidence from code review or executable tests, not just a successful browser/render pass.`,
+            `CRITERIA PROOF MISSING: step claimed exhaustive rule/logic coverage from broad runtime evidence only (${complexCriteria.length} complex criteria). Require criterion-by-criterion evidence from code review or executable tests, not just a successful browser/render pass.`,
           )
         }
       }
@@ -1354,6 +1361,7 @@ export async function runDeterministicProbes(
       }
 
       // ── Role-specific validation (agenc-core pattern) ──
+      const role = sa.executionContext.role ?? "writer"
       if (role === "writer") {
         // Writer steps must actually produce files — verify they exist and have content
         let mutationConfirmed = false

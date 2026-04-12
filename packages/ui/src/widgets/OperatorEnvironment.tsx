@@ -26,7 +26,7 @@ import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
 import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
-import { ChatPanel } from "./ioe/chat"
+import { ChatPanel, type FileAttachment } from "./ioe/chat"
 import {
     C,
     buildChatMessages,
@@ -128,6 +128,7 @@ export function OperatorEnvironment() {
 
   // ── Operational state ─────────────────────────────────────────
   const [goalInput, setGoalInput] = useState("")
+  const [goalAttachments, setGoalAttachments] = useState<FileAttachment[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
   const [workspaceMsg, setWorkspaceMsg] = useState<string | null>(null)
@@ -193,18 +194,26 @@ export function OperatorEnvironment() {
   // ── Actions ───────────────────────────────────────────────────
   const handleSubmitGoal = useCallback(async () => {
     const goal = goalInput.trim()
-    if (!goal || submitting) return
+    if (!goal && goalAttachments.length === 0) return
+    if (submitting) return
     setSubmitting(true)
     try {
+      const parts: string[] = []
+      if (goal) parts.push(goal)
+      for (const att of goalAttachments) {
+        parts.push(`\n---\n**Attached: ${att.name}**\n\`\`\`\n${att.content}\n\`\`\``)
+      }
+      const fullGoal = parts.join("\n")
       const agentId = selectedAgentId ?? agents[0]?.id
-      const { runId } = await api.startRun(goal, agentId || undefined)
+      const { runId } = await api.startRun(fullGoal, agentId || undefined)
       setActiveRun(runId)
       setGoalInput("")
+      setGoalAttachments([])
     } catch {
       /* swallow */
     }
     setSubmitting(false)
-  }, [goalInput, submitting, selectedAgentId, agents, setActiveRun])
+  }, [goalInput, goalAttachments, submitting, selectedAgentId, agents, setActiveRun])
 
   const handleRespondToInput = useCallback(async (response: string) => {
     if (!pendingInput) return
@@ -898,6 +907,9 @@ export function OperatorEnvironment() {
               pendingKill={pendingKill}
               onKillToolCall={setPendingKill}
               onSubmitKill={handleKillToolCall}
+              attachments={goalAttachments}
+              onAttach={(files) => setGoalAttachments((prev) => [...prev, ...files])}
+              onRemoveAttachment={(i) => setGoalAttachments((prev) => prev.filter((_, idx) => idx !== i))}
             />
           </div>
         )}

@@ -3,7 +3,7 @@
  * Supports simple mode (user goal → final answer) and detailed mode (full trace inline).
  */
 
-import { AlertCircle, Brain, HelpCircle, MessageSquare, Send, Square, User, Wrench } from "lucide-react"
+import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
@@ -15,6 +15,8 @@ interface ToolCallKillInfo {
   toolCallId: string
   toolName: string
 }
+
+export interface FileAttachment { name: string; content: string }
 
 export function ChatPanel({
   messages,
@@ -29,6 +31,9 @@ export function ChatPanel({
   pendingKill,
   onKillToolCall,
   onSubmitKill,
+  attachments = [],
+  onAttach,
+  onRemoveAttachment,
 }: {
   messages: ChatMessage[]
   goalInput: string
@@ -42,11 +47,33 @@ export function ChatPanel({
   pendingKill?: ToolCallKillInfo | null
   onKillToolCall?: (info: ToolCallKillInfo | null) => void
   onSubmitKill?: (message: string) => void
+  attachments?: FileAttachment[]
+  onAttach?: (files: FileAttachment[]) => void
+  onRemoveAttachment?: (index: number) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [responseInput, setResponseInput] = useState("")
   const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("simple")
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ""
+    if (!onAttach) return
+    const results: FileAttachment[] = []
+    let pending = files.length
+    if (pending === 0) return
+    for (const file of files) {
+      if (file.size > 500 * 1024) { pending--; continue }
+      const reader = new FileReader()
+      reader.onload = () => {
+        results.push({ name: file.name, content: typeof reader.result === "string" ? reader.result : "" })
+        if (--pending === 0) onAttach(results)
+      }
+      reader.readAsText(file)
+    }
+  }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages.length, pendingInput])
@@ -237,30 +264,67 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <div
-            className="flex items-center gap-2 rounded-lg px-3 py-2"
-            style={{ background: C.elevated, border: `1px solid ${C.border}` }}
-          >
-            <input
-              type="text"
-              className="flex-1 bg-transparent outline-none text-[13px]"
-              style={{ color: C.text, caretColor: C.accent }}
-              placeholder={isRunning ? "Agent is running..." : "Enter a goal..."}
-              value={goalInput}
-              onChange={(e) => onGoalChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onSubmit()
-              }}
-              disabled={isRunning || submitting}
-            />
-            <button
-              className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
-              style={{ color: goalInput.trim() ? C.accent : C.dim }}
-              onClick={onSubmit}
-              disabled={isRunning || submitting || !goalInput.trim()}
+          <div className="space-y-1.5">
+            {/* Attachment chips */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {attachments.map((att, i) => (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] max-w-[160px]"
+                    style={{ background: C.elevated, color: C.text, border: `1px solid ${C.border}` }}
+                  >
+                    <Paperclip size={9} style={{ color: C.accent, flexShrink: 0 }} />
+                    <span className="truncate" title={att.name}>{att.name}</span>
+                    {onRemoveAttachment && (
+                      <button
+                        className="ml-0.5"
+                        style={{ color: C.dim, flexShrink: 0 }}
+                        onClick={() => onRemoveAttachment(i)}
+                        title="Remove"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div
+              className="flex items-center gap-2 rounded-lg px-3 py-2"
+              style={{ background: C.elevated, border: `1px solid ${C.border}` }}
             >
-              <Send size={16} />
-            </button>
+              <input
+                type="text"
+                className="flex-1 bg-transparent outline-none text-[13px]"
+                style={{ color: C.text, caretColor: C.accent }}
+                placeholder={isRunning ? "Agent is running..." : "Enter a goal..."}
+                value={goalInput}
+                onChange={(e) => onGoalChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") onSubmit() }}
+                disabled={isRunning || submitting}
+              />
+              {/* Hidden file input */}
+              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+              {onAttach && (
+                <button
+                  className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+                  style={{ color: C.dim }}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach file"
+                >
+                  <Paperclip size={14} />
+                </button>
+              )}
+              <button
+                className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+                style={{ color: (goalInput.trim() || attachments.length > 0) ? C.accent : C.dim }}
+                onClick={onSubmit}
+                disabled={isRunning || submitting || (!goalInput.trim() && attachments.length === 0)}
+              >
+                <Send size={16} />
+              </button>
+            </div>
           </div>
         )}
       </div>

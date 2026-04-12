@@ -5952,13 +5952,13 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     expect(step?.issues.some(i => i.includes("PROCESS AUDIT FAILED"))).toBe(true)
   })
 
-  it("rejects validator blanket claims for complex rule coverage from runtime-only evidence", async () => {
+  it("rejects blanket claims for complex rule coverage from runtime-only evidence", async () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("runtime_verification", {
-          objective: "Verify the chess game in the browser",
+          objective: "Verify the game logic in the browser",
           acceptanceCriteria: [
-            "All chess rules including castling, en passant, promotion, and checkmate are verified",
+            "All rules are fully implemented and the game enforces every constraint correctly",
             "The game renders and accepts interaction",
           ],
           executionContext: {
@@ -5986,7 +5986,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
         ["runtime_verification", {
           name: "runtime_verification",
           status: "completed",
-          output: "The chess game renders successfully in the browser and all chess rules are implemented properly.",
+          output: "The game renders successfully in the browser and all rules are implemented properly.",
           durationMs: 1,
           toolCalls: [
             { name: "read_file", args: { path: "tmp/game_logic.js" }, result: "ok", isError: false },
@@ -6021,7 +6021,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
     const step = assessments.find(a => a.stepName === "runtime_verification")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("validator/reviewer claimed complex rule coverage from broad runtime evidence only"))).toBe(true)
+    expect(step?.issues.some(i => i.includes("CRITERIA PROOF MISSING") && i.includes("exhaustive rule/logic coverage"))).toBe(true)
   })
 
   it("fails closed before downstream work when the generated blueprint contract paths do not match the plan", async () => {

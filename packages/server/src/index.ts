@@ -23,30 +23,30 @@ config({
 })
 
 import {
-  closeMssqlPool,
-  setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setMssqlConfig,
-  setMssqlWriteEnabled,
-  setSearchBasePath,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
+    closeMssqlPool,
+    setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setMssqlConfig,
+    setMssqlWriteEnabled,
+    setSearchBasePath,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-  MessageQueue,
-  MessageRouter,
-  MessengerChannel,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  WhatsAppChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    MessengerChannel,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    WhatsAppChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -110,9 +110,9 @@ async function main() {
   const sandbox = initSandbox({ mode: sandboxMode })
   const dockerReady = await sandbox.isDockerAvailable()
   if (dockerReady) {
-    setShellExecutor(async (command, cwd) => {
+    setShellExecutor(async (command, cwd, signal) => {
       const workspaceForRun = cwd || currentWorkspace
-      const result = await sandbox.exec(command, workspaceForRun)
+      const result = await sandbox.exec(command, workspaceForRun, { signal })
       return result
     })
     if (sandbox.isStrictMode) {

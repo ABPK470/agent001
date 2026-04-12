@@ -254,6 +254,7 @@ export class DockerSandbox {
       cwd?: string // relative to workspace, e.g. "tmp/game"
       env?: Record<string, string>
       network?: boolean
+      signal?: AbortSignal
     },
   ): Promise<SandboxResult> {
     const useDocker = await this.isSandboxed()
@@ -284,6 +285,7 @@ export class DockerSandbox {
       cwd?: string
       env?: Record<string, string>
       network?: boolean
+      signal?: AbortSignal
     },
   ): Promise<SandboxResult> {
     const timeout = options?.timeout ?? this.config.timeout
@@ -334,6 +336,12 @@ export class DockerSandbox {
     this.activeContainers.add(containerId)
     this.trackedContainers.set(containerId, { startedAt: now, lastActivityAt: now })
 
+    // Wire abort signal → docker kill so the container is actually stopped
+    const killOnAbort = options?.signal
+      ? () => { exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {}) }
+      : undefined
+    if (killOnAbort) options!.signal!.addEventListener("abort", killOnAbort, { once: true })
+
     try {
       const { stdout, stderr } = await exec("docker", args, {
         timeout: timeout + 5000, // extra 5s for container overhead
@@ -364,6 +372,7 @@ export class DockerSandbox {
         sandboxed: true,
       }
     } finally {
+      if (killOnAbort) options!.signal!.removeEventListener("abort", killOnAbort)
       this.trackedContainers.delete(containerId)
       this.activeContainers.delete(containerId)
       this.semaphore.release()
@@ -378,6 +387,7 @@ export class DockerSandbox {
       timeout?: number
       cwd?: string
       env?: Record<string, string>
+      signal?: AbortSignal
     },
   ): Promise<SandboxResult> {
     const timeout = options?.timeout ?? this.config.timeout
@@ -398,6 +408,7 @@ export class DockerSandbox {
         maxBuffer: 1024 * 1024,
         cwd,
         env: safeEnv,
+        ...(options?.signal ? { signal: options.signal } : {}),
       })
 
       return {

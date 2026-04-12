@@ -20,6 +20,14 @@ const MAX_BODY = 1_048_576
 /** Max redirect hops. */
 const MAX_REDIRECTS = 5
 
+/** Per-tool-call kill signal — composed into each fetch AbortController. */
+let _killSignal: AbortSignal | null = null
+
+/** Set by the orchestrator when a per-tool kill is registered/cleared. */
+export function setFetchKillSignal(signal: AbortSignal | null): void {
+  _killSignal = signal
+}
+
 export const fetchUrlTool: Tool = {
   name: "fetch_url",
   description:
@@ -74,10 +82,13 @@ export const fetchUrlTool: Tool = {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15_000)
+      const signal = _killSignal
+        ? AbortSignal.any([controller.signal, _killSignal])
+        : controller.signal
 
       try {
         response = await fetch(currentUrl, {
-          signal: controller.signal,
+          signal,
           redirect: "manual",
           headers: {
             "User-Agent":

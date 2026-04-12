@@ -160,17 +160,17 @@ export { OpenAIClient } from "./llm/openai.js"
 // Built-in tools
 export { askUserTool, setAskUserResolver } from "./tools/ask-user.js"
 export type { AskUserResolver } from "./tools/ask-user.js"
-export { browseWebTool, closeAllBrowserSessions } from "./tools/browse-web.js"
+export { browseWebTool, closeAllBrowserSessions, setBrowseKillSignal } from "./tools/browse-web.js"
 export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
 export type { BrowserCheckResult } from "./tools/browser-check.js"
 export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./tools/delegate.js"
 export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
-export { fetchUrlTool } from "./tools/fetch-url.js"
+export { fetchUrlTool, setFetchKillSignal } from "./tools/fetch-url.js"
 export {
     appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
 export {
-    closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlWriteEnabled
+    closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlKillSignal, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"

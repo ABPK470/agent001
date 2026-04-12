@@ -668,7 +668,7 @@ Task execution protocol:
 7. NEVER run interactive programs (games, TUI apps, editors, REPLs) via run_command — they block the terminal. To test a GUI/TUI program, compile it and confirm the binary exists.
 
 Efficiency:
-- Use run_command with find, grep, wc, etc. A single shell pipeline replaces dozens of tool calls.
+- Use run_command with ls, cd, cp, mv, rm, find, sed, awk, grep, wc, cut, sort, tr, wget, curl, ping, which, whereis, locate, uniq, ps, kill, top, xargs, tee, sed, awk, etc. A single shell pipeline replaces dozens of tool calls.
 - For data collection tasks (counting lines, searching files): write ONE shell command, never do it file-by-file.
 - Call multiple tools in one turn when operations are independent.
 - Don't verify results unless there's a reason to doubt them.

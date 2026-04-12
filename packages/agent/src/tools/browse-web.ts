@@ -31,6 +31,14 @@ const sessions = new Map<string, BrowserSession>()
 let sessionCounter = 0
 const SESSION_TIMEOUT = 5 * 60 * 1000
 
+/** Per-tool-call kill signal — when aborted, closes the active page to unblock Puppeteer. */
+let _killSignal: AbortSignal | null = null
+
+/** Set by the orchestrator when a per-tool kill is registered/cleared. */
+export function setBrowseKillSignal(signal: AbortSignal | null): void {
+  _killSignal = signal
+}
+
 // Periodic cleanup of stale sessions (unref so it doesn't keep the process alive)
 const _cleanup = setInterval(() => {
   const now = Date.now()
@@ -98,6 +106,28 @@ async function validateUrl(url: string): Promise<string | null> {
 /* ------------------------------------------------------------------ */
 /*  Browser helpers                                                    */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Wrap a Puppeteer operation to abort early when the kill signal fires.
+ * Closing the page causes any pending Puppeteer promise to reject, unblocking
+ * the awaiting code so the agent can move on.
+ */
+function withKillGuard<T>(page: import("puppeteer").Page, fn: () => Promise<T>): Promise<T> {
+  if (!_killSignal) return fn()
+  if (_killSignal.aborted) return Promise.reject(new Error("Tool execution cancelled"))
+  return new Promise<T>((resolve, reject) => {
+    const sig = _killSignal as AbortSignal
+    const onAbort = (): void => {
+      page.close().catch(() => {})
+      reject(new Error("Tool execution cancelled"))
+    }
+    sig.addEventListener("abort", onAbort, { once: true })
+    fn().then(
+      (v) => { sig.removeEventListener("abort", onAbort); resolve(v) },
+      (e) => { sig.removeEventListener("abort", onAbort); reject(e) },
+    )
+  })
+}
 
 async function launchSession(visible = false): Promise<{ session: BrowserSession; id: string } | string> {
   let puppeteer: typeof import("puppeteer")
@@ -229,6 +259,11 @@ export const browseWebTool: Tool = {
     const sessionId = args.session_id ? String(args.session_id) : undefined
     const maxLength = Number(args.max_length ?? 10000)
 
+    // If kill signal already fired before we start, bail immediately
+    if (_killSignal?.aborted) return "Error: Tool execution cancelled"
+
+    // Capture active signal for this invocation; register kill handler below per-action
+
     /* ---------- navigate ---------- */
     if (action === "navigate") {
       const url = String(args.url ?? "")
@@ -251,7 +286,9 @@ export const browseWebTool: Tool = {
       }
 
       try {
-        await session.page.goto(url, { waitUntil: "networkidle2", timeout: 30_000 })
+        await withKillGuard(session.page, () =>
+          session.page.goto(url, { waitUntil: "networkidle2", timeout: 30_000 }),
+        )
         session.url = session.page.url()
         await dismissCookieConsent(session.page)
         const text = await readPageText(session.page, maxLength)
@@ -276,7 +313,9 @@ export const browseWebTool: Tool = {
         // Try CSS selector first
         let clicked = false
         try {
-          await session.page.waitForSelector(selector, { timeout: 3000 })
+          await withKillGuard(session.page, () =>
+            session.page.waitForSelector(selector, { timeout: 3000 }),
+          )
           await session.page.click(selector)
           clicked = true
         } catch { /* CSS selector failed, try text match below */ }
@@ -323,7 +362,9 @@ export const browseWebTool: Tool = {
       if (!rawText) return "Error: 'text' is required for type action"
 
       try {
-        await session.page.waitForSelector(selector, { timeout: 5000 })
+        await withKillGuard(session.page, () =>
+          session.page.waitForSelector(selector, { timeout: 5000 }),
+        )
         await session.page.click(selector, { clickCount: 3 }) // select existing content
 
         // Detect submit intent: literal newline or escaped \n at end
@@ -332,7 +373,9 @@ export const browseWebTool: Tool = {
         if (typeText.endsWith("\n")) { typeText = typeText.slice(0, -1); submit = true }
         else if (typeText.endsWith("\\n")) { typeText = typeText.slice(0, -2); submit = true }
 
-        await session.page.type(selector, typeText, { delay: 30 })
+        await withKillGuard(session.page, () =>
+          session.page.type(selector, typeText, { delay: 30 }),
+        )
 
         if (submit) {
           await session.page.keyboard.press("Enter")
