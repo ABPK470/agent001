@@ -48,6 +48,7 @@ export function AgentChat() {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
@@ -94,6 +95,7 @@ export function AgentChat() {
     setSending(true)
     setInput("")
     setAttachments([])
+    if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
       const agentId = selectedAgent?.id
       const { runId } = await api.startRun(fullGoal, agentId)
@@ -307,13 +309,23 @@ export function AgentChat() {
         )}
 
         {/* Input */}
-        <div className="flex gap-2">
-          <input
-            className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all"
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all resize-none overflow-hidden"
+            style={{ maxHeight: "9rem" }}
             placeholder={listening ? "Listening..." : isRunning ? "Agent is working..." : "Enter a goal..."}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSend() }}
+            onChange={(e) => {
+              setInput(e.target.value)
+              const el = e.target
+              el.style.height = "auto"
+              el.style.height = `${Math.min(el.scrollHeight, 144)}px`
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
+            }}
             disabled={sending}
           />
           {/* Hidden file input — triggered by Paperclip button */}
@@ -325,7 +337,7 @@ export function AgentChat() {
             onChange={handleFileChange}
           />
           <button
-            className="flex items-center justify-center w-11 h-11 bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors"
+            className="shrink-0 flex items-center justify-center w-11 h-11 bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors"
             onClick={() => fileInputRef.current?.click()}
             title="Attach file"
           >
@@ -333,7 +345,7 @@ export function AgentChat() {
           </button>
           {SpeechRecognition && (
             <button
-              className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${
+              className={`shrink-0 flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${
                 listening
                   ? "bg-error/20 text-error hover:bg-error/30"
                   : "bg-elevated text-text-muted hover:text-text hover:bg-elevated/80"
@@ -345,7 +357,7 @@ export function AgentChat() {
             </button>
           )}
           <button
-            className="flex items-center justify-center w-11 h-11 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
+            className="shrink-0 flex items-center justify-center w-11 h-11 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
             onClick={handleSend}
             disabled={sending || (!input.trim() && attachments.length === 0)}
           >

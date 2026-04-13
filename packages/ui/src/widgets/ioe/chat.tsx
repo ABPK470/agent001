@@ -53,6 +53,7 @@ export function ChatPanel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const goalTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [responseInput, setResponseInput] = useState("")
   const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("simple")
@@ -77,6 +78,11 @@ export function ChatPanel({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages.length, pendingInput])
+
+  // Reset textarea height when goalInput is cleared externally (e.g. after submit)
+  useEffect(() => {
+    if (!goalInput && goalTextareaRef.current) goalTextareaRef.current.style.height = "auto"
+  }, [goalInput])
 
   const hasPending = !!pendingInput && !!onRespond
 
@@ -110,11 +116,11 @@ export function ChatPanel({
         <span>Chat</span>
         <div className="ml-auto flex items-center gap-1">
           <button
-            className="px-2 py-0.5 rounded text-[11px] cursor-pointer transition-colors"
+            className="px-2 py-0.5 rounded text-[13px] font-medium cursor-pointer transition-colors"
             style={{
-              background: chatMode === "simple" ? C.accent + "20" : "transparent",
-              color: chatMode === "simple" ? C.accent : C.dim,
-              border: `1px solid ${chatMode === "simple" ? C.accent + "40" : "transparent"}`,
+              background: chatMode === "simple" ? C.accent + "35" : C.accent + "18",
+              color: C.accent,
+              border: `1px solid ${C.accent}30`,
             }}
             onClick={() => setChatMode("simple")}
             title="Show only goals and answers"
@@ -122,11 +128,11 @@ export function ChatPanel({
             Simple
           </button>
           <button
-            className="px-2 py-0.5 rounded text-[11px] cursor-pointer transition-colors"
+            className="px-2 py-0.5 rounded text-[13px] font-medium cursor-pointer transition-colors"
             style={{
-              background: chatMode === "detailed" ? C.accent + "20" : "transparent",
-              color: chatMode === "detailed" ? C.accent : C.dim,
-              border: `1px solid ${chatMode === "detailed" ? C.accent + "40" : "transparent"}`,
+              background: chatMode === "detailed" ? C.accent + "35" : C.accent + "18",
+              color: C.accent,
+              border: `1px solid ${C.accent}30`,
             }}
             onClick={() => setChatMode("detailed")}
             title="Show full trace inline"
@@ -291,17 +297,25 @@ export function ChatPanel({
               </div>
             )}
             <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2"
+              className="flex items-end gap-2 rounded-lg px-3 py-2"
               style={{ background: C.elevated, border: `1px solid ${C.border}` }}
             >
-              <input
-                type="text"
-                className="flex-1 bg-transparent outline-none text-[13px]"
-                style={{ color: C.text, caretColor: C.accent }}
+              <textarea
+                ref={goalTextareaRef}
+                rows={1}
+                className="flex-1 bg-transparent outline-none text-[13px] resize-none overflow-hidden"
+                style={{ color: C.text, caretColor: C.accent, maxHeight: "9rem" }}
                 placeholder={isRunning ? "Agent is running..." : "Enter a goal..."}
                 value={goalInput}
-                onChange={(e) => onGoalChange(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") onSubmit() }}
+                onChange={(e) => {
+                  onGoalChange(e.target.value)
+                  const el = e.target
+                  el.style.height = "auto"
+                  el.style.height = `${Math.min(el.scrollHeight, 144)}px`
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit() }
+                }}
                 disabled={isRunning || submitting}
               />
               {/* Hidden file input */}

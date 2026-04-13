@@ -376,8 +376,7 @@ export function OperatorEnvironment() {
       {showSplitToggle && (
         <button
           className="px-2 mx-1 my-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
-          style={{ color: editorSplit ? C.text : C.dim }}
-          // style={{ color: sidebarSplit ? C.text : C.dim, background: sidebarSplit ? C.base : "transparent" }}
+          style={{ color: sidebarSplit ? C.text : C.dim }}
           onClick={() => setSidebarSplit(!sidebarSplit)}
           title={sidebarSplit ? "Unsplit sidebar" : "Split sidebar"}
         >
