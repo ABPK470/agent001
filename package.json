@@ -18,7 +18,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npx concurrently -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npm run dev -w packages/ui\"",
+    "dev": "npx concurrently -k -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\"",
     "test": "npm test --workspaces",
     "build:dev": "npm run build --workspaces",
     "build": "node scripts/build.mjs",
@@ -38,7 +38,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "wait-on": "^8.0.1"
   },
   "directories": {
     "doc": "docs"

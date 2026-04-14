@@ -23,30 +23,30 @@ config({
 })
 
 import {
-    closeMssqlPool,
-    setBasePath,
-    setBrowserCheckCwd,
-    setBrowserCheckExecutor,
-    setMssqlConfig,
-    setMssqlWriteEnabled,
-    setSearchBasePath,
-    setShellCwd,
-    setShellExecutor,
-    setShellSandboxStrict,
+  closeMssqlPool,
+  setBasePath,
+  setBrowserCheckCwd,
+  setBrowserCheckExecutor,
+  setMssqlConfig,
+  setMssqlWriteEnabled,
+  setSearchBasePath,
+  setShellCwd,
+  setShellExecutor,
+  setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-    MessageQueue,
-    MessageRouter,
-    MessengerChannel,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    WhatsAppChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  MessengerChannel,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  WhatsAppChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -75,12 +75,12 @@ async function main() {
   migrateApiRequests()
   migrateEventLog()
   migrateWebhookDrains()
-  console.log("📦 Database initialized (~/.agent001/agent001.db)")
+  console.log("Database initialized (~/.agent001/agent001.db)")
 
   // Auto-prune old data on startup
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
-    console.log(`🧹 Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
+    console.log(`Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
   }
 
   // Set agent workspace — all file/shell operations are scoped here.
@@ -117,9 +117,9 @@ async function main() {
     })
     if (sandbox.isStrictMode) {
       setShellSandboxStrict(true)
-      console.log("🐳 Docker sandbox: STRICT mode (all commands require Docker, relaxed deny list)")
+      console.log("Docker sandbox: STRICT mode (all commands require Docker, relaxed deny list)")
     } else {
-      console.log("🐳 Docker sandbox: ACTIVE (commands run in isolated containers)")
+      console.log("Docker sandbox: ACTIVE (commands run in isolated containers)")
     }
 
     // Build browser image in background (don't block startup)
@@ -148,17 +148,17 @@ async function main() {
             return { report: result.stdout || "(no output)", sandboxed: true }
           }
         })
-        console.log("🌐 Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
+        console.log("Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
       } else {
-        console.log("⚠️  Browser sandbox: UNAVAILABLE (browser_check runs on host)")
+        console.log("Browser sandbox: UNAVAILABLE (browser_check runs on host)")
       }
     })
   } else {
     if (sandbox.isStrictMode) {
-      console.error("❌ SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
+      console.error("SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
       process.exit(1)
     }
-    console.log("⚠️  Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
+    console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
   // ── MSSQL configuration ───────────────────────────────────────
@@ -187,7 +187,7 @@ async function main() {
   // Load LLM config from DB (or use defaults) and build the client
   const llmCfg = getLlmConfig()
   const llm = buildLlmClient(llmCfg)
-  console.log(`🧠 LLM: ${llmCfg.provider} / ${llmCfg.model}`)
+  console.log(`LLM: ${llmCfg.provider} / ${llmCfg.model}`)
 
   // Create orchestrator (tools are resolved per-run from agent definitions)
   const orchestrator = new AgentOrchestrator({
@@ -214,7 +214,7 @@ async function main() {
 
     messageQueue.registerChannel(channel)
     messageRouter.registerChannel(channel)
-    console.log(`📡 Channel loaded: ${cfg.type} (${cfg.platformId})`)
+    console.log(`Channel loaded: ${cfg.type} (${cfg.platformId})`)
   }
 
   // Start the delivery queue (recovers pending messages)
@@ -304,7 +304,7 @@ async function main() {
   registerMemoryRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
-    console.log("🔄 LLM client hot-swapped")
+    console.log("LLM client hot-swapped")
   })
 
   // Health check
@@ -340,7 +340,7 @@ async function main() {
     setShellCwd(resolved)
     setBrowserCheckCwd(resolved)
     orchestrator.setWorkspace(resolved)
-    console.log(`📂 Workspace changed to: ${resolved}`)
+    console.log(`Workspace changed to: ${resolved}`)
 
     return { ok: true, path: resolved }
   })
