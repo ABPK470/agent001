@@ -1,5 +1,19 @@
 version: "3.9"
 
+# ══════════════════════════════════════════════════════════════════════
+#  PROFILES
+#
+#  Default (no profile):  starts the app only
+#    docker compose up
+#
+#  dev profile: starts the app + a local MSSQL server for development
+#    docker compose --profile dev up
+#
+#  The "mssql-dev" service is for LOCAL DEVELOPMENT AND TESTING ONLY.
+#  It is NOT the production database.  Point the app at real databases
+#  via MSSQL_DATABASES (JSON) or MSSQL_HOST in your production .env.
+# ══════════════════════════════════════════════════════════════════════
+
 services:
   app:
     build: .
@@ -10,34 +24,38 @@ services:
       - HOST=0.0.0.0
       - AGENT001_DATA_DIR=/data
       - AGENT_WORKSPACE=/workspace
-      # MSSQL connection
-      - MSSQL_HOST=mssql
-      - MSSQL_PORT=1433
-      - MSSQL_USER=sa
-      - MSSQL_PASSWORD=${MSSQL_SA_PASSWORD:-Agent001_Strong!P4ss}
-      - MSSQL_DATABASE=${MSSQL_DATABASE:-AgentDWH}
+      # Production databases: override MSSQL_DATABASES in your .env with JSON
+      # e.g. MSSQL_DATABASES=[{"name":"analytics","host":"sql.example.com","port":1433,...}]
+      # For local dev (--profile dev), point at the mssql-dev container instead:
+      - MSSQL_HOST=${MSSQL_HOST:-}
+      - MSSQL_PORT=${MSSQL_PORT:-1433}
+      - MSSQL_USER=${MSSQL_USER:-sa}
+      - MSSQL_PASSWORD=${MSSQL_PASSWORD:-}
+      - MSSQL_DATABASE=${MSSQL_DATABASE:-master}
+      - MSSQL_DATABASES=${MSSQL_DATABASES:-}
       - MSSQL_ENCRYPT=true
       - MSSQL_TRUST_CERT=true
       - MSSQL_WRITE_ENABLED=false
     volumes:
       - app-data:/data
       - workspace:/workspace
-    depends_on:
-      mssql:
-        condition: service_healthy
     restart: unless-stopped
 
-  mssql:
+  # ── DEV-ONLY: local SQL Server ────────────────────────────────────
+  # Started only when you run:  docker compose --profile dev up
+  # Do NOT wire this to production workloads.
+  mssql-dev:
+    profiles: [dev]
     image: mcr.microsoft.com/azure-sql-edge:latest
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-Agent001_Strong!P4ss}
+      - MSSQL_SA_PASSWORD=${MSSQL_DEV_SA_PASSWORD:-Agent001_Dev!P4ss}
     ports:
       - "1433:1433"
     volumes:
-      - mssql-data:/var/opt/mssql
+      - mssql-dev-data:/var/opt/mssql
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_DEV_SA_PASSWORD}" -Q "SELECT 1" || exit 1
       interval: 10s
       timeout: 5s
       retries: 10
@@ -46,5 +64,5 @@ services:
 
 volumes:
   app-data:
-  mssql-data:
+  mssql-dev-data:
   workspace:

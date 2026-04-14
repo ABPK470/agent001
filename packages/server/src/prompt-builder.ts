@@ -44,12 +44,15 @@ export function buildToolContext(tools: Tool[]): string {
 
   const hasMssql = tools.some((t) => t.name === "query_mssql" || t.name === "explore_mssql_schema")
   if (hasMssql) {
-    const cfg = getMssqlConfig()
-    if (cfg) {
-      const mode = cfg.writeEnabled ? "read-write" : "read-only"
-      sections.push(
-        `Database: You have ${mode} access to a Microsoft SQL Server database (server: ${cfg.server}, database: ${cfg.database}).`,
-      )
+    const cfgs = getMssqlConfig()
+    if (cfgs.length > 0) {
+      const dbList = cfgs.map((c) => {
+        const mode = c.writeEnabled ? "read-write" : "read-only"
+        return cfgs.length === 1
+          ? `${mode} access to ${c.server}/${c.database}`
+          : `"${c.name}" (${c.server}/${c.database}, ${mode})`
+      }).join("; ")
+      sections.push(`Database: You have access to Microsoft SQL Server — ${dbList}.`)
     } else {
       sections.push(
         "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",

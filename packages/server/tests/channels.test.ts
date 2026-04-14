@@ -2,41 +2,28 @@
  * Tests for the message routing infrastructure:
  *   - Retry with exponential backoff + jitter
  *   - Message queue (FIFO, per-channel serialization)
- *   - WhatsApp webhook parsing + signature validation
- *   - Messenger webhook parsing + signature validation
+ *   - Teams webhook parsing
  *   - Message router (inbound → run, run complete → outbound)
  */
 
-import { createHmac } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MessengerChannel } from "../src/channels/messenger.js"
 import type { QueueStore } from "../src/channels/queue.js"
 import { MessageQueue } from "../src/channels/queue.js"
 import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/channels/retry.js"
 import type { ConversationStore, RunTrigger } from "../src/channels/router.js"
 import { MessageRouter } from "../src/channels/router.js"
+import { TeamsChannel } from "../src/channels/teams.js"
 import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/channels/types.js"
-import { WhatsAppChannel } from "../src/channels/whatsapp.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 
-function whatsAppConfig(): ChannelConfig {
+function teamsConfig(): ChannelConfig {
   return {
-    type: "whatsapp",
-    accessToken: "test-token",
-    verifyToken: "test-verify",
-    appSecret: "test-secret",
-    platformId: "123456789",
-  }
-}
-
-function messengerConfig(): ChannelConfig {
-  return {
-    type: "messenger",
-    accessToken: "test-token",
-    verifyToken: "test-verify",
-    appSecret: "test-secret",
-    platformId: "page-123",
+    type: "teams",
+    accessToken: "",
+    verifyToken: "",
+    appSecret: "test-app-password",
+    platformId: "test-app-id-1234",
   }
 }
 
@@ -94,17 +81,17 @@ function memoryConversationStore(): ConversationStore {
   }
 }
 
-/** Mock channel that tracks sent messages. */
-function mockChannel(type: "whatsapp" | "messenger"): Channel & { sent: { to: string; text: string }[] } {
+/** Mock Teams channel that tracks sent messages. */
+function mockTeamsChannel(): Channel & { sent: { to: string; text: string }[] } {
   const sent: { to: string; text: string }[] = []
   return {
-    type,
+    type: "teams",
     sent,
     async sendMessage(recipientId, text) {
       sent.push({ to: recipientId, text })
       return `msg-${sent.length}`
     },
-    validateSignature() { return true },
+    validateSignature() { return Promise.resolve(true) },
     parseWebhook() { return [] },
   }
 }
@@ -215,163 +202,58 @@ describe("retry", () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// WHATSAPP CHANNEL
+// TEAMS CHANNEL
 // ═══════════════════════════════════════════════════════════════════
 
-describe("WhatsAppChannel", () => {
-  it("validates HMAC-SHA256 signature", () => {
-    const channel = new WhatsAppChannel(whatsAppConfig())
-    const payload = Buffer.from('{"test": true}')
-    const sig = "sha256=" + createHmac("sha256", "test-secret").update(payload).digest("hex")
-
-    expect(channel.validateSignature(payload, sig)).toBe(true)
-    expect(channel.validateSignature(payload, "sha256=wrong")).toBe(false)
-  })
-
-  it("parses text message webhook", () => {
-    const channel = new WhatsAppChannel(whatsAppConfig())
+describe("TeamsChannel", () => {
+  it("parses a text message activity", () => {
+    const channel = new TeamsChannel(teamsConfig())
     const body = {
-      object: "whatsapp_business_account",
-      entry: [{
-        id: "123",
-        changes: [{
-          field: "messages",
-          value: {
-            messaging_product: "whatsapp",
-            metadata: { display_phone_number: "+1234567890", phone_number_id: "123456789" },
-            contacts: [{ wa_id: "15551234567", profile: { name: "John" } }],
-            messages: [{
-              id: "wamid.abc123",
-              from: "15551234567",
-              timestamp: "1234567890",
-              type: "text",
-              text: { body: "Hello agent!" },
-            }],
-          },
-        }],
-      }],
+      type: "message",
+      id: "activity-abc123",
+      serviceUrl: "https://smba.trafficmanager.net/emea/",
+      from: { id: "user-123", name: "Alice" },
+      conversation: { id: "conv-456" },
+      recipient: { id: "test-app-id-1234" },
+      text: "  Hello agent!  ",
+      channelId: "msteams",
     }
 
     const messages = channel.parseWebhook(body)
     expect(messages).toHaveLength(1)
-    expect(messages[0].channelType).toBe("whatsapp")
-    expect(messages[0].senderId).toBe("15551234567")
-    expect(messages[0].senderName).toBe("John")
-    expect(messages[0].text).toBe("Hello agent!")
-    expect(messages[0].platformMessageId).toBe("wamid.abc123")
+
+    const [msg] = messages
+    expect(msg!.channelType).toBe("teams")
+    expect(msg!.text).toBe("Hello agent!")
+    expect(msg!.senderName).toBe("Alice")
+    expect(msg!.platformMessageId).toBe("activity-abc123")
+
+    // senderId should be a JSON-encoded conversation reference
+    const ref = JSON.parse(msg!.senderId)
+    expect(ref.serviceUrl).toBe("https://smba.trafficmanager.net/emea/")
+    expect(ref.conversationId).toBe("conv-456")
+    expect(ref.userId).toBe("user-123")
   })
 
-  it("ignores non-text messages", () => {
-    const channel = new WhatsAppChannel(whatsAppConfig())
-    const body = {
-      object: "whatsapp_business_account",
-      entry: [{
-        id: "123",
-        changes: [{
-          field: "messages",
-          value: {
-            messaging_product: "whatsapp",
-            metadata: {},
-            messages: [{
-              id: "wamid.abc123",
-              from: "15551234567",
-              timestamp: "1234567890",
-              type: "image",
-            }],
-          },
-        }],
-      }],
-    }
-
-    expect(channel.parseWebhook(body)).toHaveLength(0)
+  it("ignores non-message activity types", () => {
+    const channel = new TeamsChannel(teamsConfig())
+    expect(channel.parseWebhook({ type: "conversationUpdate" })).toHaveLength(0)
+    expect(channel.parseWebhook({ type: "invoke" })).toHaveLength(0)
+    expect(channel.parseWebhook({ type: "typing" })).toHaveLength(0)
   })
 
-  it("returns empty for status-only webhooks", () => {
-    const channel = new WhatsAppChannel(whatsAppConfig())
-    const body = {
-      object: "whatsapp_business_account",
-      entry: [{
-        id: "123",
-        changes: [{
-          field: "messages",
-          value: {
-            messaging_product: "whatsapp",
-            metadata: {},
-            statuses: [{ id: "wamid.abc", status: "delivered", timestamp: "123", recipient_id: "456" }],
-          },
-        }],
-      }],
-    }
-
-    expect(channel.parseWebhook(body)).toHaveLength(0)
+  it("ignores message activities with empty text", () => {
+    const channel = new TeamsChannel(teamsConfig())
+    expect(channel.parseWebhook({ type: "message", text: "" })).toHaveLength(0)
+    expect(channel.parseWebhook({ type: "message", text: "   " })).toHaveLength(0)
+    expect(channel.parseWebhook({ type: "message" })).toHaveLength(0)
   })
 
-  it("returns empty for unrelated objects", () => {
-    const channel = new WhatsAppChannel(whatsAppConfig())
-    expect(channel.parseWebhook({ object: "something_else" })).toHaveLength(0)
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════════
-// MESSENGER CHANNEL
-// ═══════════════════════════════════════════════════════════════════
-
-describe("MessengerChannel", () => {
-  it("validates HMAC-SHA256 signature", () => {
-    const channel = new MessengerChannel(messengerConfig())
-    const payload = Buffer.from('{"test": true}')
-    const sig = "sha256=" + createHmac("sha256", "test-secret").update(payload).digest("hex")
-
-    expect(channel.validateSignature(payload, sig)).toBe(true)
-    expect(channel.validateSignature(payload, "sha256=invalid")).toBe(false)
-  })
-
-  it("parses text message webhook", () => {
-    const channel = new MessengerChannel(messengerConfig())
-    const body = {
-      object: "page",
-      entry: [{
-        id: "page-123",
-        time: 1234567890,
-        messaging: [{
-          sender: { id: "user-456" },
-          recipient: { id: "page-123" },
-          timestamp: 1234567890,
-          message: { mid: "mid.abc123", text: "Hello from Messenger!" },
-        }],
-      }],
-    }
-
-    const messages = channel.parseWebhook(body)
-    expect(messages).toHaveLength(1)
-    expect(messages[0].channelType).toBe("messenger")
-    expect(messages[0].senderId).toBe("user-456")
-    expect(messages[0].text).toBe("Hello from Messenger!")
-    expect(messages[0].platformMessageId).toBe("mid.abc123")
-  })
-
-  it("ignores non-message events (delivery receipts)", () => {
-    const channel = new MessengerChannel(messengerConfig())
-    const body = {
-      object: "page",
-      entry: [{
-        id: "page-123",
-        time: 1234567890,
-        messaging: [{
-          sender: { id: "user-456" },
-          recipient: { id: "page-123" },
-          timestamp: 1234567890,
-          delivery: { mids: ["mid.abc123"], watermark: 1234567890 },
-        }],
-      }],
-    }
-
-    expect(channel.parseWebhook(body)).toHaveLength(0)
-  })
-
-  it("returns empty for non-page objects", () => {
-    const channel = new MessengerChannel(messengerConfig())
-    expect(channel.parseWebhook({ object: "other" })).toHaveLength(0)
+  it("returns empty for malformed payloads", () => {
+    const channel = new TeamsChannel(teamsConfig())
+    expect(channel.parseWebhook(null)).toHaveLength(0)
+    expect(channel.parseWebhook({})).toHaveLength(0)
+    expect(channel.parseWebhook("not an object")).toHaveLength(0)
   })
 })
 
@@ -394,10 +276,10 @@ describe("MessageQueue", () => {
   })
 
   it("delivers a message through a channel", async () => {
-    const channel = mockChannel("whatsapp")
+    const channel = mockTeamsChannel()
     queue.registerChannel(channel)
 
-    const result = await queue.enqueue("whatsapp", "15551234567", "Hello!", "conv-1")
+    const result = await queue.enqueue("teams", "15551234567", "Hello!", "conv-1")
     expect(result.status).toBe("delivered")
     expect(result.attempts).toBe(1)
     expect(channel.sent).toHaveLength(1)
@@ -405,7 +287,7 @@ describe("MessageQueue", () => {
   })
 
   it("fails when no channel is registered", async () => {
-    const result = await queue.enqueue("whatsapp", "15551234567", "Hello!", "conv-1")
+    const result = await queue.enqueue("teams", "15551234567", "Hello!", "conv-1")
     expect(result.status).toBe("failed")
     expect(result.lastError).toContain("No channel registered")
   })
@@ -442,11 +324,16 @@ describe("MessageRouter", () => {
   })
 
   it("creates a conversation and starts a run on inbound message", () => {
+    const conversationRef = JSON.stringify({
+      serviceUrl: "https://smba.trafficmanager.net/emea/",
+      conversationId: "conv-abc",
+      userId: "user-123",
+    })
     const result = router.handleInbound({
-      platformMessageId: "wamid.abc",
-      channelType: "whatsapp",
-      senderId: "15551234567",
-      senderName: "John",
+      platformMessageId: "activity-abc",
+      channelType: "teams",
+      senderId: conversationRef,
+      senderName: "Alice",
       text: "What's the weather?",
       raw: {},
       receivedAt: new Date(),
@@ -459,17 +346,17 @@ describe("MessageRouter", () => {
     // Conversation was created
     const convs = router.listConversations()
     expect(convs).toHaveLength(1)
-    expect(convs[0].channelType).toBe("whatsapp")
-    expect(convs[0].senderId).toBe("15551234567")
-    expect(convs[0].senderName).toBe("John")
+    expect(convs[0].channelType).toBe("teams")
+    expect(convs[0].senderName).toBe("Alice")
     expect(convs[0].activeRunId).toBe("run-001")
   })
 
   it("reuses existing conversation for same sender", () => {
+    const senderId = JSON.stringify({ serviceUrl: "https://smba.example.com/", conversationId: "c1", userId: "u1" })
     const msg = {
-      platformMessageId: "wamid.abc",
-      channelType: "whatsapp" as const,
-      senderId: "15551234567",
+      platformMessageId: "activity-abc",
+      channelType: "teams" as const,
+      senderId,
       text: "first",
       raw: {},
       receivedAt: new Date(),
@@ -477,22 +364,28 @@ describe("MessageRouter", () => {
 
     const result1 = router.handleInbound(msg)
     runId = "run-002"
-    const result2 = router.handleInbound({ ...msg, platformMessageId: "wamid.def", text: "second" })
+    const result2 = router.handleInbound({ ...msg, platformMessageId: "activity-def", text: "second" })
 
     expect(result1.conversationId).toBe(result2.conversationId)
     expect(router.listConversations()).toHaveLength(1)
   })
 
   it("sends reply through the queue on run completion", async () => {
-    const channel = mockChannel("whatsapp")
+    const channel = mockTeamsChannel()
     queue.registerChannel(channel)
     router.registerChannel(channel)
 
+    const conversationRef = JSON.stringify({
+      serviceUrl: "https://smba.example.com/",
+      conversationId: "conv-abc",
+      userId: "user-123",
+    })
+
     // Simulate inbound
     router.handleInbound({
-      platformMessageId: "wamid.abc",
-      channelType: "whatsapp",
-      senderId: "15551234567",
+      platformMessageId: "activity-abc",
+      channelType: "teams",
+      senderId: conversationRef,
       text: "Hello",
       raw: {},
       receivedAt: new Date(),
@@ -502,11 +395,11 @@ describe("MessageRouter", () => {
     await router.sendReply("run-001", "The weather is sunny!")
 
     expect(channel.sent).toHaveLength(1)
-    expect(channel.sent[0]).toEqual({ to: "15551234567", text: "The weather is sunny!" })
+    expect(channel.sent[0]).toEqual({ to: conversationRef, text: "The weather is sunny!" })
   })
 
   it("does nothing if run has no conversation", async () => {
-    const channel = mockChannel("whatsapp")
+    const channel = mockTeamsChannel()
     queue.registerChannel(channel)
 
     await router.sendReply("unknown-run", "No one to send to")
@@ -514,13 +407,11 @@ describe("MessageRouter", () => {
   })
 
   it("lists registered channels", () => {
-    const wa = mockChannel("whatsapp")
-    const fb = mockChannel("messenger")
-    router.registerChannel(wa)
-    router.registerChannel(fb)
+    const teams = mockTeamsChannel()
+    router.registerChannel(teams)
 
     const channels = router.listChannels()
-    expect(channels).toHaveLength(2)
-    expect(channels.map(c => c.type).sort()).toEqual(["messenger", "whatsapp"])
+    expect(channels).toHaveLength(1)
+    expect(channels[0]!.type).toBe("teams")
   })
 })

@@ -28,6 +28,7 @@ import {
   setBrowserCheckCwd,
   setBrowserCheckExecutor,
   setMssqlConfig,
+  setMssqlConfigs,
   setMssqlWriteEnabled,
   setSearchBasePath,
   setShellCwd,
@@ -41,10 +42,9 @@ import Fastify from "fastify"
 import {
   MessageQueue,
   MessageRouter,
-  MessengerChannel,
   SqliteConversationStore,
   SqliteQueueStore,
-  WhatsAppChannel,
+  TeamsChannel,
   listChannelConfigs,
   migrateChannels,
 } from "./channels/index.js"
@@ -162,25 +162,92 @@ async function main() {
   }
 
   // ── MSSQL configuration ───────────────────────────────────────
+  //
+  // Priority (highest wins):
+  //   1. MSSQL_DATABASES — JSON array of named connections
+  //   2. MSSQL_HOST      — single connection (backwards-compat)
+  //
+  // The dev-only Docker DB (mssql-dev) is never auto-connected here.
+  // To use it during development, set MSSQL_HOST=localhost in your .env.
 
-  const mssqlServer = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
-  if (mssqlServer) {
-    setMssqlConfig({
-      server: mssqlServer,
-      port: Number(process.env["MSSQL_PORT"] ?? 1433),
-      user: process.env["MSSQL_USER"] ?? "sa",
-      password: process.env["MSSQL_PASSWORD"] ?? "",
-      database: process.env["MSSQL_DATABASE"] ?? "master",
-      options: {
-        encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
-        trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
-      },
-    })
-    if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
-      setMssqlWriteEnabled(true)
-      console.log(`🗄️  MSSQL: ${mssqlServer} (WRITE mode enabled)`)
-    } else {
-      console.log(`🗄️  MSSQL: ${mssqlServer} (read-only)`)
+  let mssqlSummary = "not configured"
+
+  const mssqlDatabasesJson = process.env["MSSQL_DATABASES"]
+  if (mssqlDatabasesJson) {
+    // ── Multi-database mode ──────────────────────────────────────
+    // MSSQL_DATABASES is a JSON array. Each entry:
+    //   { name, host, port?, database?, user?, password?, domain?,
+    //     encrypt?, trustServerCertificate?, writeEnabled? }
+    // "domain" enables Windows/NTLM auth (same as MSSQL_DOMAIN in single mode).
+    let dbConfigs: Array<{
+      name: string
+      host: string
+      port?: number
+      user?: string
+      password?: string
+      domain?: string
+      database?: string
+      encrypt?: boolean
+      trustServerCertificate?: boolean
+      writeEnabled?: boolean
+    }>
+    try {
+      dbConfigs = JSON.parse(mssqlDatabasesJson)
+      if (!Array.isArray(dbConfigs)) throw new Error("MSSQL_DATABASES must be a JSON array")
+    } catch (e) {
+      console.error("Invalid MSSQL_DATABASES JSON:", e instanceof Error ? e.message : e)
+      process.exit(1)
+    }
+
+    setMssqlConfigs(
+      dbConfigs.map((db) => ({
+        name: db.name,
+        server: db.host,
+        port: db.port ?? 1433,
+        ...(db.domain ? { domain: db.domain } : {}),
+        user: db.user ?? "sa",
+        password: db.password ?? "",
+        database: db.database ?? "master",
+        options: {
+          encrypt: db.encrypt !== false,
+          trustServerCertificate: db.trustServerCertificate !== false,
+        },
+        writeEnabled: db.writeEnabled ?? false,
+      })),
+    )
+
+    for (const db of dbConfigs) {
+      if (db.writeEnabled) {
+        setMssqlWriteEnabled(true, db.name)
+      }
+    }
+
+    mssqlSummary = dbConfigs.map((db) => `${db.name}(${db.host}/${db.database ?? "master"})`).join(", ")
+    console.log(`🗄️  MSSQL databases: ${mssqlSummary}`)
+  } else {
+    // ── Single-database mode (backwards-compat / .env MSSQL_HOST) ─
+    const mssqlServer = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
+    if (mssqlServer) {
+      const domain = process.env["MSSQL_DOMAIN"]
+      setMssqlConfig({
+        server: mssqlServer,
+        port: Number(process.env["MSSQL_PORT"] ?? 1433),
+        ...(domain ? { domain } : {}),
+        user: process.env["MSSQL_USER"] ?? "sa",
+        password: process.env["MSSQL_PASSWORD"] ?? "",
+        database: process.env["MSSQL_DATABASE"] ?? "master",
+        options: {
+          encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
+          trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
+        },
+      })
+      if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
+        setMssqlWriteEnabled(true)
+        mssqlSummary = `${mssqlServer} (WRITE mode enabled)`
+      } else {
+        mssqlSummary = `${mssqlServer} (read-only)`
+      }
+      console.log(`🗄️  MSSQL: ${mssqlSummary}`)
     }
   }
 
@@ -195,7 +262,7 @@ async function main() {
     workspace: currentWorkspace,
   })
 
-  // ── Message routing (WhatsApp + Messenger) ───────────────────
+  // ── Message routing (Teams) ───────────────────────────────
 
   const queueStore = new SqliteQueueStore()
   const conversationStore = new SqliteConversationStore()
@@ -208,13 +275,12 @@ async function main() {
   // Load configured channels from the database
   const channelConfigs = listChannelConfigs()
   for (const cfg of channelConfigs) {
-    const channel = cfg.type === "whatsapp"
-      ? new WhatsAppChannel(cfg)
-      : new MessengerChannel(cfg)
-
-    messageQueue.registerChannel(channel)
-    messageRouter.registerChannel(channel)
-    console.log(`Channel loaded: ${cfg.type} (${cfg.platformId})`)
+    if (cfg.type === "teams") {
+      const channel = new TeamsChannel(cfg)
+      messageQueue.registerChannel(channel)
+      messageRouter.registerChannel(channel)
+      console.log(`Channel loaded: teams (appId: ${cfg.platformId})`)
+    }
   }
 
   // Start the delivery queue (recovers pending messages)
@@ -378,10 +444,10 @@ async function main() {
   console.log(`  Server:    http://localhost:${PORT}`)
   console.log(`  WebSocket: ws://localhost:${PORT}/ws`)
   console.log(`  API:       http://localhost:${PORT}/api`)
-  console.log(`  Webhooks:  http://localhost:${PORT}/webhooks/{whatsapp,messenger}`)
+  console.log(`  Teams:     ${existsSync(uiDist) ? `https://<host>/webhooks/teams` : `http://localhost:${PORT}/webhooks/teams`}`)
   console.log(`  Dashboard: ${existsSync(uiDist) ? `http://localhost:${PORT}` : "http://localhost:5179 (dev)"}`)
   console.log(`  Channels:  ${channelConfigs.length > 0 ? channelConfigs.map(c => c.type).join(", ") : "none (configure via POST /api/channels)"}`)
-  console.log(`  MSSQL:     ${mssqlServer ? `${mssqlServer}:${process.env["MSSQL_PORT"] ?? 1433}/${process.env["MSSQL_DATABASE"] ?? "master"}` : "not configured"}`)
+  console.log(`  MSSQL:     ${mssqlSummary}`)
   console.log(`${"═".repeat(50)}\n`)
 
   // Graceful shutdown for tsx hot-reload

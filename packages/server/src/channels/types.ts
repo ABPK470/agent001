@@ -20,7 +20,7 @@ export type DeliveryStatus =
 export interface InboundMessage {
   /** Unique ID from the platform (e.g. WhatsApp message ID). */
   platformMessageId: string
-  /** Channel this came from ("whatsapp" | "messenger"). */
+  /** Channel this came from ("teams"). */
   channelType: ChannelType
   /** The user's ID on that platform (e.g. phone number, PSID). */
   senderId: string
@@ -62,25 +62,25 @@ export interface OutboundMessage {
 
 // ── Channel interface ────────────────────────────────────────────
 
-export type ChannelType = "whatsapp" | "messenger"
+export type ChannelType = "teams"
 
 /** Configuration for a registered channel. */
 export interface ChannelConfig {
   type: ChannelType
-  /** Platform API token for sending messages. */
+  /** Microsoft App ID (Bot registration in Azure portal). */
   accessToken: string
-  /** Webhook verification token. */
+  /** Unused — kept for schema compatibility. */
   verifyToken: string
-  /** Secret for validating webhook signatures. */
+  /** Microsoft App Password / Client Secret. */
   appSecret: string
-  /** Platform-specific: WhatsApp phone number ID, Messenger page ID, etc. */
+  /** Microsoft App ID (same as accessToken — platformId is the canonical name). */
   platformId: string
 }
 
 /**
  * A messaging channel implementation.
  *
- * Each platform (WhatsApp, Messenger) implements this interface.
+ * Each platform implements this interface.
  * The router doesn't know platform specifics — it just calls
  * sendMessage() and lets the channel handle API details.
  */
@@ -90,8 +90,12 @@ export interface Channel {
   /** Send a text message to a recipient. Returns the platform message ID. */
   sendMessage(recipientId: string, text: string): Promise<string>
 
-  /** Validate a webhook signature. Returns true if authentic. */
-  validateSignature(payload: Buffer, signature: string): boolean
+  /**
+   * Validate an inbound webhook request.
+   * The `signature` parameter carries whatever auth token/header the platform provides.
+   * May be async (e.g. Teams JWT validation requires a network key fetch).
+   */
+  validateSignature(payload: Buffer, signature: string): Promise<boolean> | boolean
 
   /** Parse a raw webhook body into inbound messages. Returns [] if not a message event. */
   parseWebhook(body: unknown): InboundMessage[]

@@ -1,6 +1,10 @@
 /**
  * MSSQL tool — lets the agent query and interact with Microsoft SQL Server.
  *
+ * Supports multiple named database connections configured at startup.
+ * The agent can target a specific connection via the optional `connection`
+ * parameter on query_mssql and explore_mssql_schema.
+ *
  * Designed for DWH / data platform use cases where the agent needs to:
  *   - Explore database schema (tables, columns, types)
  *   - Run analytical queries
@@ -9,8 +13,8 @@
  *
  * Security:
  *   - Read-only by default (only SELECT, WITH, EXPLAIN allowed).
- *   - Write mode must be explicitly enabled via setMssqlWriteEnabled().
- *   - Connection is pooled and reused across calls.
+ *   - Write mode must be explicitly enabled per connection.
+ *   - Connections are pooled and reused across calls.
  *   - Query timeout (30s default, configurable).
  *   - Row limit enforced (max 1000 rows returned to LLM).
  *   - No dynamic connection strings from the agent — config is set once at startup.
@@ -19,11 +23,15 @@
 import sql from "mssql"
 import type { Tool } from "../types.js"
 
-// ── Connection management ────────────────────────────────────────
+// ── Named connection registry ────────────────────────────────────
 
-let _pool: sql.ConnectionPool | null = null
-let _config: sql.config | null = null
-let _writeEnabled = false
+interface DatabaseEntry {
+  config: sql.config
+  pool: sql.ConnectionPool | null
+  writeEnabled: boolean
+}
+
+const _databases = new Map<string, DatabaseEntry>()
 
 /** Per-tool-call kill signal — when aborted, cancels any in-flight query. */
 let _killSignal: AbortSignal | null = null
@@ -33,49 +41,97 @@ export function setMssqlKillSignal(signal: AbortSignal | null): void {
   _killSignal = signal
 }
 
-/** Configure the MSSQL connection. Called once at server startup. */
-export function setMssqlConfig(config: sql.config): void {
-  _config = {
-    ...config,
-    options: {
-      encrypt: true,
-      trustServerCertificate: true,
-      ...config.options,
+/**
+ * Configure a single MSSQL connection.
+ * @param config  mssql connection config
+ * @param name    Connection name used in the `connection` tool parameter.
+ *                Defaults to "default" for backwards compatibility.
+ */
+export function setMssqlConfig(config: sql.config, name = "default"): void {
+  _databases.set(name, {
+    config: {
+      ...config,
+      options: {
+        encrypt: true,
+        trustServerCertificate: true,
+        ...config.options,
+      },
+      requestTimeout: config.requestTimeout ?? 30_000,
+      connectionTimeout: config.connectionTimeout ?? 15_000,
     },
-    requestTimeout: config.requestTimeout ?? 30_000,
-    connectionTimeout: config.connectionTimeout ?? 15_000,
+    pool: null,
+    writeEnabled: false,
+  })
+}
+
+/**
+ * Configure multiple named MSSQL connections at once (replaces all existing).
+ * Each entry must include a `name` field. The first entry is also the "default".
+ */
+export function setMssqlConfigs(
+  configs: Array<{ name: string; writeEnabled?: boolean } & sql.config>,
+): void {
+  _databases.clear()
+  for (const { name, writeEnabled = false, ...rest } of configs) {
+    _databases.set(name, {
+      config: {
+        ...rest,
+        options: {
+          encrypt: true,
+          trustServerCertificate: true,
+          ...(rest as sql.config).options,
+        },
+        requestTimeout: (rest as sql.config).requestTimeout ?? 30_000,
+        connectionTimeout: (rest as sql.config).connectionTimeout ?? 15_000,
+      },
+      pool: null,
+      writeEnabled,
+    })
   }
 }
 
-/** Enable/disable write operations (INSERT, UPDATE, DELETE, etc.). Default: disabled. */
-export function setMssqlWriteEnabled(enabled: boolean): void {
-  _writeEnabled = enabled
+/** Enable/disable write operations for a named connection (default: "default"). */
+export function setMssqlWriteEnabled(enabled: boolean, name = "default"): void {
+  const entry = _databases.get(name)
+  if (entry) entry.writeEnabled = enabled
 }
 
-/** Return a safe summary of the current config (no credentials). Null if not configured. */
-export function getMssqlConfig(): { server: string; database: string; writeEnabled: boolean } | null {
-  if (!_config) return null
-  return { server: _config.server!, database: _config.database!, writeEnabled: _writeEnabled }
+/** Return a safe summary of all configured connections (no credentials). */
+export function getMssqlConfig(): Array<{ name: string; server: string; database: string; writeEnabled: boolean }> {
+  return Array.from(_databases.entries()).map(([name, entry]) => ({
+    name,
+    server: entry.config.server!,
+    database: entry.config.database!,
+    writeEnabled: entry.writeEnabled,
+  }))
 }
 
-/** Get or create the connection pool. */
-async function getPool(): Promise<sql.ConnectionPool> {
-  if (!_config) throw new Error("MSSQL not configured. Call setMssqlConfig() at startup.")
-  if (_pool?.connected) return _pool
-  // Close stale pool if exists
-  if (_pool) {
-    try { await _pool.close() } catch { /* ignore */ }
+/** Get or create the connection pool for a named connection. */
+async function getPool(name = "default"): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
+  const entry = _databases.get(name)
+  if (!entry) {
+    const available = Array.from(_databases.keys()).join(", ") || "none"
+    throw new Error(
+      `MSSQL connection "${name}" not configured. Available: ${available}. ` +
+      `Call setMssqlConfig() or setMssqlConfigs() at startup.`,
+    )
   }
-  _pool = new sql.ConnectionPool(_config)
-  await _pool.connect()
-  return _pool
+  if (entry.pool?.connected) return { pool: entry.pool, entry }
+  if (entry.pool) {
+    try { await entry.pool.close() } catch { /* ignore */ }
+  }
+  entry.pool = new sql.ConnectionPool(entry.config)
+  await entry.pool.connect()
+  return { pool: entry.pool, entry }
 }
 
-/** Close the connection pool (called on shutdown). */
+/** Close all connection pools (called on shutdown). */
 export async function closeMssqlPool(): Promise<void> {
-  if (_pool) {
-    try { await _pool.close() } catch { /* ignore */ }
-    _pool = null
+  for (const entry of _databases.values()) {
+    if (entry.pool) {
+      try { await entry.pool.close() } catch { /* ignore */ }
+      entry.pool = null
+    }
   }
 }
 
@@ -92,8 +148,8 @@ const DANGEROUS_PATTERNS = [
   /RECONFIGURE\b/i,
 ]
 
-function validateQuery(query: string): string | null {
-  if (!_writeEnabled) {
+function validateQuery(query: string, writeEnabled: boolean): string | null {
+  if (!writeEnabled) {
     if (!READ_ONLY_PATTERN.test(query)) {
       return "Write operations are disabled. Only SELECT/WITH queries are allowed. " +
              "Contact your administrator to enable write mode."
@@ -173,7 +229,7 @@ function formatResults(recordsets: sql.IRecordSet<unknown>[], rowsAffected: numb
 export const mssqlTool: Tool = {
   name: "query_mssql",
   description:
-    "Execute a SQL query against the configured Microsoft SQL Server database. " +
+    "Execute a SQL query against a configured Microsoft SQL Server database. " +
     "Use this to explore schemas, query data, analyze DWH tables, check data quality, and debug ETL pipelines. " +
     "By default only SELECT/WITH queries are allowed (read-only mode). " +
     "Useful system queries: " +
@@ -189,6 +245,10 @@ export const mssqlTool: Tool = {
         type: "string",
         description: "The SQL query to execute. Must be a valid T-SQL statement.",
       },
+      connection: {
+        type: "string",
+        description: "Named database connection to use (configured at startup). Omit to use the default connection.",
+      },
       database: {
         type: "string",
         description: "Optional: switch to a different database before running the query. Equivalent to USE [database].",
@@ -201,13 +261,23 @@ export const mssqlTool: Tool = {
     const query = String(args.query).trim()
     if (!query) return "Error: query cannot be empty."
 
+    const connectionName = args.connection ? String(args.connection).trim() : "default"
+
+    let pool: sql.ConnectionPool
+    let entry: DatabaseEntry
+    try {
+      const result = await getPool(connectionName)
+      pool = result.pool
+      entry = result.entry
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`
+    }
+
     // Validate before executing
-    const error = validateQuery(query)
+    const error = validateQuery(query, entry.writeEnabled)
     if (error) return error
 
     try {
-      const pool = await getPool()
-
       // Optional database switch
       const db = args.database ? String(args.database).trim() : null
       if (db) {
@@ -261,13 +331,26 @@ export const mssqlSchemaTool: Tool = {
         type: "string",
         description: "Get detailed column info for a specific table. Include schema prefix (e.g., 'dwh.FactSales').",
       },
+      connection: {
+        type: "string",
+        description: "Named database connection to use (configured at startup). Omit to use the default connection.",
+      },
     },
     required: [],
   },
 
   async execute(args) {
+    const connectionName = args.connection ? String(args.connection).trim() : "default"
+
+    let pool: sql.ConnectionPool
     try {
-      const pool = await getPool()
+      const result = await getPool(connectionName)
+      pool = result.pool
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`
+    }
+
+    try {
       const request = pool.request()
 
       // If a kill signal fires while the query is running, cancel it immediately
