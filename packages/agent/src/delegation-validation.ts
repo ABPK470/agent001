@@ -12,47 +12,47 @@
  */
 
 import {
-    BLOCKED_PHASE_RE,
-    BROWSER_RUNTIME_FAILURE_RE,
-    classifyTaskIntent,
-    COMPLETION_CLAIM_RE,
-    CONTEXT_SENSITIVE_MARKERS,
-    EMPTY_VALUES,
-    extractAcceptanceTokens,
-    extractLocalArtifactReferences,
-    FILE_ARTIFACT_RE,
-    getToolCallPathArg,
-    hasMutationPathEvidence,
-    hasPostMutationArtifactInspection,
-    isExecutableVerificationToolCall,
-    isFileMutationToolCall,
-    isLowSignalBrowserToolCall,
-    isWorkspaceInspectionToolCall,
-    MEANINGFUL_BROWSER_TOOLS,
-    NARRATIVE_FILE_CLAIM_RE,
-    normalizeArtifactPath,
-    specRequiresBrowserEvidence,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    specRequiresWorkspaceInspection,
-    UNRESOLVED_HANDOFF_RE,
-    UNRESOLVED_WORK_RE
+  BLOCKED_PHASE_RE,
+  BROWSER_RUNTIME_FAILURE_RE,
+  classifyTaskIntent,
+  COMPLETION_CLAIM_RE,
+  CONTEXT_SENSITIVE_MARKERS,
+  EMPTY_VALUES,
+  extractAcceptanceTokens,
+  extractLocalArtifactReferences,
+  FILE_ARTIFACT_RE,
+  getToolCallPathArg,
+  hasMutationPathEvidence,
+  hasPostMutationArtifactInspection,
+  isExecutableVerificationToolCall,
+  isFileMutationToolCall,
+  isLowSignalBrowserToolCall,
+  isWorkspaceInspectionToolCall,
+  MEANINGFUL_BROWSER_TOOLS,
+  NARRATIVE_FILE_CLAIM_RE,
+  normalizeArtifactPath,
+  specRequiresBrowserEvidence,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  specRequiresWorkspaceInspection,
+  UNRESOLVED_HANDOFF_RE,
+  UNRESOLVED_WORK_RE
 } from "./delegation-validation-patterns.js"
 import type { ToolCallRecord } from "./tool-result.js"
 
 // Re-export everything from sub-modules for backwards compatibility
 export { getCorrectionGuidance } from "./delegation-validation-correction.js"
 export {
-    classifyTaskIntent,
-    extractAcceptanceTokens,
-    isFileMutationToolCall,
-    isLowSignalBrowserToolCall,
-    isWorkspaceInspectionToolCall,
-    specRequiresBrowserEvidence,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    specRequiresWorkspaceInspection,
-    type TaskIntent
+  classifyTaskIntent,
+  extractAcceptanceTokens,
+  isFileMutationToolCall,
+  isLowSignalBrowserToolCall,
+  isWorkspaceInspectionToolCall,
+  specRequiresBrowserEvidence,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  specRequiresWorkspaceInspection,
+  type TaskIntent
 } from "./delegation-validation-patterns.js"
 export type { ToolCallRecord } from "./tool-result.js"
 
@@ -115,10 +115,6 @@ export interface DelegationOutputValidationResult {
 // ============================================================================
 // File-tool sets (used only by validateDelegatedOutputContract)
 // ============================================================================
-
-const FILE_MUTATION_TOOLS = new Set([
-  "write_file", "append_file", "replace_in_file",
-])
 
 const FILE_READ_TOOLS = new Set([
   "read_file", "list_directory", "search_files",

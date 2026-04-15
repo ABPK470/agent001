@@ -176,8 +176,10 @@ export { fetchUrlTool, setFetchKillSignal } from "./tools/fetch-url.js"
 export {
     appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
+export { profileDataTool } from "./tools/mssql-profiler.js"
+export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
 export {
-    closeMssqlPool, getMssqlConfig, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
+    closeMssqlPool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"

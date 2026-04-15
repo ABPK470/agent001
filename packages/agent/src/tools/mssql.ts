@@ -111,7 +111,7 @@ export function getMssqlConfig(): Array<{ name: string; server: string; database
 }
 
 /** Get or create the connection pool for a named connection. */
-async function getPool(name = "default"): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
+export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
   const entry = _databases.get(name)
   if (!entry) {
     const available = Array.from(_databases.keys()).join(", ") || "none"

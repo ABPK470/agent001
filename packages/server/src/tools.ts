@@ -7,14 +7,17 @@
  */
 
 import {
+    appendFileTool,
     askUserTool,
     browserCheckTool,
     browseWebTool,
     createDelegateTools,
+    discoverRelationshipsTool,
     fetchUrlTool,
     listDirectoryTool,
     mssqlSchemaTool,
     mssqlTool,
+    profileDataTool,
     readFileTool,
     replaceInFileTool,
     searchFilesTool,
@@ -36,6 +39,7 @@ export interface ToolInfo {
 const ALL_TOOLS: Tool[] = [
   readFileTool,
   writeFileTool,
+  appendFileTool,
   replaceInFileTool,
   listDirectoryTool,
   searchFilesTool,
@@ -46,6 +50,8 @@ const ALL_TOOLS: Tool[] = [
   askUserTool,
   mssqlTool,
   mssqlSchemaTool,
+  discoverRelationshipsTool,
+  profileDataTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))

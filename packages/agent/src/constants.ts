@@ -148,6 +148,10 @@ export const SAFE_RETRY_TOOLS = new Set([
   "fetch_url",
   "browser_check",
   "think",
+  "query_mssql",
+  "explore_mssql_schema",
+  "discover_relationships",
+  "profile_data",
 ])
 
 /** Tools that indicate verification activity. */

@@ -7,13 +7,22 @@
 
 import {
     AlertTriangle,
+    Brain,
     ChevronDown,
     ChevronRight,
     Cpu,
+    Database,
     Eye,
     EyeOff,
+    FileEdit,
+    FilePlus,
+    FileSearch,
     FolderOpen,
+    GitFork,
     Globe,
+    MessageSquare,
+    Network,
+    Search,
     Shield,
     ShieldCheck,
     ShieldX,
@@ -23,7 +32,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
-import type { PolicyRule } from "../types"
+import type { PolicyRule, ToolInfo } from "../types"
 
 interface Props {
   onClose: () => void
@@ -37,15 +46,31 @@ const EFFECTS: { value: Effect; label: string; icon: typeof ShieldCheck; color: 
   { value: "require_approval", label: "Require Approval", icon: AlertTriangle, color: "text-warning" },
 ]
 
-/** All agent tools with metadata */
-const AGENT_TOOLS = [
-  { name: "run_command", condition: "action:run_command", desc: "Execute shell commands", icon: Terminal },
-  { name: "read_file", condition: "action:read_file", desc: "Read files from workspace" },
-  { name: "write_file", condition: "action:write_file", desc: "Write / create files" },
-  { name: "list_directory", condition: "action:list_directory", desc: "List directory contents" },
-  { name: "fetch_url", condition: "action:fetch_url", desc: "Fetch web pages & APIs", icon: Globe },
-  { name: "think", condition: "action:think", desc: "Internal reasoning (no side effects)" },
-]
+/** Icon mapping for known tools — falls back to Shield for unknown tools. */
+const TOOL_ICONS: Record<string, typeof Shield> = {
+  run_command: Terminal,
+  read_file: FileSearch,
+  write_file: FilePlus,
+  append_file: FilePlus,
+  replace_in_file: FileEdit,
+  list_directory: FolderOpen,
+  search_files: Search,
+  fetch_url: Globe,
+  browse_web: Globe,
+  browser_check: Globe,
+  ask_user: MessageSquare,
+  think: Brain,
+  query_mssql: Database,
+  explore_mssql_schema: Database,
+  discover_relationships: Network,
+  profile_data: Database,
+  delegate: GitFork,
+  delegate_parallel: GitFork,
+}
+
+function getToolIcon(name: string): typeof Shield {
+  return TOOL_ICONS[name] ?? Shield
+}
 
 const SHELL_BLOCKLIST = [
   "rm -rf /", "rm -rf /*", "mkfs", "dd if=", "> /dev/sd",
@@ -64,6 +89,7 @@ type Tab = "tools" | "model" | "security"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
+  const [tools, setTools] = useState<ToolInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>("tools")
   const [error, setError] = useState<string | null>(null)
@@ -98,8 +124,9 @@ export function PolicyEditor({ onClose }: Props) {
 
   const loadRules = useCallback(async () => {
     try {
-      const data = await api.listPolicies()
+      const [data, toolList] = await Promise.all([api.listPolicies(), api.listTools()])
       setRules(data)
+      setTools(toolList)
     } catch {
       setError("Failed to load policies")
     } finally {
@@ -279,10 +306,10 @@ export function PolicyEditor({ onClose }: Props) {
                 Each tool is <span className="text-success font-medium">allowed</span> by default.
                 Set a policy to restrict or gate any tool.
               </p>
-              {AGENT_TOOLS.map((tool) => {
+              {tools.map((tool) => {
                 const rule = toolRuleMap.get(tool.name)
                 const currentEffect = rule ? (rule.effect as Effect) : null
-                const Icon = tool.icon ?? Shield
+                const Icon = getToolIcon(tool.name)
                 const effectStyle = currentEffect ? getEffectStyle(currentEffect) : null
 
                 return (
@@ -302,7 +329,7 @@ export function PolicyEditor({ onClose }: Props) {
                           </span>
                         )}
                       </div>
-                      <div className="text-[13px] text-text-muted mt-0.5">{tool.desc}</div>
+                      <div className="text-[13px] text-text-muted mt-0.5">{tool.description}</div>
                     </div>
                     <select
                       className="bg-white/[0.06] text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-white/[0.06]"

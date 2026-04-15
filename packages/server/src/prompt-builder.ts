@@ -42,7 +42,10 @@ export function buildEnvironmentContext(): string {
 export function buildToolContext(tools: Tool[]): string {
   const sections: string[] = []
 
-  const hasMssql = tools.some((t) => t.name === "query_mssql" || t.name === "explore_mssql_schema")
+  const hasMssql = tools.some((t) =>
+    t.name === "query_mssql" || t.name === "explore_mssql_schema" ||
+    t.name === "discover_relationships" || t.name === "profile_data",
+  )
   if (hasMssql) {
     const cfgs = getMssqlConfig()
     if (cfgs.length > 0) {
@@ -71,19 +74,26 @@ export function buildToolContext(tools: Tool[]): string {
 
     sections.push(
       "",
-      "SQL DISCIPLINE (follow strictly for EVERY database interaction):",
-      "1. EXPLORE FIRST: Before writing ANY query, call explore_mssql_schema to discover exact column names. This is NOT optional — do it for every table you plan to query.",
-      "2. NEVER GUESS COLUMNS: Column names are often non-obvious. If you haven't explored a table, you don't know its columns. Use explore_mssql_schema(table='schema.TableName') every time.",
-      "3. SCHEMA-QUALIFY EVERYTHING: Always use schema.table (e.g. agent.vPipelineRun, core.Pipeline). Never use bare table names.",
-      "4. FIND RELATED DATA: If a table has an ID column but not the label/name you need, use explore_mssql_schema(search='keyword') to find a related table that has both the ID and the descriptive columns, then JOIN them.",
-      "5. VERIFY THEN SCALE: First run a small query (SELECT TOP 5 ...) to confirm columns and data shape. Only then write the full analytical query.",
-      "6. USE KNOWLEDGE FILE: The DATABASE KNOWLEDGE section tells you which schemas exist and how they relate. Use it to pick the right schema, then explore to find exact tables and columns.",
-      "7. VALID T-SQL ONLY: Every query_mssql call must be syntactically valid T-SQL. No pseudo-code, no placeholder syntax, no made-up functions.",
-      "8. HANDLE ERRORS: If a query fails, read the error message carefully. Fix the query based on the error — don't retry the same broken query.",
+      "DATA-FIRST MINDSET (you are a database relationship and data expert):",
+      "You have deep tools for understanding database structure and data. Use them proactively:",
+      "- discover_relationships: Map FK graphs, find join paths between tables, spot implicit relationships via shared column names.",
+      "- profile_data: Understand what's actually IN the data — cardinality, nulls, distributions, frequent values.",
+      "- explore_mssql_schema: Discover exact column names, types, and primary/foreign keys.",
+      "- query_mssql: Execute validated T-SQL queries.",
       "",
-      "Use explore_mssql_schema to discover exact column names and types when composing queries.",
-      "Use query_mssql to run T-SQL queries. When asked about data, revenue, customers, sales, or any analytical question, query the database.",
-      "DATA DISPLAY RULE: For any report, table, chart, or data-display task, ALWAYS use query_mssql to get the actual rows NOW, then use write_file to create a STATIC HTML file with the real data embedded directly as an inline <table> or JSON constant — DO NOT generate a Node.js server, Express app, or API layer. The backend is not running during file generation; static HTML with embedded data is the correct and complete deliverable.",
+      "RELATIONSHIP-FIRST APPROACH:",
+      "1. MAP RELATIONSHIPS FIRST: Before writing any multi-table query, call discover_relationships to understand how tables connect. Use between=['A','B'] to find join paths.",
+      "2. EXPLORE COLUMNS: Call explore_mssql_schema(table='schema.Table') for every table you plan to query. NEVER guess column names.",
+      "3. PROFILE WHEN UNCERTAIN: If you're unsure about data shape, cardinality, or common values, call profile_data before writing the analytical query.",
+      "4. SCHEMA-QUALIFY EVERYTHING: Always use schema.table (e.g. agent.vPipelineRun, core.Pipeline). Never bare table names.",
+      "5. SUGGEST CONNECTIONS: When the user asks about a table, proactively discover and mention related tables — both direct FK relationships and implicit column-name matches.",
+      "6. VERIFY THEN SCALE: First run SELECT TOP 5 to confirm shape. Only then write the full query.",
+      "7. USE KNOWLEDGE FILE: The DATABASE KNOWLEDGE section tells you which schemas exist and how they relate. Start there, then use tools to drill deeper.",
+      "8. VALID T-SQL ONLY: Every query must be syntactically valid T-SQL. No pseudo-code.",
+      "9. HANDLE ERRORS: Read error messages carefully. Fix the query — don't retry the same broken one.",
+      "10. THINK IN GRAPHS: The database is a connected graph. Every ID column is a potential edge. Use discover_relationships(column='someId') to find where IDs connect across schemas.",
+      "",
+      "DATA DISPLAY RULE: For any report, table, chart, or data-display task, query_mssql for actual rows, then write_file a STATIC HTML with data embedded inline — no server/API layer.",
     )
   }
 
