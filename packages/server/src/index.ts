@@ -11,15 +11,14 @@
  */
 
 import { config } from "dotenv"
-import { existsSync, statSync } from "node:fs"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
 // Load .env — from CWD when running as installed package, from monorepo root in dev
 const _pkgRoot = process.env["AGENT001_PACKAGE_ROOT"]
+const _projectRoot = _pkgRoot ? process.cwd() : resolve(import.meta.dirname, "../../..")
 config({
-  path: _pkgRoot
-    ? resolve(process.cwd(), ".env")
-    : resolve(import.meta.dirname, "../../../.env"),
+  path: resolve(_projectRoot, ".env"),
 })
 
 import {
@@ -167,8 +166,30 @@ async function main() {
   //   1. MSSQL_DATABASES — JSON array of named connections
   //   2. MSSQL_HOST      — single connection (backwards-compat)
   //
+  // Each connection can have an optional knowledgePath pointing to a
+  // Markdown file that describes the database schema, business context,
+  // and domain meaning.  This is injected into the system prompt so the
+  // agent understands the database without runtime discovery.
+  //
   // The dev-only Docker DB (mssql-dev) is never auto-connected here.
   // To use it during development, set MSSQL_HOST=localhost in your .env.
+
+  function readKnowledgeFile(filePath: string): string | null {
+    const resolved = resolve(_projectRoot, filePath)
+    try {
+      if (!existsSync(resolved)) {
+        console.warn(`MSSQL knowledge file not found: ${resolved}`)
+        return null
+      }
+      const content = readFileSync(resolved, "utf-8").trim()
+      if (!content) return null
+      console.log(`MSSQL knowledge loaded: ${resolved} (${content.length} chars)`)
+      return content
+    } catch (e) {
+      console.warn(`Failed to read MSSQL knowledge file: ${resolved}`, e instanceof Error ? e.message : e)
+      return null
+    }
+  }
 
   let mssqlSummary = "not configured"
 
@@ -190,6 +211,7 @@ async function main() {
       encrypt?: boolean
       trustServerCertificate?: boolean
       writeEnabled?: boolean
+      knowledgePath?: string
     }>
     try {
       dbConfigs = JSON.parse(mssqlDatabasesJson)
@@ -213,6 +235,7 @@ async function main() {
           trustServerCertificate: db.trustServerCertificate !== false,
         },
         writeEnabled: db.writeEnabled ?? false,
+        knowledge: db.knowledgePath ? readKnowledgeFile(db.knowledgePath) : null,
       })),
     )
 
@@ -229,6 +252,7 @@ async function main() {
     const mssqlServer = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
     if (mssqlServer) {
       const domain = process.env["MSSQL_DOMAIN"]
+      const knowledgePath = process.env["MSSQL_KNOWLEDGE_FILE"]
       setMssqlConfig({
         server: mssqlServer,
         port: Number(process.env["MSSQL_PORT"] ?? 1433),
@@ -240,7 +264,7 @@ async function main() {
           encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
           trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
         },
-      })
+      }, "default", knowledgePath ? readKnowledgeFile(knowledgePath) : null)
       if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
         setMssqlWriteEnabled(true)
         mssqlSummary = `${mssqlServer} (WRITE mode enabled)`

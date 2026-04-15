@@ -50,7 +50,7 @@ import {
     stepStarted
 } from "./engine/index.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "./retry.js"
-import { normalizeToolExecutionOutput } from "./tool-utils.js"
+import { normalizeToolExecutionOutput } from "./tool-result.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
@@ -452,60 +452,5 @@ export async function runGoverned(
 
 // ── Pretty-print a governed result ───────────────────────────────
 
-export function printGovernanceReport(result: GovernedResult): void {
-  const { run, auditTrail, stats } = result
-
-  console.log("\n" + "═".repeat(60))
-  console.log("  GOVERNANCE REPORT")
-  console.log("═".repeat(60))
-
-  // Run summary
-  console.log(`\n  Run ID:     ${run.id}`)
-  console.log(`  Status:     ${run.status}`)
-  console.log(`  Steps:      ${run.steps.length} tool calls`)
-  console.log(`  Started:    ${run.createdAt.toISOString()}`)
-  if (run.completedAt) {
-    const durationSec = (run.completedAt.getTime() - run.createdAt.getTime()) / 1000
-    console.log(`  Completed:  ${run.completedAt.toISOString()} (${durationSec.toFixed(1)}s)`)
-  }
-
-  // Steps timeline
-  if (run.steps.length > 0) {
-    console.log("\n  ── Steps ──")
-    for (const step of run.steps) {
-      const icon = step.status === "completed" ? "✅"
-        : step.status === "failed" ? "❌"
-        : "⏸️"
-      const duration = step.output["durationMs"] ? ` (${step.output["durationMs"]}ms)` : ""
-      console.log(`  ${icon} ${step.name} → ${step.status}${duration}`)
-      if (step.error) console.log(`     Error: ${step.error}`)
-    }
-  }
-
-  // Tool stats
-  if (stats.size > 0) {
-    console.log("\n  ── Tool Stats ──")
-    for (const [tool, s] of stats) {
-      console.log(
-        `  ${tool}: ${s.calls} calls, avg ${s.avgMs}ms, ${s.failures} failures`,
-      )
-    }
-  }
-
-  // Audit trail
-  if (auditTrail.length > 0) {
-    console.log("\n  ── Audit Trail ──")
-    for (const entry of auditTrail) {
-      const time = entry.timestamp.toISOString().slice(11, 23)
-      console.log(`  [${time}] ${entry.action} — ${entry.actor}`)
-      if (entry.detail && Object.keys(entry.detail).length > 0) {
-        const summary = Object.entries(entry.detail)
-          .map(([k, v]) => `${k}=${typeof v === "string" ? v.slice(0, 60) : v}`)
-          .join(", ")
-        console.log(`             ${summary}`)
-      }
-    }
-  }
-
-  console.log("\n" + "═".repeat(60) + "\n")
-}
+// Re-export governance report for backwards compatibility
+export { printGovernanceReport } from "./governance-report.js"

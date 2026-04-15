@@ -39,139 +39,35 @@
  */
 
 import type { LLMClient, Message } from "../types.js"
+import {
+    BOUNDED_COHERENT_SCOPE_RE,
+    COHERENCE_FIRST_RE,
+    COHESIVE_IMPLEMENTATION_RE,
+    COORDINATION_HEAVY_RE,
+    DATA_FETCH_PIPELINE_RE,
+    DELEGATION_RE,
+    DIALOGUE_MEMORY_RE,
+    DIALOGUE_RECALL_RE,
+    DIALOGUE_RECALL_REFERENCE_RE,
+    EDIT_ARTIFACT_RE,
+    EXACT_RESPONSE_RE,
+    EXISTING_CODE_COUPLING_RE,
+    EXPLICIT_ENV_ACTION_RE,
+    EXTERNAL_SERVICE_RE,
+    IMPLEMENTATION_SCOPE_RE,
+    LARGE_GREENFIELD_BOOTSTRAP_RE,
+    MULTI_STEP_RE,
+    MULTI_TARGET_CUE_RE,
+    PLAN_CREATION_RE,
+    RECOVERY_HINT_RE,
+    REVIEW_QUESTION_RE,
+    SIMPLE_DIALOGUE_RE,
+    SINGLE_ARTIFACT_BURST_RE,
+    TARGET_FILE_RE,
+    TOOL_DIVERSITY_RE,
+    VERIFICATION_RE,
+} from "./decision-patterns.js"
 import type { PlannerDecision, PlannerNeedLevel, RoutingConfidence } from "./types.js"
-
-// ============================================================================
-// Layer 1: Semantic hard-gate patterns
-// ============================================================================
-
-/** Multi-step work: "build X then Y", "first...then...", numbered lists */
-const MULTI_STEP_RE =
-  /\b(?:first|then|next|after that|step \d|phase \d|\d+\.\s|\bfinally\b)/i
-
-/** Tool diversity: mentions different tool categories */
-const TOOL_DIVERSITY_RE =
-  /\b(?:create|write|build|implement|test|verify|check|run|deploy|configure|install)\b/i
-
-/**
- * Delegation cue: multiple independent components or parallel work.
- * Uses [^.!?\n] to prevent cross-sentence false positives (e.g. "all project
- * files will be stored. Build a chess game" no longer fires).
- */
-const DELEGATION_RE =
-  // /\b(?:multiple|several|all|each|every|parallel|concurrent|both|components?|modules?|features?|pages?|sections?)\b[^.!?\n]{0,120}\b(?:create|build|implement|write|develop|add)\b/i
-  /\b(sub[\s-]?agent|child agent|execute_with_agent|delegate|delegation|parallel(?:ize|ism)?|fanout)\b/i
-
-/** Implementation scope: large-scale creation request */
-const IMPLEMENTATION_SCOPE_RE =
-  /\b(?:build|create|implement|develop|make|write)\b[\s\S]{0,100}\b(?:app(?:lication)?|game|website|site|project|system|platform|service|api|dashboard|tool|library|framework|clone|full|complete|entire|whole)\b/i
-
-/** Verification cue: request mentions testing/verification */
-const VERIFICATION_RE =
-  /\b(?:test|verify|ensure|check|validate|confirm|working|functional|playable|interactive)\b/i
-
-/** Simple dialogue: just a question or greeting */
-const SIMPLE_DIALOGUE_RE =
-  /^(?:hi|hello|hey|thanks?|thank you|what is|how do|can you explain|tell me about)\b/i
-
-/** Review/analysis question: not implementation, just looking at things */
-const REVIEW_QUESTION_RE =
-  /\b(?:read\s+through|review|analyze|check|look\s+at|go\s+through|evaluate|assess)\b[\s\S]{0,60}\?/i
-
-/** Exact response: user wants a literal output, not an orchestrated build */
-const EXACT_RESPONSE_RE =
-  /\b(?:respond\s+with|output\s+exactly|just\s+(?:say|write|output|reply|return)|^(?:say|write|echo)\b)/i
-
-/** Memory/recall: storing or retrieving info (no planning needed) */
-const DIALOGUE_MEMORY_RE =
-  /\b(?:remember|memorize|save\s+(?:this|that)|store\s+(?:this|that)|note\s+that|keep\s+in\s+mind)\b/i
-const DIALOGUE_RECALL_RE =
-  /\b(?:what\s+did\s+(?:I|you|we)|recall|do\s+you\s+remember|earlier\s+(?:I|you|we))\b/i
-/** Second guard for recall gate: must reference a prior turn, not just contain the word */
-const DIALOGUE_RECALL_REFERENCE_RE =
-  /\b(?:from\s+(?:earlier|before|above|prior|previous|last\s+turn|prior\s+turn)|(?:you|i)\s+(?:stored|memorized|remembered|told)|those\s+facts|these\s+facts|the\s+facts|last\s+turn|prior\s+turn|previous\s+turn|continuity\s+test)\b/i
-
-/**
- * Explicit environment action cue: the message asks the agent to DO something
- * in the environment (use a tool, build, write, run, etc.).
- * Used to guard dialogue-only gates — if this fires, the message is NOT
- * a pure dialogue turn even if memory/recall/exact-response cues also fired.
- */
-const EXPLICIT_ENV_ACTION_RE =
-  /\b(?:use|call|invoke|run|start|stop|create|write|edit|save|open|navigate|click|search|browse|inspect|read|check|verify|delegate|spawn|launch|post|publish|deploy|install|build|implement|refactor|migrate|continue)\b[\s\S]{0,96}\b(?:tool|tools|file|files|server|process|service|api|endpoint|project|tests?|[a-z][\w-]*\.[a-z][\w.-]*)\b/i
-
-/** Edit artifact: simple read-edit-write cycle that one agent handles better */
-const EDIT_ARTIFACT_RE =
-  /\b(?:edit|update|change|modify|fix|patch|rename|refactor|replace)\b[\s\S]{0,80}\b(?:in|of|the\s+file|this\s+file|\.(?:ts|js|tsx|jsx|css|html|json|md|py|rs|go))\b/i
-
-/** Plan/document creation: user asks agent to write a plan, doc, or spec */
-const PLAN_CREATION_RE =
-  /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
-
-/**
- * Data-fetch pipeline: "query database → produce output".
- * Must go to the direct tool-loop so the agent can call query_mssql and
- * write_file with real data rather than generating a full server architecture.
- */
-const DATA_FETCH_PIPELINE_RE =
-  /\b(?:query|fetch|get|pull|retrieve|select|show|display|list|report\s+on|generate\s+(?:a\s+)?report)\b[\s\S]{0,80}\b(?:from\s+)?(?:database|db|mssql|sql\s+server|sql|table|data)\b|\b(?:mssql|sql\s+server|database|db)\b[\s\S]{0,80}\b(?:report|table|chart|display|html|dashboard|page|export|output|result)\b/i
-
-/** High-throughput direct coding: single-artifact implementation in one file */
-const SINGLE_ARTIFACT_BURST_RE =
-  /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b|\b(?:in|into)\s+[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/i
-
-/** User explicitly asks for a full cohesive implementation pass */
-const COHESIVE_IMPLEMENTATION_RE =
-  /\b(?:full|complete|entire|end[- ]to[- ]end|from scratch|all logic|whole implementation)\b/i
-
-/** Strong greenfield coherence cues */
-const COHERENCE_FIRST_RE =
-  /\b(?:playable|interactive|drag and drop|drag-and-drop|fully working|working end[- ]to[- ]end)\b/i
-
-/** Concrete file targets */
-const TARGET_FILE_RE = /\b[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/gi
-
-/** Conflicting multi-target cues */
-const MULTI_TARGET_CUE_RE =
-  /\b(?:and|plus|along with|together with)\b[\s\S]{0,40}\b(?:files?|modules?|components?|pages?|scripts?|api|services?|backend|frontend|database|schema|tests?)\b/i
-
-/**
- * Prior no-progress signal: the direct tool loop already failed and left a
- * recovery hint in the history. Scoring this up pushes toward planner routing
- * (the simple path failed — escalate). Mirrors agenc-core's hasPriorNoProgressSignal.
- */
-const RECOVERY_HINT_RE = /\[recovery\]|no[_\s]progress|stuck|repeated[_\s]failure|escalat/i
-
-// ============================================================================
-// Layer 2: Advisory heuristic patterns (signals, not decisions)
-// ============================================================================
-
-/** Bounded greenfield builds benefit from coherence before decomposition */
-const BOUNDED_COHERENT_SCOPE_RE =
-  /\b(?:build|create|implement|develop|make|write)\b[\s\S]{0,80}\b(?:app(?:lication)?|game|website|site|tool|dashboard|widget|prototype|project|starter|platform|system)\b/i
-
-/** Larger greenfield system cues justify architecture freeze before decomposition */
-const LARGE_GREENFIELD_BOOTSTRAP_RE =
-  /\b(?:starter|platform|system|suite|workspace|tenant|billing|worker|backend|frontend|api|service|admin)\b/i
-
-/**
- * Existing-code coupling tends to require planner coordination.
- * This is a HARD override: never route coupled work to bounded coherent gen.
- */
-const EXISTING_CODE_COUPLING_RE =
-  /\b(?:existing|current|already|integrat(?:e|ion)|hook\s+into|wire\s+into|refactor|migrat(?:e|ion)|extend|modify|update|patch|rename|repair)\b/i
-
-/** Explicit coordination-heavy requests */
-const COORDINATION_HEAVY_RE =
-  /\b(?:multiple|several|coordinated|shared|cross[- ]file|cross[- ]module|across|between|independent)\b[\s\S]{0,40}\b(?:files?|modules?|components?|pages?|sections?|widgets?|panels?|interactions?)\b/i
-
-/**
- * External service cues: signals that the task involves infrastructure beyond
- * simple filesystem writes. Used by the sanity override to scope it to truly
- * bounded builds.
- */
-const EXTERNAL_SERVICE_RE =
-  /\b(?:mssql|sql\s+server|postgres|mysql|mongo|redis|kafka|rabbitmq|deploy|kubernetes|docker\s+swarm|aws|azure|gcp|cloud\s+run|lambda|microservice|oauth|saml|stripe|twilio|sendgrid|broker|message\s+queue)\b/i
 
 // ============================================================================
 // Structured signal collection

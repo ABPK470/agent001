@@ -56,6 +56,13 @@ export {
 } from "./context-compaction.js"
 export type { ArtifactCompactionState, CompactedFileRecord } from "./context-compaction.js"
 
+// Context management (message compaction & truncation)
+export { compactMessages, estimateTokens, truncateMessages } from "./context-management.js"
+export type { TruncationResult } from "./context-management.js"
+
+// System prompt
+export { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
+
 // Delegation bandit learning (agenc-core enhancement)
 export {
     DelegationBanditTuner,

@@ -29,6 +29,7 @@ interface DatabaseEntry {
   config: sql.config
   pool: sql.ConnectionPool | null
   writeEnabled: boolean
+  knowledge: string | null
 }
 
 const _databases = new Map<string, DatabaseEntry>()
@@ -47,7 +48,7 @@ export function setMssqlKillSignal(signal: AbortSignal | null): void {
  * @param name    Connection name used in the `connection` tool parameter.
  *                Defaults to "default" for backwards compatibility.
  */
-export function setMssqlConfig(config: sql.config, name = "default"): void {
+export function setMssqlConfig(config: sql.config, name = "default", knowledge: string | null = null): void {
   _databases.set(name, {
     config: {
       ...config,
@@ -61,6 +62,7 @@ export function setMssqlConfig(config: sql.config, name = "default"): void {
     },
     pool: null,
     writeEnabled: false,
+    knowledge,
   })
 }
 
@@ -69,10 +71,10 @@ export function setMssqlConfig(config: sql.config, name = "default"): void {
  * Each entry must include a `name` field. The first entry is also the "default".
  */
 export function setMssqlConfigs(
-  configs: Array<{ name: string; writeEnabled?: boolean } & sql.config>,
+  configs: Array<{ name: string; writeEnabled?: boolean; knowledge?: string | null } & sql.config>,
 ): void {
   _databases.clear()
-  for (const { name, writeEnabled = false, ...rest } of configs) {
+  for (const { name, writeEnabled = false, knowledge = null, ...rest } of configs) {
     _databases.set(name, {
       config: {
         ...rest,
@@ -86,6 +88,7 @@ export function setMssqlConfigs(
       },
       pool: null,
       writeEnabled,
+      knowledge,
     })
   }
 }
@@ -97,12 +100,13 @@ export function setMssqlWriteEnabled(enabled: boolean, name = "default"): void {
 }
 
 /** Return a safe summary of all configured connections (no credentials). */
-export function getMssqlConfig(): Array<{ name: string; server: string; database: string; writeEnabled: boolean }> {
+export function getMssqlConfig(): Array<{ name: string; server: string; database: string; writeEnabled: boolean; knowledge: string | null }> {
   return Array.from(_databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
     database: entry.config.database!,
     writeEnabled: entry.writeEnabled,
+    knowledge: entry.knowledge,
   }))
 }
 
@@ -229,14 +233,12 @@ function formatResults(recordsets: sql.IRecordSet<unknown>[], rowsAffected: numb
 export const mssqlTool: Tool = {
   name: "query_mssql",
   description:
-    "Execute a SQL query against a configured Microsoft SQL Server database. " +
-    "Use this to explore schemas, query data, analyze DWH tables, check data quality, and debug ETL pipelines. " +
-    "By default only SELECT/WITH queries are allowed (read-only mode). " +
-    "Useful system queries: " +
-    "- List tables: SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES " +
-    "- List columns: SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'xxx' " +
-    "- Row counts: SELECT COUNT(*) FROM schema.table " +
-    "- Table sizes: sp_spaceused 'schema.table' " +
+    "Execute a T-SQL query against Microsoft SQL Server. Read-only by default (SELECT/WITH only). " +
+    "CRITICAL: NEVER guess column names. Before writing ANY query, call explore_mssql_schema first " +
+    "to get the exact column names and types for each table you plan to query. " +
+    "Always use schema-qualified table names (e.g. agent.PipelineRun, not just PipelineRun). " +
+    "When data spans multiple tables/views, explore EACH table first, then JOIN them. " +
+    "For large tables (>1M rows), always include WHERE clauses with date filters and use TOP. " +
     "Returns results as plain text table format.",
   parameters: {
     type: "object",
@@ -317,19 +319,26 @@ export const mssqlTool: Tool = {
 export const mssqlSchemaTool: Tool = {
   name: "explore_mssql_schema",
   description:
-    "Quickly explore the MSSQL database schema. Returns tables, views, and their columns. " +
-    "Use this before writing queries to understand the data model. " +
-    "Much faster than manual INFORMATION_SCHEMA queries for getting an overview.",
+    "Explore the MSSQL database schema — list tables/views in a schema, or get exact column names and types for a table. " +
+    "ALWAYS call this BEFORE writing any query_mssql query. This is mandatory, not optional. " +
+    "Step 1: Call with schema='agent' to list tables in that schema. " +
+    "Step 2: Call with table='agent.PipelineRun' to get exact columns. " +
+    "Step 3: Only THEN write your query_mssql using the discovered column names. " +
+    "Never assume column names — they are often different from what you'd expect.",
   parameters: {
     type: "object",
     properties: {
       schema: {
         type: "string",
-        description: "Filter by schema name (e.g., 'dbo', 'staging', 'dwh'). Leave empty for all schemas.",
+        description: "Filter by schema name (e.g., 'agent', 'core', 'publish', 'dim', 'fact'). Lists all tables/views in that schema.",
       },
       table: {
         type: "string",
-        description: "Get detailed column info for a specific table. Include schema prefix (e.g., 'dwh.FactSales').",
+        description: "Get detailed column info for a specific table. Use schema prefix for accuracy (e.g., 'agent.PipelineRun', 'core.Dataset', 'fact.AfricaFlex'). Without prefix, searches all schemas.",
+      },
+      search: {
+        type: "string",
+        description: "Search for tables/views by name pattern across all schemas. Uses SQL LIKE with wildcards added automatically. E.g., search='Revenue' finds all tables/views containing 'Revenue' in any schema. search='Pipeline' finds agent.PipelineRun, core.Pipeline, etc.",
       },
       connection: {
         type: "string",
@@ -365,14 +374,17 @@ export const mssqlSchemaTool: Tool = {
         const tableName = String(args.table)
         // Parameterize the table lookup
         const parts = tableName.split(".")
-        const schema = parts.length > 1 ? parts[0] : "dbo"
+        const schema = parts.length > 1 ? parts[0] : null
         const table = parts.length > 1 ? parts[1] : parts[0]
 
-        request.input("schema", sql.NVarChar, schema)
         request.input("table", sql.NVarChar, table)
+        if (schema) {
+          request.input("schema", sql.NVarChar, schema)
+        }
 
         const result = await request.query(`
           SELECT
+            c.TABLE_SCHEMA,
             c.COLUMN_NAME,
             c.DATA_TYPE,
             c.CHARACTER_MAXIMUM_LENGTH,
@@ -396,12 +408,38 @@ export const mssqlSchemaTool: Tool = {
             JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE cu ON rc.CONSTRAINT_NAME = cu.CONSTRAINT_NAME
             JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku2 ON rc.UNIQUE_CONSTRAINT_NAME = ku2.CONSTRAINT_NAME
           ) fk ON fk.TABLE_SCHEMA = c.TABLE_SCHEMA AND fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME
-          WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
-          ORDER BY c.ORDINAL_POSITION
+          WHERE ${schema ? "c.TABLE_SCHEMA = @schema AND" : ""} c.TABLE_NAME = @table
+          ORDER BY c.TABLE_SCHEMA, c.ORDINAL_POSITION
         `)
 
-        if (!result.recordset.length) return `No columns found for ${tableName}`
-        return `Columns for ${schema}.${table}:\n` +
+        if (!result.recordset.length) return `No columns found for ${tableName}. Try with schema prefix (e.g. 'agent.${table}', 'core.${table}').`
+        const label = schema ? `${schema}.${table}` : result.recordset[0].TABLE_SCHEMA + "." + table
+        return `Columns for ${label}:\n` +
+          formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+      }
+
+      // Search for tables/views by name pattern
+      if (args.search) {
+        const pattern = `%${String(args.search)}%`
+        request.input("pattern", sql.NVarChar, pattern)
+
+        const result = await request.query(`
+          SELECT
+            t.TABLE_SCHEMA,
+            t.TABLE_NAME,
+            t.TABLE_TYPE,
+            (SELECT SUM(p.rows) FROM sys.partitions p
+             JOIN sys.tables st ON p.object_id = st.object_id
+             JOIN sys.schemas s ON st.schema_id = s.schema_id
+             WHERE s.name = t.TABLE_SCHEMA AND st.name = t.TABLE_NAME AND p.index_id IN (0,1)
+            ) AS ROW_COUNT
+          FROM INFORMATION_SCHEMA.TABLES t
+          WHERE t.TABLE_NAME LIKE @pattern
+          ORDER BY t.TABLE_SCHEMA, t.TABLE_TYPE, t.TABLE_NAME
+        `)
+
+        if (!result.recordset.length) return `No tables/views found matching '${String(args.search)}'. Try a different keyword.`
+        return `Tables/views matching '${String(args.search)}':\n` +
           formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
       }
 

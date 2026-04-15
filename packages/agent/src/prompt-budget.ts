@@ -1,145 +1,42 @@
 /**
- * Prompt budget allocation system — ported from agenc-core's prompt-budget.ts (839 lines).
+ * Prompt budget allocation system — section-aware context window management.
  *
- * Section-aware context window management that:
- *   1. Derives per-section budgets from the model's context window
- *   2. Rebalances slack from under-used sections to over-used ones
- *   3. Drops/truncates messages per section using priority rules
- *   4. Preserves anchored sections (system anchor, user, tools) from drops
- *   5. Reports diagnostics for observability
+ * Types and section configuration are in prompt-budget-types.ts.
  *
  * @module
  */
 
+import {
+    BASE_SECTION_KEYS,
+    BASE_SECTION_SPECS,
+    DEFAULT_CHAR_PER_TOKEN,
+    DEFAULT_CONTEXT_WINDOW_TOKENS,
+    DEFAULT_HARD_MAX_PROMPT_CHARS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_SAFETY_MARGIN_TOKENS,
+    MAX_PROMPT_CHAR_BUDGET,
+    MIN_PROMPT_CHAR_BUDGET,
+    SECTION_BEHAVIOR,
+    SECTION_ORDER,
+    type BaseSectionKey,
+    type PromptBudgetAllocationResult,
+    type PromptBudgetCaps,
+    type PromptBudgetConfig,
+    type PromptBudgetPlan,
+    type PromptBudgetSectionStats,
+} from "./prompt-budget-types.js"
 import type { Message, PromptBudgetSection } from "./types.js"
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface PromptBudgetConfig {
-  /** Provider/model context window in tokens. */
-  readonly contextWindowTokens?: number
-  /** Requested max output tokens. */
-  readonly maxOutputTokens?: number
-  /** Approximate chars-per-token (default: 4). */
-  readonly charPerToken?: number
-  /** Safety margin reserved for protocol overhead. */
-  readonly safetyMarginTokens?: number
-  /** Hard upper bound on prompt chars after allocation. */
-  readonly hardMaxPromptChars?: number
-}
-
-export interface PromptBudgetModelProfile {
-  readonly contextWindowTokens: number
-  readonly maxOutputTokens: number
-  readonly safetyMarginTokens: number
-  readonly promptTokenBudget: number
-  readonly charPerToken: number
-}
-
-export interface PromptBudgetCaps {
-  readonly totalChars: number
-  readonly systemChars: number
-  readonly systemAnchorChars: number
-  readonly systemRuntimeChars: number
-  readonly memoryChars: number
-  readonly memoryWorkingChars: number
-  readonly memoryEpisodicChars: number
-  readonly memorySemanticChars: number
-  readonly historyChars: number
-  readonly userChars: number
-  readonly otherChars: number
-}
-
-export interface PromptBudgetSectionStats {
-  readonly capChars: number
-  readonly beforeMessages: number
-  readonly afterMessages: number
-  readonly beforeChars: number
-  readonly afterChars: number
-  readonly droppedMessages: number
-  readonly truncatedMessages: number
-}
-
-export interface PromptBudgetDiagnostics {
-  readonly model: PromptBudgetModelProfile
-  readonly caps: PromptBudgetCaps
-  readonly totalBeforeChars: number
-  readonly totalAfterChars: number
-  readonly constrained: boolean
-  readonly droppedSections: readonly PromptBudgetSection[]
-  readonly sections: Record<PromptBudgetSection, PromptBudgetSectionStats>
-}
-
-export interface PromptBudgetPlan {
-  readonly model: PromptBudgetModelProfile
-  readonly caps: PromptBudgetCaps
-}
-
-export interface PromptBudgetAllocationResult {
-  readonly messages: Message[]
-  readonly diagnostics: PromptBudgetDiagnostics
-}
-
-// ============================================================================
-// Defaults
-// ============================================================================
-
-const DEFAULT_CONTEXT_WINDOW_TOKENS = 32_768
-const DEFAULT_MAX_OUTPUT_TOKENS = 2_048
-const DEFAULT_CHAR_PER_TOKEN = 4
-const DEFAULT_SAFETY_MARGIN_TOKENS = 1_024
-const DEFAULT_HARD_MAX_PROMPT_CHARS = 100_000
-const MIN_PROMPT_CHAR_BUDGET = 8_000
-const MAX_PROMPT_CHAR_BUDGET = 1_500_000
-
-// ============================================================================
-// Section specs & behavior
-// ============================================================================
-
-type BaseSectionKey = "system" | "memory" | "history" | "user" | "other"
-const BASE_SECTION_KEYS: readonly BaseSectionKey[] = ["system", "memory", "history", "user", "other"]
-
-interface SectionSpec {
-  readonly key: BaseSectionKey
-  readonly weight: number
-  readonly minChars: number
-  readonly maxChars: number
-}
-
-const BASE_SECTION_SPECS: readonly SectionSpec[] = [
-  { key: "system", weight: 0.25, minChars: 2_048, maxChars: 40_000 },
-  { key: "memory", weight: 0.20, minChars: 1_536, maxChars: 30_000 },
-  { key: "history", weight: 0.35, minChars: 2_048, maxChars: 50_000 },
-  { key: "user", weight: 0.12, minChars: 1_536, maxChars: 16_000 },
-  { key: "other", weight: 0.08, minChars: 512, maxChars: 12_000 },
-]
-
-const SECTION_ORDER: readonly PromptBudgetSection[] = [
-  "system_anchor",
-  "system_runtime",
-  "memory_working",
-  "memory_episodic",
-  "memory_semantic",
-  "history",
-  "user",
-]
-
-interface SectionBehavior {
-  readonly dropAllowed: boolean
-  readonly newestFirst: boolean
-}
-
-const SECTION_BEHAVIOR: Record<PromptBudgetSection, SectionBehavior> = {
-  system_anchor: { dropAllowed: false, newestFirst: false },
-  system_runtime: { dropAllowed: true, newestFirst: true },
-  memory_working: { dropAllowed: true, newestFirst: true },
-  memory_episodic: { dropAllowed: true, newestFirst: true },
-  memory_semantic: { dropAllowed: true, newestFirst: true },
-  history: { dropAllowed: true, newestFirst: true },
-  user: { dropAllowed: false, newestFirst: false },
-}
+// Re-export all types for backwards compatibility
+export type {
+    PromptBudgetAllocationResult,
+    PromptBudgetCaps,
+    PromptBudgetConfig,
+    PromptBudgetDiagnostics,
+    PromptBudgetModelProfile,
+    PromptBudgetPlan,
+    PromptBudgetSectionStats
+} from "./prompt-budget-types.js"
 
 // ============================================================================
 // Helpers

@@ -9,51 +9,27 @@
  * @module
  */
 
-import type { RecoveryHint, ToolCallRecord } from "./recovery.js"
-import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText } from "./recovery.js"
+import {
+    HIGH_RISK_TOOLS,
+    MAX_CONSECUTIVE_ALL_FAILED_ROUNDS,
+    MAX_CONSECUTIVE_IDENTICAL_FAILURES,
+    MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS,
+    MAX_TOOL_CALL_ARGUMENT_CHARS,
+    SAFE_RETRY_TOOLS,
+} from "./constants.js"
+import type { ToolCallRecord } from "./tool-result.js"
+import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText, normalizeToolExecutionOutput } from "./tool-result.js"
 import type { ToolResultEnvelope } from "./types.js"
 
+// Re-export normalizeToolExecutionOutput for backwards compatibility
+export { normalizeToolExecutionOutput } from "./tool-result.js"
+
 // ============================================================================
-// Constants
+// Constants (local only — not duplicated from constants.ts)
 // ============================================================================
 
-/** Max chars retained per tool call argument payload for replay. */
-export const MAX_TOOL_CALL_ARGUMENT_CHARS = 100_000
 /** Max chars of raw preview kept when tool-call args are truncated. */
 export const MAX_TOOL_CALL_ARGUMENT_PREVIEW_CHARS = 4_000
-/** Max chars kept from a tool result when feeding back into context. */
-export const MAX_TOOL_RESULT_CHARS = 100_000
-/** Upper bound on additive runtime hint system messages per execution. */
-export const MAX_RUNTIME_SYSTEM_HINTS = 4
-/** Max repeat identical failing calls / all-fail rounds / semantic duplicate rounds. */
-export const MAX_CONSECUTIVE_IDENTICAL_FAILURES = 3
-export const MAX_CONSECUTIVE_ALL_FAILED_ROUNDS = 3
-export const MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS = 2
-
-const RECOVERY_HINT_PREFIX = "Tool recovery hint:"
-
-/**
- * High-risk tools that MUST NOT be auto-retried unless an explicit
- * idempotency token is provided.
- */
-const HIGH_RISK_TOOLS = new Set([
-  "run_command",
-  "write_file",
-  "delete",
-  "delegate",
-  "delegate_parallel",
-])
-
-/** Tools that are always safe to retry on transport failure. */
-const SAFE_RETRY_TOOLS = new Set([
-  "read_file",
-  "list_directory",
-  "search_files",
-  "browse_web",
-  "fetch_url",
-  "browser_check",
-  "think",
-])
 
 // ============================================================================
 // Tool call permission
@@ -155,28 +131,6 @@ export interface ToolExecutionResult {
   readonly retrySuppressedReason?: string
   readonly durationMs: number
   readonly outcome?: ToolResultEnvelope
-}
-
-function isToolResultEnvelope(value: unknown): value is ToolResultEnvelope {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-    && typeof (value as ToolResultEnvelope).ok === "boolean"
-    && typeof (value as ToolResultEnvelope).summary === "string"
-}
-
-function formatToolResultEnvelope(outcome: ToolResultEnvelope): string {
-  const details = outcome.details?.filter(Boolean) ?? []
-  if (details.length === 0) return outcome.summary
-  return `${outcome.summary}\n${details.map((detail) => `  - ${detail}`).join("\n")}`
-}
-
-export function normalizeToolExecutionOutput(
-  value: string | ToolResultEnvelope,
-): { result: string; outcome?: ToolResultEnvelope } {
-  if (typeof value === "string") return { result: value }
-  if (isToolResultEnvelope(value)) {
-    return { result: formatToolResultEnvelope(value), outcome: value }
-  }
-  return { result: JSON.stringify({ error: "Tool returned unsupported payload type" }) }
 }
 
 /**
@@ -424,305 +378,15 @@ export function checkToolLoopStuckDetection(
   return { shouldBreak: false }
 }
 
-// ============================================================================
-// Tool round progress summary (for budget extension decisions)
-// ============================================================================
-
-// Strip ANSI escapes for diagnostic key normalization
-const ANSI_ESCAPE_RE =
-  // eslint-disable-next-line no-control-regex
-  /\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
-
-/** Tokens that indicate a verification/check command. */
-const VERIFICATION_TOKENS = new Set([
-  "build", "check", "compile", "coverage", "lint", "test", "typecheck", "verify",
-])
-
-/** Commands that, when leading, indicate a verification invocation. */
-const VERIFICATION_COMMANDS = new Set([
-  "cargo", "deno", "go", "gradle", "jest", "mvn", "node", "npm", "npx",
-  "pnpm", "python", "python3", "pytest", "ruff", "tsc", "uv", "vitest",
-  "yarn", "bun",
-])
-
-/** Commands that indicate workspace mutations. */
-const MUTATING_COMMANDS = new Set([
-  "cp", "git", "install", "mkdir", "mv", "perl", "rm", "sed", "touch",
-])
-
-export interface ToolRoundProgressSummary {
-  readonly durationMs: number
-  readonly totalCalls: number
-  readonly successfulCalls: number
-  readonly newSuccessfulSemanticKeys: number
-  readonly newVerificationFailureDiagnosticKeys: number
-  readonly hadSuccessfulMutation: boolean
-  readonly hadVerificationCall: boolean
-  readonly hadReadCall: boolean
-  readonly hadMaterialProgress: boolean
-}
-
-/**
- * Summarize a tool round's progress for budget extension decisions.
- *
- * Detects:
- *   - Verification calls (test/build/lint commands)
- *   - Mutation calls (file writes, git, npm install, etc.)
- *   - New unique semantic keys (calls not seen before)
- *   - New unique failure diagnostic keys
- */
-export function summarizeToolRoundProgress(
-  roundCalls: readonly ToolCallRecord[],
-  durationMs: number,
-  seenSuccessfulSemanticKeys: Set<string>,
-  seenVerificationFailureDiagnosticKeys: Set<string>,
-): ToolRoundProgressSummary {
-  let successfulCalls = 0
-  let newSuccessfulSemanticKeys = 0
-  let newVerificationFailureDiagnosticKeys = 0
-  let hadSuccessfulMutation = false
-  let hadVerificationCall = false
-  let hadReadCall = false
-
-  for (const call of roundCalls) {
-    if (isVerificationToolCall(call)) {
-      hadVerificationCall = true
-      if (didToolCallFail(call.isError, call.result)) {
-        const diagKey = buildFailureDiagnosticKey(call)
-        if (diagKey && !seenVerificationFailureDiagnosticKeys.has(diagKey)) {
-          seenVerificationFailureDiagnosticKeys.add(diagKey)
-          newVerificationFailureDiagnosticKeys++
-        }
-      }
-    }
-    if (call.name === "read_file" && !didToolCallFail(call.isError, call.result)) {
-      hadReadCall = true
-    }
-    if (isSuccessfulMutationToolCall(call)) {
-      hadSuccessfulMutation = true
-    }
-    if (didToolCallFail(call.isError, call.result)) continue
-    successfulCalls++
-    const semanticKey = buildSemanticToolCallKey(call.name, call.args)
-    if (!seenSuccessfulSemanticKeys.has(semanticKey)) {
-      seenSuccessfulSemanticKeys.add(semanticKey)
-      newSuccessfulSemanticKeys++
-    }
-  }
-
-  return {
-    durationMs,
-    totalCalls: roundCalls.length,
-    successfulCalls,
-    newSuccessfulSemanticKeys,
-    newVerificationFailureDiagnosticKeys,
-    hadSuccessfulMutation,
-    hadVerificationCall,
-    hadReadCall,
-    hadMaterialProgress: newSuccessfulSemanticKeys > 0 || newVerificationFailureDiagnosticKeys > 0,
-  }
-}
-
-function normalizeFailureDiagnosticText(text: string): string {
-  return text.replace(ANSI_ESCAPE_RE, "").trim().replace(/\s+/g, " ").toLowerCase().slice(0, 600)
-}
-
-function buildFailureDiagnosticKey(call: ToolCallRecord): string | null {
-  if (!didToolCallFail(call.isError, call.result)) return null
-  const normalizedFailure = normalizeFailureDiagnosticText(extractToolFailureText(call))
-  if (normalizedFailure.length === 0) return null
-  return `${call.name}:${normalizedFailure}`
-}
-
-function extractCommandTokens(args: Record<string, unknown>): string[] {
-  const command = typeof args.command === "string" ? args.command : ""
-  if (command.trim().length === 0) return []
-  return command.trim().split(/\s+/).map(t => t.toLowerCase())
-}
-
-function isVerificationToolCall(call: ToolCallRecord): boolean {
-  if (call.name !== "run_command") return false
-  const tokens = extractCommandTokens(call.args)
-  if (tokens.length === 0) return false
-  const [command, ...rest] = tokens
-  if (VERIFICATION_COMMANDS.has(command)) {
-    if (command === "npm" || command === "pnpm" || command === "yarn" || command === "bun") {
-      return rest.some(t => VERIFICATION_TOKENS.has(t))
-    }
-    if (command === "npx" || command === "uv") {
-      return rest.some(t => VERIFICATION_COMMANDS.has(t) || VERIFICATION_TOKENS.has(t))
-    }
-    return true
-  }
-  return tokens.some(t => VERIFICATION_TOKENS.has(t))
-}
-
-function isSuccessfulMutationToolCall(call: ToolCallRecord): boolean {
-  if (didToolCallFail(call.isError, call.result)) return false
-  if (call.name === "write_file" || call.name === "delete") return true
-  if (call.name !== "run_command") return false
-  const tokens = extractCommandTokens(call.args)
-  if (tokens.length === 0) return false
-  const [command, ...rest] = tokens
-  if (command === "git") {
-    return rest.some(t => ["apply", "checkout", "mv", "restore", "rm"].includes(t))
-  }
-  if (command === "npm" || command === "pnpm" || command === "yarn" || command === "bun") {
-    return rest.some(t => ["add", "dedupe", "install", "remove", "uninstall", "update"].includes(t))
-  }
-  if (command === "sed" || command === "perl") {
-    return rest.some(t => t === "-i" || t.startsWith("-i"))
-  }
-  return MUTATING_COMMANDS.has(command)
-}
-
-// ============================================================================
-// Tool loop recovery message builder
-// ============================================================================
-
-/**
- * Build recovery hint messages for injection after a tool round.
- * Respects the max runtime system hint cap.
- */
-export function buildToolLoopRecoveryMessages(
-  recoveryHints: readonly RecoveryHint[],
-  maxRuntimeSystemHints: number,
-  currentRuntimeHintCount: number,
-): Array<{ role: "system"; content: string }> {
-  const messages: Array<{ role: "system"; content: string }> = []
-  if (maxRuntimeSystemHints <= 0) return messages
-  let hintCount = currentRuntimeHintCount
-  for (const hint of recoveryHints) {
-    if (hintCount >= maxRuntimeSystemHints) break
-    messages.push({
-      role: "system",
-      content: `${RECOVERY_HINT_PREFIX} ${hint.message}`,
-    })
-    hintCount++
-  }
-  return messages
-}
-
-// ============================================================================
-// Tool round budget extension
-// ============================================================================
-
-export interface ToolRoundBudgetExtensionResult {
-  readonly decision: "extended" | "capped" | "not_needed"
-  readonly extensionRounds: number
-  readonly newLimit: number
-  readonly extensionReason?: string
-  readonly recentProgressRate: number
-  readonly latestRoundHadMaterialProgress: boolean
-  readonly repairCycleDetected: boolean
-}
-
-/** Geometric decay weight applied to older rounds: newest = 1.0, second = DECAY, third = DECAY^2. */
-const PROGRESS_RATE_DECAY = 0.7
-
-/**
- * Evaluate whether the tool round budget should be extended based on
- * recent progress metrics.
- *
- * Enhancement over baseline (agenc-core patterns):
- *  - Weighted progress rate: recent rounds count more (geometric decay).
- *  - Cross-round repair cycle detection: (read) → (verify) → (mutation) across up to 3 rounds.
- *  - Wall clock gate: optional hard deadline — don't extend when time is almost up.
- *  - Extension size: repair_episode → 3 rounds, sustained_progress → 2 rounds.
- */
-export function evaluateToolRoundBudgetExtension(params: {
-  readonly currentLimit: number
-  readonly maxAbsoluteLimit: number
-  readonly recentRounds: readonly ToolRoundProgressSummary[]
-  readonly remainingToolBudget: number
-  /** Optional: wall clock start time. Combined with maxWallClockMs for deadline gate. */
-  readonly startTimeMs?: number
-  /** Optional: total allowed wall clock ms. Extension is suppressed at 85% of budget consumed. */
-  readonly maxWallClockMs?: number
-}): ToolRoundBudgetExtensionResult {
-  const { currentLimit, maxAbsoluteLimit, recentRounds, remainingToolBudget } = params
-
-  if (currentLimit >= maxAbsoluteLimit) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
-  }
-  if (recentRounds.length === 0) {
-    return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
-  }
-
-  // Wall clock gate — don't extend if we're close to the deadline
-  if (params.startTimeMs != null && params.maxWallClockMs != null) {
-    const elapsedMs = Date.now() - params.startTimeMs
-    if (elapsedMs > params.maxWallClockMs * 0.85) {
-      return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
-    }
-  }
-
-  const latestRound = recentRounds[recentRounds.length - 1]
-
-  // Weighted progress rate: newest round has weight 1.0, each older round decays by DECAY factor
-  let weightedProgressSum = 0
-  let weightTotal = 0
-  for (let j = 0; j < recentRounds.length; j++) {
-    const weight = Math.pow(PROGRESS_RATE_DECAY, recentRounds.length - 1 - j)
-    weightedProgressSum += weight * (recentRounds[j].hadMaterialProgress ? 1 : 0)
-    weightTotal += weight
-  }
-  const recentProgressRate = weightTotal > 0 ? weightedProgressSum / weightTotal : 0
-
-  // Cross-round repair cycle: detect read → verify → mutation sequence across last 3 rounds
-  // Pattern: prev-prev had a read call, prev had a verification call, latest has a mutation
-  let repairCycleDetected = false
-  if (recentRounds.length >= 3) {
-    const prev2 = recentRounds[recentRounds.length - 3]
-    const prev1 = recentRounds[recentRounds.length - 2]
-    if (prev2.hadReadCall && prev1.hadVerificationCall && latestRound.hadSuccessfulMutation) {
-      repairCycleDetected = true
-    }
-  }
-  // Also detect a shorter 2-round pattern: verify → mutation (the mutation is the repair)
-  if (!repairCycleDetected && recentRounds.length >= 2) {
-    const prev1 = recentRounds[recentRounds.length - 2]
-    if (prev1.hadVerificationCall && latestRound.hadSuccessfulMutation) {
-      repairCycleDetected = true
-    }
-  }
-  // In-round repair: mutation + verification in the same round (existing logic, kept for compatibility)
-  const isInRoundRepair = latestRound.hadSuccessfulMutation && latestRound.hadVerificationCall
-
-  const shouldExtend = recentProgressRate >= 0.5 || repairCycleDetected || isInRoundRepair
-
-  if (!shouldExtend) {
-    return {
-      decision: "not_needed",
-      extensionRounds: 0,
-      newLimit: currentLimit,
-      recentProgressRate,
-      latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
-      repairCycleDetected,
-    }
-  }
-
-  // Extension size: repair episode gets 3 rounds, sustained progress gets 2, +1 if budget allows
-  let extensionRounds = repairCycleDetected ? 3 : 2
-  if (remainingToolBudget > 10) extensionRounds++
-
-  const newLimit = Math.min(currentLimit + extensionRounds, maxAbsoluteLimit)
-  extensionRounds = newLimit - currentLimit
-
-  if (extensionRounds <= 0) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate, latestRoundHadMaterialProgress: latestRound.hadMaterialProgress, repairCycleDetected }
-  }
-
-  return {
-    decision: "extended",
-    extensionRounds,
-    newLimit,
-    extensionReason: repairCycleDetected ? "repair_episode" : (isInRoundRepair ? "repair_cycle_active" : "sustained_progress"),
-    recentProgressRate,
-    latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
-    repairCycleDetected,
-  }
-}
+// Re-export progress summary and budget extension from tool-progress.ts
+export {
+    evaluateToolRoundBudgetExtension,
+    summarizeToolRoundProgress
+} from "./tool-progress.js"
+export type {
+    ToolRoundBudgetExtensionResult,
+    ToolRoundProgressSummary
+} from "./tool-progress.js"
 
 // ============================================================================
 // Enrichment helpers

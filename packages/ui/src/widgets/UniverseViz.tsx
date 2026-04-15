@@ -2,8 +2,8 @@
  * UniverseViz — Real-time Sequence Diagram
  *
  * Renders ALL WebSocket events as a UML-style sequence diagram
- * with nine participant lifelines: Agent, LLM, Tools, Delegates,
- * Memory, Checkpoint, API/Channels, Database, and System.
+ * with ten participant lifelines: Agent, LLM, Tools, Delegates,
+ * Memory, Checkpoint, API/Channels, Database, Orchestrator, and Planner.
  *
  * Visual elements:
  *   - Dashed vertical lifelines per participant
@@ -31,7 +31,7 @@ const P = {
   ckpt:     "#D4A64A",
   api:      "#4DD0E1",
   db:       "#AB7DDB",
-  system:   "#6B7280",
+  orch:     "#6B7280",
   planner:  "#E879A8",
   ok:       "#5DB078",
   err:      "#E05252",
@@ -53,7 +53,7 @@ const LANES = [
   { id: "ckpt",     label: "Checkpoint", color: P.ckpt },
   { id: "api",      label: "API",        color: P.api },
   { id: "db",       label: "Database",   color: P.db },
-  { id: "system",   label: "System",     color: P.system },
+  { id: "orch",     label: "Orchestrator", color: P.orch },
   { id: "planner",  label: "Planner",    color: P.planner },
 ] as const
 
@@ -312,30 +312,90 @@ function classify(ev: WsEvent): DRow {
       }
     }
 
+    // ── Additional planner trace events ────────────────────────
+    if (kind === "planning_preflight")
+      return { ...base, lane: 9, label: "planner-first routing", color: P.planner, arrow: 0 }
+    if (kind === "planner_failure")
+      return { ...base, lane: 9, label: `planner failed: ${trunc(String(entry?.error ?? ""), 30)}`, color: P.err }
+    if (kind === "direct_loop_fallback")
+      return { ...base, lane: 0, label: "direct loop fallback (no planner)", color: P.agent }
+    if (kind === "planner-runtime-compiled")
+      return { ...base, lane: 9, label: "runtime compiled", color: P.planner }
+    if (kind === "planner-coherent-bootstrap")
+      return { ...base, lane: 9, label: "coherent bootstrap", color: P.planner, arrow: 1 }
+    if (kind === "planner-architecture-state")
+      return { ...base, lane: 9, label: `arch: ${trunc(String(entry?.status ?? ""), 20)} ${trunc(String(entry?.lane ?? ""), 14)}`, color: P.planner }
+    if (kind === "planner-step-transition")
+      return { ...base, lane: 9, label: `transition: ${trunc(String(entry?.stepName ?? ""), 20)} → ${trunc(String(entry?.state ?? ""), 12)}`, color: P.planner }
+    if (kind === "planner-verification-followup")
+      return { ...base, lane: 9, label: `verify followup: ${entry?.followupCount ?? 0} steps`, color: P.warn }
+    if (kind === "planner-issue-timeline")
+      return { ...base, lane: 9, label: `issue timeline: ${entry?.issueCount ?? 0} issues`, color: P.warn }
+    if (kind === "planner-repair-plan")
+      return { ...base, lane: 9, label: `repair plan: ${Array.isArray(entry?.rerunOrder) ? entry.rerunOrder.join(" → ") : "none"}`, color: P.warn, arrow: 3 }
+    if (kind === "planner-repair-compatibility")
+      return { ...base, lane: 9, label: `repair compat: ${trunc(String(entry?.status ?? ""), 20)}`, color: P.warn }
+
+    // ── Coherent generation (Planner orchestrating multi-artifact writes) ──
+    if (kind === "coherent-generation-start")
+      return { ...base, lane: 9, label: "coherent generation start", color: P.planner, arrow: 2 }
+    if (kind === "coherent-generation-bundle")
+      return { ...base, lane: 9, label: `coherent bundle (${entry?.artifactCount ?? "?"} artifacts)`, color: P.planner }
+    if (kind === "coherent-generation-materialized")
+      return { ...base, lane: 9, label: `coherent materialized (${entry?.fileCount ?? "?"} files)`, color: P.ok, arrow: 2 }
+    if (kind === "coherent-generation-verified")
+      return { ...base, lane: 9, label: "coherent verified", color: P.ok }
+    if (kind === "coherent-generation-repair-needed")
+      return { ...base, lane: 9, label: "coherent repair needed", color: P.warn }
+    if (kind === "coherent-generation-escalated")
+      return { ...base, lane: 9, label: "coherent repair escalated", color: P.err }
+    if (kind === "coherent-generation-handoff")
+      return { ...base, lane: 9, label: "coherent handoff to verifier", color: P.planner }
+    if (kind === "coherent-generation-failed")
+      return { ...base, lane: 9, label: "coherent generation failed", color: P.err }
+
+    // ── Verifier trace events ────────────────────────────────
+    if (kind === "verifier-reconciliation-check")
+      return { ...base, lane: 9, label: `verify reconciliation: ${trunc(String(entry?.status ?? ""), 20)}`, color: P.planner }
+    if (kind === "verifier-contract-check")
+      return { ...base, lane: 9, label: `verify contract: ${trunc(String(entry?.status ?? ""), 20)}`, color: P.planner }
+    if (kind === "verification_attempt_failure")
+      return { ...base, lane: 9, label: `verify attempt failed: ${trunc(String(entry?.error ?? ""), 25)}`, color: P.err }
+
+    // ── Agent-level trace events ─────────────────────────────
+    if (kind === "nudge")
+      return { ...base, lane: 0, label: `nudge: ${trunc(String(entry?.text ?? ""), 40)}`, color: P.agent }
+
+    // ── Workspace diff (Agent file operations via tools) ─────
     if (kind === "workspace_diff") {
       const diff = entry?.diff as { added?: unknown[]; modified?: unknown[]; deleted?: unknown[] } | undefined
       const added = diff?.added?.length ?? 0
       const modified = diff?.modified?.length ?? 0
       const deleted = diff?.deleted?.length ?? 0
-      return { ...base, lane: 0, label: `workspace diff +${added} ~${modified} -${deleted}`, color: P.api, arrow: 8 }
+      return { ...base, lane: 0, label: `workspace diff +${added} ~${modified} -${deleted}`, color: P.tools, arrow: 2 }
     }
     if (kind === "workspace_diff_applied") {
       const summary = entry?.summary as { added?: number; modified?: number; deleted?: number } | undefined
       const added = summary?.added ?? 0
       const modified = summary?.modified ?? 0
       const deleted = summary?.deleted ?? 0
-      return { ...base, lane: 6, label: `workspace apply +${added} ~${modified} -${deleted}`, color: P.ok, arrow: 0 }
+      return { ...base, lane: 2, label: `workspace apply +${added} ~${modified} -${deleted}`, color: P.ok, arrow: 0 }
     }
 
-    // Debug / inspector
+    // ── Server setup (Orchestrator → Agent) ────────────────────
     if (kind === "system-prompt")
-      return { ...base, lane: 8, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.system, arrow: 0 }
+      return { ...base, lane: 8, label: `system prompt (${entry?.text?.length ?? 0} chars)`, color: P.orch, arrow: 0 }
     if (kind === "tools-resolved") {
       const names = (entry?.tools as { name: string }[])?.map((x) => x.name).join(", ") ?? ""
-      return { ...base, lane: 8, label: `${entry?.tools?.length ?? 0} tools: ${trunc(names, 50)}`, color: P.system, arrow: 0 }
+      return { ...base, lane: 8, label: `${entry?.tools?.length ?? 0} tools: ${trunc(names, 50)}`, color: P.orch, arrow: 0 }
     }
 
-    return { ...base, lane: 8, label: `trace: ${kind ?? "unknown"}`, color: P.dim }
+    // ── Fallback: route by kind prefix ───────────────────────
+    // Planner-related unknown kinds → Planner lane
+    if (kind?.startsWith("planner-") || kind?.startsWith("coherent-") || kind?.startsWith("verifier-"))
+      return { ...base, lane: 9, label: trunc(kind, 40), color: P.dim }
+    // Agent-side unknown kinds → Agent lane (not System)
+    return { ...base, lane: 0, label: `trace: ${kind ?? "unknown"}`, color: P.dim }
   }
 
   // ── Delegation events (non-trace) ──────────────────────────────
@@ -358,16 +418,14 @@ function classify(ev: WsEvent): DRow {
   if (t === "user_input.response")
     return { ...base, lane: 0, label: "user responded", color: P.agent }
 
-  // ── System events ──────────────────────────────────────────────
+  // ── Orchestrator events ─────────────────────────────────────────
   if (t === "ws.connected")
-    return { ...base, lane: 8, label: `connected (v${d.version ?? "?"}, ${d.clients ?? 0} clients)`, color: P.system }
+    return { ...base, lane: 8, label: `connected (v${d.version ?? "?"}, ${d.clients ?? 0} clients)`, color: P.orch }
   if (t === "audit") {
     const action = String(d.action ?? "")
-    if (action.startsWith("tool."))
-      return { ...base, lane: 2, label: `audit: ${action}`, color: P.system, arrow: 8 }
-    if (action.startsWith("agent.") || action.startsWith("delegation."))
-      return { ...base, lane: 0, label: `audit: ${action}`, color: P.system, arrow: 8 }
-    return { ...base, lane: 8, label: `audit: ${action}`, color: P.system }
+    // All audit events originate from the Orchestrator (it intercepts & logs)
+    // and persist to Database (audit_log table)
+    return { ...base, lane: 8, label: `audit: ${action}`, color: P.orch, arrow: 7 }
   }
   if (t === "notification")
     return { ...base, lane: 8, label: `notify: ${trunc(String(d.title ?? ""), 40)}`, color: P.warn, arrow: 6 }
@@ -402,6 +460,63 @@ function classify(ev: WsEvent): DRow {
     return { ...base, lane: 8, label: `approval: ${d.toolName}`, color: P.warn, arrow: 0 }
   if (t === "checkpoint.saved")
     return { ...base, lane: 0, label: `checkpoint (iter ${d.iteration})`, color: P.ckpt, arrow: 5 }
+
+  // ── Tool call lifecycle (killable) ─────────────────────────────
+  if (t === "tool_call.executing")
+    return { ...base, lane: 0, label: `exec: ${trunc(String(d.toolName ?? "tool"), 24)}`, color: P.tools, arrow: 2 }
+  if (t === "tool_call.completed")
+    return { ...base, lane: 2, label: `done: ${trunc(String(d.toolName ?? "tool"), 24)}`, color: P.ok, arrow: 0 }
+  if (t === "tool_call.killed")
+    return { ...base, lane: 2, label: `killed: ${trunc(String(d.toolName ?? "tool"), 24)}`, color: P.err, arrow: 0 }
+
+  // ── Rollback / Snapshot events ─────────────────────────────────
+  if (t === "snapshot.captured")
+    return { ...base, lane: 5, label: `snapshot: ${trunc(String(d.path ?? ""), 30)}`, color: P.ckpt }
+  if (t === "rollback.started")
+    return { ...base, lane: 5, label: `rollback started (${d.effectCount ?? 0} effects)`, color: P.warn, arrow: 2 }
+  if (t === "rollback.effect")
+    return { ...base, lane: 5, label: `undo: ${trunc(String(d.kind ?? ""), 10)} ${trunc(String(d.path ?? ""), 24)}`, color: P.warn }
+  if (t === "rollback.completed")
+    return { ...base, lane: 5, label: `rollback done (${d.undone ?? 0}/${d.total ?? 0})`, color: P.ok }
+  if (t === "rollback.blocked")
+    return { ...base, lane: 5, label: `rollback blocked: ${trunc(String(d.reason ?? ""), 30)}`, color: P.err }
+
+  // ── Planner coherent generation (top-level WS) ────────────────
+  if (t === "planner.coherent.started")
+    return { ...base, lane: 9, label: "coherent generation started", color: P.planner, arrow: 2 }
+  if (t === "planner.coherent.bootstrap")
+    return { ...base, lane: 9, label: "coherent bootstrap", color: P.planner, arrow: 1 }
+  if (t === "planner.coherent.bundle")
+    return { ...base, lane: 9, label: `coherent bundle (${d.artifactCount ?? "?"} artifacts)`, color: P.planner }
+  if (t === "planner.coherent.materialized")
+    return { ...base, lane: 9, label: `coherent materialized (${d.fileCount ?? "?"} files)`, color: P.ok, arrow: 2 }
+  if (t === "planner.coherent.verified")
+    return { ...base, lane: 9, label: "coherent verified", color: P.ok }
+  if (t === "planner.coherent.repair.required")
+    return { ...base, lane: 9, label: "coherent repair needed", color: P.warn }
+  if (t === "planner.coherent.repair.escalated")
+    return { ...base, lane: 9, label: "coherent repair escalated", color: P.err }
+  if (t === "planner.coherent.handoff")
+    return { ...base, lane: 9, label: "coherent handoff to verifier", color: P.planner }
+  if (t === "planner.coherent.failed")
+    return { ...base, lane: 9, label: "coherent failed", color: P.err }
+  if (t === "planner.architecture.state")
+    return { ...base, lane: 9, label: `arch: ${trunc(String(d.status ?? ""), 20)} ${trunc(String(d.lane ?? ""), 14)}`, color: P.planner }
+  if (t === "planner.runtime.compiled")
+    return { ...base, lane: 9, label: "runtime compiled", color: P.planner }
+  if (t === "planner.step.transition")
+    return { ...base, lane: 9, label: `transition: ${trunc(String(d.stepName ?? ""), 20)} → ${trunc(String(d.state ?? ""), 12)}`, color: P.planner }
+  if (t === "planner.verification.followup")
+    return { ...base, lane: 9, label: `verify followup: ${d.followupCount ?? 0} steps`, color: P.warn }
+  if (t === "planner.issue.timeline")
+    return { ...base, lane: 9, label: `issue timeline: ${d.issueCount ?? 0} issues`, color: P.warn }
+  if (t === "planner.repair.compatibility")
+    return { ...base, lane: 9, label: `repair compat: ${trunc(String(d.status ?? ""), 20)}`, color: P.warn }
+  // planner.verification handled above as planner.completed variant
+
+  // ── Procedural memory failure ──────────────────────────────────
+  if (t === "procedural.failed")
+    return { ...base, lane: 4, label: `procedural failed: ${trunc(String(d.reason ?? ""), 30)}`, color: P.err }
 
   // ── Database / API request logging ─────────────────────────────
   if (t === "api.request") {
@@ -473,7 +588,17 @@ function classify(ev: WsEvent): DRow {
     return { ...base, lane: 6, label: `msg.${action}`, color: P.api }
   }
 
-  // ── Unknown ────────────────────────────────────────────────────
+  // ── Unknown — route by event type prefix ────────────────────────
+  if (t.startsWith("planner."))
+    return { ...base, lane: 9, label: trunc(t, 40), color: P.dim }
+  if (t.startsWith("run.") || t.startsWith("agent."))
+    return { ...base, lane: 0, label: trunc(t, 40), color: P.dim }
+  if (t.startsWith("step.") || t.startsWith("tool"))
+    return { ...base, lane: 2, label: trunc(t, 40), color: P.dim }
+  if (t.startsWith("delegation."))
+    return { ...base, lane: 3, label: trunc(t, 40), color: P.dim }
+  if (t.startsWith("memory.") || t.startsWith("procedural."))
+    return { ...base, lane: 4, label: trunc(t, 40), color: P.dim }
   return { ...base, lane: 8, label: t, color: P.dim }
 }
 

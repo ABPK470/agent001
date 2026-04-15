@@ -58,8 +58,30 @@ export function buildToolContext(tools: Tool[]): string {
         "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",
       )
     }
+
+    // Inject database knowledge (schema descriptions, business context)
+    // loaded from knowledgePath files at startup. This gives the agent
+    // deep understanding of the database without runtime discovery.
+    const knowledgeBlocks = cfgs
+      .filter((c) => c.knowledge)
+      .map((c) => cfgs.length === 1 ? c.knowledge! : `[${c.name}]\n${c.knowledge!}`)
+    if (knowledgeBlocks.length > 0) {
+      sections.push("", "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:", ...knowledgeBlocks)
+    }
+
     sections.push(
-      "Use explore_mssql_schema to discover tables and columns before writing queries.",
+      "",
+      "SQL DISCIPLINE (follow strictly for EVERY database interaction):",
+      "1. EXPLORE FIRST: Before writing ANY query, call explore_mssql_schema to discover exact column names. This is NOT optional — do it for every table you plan to query.",
+      "2. NEVER GUESS COLUMNS: Column names are often non-obvious. If you haven't explored a table, you don't know its columns. Use explore_mssql_schema(table='schema.TableName') every time.",
+      "3. SCHEMA-QUALIFY EVERYTHING: Always use schema.table (e.g. agent.vPipelineRun, core.Pipeline). Never use bare table names.",
+      "4. FIND RELATED DATA: If a table has an ID column but not the label/name you need, use explore_mssql_schema(search='keyword') to find a related table that has both the ID and the descriptive columns, then JOIN them.",
+      "5. VERIFY THEN SCALE: First run a small query (SELECT TOP 5 ...) to confirm columns and data shape. Only then write the full analytical query.",
+      "6. USE KNOWLEDGE FILE: The DATABASE KNOWLEDGE section tells you which schemas exist and how they relate. Use it to pick the right schema, then explore to find exact tables and columns.",
+      "7. VALID T-SQL ONLY: Every query_mssql call must be syntactically valid T-SQL. No pseudo-code, no placeholder syntax, no made-up functions.",
+      "8. HANDLE ERRORS: If a query fails, read the error message carefully. Fix the query based on the error — don't retry the same broken query.",
+      "",
+      "Use explore_mssql_schema to discover exact column names and types when composing queries.",
       "Use query_mssql to run T-SQL queries. When asked about data, revenue, customers, sales, or any analytical question, query the database.",
       "DATA DISPLAY RULE: For any report, table, chart, or data-display task, ALWAYS use query_mssql to get the actual rows NOW, then use write_file to create a STATIC HTML file with the real data embedded directly as an inline <table> or JSON constant — DO NOT generate a Node.js server, Express app, or API layer. The backend is not running during file generation; static HTML with embedded data is the correct and complete deliverable.",
     )
