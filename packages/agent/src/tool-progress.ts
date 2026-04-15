@@ -265,7 +265,7 @@ function isVerificationToolCall(call: ToolCallRecord): boolean {
 
 function isSuccessfulMutationToolCall(call: ToolCallRecord): boolean {
   if (didToolCallFail(call.isError, call.result)) return false
-  if (call.name === "write_file" || call.name === "delete") return true
+  if (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file") return true
   if (call.name !== "run_command") return false
   const tokens = extractCommandTokens(call.args)
   if (tokens.length === 0) return false

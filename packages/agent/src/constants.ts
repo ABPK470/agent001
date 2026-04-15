@@ -130,7 +130,8 @@ export const DEFAULT_TOOL_FAILURE_BREAKER_COOLDOWN_MS = 120_000
 export const HIGH_RISK_TOOLS = new Set([
   "run_command",
   "write_file",
-  "delete",
+  "replace_in_file",
+  "append_file",
   "delegate",
   "delegate_parallel",
 ])
@@ -160,7 +161,8 @@ export const VERIFICATION_TOOLS = new Set([
 /** Tools that indicate workspace mutation. */
 export const MUTATION_TOOLS = new Set([
   "write_file",
-  "delete",
+  "replace_in_file",
+  "append_file",
   "run_command",
 ])
 

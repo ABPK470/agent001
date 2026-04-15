@@ -206,7 +206,7 @@ export function detectStructuralMarkersInArtifact(path: string, content: string)
 const SHELL_MUTATION_RE =
   /(?:^|[;&|]\s*|\n)\s*(?:cp|mv|rm|mkdir|touch|tee|sed|perl|python|node|ruby|go|cargo|npm|pnpm|yarn|make|cmake|cat|echo|printf)\b|>>?/i
 /** Direct mutation tool names. */
-const DIRECT_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "delete"])
+const DIRECT_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])
 
 export function collectSpecAuditIssues(
   step: SubagentTaskStep,

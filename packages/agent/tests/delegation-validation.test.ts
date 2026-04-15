@@ -457,8 +457,8 @@ describe("validateDelegatedOutputContract", () => {
         toolCalls: [
           makeToolCall(),
           makeToolCall({
-            name: "browser_tab_list",
-            args: {},
+            name: "browser_check",
+            args: { url: "about:blank" },
             result: "[about:blank]",
           }),
         ],
@@ -836,13 +836,6 @@ describe("isWorkspaceInspectionToolCall", () => {
 })
 
 describe("isLowSignalBrowserToolCall", () => {
-  it("identifies browser_tab_list as low signal", () => {
-    expect(isLowSignalBrowserToolCall(makeToolCall({
-      name: "browser_tab_list",
-      args: {},
-    }))).toBe(true)
-  })
-
   it("identifies about:blank navigation as low signal", () => {
     expect(isLowSignalBrowserToolCall(makeToolCall({
       name: "browser_check",

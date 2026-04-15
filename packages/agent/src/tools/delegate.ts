@@ -88,7 +88,7 @@ COMPLETE IMPLEMENTATION — NO STUBS OF ANY KIND:
 CRITICAL — write_file REPLACES the ENTIRE file:
 - write_file OVERWRITES the full file content every time. It does NOT append.
 - To ADD code to an existing file: read_file first, then write_file with ALL the old content PLUS your new code combined.
-- If your write_file content is getting very long (300+ lines), it's fine — include everything. A complete file that is long is FAR better than a partial file that destroys prior work.
+- For new files with many functions, prefer creating the file with function signatures first, then implementing each function body using replace_in_file — this avoids the risk of generating stubs or placeholders in long outputs.
 - FUNCTION PRESERVATION RULE: When you read an existing file and rewrite it, you MUST preserve ALL existing functions/methods. BEFORE calling write_file, verify that your new content contains EVERY function from the original. If your fix only touches 1-2 functions, copy the ENTIRE file and modify only those functions — keep everything else exactly as-is. Removing functions that other code calls will crash the system and the verifier WILL reject your work.
 
 PREFER replace_in_file FOR FIXES:
@@ -104,7 +104,7 @@ FILE ARCHITECTURE — CHOOSE BY OWNERSHIP AND COHESION, NOT ARBITRARY LINE CAPS:
 - If the contract clearly calls for one cohesive owned file, it is acceptable to write several hundred lines in that file. Do NOT invent extra modules just to keep files short.
 - A large coherent file is acceptable; an incomplete file is not. Preserve exact target paths and file ownership.
 - If you do use multiple browser files, load them via multiple \`<script src="file.js">\` tags in dependency order in index.html.
-- WRITE EACH OWNED FILE COMPLETELY IN ONE mutation. Do not write a skeleton and then fill it in later.
+- INCREMENTAL BUILD STRATEGY: For files with many functions, create the file first with ALL function signatures (skeleton with real parameter types and return types), then implement each function body one at a time using replace_in_file. This keeps each write small and avoids placeholder/stub output. Do NOT leave a function as a skeleton permanently — implement every function before moving to the next file.
 
 Browser projects:
 - For browser-based HTML/JS/CSS projects, use the simplest runtime boundary that matches the goal. If HTML loads cross-file browser JS/TS, use ES modules consistently: load entry files with \`<script type="module" src="...">\` and share code with \`import\`/\`export\`.
@@ -112,8 +112,9 @@ Browser projects:
 - Do NOT try to install npm packages, start HTTP servers, or run \`npm init\`. The browser_check tool loads files directly — no server needed.
 
 Writing approach:
-- For new files, write the complete implementation in one go. Include ALL logic needed for the acceptance criteria.
-- For existing files, ALWAYS read_file first, then write_file with the FULL updated content.
+- For new files with few functions (under ~100 lines), write the complete implementation in one go.
+- For new files with many functions, use the incremental build strategy: create with signatures first, then implement each function via replace_in_file.
+- For existing files, ALWAYS read_file first. Use replace_in_file for targeted changes; only use write_file when changing more than half the content.
 - IMPORTANT: "it renders" is NOT "it works". A UI that displays but has broken interactions or logic is NOT done. browser_check only checks for JavaScript load errors — it does NOT test functionality.
 - If your first write_file attempt gets errors, FIX the specific errors — do NOT delete everything and start over.
 

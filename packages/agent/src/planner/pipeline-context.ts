@@ -43,7 +43,7 @@ export function extractMutatedPathsFromToolCalls(calls: readonly ToolCallRecord[
 
   for (const c of calls) {
     if (c.isError) continue
-    if (c.name !== "write_file" && c.name !== "replace_in_file" && c.name !== "create_file") continue
+    if (c.name !== "write_file" && c.name !== "replace_in_file" && c.name !== "append_file") continue
 
     const fromArgs = typeof c.args.path === "string"
       ? c.args.path

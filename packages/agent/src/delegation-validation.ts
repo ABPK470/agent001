@@ -11,50 +11,49 @@
  * @module
  */
 
-import type { ToolCallRecord } from "./tool-result.js"
 import {
-  BLOCKED_PHASE_RE,
-  BROWSER_RUNTIME_FAILURE_RE,
-  classifyTaskIntent,
-  COMPLETION_CLAIM_RE,
-  CONTEXT_SENSITIVE_MARKERS,
-  EMPTY_VALUES,
-  extractAcceptanceTokens,
-  extractLocalArtifactReferences,
-  FILE_ARTIFACT_RE,
-  getToolCallPathArg,
-  hasMutationPathEvidence,
-  hasPostMutationArtifactInspection,
-  isExecutableVerificationToolCall,
-  isFileMutationToolCall,
-  isLowSignalBrowserToolCall,
-  isMeaningfulBrowserToolCall,
-  isWorkspaceInspectionToolCall,
-  MEANINGFUL_BROWSER_TOOLS,
-  NARRATIVE_FILE_CLAIM_RE,
-  normalizeArtifactPath,
-  specRequiresBrowserEvidence,
-  specRequiresFileMutationEvidence,
-  specRequiresSuccessfulToolEvidence,
-  specRequiresWorkspaceInspection,
-  UNRESOLVED_HANDOFF_RE,
-  UNRESOLVED_WORK_RE,
+    BLOCKED_PHASE_RE,
+    BROWSER_RUNTIME_FAILURE_RE,
+    classifyTaskIntent,
+    COMPLETION_CLAIM_RE,
+    CONTEXT_SENSITIVE_MARKERS,
+    EMPTY_VALUES,
+    extractAcceptanceTokens,
+    extractLocalArtifactReferences,
+    FILE_ARTIFACT_RE,
+    getToolCallPathArg,
+    hasMutationPathEvidence,
+    hasPostMutationArtifactInspection,
+    isExecutableVerificationToolCall,
+    isFileMutationToolCall,
+    isLowSignalBrowserToolCall,
+    isWorkspaceInspectionToolCall,
+    MEANINGFUL_BROWSER_TOOLS,
+    NARRATIVE_FILE_CLAIM_RE,
+    normalizeArtifactPath,
+    specRequiresBrowserEvidence,
+    specRequiresFileMutationEvidence,
+    specRequiresSuccessfulToolEvidence,
+    specRequiresWorkspaceInspection,
+    UNRESOLVED_HANDOFF_RE,
+    UNRESOLVED_WORK_RE
 } from "./delegation-validation-patterns.js"
+import type { ToolCallRecord } from "./tool-result.js"
 
 // Re-export everything from sub-modules for backwards compatibility
-export {
-  classifyTaskIntent,
-  extractAcceptanceTokens,
-  isFileMutationToolCall,
-  isLowSignalBrowserToolCall,
-  isWorkspaceInspectionToolCall,
-  specRequiresBrowserEvidence,
-  specRequiresFileMutationEvidence,
-  specRequiresSuccessfulToolEvidence,
-  specRequiresWorkspaceInspection,
-  type TaskIntent,
-} from "./delegation-validation-patterns.js"
 export { getCorrectionGuidance } from "./delegation-validation-correction.js"
+export {
+    classifyTaskIntent,
+    extractAcceptanceTokens,
+    isFileMutationToolCall,
+    isLowSignalBrowserToolCall,
+    isWorkspaceInspectionToolCall,
+    specRequiresBrowserEvidence,
+    specRequiresFileMutationEvidence,
+    specRequiresSuccessfulToolEvidence,
+    specRequiresWorkspaceInspection,
+    type TaskIntent
+} from "./delegation-validation-patterns.js"
 export type { ToolCallRecord } from "./tool-result.js"
 
 // Re-export from tool-result for backwards compatibility
@@ -118,8 +117,7 @@ export interface DelegationOutputValidationResult {
 // ============================================================================
 
 const FILE_MUTATION_TOOLS = new Set([
-  "write_file", "create_file", "append_file", "delete_file",
-  "edit_file", "patch_file", "replace_in_file",
+  "write_file", "append_file", "replace_in_file",
 ])
 
 const FILE_READ_TOOLS = new Set([
@@ -133,8 +131,8 @@ const SHELL_IN_PLACE_EDIT_RE =
 const SHELL_SCAFFOLD_RE =
   /\b(?:npm\s+(?:create|init)|pnpm\s+(?:create|init)|yarn\s+create|bun\s+create|cargo\s+(?:new|init)|git\s+clone)\b/i
 
-const LOW_SIGNAL_BROWSER_TOOLS = new Set([
-  "browser_tab_list", "browser_console_messages",
+const LOW_SIGNAL_BROWSER_TOOLS = new Set<string>([
+  // Reserved for future browser sub-tools
 ])
 
 // ============================================================================
@@ -211,7 +209,7 @@ export function validateDelegatedOutputContract(params: {
     const hasMutation = toolCalls.some(tc => isFileMutationToolCall(tc) && !tc.isError)
     if (!hasMutation && toolCalls.length > 0) {
       const hasShellMutation = toolCalls.some(tc => {
-        if (tc.name !== "run_command" && tc.name !== "shell") return false
+        if (tc.name !== "run_command") return false
         const cmd = typeof tc.args.command === "string" ? tc.args.command : ""
         return (SHELL_FILE_WRITE_RE.test(cmd) || SHELL_IN_PLACE_EDIT_RE.test(cmd) || SHELL_SCAFFOLD_RE.test(cmd)) && !tc.isError
       })

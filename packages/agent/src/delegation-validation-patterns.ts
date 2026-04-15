@@ -40,8 +40,7 @@ export const CONTEXT_SENSITIVE_MARKERS: ReadonlyArray<{ re: RegExp; label: strin
 
 /** File mutation tool names — tools that create/modify/delete files. */
 const FILE_MUTATION_TOOLS = new Set([
-  "write_file", "create_file", "append_file", "delete_file",
-  "edit_file", "patch_file", "replace_in_file",
+  "write_file", "append_file", "replace_in_file",
 ])
 
 /** File reading tool names. */
@@ -101,13 +100,12 @@ const LOW_SIGNAL_BROWSER_TARGETS = new Set(["about:blank"])
 
 /** Browser tools that are meaningful (navigate, snapshot, run_code). */
 export const MEANINGFUL_BROWSER_TOOLS = new Set([
-  "browser_check", "browser_navigate", "browser_snapshot",
-  "browser_run_code",
+  "browser_check",
 ])
 
 /** Browser tools that are low-signal (tab list, console only). */
-const LOW_SIGNAL_BROWSER_TOOLS = new Set([
-  "browser_tab_list", "browser_console_messages",
+const LOW_SIGNAL_BROWSER_TOOLS = new Set<string>([
+  // Reserved for future browser sub-tools
 ])
 
 // ============================================================================
@@ -237,7 +235,7 @@ export function extractAcceptanceTokens(criteria: readonly string[]): string[] {
 /** Check if a tool call represents a file mutation. */
 export function isFileMutationToolCall(record: ToolCallRecord): boolean {
   if (FILE_MUTATION_TOOLS.has(record.name)) return true
-  if (record.name === "run_command" || record.name === "shell") {
+  if (record.name === "run_command") {
     const cmd = typeof record.args.command === "string" ? record.args.command : ""
     if (SHELL_FILE_WRITE_RE.test(cmd)) return true
     if (SHELL_IN_PLACE_EDIT_RE.test(cmd)) return true
@@ -271,7 +269,7 @@ export function isMeaningfulBrowserToolCall(record: ToolCallRecord): boolean {
 /** Check if a tool call provides executable verification evidence. */
 export function isExecutableVerificationToolCall(record: ToolCallRecord): boolean {
   if (isMeaningfulBrowserToolCall(record)) return true
-  if ((record.name === "run_command" || record.name === "shell") && typeof record.args.command === "string") {
+  if (record.name === "run_command" && typeof record.args.command === "string") {
     return EXECUTABLE_VERIFICATION_CMD_RE.test(record.args.command)
   }
   return false
