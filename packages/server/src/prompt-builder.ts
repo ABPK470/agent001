@@ -5,7 +5,7 @@
  * and reusable independently of the run lifecycle.
  */
 
-import { getMssqlConfig, type Tool } from "@agent001/agent"
+import { getCatalogPromptSummary, getMssqlConfig, type Tool } from "@agent001/agent"
 import { arch, homedir, platform } from "node:os"
 
 // ── Environment detection ────────────────────────────────────────
@@ -44,7 +44,8 @@ export function buildToolContext(tools: Tool[]): string {
 
   const hasMssql = tools.some((t) =>
     t.name === "query_mssql" || t.name === "explore_mssql_schema" ||
-    t.name === "discover_relationships" || t.name === "profile_data",
+    t.name === "discover_relationships" || t.name === "profile_data" ||
+    t.name === "inspect_definition" || t.name === "search_catalog",
   )
   if (hasMssql) {
     const cfgs = getMssqlConfig()
@@ -72,28 +73,72 @@ export function buildToolContext(tools: Tool[]): string {
       sections.push("", "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:", ...knowledgeBlocks)
     }
 
+    // Inject live catalog summary if available
+    const catalogSummary = getCatalogPromptSummary()
+    if (catalogSummary) {
+      sections.push("", "SCHEMA CATALOG (live, auto-built at startup from sys.* DMVs):", catalogSummary)
+    }
+
     sections.push(
       "",
-      "DATA-FIRST MINDSET (you are a database relationship and data expert):",
-      "You have deep tools for understanding database structure and data. Use them proactively:",
-      "- discover_relationships: Map FK graphs, find join paths between tables, spot implicit relationships via shared column names.",
-      "- profile_data: Understand what's actually IN the data — cardinality, nulls, distributions, frequent values.",
-      "- explore_mssql_schema: Discover exact column names, types, and primary/foreign keys.",
-      "- query_mssql: Execute validated T-SQL queries.",
+      "⚠ SCALE CONTEXT — READ THIS FIRST:",
+      "This database is approximately 2TB of data.",
+      "SCALE RULES — ALWAYS ENFORCE:",
+      "  A) NEVER SELECT * or COUNT(*) on any fact/ext/archive table without a WHERE clause.",
+      "  B) ALWAYS use TOP + a date filter when exploring large tables.",
+      "  C) prefer persistedView.publish.X over publish.X when it exists — same data, pre-materialized.",
+      "  D) For profiling: call profile_data(columns=['col1','col2']) — never profile all columns on a wide table.",
+      "  E) Before any JOIN to dim.Client or dim.Account, confirm cardinality with profile_data or SELECT TOP 5.",
       "",
-      "RELATIONSHIP-FIRST APPROACH:",
-      "1. MAP RELATIONSHIPS FIRST: Before writing any multi-table query, call discover_relationships to understand how tables connect. Use between=['A','B'] to find join paths.",
-      "2. EXPLORE COLUMNS: Call explore_mssql_schema(table='schema.Table') for every table you plan to query. NEVER guess column names.",
-      "3. PROFILE WHEN UNCERTAIN: If you're unsure about data shape, cardinality, or common values, call profile_data before writing the analytical query.",
-      "4. SCHEMA-QUALIFY EVERYTHING: Always use schema.table (e.g. agent.vPipelineRun, core.Pipeline). Never bare table names.",
-      "5. SUGGEST CONNECTIONS: When the user asks about a table, proactively discover and mention related tables — both direct FK relationships and implicit column-name matches.",
-      "6. VERIFY THEN SCALE: First run SELECT TOP 5 to confirm shape. Only then write the full query.",
-      "7. USE KNOWLEDGE FILE: The DATABASE KNOWLEDGE section tells you which schemas exist and how they relate. Start there, then use tools to drill deeper.",
-      "8. VALID T-SQL ONLY: Every query must be syntactically valid T-SQL. No pseudo-code.",
-      "9. HANDLE ERRORS: Read error messages carefully. Fix the query — don't retry the same broken one.",
-      "10. THINK IN GRAPHS: The database is a connected graph. Every ID column is a potential edge. Use discover_relationships(column='someId') to find where IDs connect across schemas.",
+      "DATA TOOLS (use in this order for any database task):",
+      "  0. search_catalog        — ★ ALWAYS START HERE. Searches the persistent knowledge graph.",
+      "                              Shows rich metadata per table: row count, column count, join edges, centrality.",
+      "                              Use this to identify the correct table — don't guess, let the data tell you.",
+      "                              Modes: search='keyword', table='schema.Table', column='colName', joins='schema.Table', path=['A','B'], stats=true.",
+      "  1. explore_mssql_schema  — ONLY after search_catalog found the table. Gets full column detail.",
+      "  2. inspect_definition    — Read T-SQL source of views/procs. Detects DUPLICATE JOINS.",
+      "  3. discover_relationships — FK graph traversal, join-path finder, implicit column matches.",
+      "  4. profile_data          — Column stats, cardinality, nulls, top values. Essential before writing queries.",
+      "  5. query_mssql           — Execute T-SQL. Always confirm columns with explore first.",
       "",
-      "DATA DISPLAY RULE: For any report, table, chart, or data-display task, query_mssql for actual rows, then write_file a STATIC HTML with data embedded inline — no server/API layer.",
+      "★ MANDATORY WORKFLOW — READ THIS:",
+      "  Step 1: search_catalog(search='keyword') → find candidates. Read the metadata (row count, cols, joins).",
+      "  Step 2: Pick the table with the BEST structural fit (most columns matching your need, right schema tier, connected).",
+      "  Step 3: explore_mssql_schema(table='schema.Table') → confirm exact columns.",
+      "  Step 4: query_mssql(sql='SELECT TOP 5 ...') → verify with data before scaling up.",
+      "  NEVER skip Step 1. NEVER guess table names. NEVER dump entire schemas.",
+      "",
+      "DATA-FIRST + EFFICIENCY APPROACH:",
+      "1. CATALOG FIRST: search_catalog is your primary discovery tool. Trust the structural signals (row count, centrality, schema tier).",
+      "2. LINEAGE MAPS: For critical views like publish.Revenue and publish.Balances, DATABASE KNOWLEDGE contains full lineage maps.",
+      "   Use these to understand what data feeds into a view and how to trace it to source facts/dimensions.",
+      "3. USE JOINS MODE: search_catalog(joins='schema.Table') shows FK + implicit edges — no guessing needed.",
+      "4. NEVER GUESS COLUMNS: explore_mssql_schema(table='schema.Table') before every query.",
+      "5. SCHEMA-QUALIFY EVERYTHING: Always schema.table. Never bare names.",
+      "6. RELATIONSHIP-FIRST: search_catalog(path=['A','B']) or discover_relationships(between=['A','B']) before multi-table queries.",
+      "7. MAP BEFORE JOINING: Read view definitions with inspect_definition — views may already include the join you're adding.",
+      "8. VERIFY THEN SCALE: SELECT TOP 5 first, full query only after shape is confirmed.",
+      "9. VALID T-SQL ONLY: No pseudo-SQL. Every query_mssql call executes live.",
+      "10. FIX ERRORS IMMEDIATELY: Read the error message. Don't retry the same broken query.",
+      "",
+      "ANTI-PATTERNS — NEVER DO THESE:",
+      "  ✗ NEVER call explore_mssql_schema(schema='publish') to find a specific metric.",
+      "    INSTEAD: search_catalog(search='revenue') → instant, precise, ranked results.",
+      "  ✗ NEVER dump an entire schema to 'browse' — use search_catalog to search by keyword.",
+      "  ✗ NEVER assume a table name from a large dump. Use search_catalog to find the exact match.",
+      "  ✗ NEVER try a query on a table you haven't confirmed columns for.",
+      "",
+      "EFFICIENCY ANALYSIS MINDSET:",
+      "When asked about pipeline performance, slow jobs, or unexpected runtime:",
+      "  • inspect_definition(object='publish.ViewName') → read T-SQL, spot duplicate table references.",
+      "  • inspect_definition(depends_on='publish.ViewName') → trace dependency chain.",
+      "  • inspect_definition(search='TableName') → find every view/proc that touches a table.",
+      "  • inspect_definition(slow_queries=true) → surface the most expensive live queries.",
+      "  • inspect_definition(missing_indexes=true) → SQL Server's own index recommendations.",
+      "  • inspect_definition(index_usage='schema.Table') → index usage vs waste.",
+      "FINDING BAD JOINS: When a view joins the same table twice → DUPLICATE JOIN. inspect_definition flags these automatically.",
+      "",
+      "DATA DISPLAY RULE: For any report or data-display task, query_mssql for actual rows, then write_file a STATIC HTML — no server/API layer.",
     )
   }
 

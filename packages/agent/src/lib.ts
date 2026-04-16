@@ -170,12 +170,16 @@ export type { AskUserResolver } from "./tools/ask-user.js"
 export { browseWebTool, closeAllBrowserSessions, setBrowseKillSignal } from "./tools/browse-web.js"
 export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
 export type { BrowserCheckResult } from "./tools/browser-check.js"
+export { searchCatalogTool } from "./tools/catalog-search.js"
+export { buildCatalog, getCatalog, getCatalogPromptSummary, hasCatalog } from "./tools/catalog.js"
+export type { CatalogBuildOptions, CatalogGraph, CatalogStats, CatalogTable, ImplicitEdge } from "./tools/catalog.js"
 export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./tools/delegate.js"
 export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
 export { fetchUrlTool, setFetchKillSignal } from "./tools/fetch-url.js"
 export {
     appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
 } from "./tools/filesystem.js"
+export { inspectDefinitionTool } from "./tools/mssql-inspector.js"
 export { profileDataTool } from "./tools/mssql-profiler.js"
 export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
 export {

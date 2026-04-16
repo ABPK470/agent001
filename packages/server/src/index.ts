@@ -22,30 +22,31 @@ config({
 })
 
 import {
-  closeMssqlPool,
-  setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setMssqlConfig,
-  setMssqlConfigs,
-  setMssqlWriteEnabled,
-  setSearchBasePath,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
+    buildCatalog,
+    closeMssqlPool,
+    setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setMssqlConfig,
+    setMssqlConfigs,
+    setMssqlWriteEnabled,
+    setSearchBasePath,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict,
 } from "@agent001/agent"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -279,6 +280,25 @@ async function main() {
   const llmCfg = getLlmConfig()
   const llm = buildLlmClient(llmCfg)
   console.log(`LLM: ${llmCfg.provider} / ${llmCfg.model}`)
+
+  // Build schema catalog (persistent knowledge graph of entire DB structure)
+  if (mssqlSummary !== "not configured") {
+    try {
+      const maxAgeHours = Number(process.env.CATALOG_MAX_AGE_HOURS || 168)
+      const cachePath = process.env.CATALOG_CACHE_PATH || "./data/catalog-cache.json"
+      console.log(`Loading schema catalog (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
+      const catalog = await buildCatalog({
+        cachePath,
+        maxAgeMs: maxAgeHours * 3600_000,
+      })
+      const s = catalog.stats()
+      const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
+      const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
+      console.log(`📊 Schema catalog ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges`)
+    } catch (e) {
+      console.warn("⚠️  Failed to build schema catalog:", e instanceof Error ? e.message : e)
+    }
+  }
 
   // Create orchestrator (tools are resolved per-run from agent definitions)
   const orchestrator = new AgentOrchestrator({

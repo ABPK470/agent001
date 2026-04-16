@@ -64,6 +64,8 @@ const TOOL_ICONS: Record<string, typeof Shield> = {
   explore_mssql_schema: Database,
   discover_relationships: Network,
   profile_data: Database,
+  inspect_definition: FileSearch,
+  search_catalog: Search,
   delegate: GitFork,
   delegate_parallel: GitFork,
 }

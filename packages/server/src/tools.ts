@@ -14,12 +14,14 @@ import {
     createDelegateTools,
     discoverRelationshipsTool,
     fetchUrlTool,
+    inspectDefinitionTool,
     listDirectoryTool,
     mssqlSchemaTool,
     mssqlTool,
     profileDataTool,
     readFileTool,
     replaceInFileTool,
+    searchCatalogTool,
     searchFilesTool,
     shellTool,
     thinkTool,
@@ -52,6 +54,8 @@ const ALL_TOOLS: Tool[] = [
   mssqlSchemaTool,
   discoverRelationshipsTool,
   profileDataTool,
+  inspectDefinitionTool,
+  searchCatalogTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))

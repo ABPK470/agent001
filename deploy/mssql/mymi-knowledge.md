@@ -212,23 +212,346 @@ When a table lacks data you need, a related table in another schema likely has i
 
 ## Discovery Workflow
 
-For ANY database question, follow this generic process:
+For ANY database question, follow this process — **never skip steps**:
 
 1. **Identify the domain**: Use the schema descriptions above to determine which schema(s) are relevant.
    - Revenue/balances/clients → `publish`, `fact`, `dim`
    - Pipeline/ETL/jobs → `agent`, `core`
    - Data quality → `audit`, `gate`
 
-2. **Find the tables**: Use `explore_mssql_schema(search='keyword')` to find tables/views matching your topic.
-   Or use `explore_mssql_schema(schema='publish')` to list all tables in a schema.
+2. **Search the catalog**: Use `search_catalog(search='keyword')` to find tables/views matching your topic.
+   - `search_catalog(search='revenue client')` — finds client revenue views and tables
+   - `search_catalog(search='profitability')` — finds profitability views
+   - `search_catalog(search='balance daily')` — finds balance tables
+   - The catalog returns columns, types, FKs, row counts — enough to pick the right table.
+   - **Prefer publish views** in the results — they are pre-joined business-ready data.
+   - If a `persistedView.publish.X` exists for the same object, use it for better performance.
 
-3. **Discover columns**: Use `explore_mssql_schema(table='schema.TableName')` to get EXACT column names.
+3. **Check joins**: Use `search_catalog(joins='schema.Table')` to see FK + implicit join edges.
+   - This tells you exactly which tables can be joined and on what columns.
+
+4. **Discover columns**: Use `explore_mssql_schema(table='schema.TableName')` to get EXACT column names.
    Do this for EVERY table you plan to query. Never guess column names.
-
-4. **Check for missing data**: If a table has an ID column but not the label/name you need,
-   search for a related table in another schema that has both the ID and the name,
-   then JOIN them.
 
 5. **Test small first**: Run `SELECT TOP 5 ...` to verify the query works and data looks right.
 
 6. **Scale up**: Only after confirming the shape, write the full query with filters and aggregations.
+
+### Common Business Question Hints
+
+These are **suggested starting points** for common analytical questions. They may not always be correct
+or up-to-date. ALWAYS verify with `search_catalog` — the catalog's rich metadata (row count, column count,
+joins, centrality) will help you pick the best table. Trust structural signals over these hints.
+
+| Business Question | Suggested Table | Key Columns | Notes |
+|---|---|---|---|
+| Client revenue / profitability | `publish.ClientProfitability` | clientName, revenue, product, bookName | Check catalog for alternatives — multiple tables may have revenue data. |
+| Revenue by P&L / book | `fact.PNLRevenueMTD` | bookId, revenue, reportDate | Month-to-date P&L revenue. Join `dim.Book` for book names. |
+| Account balances | `publish.Balances` or `fact.AfricaFlexDailyBalances` | accountId, balance, effectiveDate | publish view is pre-joined; fact table needs dim.Account join. |
+| Client details / hierarchy | `dim.Client` + `dim.CIBParent` | clientId, clientName, parentName | dim.Client is 26M rows — always filter by clientId. |
+| Sales credits | `publish.AfricaSalesCreditTradesRules` | clientId, tradeId, salesCredit | Pre-joined view with rules applied. |
+| Risk (RWA) | `fact.RWA` | rwaAmount, clientId, reportDate | 484M rows — mandatory date filter. |
+| Pipeline runs / ETL status | `agent.vPipelineRun` | pipelineId, status, startDate, duration | Use the view, not the base table. |
+| Merchant services | `fact.MerchantServices` | merchantId, revenue, transactionDate | 397M rows — date filter required. |
+| Financial disclosure | `fact.FinancialDisclosureDaily` | amount, accountId, reportDate | 570M rows — always filter by date range. |
+
+**NOTE**: If the suggested table doesn't match your search_catalog results, trust the catalog.
+Use `search_catalog(column='revenue')` to find ALL tables with a given column, then compare metadata.
+
+---
+
+## Scale & Efficiency Reference
+
+This database is approximately **2TB** of data across hundreds of schemas and tables.
+Always treat it as a high-scale system — unfiltered queries on large tables will time out or cause load spikes.
+
+### Largest tables (row counts at last observation)
+
+| Table | Rows | Notes |
+|---|---|---|
+| `fact.UnoTranspose` | ~2.4 billion | Transactional data pivot — NEVER scan without filters |
+| `fact.IMEXCommissionsDealBalance` | ~1.6 billion | Fee/commission data — always date-filter |
+| `ext.GhanaDailyAccountsAll` | ~1 billion | External Hadoop load |
+| `ext.BotswanaDailyAccountsAll` | ~852 million | External Hadoop load |
+| `fact.AfricaFlexDailyBalances` | ~798 million | Daily balances — use date ranges |
+| `fact.FinancialDisclosureDaily` | ~570 million | Regulatory disclosure |
+| `fact.FinancialDisclosureDailySAP` | ~272 million | SAP variant |
+| `fact.BackdatedTransactions` | ~367 million | Backdated adjustments |
+| `fact.CounterpartyStructures` | ~294 million | Counterparty risk |
+| `fact.ACMAccountFacilityMapping` | ~199 million | Credit facilities |
+| `fact.AfricaFrontArena` | ~156 million | Markets trading |
+| `dim.Account` | ~51 million | Always filter before joining |
+| `dim.Client` | ~26 million | Central client master — heavy join target |
+| `agent.ActivityRun` | ~5.5 million | ETL activity execution records |
+| `agent.ActivityRunArchive` | ~4.4 million | Historical activity runs |
+| `log.Detail` | ~72 million | Granular ETL execution logs |
+
+### Query efficiency rules
+
+- **Always date-filter**: Every query on `fact.*`, `ext.*`, `archive.*` MUST have a date WHERE clause.
+- **Use TOP for exploration**: Start every investigation with `SELECT TOP 10` — never `SELECT *` cold.
+- **Prefer persistedViews**: `persistedView.publish.X` is pre-materialized. Use it instead of `publish.X` when available for the same result at a fraction of the I/O.
+- **Avoid SELECT ***: On any table with 1M+ rows, specify only the columns you need.
+- **Date dimension**: Use `dim.Date` for all temporal filtering — it has pre-computed period attributes (fiscal year, quarter, month). Never compute date logic in WHERE; join to `dim.Date` instead.
+- **dim.Client and dim.Account**: These are the most-joined tables in the system. Both are very large. Filter on key values (clientId, accountId) rather than scanning.
+
+### publish vs persistedView vs fact+dim
+
+```
+Business question
+  └── publish.X (view — pre-joined fact+dim, business-ready)
+        └── persistedView.publish.X (materialized — same as publish.X but stored)
+              └── fact.X + dim.Y (base tables — flexible but requires manual joins)
+```
+
+**For reporting**: always start at `persistedView.publish.*` if it exists; fall back to `publish.*`, then `fact+dim`.
+**For raw data / custom joins**: go to `fact` + `dim` directly.
+
+### View layer architecture
+
+The platform has 4 view layers stacked on top of base tables:
+1. **`core.*` views** (`vDataset`, `vRule`, etc.) — metadata/config pre-joins
+2. **`publish.*` views** (248+) — business-ready star-schema joins; what BI tools query
+3. **`persistedView.publish.*`** (292) — SQL Server indexed views materializing `publish.*`
+4. **`audit.*` views** (9) — data quality monitors
+
+When diagnosing slow ETL or long pipeline runs, the problem is often in **`publish.*` view definitions**:
+- Duplicate JOINs to the same table (e.g., joining `dim.Client` twice)
+- Joining through `publish.*` views inside other `publish.*` views (N-level view nesting)
+- Joining `fact.*` tables without adequate WHERE predicates — they get full scans
+
+Use `inspect_definition(object='publish.ViewName')` to read the T-SQL and detect these patterns.
+Use `inspect_definition(depends_on='publish.ViewName')` to trace the full view chain.
+Use `inspect_definition(search='TableName')` to find every view that joins a specific table.
+
+### ETL pipeline performance analysis
+
+When a pipeline is slow, trace it through three layers:
+1. **What ran?** → `agent.vPipelineRun`, `agent.vPipelineLatestRun` — get duration and status
+2. **Which activity was slow?** → `agent.ActivityRun` — find the step with the longest elapsed time
+3. **What query did it run?** → `core.Rule`, `core.vRule` — read the rule definition for that activity
+4. **Why was it slow?** → `inspect_definition(object='...')` on any view the rule references
+
+Common performance causes found this way:
+- Redundant JOIN to the same dimension (e.g., `client_base` twice in one SELECT)
+- A `publish` view calling another `publish` view that itself calls a 500M-row fact table without filters
+- Missing indexes on join columns in large `fact` tables
+- `SELECT *` inside a view definition causing over-fetch
+
+### etl schema (368 tables)
+These mapping tables (`mapping_*`) are generated dynamically per pipeline run. They are typically small
+(lookup tables for a single transformation run) but there are hundreds of them. When debugging a rule, 
+the relevant mapping table can be found via:
+```sql
+SELECT * FROM INFORMATION_SCHEMA.TABLES 
+WHERE TABLE_SCHEMA = 'etl' AND TABLE_NAME LIKE '%TargetTableName%'
+ORDER BY TABLE_NAME
+```
+
+---
+
+## Part 4: Critical View Lineage Maps
+
+These lineage maps document the **most important business views** in the DWH.
+They show exactly which tables/views feed into each critical view, what dimension keys
+are used, and how data flows from source → fact → publish layer.
+
+**USE THESE MAPS** to: understand what data is available, trace a metric to its source,
+find the right table for a business question, discover cross-sell opportunities across products,
+and suggest improvements (technical or business).
+
+### publish.Revenue — THE Revenue View
+
+The single most important view in the DWH. All client revenue across every business line
+flows through this view. It is a **UNION ALL of 59 source views/tables**, each representing
+a distinct revenue stream (product line / business area).
+
+**Output Schema** (26 columns — every UNION segment produces the same shape):
+
+| Column | Type | Dimension Join | Purpose |
+|---|---|---|---|
+| `pkMonth` | int | `dim.Month` / `dim.Calendar` | Reporting month key |
+| `pkClient` | int | `dim.Client` (26M rows) | Client dimension key — ALWAYS filter |
+| `pkProduct` | int | `dim.Product` | Product/service classification |
+| `pkChannel` | int | `dim.Channel` | Distribution channel |
+| `pkSourceProduct` | int | `dim.SourceProduct` | Original source system product |
+| `pkPortfolio` | int | `dim.Portfolio` | Portfolio grouping |
+| `pkSource` | int | `dim.Source` | Source system identifier |
+| `pkCostCentre` | int | `dim.CostCentre` | Cost centre allocation |
+| `pkSAPProduct` | int | `dim.SAPProduct` | SAP product mapping (sparse) |
+| `pkGLAccount` | int | `dim.GLAccount` | General Ledger account |
+| `RevenueLCYMTD` | decimal | — | Revenue in Local Currency, Month-To-Date |
+| `RevenueZARMTD` | decimal | — | Revenue in ZAR, Month-To-Date |
+| `RevenueCCYMTD` | decimal | — | Revenue in Contract Currency, MTD |
+| `ServiceRate` | decimal | — | Applied service rate (sparse) |
+| `pkAccount` | int | `dim.Account` (51M rows) | Account key — ALWAYS filter |
+| `pkCountry` | int | `dim.Country` | Country dimension |
+| `pkClient_ReceiverBank` | int | `dim.Client` | Receiver bank (GPP/payments) |
+| `pkClient_SenderBank` | int | `dim.Client` | Sender bank (payments) |
+| `MasterBook` | varchar | `dim.Book` | Trading book (Markets) |
+| `SRInd` | varchar | — | Sales Revenue Indicator (YES/NO) |
+| `ReferenceNumber` | varchar | — | Transaction reference |
+| `ReferenceType` | varchar | — | Reference type classification |
+| `TransactionCurrency` | varchar | `dim.Currency` | Transaction currency code |
+| `ruleId` | int | `core.Rule` | ETL rule that produced this row |
+| `pkDetailsOfTransferCharges` | int | dim table | Transfer charge detail key |
+| `OMCCode` | varchar | — | Markets OMC classification code |
+
+#### Layer 1: Revenue Streams (59 sources → publish.Revenue)
+
+Each source is a `publish.Mapping*` view/table. Grouped by business area:
+
+**Retail & Business Banking (RBB)**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 1 | `publish.MappingTransactionalBankingRules` | Transactional Banking | `pkProduct IS NOT NULL AND Amount <> 0` |
+| 2 | `publish.MappingRBBCardIssuing` | Card Issuing | `IncomeProduct IN ('CashHandlingFee','CreditInterestIncome',...)` |
+| 3 | `publish.MappingRBBMerchantServicesRules` | Merchant Services | `pkProduct IS NOT NULL AND RevenueMTD <> 0` |
+| 4 | `publish.MappingRBBFXSmallsProduct` | FX Smalls (Markets) | All rows |
+| 5 | `publish.MappingBusinessBankFleet` | Business Bank Fleet | `BsIsCode = 'INCOME'` |
+
+**UNO System (transactional core banking)**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 6 | `publish.MappingUNOTranspose` | UNO Main | `BsIsCode = 'INCOME'` |
+| 7 | `publish.MappingUNOTransposeCFC` | UNO CFC | `BsIsCode = 'INCOME'` |
+| 8 | `publish.MappingUNOTransposeCheqFees` | UNO Cheque Fees | `BsIsCode = 'INCOME'` |
+
+**Corporate & Portfolio Analytics (CPA)**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 9 | `publish.MappingCPALoanCapitalMarkets` | Loan Capital Markets | `IncomeProduct IN ('PnLinZARTrade','PnLinZARAdjustments','FXComponent...')` |
+| 10 | `publish.MappingCPABonds` | Bonds | Same PnL/FX filter |
+| 11 | `publish.MappingCPACorporate` | Corporate | Same PnL/FX filter |
+| 12 | `publish.MappingCPARPF` | RPF | Same PnL/FX filter |
+| 13 | `publish.MappingCPAUnderwriting` | Underwriting | Same PnL/FX filter |
+| 14 | `publish.MappingCPAGFOther` | GF Other | All (pkProduct NOT NULL) |
+| 15 | `publish.MappingCPAFees` | CPA Fees | All (pkProduct NOT NULL) |
+| 16 | `publish.MappingCPAFSG` | FSG | All (pkProduct NOT NULL) |
+| 17 | `publish.MappingCPAFSGPTEA` | FSG PTEA | All (pkProduct NOT NULL) |
+| 18 | `publish.MappingCPAAlpha` | Alpha | PnL/FX filter |
+| 19 | `publish.MappingCPASAF` | SAF | PnL/FX filter |
+| 20 | `publish.MappingCPAROA` | ROA | PnL/FX filter |
+| 21 | `publish.MappingCPATrade` | CPA Trades | PnL/FX filter |
+| 22 | `publish.MappingCPACPFFees` | CPF Fees | All (pkProduct NOT NULL) |
+| 23 | `publish.MappingCPADaco` | DACO | PnL/FX filter |
+| 24 | `publish.MappingCPASAM` | SAM | `IncomeProduct IN ('DailyPnL')` |
+
+**Africa Regional**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 25 | `publish.MappingAfricaCreditEas` | Africa Credit EAS | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 26 | `publish.MappingAfricaFrontArenaAfrica` | Africa FrontArena | `SourceIndicator = 'SYSTEM'` |
+| 27 | `publish.MappingAfricaFrontArenaConsolidated` | FrontArena Consolidated | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 28 | `publish.MappingAfricaFrontArenaVoided` | FrontArena Voided | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 29 | `publish.MappingAfricaFrontArenaInterest` | FrontArena Interest | `SourceIndicator NOT IN ('SYSTEMHISTORY','OTHER')` |
+| 30 | `publish.MappingAfricaFrontArenaBotswanaInstitutionalDeposits` | Botswana Deposits | `SourceIndicator = 'SYSTEM'` |
+| 31 | `publish.MappingAfricaFrontArenaFTPReversal` | FrontArena FTP Reversal | `SourceIndicator = 'SYSTEM'` |
+| 32 | `publish.MappingAfricaBrains_EMDW` | Africa Brains EMDW | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 33 | `publish.MappingAfricaFlex_EMDW` | Africa Flex EMDW | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 34 | `publish.MappingAfricaCard` | Africa Card | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 35 | `publish.MappingAfricaFTP_EMDW` | Africa FTP | `SourceIndicator <> 'SYSTEMHISTORY'` |
+| 36 | `publish.MappingAfricaMarketsMonthlyNew` | Africa Markets New | All (pkProduct + pkSourceProduct NOT NULL) |
+
+**IMEX (International Payments/Trade)**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 37 | `publish.MappingIMEXTrades` | IMEX Trades | `pkMonth <= 844` |
+| 38 | `publish.MappingIMEXCommissionsTransactions` | IMEX Commissions | `pkMonth >= 845 AND PostingFlag = 1` |
+| 39 | `publish.MappingIMEXARO` | IMEX ARO | All (pkProduct NOT NULL) |
+
+**Lending & Working Capital**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 40 | `publish.MappingCPFLoanPortfolio` | CPF Loan Portfolio | `IncomeProduct = 'MTDPNL'` |
+| 41 | `publish.MappingReceivableFinance` | Receivable Finance | `IncomeProduct IN ('1over12Fees...','FeesUpfront...',...)` |
+| 42 | `publish.MappingMoneyMarkets` | Money Markets | `IncomeProduct IN ('MFTP','InterestReceived','InterestPaid')` |
+| 43 | `publish.MappingWorkingCapitalCorp` | Working Capital | `IncomeProduct IN ('FTPCost','InterestReceived',...)` |
+| 44 | `publish.MappingVostroDepositsRules` | Vostro Deposits | `IncomeProduct IN ('MFTPrate','CRInterest1','DRInterest1')` |
+| 45 | `publish.MappingCreditLinkNote` | Credit Link Notes | `RevenueMTD <> 0` |
+
+**Payments & Fees**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 46 | `publish.MappingGPPFees` | GPP Fees (Global Payments) | `pkProduct IS NOT NULL AND RevenueMTD <> 0` |
+| 47 | `publish.MappingTradeRules` | Trade Rules | All (pkProduct NOT NULL) |
+| 48 | `publish.MappingMentisFees` | Mentis Fees | All rows |
+| 49 | `publish.MappingNewMentisFees` | New Mentis Fees | All rows |
+| 50 | `publish.MappingNewMentisFeesPre2024` | New Mentis Fees Pre-2024 | All rows |
+| 51 | `publish.MappingMentisCreditNotes` | Mentis Credit Notes | All rows |
+| 52 | `publish.MappingAISRevenue` | AIS Revenue | All (pkProduct NOT NULL) |
+| 53 | `publish.MappingAISVariableCosts` | AIS Variable Costs | All (pkProduct NOT NULL) |
+
+**Manual Adjustments & Restatements**
+| # | Source | Business Area | Key Filter |
+|---|---|---|---|
+| 54 | `publish.MappingManualAdjustments` | Manual Adj (Revenue) | All (pkProduct NOT NULL) |
+| 55 | `publish.MappingManualAdjustmentsStatic` | Manual Adj (Static) | `RevenueLCYMTD <> 0` |
+| 56 | `publish.MappingImpairmentsHadoopProduct` | Impairments (Hadoop) | All rows |
+| 57 | `publish.MappingSalesCredits` | Sales Credits | `RevenueMTD <> 0` |
+| 58 | `publish.mappingChequeDepositsRestatements` | Cheque Restatements | All rows |
+| 59 | `publish.mappingFBSSRestatements` | FBSS Restatements | All rows |
+
+#### Layer 2: What the Mapping Views Are Built From
+
+Each `publish.Mapping*` view is itself a transformation view that typically joins:
+- A **fact table** (the raw revenue/transaction data from a source system)
+- Several **dimension mapping rules** (from `core.Rule`, `core.RuleColumn` via the ETL engine)
+- **Dimension lookups** (resolving pk* keys to standardized dimension values)
+
+To discover Layer 2 for any specific Mapping view, use:
+```
+inspect_definition(object='MappingTransactionalBankingRules', schema='publish')
+```
+This will reveal the underlying fact tables and joins.
+
+Common patterns in Layer 2:
+- `fact.*` tables → raw source data (e.g., `fact.TransactionalBanking`, `fact.UnoTranspose`)
+- `etl.mapping_*` tables → rule-generated lookup tables
+- `dim.*` joins → resolving dimension keys
+- Other `publish.*` views → some Mapping views reference other publish views
+
+#### Dimension Join Reference (Layer 3)
+
+Every row in publish.Revenue has pk* keys that join to these dimension tables:
+
+| Key Column | Dimension Table | Rows | Usage |
+|---|---|---|---|
+| `pkMonth` | `dim.Month` or `dim.Calendar` | ~1K | Always present |
+| `pkClient` | `dim.Client` | ~26M | **ALWAYS filter** — never full scan |
+| `pkProduct` | `dim.Product` | ~5K | Product classification |
+| `pkChannel` | `dim.Channel` | ~100 | Distribution channel (nullable) |
+| `pkSourceProduct` | `dim.SourceProduct` | ~10K | Original source product |
+| `pkPortfolio` | `dim.Portfolio` | ~500 | Portfolio group (nullable) |
+| `pkSource` | `dim.Source` | ~100 | Source system |
+| `pkCostCentre` | `dim.CostCentre` | ~5K | Cost centre |
+| `pkGLAccount` | `dim.GLAccount` | ~10K | GL account (nullable) |
+| `pkAccount` | `dim.Account` | ~51M | **ALWAYS filter** — never full scan |
+| `pkCountry` | `dim.Country` | ~250 | Country dimension |
+
+**SRInd logic**: Most streams set `SRInd = 'YES'`. Exceptions:
+- Africa sources: `'NO'` when `pkCountry = 47` (South Africa — non-SR revenue)
+- Business Bank Fleet: always `'NO'`
+- Markets FX Smalls: `'NO'` when `Team = 'FINANCIAL INSTITUTIONS'`
+- Africa Card: `'NO'` when `pkProduct = 1833`
+- Impairments Hadoop: `'NO'` when `PLdesk = 'PRIME SERVICES' AND CoverageGroup = 'NBFI'`
+
+#### How to Use This Map
+
+**Finding revenue for a specific product/business line:**
+1. Look at the Layer 1 table above — find the business area
+2. Query that specific `publish.Mapping*` source directly for detailed analysis
+3. Or query `publish.Revenue` with appropriate filters for cross-product views
+
+**Tracing a revenue number to its source:**
+1. Find the row in publish.Revenue
+2. The source Mapping* view is identifiable by the combination of populated/NULL columns
+3. Use `inspect_definition` on that Mapping view to find the underlying fact table
+4. Use the fact table + dimension joins for root-cause analysis
+
+**Cross-sell / opportunity analysis:**
+1. Query publish.Revenue grouped by pkClient + pkProduct → see which products a client uses
+2. Compare against dimension reference data to find products NOT used
+3. Use dimension relationships (dim.Client → dim.CIBParent) to compare against peer clients
+4. The 59 revenue streams map to distinct business capabilities — gaps = opportunities
+

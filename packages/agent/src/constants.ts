@@ -152,6 +152,8 @@ export const SAFE_RETRY_TOOLS = new Set([
   "explore_mssql_schema",
   "discover_relationships",
   "profile_data",
+  "inspect_definition",
+  "search_catalog",
 ])
 
 /** Tools that indicate verification activity. */
