@@ -79,8 +79,8 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden p-3">
+      {/* Content — widget-content marks this as a drag-cancel zone so text inside is selectable */}
+      <div className="widget-content flex-1 overflow-hidden p-3">
         {children}
       </div>
     </div>

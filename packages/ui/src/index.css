@@ -97,6 +97,16 @@ body {
   opacity: 0.9;
 }
 
+/* Widget content areas must stay text-selectable.
+   react-draggable's enableUserSelectHack applies user-select: none to the
+   document during drags — override it for the content zone. */
+.widget-content,
+.widget-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: auto;
+}
+
 .react-grid-placeholder {
   background: var(--color-accent) !important;
   opacity: 0.08 !important;

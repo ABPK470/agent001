@@ -575,13 +575,15 @@ export function ingestRunTurns(run: {
   const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status }
   const episodicConfidence = run.status === "completed" ? 0.7 : 0.3
 
-  // Check for an existing summary for the same goal in this session
+  // Check for an existing summary for the same goal in this session.
+  // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
+  const goalPrefix = `Goal: ${run.goal}\n`
   const existingEpisodic = getDb().prepare(`
     SELECT id FROM memory_entries
     WHERE session_id = ? AND tier = 'episodic' AND role = 'summary'
-      AND content LIKE ?
+      AND substr(content, 1, ?) = ?
     ORDER BY created_at DESC LIMIT 1
-  `).get(sessionId, `Goal: ${run.goal}\n%`) as { id: string } | undefined
+  `).get(sessionId, goalPrefix.length, goalPrefix) as { id: string } | undefined
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
@@ -895,7 +897,11 @@ export async function searchEntries(
   const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
     const entry = rowToEntry(row)
     const rawRank = Math.abs(row.fts_rank)
-    const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence)
+    // Down-weight failed/incomplete episodic summaries so they don't poison future runs.
+    // A completed episodic entry (confidence 0.7) is treated normally.
+    // A failed one (confidence 0.3) gets an extra 0.4× penalty so it barely surfaces.
+    const statusPenalty = (entry.tier === "episodic" && entry.confidence < 0.5) ? 0.4 : 1.0
+    const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence * statusPenalty)
     const rec = recencyScore(entry.createdAt, now)
     const decay = confidenceDecay(entry.createdAt, now)
     const activation = activationBonus(entry.accessCount, entry.updatedAt, now)

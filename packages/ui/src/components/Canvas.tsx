@@ -99,7 +99,7 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
           isDraggable
           isResizable
           draggableHandle=".widget-drag-handle"
-          draggableCancel=".widget-controls"
+          draggableCancel=".widget-controls,.widget-content"
           margin={[8, 8]}
           containerPadding={[0, 0]}
           compactType="vertical"
