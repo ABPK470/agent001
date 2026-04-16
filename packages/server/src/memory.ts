@@ -561,7 +561,8 @@ export function ingestRunTurns(run: {
     })
   }
 
-  // 4. Store a compact episodic summary
+  // 4. Store a compact episodic summary — upsert by goal so repeated runs of the
+  //    same goal don't accumulate contradictory entries in memory.
   const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
   lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
   if (run.answer) {
@@ -570,16 +571,46 @@ export function ingestRunTurns(run: {
   }
   if (run.error) lines.push(`Error: ${run.error}`)
 
-  ingestTurn({
-    tier: "episodic",
-    role: "summary",
-    content: lines.join("\n"),
-    metadata: { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status },
-    source: "agent",
-    confidence: run.status === "completed" ? 0.7 : 0.3,
-    sessionId,
-    runId: run.id,
-  })
+  const episodicContent = lines.join("\n")
+  const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status }
+  const episodicConfidence = run.status === "completed" ? 0.7 : 0.3
+
+  // Check for an existing summary for the same goal in this session
+  const existingEpisodic = getDb().prepare(`
+    SELECT id FROM memory_entries
+    WHERE session_id = ? AND tier = 'episodic' AND role = 'summary'
+      AND content LIKE ?
+    ORDER BY created_at DESC LIMIT 1
+  `).get(sessionId, `Goal: ${run.goal}\n%`) as { id: string } | undefined
+
+  if (existingEpisodic) {
+    // Update in place — keeps memory lean and avoids contradictory prior-failure entries
+    const now = new Date().toISOString()
+    getDb().prepare(`
+      UPDATE memory_entries
+      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      episodicContent,
+      JSON.stringify(episodicMeta),
+      episodicConfidence,
+      computeSalience(episodicContent, "summary"),
+      run.id,
+      now,
+      existingEpisodic.id,
+    )
+  } else {
+    ingestTurn({
+      tier: "episodic",
+      role: "summary",
+      content: episodicContent,
+      metadata: episodicMeta,
+      source: "agent",
+      confidence: episodicConfidence,
+      sessionId,
+      runId: run.id,
+    })
+  }
 }
 
 // ── Procedural memory ────────────────────────────────────────────

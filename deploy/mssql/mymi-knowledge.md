@@ -357,7 +357,7 @@ structured data in the schema catalog — NOT in this file.
 
 **To access lineage:**
 - `search_catalog(lineage='publish.Revenue')` → full map: 59 source views, dimension joins, business areas
-- `search_catalog(lineage='publish.Balances')` → (when added)
+- `search_catalog(lineage='publish.Balances')` → full map: 10 source views, balance sheet categories
 
 **What lineage tells you:**
 - Which `publish.Mapping*` views feed into the critical view
