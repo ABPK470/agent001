@@ -243,17 +243,28 @@ These are **suggested starting points** for common analytical questions. They ma
 or up-to-date. ALWAYS verify with `search_catalog` — the catalog's rich metadata (row count, column count,
 joins, centrality) will help you pick the best table. Trust structural signals over these hints.
 
-| Business Question | Suggested Table | Key Columns | Notes |
-|---|---|---|---|
-| Client revenue / profitability | `publish.ClientProfitability` | clientName, revenue, product, bookName | Check catalog for alternatives — multiple tables may have revenue data. |
-| Revenue by P&L / book | `fact.PNLRevenueMTD` | bookId, revenue, reportDate | Month-to-date P&L revenue. Join `dim.Book` for book names. |
-| Account balances | `publish.Balances` or `fact.AfricaFlexDailyBalances` | accountId, balance, effectiveDate | publish view is pre-joined; fact table needs dim.Account join. |
-| Client details / hierarchy | `dim.Client` + `dim.CIBParent` | clientId, clientName, parentName | dim.Client is 26M rows — always filter by clientId. |
-| Sales credits | `publish.AfricaSalesCreditTradesRules` | clientId, tradeId, salesCredit | Pre-joined view with rules applied. |
-| Risk (RWA) | `fact.RWA` | rwaAmount, clientId, reportDate | 484M rows — mandatory date filter. |
-| Pipeline runs / ETL status | `agent.vPipelineRun` | pipelineId, status, startDate, duration | Use the view, not the base table. |
-| Merchant services | `fact.MerchantServices` | merchantId, revenue, transactionDate | 397M rows — date filter required. |
-| Financial disclosure | `fact.FinancialDisclosureDaily` | amount, accountId, reportDate | 570M rows — always filter by date range. |
+⚠️ **COLUMN NAMES ARE NOT LISTED HERE — always verify with `explore_mssql_schema` before querying.**
+This database uses a `pk*` convention for primary keys (`pkClient`, `pkProduct`, `pkMonth`, `pkDate`, etc.)
+and `Name` for display names. Generic names like `clientName`, `revenue`, `reportDate` almost certainly
+do NOT exist — using them will produce `Invalid column name` errors.
+
+**Verified key columns (confirmed from live schema):**
+- `dim.Date`: `pkDate` (PK int), `pkMonth` (int FK→dim.Month), `Year` (smallint), `MonthNo` (smallint), `QuarterNo` (smallint), `Period` (varchar), `FullDate` (date)
+- `dim.Client`: `pkClient` (PK), `Name` (display name) — 26M rows, always filter by `pkClient`
+- `dim.Product`: `pkProduct` (PK), `Name` (display name)
+- `publish.Revenue`: `pkClient`, `pkProduct`, `pkMonth`, `RevenueZARMTD` (ZAR month-to-date revenue)
+
+| Business Question | Suggested Table | Notes |
+|---|---|---|
+| Client revenue / profitability | `publish.Revenue` or `publish.ClientProfitability` | Revenue view needs pkMonth filter (see pattern below). Verify table exists with search_catalog first. |
+| Revenue by P&L / book | `fact.PNLRevenueMTD` | Month-to-date P&L. Always run explore_mssql_schema to get exact column names before querying. |
+| Account balances | `publish.Balances` or `fact.AfricaFlexDailyBalances` | publish view is pre-joined; fact table needs dim.Account join. Verify columns first. |
+| Client details / hierarchy | `dim.Client` + `dim.CIBParent` | 26M rows — always filter by `pkClient`. Join key: `pkClient`. |
+| Sales credits | `publish.AfricaSalesCreditTradesRules` | Pre-joined view with rules applied. Verify column names with explore_mssql_schema. |
+| Risk (RWA) | `fact.RWA` | 484M rows — mandatory date filter. Verify column names before use. |
+| Pipeline runs / ETL status | `agent.vPipelineRun` | Use the view, not the base table. Verify columns with explore_mssql_schema. |
+| Merchant services | `fact.MerchantServices` | 397M rows — date filter required. Verify column names before use. |
+| Financial disclosure | `fact.FinancialDisclosureDaily` | 570M rows — always filter by date range. Verify column names before use. |
 
 **NOTE**: If the suggested table doesn't match your search_catalog results, trust the catalog.
 Use `search_catalog(column='revenue')` to find ALL tables with a given column, then compare metadata.
@@ -292,8 +303,8 @@ Always treat it as a high-scale system — unfiltered queries on large tables wi
 - **Use TOP for exploration**: Start every investigation with `SELECT TOP 10` — never `SELECT *` cold.
 - **Prefer persistedViews**: `persistedView.publish.X` is pre-materialized. Use it instead of `publish.X` when available for the same result at a fraction of the I/O.
 - **Avoid SELECT ***: On any table with 1M+ rows, specify only the columns you need.
-- **Date dimension**: Use `dim.Date` for all temporal filtering — it has pre-computed period attributes (fiscal year, quarter, month). Never compute date logic in WHERE; join to `dim.Date` instead.
-- **dim.Client and dim.Account**: These are the most-joined tables in the system. Both are very large. Filter on key values (clientId, accountId) rather than scanning.
+- **Date dimension**: Use `dim.Date` for all temporal filtering. Verified columns: `Year` (smallint), `MonthNo` (smallint), `QuarterNo` (smallint), `pkDate` (int PK), `pkMonth` (int). Never use `calYear`, `calMonth`, `calYearMonth` — those columns do NOT exist. Filter using `WHERE Year = 2025`, not `WHERE calYear = 2025`.
+- **dim.Client and dim.Account**: These are the most-joined tables in the system. Both are very large. Filter on primary key values (`pkClient`, `pkAccount`) rather than scanning.
 
 ### ⚠️ CRITICAL: Never probe views with ORDER BY or unfiltered queries
 
@@ -319,9 +330,10 @@ data is available WITHOUT querying the view:
 
 ```sql
 -- Option 1: Query dim.Date directly — find all months that exist
-SELECT DISTINCT pkDate, calYear, calMonth FROM dim.Date
-WHERE calYear = 2025
-ORDER BY pkDate
+-- VERIFIED column names: Year (smallint), MonthNo (smallint), Period (varchar), pkDate (int), pkMonth (int)
+SELECT DISTINCT pkMonth, Year, MonthNo, Period FROM dim.Date
+WHERE Year = 2025
+ORDER BY pkMonth
 
 -- Option 2: Check the underlying fact table (much faster than the view)
 -- publish.Revenue is built from fact tables. Use search_catalog(lineage='publish.Revenue')
@@ -330,10 +342,10 @@ ORDER BY pkDate
 SELECT TOP 1 pkMonth FROM fact.PNLRevenueMTD WITH (NOLOCK) ORDER BY pkMonth DESC
 
 -- Option 3: For the Revenue view specifically, check the month dimension:
-SELECT pkDate, calYear, calMonth, calYearMonth
+SELECT pkMonth, Year, MonthNo, Period
 FROM dim.Date WITH (NOLOCK)
-WHERE calYear = 2025
-ORDER BY pkDate
+WHERE Year = 2025
+ORDER BY pkMonth
 ```
 
 ### ✅ How to query large publish.* views efficiently
@@ -343,28 +355,30 @@ an indexed column on the underlying base tables:
 
 ```sql
 -- CORRECT: pkMonth filter pushes predicate into the view — each source table can use its index
+-- ALWAYS look up the pkMonth range from dim.Date first (see pattern below) — never hardcode values
 SELECT pkClient, SUM(RevenueZARMTD) AS revenue
 FROM publish.Revenue WITH (NOLOCK)
-WHERE pkMonth BETWEEN 733 AND 744    -- months for 2025 (look up from dim.Date first!)
+WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo   -- resolve from dim.Date first!
 GROUP BY pkClient
 
 -- CORRECT: Use persistedView if available — it's a pre-materialized index
 SELECT pkClient, SUM(RevenueZARMTD) AS revenue
 FROM persistedView.[publish.Revenue] WITH (NOLOCK)   -- use search_catalog to verify exact name
-WHERE pkMonth BETWEEN 733 AND 744
+WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
 GROUP BY pkClient
 ```
 
 ### ✅ pkMonth lookup pattern
 
-`pkMonth` in `publish.Revenue` corresponds to `pkDate` in `dim.Date`.
+`pkMonth` in `publish.Revenue` corresponds to `pkMonth` in `dim.Date` (NOT `pkDate` — these are different columns).
 **Always resolve the pkMonth range before querying Revenue:**
 
 ```sql
 -- Step 1: Resolve pkMonth values for the target period
-SELECT MIN(pkDate) AS pkMonthFrom, MAX(pkDate) AS pkMonthTo
+-- dim.Date column names: Year (smallint), MonthNo (smallint), pkDate (int), pkMonth (int)
+SELECT MIN(pkMonth) AS pkMonthFrom, MAX(pkMonth) AS pkMonthTo
 FROM dim.Date WITH (NOLOCK)
-WHERE calYear = 2025
+WHERE Year = 2025
 
 -- Step 2: Use those values as filters in publish.Revenue
 SELECT TOP 20 pkClient, SUM(RevenueZARMTD) AS totalRevenue
@@ -372,6 +386,19 @@ FROM publish.Revenue WITH (NOLOCK)
 WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
 GROUP BY pkClient
 ORDER BY totalRevenue DESC
+
+-- Step 3: Look up client names (join to dim.Client on pkClient)
+-- dim.Client column: Name (client display name)
+SELECT Name FROM dim.Client WITH (NOLOCK) WHERE pkClient = @pkClient
+
+-- Step 4: Look up top product per client
+-- dim.Product column: Name (product display name); join key: pkProduct
+SELECT TOP 1 p.Name AS ProductName, SUM(r.RevenueZARMTD) AS ProductRevenue
+FROM publish.Revenue r WITH (NOLOCK)
+JOIN dim.Product p WITH (NOLOCK) ON r.pkProduct = p.pkProduct
+WHERE r.pkClient = @pkClient AND r.pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
+GROUP BY p.Name
+ORDER BY ProductRevenue DESC
 ```
 
 ### Key discovery rule: use catalog metadata, not view queries, for exploration

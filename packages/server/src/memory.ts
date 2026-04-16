@@ -115,6 +115,13 @@ const RECENCY_HALF_LIFE_H = 24
 const DECAY_HALF_LIFE_DAYS = 7
 const RECENCY_WEIGHT = 0.4
 const SALIENCE_THRESHOLD = 0.15
+/**
+ * Working memory is scoped to an active session window.
+ * Entries older than this are excluded from working-tier retrieval so that answers
+ * from a conversation last week don't bleed into a fresh run today.
+ * Episodic/semantic tiers are unaffected — they have their own decay mechanisms.
+ */
+const WORKING_SESSION_WINDOW_H = 4
 const DEDUP_JACCARD_THRESHOLD = 0.86
 /** Minimum combined score for a memory to be included in context. */
 const RELEVANCE_THRESHOLD = 0.15
@@ -547,10 +554,11 @@ export function ingestRunTurns(run: {
     }
   }
 
-  // 3. Store the final answer — only for completed runs.
-  //    Failed-run answers are already captured in the episodic summary (step 4).
-  //    Storing them here too causes failed answers to appear in working_memory and
-  //    confuse the agent on the next run, even after the statusPenalty down-scores them.
+  // 3. Store the final answer in working memory — only for completed runs.
+  //    Working memory is session-scoped by retrieval (WORKING_SESSION_WINDOW_H cutoff),
+  //    so this answer is visible as hot context for follow-up questions in the same session
+  //    (e.g. "now filter those top 3 by region") but won't surface in a run started hours later.
+  //    The episodic upsert (step below) is the cross-session canonical record.
   if (run.answer && run.status === "completed") {
     ingestTurn({
       tier: "working",
@@ -885,6 +893,15 @@ export async function searchEntries(
     sql += " AND e.session_id = ?"
     params.push(opts.sessionId)
   }
+  if (opts.tier === "working") {
+    // Hard cutoff: working memory only surfaces entries from the active session window.
+    // This prevents stale answers from previous sessions bleeding into a fresh run.
+    // The RECENCY_HALF_LIFE decay alone is not sufficient — entries with accessCount > 0
+    // get an ACT-R activation bonus that keeps them alive across session boundaries.
+    const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
+    sql += " AND e.created_at > ?"
+    params.push(windowCutoff)
+  }
 
   sql += " ORDER BY fts_rank LIMIT ?"
   params.push(opts.budget.maxItems * 3)
@@ -983,6 +1000,11 @@ function getRecentEntries(
   if (sessionId) {
     sql += " AND session_id = ?"
     params.push(sessionId)
+  }
+  if (tier === "working") {
+    const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
+    sql += " AND created_at > ?"
+    params.push(windowCutoff)
   }
 
   sql += " ORDER BY created_at DESC LIMIT ?"
@@ -1162,10 +1184,19 @@ export function consolidate(opts?: {
   const maxBatchSize = opts?.maxBatchSize ?? 200  // agenc-core uses 200
   const cutoff = new Date(Date.now() - minAgeHours * 60 * 60 * 1000).toISOString()
 
-  // Fetch candidates: episodic entries older than cutoff + old working entries
+  // Fetch candidates: episodic entries older than cutoff + old working entries.
+  // Exclude role='summary' — these are canonical per-goal answer records (from ingestRunTurns).
+  // They must NOT be clustered into semantic because:
+  //   1. The content includes specific query results (client names, revenue figures)
+  //      that change over time — merging two such entries produces a contradictory
+  //      semantic "fact" with wrong answers from multiple different time periods.
+  //   2. They are already deduplicated by the episodic upsert (one per goal) — there
+  //      is no value in further consolidation.
+  // Only working-tier tool-call/result turns (raw patterns) should be clustered.
   const candidates = getDb().prepare(`
     SELECT * FROM memory_entries
     WHERE (tier = 'episodic' OR (tier = 'working' AND created_at < ?))
+      AND role != 'summary'
       AND created_at < ?
     ORDER BY created_at ASC
     LIMIT ?
@@ -1328,6 +1359,24 @@ export function prune(): { deleted: number } {
     "DELETE FROM memory_entries WHERE tier = 'working' AND role = 'assistant' AND confidence < 0.5"
   ).run()
 
+  // Delete working-tier assistant entries that are older than the session window.
+  // Answers within the window are valid hot context for follow-up questions; older ones
+  // are no longer reachable by retrieval (the window cutoff in searchEntries/getRecentEntries
+  // already blocks them) but this cleans them from storage so the DB doesn't grow unboundedly.
+  const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
+  const staleAnswers = db.prepare(
+    "DELETE FROM memory_entries WHERE tier = 'working' AND role = 'assistant' AND created_at < ?"
+  ).run(windowCutoff)
+
+  // Delete semantic entries with role='summary' — these were incorrectly promoted from
+  // episodic by the old consolidate() which did not exclude summary-role entries.
+  // Goal-answer summaries belong in episodic only (one per goal, upserted). In semantic
+  // they create long-lived contradictions: e.g. "top 3 clients = PICK N PAY" from a
+  // Jan run persists in semantic even after March's correct answer is in episodic.
+  const staleSemantic = db.prepare(
+    "DELETE FROM memory_entries WHERE tier = 'semantic' AND role = 'summary'"
+  ).run()
+
   // Collapse duplicate episodic goal summaries — keeps the most recently updated
   // one per goal-prefix across ALL sessions. Previously this was session-scoped,
   // which allowed one entry per session-id restart for the same goal.
@@ -1361,7 +1410,14 @@ export function prune(): { deleted: number } {
     }
   }
 
-  return { deleted: (lowConf.changes ?? 0) + (failedWorking.changes ?? 0) + dupDeleted }
+  return {
+    deleted:
+      (lowConf.changes ?? 0) +
+      (failedWorking.changes ?? 0) +
+      (staleAnswers.changes ?? 0) +
+      (staleSemantic.changes ?? 0) +
+      dupDeleted,
+  }
 }
 
 export function getMemoryStats(): {

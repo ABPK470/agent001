@@ -9,7 +9,7 @@
  */
 
 import { ExternalLink, X } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode } from "react"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
 
@@ -79,7 +79,7 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
         </div>
       </div>
 
-      {/* Content — widget-content marks this as a drag-cancel zone so text inside is selectable */}
+      {/* Content area — widget-content class used by draggableCancel in Canvas.tsx */}
       <div className="widget-content flex-1 overflow-hidden p-3">
         {children}
       </div>

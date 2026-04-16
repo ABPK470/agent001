@@ -115,6 +115,34 @@ export function buildToolContext(tools: Tool[]): string {
   }
 
   if (sections.length === 0) return ""
+
+  // Always append memory usage instructions — these explain what the memory XML tags mean
+  // and tell the agent to reuse prior working approaches instead of rediscovering from scratch.
+  sections.push(
+    "",
+    "MEMORY CONTEXT — check before issuing discovery tool calls:",
+    "  The system prompt may contain <working_memory>, <episodic_memory>, and <semantic_memory> blocks.",
+    "  These are summaries of prior runs retrieved by relevance to the current goal.",
+    "",
+    "  • <episodic_memory>: summaries of prior runs for the same or similar goals.",
+    "    If you see 'Status: completed' for a matching goal:",
+    "    1. Extract the table names and column names that worked from the Answer section.",
+    "    2. Use them directly — skip search_catalog and explore_mssql_schema for those tables.",
+    "    3. Only call discovery tools for tables/columns NOT already confirmed in memory.",
+    "    CRITICAL OVERRIDE: 'NEVER skip search_catalog' means never guess without evidence.",
+    "    Memory IS evidence — a prior completed run already ran search_catalog for you.",
+    "    Calling search_catalog again when episodic_memory already has the answer wastes",
+    "    tokens and iterations. Skip it.",
+    "",
+    "  • <semantic_memory>: long-term consolidated facts from many prior runs.",
+    "    Treat confirmed facts here (table names, column names, filter patterns) as trusted.",
+    "",
+    "  • <working_memory>: recent tool calls from the active session. Use for continuity.",
+    "",
+    "  RULE: Memory saves iterations. A prior completed run for the same goal = use its tool sequence.",
+    "  Do NOT re-run the full discovery workflow if memory already shows what worked.",
+  )
+
   return "\nCapabilities:\n  " + sections.join("\n  ")
 }
 

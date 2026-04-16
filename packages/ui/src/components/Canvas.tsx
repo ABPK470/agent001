@@ -96,13 +96,12 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
           rowHeight={dynamicRowHeight}
           width={containerWidth}
           onLayoutChange={handleLayoutChange}
-          isDraggable
-          isResizable
-          draggableHandle=".widget-drag-handle"
-          draggableCancel=".widget-controls,.widget-content"
+          dragConfig={{
+            handle: ".widget-drag-handle",
+            cancel: ".widget-controls,.widget-content",
+          }}
           margin={[8, 8]}
           containerPadding={[0, 0]}
-          compactType="vertical"
         >
           {widgets.map((widget) => {
             const WidgetComponent = widgetRegistry[widget.type]

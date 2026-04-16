@@ -98,13 +98,14 @@ body {
 }
 
 /* Widget content areas must stay text-selectable.
-   react-draggable's enableUserSelectHack applies user-select: none to the
-   document during drags — override it for the content zone. */
+   react-draggable's enableUserSelectHack sets user-select: none on <body>
+   during any active drag of ANY widget. This override covers the edge case
+   where a neighbouring widget's drag is active while the user tries to
+   interact with text in this widget's content area. */
 .widget-content,
 .widget-content * {
   user-select: text !important;
   -webkit-user-select: text !important;
-  cursor: auto;
 }
 
 .react-grid-placeholder {

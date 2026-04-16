@@ -669,9 +669,26 @@ export class AgentOrchestrator {
       })
     }
     if (perTier.episodic) {
+      // If episodic contains a completed entry, prepend a loud SKIP-DISCOVERY directive.
+      // Without this, the agent sees the "NEVER skip search_catalog" rule in the knowledge
+      // file and interprets it as more authoritative than the softer memory context guidance,
+      // re-running the full 20-30 step discovery workflow even when memory already has the answer.
+      const episodicHasCompletedEntry = perTier.episodic.includes("Status: completed")
+      const episodicContent = episodicHasCompletedEntry
+        ? [
+            "⚠️ MEMORY HIT — prior completed run found for this goal.",
+            "REQUIRED ACTION: Extract the confirmed tables/columns/approach from the",
+            "episodic_memory Answer section below and use them directly in your first tool call.",
+            "DO NOT call search_catalog or explore_mssql_schema for tables already listed there.",
+            "The 'NEVER skip search_catalog' rule is satisfied — memory IS the prior evidence.",
+            "Only use discovery tools for information that is genuinely absent from memory.",
+            "",
+            perTier.episodic,
+          ].join("\n")
+        : perTier.episodic
       systemMessages.push({
         role: "system",
-        content: `<episodic_memory>\n${perTier.episodic}\n</episodic_memory>`,
+        content: `<episodic_memory>\n${episodicContent}\n</episodic_memory>`,
         section: "memory_episodic",
       })
     }
