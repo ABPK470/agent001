@@ -5,11 +5,10 @@
  *   copilot-chat — Copilot Chat API (same as VS Code, full context window)
  *   copilot      — GitHub Models (OpenAI-compatible, 8K token limit)
  *   openai       — OpenAI API or any OpenAI-compatible endpoint
- *   anthropic    — Anthropic Messages API
  *   local        — Local model via OpenAI-compatible API (Ollama, LM Studio, etc.)
  */
 
-import { AnthropicClient, OpenAIClient, type LLMClient } from "@agent001/agent";
+import { OpenAIClient, type LLMClient } from "@agent001/agent";
 import type { DbLlmConfig } from "../db.js";
 import { CopilotChatClient } from "./copilot-chat.js";
 import { CopilotClient } from "./copilot.js";
@@ -19,7 +18,6 @@ export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string;
   "copilot-chat": { model: "gpt-4o",              baseUrl: "",                                   placeholder: "Automatic (Device Flow — authorize once)" },
   copilot:   { model: "gpt-4o",                   baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
   openai:    { model: "gpt-4o",                   baseUrl: "https://api.openai.com",             placeholder: "sk-..." },
-  anthropic: { model: "claude-sonnet-4-20250514", baseUrl: "",                                   placeholder: "sk-ant-..." },
   local:     { model: "llama3",                   baseUrl: "http://localhost:11434",              placeholder: "none required (or model API key)" },
 }
 
@@ -49,12 +47,6 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
         apiKey:  api_key,
         model:   model || "gpt-4o",
         baseUrl: base_url || undefined,
-      })
-
-    case "anthropic":
-      return new AnthropicClient({
-        apiKey: api_key,
-        model:  model || "claude-sonnet-4-20250514",
       })
 
     case "local":

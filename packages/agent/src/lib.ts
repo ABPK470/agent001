@@ -161,7 +161,6 @@ export type {
 } from "./engine/index.js"
 
 // LLM clients
-export { AnthropicClient } from "./llm/anthropic.js"
 export { OpenAIClient } from "./llm/openai.js"
 
 // Built-in tools

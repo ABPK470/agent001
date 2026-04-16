@@ -6,7 +6,7 @@ import { getDb } from "./connection.js"
 
 // ── LLM config ───────────────────────────────────────────────────
 
-export type LlmProvider = "copilot-chat" | "copilot" | "openai" | "anthropic" | "local"
+export type LlmProvider = "copilot-chat" | "copilot" | "openai" | "local"
 
 export interface DbLlmConfig {
   provider: LlmProvider

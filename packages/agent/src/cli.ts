@@ -12,21 +12,19 @@
  *   AGENT_MODE=raw npm start -w packages/agent
  *
  * Environment variables:
- *   OPENAI_API_KEY    — use OpenAI (gpt-4o by default)
- *   ANTHROPIC_API_KEY — use Anthropic (claude-sonnet-4-20250514 by default)
- *   MODEL             — override the model name
- *   AGENT_MODE        — "governed" (default) or "raw"
+ *   OPENAI_API_KEY — use OpenAI (gpt-4o by default)
+ *   MODEL          — override the model name
+ *   AGENT_MODE     — "governed" (default) or "raw"
  */
 
 import { createInterface } from "node:readline"
 import { Agent } from "./agent.js"
 import {
-    createEngineServices,
-    printGovernanceReport,
-    runGoverned,
-    type EngineServices,
+  createEngineServices,
+  printGovernanceReport,
+  runGoverned,
+  type EngineServices,
 } from "./governance.js"
-import { AnthropicClient } from "./llm/anthropic.js"
 import { OpenAIClient } from "./llm/openai.js"
 import { fetchUrlTool } from "./tools/fetch-url.js"
 import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/filesystem.js"
@@ -39,12 +37,6 @@ import type { LLMClient, Tool } from "./types.js"
 function createLLMClient(): LLMClient {
   const model = process.env["MODEL"]
 
-  const anthropicKey = process.env["ANTHROPIC_API_KEY"]
-  if (anthropicKey) {
-    console.log(`🧠 Using Anthropic (${model ?? "claude-sonnet-4-20250514"})`)
-    return new AnthropicClient({ apiKey: anthropicKey, model })
-  }
-
   const openaiKey = process.env["OPENAI_API_KEY"]
   if (openaiKey) {
     console.log(`🧠 Using OpenAI (${model ?? "gpt-4o"})`)
@@ -53,9 +45,7 @@ function createLLMClient(): LLMClient {
 
   console.error(
     "❌ No API key found.\n\n" +
-      "Set one of these environment variables:\n" +
-      "  export OPENAI_API_KEY=sk-...\n" +
-      "  export ANTHROPIC_API_KEY=sk-ant-...\n",
+      "Set OPENAI_API_KEY=sk-... to use the OpenAI API.\n",
   )
   process.exit(1)
 }
