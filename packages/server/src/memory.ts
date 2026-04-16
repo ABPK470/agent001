@@ -547,15 +547,18 @@ export function ingestRunTurns(run: {
     }
   }
 
-  // 3. Store the final answer
-  if (run.answer) {
+  // 3. Store the final answer — only for completed runs.
+  //    Failed-run answers are already captured in the episodic summary (step 4).
+  //    Storing them here too causes failed answers to appear in working_memory and
+  //    confuse the agent on the next run, even after the statusPenalty down-scores them.
+  if (run.answer && run.status === "completed") {
     ingestTurn({
       tier: "working",
       role: "assistant",
       content: run.answer,
       metadata: { type: "answer", runId: run.id, status: run.status },
       source: "agent",
-      confidence: run.status === "completed" ? 0.8 : 0.4,
+      confidence: 0.8,
       sessionId,
       runId: run.id,
     })
@@ -575,15 +578,17 @@ export function ingestRunTurns(run: {
   const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status }
   const episodicConfidence = run.status === "completed" ? 0.7 : 0.3
 
-  // Check for an existing summary for the same goal in this session.
+  // Check for an existing summary for the same goal across ALL sessions.
+  // Session-scoped upsert would allow the same goal to accumulate one entry per
+  // session-id restart, filling episodic memory with contradictory completed answers.
   // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
   const goalPrefix = `Goal: ${run.goal}\n`
   const existingEpisodic = getDb().prepare(`
     SELECT id FROM memory_entries
-    WHERE session_id = ? AND tier = 'episodic' AND role = 'summary'
+    WHERE tier = 'episodic' AND role = 'summary'
       AND substr(content, 1, ?) = ?
-    ORDER BY created_at DESC LIMIT 1
-  `).get(sessionId, goalPrefix.length, goalPrefix) as { id: string } | undefined
+    ORDER BY updated_at DESC LIMIT 1
+  `).get(goalPrefix.length, goalPrefix) as { id: string } | undefined
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
@@ -897,10 +902,13 @@ export async function searchEntries(
   const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
     const entry = rowToEntry(row)
     const rawRank = Math.abs(row.fts_rank)
-    // Down-weight failed/incomplete episodic summaries so they don't poison future runs.
-    // A completed episodic entry (confidence 0.7) is treated normally.
-    // A failed one (confidence 0.3) gets an extra 0.4× penalty so it barely surfaces.
-    const statusPenalty = (entry.tier === "episodic" && entry.confidence < 0.5) ? 0.4 : 1.0
+    // Down-weight failed/incomplete entries so they don't poison future runs.
+    // Applies to both episodic summaries (confidence 0.3) and working-tier agent
+    // answers from prior failed runs (confidence 0.4). Completed entries are unaffected.
+    const isFailedEntry =
+      entry.confidence < 0.5 &&
+      (entry.tier === "episodic" || (entry.tier === "working" && entry.role === "assistant"))
+    const statusPenalty = isFailedEntry ? 0.4 : 1.0
     const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence * statusPenalty)
     const rec = recencyScore(entry.createdAt, now)
     const decay = confidenceDecay(entry.createdAt, now)
@@ -1306,10 +1314,54 @@ function sanitizeFtsQuery(query: string): string {
 // ── Maintenance ──────────────────────────────────────────────────
 
 export function prune(): { deleted: number } {
-  const lowConf = getDb().prepare(
+  const db = getDb()
+
+  // Remove entries below minimum confidence threshold
+  const lowConf = db.prepare(
     "DELETE FROM memory_entries WHERE confidence < 0.05"
   ).run()
-  return { deleted: lowConf.changes ?? 0 }
+
+  // Delete accumulated failed working/assistant entries — these are failed-run answers
+  // that were stored before the step-3 guard was added. They pollute working_memory
+  // because recency keeps them in top-K even after the statusPenalty down-scores them.
+  const failedWorking = db.prepare(
+    "DELETE FROM memory_entries WHERE tier = 'working' AND role = 'assistant' AND confidence < 0.5"
+  ).run()
+
+  // Collapse duplicate episodic goal summaries — keeps the most recently updated
+  // one per goal-prefix across ALL sessions. Previously this was session-scoped,
+  // which allowed one entry per session-id restart for the same goal.
+  const duplicates = db.prepare(`
+    SELECT id, substr(content, 1, instr(content, char(10)) - 1) AS goal_line
+    FROM memory_entries
+    WHERE tier = 'episodic' AND role = 'summary'
+  `).all() as Array<{ id: string; goal_line: string }>
+
+  // Group by goal_line only (cross-session), keep newest updated_at, delete the rest
+  const groups = new Map<string, Array<{ id: string }>>()
+  for (const row of duplicates) {
+    const key = row.goal_line
+    const group = groups.get(key) ?? []
+    group.push({ id: row.id })
+    groups.set(key, group)
+  }
+
+  let dupDeleted = 0
+  for (const [, members] of groups) {
+    if (members.length <= 1) continue
+    // Find the keeper: the one with the most recent updated_at
+    const ordered = db.prepare(
+      `SELECT id FROM memory_entries WHERE id IN (${members.map(() => "?").join(",")}) ORDER BY updated_at DESC LIMIT 1`
+    ).get(...members.map((m) => m.id)) as { id: string } | undefined
+    if (!ordered) continue
+    const toDelete = members.filter((m) => m.id !== ordered.id)
+    for (const { id } of toDelete) {
+      db.prepare("DELETE FROM memory_entries WHERE id = ?").run(id)
+      dupDeleted++
+    }
+  }
+
+  return { deleted: (lowConf.changes ?? 0) + (failedWorking.changes ?? 0) + dupDeleted }
 }
 
 export function getMemoryStats(): {

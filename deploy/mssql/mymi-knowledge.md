@@ -295,6 +295,93 @@ Always treat it as a high-scale system — unfiltered queries on large tables wi
 - **Date dimension**: Use `dim.Date` for all temporal filtering — it has pre-computed period attributes (fiscal year, quarter, month). Never compute date logic in WHERE; join to `dim.Date` instead.
 - **dim.Client and dim.Account**: These are the most-joined tables in the system. Both are very large. Filter on key values (clientId, accountId) rather than scanning.
 
+### ⚠️ CRITICAL: Never probe views with ORDER BY or unfiltered queries
+
+`publish.*` views are NOT tables — they are T-SQL view definitions that UNION together 10–60 underlying
+fact tables at runtime. Every query against a `publish.*` view re-executes the entire view.
+
+**NEVER do this — it will time out (minutes) or never complete:**
+```sql
+SELECT TOP 5 pkMonth FROM publish.Revenue ORDER BY pkMonth         -- FULL SCAN of 59 unioned fact tables
+SELECT TOP 5 * FROM publish.Revenue                                 -- same — forces full materialization
+SELECT MIN(pkMonth), MAX(pkMonth) FROM publish.Revenue              -- same issue
+SELECT DISTINCT pkMonth FROM publish.Revenue                        -- extremely slow
+```
+
+**Why it's slow:** `SELECT TOP N ... ORDER BY` on a view forces SQL Server to evaluate the entire view
+(all 59+ UNION branches across multiple 100M+ row fact tables) to find the globally sorted top-N.
+There is no index SQL Server can use on the result of a view with UNIONs.
+
+### ✅ How to discover date ranges on publish.* views efficiently
+
+The `pkMonth` key is sourced from `dim.Date.pkDate` (or a `CalendarCode` lookup). To find what period
+data is available WITHOUT querying the view:
+
+```sql
+-- Option 1: Query dim.Date directly — find all months that exist
+SELECT DISTINCT pkDate, calYear, calMonth FROM dim.Date
+WHERE calYear = 2025
+ORDER BY pkDate
+
+-- Option 2: Check the underlying fact table (much faster than the view)
+-- publish.Revenue is built from fact tables. Use search_catalog(lineage='publish.Revenue')
+-- to find which base fact tables feed it, then query those directly with TOP 1 + date filter.
+-- Example with a single source:
+SELECT TOP 1 pkMonth FROM fact.PNLRevenueMTD WITH (NOLOCK) ORDER BY pkMonth DESC
+
+-- Option 3: For the Revenue view specifically, check the month dimension:
+SELECT pkDate, calYear, calMonth, calYearMonth
+FROM dim.Date WITH (NOLOCK)
+WHERE calYear = 2025
+ORDER BY pkDate
+```
+
+### ✅ How to query large publish.* views efficiently
+
+When querying `publish.Revenue` or similar large views, ALWAYS anchor with a filter that matches
+an indexed column on the underlying base tables:
+
+```sql
+-- CORRECT: pkMonth filter pushes predicate into the view — each source table can use its index
+SELECT pkClient, SUM(RevenueZARMTD) AS revenue
+FROM publish.Revenue WITH (NOLOCK)
+WHERE pkMonth BETWEEN 733 AND 744    -- months for 2025 (look up from dim.Date first!)
+GROUP BY pkClient
+
+-- CORRECT: Use persistedView if available — it's a pre-materialized index
+SELECT pkClient, SUM(RevenueZARMTD) AS revenue
+FROM persistedView.[publish.Revenue] WITH (NOLOCK)   -- use search_catalog to verify exact name
+WHERE pkMonth BETWEEN 733 AND 744
+GROUP BY pkClient
+```
+
+### ✅ pkMonth lookup pattern
+
+`pkMonth` in `publish.Revenue` corresponds to `pkDate` in `dim.Date`.
+**Always resolve the pkMonth range before querying Revenue:**
+
+```sql
+-- Step 1: Resolve pkMonth values for the target period
+SELECT MIN(pkDate) AS pkMonthFrom, MAX(pkDate) AS pkMonthTo
+FROM dim.Date WITH (NOLOCK)
+WHERE calYear = 2025
+
+-- Step 2: Use those values as filters in publish.Revenue
+SELECT TOP 20 pkClient, SUM(RevenueZARMTD) AS totalRevenue
+FROM publish.Revenue WITH (NOLOCK)
+WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
+GROUP BY pkClient
+ORDER BY totalRevenue DESC
+```
+
+### Key discovery rule: use catalog metadata, not view queries, for exploration
+
+Before querying a large view:
+1. `search_catalog(lineage='publish.Revenue')` — see all source tables and their filter conditions
+2. Query `dim.Date` to resolve any `pkDate/pkMonth` values for your time period  
+3. Only then query the view, WITH a predicate on `pkMonth`/`pkDate` that uses the resolved range
+4. Add `WITH (NOLOCK)` for analytical read-only queries — avoids lock contention on live systems
+
 ### publish vs persistedView vs fact+dim
 
 ```

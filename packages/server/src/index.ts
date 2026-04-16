@@ -51,6 +51,7 @@ import {
 } from "./channels/index.js"
 import { clearTransactionalData, getDb, getDbStats, getLlmConfig, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, pruneOldData, saveApiRequest } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
+import { prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { registerAgentRoutes } from "./routes/agents.js"
 import { registerEventRoutes } from "./routes/events.js"
@@ -82,6 +83,12 @@ async function main() {
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
     console.log(`Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
+  }
+
+  // Prune duplicate episodic memory entries left over from pre-upsert-fix runs
+  const memPrune = pruneMemory()
+  if (memPrune.deleted > 0) {
+    console.log(`Pruned ${memPrune.deleted} stale/duplicate memory entries`)
   }
 
   // Set agent workspace — all file/shell operations are scoped here.
