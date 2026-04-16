@@ -15,7 +15,7 @@
  */
 
 import type { Tool } from "../types.js"
-import { buildCatalog, getCatalog, type CatalogFK, type CatalogTable, type ViewLineage } from "./catalog.js"
+import { buildCatalog, getCatalog, type CatalogFK, type CatalogTable, type ConceptPathResult, type ViewLineage } from "./catalog.js"
 
 // ── Formatters ───────────────────────────────────────────────────
 
@@ -27,7 +27,14 @@ function fmtRow(n: number | null): string {
   return `${n} rows`
 }
 
-function fmtTable(t: CatalogTable, matchedCols?: string[], catalog?: { getImplicitJoins(key: string, limit?: number): { column: string; dataType: string; tables: string[] }[] }): string {
+function fmtTable(
+  t: CatalogTable,
+  matchedCols?: string[],
+  catalog?: {
+    getImplicitJoins(key: string, limit?: number): { column: string; dataType: string; tables: string[] }[]
+    getTableConcepts(key: string): { concept: string; sourceView: string }[]
+  },
+): string {
   const lines: string[] = []
   const rowInfo = fmtRow(t.rowCount)
 
@@ -70,6 +77,12 @@ function fmtTable(t: CatalogTable, matchedCols?: string[], catalog?: { getImplic
   }
   if (fkIn > 0) {
     lines.push(`    Referenced by: ${fkIn} other tables`)
+  }
+
+  // Business concepts — semantic context derived from lineage; reveals relationships beyond FK structure
+  const concepts = catalog?.getTableConcepts(t.qualifiedName) ?? []
+  if (concepts.length > 0) {
+    lines.push(`    Concepts: ${concepts.map((c) => `${c.concept} (via ${c.sourceView})`).join(", ")}`)
   }
 
   return lines.join("\n")
@@ -135,7 +148,9 @@ export const searchCatalogTool: Tool = {
     "(5) path=['dim.Client','fact.X'] — find FK join paths between two tables. " +
     "(6) lineage='publish.Revenue' — show full lineage map: all source views, dimension joins, business areas. " +
     "(7) stats=true — catalog summary. " +
-    "(8) refresh=true — rebuild from live database and update cache.",
+    "(8) refresh=true — rebuild from live database and update cache. " +
+    "(9) concepts='fact.CommissionAllocation' — show which business concepts this table contributes to (semantic tags from lineage). " +
+    "(10) concept_path=['tableA','tableB'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships.",
   parameters: {
     type: "object",
     properties: {
@@ -181,6 +196,23 @@ export const searchCatalogTool: Tool = {
           "Show the full lineage map for a critical view. Schema-qualified: 'publish.Revenue'. " +
           "Returns all source tables/views grouped by business area, dimension joins, output columns, " +
           "and filters. Essential for understanding what data feeds into a view.",
+      },
+      concept_path: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Find concept-aware paths between two tables. Traverses FK edges, implicit join edges, AND " +
+          "concept edges (tables sharing a business concept via lineage maps). " +
+          "Finds paths even when no FK relationship exists. " +
+          "E.g. ['fact.CommissionAllocation', 'publish.Revenue'] traces the semantic path. " +
+          "Provide exactly two schema-qualified names.",
+      },
+      concepts: {
+        type: "string",
+        description:
+          "Show which business concepts a table contributes to, derived from lineage maps. " +
+          "E.g. 'fact.CommissionAllocation' reveals it contributes to Revenue (via publish.Revenue). " +
+          "Use this to discover semantic relationships invisible to pure FK analysis.",
       },
       refresh: {
         type: "boolean",
@@ -256,6 +288,89 @@ export const searchCatalogTool: Tool = {
         return `No lineage map for '${viewName}'. Available lineage maps: ${available.join(", ")}`
       }
       return `No lineage maps loaded. Lineage maps are curated files loaded at server startup.`
+    }
+
+    // Concepts mode: show which business concepts a table contributes to
+    if (args.concepts) {
+      const key = String(args.concepts).trim()
+      const t = catalog.getTable(key)
+      if (!t) {
+        const hits = catalog.search(key.replace(".", " "), 3)
+        if (hits.length > 0) {
+          return `Table '${key}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName}`).join("\n")}`
+        }
+        return `Table '${key}' not found in catalog. Use search_catalog(search='keyword') to find it.`
+      }
+      const concepts = catalog.getTableConcepts(key)
+      if (concepts.length === 0) {
+        const allConcepts = catalog.listConcepts()
+        const all = allConcepts.map((c) => `${c.concept} (${c.tables.length} sources)`).join(", ")
+        return all
+          ? `No concept tags for '${key}'. This table doesn't appear as a source in any lineage map.\nLoaded concepts: ${all}`
+          : `No concept tags for '${key}'. No lineage maps are loaded yet.`
+      }
+      const lines = [`Business concepts for ${key} (${concepts.length}):`, ""]
+      for (const c of concepts) {
+        const node = catalog.getConcept(c.concept)
+        lines.push(`  ★ ${c.concept}`)
+        lines.push(`    Aggregated by: ${c.sourceView}`)
+        lines.push(`    ${c.description}`)
+        lines.push(`    ${node?.tables.length ?? "?"} contributing sources across groups: ${node?.businessGroups.join(", ") ?? "unknown"}`)
+        lines.push(`    Use search_catalog(lineage='${c.sourceView}') to see the full source map.`)
+        lines.push(`    Use search_catalog(concept_path=['${key}', '${c.sourceView}']) to trace the join path.`)
+        lines.push("")
+      }
+      return lines.join("\n")
+    }
+
+    // Concept path mode: BFS across FK + implicit join + concept edges
+    if (args.concept_path) {
+      const tables = args.concept_path as string[]
+      if (!Array.isArray(tables) || tables.length !== 2) {
+        return "Error: 'concept_path' requires exactly two schema-qualified table names."
+      }
+      const [from, to] = tables.map((t) => String(t).trim())
+      const fkPaths = catalog.findPath(from, to)
+      const conceptPaths: ConceptPathResult[] = catalog.findConceptPath(from, to)
+
+      if (fkPaths.length === 0 && conceptPaths.length === 0) {
+        const fromConcepts = catalog.getTableConcepts(from)
+        const toConcepts = catalog.getTableConcepts(to)
+        const lines = [`No path found between ${from} and ${to} (checked FK, implicit join, and concept edges).`, ""]
+        lines.push(fromConcepts.length > 0
+          ? `  ${from} contributes to: ${fromConcepts.map((c) => c.concept).join(", ")}`
+          : `  ${from} has no concept tags (not a source in any lineage map).`)
+        lines.push(toConcepts.length > 0
+          ? `  ${to} contributes to: ${toConcepts.map((c) => c.concept).join(", ")}`
+          : `  ${to} has no concept tags (not a source in any lineage map).`)
+        return lines.join("\n")
+      }
+
+      const lines = [`Concept-aware paths from ${from} to ${to}:`]
+      if (fkPaths.length > 0) {
+        lines.push("", `FK paths (${fkPaths.length} — structural):`)
+        for (let i = 0; i < fkPaths.length; i++) {
+          lines.push(`  Path ${i + 1} (${fkPaths[i].length} hop${fkPaths[i].length !== 1 ? "s" : ""}):`, fmtPath(fkPaths[i]))
+        }
+      }
+      if (conceptPaths.length > 0) {
+        lines.push("", `Concept paths (${conceptPaths.length} — semantic):`, "")
+        for (let i = 0; i < conceptPaths.length; i++) {
+          const p = conceptPaths[i]
+          const label = p.conceptsUsed.length > 0 ? ` via concept: ${p.conceptsUsed.join(", ")}` : ""
+          lines.push(`  Path ${i + 1} (${p.totalHops} hop${p.totalHops !== 1 ? "s" : ""}${label}):`)
+          for (const step of p.steps) {
+            const edgeDesc =
+              step.edge.type === "fk"
+                ? `FK: ${step.edge.fromColumn} → ${step.edge.toColumn}`
+                : step.edge.type === "implicit"
+                  ? `implicit join on ${step.edge.column} (${step.edge.dataType})`
+                  : `concept: ${step.edge.concept} (via ${step.edge.via})`
+            lines.push(`    ${step.from} ──[${edgeDesc}]──> ${step.to}`)
+          }
+        }
+      }
+      return lines.join("\n")
     }
 
     // Table detail mode

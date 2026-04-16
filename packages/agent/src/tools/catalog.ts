@@ -103,6 +103,40 @@ export interface ViewLineage {
   sources: LineageSource[]        // all contributing tables/views
 }
 
+/**
+ * A business concept node — derived from view lineage, models semantic relationships.
+ * Concept nodes bridge tables that share a business purpose even without FK connections.
+ * e.g. fact.CommissionAllocation and publish.MappingTransactionalBanking both belong
+ * to the concept "Revenue" because they are both sources feeding publish.Revenue.
+ */
+export interface ConceptNode {
+  concept: string           // e.g. "Revenue" (derived from source view name)
+  sourceView: string        // e.g. "publish.Revenue" — the canonical aggregating view
+  description: string       // from ViewLineage.description
+  tables: string[]          // qualified names of all contributing source tables
+  businessGroups: string[]  // unique business group names from sources
+}
+
+/** Edge type in a concept-aware path. */
+export type ConceptPathEdge =
+  | { type: "fk"; fromColumn: string; toColumn: string }
+  | { type: "implicit"; column: string; dataType: string }
+  | { type: "concept"; concept: string; via: string }  // via = source view
+
+/** One step in a concept-aware path. */
+export interface ConceptPathStep {
+  from: string
+  edge: ConceptPathEdge
+  to: string
+}
+
+/** Result of a concept-aware path search. */
+export interface ConceptPathResult {
+  steps: ConceptPathStep[]
+  totalHops: number
+  conceptsUsed: string[]  // concept names traversed
+}
+
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
   version: 1 | 2
@@ -247,6 +281,13 @@ export class CatalogGraph {
   /** tableKey → implicit edges involving this table */
   private implicitJoinIndex: Map<string, ImplicitEdge[]>
 
+  /** Concept nodes indexed by concept name (lowercase) — e.g. "revenue" → ConceptNode */
+  private conceptNodes: Map<string, ConceptNode>
+  /** Source view (lowercase) → ConceptNode — fast lookup by view name */
+  private conceptByView: Map<string, ConceptNode>
+  /** tableKey → list of concept nodes this table contributes to (reverse index) */
+  private conceptEdgeIndex: Map<string, ConceptNode[]>
+
   private constructor(
     tables: Map<string, CatalogTable>,
     nameIndex: Map<string, Set<string>>,
@@ -274,6 +315,13 @@ export class CatalogGraph {
     this.lineageMap = new Map()
     if (lineage) {
       for (const l of lineage) this.lineageMap.set(l.view, l)
+    }
+    // Build concept graph (pure in-memory derivation from lineage — zero SQL)
+    this.conceptNodes = new Map()
+    this.conceptByView = new Map()
+    this.conceptEdgeIndex = new Map()
+    if (lineage && lineage.length > 0) {
+      this._buildConceptGraph(lineage)
     }
   }
 
@@ -435,11 +483,55 @@ export class CatalogGraph {
     )
   }
 
-  // ── Lineage ──────────────────────────────────────────────────
+  // ── Concept graph (private) ──────────────────────────────────
 
-  /** Merge externally-curated lineage maps into the catalog. */
+  /**
+   * Rebuild concept graph from all current lineage maps.
+   * For each view lineage, derives a ConceptNode (name = view's own name without schema)
+   * and builds bi-directional indexes:
+   *   conceptNodes["revenue"] → ConceptNode
+   *   conceptEdgeIndex["publish.MappingTransactionalBanking"] → [ConceptNode(Revenue)]
+   *   conceptEdgeIndex["publish.Revenue"] → [ConceptNode(Revenue)]  ← the view itself
+   */
+  private _buildConceptGraph(lineages: ViewLineage[]): void {
+    this.conceptNodes.clear()
+    this.conceptByView.clear()
+    this.conceptEdgeIndex.clear()
+
+    for (const l of lineages) {
+      const concept = l.view.includes(".") ? l.view.split(".").pop()! : l.view
+      const tables = [...new Set(l.sources.map((s) => s.qualifiedName))]
+      const businessGroups = [...new Set(l.sources.map((s) => s.group))]
+      const node: ConceptNode = { concept, sourceView: l.view, description: l.description, tables, businessGroups }
+
+      this.conceptNodes.set(concept.toLowerCase(), node)
+      this.conceptByView.set(l.view.toLowerCase(), node)
+
+      // Reverse index: source tables → concepts they contribute to
+      for (const tk of tables) {
+        if (!this.conceptEdgeIndex.has(tk)) this.conceptEdgeIndex.set(tk, [])
+        if (!this.conceptEdgeIndex.get(tk)!.some((n) => n.concept === concept)) {
+          this.conceptEdgeIndex.get(tk)!.push(node)
+        }
+      }
+      // The source view itself belongs to its own concept
+      if (!this.conceptEdgeIndex.has(l.view)) this.conceptEdgeIndex.set(l.view, [])
+      if (!this.conceptEdgeIndex.get(l.view)!.some((n) => n.concept === concept)) {
+        this.conceptEdgeIndex.get(l.view)!.push(node)
+      }
+    }
+  }
+
+  private _pathVisited(steps: ConceptPathStep[], node: string): boolean {
+    return steps.some((s) => s.from === node || s.to === node)
+  }
+
+  // ── Lineage ────────────────────────────────────────────
+
+  /** Merge externally-curated lineage maps into the catalog. Rebuilds concept graph. */
   mergeLineage(lineages: ViewLineage[]): void {
     for (const l of lineages) this.lineageMap.set(l.view, l)
+    this._buildConceptGraph([...this.lineageMap.values()])
   }
 
   /** Get lineage for a specific view. */
@@ -462,6 +554,112 @@ export class CatalogGraph {
         }
       }
     }
+    return results
+  }
+
+  // ── Concept graph (public) ───────────────────────────────────
+
+  /** Get all business concepts a table/view contributes to (derived from lineage maps). */
+  getTableConcepts(qualifiedName: string): ConceptNode[] {
+    return this.conceptEdgeIndex.get(qualifiedName) ?? []
+  }
+
+  /**
+   * Get a concept node by concept name (e.g. "Revenue") or source view
+   * (e.g. "publish.Revenue"). Case-insensitive.
+   */
+  getConcept(nameOrView: string): ConceptNode | null {
+    return this.conceptNodes.get(nameOrView.toLowerCase())
+      ?? this.conceptByView.get(nameOrView.toLowerCase())
+      ?? null
+  }
+
+  /** List all loaded concept nodes (one per lineage view). */
+  listConcepts(): ConceptNode[] {
+    return [...this.conceptNodes.values()]
+  }
+
+  /**
+   * Concept-aware path finding between two tables.
+   *
+   * Traverses three edge types:
+   *   • FK edges        — declared FK constraints (structural)
+   *   • Implicit edges  — shared column name + type (inferred)
+   *   • Concept edges   — tables sharing a business concept via lineage:
+   *       tableA ──[concept:Revenue]──> publish.Revenue ──[concept:Revenue]──> tableB
+   *
+   * This surfaces semantic relationships that pure FK traversal cannot find.
+   * E.g. fact.CommissionAllocation → publish.Revenue even with no FK between them.
+   */
+  findConceptPath(from: string, to: string, maxDepth = 6): ConceptPathResult[] {
+    if (!this.tables.has(from) || !this.tables.has(to)) return []
+
+    const results: ConceptPathResult[] = []
+    const queue: Array<{ node: string; steps: ConceptPathStep[] }> = [{ node: from, steps: [] }]
+    const visited = new Set<string>()
+
+    while (queue.length > 0 && results.length < 5) {
+      const { node, steps } = queue.shift()!
+      if (steps.length > maxDepth) continue
+
+      if (node === to && steps.length > 0) {
+        const conceptsUsed = [...new Set(
+          steps
+            .filter((s) => s.edge.type === "concept")
+            .map((s) => (s.edge as { type: "concept"; concept: string; via: string }).concept),
+        )]
+        results.push({ steps, totalHops: steps.length, conceptsUsed })
+        continue
+      }
+
+      const depthKey = `${node}@${steps.length}`
+      if (visited.has(depthKey)) continue
+      visited.add(depthKey)
+
+      // 1. FK edges (structural — declared FK constraints)
+      for (const { target, fk } of (this.adjacency.get(node) ?? [])) {
+        if (this._pathVisited(steps, target) && target !== to) continue
+        queue.push({
+          node: target,
+          steps: [...steps, { from: node, edge: { type: "fk", fromColumn: fk.fromColumn, toColumn: fk.toColumn }, to: target }],
+        })
+      }
+
+      // 2. Implicit join edges (inferred — shared column name + compatible type)
+      for (const edge of (this.implicitJoinIndex.get(node) ?? [])) {
+        for (const target of edge.tables) {
+          if (target === node) continue
+          if (this._pathVisited(steps, target) && target !== to) continue
+          queue.push({
+            node: target,
+            steps: [...steps, { from: node, edge: { type: "implicit", column: edge.column, dataType: edge.dataType }, to: target }],
+          })
+        }
+      }
+
+      // 3. Concept edges (semantic — route through source view as hub)
+      //    tableA → sourceView:  contributing table reaches the aggregating view
+      //    sourceView → tableB:  the aggregating view fans out to all contributors
+      for (const conceptNode of (this.conceptEdgeIndex.get(node) ?? [])) {
+        const hub = conceptNode.sourceView
+        const conceptEdge: ConceptPathEdge = { type: "concept", concept: conceptNode.concept, via: hub }
+
+        if (node !== hub) {
+          // This node is a contributing table → step toward the source view (hub)
+          if (!this._pathVisited(steps, hub) || hub === to) {
+            queue.push({ node: hub, steps: [...steps, { from: node, edge: conceptEdge, to: hub }] })
+          }
+        } else {
+          // This node IS the source view → fan out to all contributing tables
+          for (const target of conceptNode.tables) {
+            if (target === node) continue
+            if (this._pathVisited(steps, target) && target !== to) continue
+            queue.push({ node: target, steps: [...steps, { from: node, edge: conceptEdge, to: target }] })
+          }
+        }
+      }
+    }
+
     return results
   }
 
@@ -508,6 +706,25 @@ export class CatalogGraph {
       }
     }
 
+    // Concept-level matches: query tokens matching a concept name pull in all tables
+    // belonging to that concept, even those with no lexical match in name/columns.
+    // e.g. search("revenue") → fact.CommissionAllocation gets conceptBonus=15 even
+    // though neither "revenue" nor any variant appears in its name or column list.
+    const conceptBonusMap = new Map<string, number>()
+    for (const token of tokens) {
+      const cNode = this.conceptNodes.get(token)
+      if (cNode) {
+        // Source view IS the concept — strongest signal
+        if (!scores.has(cNode.sourceView)) scores.set(cNode.sourceView, { nameScore: 0, colMatches: [] })
+        conceptBonusMap.set(cNode.sourceView, (conceptBonusMap.get(cNode.sourceView) ?? 0) + 30)
+        // Contributing sources are semantically related to the concept
+        for (const tk of cNode.tables) {
+          if (!scores.has(tk)) scores.set(tk, { nameScore: 0, colMatches: [] })
+          conceptBonusMap.set(tk, (conceptBonusMap.get(tk) ?? 0) + 15)
+        }
+      }
+    }
+
     // Build ranked results
     const hits: CatalogSearchHit[] = []
     for (const [key, { nameScore, colMatches }] of scores) {
@@ -534,9 +751,11 @@ export class CatalogGraph {
       // Implicit join connectivity: tables with many implicit joins are well-connected
       const implicitJoins = this.implicitJoinIndex.get(key)?.length ?? 0
       const connectivityBonus = Math.min(implicitJoins * 2, 16)
+      // Semantic boost: table belongs to a concept matching the query
+      const conceptBonus = conceptBonusMap.get(key) ?? 0
 
       const score = nameScore + colScore + rowBonus + schemaBoost + viewBonus +
-        incomingFkBonus + colRichness + connectivityBonus
+        incomingFkBonus + colRichness + connectivityBonus + conceptBonus
 
       hits.push({
         table,
@@ -641,6 +860,10 @@ export class CatalogGraph {
     ]
     if (lineageViews.length > 0) {
       lines.push(`Lineage maps available: ${lineageViews.join(", ")} — use search_catalog(lineage='view') to explore.`)
+    }
+    const conceptList = this.listConcepts()
+    if (conceptList.length > 0) {
+      lines.push(`Business concepts: ${conceptList.map((c) => c.concept).join(", ")} — use search_catalog(concepts='table') for semantic tags, search_catalog(concept_path=['A','B']) to trace cross-concept paths.`)
     }
     return lines.join("\n")
   }

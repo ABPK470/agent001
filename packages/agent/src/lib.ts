@@ -172,7 +172,7 @@ export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from ".
 export type { BrowserCheckResult } from "./tools/browser-check.js"
 export { searchCatalogTool } from "./tools/catalog-search.js"
 export { buildCatalog, getCatalog, getCatalogPromptSummary, hasCatalog, loadLineage } from "./tools/catalog.js"
-export type { CatalogBuildOptions, CatalogGraph, CatalogStats, CatalogTable, ImplicitEdge, ViewLineage } from "./tools/catalog.js"
+export type { CatalogBuildOptions, CatalogGraph, CatalogStats, CatalogTable, ConceptNode, ConceptPathEdge, ConceptPathResult, ConceptPathStep, ImplicitEdge, ViewLineage } from "./tools/catalog.js"
 export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./tools/delegate.js"
 export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
 export { fetchUrlTool, setFetchKillSignal } from "./tools/fetch-url.js"
