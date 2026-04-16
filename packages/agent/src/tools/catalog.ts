@@ -76,13 +76,41 @@ export interface ImplicitEdge {
   tables: string[]                // all tables sharing this column+type
 }
 
+// ── Lineage types ────────────────────────────────────────────────
+
+/** A dimension key column → dimension table mapping. */
+export interface LineageDimJoin {
+  column: string                  // e.g. "pkClient"
+  dimTable: string                // e.g. "dim.Client"
+  dimRows: string                 // e.g. "~26M"
+  note: string                    // e.g. "ALWAYS filter — never full scan"
+}
+
+/** A single source feeding into a critical view. */
+export interface LineageSource {
+  qualifiedName: string           // e.g. "publish.MappingTransactionalBankingRules"
+  businessArea: string            // e.g. "Transactional Banking"
+  group: string                   // e.g. "Retail & Business Banking"
+  filter: string                  // e.g. "pkProduct IS NOT NULL AND Amount <> 0"
+}
+
+/** Full lineage map for a critical view (e.g. publish.Revenue). */
+export interface ViewLineage {
+  view: string                    // "publish.Revenue"
+  description: string             // "All client revenue across every business line"
+  outputColumns: string[]         // column names in the view's output
+  dimJoins: LineageDimJoin[]      // dimension key mappings
+  sources: LineageSource[]        // all contributing tables/views
+}
+
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
-  version: 1
+  version: 1 | 2
   builtAt: string                 // ISO 8601
   source: string                  // connection name
   tables: CatalogTable[]
   implicitEdges: ImplicitEdge[]
+  lineage: ViewLineage[]          // curated lineage maps for critical views
 }
 
 export interface CatalogBuildOptions {
@@ -210,6 +238,8 @@ export class CatalogGraph {
   readonly tables: Map<string, CatalogTable>
   readonly implicitEdges: ImplicitEdge[]
   readonly builtAt: Date
+  /** Curated lineage maps for critical views, keyed by qualifiedName. */
+  private lineageMap: Map<string, ViewLineage>
 
   private nameIndex: Map<string, Set<string>>
   private columnIndex: Map<string, Set<string>>
@@ -224,6 +254,7 @@ export class CatalogGraph {
     adjacency: Map<string, Array<{ target: string; fk: CatalogFK }>>,
     implicitEdges: ImplicitEdge[],
     builtAt?: Date,
+    lineage?: ViewLineage[],
   ) {
     this.tables = tables
     this.nameIndex = nameIndex
@@ -238,6 +269,11 @@ export class CatalogGraph {
         if (!this.implicitJoinIndex.has(tk)) this.implicitJoinIndex.set(tk, [])
         this.implicitJoinIndex.get(tk)!.push(edge)
       }
+    }
+    // Build lineage index
+    this.lineageMap = new Map()
+    if (lineage) {
+      for (const l of lineage) this.lineageMap.set(l.view, l)
     }
   }
 
@@ -345,11 +381,12 @@ export class CatalogGraph {
   /** Serialize to a JSON-safe snapshot for disk persistence. */
   toSnapshot(source = "default"): CatalogSnapshot {
     return {
-      version: 1,
+      version: 2,
       builtAt: this.builtAt.toISOString(),
       source,
       tables: [...this.tables.values()],
       implicitEdges: this.implicitEdges,
+      lineage: [...this.lineageMap.values()],
     }
   }
 
@@ -394,7 +431,38 @@ export class CatalogGraph {
     return new CatalogGraph(
       tables, nameIndex, columnIndex, adjacency,
       snap.implicitEdges, new Date(snap.builtAt),
+      (snap as any).lineage ?? [],
     )
+  }
+
+  // ── Lineage ──────────────────────────────────────────────────
+
+  /** Merge externally-curated lineage maps into the catalog. */
+  mergeLineage(lineages: ViewLineage[]): void {
+    for (const l of lineages) this.lineageMap.set(l.view, l)
+  }
+
+  /** Get lineage for a specific view. */
+  getLineage(qualifiedName: string): ViewLineage | null {
+    return this.lineageMap.get(qualifiedName) ?? null
+  }
+
+  /** List all views that have lineage maps. */
+  listLineage(): string[] {
+    return [...this.lineageMap.keys()]
+  }
+
+  /** Check if a table appears as a source in any lineage map. */
+  getLineageParents(qualifiedName: string): Array<{ view: string; businessArea: string }> {
+    const results: Array<{ view: string; businessArea: string }> = []
+    for (const l of this.lineageMap.values()) {
+      for (const s of l.sources) {
+        if (s.qualifiedName.toLowerCase() === qualifiedName.toLowerCase()) {
+          results.push({ view: l.view, businessArea: s.businessArea })
+        }
+      }
+    }
+    return results
   }
 
   // ── Search ───────────────────────────────────────────────────
@@ -566,19 +634,14 @@ export class CatalogGraph {
   promptSummary(): string {
     const s = this.stats()
     const age = Math.round((Date.now() - this.builtAt.getTime()) / 3600000)
+    const lineageViews = this.listLineage()
     const lines = [
       `Schema Catalog (built ${age}h ago): ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges.`,
       `Total rows: ~${(s.totalRows / 1e6).toFixed(0)}M.`,
-      "Largest tables:",
     ]
-    for (const t of s.largestTables.slice(0, 10)) {
-      lines.push(`  ${t.name}: ~${(t.rows / 1e6).toFixed(0)}M rows`)
+    if (lineageViews.length > 0) {
+      lines.push(`Lineage maps available: ${lineageViews.join(", ")} — use search_catalog(lineage='view') to explore.`)
     }
-    lines.push(
-      "",
-      "The catalog is a persistent knowledge graph. Use search_catalog BEFORE any other DB tool.",
-      "search_catalog(joins='schema.Table') shows FK + implicit join edges.",
-    )
     return lines.join("\n")
   }
 }
@@ -610,7 +673,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
       if (Date.now() - stat.mtimeMs < maxAge) {
         const raw = await fs.readFile(cachePath, "utf-8")
         const snap: CatalogSnapshot = JSON.parse(raw)
-        if (snap.version === 1) {
+        if (snap.version === 1 || snap.version === 2) {
           const catalog = CatalogGraph.fromSnapshot(snap)
           _catalogs.set(conn, catalog)
           return catalog
@@ -647,4 +710,35 @@ export function hasCatalog(): boolean {
 
 export function getCatalogPromptSummary(connection = "default"): string {
   return _catalogs.get(connection)?.promptSummary() ?? ""
+}
+
+/**
+ * Load lineage definitions from a JSON file and merge into the catalog.
+ * Call this after buildCatalog() — lineage is curated, not auto-discovered.
+ */
+export async function loadLineage(
+  filePath: string,
+  connection = "default",
+): Promise<number> {
+  const catalog = _catalogs.get(connection)
+  if (!catalog) throw new Error("Catalog not built yet — call buildCatalog() first")
+
+  const fs = await import("node:fs/promises")
+  const { resolve } = await import("node:path")
+  const resolved = resolve(filePath)
+  const raw = await fs.readFile(resolved, "utf-8")
+  const lineages: ViewLineage[] = JSON.parse(raw)
+  catalog.mergeLineage(lineages)
+
+  // Re-persist the snapshot so lineage is cached with structural data
+  const cachePath = _defaultCachePath
+  if (cachePath) {
+    try {
+      const { dirname } = await import("node:path")
+      await fs.mkdir(dirname(cachePath), { recursive: true })
+      await fs.writeFile(cachePath, JSON.stringify(catalog.toSnapshot(connection)), "utf-8")
+    } catch { /* non-fatal */ }
+  }
+
+  return lineages.length
 }

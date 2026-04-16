@@ -11,39 +11,40 @@
  */
 
 import {
-    Agent,
-    askUserTool,
-    cancelRun,
-    completeRun,
-    createDelegateTools,
-    createEngineServices,
-    createRun,
-    failRun,
-    governTool,
-    PolicyEffect,
-    runCompleted,
-    runFailed,
-    runStarted,
-    setBasePath,
-    setBrowseKillSignal,
-    setBrowserCheckCwd,
-    setFetchKillSignal,
-    setMssqlKillSignal,
-    setSearchBasePath,
-    setShellCwd,
-    setShellSignal,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    type DelegateContext,
-    type DomainEvent,
-    type EngineServices,
-    type LLMClient,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager,
+  Agent,
+  askUserTool,
+  cancelRun,
+  completeRun,
+  createDelegateTools,
+  createEngineServices,
+  createRun,
+  DEFAULT_SYSTEM_PROMPT,
+  failRun,
+  governTool,
+  PolicyEffect,
+  runCompleted,
+  runFailed,
+  runStarted,
+  setBasePath,
+  setBrowseKillSignal,
+  setBrowserCheckCwd,
+  setFetchKillSignal,
+  setMssqlKillSignal,
+  setSearchBasePath,
+  setShellCwd,
+  setShellSignal,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  type DelegateContext,
+  type DomainEvent,
+  type EngineServices,
+  type LLMClient,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus, createBusTools } from "./agent-bus.js"
@@ -54,13 +55,13 @@ import { consolidate, extractProcedural, ingestRunTurns, migrateMemory, retrieve
 import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "./prompt-builder.js"
 import { RunQueue, type RunPriority } from "./queue.js"
 import {
-    applyWorkspaceDiff,
-    cleanupRunWorkspace,
-    cleanupStaleRunWorkspaces,
-    computeWorkspaceDiff,
-    prepareRunWorkspace,
-    type RunWorkspaceContext,
-    type WorkspaceDiff,
+  applyWorkspaceDiff,
+  cleanupRunWorkspace,
+  cleanupStaleRunWorkspaces,
+  computeWorkspaceDiff,
+  prepareRunWorkspace,
+  type RunWorkspaceContext,
+  type WorkspaceDiff,
 } from "./run-workspace.js"
 import { getAllTools, resolveTools } from "./tools.js"
 import { broadcast } from "./ws.js"
@@ -620,11 +621,9 @@ export class AgentOrchestrator {
     const systemMessages: Message[] = []
 
     // Section 1: system_anchor — base prompt + environment (NEVER dropped)
-    const basePrompt = systemPrompt ?? undefined
+    const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
     const envBlock = buildEnvironmentContext()
-    const anchorContent = basePrompt
-      ? `${basePrompt}\n${envBlock}`
-      : envBlock
+    const anchorContent = `${basePrompt}\n${envBlock}`
     systemMessages.push({
       role: "system",
       content: anchorContent,

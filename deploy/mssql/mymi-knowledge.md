@@ -350,208 +350,24 @@ ORDER BY TABLE_NAME
 
 ---
 
-## Part 4: Critical View Lineage Maps
+## Part 4: Critical View Lineage
 
-These lineage maps document the **most important business views** in the DWH.
-They show exactly which tables/views feed into each critical view, what dimension keys
-are used, and how data flows from source → fact → publish layer.
+Lineage maps for critical views like `publish.Revenue` and `publish.Balances` are stored as
+structured data in the schema catalog — NOT in this file.
 
-**USE THESE MAPS** to: understand what data is available, trace a metric to its source,
-find the right table for a business question, discover cross-sell opportunities across products,
-and suggest improvements (technical or business).
+**To access lineage:**
+- `search_catalog(lineage='publish.Revenue')` → full map: 59 source views, dimension joins, business areas
+- `search_catalog(lineage='publish.Balances')` → (when added)
 
-### publish.Revenue — THE Revenue View
+**What lineage tells you:**
+- Which `publish.Mapping*` views feed into the critical view
+- How sources are grouped by business area (RBB, UNO, CPA, Africa, IMEX, etc.)
+- Which dimension tables join via pk* keys (dim.Client, dim.Product, etc.)
+- Filter conditions applied to each source
 
-The single most important view in the DWH. All client revenue across every business line
-flows through this view. It is a **UNION ALL of 59 source views/tables**, each representing
-a distinct revenue stream (product line / business area).
-
-**Output Schema** (26 columns — every UNION segment produces the same shape):
-
-| Column | Type | Dimension Join | Purpose |
-|---|---|---|---|
-| `pkMonth` | int | `dim.Month` / `dim.Calendar` | Reporting month key |
-| `pkClient` | int | `dim.Client` (26M rows) | Client dimension key — ALWAYS filter |
-| `pkProduct` | int | `dim.Product` | Product/service classification |
-| `pkChannel` | int | `dim.Channel` | Distribution channel |
-| `pkSourceProduct` | int | `dim.SourceProduct` | Original source system product |
-| `pkPortfolio` | int | `dim.Portfolio` | Portfolio grouping |
-| `pkSource` | int | `dim.Source` | Source system identifier |
-| `pkCostCentre` | int | `dim.CostCentre` | Cost centre allocation |
-| `pkSAPProduct` | int | `dim.SAPProduct` | SAP product mapping (sparse) |
-| `pkGLAccount` | int | `dim.GLAccount` | General Ledger account |
-| `RevenueLCYMTD` | decimal | — | Revenue in Local Currency, Month-To-Date |
-| `RevenueZARMTD` | decimal | — | Revenue in ZAR, Month-To-Date |
-| `RevenueCCYMTD` | decimal | — | Revenue in Contract Currency, MTD |
-| `ServiceRate` | decimal | — | Applied service rate (sparse) |
-| `pkAccount` | int | `dim.Account` (51M rows) | Account key — ALWAYS filter |
-| `pkCountry` | int | `dim.Country` | Country dimension |
-| `pkClient_ReceiverBank` | int | `dim.Client` | Receiver bank (GPP/payments) |
-| `pkClient_SenderBank` | int | `dim.Client` | Sender bank (payments) |
-| `MasterBook` | varchar | `dim.Book` | Trading book (Markets) |
-| `SRInd` | varchar | — | Sales Revenue Indicator (YES/NO) |
-| `ReferenceNumber` | varchar | — | Transaction reference |
-| `ReferenceType` | varchar | — | Reference type classification |
-| `TransactionCurrency` | varchar | `dim.Currency` | Transaction currency code |
-| `ruleId` | int | `core.Rule` | ETL rule that produced this row |
-| `pkDetailsOfTransferCharges` | int | dim table | Transfer charge detail key |
-| `OMCCode` | varchar | — | Markets OMC classification code |
-
-#### Layer 1: Revenue Streams (59 sources → publish.Revenue)
-
-Each source is a `publish.Mapping*` view/table. Grouped by business area:
-
-**Retail & Business Banking (RBB)**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 1 | `publish.MappingTransactionalBankingRules` | Transactional Banking | `pkProduct IS NOT NULL AND Amount <> 0` |
-| 2 | `publish.MappingRBBCardIssuing` | Card Issuing | `IncomeProduct IN ('CashHandlingFee','CreditInterestIncome',...)` |
-| 3 | `publish.MappingRBBMerchantServicesRules` | Merchant Services | `pkProduct IS NOT NULL AND RevenueMTD <> 0` |
-| 4 | `publish.MappingRBBFXSmallsProduct` | FX Smalls (Markets) | All rows |
-| 5 | `publish.MappingBusinessBankFleet` | Business Bank Fleet | `BsIsCode = 'INCOME'` |
-
-**UNO System (transactional core banking)**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 6 | `publish.MappingUNOTranspose` | UNO Main | `BsIsCode = 'INCOME'` |
-| 7 | `publish.MappingUNOTransposeCFC` | UNO CFC | `BsIsCode = 'INCOME'` |
-| 8 | `publish.MappingUNOTransposeCheqFees` | UNO Cheque Fees | `BsIsCode = 'INCOME'` |
-
-**Corporate & Portfolio Analytics (CPA)**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 9 | `publish.MappingCPALoanCapitalMarkets` | Loan Capital Markets | `IncomeProduct IN ('PnLinZARTrade','PnLinZARAdjustments','FXComponent...')` |
-| 10 | `publish.MappingCPABonds` | Bonds | Same PnL/FX filter |
-| 11 | `publish.MappingCPACorporate` | Corporate | Same PnL/FX filter |
-| 12 | `publish.MappingCPARPF` | RPF | Same PnL/FX filter |
-| 13 | `publish.MappingCPAUnderwriting` | Underwriting | Same PnL/FX filter |
-| 14 | `publish.MappingCPAGFOther` | GF Other | All (pkProduct NOT NULL) |
-| 15 | `publish.MappingCPAFees` | CPA Fees | All (pkProduct NOT NULL) |
-| 16 | `publish.MappingCPAFSG` | FSG | All (pkProduct NOT NULL) |
-| 17 | `publish.MappingCPAFSGPTEA` | FSG PTEA | All (pkProduct NOT NULL) |
-| 18 | `publish.MappingCPAAlpha` | Alpha | PnL/FX filter |
-| 19 | `publish.MappingCPASAF` | SAF | PnL/FX filter |
-| 20 | `publish.MappingCPAROA` | ROA | PnL/FX filter |
-| 21 | `publish.MappingCPATrade` | CPA Trades | PnL/FX filter |
-| 22 | `publish.MappingCPACPFFees` | CPF Fees | All (pkProduct NOT NULL) |
-| 23 | `publish.MappingCPADaco` | DACO | PnL/FX filter |
-| 24 | `publish.MappingCPASAM` | SAM | `IncomeProduct IN ('DailyPnL')` |
-
-**Africa Regional**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 25 | `publish.MappingAfricaCreditEas` | Africa Credit EAS | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 26 | `publish.MappingAfricaFrontArenaAfrica` | Africa FrontArena | `SourceIndicator = 'SYSTEM'` |
-| 27 | `publish.MappingAfricaFrontArenaConsolidated` | FrontArena Consolidated | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 28 | `publish.MappingAfricaFrontArenaVoided` | FrontArena Voided | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 29 | `publish.MappingAfricaFrontArenaInterest` | FrontArena Interest | `SourceIndicator NOT IN ('SYSTEMHISTORY','OTHER')` |
-| 30 | `publish.MappingAfricaFrontArenaBotswanaInstitutionalDeposits` | Botswana Deposits | `SourceIndicator = 'SYSTEM'` |
-| 31 | `publish.MappingAfricaFrontArenaFTPReversal` | FrontArena FTP Reversal | `SourceIndicator = 'SYSTEM'` |
-| 32 | `publish.MappingAfricaBrains_EMDW` | Africa Brains EMDW | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 33 | `publish.MappingAfricaFlex_EMDW` | Africa Flex EMDW | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 34 | `publish.MappingAfricaCard` | Africa Card | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 35 | `publish.MappingAfricaFTP_EMDW` | Africa FTP | `SourceIndicator <> 'SYSTEMHISTORY'` |
-| 36 | `publish.MappingAfricaMarketsMonthlyNew` | Africa Markets New | All (pkProduct + pkSourceProduct NOT NULL) |
-
-**IMEX (International Payments/Trade)**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 37 | `publish.MappingIMEXTrades` | IMEX Trades | `pkMonth <= 844` |
-| 38 | `publish.MappingIMEXCommissionsTransactions` | IMEX Commissions | `pkMonth >= 845 AND PostingFlag = 1` |
-| 39 | `publish.MappingIMEXARO` | IMEX ARO | All (pkProduct NOT NULL) |
-
-**Lending & Working Capital**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 40 | `publish.MappingCPFLoanPortfolio` | CPF Loan Portfolio | `IncomeProduct = 'MTDPNL'` |
-| 41 | `publish.MappingReceivableFinance` | Receivable Finance | `IncomeProduct IN ('1over12Fees...','FeesUpfront...',...)` |
-| 42 | `publish.MappingMoneyMarkets` | Money Markets | `IncomeProduct IN ('MFTP','InterestReceived','InterestPaid')` |
-| 43 | `publish.MappingWorkingCapitalCorp` | Working Capital | `IncomeProduct IN ('FTPCost','InterestReceived',...)` |
-| 44 | `publish.MappingVostroDepositsRules` | Vostro Deposits | `IncomeProduct IN ('MFTPrate','CRInterest1','DRInterest1')` |
-| 45 | `publish.MappingCreditLinkNote` | Credit Link Notes | `RevenueMTD <> 0` |
-
-**Payments & Fees**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 46 | `publish.MappingGPPFees` | GPP Fees (Global Payments) | `pkProduct IS NOT NULL AND RevenueMTD <> 0` |
-| 47 | `publish.MappingTradeRules` | Trade Rules | All (pkProduct NOT NULL) |
-| 48 | `publish.MappingMentisFees` | Mentis Fees | All rows |
-| 49 | `publish.MappingNewMentisFees` | New Mentis Fees | All rows |
-| 50 | `publish.MappingNewMentisFeesPre2024` | New Mentis Fees Pre-2024 | All rows |
-| 51 | `publish.MappingMentisCreditNotes` | Mentis Credit Notes | All rows |
-| 52 | `publish.MappingAISRevenue` | AIS Revenue | All (pkProduct NOT NULL) |
-| 53 | `publish.MappingAISVariableCosts` | AIS Variable Costs | All (pkProduct NOT NULL) |
-
-**Manual Adjustments & Restatements**
-| # | Source | Business Area | Key Filter |
-|---|---|---|---|
-| 54 | `publish.MappingManualAdjustments` | Manual Adj (Revenue) | All (pkProduct NOT NULL) |
-| 55 | `publish.MappingManualAdjustmentsStatic` | Manual Adj (Static) | `RevenueLCYMTD <> 0` |
-| 56 | `publish.MappingImpairmentsHadoopProduct` | Impairments (Hadoop) | All rows |
-| 57 | `publish.MappingSalesCredits` | Sales Credits | `RevenueMTD <> 0` |
-| 58 | `publish.mappingChequeDepositsRestatements` | Cheque Restatements | All rows |
-| 59 | `publish.mappingFBSSRestatements` | FBSS Restatements | All rows |
-
-#### Layer 2: What the Mapping Views Are Built From
-
-Each `publish.Mapping*` view is itself a transformation view that typically joins:
-- A **fact table** (the raw revenue/transaction data from a source system)
-- Several **dimension mapping rules** (from `core.Rule`, `core.RuleColumn` via the ETL engine)
-- **Dimension lookups** (resolving pk* keys to standardized dimension values)
-
-To discover Layer 2 for any specific Mapping view, use:
-```
-inspect_definition(object='MappingTransactionalBankingRules', schema='publish')
-```
-This will reveal the underlying fact tables and joins.
-
-Common patterns in Layer 2:
-- `fact.*` tables → raw source data (e.g., `fact.TransactionalBanking`, `fact.UnoTranspose`)
-- `etl.mapping_*` tables → rule-generated lookup tables
-- `dim.*` joins → resolving dimension keys
-- Other `publish.*` views → some Mapping views reference other publish views
-
-#### Dimension Join Reference (Layer 3)
-
-Every row in publish.Revenue has pk* keys that join to these dimension tables:
-
-| Key Column | Dimension Table | Rows | Usage |
-|---|---|---|---|
-| `pkMonth` | `dim.Month` or `dim.Calendar` | ~1K | Always present |
-| `pkClient` | `dim.Client` | ~26M | **ALWAYS filter** — never full scan |
-| `pkProduct` | `dim.Product` | ~5K | Product classification |
-| `pkChannel` | `dim.Channel` | ~100 | Distribution channel (nullable) |
-| `pkSourceProduct` | `dim.SourceProduct` | ~10K | Original source product |
-| `pkPortfolio` | `dim.Portfolio` | ~500 | Portfolio group (nullable) |
-| `pkSource` | `dim.Source` | ~100 | Source system |
-| `pkCostCentre` | `dim.CostCentre` | ~5K | Cost centre |
-| `pkGLAccount` | `dim.GLAccount` | ~10K | GL account (nullable) |
-| `pkAccount` | `dim.Account` | ~51M | **ALWAYS filter** — never full scan |
-| `pkCountry` | `dim.Country` | ~250 | Country dimension |
-
-**SRInd logic**: Most streams set `SRInd = 'YES'`. Exceptions:
-- Africa sources: `'NO'` when `pkCountry = 47` (South Africa — non-SR revenue)
-- Business Bank Fleet: always `'NO'`
-- Markets FX Smalls: `'NO'` when `Team = 'FINANCIAL INSTITUTIONS'`
-- Africa Card: `'NO'` when `pkProduct = 1833`
-- Impairments Hadoop: `'NO'` when `PLdesk = 'PRIME SERVICES' AND CoverageGroup = 'NBFI'`
-
-#### How to Use This Map
-
-**Finding revenue for a specific product/business line:**
-1. Look at the Layer 1 table above — find the business area
-2. Query that specific `publish.Mapping*` source directly for detailed analysis
-3. Or query `publish.Revenue` with appropriate filters for cross-product views
-
-**Tracing a revenue number to its source:**
-1. Find the row in publish.Revenue
-2. The source Mapping* view is identifiable by the combination of populated/NULL columns
-3. Use `inspect_definition` on that Mapping view to find the underlying fact table
-4. Use the fact table + dimension joins for root-cause analysis
-
-**Cross-sell / opportunity analysis:**
-1. Query publish.Revenue grouped by pkClient + pkProduct → see which products a client uses
-2. Compare against dimension reference data to find products NOT used
-3. Use dimension relationships (dim.Client → dim.CIBParent) to compare against peer clients
-4. The 59 revenue streams map to distinct business capabilities — gaps = opportunities
+**Use lineage for:**
+- Tracing a revenue number to its source fact table
+- Finding which business lines a client participates in
+- Cross-sell analysis (products used vs. not used, compared to peer clients)
+- Understanding what `inspect_definition` will reveal when drilling deeper
 

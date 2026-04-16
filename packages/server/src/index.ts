@@ -24,6 +24,7 @@ config({
 import {
     buildCatalog,
     closeMssqlPool,
+    loadLineage,
     setBasePath,
     setBrowserCheckCwd,
     setBrowserCheckExecutor,
@@ -295,6 +296,15 @@ async function main() {
       const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
       const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
       console.log(`📊 Schema catalog ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges`)
+
+      // Load curated lineage maps (if file exists)
+      const lineagePath = process.env.LINEAGE_FILE || resolve(_projectRoot, "deploy/mssql/lineage.json")
+      try {
+        const count = await loadLineage(lineagePath)
+        console.log(`📊 Lineage maps loaded: ${count} critical view(s) from ${lineagePath}`)
+      } catch {
+        // Non-fatal — lineage is optional (file may not exist)
+      }
     } catch (e) {
       console.warn("⚠️  Failed to build schema catalog:", e instanceof Error ? e.message : e)
     }

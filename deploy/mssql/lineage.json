@@ -1,0 +1,141 @@
+[
+  {
+    "view": "publish.Revenue",
+    "description": "All client revenue across every business line — UNION ALL of 59 revenue stream views. The single most important view in the DWH.",
+    "outputColumns": [
+      "pkMonth", "pkClient", "pkProduct", "pkChannel", "pkSourceProduct",
+      "pkPortfolio", "pkSource", "pkCostCentre", "pkSAPProduct", "pkGLAccount",
+      "RevenueLCYMTD", "RevenueZARMTD", "RevenueCCYMTD", "ServiceRate",
+      "pkAccount", "pkCountry", "pkClient_ReceiverBank", "pkClient_SenderBank",
+      "MasterBook", "SRInd", "ReferenceNumber", "ReferenceType",
+      "TransactionCurrency", "ruleId", "pkDetailsOfTransferCharges", "OMCCode"
+    ],
+    "dimJoins": [
+      { "column": "pkMonth", "dimTable": "dim.Month", "dimRows": "~1K", "note": "Reporting month key" },
+      { "column": "pkClient", "dimTable": "dim.Client", "dimRows": "~26M", "note": "ALWAYS filter — never full scan" },
+      { "column": "pkProduct", "dimTable": "dim.Product", "dimRows": "~5K", "note": "Product classification" },
+      { "column": "pkChannel", "dimTable": "dim.Channel", "dimRows": "~100", "note": "Distribution channel (nullable)" },
+      { "column": "pkSourceProduct", "dimTable": "dim.SourceProduct", "dimRows": "~10K", "note": "Original source product" },
+      { "column": "pkPortfolio", "dimTable": "dim.Portfolio", "dimRows": "~500", "note": "Portfolio group (nullable)" },
+      { "column": "pkSource", "dimTable": "dim.Source", "dimRows": "~100", "note": "Source system" },
+      { "column": "pkCostCentre", "dimTable": "dim.CostCentre", "dimRows": "~5K", "note": "Cost centre" },
+      { "column": "pkGLAccount", "dimTable": "dim.GLAccount", "dimRows": "~10K", "note": "GL account (nullable)" },
+      { "column": "pkAccount", "dimTable": "dim.Account", "dimRows": "~51M", "note": "ALWAYS filter — never full scan" },
+      { "column": "pkCountry", "dimTable": "dim.Country", "dimRows": "~250", "note": "Country dimension" }
+    ],
+    "sources": [
+      { "qualifiedName": "publish.MappingTransactionalBankingRules", "businessArea": "Transactional Banking", "group": "Retail & Business Banking", "filter": "pkProduct IS NOT NULL AND Amount <> 0" },
+      { "qualifiedName": "publish.MappingRBBCardIssuing", "businessArea": "Card Issuing", "group": "Retail & Business Banking", "filter": "IncomeProduct IN ('CashHandlingFee','CreditInterestIncome',...)" },
+      { "qualifiedName": "publish.MappingRBBMerchantServicesRules", "businessArea": "Merchant Services", "group": "Retail & Business Banking", "filter": "pkProduct IS NOT NULL AND RevenueMTD <> 0" },
+      { "qualifiedName": "publish.MappingRBBFXSmallsProduct", "businessArea": "FX Smalls (Markets)", "group": "Retail & Business Banking", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingBusinessBankFleet", "businessArea": "Business Bank Fleet", "group": "Retail & Business Banking", "filter": "BsIsCode = 'INCOME'" },
+
+      { "qualifiedName": "publish.MappingUNOTranspose", "businessArea": "UNO Main", "group": "UNO System", "filter": "BsIsCode = 'INCOME'" },
+      { "qualifiedName": "publish.MappingUNOTransposeCFC", "businessArea": "UNO CFC", "group": "UNO System", "filter": "BsIsCode = 'INCOME'" },
+      { "qualifiedName": "publish.MappingUNOTransposeCheqFees", "businessArea": "UNO Cheque Fees", "group": "UNO System", "filter": "BsIsCode = 'INCOME'" },
+
+      { "qualifiedName": "publish.MappingCPALoanCapitalMarkets", "businessArea": "Loan Capital Markets", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct IN ('PnLinZARTrade','PnLinZARAdjustments','FXComponentTrade','FXComponentAdjustments')" },
+      { "qualifiedName": "publish.MappingCPABonds", "businessArea": "Bonds", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPACorporate", "businessArea": "Corporate", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPARPF", "businessArea": "RPF", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPAUnderwriting", "businessArea": "Underwriting", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPAGFOther", "businessArea": "GF Other", "group": "Corporate & Portfolio Analytics", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingCPAFees", "businessArea": "CPA Fees", "group": "Corporate & Portfolio Analytics", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingCPAFSG", "businessArea": "FSG", "group": "Corporate & Portfolio Analytics", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingCPAFSGPTEA", "businessArea": "FSG PTEA", "group": "Corporate & Portfolio Analytics", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingCPAAlpha", "businessArea": "Alpha", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPASAF", "businessArea": "SAF", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPAROA", "businessArea": "ROA", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPATrade", "businessArea": "CPA Trades", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPACPFFees", "businessArea": "CPF Fees", "group": "Corporate & Portfolio Analytics", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingCPADaco", "businessArea": "DACO", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct PnL/FX filter" },
+      { "qualifiedName": "publish.MappingCPASAM", "businessArea": "SAM", "group": "Corporate & Portfolio Analytics", "filter": "IncomeProduct IN ('DailyPnL')" },
+
+      { "qualifiedName": "publish.MappingAfricaCreditEas", "businessArea": "Africa Credit EAS", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY'" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaAfrica", "businessArea": "Africa FrontArena", "group": "Africa Regional", "filter": "SourceIndicator = 'SYSTEM'" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaConsolidated", "businessArea": "FrontArena Consolidated", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY' AND DataSourceType <> 'DMR Journals'" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaVoided", "businessArea": "FrontArena Voided", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY'" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaInterest", "businessArea": "FrontArena Interest", "group": "Africa Regional", "filter": "SourceIndicator NOT IN ('SYSTEMHISTORY','OTHER')" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaBotswanaInstitutionalDeposits", "businessArea": "Botswana Deposits", "group": "Africa Regional", "filter": "SourceIndicator = 'SYSTEM'" },
+      { "qualifiedName": "publish.MappingAfricaFrontArenaFTPReversal", "businessArea": "FrontArena FTP Reversal", "group": "Africa Regional", "filter": "SourceIndicator = 'SYSTEM'" },
+      { "qualifiedName": "publish.MappingAfricaBrains_EMDW", "businessArea": "Africa Brains EMDW", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY'" },
+      { "qualifiedName": "publish.MappingAfricaFlex_EMDW", "businessArea": "Africa Flex EMDW", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY'" },
+      { "qualifiedName": "publish.MappingAfricaCard", "businessArea": "Africa Card", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY'" },
+      { "qualifiedName": "publish.MappingAfricaFTP_EMDW", "businessArea": "Africa FTP", "group": "Africa Regional", "filter": "SourceIndicator <> 'SYSTEMHISTORY' AND RevenueLCYMTD <> 0" },
+      { "qualifiedName": "publish.MappingAfricaMarketsMonthlyNew", "businessArea": "Africa Markets New", "group": "Africa Regional", "filter": "pkProduct IS NOT NULL AND pkSourceProduct IS NOT NULL" },
+
+      { "qualifiedName": "publish.MappingIMEXTrades", "businessArea": "IMEX Trades", "group": "IMEX", "filter": "pkMonth <= 844" },
+      { "qualifiedName": "publish.MappingIMEXCommissionsTransactions", "businessArea": "IMEX Commissions", "group": "IMEX", "filter": "pkMonth >= 845 AND PostingFlag = 1" },
+      { "qualifiedName": "publish.MappingIMEXARO", "businessArea": "IMEX ARO", "group": "IMEX", "filter": "pkProduct IS NOT NULL" },
+
+      { "qualifiedName": "publish.MappingCPFLoanPortfolio", "businessArea": "CPF Loan Portfolio", "group": "Lending & Working Capital", "filter": "IncomeProduct = 'MTDPNL'" },
+      { "qualifiedName": "publish.MappingReceivableFinance", "businessArea": "Receivable Finance", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('1over12Fees...','FeesUpfront...',...)" },
+      { "qualifiedName": "publish.MappingMoneyMarkets", "businessArea": "Money Markets", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('MFTP','InterestReceived','InterestPaid')" },
+      { "qualifiedName": "publish.MappingWorkingCapitalCorp", "businessArea": "Working Capital", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('FTPCost','InterestReceived',...)" },
+      { "qualifiedName": "publish.MappingVostroDepositsRules", "businessArea": "Vostro Deposits", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('MFTPrate','CRInterest1','DRInterest1')" },
+      { "qualifiedName": "publish.MappingCreditLinkNote", "businessArea": "Credit Link Notes", "group": "Lending & Working Capital", "filter": "RevenueMTD <> 0" },
+
+      { "qualifiedName": "publish.MappingGPPFees", "businessArea": "GPP Fees (Global Payments)", "group": "Payments & Fees", "filter": "pkProduct IS NOT NULL AND RevenueMTD <> 0" },
+      { "qualifiedName": "publish.MappingTradeRules", "businessArea": "Trade Rules", "group": "Payments & Fees", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingMentisFees", "businessArea": "Mentis Fees", "group": "Payments & Fees", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingNewMentisFees", "businessArea": "New Mentis Fees", "group": "Payments & Fees", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingNewMentisFeesPre2024", "businessArea": "New Mentis Fees Pre-2024", "group": "Payments & Fees", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingMentisCreditNotes", "businessArea": "Mentis Credit Notes", "group": "Payments & Fees", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingAISRevenue", "businessArea": "AIS Revenue", "group": "Payments & Fees", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingAISVariableCosts", "businessArea": "AIS Variable Costs", "group": "Payments & Fees", "filter": "pkProduct IS NOT NULL" },
+
+      { "qualifiedName": "publish.MappingManualAdjustments", "businessArea": "Manual Adjustments (Revenue)", "group": "Manual Adjustments & Restatements", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingManualAdjustmentsStatic", "businessArea": "Manual Adjustments (Static)", "group": "Manual Adjustments & Restatements", "filter": "RevenueLCYMTD <> 0" },
+      { "qualifiedName": "publish.MappingImpairmentsHadoopProduct", "businessArea": "Impairments (Hadoop)", "group": "Manual Adjustments & Restatements", "filter": "all rows" },
+      { "qualifiedName": "publish.MappingSalesCredits", "businessArea": "Sales Credits", "group": "Manual Adjustments & Restatements", "filter": "RevenueMTD <> 0" },
+      { "qualifiedName": "publish.mappingChequeDepositsRestatements", "businessArea": "Cheque Restatements", "group": "Manual Adjustments & Restatements", "filter": "all rows" },
+      { "qualifiedName": "publish.mappingFBSSRestatements", "businessArea": "FBSS Restatements", "group": "Manual Adjustments & Restatements", "filter": "all rows" }
+    ]
+  },
+  {
+    "view": "publish.Balances",
+    "description": "All client balance sheet positions (deposits, advances, off-balance-sheet) — UNION ALL of 10 source views. The second most critical view in the DWH alongside publish.Revenue.",
+    "outputColumns": [
+      "pkCountry", "pkMonth", "pkAccount", "pkClient", "pkProduct", "pkChannel",
+      "pkSourceProduct", "pkPortfolio", "pkSource", "pkCostCentre", "pkGLAccount", "pkSAPProduct",
+      "AverageCreditBalanceLCYMTD", "AverageCreditBalanceCCYMTD", "AverageCreditBalanceZARMTD",
+      "AverageDebitBalanceLCYMTD", "AverageDebitBalanceCCYMTD", "AverageDebitBalanceZARMTD",
+      "SpotCreditBalanceLCYMTD", "SpotCreditBalanceCCYMTD", "SpotCreditBalanceZARMTD",
+      "SpotDebitBalanceLCYMTD", "SpotDebitBalanceCCYMTD", "SpotDebitBalanceZARMTD",
+      "OffBalanceSheetAverageLCYMTD", "OffBalanceSheetAverageCCYMTD", "OffBalanceSheetAverageZARMTD",
+      "OffBalanceSheetSpotLCYMTD", "OffBalanceSheetSpotCCYMTD", "OffBalanceSheetSpotZARMTD",
+      "ReferenceNumber", "ReferenceType", "SRInd", "TransactionCurrency", "OMCCode", "ruleId"
+    ],
+    "dimJoins": [
+      { "column": "pkCountry", "dimTable": "dim.Country", "dimRows": "~250", "note": "Country dimension" },
+      { "column": "pkMonth", "dimTable": "dim.Month", "dimRows": "~1K", "note": "Reporting month key" },
+      { "column": "pkAccount", "dimTable": "dim.Account", "dimRows": "~51M", "note": "ALWAYS filter — never full scan" },
+      { "column": "pkClient", "dimTable": "dim.Client", "dimRows": "~26M", "note": "ALWAYS filter — never full scan" },
+      { "column": "pkProduct", "dimTable": "dim.Product", "dimRows": "~5K", "note": "Product classification" },
+      { "column": "pkChannel", "dimTable": "dim.Channel", "dimRows": "~100", "note": "Distribution channel (nullable)" },
+      { "column": "pkSourceProduct", "dimTable": "dim.SourceProduct", "dimRows": "~10K", "note": "Balance type indicator (4865=debit, 4868=credit, 4870=accrued adv, 4871=accrued dep)" },
+      { "column": "pkPortfolio", "dimTable": "dim.Portfolio", "dimRows": "~500", "note": "Portfolio group (nullable)" },
+      { "column": "pkSource", "dimTable": "dim.Source", "dimRows": "~100", "note": "Source system" },
+      { "column": "pkCostCentre", "dimTable": "dim.CostCentre", "dimRows": "~5K", "note": "Cost centre (nullable)" },
+      { "column": "pkGLAccount", "dimTable": "dim.GLAccount", "dimRows": "~10K", "note": "GL account (nullable)" }
+    ],
+    "sources": [
+      { "qualifiedName": "publish.MappingUNOTranspose", "businessArea": "UNO Main (Deposits & Advances)", "group": "UNO System", "filter": "BsIsCode IN ('DEPOSITS','ADVANCES') AND pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingUNOTransposeCFC", "businessArea": "UNO CFC (Deposits & Advances)", "group": "UNO System", "filter": "BsIsCode IN ('DEPOSITS','ADVANCES') AND pkProduct IS NOT NULL" },
+
+      { "qualifiedName": "publish.MappingRBBCardIssuing", "businessArea": "Card Issuing Balances", "group": "Retail & Business Banking", "filter": "IncomeProduct IN ('AccountBalanceCt','AccountBalanceDt','AccrIntAdvances','AccrIntDeposits','AvgCreditBalance','AvgDebitBalance')" },
+
+      { "qualifiedName": "publish.MappingCPFLoanPortfolio", "businessArea": "CPF Loan Portfolio Balances", "group": "Lending & Working Capital", "filter": "pkProduct IS NOT NULL" },
+      { "qualifiedName": "publish.MappingMoneyMarkets", "businessArea": "Money Markets Balances", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('AverageBalance','MonthEndBalance')" },
+      { "qualifiedName": "publish.MappingWorkingCapitalCorp", "businessArea": "Working Capital Balances", "group": "Lending & Working Capital", "filter": "IncomeProduct IN ('AveDebitBalance','AveCreditBalance','MonthEndBalance','AccrCRInt','AccrDRInt','MonthEndBalanceDR','MonthEndBalanceCR')" },
+
+      { "qualifiedName": "publish.MappingManualAdjustments", "businessArea": "Manual Adjustments (Balances)", "group": "Manual Adjustments", "filter": "pkProduct IS NOT NULL" },
+
+      { "qualifiedName": "Publish.MappingAISBalancesheet", "businessArea": "AIS Balance Sheet (Off-Balance-Sheet)", "group": "Advisory & Investment Services", "filter": "all rows (off-balance-sheet Average only)" },
+
+      { "qualifiedName": "publish.MappingAfricaMonthlyBalances", "businessArea": "Africa Monthly Balances", "group": "Africa Regional", "filter": "pkProduct IS NOT NULL AND pkSourceProduct IS NOT NULL" },
+
+      { "qualifiedName": "publish.CIBMonthlyBalancesFinancialDisclosure", "businessArea": "CIB Financial Disclosure Balances", "group": "CIB (Corporate & Investment Banking)", "filter": "pkMonth <= current month. Complex BusinessArea/ProductHouse/Product CASE routing for GFTB, Treasury, ABSA Management, STCF, Business Banking, etc." }
+    ]
+  }
+]

@@ -15,7 +15,7 @@
  */
 
 import type { Tool } from "../types.js"
-import { buildCatalog, getCatalog, type CatalogFK, type CatalogTable } from "./catalog.js"
+import { buildCatalog, getCatalog, type CatalogFK, type CatalogTable, type ViewLineage } from "./catalog.js"
 
 // ── Formatters ───────────────────────────────────────────────────
 
@@ -81,6 +81,43 @@ function fmtPath(path: CatalogFK[]): string {
   ).join("\n")
 }
 
+function fmtLineage(l: ViewLineage): string {
+  const lines = [
+    `LINEAGE MAP: ${l.view}`,
+    l.description,
+    "",
+    `Output columns (${l.outputColumns.length}): ${l.outputColumns.join(", ")}`,
+    "",
+    `Dimension Joins (${l.dimJoins.length}):`,
+  ]
+  for (const d of l.dimJoins) {
+    lines.push(`  ${d.column} → ${d.dimTable} (${d.dimRows}) — ${d.note}`)
+  }
+
+  // Group sources by business group
+  const groups = new Map<string, typeof l.sources>()
+  for (const s of l.sources) {
+    if (!groups.has(s.group)) groups.set(s.group, [])
+    groups.get(s.group)!.push(s)
+  }
+
+  lines.push("", `Sources (${l.sources.length} total):`)
+  for (const [group, sources] of groups) {
+    lines.push(``, `  ▸ ${group} (${sources.length}):`)
+    for (const s of sources) {
+      lines.push(`    ${s.qualifiedName} — ${s.businessArea}`)
+      if (s.filter && s.filter !== "all rows") lines.push(`      filter: ${s.filter}`)
+    }
+  }
+
+  lines.push(
+    "",
+    "To drill deeper into any source: inspect_definition(object='MappingName', schema='publish')",
+    "To query this view: always filter by pkMonth + pkClient (both are high-cardinality).",
+  )
+  return lines.join("\n")
+}
+
 // ── The tool ─────────────────────────────────────────────────────
 
 export const searchCatalogTool: Tool = {
@@ -96,8 +133,9 @@ export const searchCatalogTool: Tool = {
     "(3) column='clientId' — find every table that has this column. " +
     "(4) joins='dim.Client' — show ALL join edges (FK + implicit) for a table. " +
     "(5) path=['dim.Client','fact.X'] — find FK join paths between two tables. " +
-    "(6) stats=true — catalog summary. " +
-    "(7) refresh=true — rebuild from live database and update cache.",
+    "(6) lineage='publish.Revenue' — show full lineage map: all source views, dimension joins, business areas. " +
+    "(7) stats=true — catalog summary. " +
+    "(8) refresh=true — rebuild from live database and update cache.",
   parameters: {
     type: "object",
     properties: {
@@ -137,6 +175,13 @@ export const searchCatalogTool: Tool = {
         type: "boolean",
         description: "Return high-level catalog summary: schema count, table/view count, largest tables.",
       },
+      lineage: {
+        type: "string",
+        description:
+          "Show the full lineage map for a critical view. Schema-qualified: 'publish.Revenue'. " +
+          "Returns all source tables/views grouped by business area, dimension joins, output columns, " +
+          "and filters. Essential for understanding what data feeds into a view.",
+      },
       refresh: {
         type: "boolean",
         description: "Rebuild the catalog from the live database and update the disk cache. Use after schema changes or as a weekly/daily maintenance step.",
@@ -174,6 +219,7 @@ export const searchCatalogTool: Tool = {
     // Stats mode
     if (args.stats) {
       const s = catalog.stats()
+      const lineageViews = catalog.listLineage()
       const lines = [
         `Schema Catalog Summary:`,
         `  Schemas: ${s.schemas} | Tables: ${s.tables} | Views: ${s.views}`,
@@ -185,7 +231,31 @@ export const searchCatalogTool: Tool = {
       for (const t of s.largestTables) {
         lines.push(`  ${t.name}: ${fmtRow(t.rows)}`)
       }
+      if (lineageViews.length > 0) {
+        lines.push("", `Lineage maps available: ${lineageViews.join(", ")}`)
+        lines.push("  Use search_catalog(lineage='view') to explore.")
+      }
       return lines.join("\n")
+    }
+
+    // Lineage mode
+    if (args.lineage) {
+      const viewName = String(args.lineage).trim()
+      const lineage = catalog.getLineage(viewName)
+      if (lineage) return fmtLineage(lineage)
+
+      // Check if it's a source in another view's lineage
+      const parents = catalog.getLineageParents(viewName)
+      if (parents.length > 0) {
+        const parentInfo = parents.map((p) => `  ${p.view} (as "${p.businessArea}")`).join("\n")
+        return `No standalone lineage map for '${viewName}', but it feeds into:\n${parentInfo}\n\nUse search_catalog(lineage='${parents[0].view}') to see the full map.`
+      }
+
+      const available = catalog.listLineage()
+      if (available.length > 0) {
+        return `No lineage map for '${viewName}'. Available lineage maps: ${available.join(", ")}`
+      }
+      return `No lineage maps loaded. Lineage maps are curated files loaded at server startup.`
     }
 
     // Table detail mode
@@ -327,7 +397,7 @@ export const searchCatalogTool: Tool = {
       )
 
       if (publishHits.length > 0) {
-        lines.push("★ PUBLISH / PERSISTED VIEWS (start here — curated BI layer):")
+        lines.push(" PUBLISH / PERSISTED VIEWS (start here — curated BI layer):")
         for (const h of publishHits) lines.push(fmtTable(h.table, h.matchedColumns, catalog))
       }
       if (dataHits.length > 0) {
@@ -346,9 +416,22 @@ export const searchCatalogTool: Tool = {
         "Pick the highest-ranked table in the best schema tier. If unsure, compare column lists above.",
         "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5.",
       )
+
+      // If any top result has a lineage map, surface that
+      const lineageHints = hits.slice(0, 5)
+        .map((h) => catalog.getLineage(h.table.qualifiedName))
+        .filter((l): l is ViewLineage => l !== null)
+      if (lineageHints.length > 0) {
+        lines.push(
+          "",
+          ` LINEAGE AVAILABLE: ${lineageHints.map((l) => l.view).join(", ")}`,
+          `  Use search_catalog(lineage='${lineageHints[0].view}') to see all ${lineageHints[0].sources.length} source views, dimension joins, and business areas.`,
+        )
+      }
+
       return lines.join("\n")
     }
 
-    return "Error: Provide at least one parameter: search, table, column, joins, path, stats, or refresh."
+    return "Error: Provide at least one parameter: search, table, column, joins, path, lineage, stats, or refresh."
   },
 }
