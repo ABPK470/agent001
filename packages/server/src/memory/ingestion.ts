@@ -1,0 +1,245 @@
+import { randomUUID } from "node:crypto"
+import { getDb } from "../db.js"
+import { broadcast } from "../ws.js"
+import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
+import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
+import { embedEntry } from "./vectors.js"
+
+// ── Ingestion ────────────────────────────────────────────────────
+
+/**
+ * Ingest a single turn into memory.
+ * Applies salience scoring and dedup before storing.
+ * Returns the entry if stored, null if filtered out.
+ */
+export function ingestTurn(opts: {
+  tier: MemoryTier
+  role: MemoryRole
+  content: string
+  metadata?: Record<string, unknown>
+  source?: MemorySource
+  confidence?: number
+  sessionId?: string | null
+  runId?: string | null
+  parentId?: string | null
+}): MemoryEntry | null {
+  const salience = computeSalience(opts.content, opts.role)
+
+  if (salience < SALIENCE_THRESHOLD && opts.role !== "system") {
+    broadcast({
+      type: "memory.filtered",
+      data: {
+        reason: "low-salience",
+        salience,
+        threshold: SALIENCE_THRESHOLD,
+        tier: opts.tier,
+        role: opts.role,
+        contentPreview: opts.content.slice(0, 80),
+      },
+    })
+    return null
+  }
+
+  // Dedup: check against recent entries (same session/run)
+  const recentRows = getDb().prepare(`
+    SELECT content FROM memory_entries
+    WHERE (session_id = ? OR run_id = ?)
+    ORDER BY created_at DESC LIMIT 20
+  `).all(opts.sessionId ?? "", opts.runId ?? "") as Array<{ content: string }>
+
+  if (isDuplicate(opts.content, recentRows.map((r) => r.content))) {
+    broadcast({
+      type: "memory.filtered",
+      data: {
+        reason: "duplicate",
+        tier: opts.tier,
+        role: opts.role,
+        contentPreview: opts.content.slice(0, 80),
+      },
+    })
+    return null
+  }
+
+  const now = new Date().toISOString()
+  const entry: MemoryEntry = {
+    id: randomUUID(),
+    tier: opts.tier,
+    role: opts.role,
+    content: opts.content,
+    metadata: opts.metadata ?? {},
+    source: opts.source ?? "agent",
+    confidence: opts.confidence ?? 0.5,
+    salience,
+    accessCount: 0,
+    sessionId: opts.sessionId ?? null,
+    runId: opts.runId ?? null,
+    parentId: opts.parentId ?? null,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  getDb().prepare(`
+    INSERT INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, created_at, updated_at)
+    VALUES (@id, @tier, @role, @content, @metadata, @source, @confidence, @salience, @access_count, @session_id, @run_id, @parent_id, @created_at, @updated_at)
+  `).run({
+    id: entry.id,
+    tier: entry.tier,
+    role: entry.role,
+    content: entry.content,
+    metadata: JSON.stringify(entry.metadata),
+    source: entry.source,
+    confidence: entry.confidence,
+    salience: entry.salience,
+    access_count: entry.accessCount,
+    session_id: entry.sessionId,
+    run_id: entry.runId,
+    parent_id: entry.parentId,
+    created_at: entry.createdAt,
+    updated_at: entry.updatedAt,
+  })
+
+  // Optionally embed (async, non-blocking)
+  embedEntry(entry).catch(() => {})
+
+  broadcast({
+    type: "memory.ingested",
+    data: {
+      id: entry.id,
+      tier: entry.tier,
+      role: entry.role,
+      source: entry.source,
+      runId: entry.runId,
+      contentPreview: entry.content.slice(0, 200),
+    },
+  })
+
+  return entry
+}
+
+/**
+ * Ingest all significant turns from a completed run.
+ * Called by the orchestrator after a run finishes.
+ */
+export function ingestRunTurns(run: {
+  id: string
+  goal: string
+  answer: string | null
+  status: string
+  agentId: string | null
+  tools: string[]
+  stepCount: number
+  error?: string | null
+  trace: Array<{ kind: string; tool?: string; text?: string; argsSummary?: string }>
+}): void {
+  const sessionId = run.agentId ?? "default"
+
+  // 1. Store the user's goal
+  ingestTurn({
+    tier: "working",
+    role: "user",
+    content: run.goal,
+    metadata: { type: "goal", runId: run.id },
+    source: "user",
+    confidence: 0.8,
+    sessionId,
+    runId: run.id,
+  })
+
+  // 2. Store significant tool calls and results
+  for (const t of run.trace) {
+    if (t.kind === "tool-call" && t.tool && t.text) {
+      ingestTurn({
+        tier: "working",
+        role: "tool",
+        content: `[Tool: ${t.tool}] ${t.text}`,
+        metadata: { type: "tool-call", tool: t.tool },
+        source: "tool",
+        confidence: 0.6,
+        sessionId,
+        runId: run.id,
+      })
+    } else if (t.kind === "tool-result" && t.text) {
+      ingestTurn({
+        tier: "working",
+        role: "tool",
+        content: t.text,
+        metadata: { type: "tool-result" },
+        source: "tool",
+        confidence: 0.6,
+        sessionId,
+        runId: run.id,
+      })
+    }
+  }
+
+  // 3. Store the final answer in working memory — only for completed runs.
+  //    Working memory is session-scoped by retrieval (WORKING_SESSION_WINDOW_H cutoff),
+  //    so this answer is visible as hot context for follow-up questions in the same session
+  //    (e.g. "now filter those top 3 by region") but won't surface in a run started hours later.
+  //    The episodic upsert (step below) is the cross-session canonical record.
+  if (run.answer && run.status === "completed") {
+    ingestTurn({
+      tier: "working",
+      role: "assistant",
+      content: run.answer,
+      metadata: { type: "answer", runId: run.id, status: run.status },
+      source: "agent",
+      confidence: 0.8,
+      sessionId,
+      runId: run.id,
+    })
+  }
+
+  // 4. Store a compact episodic summary — upsert by goal so repeated runs of the
+  //    same goal don't accumulate contradictory entries in memory.
+  const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
+  lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
+  if (run.answer) {
+    const a = truncateAtBoundary(run.answer, 800, "\u2026")
+    lines.push(`Answer: ${a}`)
+  }
+  if (run.error) lines.push(`Error: ${run.error}`)
+
+  const episodicContent = lines.join("\n")
+  const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status }
+  const episodicConfidence = run.status === "completed" ? 0.7 : 0.3
+
+  // Check for an existing summary for the same goal across ALL sessions.
+  // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
+  const goalPrefix = `Goal: ${run.goal}\n`
+  const existingEpisodic = getDb().prepare(`
+    SELECT id FROM memory_entries
+    WHERE tier = 'episodic' AND role = 'summary'
+      AND substr(content, 1, ?) = ?
+    ORDER BY updated_at DESC LIMIT 1
+  `).get(goalPrefix.length, goalPrefix) as { id: string } | undefined
+
+  if (existingEpisodic) {
+    // Update in place — keeps memory lean and avoids contradictory prior-failure entries
+    const now = new Date().toISOString()
+    getDb().prepare(`
+      UPDATE memory_entries
+      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      episodicContent,
+      JSON.stringify(episodicMeta),
+      episodicConfidence,
+      computeSalience(episodicContent, "summary"),
+      run.id,
+      now,
+      existingEpisodic.id,
+    )
+  } else {
+    ingestTurn({
+      tier: "episodic",
+      role: "summary",
+      content: episodicContent,
+      metadata: episodicMeta,
+      source: "agent",
+      confidence: episodicConfidence,
+      sessionId,
+      runId: run.id,
+    })
+  }
+}
