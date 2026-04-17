@@ -225,7 +225,12 @@ export async function spawnChildForPlan(
 
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
-    systemPrompt: CHILD_SYSTEM_PROMPT,
+    // If the parent resolved system prompt is available (contains DB knowledge, schema context,
+    // tool rules, memory etc.) prepend it so the child is not "blind" — otherwise it has no
+    // knowledge of the database, schemas, or domain-specific tool usage rules.
+    systemPrompt: ctx.parentSystemPrompt
+      ? `${ctx.parentSystemPrompt}\n\n---\n\n${CHILD_SYSTEM_PROMPT}`
+      : CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
     deferRecoveryHintsUntilCompletionAttempt: true,

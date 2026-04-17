@@ -74,6 +74,26 @@ export const PLAN_CREATION_RE =
   /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
 
 /**
+ * Database investigation task: explore schema structure, find views/joins/tables,
+ * analyze performance, inspect definitions — pure tool-call work that produces
+ * answers, not code files.
+ *
+ * Without this gate, the planner's score threshold fires on multi-step goals
+ * like "identify top N views and then find unnecessary joins" (the word "then"
+ * alone scores 3 via MULTI_STEP_RE, which equals the shouldPlan threshold).
+ * The planner then generates a BLUEPRINT.md with TypeScript-style function
+ * signatures inside .json data files — a category error: it treats a database
+ * investigation as a software build.
+ *
+ * Must be checked BEFORE hasImplementationScopeCue so that a goal like
+ * "build a tool that identifies views" does not get blocked (IMPLEMENTATION_SCOPE_RE
+ * fires first and prevents this gate from activating via the hasImplementationScopeCue
+ * guard in assess.ts).
+ */
+export const DB_INVESTIGATION_RE =
+  /\b(?:identify|find(?:\s+out)?|discover|analyse|analyze|inspect|examine|scan|look\s+for|explore)\b[\s\S]{0,120}\b(?:view|views|join|joins|table|tables|schema|schemas|index|indexes|indices|column|columns|slow|duplicate\s+join|unnecessary\s+join|redundant|inefficien)\b|\b(?:view|views|join|joins|schema|schemas)\b[\s\S]{0,80}\b(?:slow|redundant|unnecessary|duplicate|inefficien|identify|find|discover|analyze|analyse|inspect)\b/i
+
+/**
  * Data-fetch pipeline: "query database → produce output".
  * Must go to the direct tool-loop so the agent can call query_mssql and
  * write_file with real data rather than generating a full server architecture.

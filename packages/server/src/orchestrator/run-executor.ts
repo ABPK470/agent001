@@ -185,6 +185,11 @@ export async function executeRunImpl(
   const systemMessages = await buildSystemMessages({ goal, systemPrompt, allTools, runWorkspace, perTier, runId })
   const effectivePrompt = systemMessages.map((m) => m.content).join("\n\n")
 
+  // Pass the fully-resolved system prompt (includes DB knowledge, schema context, tool rules,
+  // memory tiers) down to all child agents. Without this, children are completely "blind" —
+  // they see only CHILD_SYSTEM_PROMPT and have no knowledge of the database or domain tools.
+  delegateCtx.parentSystemPrompt = effectivePrompt
+
   const debugSeqRef = { value: 0 }
   const systemPromptEntry = { kind: "system-prompt" as const, text: effectivePrompt ?? "(no system prompt)" }
   boundSaveTrace(runId, systemPromptEntry)

@@ -166,6 +166,14 @@ export interface DelegateContext {
   extraChildTools?: Tool[]
   /** Optional: acquire a concurrency slot before running a child. */
   acquireSlot?: (childRunId: string) => Promise<() => void>
+  /**
+   * The fully-resolved system prompt of the parent agent (including DB knowledge,
+   * environment context, discovery rules, and memory). Set by the orchestrator
+   * after building systemMessages so that every child agent inherits the same
+   * domain context. Without this, children are "blind" — they see only
+   * CHILD_SYSTEM_PROMPT and have no knowledge of the database, schemas, or tools.
+   */
+  parentSystemPrompt?: string
 }
 
 /**

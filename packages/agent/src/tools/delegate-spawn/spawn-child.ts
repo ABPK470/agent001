@@ -60,9 +60,14 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   }
 
   // Always use CHILD_SYSTEM_PROMPT as the behavioral base.
-  const effectivePrompt = childPrompt
-    ? `${CHILD_SYSTEM_PROMPT}\n\n--- Agent-specific instructions ---\n${childPrompt}`
+  // If the parent provided its resolved system prompt (containing DB knowledge, schema
+  // context, tool usage rules, etc.) prepend it so the child is not "blind".
+  const basePrompt = ctx.parentSystemPrompt
+    ? `${ctx.parentSystemPrompt}\n\n---\n\n${CHILD_SYSTEM_PROMPT}`
     : CHILD_SYSTEM_PROMPT
+  const effectivePrompt = childPrompt
+    ? `${basePrompt}\n\n--- Agent-specific instructions ---\n${childPrompt}`
+    : basePrompt
 
   const effectiveGoal = spec.instructions
     ? `${spec.goal}\n\nAdditional instructions:\n${spec.instructions}`

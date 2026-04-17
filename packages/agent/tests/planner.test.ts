@@ -446,8 +446,8 @@ describe("Planner path execution", () => {
     const messages = chat.mock.calls[0]?.[0] as Array<{ role: string; content: string }>
     const systemPrompt = messages?.find(message => message.role === "system" && message.content.includes("## Rules"))?.content ?? ""
 
-    expect(systemPrompt).toContain("CHOOSE THE BEST IMPLEMENTATION MEDIUM FOR THE GOAL")
-    expect(systemPrompt).toContain("Do NOT default to JavaScript for every task")
+    expect(systemPrompt).toContain("CHOOSE THE BEST EXECUTION STRATEGY FOR THE GOAL")
+    expect(systemPrompt).toContain("Do NOT default to JavaScript code files for every task")
     expect(systemPrompt).toContain("This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML")
     expect(systemPrompt).toContain("This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed")
     expect(systemPrompt).toContain("HELPER/CALL DEPENDENCY CLOSURE MUST BE EXPLICIT")

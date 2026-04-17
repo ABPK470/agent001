@@ -42,6 +42,7 @@ import type { LLMClient, Message } from "../../types.js"
 import {
     BOUNDED_COHERENT_SCOPE_RE,
     DATA_FETCH_PIPELINE_RE,
+    DB_INVESTIGATION_RE,
     DIALOGUE_MEMORY_RE,
     DIALOGUE_RECALL_RE,
     DIALOGUE_RECALL_REFERENCE_RE,
@@ -269,6 +270,14 @@ export async function assessPlannerDecision(
   }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return makeDecision("direct", score, "plan_generation_direct_path", axes, "decisive_coherent", false)
+  }
+  // Database investigation tasks (identify views, find joins, analyze schema, etc.) are
+  // pure tool-call work — they answer questions about an existing database, they never
+  // produce code files. The planner would generate a nonsensical BLUEPRINT with
+  // TypeScript function signatures inside .json data files. Route direct unconditionally.
+  // Guard: skip if the goal is actually a software build mentioning DB concepts.
+  if (DB_INVESTIGATION_RE.test(signals.normalized) && !signals.hasDelegationCue && !signals.hasImplementationScopeCue) {
+    return makeDecision("direct", score, "db_investigation_direct_path", axes, "decisive_coherent", false)
   }
   // Data-fetch pipelines use direct tool loop for real query results
   if (DATA_FETCH_PIPELINE_RE.test(signals.normalized) && !signals.hasDelegationCue) {
