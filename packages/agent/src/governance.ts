@@ -20,18 +20,8 @@
 import { randomUUID } from "node:crypto"
 import { Agent } from "./agent.js"
 import {
-    type AgentRun,
-    type AuditEntry,
-    AuditService,
     type ExecutionRecord,
-    Learner,
-    MemoryAuditRepository,
-    MemoryEventBus,
-    MemoryExecutionRecordRepository,
-    MemoryRunRepository,
     PolicyViolationError,
-    RulePolicyEvaluator,
-    type Step,
     StepStatus,
     approvalRequired,
     completeRun,
@@ -49,81 +39,10 @@ import {
     stepFailed,
     stepStarted
 } from "./engine/index.js"
+import { type EngineServices, type GovernedResult, type RunState, createToolStep } from "./governance-types.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "./retry.js"
 import { normalizeToolExecutionOutput } from "./tool-result.js"
 import type { AgentConfig, LLMClient, Tool } from "./types.js"
-
-// ── Engine infrastructure ────────────────────────────────────────
-
-export interface EngineServices {
-  runRepo: InstanceType<typeof MemoryRunRepository>
-  auditService: AuditService
-  policyEvaluator: RulePolicyEvaluator
-  learner: Learner
-  eventBus: MemoryEventBus
-}
-
-/** Creates a default set of engine services (in-memory). */
-export function createEngineServices(): EngineServices {
-  const runRepo = new MemoryRunRepository()
-  const auditRepo = new MemoryAuditRepository()
-  const recordRepo = new MemoryExecutionRecordRepository()
-  const eventBus = new MemoryEventBus()
-
-  return {
-    runRepo,
-    auditService: new AuditService(auditRepo),
-    policyEvaluator: new RulePolicyEvaluator(),
-    learner: new Learner(recordRepo),
-    eventBus,
-  }
-}
-
-// ── Governed result ──────────────────────────────────────────────
-
-export interface GovernedResult {
-  /** The agent's final answer. */
-  answer: string
-  /** Full run with all steps — shows exactly what happened. */
-  run: AgentRun
-  /** Audit trail — immutable log of every action. */
-  auditTrail: AuditEntry[]
-  /** Execution records — performance metrics per tool call. */
-  stats: Map<string, { calls: number, avgMs: number, failures: number }>
-}
-
-// ── Run state (shared between governed tools) ────────────────────
-
-export interface RunState {
-  run: AgentRun
-  actor: string
-  stepCounter: number
-}
-
-// ── Build a Step for a tool call ─────────────────────────────────
-
-export function createToolStep(
-  toolName: string,
-  args: Record<string, unknown>,
-  state: RunState,
-): Step {
-  const order = state.stepCounter++
-  return {
-    id: randomUUID(),
-    definitionId: `tool-${toolName}-${order}`,
-    name: `${toolName} (#${order})`,
-    action: toolName,
-    input: args,
-    condition: null,
-    onError: "continue",
-    status: StepStatus.Pending,
-    order,
-    output: {},
-    error: null,
-    startedAt: null,
-    completedAt: null,
-  }
-}
 
 // ── Tool governance options ──────────────────────────────────────
 
@@ -454,3 +373,5 @@ export async function runGoverned(
 
 // Re-export governance report for backwards compatibility
 export { printGovernanceReport } from "./governance-report.js"
+export { createEngineServices, createToolStep, type EngineServices, type GovernedResult, type RunState } from "./governance-types.js"
+

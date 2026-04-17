@@ -11,7 +11,7 @@
  */
 
 import { config } from "dotenv"
-import { existsSync, readFileSync, statSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
 // Load .env — from CWD when running as installed package, from monorepo root in dev
@@ -28,9 +28,6 @@ import {
     setBasePath,
     setBrowserCheckCwd,
     setBrowserCheckExecutor,
-    setMssqlConfig,
-    setMssqlConfigs,
-    setMssqlWriteEnabled,
     setSearchBasePath,
     setShellCwd,
     setShellExecutor,
@@ -40,6 +37,7 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
+import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {
     MessageQueue,
     MessageRouter,
@@ -64,6 +62,7 @@ import { registerRunRoutes } from "./routes/runs.js"
 import { registerUsageRoutes } from "./routes/usage.js"
 import { registerWebhookRoutes } from "./routes/webhooks.js"
 import { initSandbox } from "./sandbox.js"
+import { setupMssql } from "./setup-mssql.js"
 import { addClient, broadcast } from "./ws.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
@@ -169,120 +168,7 @@ async function main() {
     console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
-  // ── MSSQL configuration ───────────────────────────────────────
-  //
-  // Priority (highest wins):
-  //   1. MSSQL_DATABASES — JSON array of named connections
-  //   2. MSSQL_HOST      — single connection (backwards-compat)
-  //
-  // Each connection can have an optional knowledgePath pointing to a
-  // Markdown file that describes the database schema, business context,
-  // and domain meaning.  This is injected into the system prompt so the
-  // agent understands the database without runtime discovery.
-  //
-  // The dev-only Docker DB (mssql-dev) is never auto-connected here.
-  // To use it during development, set MSSQL_HOST=localhost in your .env.
-
-  function readKnowledgeFile(filePath: string): string | null {
-    const resolved = resolve(_projectRoot, filePath)
-    try {
-      if (!existsSync(resolved)) {
-        console.warn(`MSSQL knowledge file not found: ${resolved}`)
-        return null
-      }
-      const content = readFileSync(resolved, "utf-8").trim()
-      if (!content) return null
-      console.log(`MSSQL knowledge loaded: ${resolved} (${content.length} chars)`)
-      return content
-    } catch (e) {
-      console.warn(`Failed to read MSSQL knowledge file: ${resolved}`, e instanceof Error ? e.message : e)
-      return null
-    }
-  }
-
-  let mssqlSummary = "not configured"
-
-  const mssqlDatabasesJson = process.env["MSSQL_DATABASES"]
-  if (mssqlDatabasesJson) {
-    // ── Multi-database mode ──────────────────────────────────────
-    // MSSQL_DATABASES is a JSON array. Each entry:
-    //   { name, host, port?, database?, user?, password?, domain?,
-    //     encrypt?, trustServerCertificate?, writeEnabled? }
-    // "domain" enables Windows/NTLM auth (same as MSSQL_DOMAIN in single mode).
-    let dbConfigs: Array<{
-      name: string
-      host: string
-      port?: number
-      user?: string
-      password?: string
-      domain?: string
-      database?: string
-      encrypt?: boolean
-      trustServerCertificate?: boolean
-      writeEnabled?: boolean
-      knowledgePath?: string
-    }>
-    try {
-      dbConfigs = JSON.parse(mssqlDatabasesJson)
-      if (!Array.isArray(dbConfigs)) throw new Error("MSSQL_DATABASES must be a JSON array")
-    } catch (e) {
-      console.error("Invalid MSSQL_DATABASES JSON:", e instanceof Error ? e.message : e)
-      process.exit(1)
-    }
-
-    setMssqlConfigs(
-      dbConfigs.map((db) => ({
-        name: db.name,
-        server: db.host,
-        port: db.port ?? 1433,
-        ...(db.domain ? { domain: db.domain } : {}),
-        user: db.user ?? "sa",
-        password: db.password ?? "",
-        database: db.database ?? "master",
-        options: {
-          encrypt: db.encrypt !== false,
-          trustServerCertificate: db.trustServerCertificate !== false,
-        },
-        writeEnabled: db.writeEnabled ?? false,
-        knowledge: db.knowledgePath ? readKnowledgeFile(db.knowledgePath) : null,
-      })),
-    )
-
-    for (const db of dbConfigs) {
-      if (db.writeEnabled) {
-        setMssqlWriteEnabled(true, db.name)
-      }
-    }
-
-    mssqlSummary = dbConfigs.map((db) => `${db.name}(${db.host}/${db.database ?? "master"})`).join(", ")
-    console.log(`🗄️  MSSQL databases: ${mssqlSummary}`)
-  } else {
-    // ── Single-database mode (backwards-compat / .env MSSQL_HOST) ─
-    const mssqlServer = process.env["MSSQL_HOST"] || process.env["MSSQL_SERVER"]
-    if (mssqlServer) {
-      const domain = process.env["MSSQL_DOMAIN"]
-      const knowledgePath = process.env["MSSQL_KNOWLEDGE_FILE"]
-      setMssqlConfig({
-        server: mssqlServer,
-        port: Number(process.env["MSSQL_PORT"] ?? 1433),
-        ...(domain ? { domain } : {}),
-        user: process.env["MSSQL_USER"] ?? "sa",
-        password: process.env["MSSQL_PASSWORD"] ?? "",
-        database: process.env["MSSQL_DATABASE"] ?? "master",
-        options: {
-          encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
-          trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
-        },
-      }, "default", knowledgePath ? readKnowledgeFile(knowledgePath) : null)
-      if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
-        setMssqlWriteEnabled(true)
-        mssqlSummary = `${mssqlServer} (WRITE mode enabled)`
-      } else {
-        mssqlSummary = `${mssqlServer} (read-only)`
-      }
-      console.log(`🗄️  MSSQL: ${mssqlSummary}`)
-    }
-  }
+  const mssqlSummary = setupMssql(_projectRoot)
 
   // Load LLM config from DB (or use defaults) and build the client
   const llmCfg = getLlmConfig()
@@ -526,176 +412,3 @@ main().catch((err) => {
   console.error("Failed to start server:", err)
   process.exit(1)
 })
-
-// ── Browser sandbox helpers ──────────────────────────────────────
-
-/**
- * Build a self-contained Node.js script that runs inside the browser container.
- * The script:
- *   1. Starts a static file server on a random port inside the container
- *   2. Launches Chromium via Puppeteer (container-installed)
- *   3. Navigates to the HTML file
- *   4. Collects errors for the specified wait time
- *   5. Performs any requested clicks
- *   6. Outputs a JSON result to stdout
- */
-function buildBrowserScript(htmlPath: string, clicks: string[], waitMs: number): string {
-  // Escape strings for embedding in the script
-  const esc = (s: string) => JSON.stringify(s)
-  return `
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-let puppeteer;
-try {
-  puppeteer = require("puppeteer");
-} catch {
-  try {
-    puppeteer = require("/usr/local/lib/node_modules/puppeteer");
-  } catch {
-    puppeteer = require("/usr/lib/node_modules/puppeteer");
-  }
-}
-
-const MIME = {
-  ".html": "text/html", ".htm": "text/html", ".js": "application/javascript",
-  ".mjs": "application/javascript", ".css": "text/css", ".json": "application/json",
-  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-  ".gif": "image/gif", ".svg": "image/svg+xml", ".ico": "image/x-icon",
-  ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf",
-};
-
-async function main() {
-  const htmlPath = ${esc(htmlPath)};
-  const clicks = ${JSON.stringify(clicks)};
-  const waitMs = ${waitMs};
-
-  const fullPath = path.join("/workspace", htmlPath);
-  const dir = path.dirname(fullPath);
-  const fileName = path.basename(fullPath);
-
-  // Static file server
-  const server = http.createServer(async (req, res) => {
-    const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-    const relPath = (urlPath === "/" ? "index.html" : urlPath.replace(/^\\/+/, "")) || "index.html";
-    const filePath = path.join(dir, relPath);
-    if (!filePath.startsWith(dir)) { res.writeHead(403); res.end(); return; }
-    try {
-      const content = fs.readFileSync(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
-      res.end(content);
-    } catch { res.writeHead(404); res.end("Not found"); }
-  });
-
-  await new Promise((resolve, reject) => {
-    server.listen(0, "127.0.0.1", () => resolve(null));
-    server.on("error", reject);
-  });
-  const port = server.address().port;
-
-  const consoleErrors = [];
-  const consoleWarnings = [];
-  const networkErrors = [];
-  const uncaughtErrors = [];
-
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: "/usr/bin/chromium",
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
-    });
-    const page = await browser.newPage();
-
-    page.on("console", (msg) => {
-      const type = msg.type();
-      const text = msg.text();
-      if (type === "error") {
-        const loc = msg.location();
-        const errUrl = loc?.url || "";
-        if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
-          // skip non-critical
-        } else if (text.includes("Failed to load resource") && errUrl) {
-          consoleErrors.push(text + " — URL: " + errUrl);
-        } else {
-          consoleErrors.push(text);
-        }
-      }
-      else if (type === "warn") consoleWarnings.push(text);
-    });
-    page.on("pageerror", (err) => uncaughtErrors.push(String(err)));
-    page.on("requestfailed", (req) => {
-      const reqUrl = req.url();
-      if (/favicon|apple-touch-icon/i.test(reqUrl)) return;
-      networkErrors.push((req.failure()?.errorText || "failed") + ": " + reqUrl);
-    });
-
-    await page.goto("http://127.0.0.1:" + port + "/" + fileName, {
-      waitUntil: "domcontentloaded", timeout: 15000,
-    });
-
-    await new Promise(r => setTimeout(r, waitMs));
-
-    for (const selector of clicks) {
-      try {
-        await page.click(selector);
-        await new Promise(r => setTimeout(r, 500));
-      } catch (err) {
-        consoleErrors.push("Click failed on " + JSON.stringify(selector) + ": " + err.message);
-      }
-    }
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-    server.close();
-  }
-
-  const result = { consoleErrors, consoleWarnings, networkErrors, uncaughtErrors };
-  process.stdout.write(JSON.stringify(result));
-}
-
-main().catch((err) => {
-  process.stderr.write(err.message || String(err));
-  process.exit(1);
-});
-`.trim()
-}
-
-/** Format the JSON result from the container browser script into a readable report. */
-function formatBrowserReport(parsed: {
-  consoleErrors?: string[]
-  consoleWarnings?: string[]
-  networkErrors?: string[]
-  uncaughtErrors?: string[]
-}): string {
-  const consoleErrors = parsed.consoleErrors ?? []
-  const consoleWarnings = parsed.consoleWarnings ?? []
-  const networkErrors = parsed.networkErrors ?? []
-  const uncaughtErrors = parsed.uncaughtErrors ?? []
-  const totalErrors = consoleErrors.length + uncaughtErrors.length + networkErrors.length
-
-  if (totalErrors === 0 && consoleWarnings.length === 0) {
-    return "✓ No errors or warnings detected."
-  }
-
-  const lines: string[] = []
-  if (uncaughtErrors.length > 0) {
-    lines.push(`## Uncaught Exceptions (${uncaughtErrors.length})`)
-    for (const e of uncaughtErrors) lines.push(`  - ${e}`)
-  }
-  if (consoleErrors.length > 0) {
-    lines.push(`## Console Errors (${consoleErrors.length})`)
-    for (const e of consoleErrors) lines.push(`  - ${e}`)
-  }
-  if (networkErrors.length > 0) {
-    lines.push(`## Network Failures (${networkErrors.length})`)
-    for (const e of networkErrors) lines.push(`  - ${e}`)
-  }
-  if (consoleWarnings.length > 0) {
-    lines.push(`## Warnings (${consoleWarnings.length})`)
-    for (const w of consoleWarnings) lines.push(`  - ${w}`)
-  }
-  lines.push("")
-  lines.push(`Total: ${totalErrors} error(s), ${consoleWarnings.length} warning(s)`)
-  return lines.join("\n")
-}
