@@ -308,7 +308,13 @@ export async function executeRunImpl(
     const pendingDiff = ctx.completedRunDiffs.get(runId)
     const pendingChangeCount = pendingDiff ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length : 0
 
-    ingestRunTurns({ id: runId, goal, answer, status: "completed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
+    // A run can return an answer that starts with "Task FAILED" when the planner
+    // internally synthesizes a failure (all steps incomplete, unresolved blockers, etc.).
+    // The orchestrator sees no exception, so the run "completed" at the infrastructure
+    // level — but episodic memory must record it as failed so it is NOT used as
+    // positive evidence by the ⚠️ MEMORY HIT directive in future runs.
+    const taskInternallyFailed = answer.startsWith("Task FAILED")
+    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
     extractProcedural({ id: runId, goal, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
     consolidate({ minAgeHours: 24 })
 

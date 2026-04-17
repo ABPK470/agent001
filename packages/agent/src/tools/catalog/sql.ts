@@ -60,3 +60,26 @@ export const Q_FKS = `
   JOIN sys.columns rc ON fkc.referenced_object_id  = rc.object_id AND fkc.referenced_column_id = rc.column_id
   ORDER BY fk.name, fkc.constraint_column_id
 `
+
+/**
+ * View → source table dependencies.
+ * Used at catalog build time to compute per-view "underlying source rows" by summing
+ * the row counts of each physical table a view directly or indirectly references.
+ * sys.sql_expression_dependencies is catalog metadata — this runs in milliseconds.
+ * referenced_class = 1 filters to OBJECT_OR_COLUMN references (physical tables/views).
+ * We only follow one level: view → the tables/views it directly FROM/JOINs.
+ */
+export const Q_VIEW_DEPS = `
+  SELECT
+    vs.name  AS view_schema,
+    v.name   AS view_name,
+    rs.name  AS ref_schema,
+    rt.name  AS ref_name
+  FROM sys.sql_expression_dependencies d
+  JOIN sys.objects v  ON d.referencing_id = v.object_id  AND v.type  = 'V'
+  JOIN sys.schemas vs ON v.schema_id       = vs.schema_id
+  JOIN sys.objects rt ON d.referenced_id   = rt.object_id AND rt.type = 'U'
+  JOIN sys.schemas rs ON rt.schema_id      = rs.schema_id
+  WHERE d.referenced_class = 1
+    AND rt.is_ms_shipped   = 0
+`

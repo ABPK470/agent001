@@ -9,3 +9,4 @@ docs
 *.cache
 .npmrc
 notes
+catalog-cache.json

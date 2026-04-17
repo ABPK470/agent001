@@ -45,6 +45,8 @@ export interface CatalogStats {
   totalRows: number
   implicitEdges: number
   largestTables: Array<{ name: string; rows: number }>
+  /** publish views ranked by sum of their directly referenced source table rows. */
+  largestPublishViews: Array<{ name: string; sourceRows: number }>
 }
 
 /** An implicit join edge: tables sharing a column name with matching data type. */
@@ -117,12 +119,14 @@ export interface ConceptPathResult {
 
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
-  version: 1 | 2
+  version: 1 | 2 | 3
   builtAt: string                 // ISO 8601
   source: string                  // connection name
   tables: CatalogTable[]
   implicitEdges: ImplicitEdge[]
   lineage: ViewLineage[]          // curated lineage maps for critical views
+  /** publish views ranked by sum of directly referenced source table rows (v3+). */
+  viewSourceRows?: Array<{ name: string; sourceRows: number }>
 }
 
 export interface CatalogBuildOptions {

@@ -3,7 +3,7 @@ import { buildConceptGraph } from "./concepts.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "./helpers.js"
 import { findConceptPath as findConceptPathModule, findFkPath } from "./paths.js"
 import { searchCatalog } from "./search.js"
-import { Q_COLUMNS, Q_FKS, Q_OBJECTS } from "./sql.js"
+import { Q_COLUMNS, Q_FKS, Q_OBJECTS, Q_VIEW_DEPS } from "./sql.js"
 import type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -32,6 +32,12 @@ export class CatalogGraph {
   readonly adjacency: Map<string, Array<{ target: string; fk: CatalogFK }>>
   /** tableKey → implicit edges involving this table */
   readonly implicitJoinIndex: Map<string, ImplicitEdge[]>
+  /**
+   * For every publish VIEW: sum of row_counts of the physical tables it directly references.
+   * Built at catalog-build time from Q_VIEW_DEPS — zero runtime cost for the agent.
+   * Key = "publish.ViewName", value = total source rows.
+   */
+  readonly viewSourceRows: Map<string, number>
 
   /** Concept nodes indexed by concept name (lowercase) — e.g. "revenue" → ConceptNode */
   readonly conceptNodes: Map<string, ConceptNode>
@@ -48,6 +54,7 @@ export class CatalogGraph {
     implicitEdges: ImplicitEdge[],
     builtAt?: Date,
     lineage?: ViewLineage[],
+    viewSourceRows?: Map<string, number>,
   ) {
     this.tables = tables
     this.nameIndex = nameIndex
@@ -55,6 +62,7 @@ export class CatalogGraph {
     this.adjacency = adjacency
     this.implicitEdges = implicitEdges
     this.builtAt = builtAt ?? new Date()
+    this.viewSourceRows = viewSourceRows ?? new Map()
     // Build implicit join index for fast per-table lookup
     this.implicitJoinIndex = new Map()
     for (const edge of implicitEdges) {
@@ -147,7 +155,22 @@ export class CatalogGraph {
     // Step 5: Compute implicit join edges (shared column names + compatible types)
     const implEdges = computeImplicitEdges(tables, columnIndex)
 
-    return new CatalogGraph(tables, nameIndex, columnIndex, adjacency, implEdges)
+    // Step 6: Compute per-publish-view source row totals from view→table dependencies.
+    // sys.sql_expression_dependencies is catalog metadata — runs in milliseconds.
+    const viewSourceRows = new Map<string, number>()
+    try {
+      const depResult = await pool.request().query(Q_VIEW_DEPS)
+      for (const r of depResult.recordset) {
+        const viewKey = tableKey(r.view_schema, r.view_name)
+        const refKey = tableKey(r.ref_schema, r.ref_name)
+        const refTable = tables.get(refKey)
+        if (refTable?.rowCount) {
+          viewSourceRows.set(viewKey, (viewSourceRows.get(viewKey) ?? 0) + refTable.rowCount)
+        }
+      }
+    } catch { /* non-fatal — older SQL Server versions may not have sys.sql_expression_dependencies */ }
+
+    return new CatalogGraph(tables, nameIndex, columnIndex, adjacency, implEdges, undefined, undefined, viewSourceRows)
   }
 
   // ── Serialization (persistent cache) ───────────────────────
@@ -155,12 +178,13 @@ export class CatalogGraph {
   /** Serialize to a JSON-safe snapshot for disk persistence. */
   toSnapshot(source = "default"): CatalogSnapshot {
     return {
-      version: 2,
+      version: 3,
       builtAt: this.builtAt.toISOString(),
       source,
       tables: [...this.tables.values()],
       implicitEdges: this.implicitEdges,
       lineage: [...this.lineageMap.values()],
+      viewSourceRows: [...this.viewSourceRows.entries()].map(([name, sourceRows]) => ({ name, sourceRows })),
     }
   }
 
@@ -183,10 +207,15 @@ export class CatalogGraph {
       }
     }
 
+    const viewSourceRows = new Map<string, number>()
+    if (snap.viewSourceRows) {
+      for (const { name, sourceRows } of snap.viewSourceRows) viewSourceRows.set(name, sourceRows)
+    }
     return new CatalogGraph(
       tables, nameIndex, columnIndex, adjacency,
       snap.implicitEdges, new Date(snap.builtAt),
       (snap as any).lineage ?? [],
+      viewSourceRows,
     )
   }
 
@@ -308,6 +337,12 @@ export class CatalogGraph {
     }
     largest.sort((a, b) => b.rows - a.rows)
 
+    const publishViews: Array<{ name: string; sourceRows: number }> = []
+    for (const [name, sourceRows] of this.viewSourceRows) {
+      if (name.startsWith("publish.")) publishViews.push({ name, sourceRows })
+    }
+    publishViews.sort((a, b) => b.sourceRows - a.sourceRows)
+
     return {
       schemas: schemas.size,
       tables,
@@ -317,6 +352,7 @@ export class CatalogGraph {
       implicitEdges: this.implicitEdges.length,
       totalRows,
       largestTables: largest.slice(0, 15),
+      largestPublishViews: publishViews.slice(0, 15),
     }
   }
 

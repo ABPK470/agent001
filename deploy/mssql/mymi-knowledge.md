@@ -438,6 +438,33 @@ Use `inspect_definition(object='publish.ViewName')` to read the T-SQL and detect
 Use `inspect_definition(depends_on='publish.ViewName')` to trace the full view chain.
 Use `inspect_definition(search='TableName')` to find every view that joins a specific table.
 
+### Correct workflow for finding top-N largest publish views and their duplicate joins
+
+The catalog pre-computes view rankings at startup using `sys.sql_expression_dependencies` —
+a catalog metadata DMV that runs in milliseconds. There is no need to write a runtime SQL query.
+
+**Step 1 — `search_catalog(stats=true)`**
+
+Returns two sections:
+- "Largest tables" — physical tables. The `publish.*` entries there (`ZambiaDailyAccountsAll`,
+  `MappingAfricaEMDWDailyBalances`, `AfricaFlexDailyBalances`, etc.) are physical tables —
+  `inspect_definition` on them returns "No definition found". **Ignore this list for view analysis.**
+- "Largest publish VIEWS (by sum of source table rows)" — real publish VIEWs with T-SQL
+  definitions, ranked by the total rows of the physical tables they reference.
+
+**Step 2 — for each view in "Largest publish VIEWS", call in PARALLEL:**
+```
+inspect_definition(object='publish.ViewName')
+```
+→ check "TABLE/VIEW REFERENCES IN FROM/JOIN CLAUSES"
+→ any table name listed more than once = confirmed duplicate join
+
+**Notes:**
+- `publish.Revenue` and `publish.Balances` are UNION-ALL aggregations — always return
+  "No duplicate table references" — correct, skip them.
+- The customer-reported issue (joining `publish.Client_Base` twice) will appear in one of the
+  large publish views returned by Step 1.
+
 ### ETL pipeline performance analysis
 
 When a pipeline is slow, trace it through three layers:

@@ -15,6 +15,13 @@ export function handleStats(catalog: CatalogGraph): string {
   for (const t of s.largestTables) {
     lines.push(`  ${t.name}: ${fmtRow(t.rows)}`)
   }
+  if (s.largestPublishViews.length > 0) {
+    lines.push("", "Largest publish VIEWS (by sum of source table rows):")
+    lines.push("  Use inspect_definition(object='publish.ViewName') on each to check for duplicate joins.")
+    for (const v of s.largestPublishViews) {
+      lines.push(`  ${v.name}: ~${fmtRow(v.sourceRows)} underlying rows`)
+    }
+  }
   if (lineageViews.length > 0) {
     lines.push("", `Lineage maps available: ${lineageViews.join(", ")}`)
     lines.push("  Use search_catalog(lineage='view') to explore.")

@@ -206,7 +206,7 @@ First investigates/queries data with tools (Type B phase), then produces a visua
 These rules REPLACE Rules 22–28 for investigation tasks. Do NOT create a BLUEPRINT.md with TypeScript/code function signatures for investigation tasks — that is a category error.
 
 **I-1. Steps are tool-call sequences, not code-writing pipelines.**
-Each step's objective describes WHICH TOOL(S) to call, with WHAT arguments, and WHAT to do with the output. Example objective: "Use search_catalog(stats='publish') to get the row counts for all publish tables and views. Sort by row count descending and write the top 10 to tmp/top_views.json as a plain data array [{name, rowCount, objectType}]."
+Each step's objective describes WHICH TOOL(S) to call, with WHAT arguments, and WHAT to do with the output. Example objective: "Use search_catalog(stats=true) to get the catalog summary. It returns two sections: 'Largest tables' (physical tables — inspect_definition on these returns No definition found, ignore for view analysis) and 'Largest publish VIEWS (by sum of source table rows)' — these are the ranked publish views pre-computed from sys.sql_expression_dependencies at catalog build time. For finding duplicate-join candidates, call inspect_definition(object=viewName) in parallel on each view listed in 'Largest publish VIEWS'."
 
 **I-2. deterministic_tool steps for single known calls.**
 If a step is a single exact tool call with known arguments at plan time, use stepType "deterministic_tool". Example: call explore_mssql_schema(schema='publish') to enumerate all views and tables.

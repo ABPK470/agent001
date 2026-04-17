@@ -61,8 +61,13 @@ export async function buildSystemMessages(opts: {
   }
 
   if (perTier.episodic) {
-    // If episodic contains a completed entry, prepend a loud SKIP-DISCOVERY directive.
-    const episodicHasCompletedEntry = perTier.episodic.includes("Status: completed")
+    // Only fire the SKIP-DISCOVERY directive when the episodic entry is genuinely
+    // successful. A failed planner run stores "Status: completed" but with an answer
+    // that starts with "Task FAILED" — following that as positive evidence would
+    // cause the agent to reproduce the failure. Exclude those entries.
+    const episodicHasCompletedEntry =
+      perTier.episodic.includes("Status: completed") &&
+      !perTier.episodic.includes("Answer: Task FAILED")
     const episodicContent = episodicHasCompletedEntry
       ? [
           "⚠️ MEMORY HIT — prior completed run found for this goal.",
