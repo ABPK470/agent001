@@ -372,11 +372,11 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
             </div>
 
             {/* Content */}
-            <div
-              className="flex-1 pb-3 cursor-pointer select-none"
-              onClick={() => setExpanded(isExpanded ? null : key)}
-            >
-              <div className="flex items-center gap-2">
+            <div className="flex-1 pb-3">
+              <div
+                className="flex items-center gap-2 cursor-pointer select-none"
+                onClick={() => setExpanded(isExpanded ? null : key)}
+              >
                 <span className="text-[13px] font-medium" style={{ color: C.text }}>{step.name}</span>
                 {duration !== null && (
                   <span className="text-[13px] font-mono" style={{ color: C.dim }}>

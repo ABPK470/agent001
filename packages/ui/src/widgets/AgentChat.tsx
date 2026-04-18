@@ -7,10 +7,10 @@
  */
 
 import { AlertCircle, Bot, ChevronDown, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
-import type { AgentDefinition } from "../types"
+import type { AgentDefinition, TraceEntry } from "../types"
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -50,9 +50,25 @@ export function AgentChat() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const steps = useStore((s) => s.steps)
+  const trace = useStore((s) => s.trace)
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
+
+  const currentActivity = useMemo(() => {
+    if (!activeRun || activeRun.status === "pending") return null
+    if (activeRun.status === "planning") return "Planning"
+    const running = [...steps].reverse().find((s) => s.status === "running")
+    if (running) return running.name + (running.action ? ` — ${running.action.slice(0, 45)}` : "")
+    for (let i = trace.length - 1; i >= 0; i--) {
+      const e = trace[i] as TraceEntry
+      if (e.kind === "tool-call") return e.tool
+      if (e.kind === "iteration") return `iter ${e.current} / ${e.max}`
+      if (e.kind === "delegation-start") return "delegating"
+    }
+    return null
+  }, [activeRun, steps, trace])
 
   // Load agents on mount
   useEffect(() => {
@@ -228,14 +244,20 @@ export function AgentChat() {
             {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && (
               <div className="flex items-center gap-2 ml-5">
                 <Bot size={14} className="text-accent shrink-0" />
-                <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
-                </div>
-                <span className="text-[12px] text-text-muted">
-                  {run.status === "pending" ? "Queued" : "Thinking"}
-                </span>
+                {run.status === "pending" ? (
+                  <span className="text-[12px] text-text-muted">Queued</span>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
+                    </div>
+                    <span className="text-[12px] text-text-muted font-mono truncate max-w-[220px]">
+                      {run.id === activeRunId && currentActivity ? currentActivity : run.status === "planning" ? "Planning" : "Thinking"}
+                    </span>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -34,6 +34,7 @@ export function ChatPanel({
   attachments = [],
   onAttach,
   onRemoveAttachment,
+  currentActivity,
 }: {
   messages: ChatMessage[]
   goalInput: string
@@ -50,6 +51,7 @@ export function ChatPanel({
   attachments?: FileAttachment[]
   onAttach?: (files: FileAttachment[]) => void
   onRemoveAttachment?: (index: number) => void
+  currentActivity?: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -143,7 +145,7 @@ export function ChatPanel({
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
-        {visibleMessages.length === 0 ? (
+        {visibleMessages.length === 0 && !isRunning ? (
           <div
             className="flex flex-col items-center justify-center h-full gap-2"
             style={{ color: C.dim }}
@@ -153,7 +155,12 @@ export function ChatPanel({
             <span className="text-[13px]">Start a run to see the agent&apos;s reasoning</span>
           </div>
         ) : (
-          visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)
+          <>
+            {visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)}
+            {isRunning && !hasPending && (
+              <ActivityBubble activity={currentActivity ?? "Thinking..."} />
+            )}
+          </>
         )}
       </div>
 
@@ -439,6 +446,32 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
       <AlertCircle size={14} className="shrink-0 mt-1" style={{ color: C.coral }} />
       <div className="text-[13px]" style={{ color: C.muted }}>
         {msg.content}
+      </div>
+    </div>
+  )
+}
+
+function ActivityBubble({ activity }: { activity: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center animate-pulse"
+        style={{ background: C.accent + "20" }}
+      >
+        <Wrench size={13} style={{ color: C.accent }} />
+      </div>
+      <div
+        className="flex-1 rounded-lg px-3 py-2 text-[13px]"
+        style={{ background: C.accent + "08", border: `1px solid ${C.accent}20`, color: C.muted }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-0.5 shrink-0">
+            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:0ms]" style={{ background: C.accent }} />
+            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:150ms]" style={{ background: C.accent }} />
+            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:300ms]" style={{ background: C.accent }} />
+          </span>
+          <span className="font-mono text-[13px] truncate">{activity}</span>
+        </div>
       </div>
     </div>
   )

@@ -191,6 +191,21 @@ export function OperatorEnvironment() {
     [searchQuery, runs, trace, audit],
   )
   const chatMessages = useMemo(() => buildChatMessages(trace), [trace])
+
+  const currentActivity = useMemo(() => {
+    if (!activeRun || activeRun.status === "pending") return null
+    if (activeRun.status === "planning") return "Planning"
+    if (activeRun.status !== "running") return null
+    const running = [...steps].reverse().find((s) => s.status === "running")
+    if (running) return running.name + (running.action ? ` — ${running.action.slice(0, 45)}` : "")
+    for (let i = trace.length - 1; i >= 0; i--) {
+      const e = trace[i]
+      if (e.kind === "tool-call") return e.tool
+      if (e.kind === "iteration") return `iter ${e.current} / ${e.max}`
+      if (e.kind === "delegation-start") return "delegating"
+    }
+    return null
+  }, [activeRun, steps, trace])
   // ── Actions ───────────────────────────────────────────────────
   const handleSubmitGoal = useCallback(async () => {
     const goal = goalInput.trim()
@@ -909,6 +924,7 @@ export function OperatorEnvironment() {
               attachments={goalAttachments}
               onAttach={(files) => setGoalAttachments((prev) => [...prev, ...files])}
               onRemoveAttachment={(i) => setGoalAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+              currentActivity={currentActivity ?? undefined}
             />
           </div>
         )}
