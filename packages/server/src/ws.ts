@@ -31,6 +31,10 @@ export class EventBroadcaster {
 
   addClient(ws: WebSocket): void {
     this.clients.add(ws)
+    // Disable Nagle's algorithm so each WS frame is flushed immediately.
+    // Without this, rapid small sends (e.g. token streaming) get coalesced
+    // by the TCP stack and arrive at the browser all at once.
+    ;(ws as unknown as { _socket?: { setNoDelay?: (v: boolean) => void } })._socket?.setNoDelay?.(true)
     ws.on("close", () => this.clients.delete(ws))
     ws.on("error", () => this.clients.delete(ws))
 
@@ -55,10 +59,13 @@ export class EventBroadcaster {
       }
     }
 
-    // 2. Persist to event_log (fire-and-forget)
-    try {
-      saveEvent(msg.type, msg.data, msg.timestamp)
-    } catch { /* don't break broadcast if DB write fails */ }
+    // 2. Persist to event_log (skip high-frequency ephemeral events to avoid
+    //    blocking the Node.js event loop between WS frame sends)
+    if (msg.type !== "answer.chunk") {
+      try {
+        saveEvent(msg.type, msg.data, msg.timestamp)
+      } catch { /* don't break broadcast if DB write fails */ }
+    }
 
     // 3. Push to webhook drains (fire-and-forget, async)
     this.pushToWebhooks(msg, json).catch(() => {})

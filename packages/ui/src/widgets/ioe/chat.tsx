@@ -35,6 +35,7 @@ export function ChatPanel({
   onAttach,
   onRemoveAttachment,
   currentActivity,
+  streamingAnswer,
 }: {
   messages: ChatMessage[]
   goalInput: string
@@ -52,6 +53,7 @@ export function ChatPanel({
   onAttach?: (files: FileAttachment[]) => void
   onRemoveAttachment?: (index: number) => void
   currentActivity?: string
+  streamingAnswer?: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -79,7 +81,7 @@ export function ChatPanel({
   }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [messages.length, pendingInput])
+  }, [messages.length, pendingInput, streamingAnswer])
 
   // Reset textarea height when goalInput is cleared externally (e.g. after submit)
   useEffect(() => {
@@ -158,7 +160,9 @@ export function ChatPanel({
           <>
             {visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)}
             {isRunning && !hasPending && (
-              <ActivityBubble activity={currentActivity ?? "Thinking..."} />
+              streamingAnswer
+                ? <StreamingAnswerBubble text={streamingAnswer} />
+                : <ActivityBubble activity={currentActivity ?? "Thinking..."} />
             )}
           </>
         )}
@@ -446,6 +450,25 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
       <AlertCircle size={14} className="shrink-0 mt-1" style={{ color: C.coral }} />
       <div className="text-[13px]" style={{ color: C.muted }}>
         {msg.content}
+      </div>
+    </div>
+  )
+}
+
+function StreamingAnswerBubble({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+        style={{ background: C.success + "30" }}
+      >
+        <MessageSquare size={14} style={{ color: C.success }} />
+      </div>
+      <div
+        className="flex-1 rounded-lg px-3 py-2 text-[13px] whitespace-pre-wrap"
+        style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+      >
+        {text}<span className="inline-block w-0.5 h-3.5 ml-0.5 animate-pulse" style={{ background: C.accent }} />
       </div>
     </div>
   )

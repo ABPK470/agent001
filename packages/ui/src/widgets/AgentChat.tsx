@@ -32,6 +32,27 @@ const SpeechRecognition = (globalThis as Record<string, unknown>)["SpeechRecogni
   (globalThis as Record<string, unknown>)["webkitSpeechRecognition"] as
   (new () => SpeechRecognitionInstance) | undefined
 
+const TOOL_LABELS: Record<string, string> = {
+  search_catalog:        "Searching catalog",
+  inspect_definition:    "Inspecting definition",
+  explore_mssql_schema:  "Exploring schema",
+  query_mssql:           "Running query",
+  profile_data:          "Profiling data",
+  discover_relationships:"Discovering relationships",
+  read_file:             "Reading file",
+  write_file:            "Writing file",
+  append_file:           "Appending file",
+  replace_in_file:       "Editing file",
+  list_directory:        "Listing directory",
+  search_files:          "Searching files",
+  run_command:           "Running command",
+  browse_web:            "Browsing web",
+  fetch_url:             "Fetching URL",
+  think:                 "Thinking",
+  ask_user:              "Asking user",
+  browser_check:         "Checking browser",
+}
+
 export function AgentChat() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -52,6 +73,7 @@ export function AgentChat() {
 
   const steps = useStore((s) => s.steps)
   const trace = useStore((s) => s.trace)
+  const streamingAnswer = useStore((s) => s.streamingAnswer)
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
@@ -60,12 +82,12 @@ export function AgentChat() {
     if (!activeRun || activeRun.status === "pending") return null
     if (activeRun.status === "planning") return "Planning"
     const running = [...steps].reverse().find((s) => s.status === "running")
-    if (running) return running.name + (running.action ? ` — ${running.action.slice(0, 45)}` : "")
+    if (running) return TOOL_LABELS[running.action] ?? running.name
     for (let i = trace.length - 1; i >= 0; i--) {
       const e = trace[i] as TraceEntry
-      if (e.kind === "tool-call") return e.tool
+      if (e.kind === "tool-call") return TOOL_LABELS[e.tool] ?? e.tool
       if (e.kind === "iteration") return `iter ${e.current} / ${e.max}`
-      if (e.kind === "delegation-start") return "delegating"
+      if (e.kind === "delegation-start") return "Delegating to sub-agent"
     }
     return null
   }, [activeRun, steps, trace])
@@ -87,8 +109,8 @@ export function AgentChat() {
   }, [pickerOpen])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [runs])
+    bottomRef.current?.scrollIntoView({ behavior: streamingAnswer ? "instant" : "smooth" })
+  }, [runs, streamingAnswer])
 
   // Cleanup recognition on unmount
   useEffect(() => {
@@ -232,6 +254,16 @@ export function AgentChat() {
               </div>
             )}
 
+            {/* Streaming answer — shown live for the active run while it runs */}
+            {run.id === activeRunId && !run.answer && streamingAnswer && (
+              <div className="flex items-start gap-2 max-w-[85%]">
+                <Bot size={14} className="text-accent shrink-0 mt-1.5" />
+                <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
+                  {streamingAnswer}<span className="inline-block w-0.5 h-3.5 bg-accent ml-0.5 animate-pulse" />
+                </span>
+              </div>
+            )}
+
             {/* Error */}
             {run.error && (
               <div className="flex items-start gap-2">
@@ -240,8 +272,8 @@ export function AgentChat() {
               </div>
             )}
 
-            {/* Progress indicator — shown while agent is working */}
-            {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && (
+            {/* Progress indicator — shown while agent is working and not yet streaming text */}
+            {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && !(run.id === activeRunId && streamingAnswer) && (
               <div className="flex items-center gap-2 ml-5">
                 <Bot size={14} className="text-accent shrink-0" />
                 {run.status === "pending" ? (

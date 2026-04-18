@@ -54,6 +54,27 @@ import {
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
+const TOOL_LABELS: Record<string, string> = {
+  search_catalog:        "Searching catalog",
+  inspect_definition:    "Inspecting definition",
+  explore_mssql_schema:  "Exploring schema",
+  query_mssql:           "Running query",
+  profile_data:          "Profiling data",
+  discover_relationships:"Discovering relationships",
+  read_file:             "Reading file",
+  write_file:            "Writing file",
+  append_file:           "Appending file",
+  replace_in_file:       "Editing file",
+  list_directory:        "Listing directory",
+  search_files:          "Searching files",
+  run_command:           "Running command",
+  browse_web:            "Browsing web",
+  fetch_url:             "Fetching URL",
+  think:                 "Thinking",
+  ask_user:              "Asking user",
+  browser_check:         "Checking browser",
+}
+
 export function OperatorEnvironment() {
   // ── Store ─────────────────────────────────────────────────────
   const connected = useStore((s) => s.connected)
@@ -191,18 +212,19 @@ export function OperatorEnvironment() {
     [searchQuery, runs, trace, audit],
   )
   const chatMessages = useMemo(() => buildChatMessages(trace), [trace])
+  const streamingAnswer = useStore((s) => s.streamingAnswer)
 
   const currentActivity = useMemo(() => {
     if (!activeRun || activeRun.status === "pending") return null
     if (activeRun.status === "planning") return "Planning"
     if (activeRun.status !== "running") return null
     const running = [...steps].reverse().find((s) => s.status === "running")
-    if (running) return running.name + (running.action ? ` — ${running.action.slice(0, 45)}` : "")
+    if (running) return TOOL_LABELS[running.action] ?? running.name
     for (let i = trace.length - 1; i >= 0; i--) {
       const e = trace[i]
-      if (e.kind === "tool-call") return e.tool
+      if (e.kind === "tool-call") return TOOL_LABELS[e.tool] ?? e.tool
       if (e.kind === "iteration") return `iter ${e.current} / ${e.max}`
-      if (e.kind === "delegation-start") return "delegating"
+      if (e.kind === "delegation-start") return "Delegating to sub-agent"
     }
     return null
   }, [activeRun, steps, trace])
@@ -925,6 +947,7 @@ export function OperatorEnvironment() {
               onAttach={(files) => setGoalAttachments((prev) => [...prev, ...files])}
               onRemoveAttachment={(i) => setGoalAttachments((prev) => prev.filter((_, idx) => idx !== i))}
               currentActivity={currentActivity ?? undefined}
+              streamingAnswer={streamingAnswer || undefined}
             />
           </div>
         )}

@@ -103,6 +103,11 @@ interface AppState {
   wsEventLog: WsEvent[]
   clearWsEventLog: () => void
 
+  // Live streaming answer (chunks from LLM before run.completed)
+  streamingAnswer: string
+  appendStreamingChunk: (chunk: string) => void
+  clearStreamingAnswer: () => void
+
   // IOE layout persistence (survives view switches + page reload)
   ioeLayout: IoeLayout
   setIoeLayout: (patch: Partial<IoeLayout>) => void
@@ -436,6 +441,10 @@ export const useStore = create<AppState>()(
       wsEventLog: [],
       clearWsEventLog: () => set({ wsEventLog: [] }),
 
+      streamingAnswer: "",
+      appendStreamingChunk: (chunk) => set((s) => ({ streamingAnswer: s.streamingAnswer + chunk })),
+      clearStreamingAnswer: () => set({ streamingAnswer: "" }),
+
       // IOE layout
       ioeLayout: { ...DEFAULT_IOE_LAYOUT },
       setIoeLayout: (patch) => set((s) => ({ ioeLayout: { ...s.ioeLayout, ...patch } })),
@@ -459,6 +468,7 @@ export const useStore = create<AppState>()(
             store.setLogs([])
             store.setAudit([])
             store.resetLiveUsage()
+            store.clearStreamingAnswer()
             store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -487,6 +497,7 @@ export const useStore = create<AppState>()(
             break
 
           case "run.completed":
+            store.clearStreamingAnswer()
             store.addTrace({ kind: "answer", text: data["answer"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -504,6 +515,7 @@ export const useStore = create<AppState>()(
             break
 
           case "run.failed":
+            store.clearStreamingAnswer()
             store.addTrace({ kind: "error", text: data["error"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -520,6 +532,7 @@ export const useStore = create<AppState>()(
             break
 
           case "run.cancelled":
+            store.clearStreamingAnswer()
             store.addTrace({ kind: "error", text: "Run cancelled by user" })
             store.upsertRun({
               id: data["runId"] as string,
@@ -528,6 +541,12 @@ export const useStore = create<AppState>()(
             })
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
+
+          case "answer.chunk": {
+            const chunk = data["chunk"] as string
+            if (chunk) store.appendStreamingChunk(chunk)
+            break
+          }
 
           case "step.started": {
             const toolName = (data["action"] as string) ?? "unknown"

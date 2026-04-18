@@ -21,6 +21,7 @@ import { runCompletionGuards } from "./completion-guards.js"
 import { applyFullCompaction, shouldApplyFullCompaction } from "./context-compaction.js"
 import { compactMessages, truncateMessages } from "./context-management.js"
 import * as log from "./logger.js"
+import { attemptPlannerRouting } from "./planner-routing.js"
 import {
   buildCoherentVerificationPipelineResult,
   summarizeCoherentVerifierDecision,
@@ -28,7 +29,6 @@ import {
 import type { PlannerContext } from "./planner/index.js"
 import type { VerifierDecision } from "./planner/types.js"
 import { verify } from "./planner/verifier.js"
-import { attemptPlannerRouting } from "./planner-routing.js"
 import { processPostRound } from "./post-round.js"
 import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
 import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "./tool-contract-guidance.js"
@@ -49,6 +49,7 @@ export class Agent {
     systemMessages: Message[] | null
     verbose: boolean
     onThinking: AgentConfig["onThinking"]
+    onToken: AgentConfig["onToken"]
     onStep: AgentConfig["onStep"]
     onLlmCall: AgentConfig["onLlmCall"]
     onNudge: AgentConfig["onNudge"]
@@ -79,6 +80,7 @@ export class Agent {
       systemMessages: config.systemMessages ?? null,
       verbose: config.verbose ?? true,
       onThinking: config.onThinking,
+      onToken: config.onToken,
       onStep: config.onStep,
       onLlmCall: config.onLlmCall,
       onNudge: config.onNudge,
@@ -260,7 +262,7 @@ export class Agent {
       const t0 = Date.now()
       let response
       try {
-        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal })
+        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal, onToken: this.config.onToken })
       } catch (err) {
         if (err instanceof Error && err.message.includes("finish_reason=length")) {
           const truncMsg =

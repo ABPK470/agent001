@@ -274,6 +274,9 @@ export async function executeRunImpl(
       broadcast({ type: "checkpoint.saved", data: { runId, iteration, stepCounter: state.stepCounter } })
       persistRun(run, goal, agentId, resume?.parentRunId)
     },
+    onToken: (token) => {
+      broadcast({ type: "answer.chunk", data: { runId, chunk: token } })
+    },
   })
 
   try {
