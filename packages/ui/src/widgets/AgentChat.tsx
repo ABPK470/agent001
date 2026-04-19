@@ -6,7 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, ChevronDown, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
+import { AlertCircle, Bot, ChevronDown, MessageSquare, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { useStore } from "../store"
@@ -240,14 +240,18 @@ export function AgentChat() {
             <div className="flex justify-end">
               <div className="flex items-start gap-2 max-w-[85%]">
                 <span className="text-text text-sm bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">{run.goal}</span>
-                <User size={14} className="text-accent shrink-0 mt-1.5" />
+                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-accent/20">
+                  <User size={14} className="text-accent" />
+                </div>
               </div>
             </div>
 
             {/* Answer (agent response) — left-aligned */}
             {run.answer && (
               <div className="flex items-start gap-2 max-w-[85%]">
-                <Bot size={14} className="text-text-muted shrink-0 mt-1.5" />
+                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
+                  <MessageSquare size={14} className="text-success" />
+                </div>
                 <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
                   {run.answer}
                 </span>
@@ -257,7 +261,9 @@ export function AgentChat() {
             {/* Streaming answer — shown live for the active run while it runs */}
             {run.id === activeRunId && !run.answer && streamingAnswer && (
               <div className="flex items-start gap-2 max-w-[85%]">
-                <Bot size={14} className="text-accent shrink-0 mt-1.5" />
+                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
+                  <MessageSquare size={14} className="text-success" />
+                </div>
                 <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
                   {streamingAnswer}<span className="inline-block w-0.5 h-3.5 bg-accent ml-0.5 animate-pulse" />
                 </span>
@@ -274,8 +280,10 @@ export function AgentChat() {
 
             {/* Progress indicator — shown while agent is working and not yet streaming text */}
             {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && !(run.id === activeRunId && streamingAnswer) && (
-              <div className="flex items-center gap-2 ml-5">
-                <Bot size={14} className="text-accent shrink-0" />
+              <div className="flex items-center gap-2">
+                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
+                  <MessageSquare size={14} className="text-success" />
+                </div>
                 {run.status === "pending" ? (
                   <span className="text-[12px] text-text-muted">Queued</span>
                 ) : (
