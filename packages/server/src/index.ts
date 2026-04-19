@@ -167,7 +167,7 @@ function resolveWorkspace(): string {
   setSearchBasePath(workspace)
   setShellCwd(workspace)
   setBrowserCheckCwd(workspace)
-  console.log(`📂 Agent workspace: ${workspace}`)
+  console.log(`Agent workspace: ${workspace}`)
   return workspace
 }
 

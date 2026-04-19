@@ -9,6 +9,7 @@
 import { AlertCircle, Bot, ChevronDown, MessageSquare, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { SmartAnswer } from "../components/SmartAnswer"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry } from "../types"
 
@@ -248,25 +249,25 @@ export function AgentChat() {
 
             {/* Answer (agent response) — left-aligned */}
             {run.answer && (
-              <div className="flex items-start gap-2 max-w-[85%]">
+              <div className="flex items-start gap-2 w-full">
                 <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
                   <MessageSquare size={14} className="text-success" />
                 </div>
-                <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
-                  {run.answer}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <SmartAnswer text={run.answer} />
+                </div>
               </div>
             )}
 
             {/* Streaming answer — shown live for the active run while it runs */}
             {run.id === activeRunId && !run.answer && streamingAnswer && (
-              <div className="flex items-start gap-2 max-w-[85%]">
+              <div className="flex items-start gap-2 w-full">
                 <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
                   <MessageSquare size={14} className="text-success" />
                 </div>
-                <span className="text-text-secondary text-sm whitespace-pre-wrap leading-relaxed">
-                  {streamingAnswer}<span className="inline-block w-0.5 h-3.5 bg-accent ml-0.5 animate-pulse" />
-                </span>
+                <div className="flex-1 min-w-0">
+                  <SmartAnswer text={streamingAnswer} streaming />
+                </div>
               </div>
             )}
 

@@ -7,12 +7,14 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { api } from "./api"
 import type {
     AuditEntry,
     LayoutItem,
     LogEntry,
     Notification,
     Run,
+    RunDetail,
     Step,
     TraceEntry,
     ViewConfig,
@@ -325,7 +327,26 @@ export const useStore = create<AppState>()(
       runs: [],
       activeRunId: null,
       setRuns: (runs) => set({ runs }),
-      setActiveRun: (activeRunId) => set({ activeRunId }),
+      setActiveRun: (activeRunId) => {
+        set({ activeRunId })
+        if (!activeRunId) return
+        // Load historical run data into the store so all widgets reflect
+        // the selected run (steps, trace, audit, logs).
+        const store = get()
+        const run = store.runs.find((r) => r.id === activeRunId)
+        const isLive = run?.status === "pending" || run?.status === "running" || run?.status === "planning"
+        if (isLive) return  // live run already has fresh data in store
+        Promise.all([
+          api.getRun(activeRunId),
+          api.getRunTrace(activeRunId),
+        ]).then(([detail, rawTrace]) => {
+          const d = detail as RunDetail
+          get().setSteps(d.data?.steps ?? [])
+          get().setAudit(d.audit ?? [])
+          get().setLogs(d.logs ?? [])
+          get().setTrace(rawTrace as TraceEntry[])
+        }).catch(() => {})
+      },
       upsertRun: (run) => set((s) => {
         const idx = s.runs.findIndex((r) => r.id === run.id)
         if (idx >= 0) {

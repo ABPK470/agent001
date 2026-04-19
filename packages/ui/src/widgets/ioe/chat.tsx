@@ -5,6 +5,7 @@
 
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { SmartAnswer } from "../../components/SmartAnswer"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
 
@@ -404,10 +405,10 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
           <MessageSquare size={14} style={{ color: C.success }} />
         </div>
         <div
-          className="flex-1 rounded-lg px-3 py-2 text-[13px] whitespace-pre-wrap"
-          style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+          className="flex-1 min-w-0 rounded-lg px-3 py-2"
+          style={{ background: C.base, border: `1px solid ${C.border}` }}
         >
-          {msg.content}
+          <SmartAnswer text={msg.content} />
         </div>
       </div>
     )
@@ -465,10 +466,10 @@ function StreamingAnswerBubble({ text }: { text: string }) {
         <MessageSquare size={14} style={{ color: C.success }} />
       </div>
       <div
-        className="flex-1 rounded-lg px-3 py-2 text-[13px] whitespace-pre-wrap"
-        style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+        className="flex-1 min-w-0 rounded-lg px-3 py-2"
+        style={{ background: C.base, border: `1px solid ${C.border}` }}
       >
-        {text}<span className="inline-block w-0.5 h-3.5 ml-0.5 animate-pulse" style={{ background: C.accent }} />
+        <SmartAnswer text={text} streaming />
       </div>
     </div>
   )

@@ -104,11 +104,11 @@ export function setupMssql(projectRoot: string): string {
     if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
       setMssqlWriteEnabled(true)
       const summary = `${mssqlServer} (WRITE mode enabled)`
-      console.log(`🗄️  MSSQL: ${summary}`)
+      console.log(`MSSQL: ${summary}`)
       return summary
     }
     const summary = `${mssqlServer} (read-only)`
-    console.log(`🗄️  MSSQL: ${summary}`)
+    console.log(`MSSQL: ${summary}`)
     return summary
   }
 
