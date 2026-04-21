@@ -8,10 +8,10 @@ import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOut
 import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
-    C,
-    fmtK,
-    statusDot,
-    type EditorTab,
+  C,
+  fmtK,
+  statusDot,
+  type EditorTab,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2750,6 +2750,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
   const [open, setOpen] = useState(false)
 
   if (e.kind === "tool-call") {
+    const extracted = extractToolCode(e.tool, e.argsFormatted)
     return (
       <div className="px-1">
         <div
@@ -2762,12 +2763,35 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
           <span className="font-semibold" style={{ color: C.warning }}>{e.tool}</span>
           {!open && <span className="truncate" style={{ color: C.dim }}>{e.argsSummary}</span>}
         </div>
-        {open && <div className="ml-5 py-0.5"><Pane text={e.argsFormatted} /></div>}
+        {open && (
+          <div className="ml-5 py-0.5">
+            {extracted ? (() => {
+              let otherArgs: Record<string, unknown> | null = null
+              try {
+                const parsed = JSON.parse(e.argsFormatted) as Record<string, unknown>
+                const rest = Object.fromEntries(Object.entries(parsed).filter(([k]) => k !== extracted.field))
+                if (Object.keys(rest).length > 0) otherArgs = rest
+              } catch { /* noop */ }
+              return (
+                <div className="space-y-1.5">
+                  {otherArgs && (
+                    <pre className="text-[12px] font-mono rounded px-2 py-1"
+                      style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}>
+                      {JSON.stringify(otherArgs, null, 2)}
+                    </pre>
+                  )}
+                  <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={240} />
+                </div>
+              )
+            })() : <Pane text={e.argsFormatted} />}
+          </div>
+        )}
       </div>
     )
   }
 
   if (e.kind === "tool-result") {
+    const preview = e.text.replace(/\\n/g, " ").replace(/\n/g, " ").slice(0, 100)
     return (
       <div className="px-1">
         <div
@@ -2778,10 +2802,14 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
             {open ? "▾" : "▸"}
           </span>
           <span className="font-semibold" style={{ color: C.success }}>TOOL RESULT</span>
-          {!open && <span className="truncate" style={{ color: C.dim }}>{truncate(e.text, 100)}</span>}
+          {!open && <span className="truncate" style={{ color: C.dim }}>{preview}{e.text.length > 100 ? "..." : ""}</span>}
           {open && <span style={{ color: C.dim }}>{e.text.length} chars</span>}
         </div>
-        {open && <div className="ml-5 py-0.5"><Pane text={e.text} /></div>}
+        {open && (
+          <div className="ml-5 py-0.5">
+            <ToolResultTable text={e.text} maxHeight={300} />
+          </div>
+        )}
       </div>
     )
   }
