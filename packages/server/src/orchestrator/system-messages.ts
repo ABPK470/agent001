@@ -65,17 +65,43 @@ export async function buildSystemMessages(opts: {
     // successful. A failed planner run stores "Status: completed" but with an answer
     // that starts with "Task FAILED" — following that as positive evidence would
     // cause the agent to reproduce the failure. Exclude those entries.
+    //
+    // Also exclude "punt" answers — runs where the agent gave up and asked for
+    // clarification rather than delivering real results. These look "completed" but
+    // are not reliable positive evidence. Recognizable by qualifying language in the answer.
+    const PUNT_PATTERNS = [
+      "please provide more details",
+      "please clarify",
+      "if you meant",
+      "could you clarify",
+      "i wasn't able to",
+      "unable to find",
+      "no tables explicitly mention",
+      "if it refers to",
+      "let me know which",
+      "please let me know",
+    ]
+    const episodicAnswerSection = perTier.episodic.match(/Answer:([\s\S]+?)(?=\nGoal:|\s*$)/i)?.[1] ?? ""
+    const hasPuntAnswer = PUNT_PATTERNS.some(p => episodicAnswerSection.toLowerCase().includes(p))
+
     const episodicHasCompletedEntry =
       perTier.episodic.includes("Status: completed") &&
-      !perTier.episodic.includes("Answer: Task FAILED")
+      !perTier.episodic.includes("Answer: Task FAILED") &&
+      !hasPuntAnswer
+
     const episodicContent = episodicHasCompletedEntry
       ? [
           "⚠️ MEMORY HIT — prior completed run found for this goal.",
-          "REQUIRED ACTION: Extract the confirmed tables/columns/approach from the",
-          "episodic_memory Answer section below and use them directly in your first tool call.",
-          "DO NOT call search_catalog or explore_mssql_schema for tables already listed there.",
+          "SHORTCUT: For tables/columns/queries already confirmed in the Answer below, use them",
+          "directly — skip redundant search_catalog or explore_mssql_schema calls for those.",
           "The 'NEVER skip search_catalog' rule is satisfied — memory IS the prior evidence.",
-          "Only use discovery tools for information that is genuinely absent from memory.",
+          "",
+          "IMPORTANT EXCEPTION — Tool Orchestration override:",
+          "If the goal involves an unfamiliar technical term (SQL Server internals like 'tombstone',",
+          "'ghost records', 'WAL', 'fill factor', 'spinlock', etc.), ALWAYS use fetch_url to search",
+          "the internet FIRST, regardless of what memory shows. Prior runs may have guessed wrong",
+          "about what those terms mean. Memory shortcuts apply to table/column names, not to the",
+          "interpretation of unfamiliar domain concepts.",
           "",
           perTier.episodic,
         ].join("\n")
