@@ -28,7 +28,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
       if (Date.now() - stat.mtimeMs < maxAge) {
         const raw = await fs.readFile(cachePath, "utf-8")
         const snap: CatalogSnapshot = JSON.parse(raw)
-        if (snap.version === 1 || snap.version === 2) {
+        if (snap.version === 1 || snap.version === 2 || snap.version === 3 || snap.version === 4) {
           const catalog = CatalogGraph.fromSnapshot(snap)
           _catalogs.set(conn, catalog)
           return catalog

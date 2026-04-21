@@ -62,6 +62,25 @@ export const Q_FKS = `
 `
 
 /**
+ * All columns for all sys.* schema objects (catalog views + DMVs + TVFs).
+ * Fetched at catalog build time so the agent knows what columns each sys object has.
+ * We fetch ALL sys objects and filter locally to those in SYS_DESCRIPTORS, avoiding
+ * a large IN clause. Runs once at startup — ~4000 rows, fast.
+ */
+export const Q_SYS_COLUMNS = `
+  SELECT
+    o.name       AS object_name,
+    c.name       AS column_name,
+    ty.name      AS data_type
+  FROM sys.all_columns c
+  JOIN sys.all_objects o  ON c.object_id  = o.object_id
+  JOIN sys.schemas s      ON o.schema_id  = s.schema_id
+  JOIN sys.types ty       ON c.user_type_id = ty.user_type_id
+  WHERE s.name = 'sys'
+  ORDER BY o.name, c.column_id
+`
+
+/**
  * View → source table dependencies.
  * Used at catalog build time to compute per-view "underlying source rows" by summing
  * the row counts of each physical table a view directly or indirectly references.

@@ -1,5 +1,5 @@
 import type { CatalogGraph, ConceptPathResult, ViewLineage } from "../catalog.js"
-import { fmtLineage, fmtPath, fmtRow, fmtTable } from "./formatters.js"
+import { fmtLineage, fmtPath, fmtRow, fmtSysEntry, fmtTable } from "./formatters.js"
 
 export function handleStats(catalog: CatalogGraph): string {
   const s = catalog.stats()
@@ -225,7 +225,8 @@ export function handlePath(catalog: CatalogGraph, from: string, to: string): str
 
 export function handleSearch(catalog: CatalogGraph, query: string): string {
   const hits = catalog.search(query)
-  if (hits.length === 0) {
+  const sysHits = catalog.searchSys(query)
+  if (hits.length === 0 && sysHits.length === 0) {
     return `No matches found for '${query}'. Try different keywords or check spelling.`
   }
 
@@ -254,12 +255,14 @@ export function handleSearch(catalog: CatalogGraph, query: string): string {
     for (const h of otherHits) lines.push(fmtTable(h.table, h.matchedColumns, catalog))
   }
 
-  lines.push(
-    "",
-    "Results ranked by: name match + schema tier (publish ★) + row volume + column richness + FK centrality + join connectivity.",
-    "Pick the highest-ranked table in the best schema tier. If unsure, compare column lists above.",
-    "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5.",
-  )
+  if (hits.length > 0) {
+    lines.push(
+      "",
+      "Results ranked by: name match + schema tier (publish ★) + row volume + column richness + FK centrality + join connectivity.",
+      "Pick the highest-ranked table in the best schema tier. If unsure, compare column lists above.",
+      "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5.",
+    )
+  }
 
   // If any top result has a lineage map, surface that
   const lineageHints = hits.slice(0, 5)
@@ -273,5 +276,77 @@ export function handleSearch(catalog: CatalogGraph, query: string): string {
     )
   }
 
+  // Surface sys results when they match — always shown if user tables had 0 hits,
+  // or appended as a supplemental section when sys results are relevant
+  if (sysHits.length > 0) {
+    lines.push(
+      "",
+      `SQL SERVER SYSTEM CATALOG (sys.*) — ${sysHits.length} match${sysHits.length > 1 ? "es" : ""}:`,
+      "  These are SQL Server engine internals. Query them with query_mssql — NOT search_catalog.",
+      "  Do NOT call search_catalog or explore_mssql_schema for sys.* objects.",
+      "",
+    )
+    for (const entry of sysHits) {
+      lines.push(fmtSysEntry(entry))
+    }
+  }
+
+  return lines.join("\n")
+}
+
+/**
+ * Dedicated sys catalog lookup — searches only sys.* objects.
+ * Handles search_catalog(sys='tombstone') or search_catalog(sys='sys.dm_db_column_store_row_group_physical_stats').
+ */
+export function handleSys(catalog: CatalogGraph, query: string): string {
+  // Direct lookup: if query looks like a qualified sys object name, get it
+  const directEntry = catalog.getSysEntry(query)
+  if (directEntry) {
+    const lines = [
+      `SQL Server sys object: ${directEntry.qualifiedName}`,
+      "",
+      directEntry.description,
+      "",
+    ]
+    if (directEntry.columns.length > 0) {
+      lines.push(`Columns (${directEntry.columns.length}):`)
+      for (const col of directEntry.columns) {
+        lines.push(`  ${col.name} (${col.dataType})`)
+      }
+    }
+    if (directEntry.exampleQuery) {
+      lines.push("", "Example query:")
+      lines.push(directEntry.exampleQuery)
+    }
+    lines.push(
+      "",
+      `IMPORTANT: Query this with query_mssql — NOT search_catalog or explore_mssql_schema.`,
+      `sys.* objects are SQL Server engine internals, not in the user table catalog.`,
+    )
+    return lines.join("\n")
+  }
+
+  // Keyword search
+  const hits = catalog.searchSys(query, 8)
+  if (hits.length === 0) {
+    return (
+      `No sys catalog matches for '${query}'.\n` +
+      `The sys catalog covers: columnstore internals, index health, query performance, ` +
+      `wait stats, locking, memory, partitioning, FK constraints, statistics, HA/Always On, ` +
+      `and server configuration.\n` +
+      `Try: tombstone, fragmentation, missing index, wait stats, locking, memory, HA, ` +
+      `columnstore, partition, statistics, slow query.`
+    )
+  }
+
+  const lines = [
+    `SQL Server System Catalog Search: '${query}' — ${hits.length} sys match${hits.length > 1 ? "es" : ""}`,
+    "Query all of these with query_mssql — NOT search_catalog or explore_mssql_schema.",
+    "",
+  ]
+  for (const entry of hits) {
+    lines.push(fmtSysEntry(entry))
+    lines.push("")
+  }
   return lines.join("\n")
 }

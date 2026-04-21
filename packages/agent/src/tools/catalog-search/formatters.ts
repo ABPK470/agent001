@@ -1,4 +1,4 @@
-import type { CatalogFK, CatalogTable, ViewLineage } from "../catalog.js"
+import type { CatalogFK, CatalogTable, SysEntry, ViewLineage } from "../catalog.js"
 
 // ── Formatters ───────────────────────────────────────────────────
 
@@ -111,5 +111,25 @@ export function fmtLineage(l: ViewLineage): string {
     "To drill deeper into any source: inspect_definition(object='MappingName', schema='publish')",
     "To query this view: always filter by pkMonth + pkClient (both are high-cardinality).",
   )
+  return lines.join("\n")
+}
+
+/**
+ * Format a sys catalog entry for display in search results or sys lookup mode.
+ * Clearly marks it as a sys object to guide the agent to use query_mssql directly.
+ */
+export function fmtSysEntry(entry: SysEntry): string {
+  const lines: string[] = []
+  lines.push(`  [SYS] ${entry.qualifiedName}`)
+  lines.push(`    ${entry.description}`)
+  if (entry.columns.length > 0) {
+    const shown = entry.columns.slice(0, 12)
+    const colStr = shown.map((c) => `${c.name} (${c.dataType})`).join(", ")
+    lines.push(`    Columns: ${colStr}${entry.columns.length > 12 ? ` (+${entry.columns.length - 12} more)` : ""}`)
+  }
+  if (entry.exampleQuery) {
+    lines.push(`    Example: ${entry.exampleQuery.slice(0, 200)}${entry.exampleQuery.length > 200 ? "..." : ""}`)
+  }
+  lines.push(`    ⇒ Query with: query_mssql({ query: "SELECT ... FROM ${entry.qualifiedName} ..." })`)
   return lines.join("\n")
 }

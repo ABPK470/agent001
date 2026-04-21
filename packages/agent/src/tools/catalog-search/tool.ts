@@ -9,6 +9,7 @@ import {
     handlePath,
     handleSearch,
     handleStats,
+    handleSys,
     handleTable,
 } from "./handlers.js"
 
@@ -20,7 +21,7 @@ export const searchCatalogTool: Tool = {
     "FK relationships, and implicit join edges (shared column names). It is pre-computed and cached on disk; searches " +
     "are instant (no SQL queries). ALWAYS use this BEFORE explore_mssql_schema or query_mssql. " +
     "Modes: " +
-    "(1) search='revenue' — keyword search across all table and column names. " +
+    "(1) search='revenue' — keyword search across all table and column names (also searches sys.* DMV catalog). " +
     "(2) table='publish.Revenue' — get full detail for a specific table. " +
     "(3) column='clientId' — find every table that has this column. " +
     "(4) joins='dim.Client' — show ALL join edges (FK + implicit) for a table. " +
@@ -29,7 +30,11 @@ export const searchCatalogTool: Tool = {
     "(7) stats=true — catalog summary. " +
     "(8) refresh=true — rebuild from live database and update cache. " +
     "(9) concepts='fact.CommissionAllocation' — show which business concepts this table contributes to (semantic tags from lineage). " +
-    "(10) concept_path=['tableA','tableB'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships.",
+    "(10) concept_path=['tableA','tableB'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships. " +
+    "(11) sys='tombstone' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
+    "Use sys= for: columnstore internals, index fragmentation, query performance, wait statistics, locking, " +
+    "memory, partitioning, HA/Always On, server config. sys= returns the right DMV + example query — " +
+    "then call query_mssql to run it.",
   parameters: {
     type: "object",
     properties: {
@@ -84,6 +89,7 @@ export const searchCatalogTool: Tool = {
     }
 
     if (args.stats) return handleStats(catalog)
+    if (args.sys) return handleSys(catalog, String(args.sys).trim())
     if (args.lineage) return handleLineage(catalog, String(args.lineage).trim())
     if (args.concepts) return handleConcepts(catalog, String(args.concepts).trim())
 

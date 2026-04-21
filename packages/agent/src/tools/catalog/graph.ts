@@ -1,9 +1,10 @@
 import { getPool } from "../mssql.js"
 import { buildConceptGraph } from "./concepts.js"
-import { buildSearchIndexes, computeImplicitEdges, tableKey } from "./helpers.js"
+import { buildSearchIndexes, computeImplicitEdges, tableKey, tokenize } from "./helpers.js"
 import { findConceptPath as findConceptPathModule, findFkPath } from "./paths.js"
 import { searchCatalog } from "./search.js"
-import { Q_COLUMNS, Q_FKS, Q_OBJECTS, Q_VIEW_DEPS } from "./sql.js"
+import { Q_COLUMNS, Q_FKS, Q_OBJECTS, Q_SYS_COLUMNS, Q_VIEW_DEPS } from "./sql.js"
+import { SYS_DESCRIPTORS } from "./sys-descriptors.js"
 import type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -15,6 +16,7 @@ import type {
     ConceptNode,
     ConceptPathResult,
     ImplicitEdge,
+    SysEntry,
     ViewLineage,
 } from "./types.js"
 
@@ -46,6 +48,34 @@ export class CatalogGraph {
   /** tableKey → list of concept nodes this table contributes to (reverse index) */
   readonly conceptEdgeIndex: Map<string, ConceptNode[]>
 
+  /**
+   * sys.* catalog — entries for SQL Server system objects (DMVs, catalog views, TVFs).
+   * Columns are fetched from the live DB at build time; descriptions/aliases are curated
+   * in sys-descriptors.ts. Used by searchSys() to surface DMV guidance when keyword search
+   * on user tables returns no results or when the user explicitly asks about sys objects.
+   * Key = lowercase sys object name (without schema prefix).
+   */
+  readonly sysCatalog: Map<string, SysEntry>
+  /** Token → Set<sys object name> — built from curated aliases + actual column names. */
+  private readonly sysIndex: Map<string, Set<string>>
+  readonly columnIndex: Map<string, Set<string>>
+  readonly adjacency: Map<string, Array<{ target: string; fk: CatalogFK }>>
+  /** tableKey → implicit edges involving this table */
+  readonly implicitJoinIndex: Map<string, ImplicitEdge[]>
+  /**
+   * For every publish VIEW: sum of row_counts of the physical tables it directly references.
+   * Built at catalog-build time from Q_VIEW_DEPS — zero runtime cost for the agent.
+   * Key = "publish.ViewName", value = total source rows.
+   */
+  readonly viewSourceRows: Map<string, number>
+
+  /** Concept nodes indexed by concept name (lowercase) — e.g. "revenue" → ConceptNode */
+  readonly conceptNodes: Map<string, ConceptNode>
+  /** Source view (lowercase) → ConceptNode — fast lookup by view name */
+  readonly conceptByView: Map<string, ConceptNode>
+  /** tableKey → list of concept nodes this table contributes to (reverse index) */
+  readonly conceptEdgeIndex: Map<string, ConceptNode[]>
+
   private constructor(
     tables: Map<string, CatalogTable>,
     nameIndex: Map<string, Set<string>>,
@@ -55,6 +85,7 @@ export class CatalogGraph {
     builtAt?: Date,
     lineage?: ViewLineage[],
     viewSourceRows?: Map<string, number>,
+    sysCatalog?: SysEntry[],
   ) {
     this.tables = tables
     this.nameIndex = nameIndex
@@ -83,14 +114,55 @@ export class CatalogGraph {
     if (lineage && lineage.length > 0) {
       buildConceptGraph(this.conceptNodes, this.conceptByView, this.conceptEdgeIndex, lineage)
     }
+    // Build sys catalog and its search index
+    this.sysCatalog = new Map()
+    this.sysIndex = new Map()
+    if (sysCatalog) {
+      for (const entry of sysCatalog) {
+        this.sysCatalog.set(entry.name.toLowerCase(), entry)
+      }
+      this._buildSysIndex()
+    }
+  }
+
+  /**
+   * Build the sys search index from the current sysCatalog.
+   * Indexes: object name tokens, curated alias tokens, column name tokens.
+   */
+  private _buildSysIndex(): void {
+    const addToken = (token: string, key: string) => {
+      if (!this.sysIndex.has(token)) this.sysIndex.set(token, new Set())
+      this.sysIndex.get(token)!.add(key)
+    }
+    for (const entry of this.sysCatalog.values()) {
+      const key = entry.name.toLowerCase()
+      // Object name tokens
+      for (const t of tokenize(entry.name)) addToken(t, key)
+      // Curated alias tokens (semantic keywords — highest value)
+      for (const alias of entry.aliases) {
+        for (const t of tokenize(alias)) addToken(t, key)
+        // Also index the alias as a whole phrase token (split on spaces)
+        const phrase = alias.toLowerCase().trim()
+        if (phrase.includes(" ")) {
+          // index each word in multi-word aliases
+          for (const word of phrase.split(/\s+/).filter((w) => w.length > 1)) addToken(word, key)
+        } else if (phrase.length > 1) {
+          addToken(phrase, key)
+        }
+      }
+      // Column name tokens
+      for (const col of entry.columns) {
+        for (const t of tokenize(col.name)) addToken(t, key)
+      }
+    }
   }
 
   // ── Build from live database ─────────────────────────────────
 
   static async build(connection?: string): Promise<CatalogGraph> {
     const { pool } = await getPool(connection)
-
-    // Step 1: Fetch all tables/views
+    // Start sys catalog fetch in parallel with user catalog (non-fatal if it fails)
+    const sysCatalogPromise = CatalogGraph.buildSysCatalog(pool)
     const objResult = await pool.request().query(Q_OBJECTS)
     const tables = new Map<string, CatalogTable>()
     for (const r of objResult.recordset) {
@@ -170,7 +242,55 @@ export class CatalogGraph {
       }
     } catch { /* non-fatal — older SQL Server versions may not have sys.sql_expression_dependencies */ }
 
-    return new CatalogGraph(tables, nameIndex, columnIndex, adjacency, implEdges, undefined, undefined, viewSourceRows)
+    // Step 7: Await sys catalog
+    const sysCatalog = await sysCatalogPromise
+
+    return new CatalogGraph(tables, nameIndex, columnIndex, adjacency, implEdges, undefined, undefined, viewSourceRows, sysCatalog)
+  }
+
+  // ── Sys catalog build (separate step) ─────────────────────────
+
+  /**
+   * Fetch sys.* column definitions from the live database and build SysEntry objects
+   * by overlaying the curated SYS_DESCRIPTORS. Returns only entries present in the
+   * curated map (we ignore the hundreds of sys objects we have no guidance for).
+   * Non-fatal: if the query fails (older SQL Server, restricted perms) returns [].
+   */
+  static async buildSysCatalog(pool: import("mssql").ConnectionPool): Promise<SysEntry[]> {
+    try {
+      const colResult = await pool.request().query(Q_SYS_COLUMNS)
+      // Group columns by object name
+      const colsByObject = new Map<string, Array<{ name: string; dataType: string }>>()
+      for (const r of colResult.recordset) {
+        const key = String(r.object_name).toLowerCase()
+        if (!colsByObject.has(key)) colsByObject.set(key, [])
+        colsByObject.get(key)!.push({ name: r.column_name, dataType: r.data_type })
+      }
+      // Build SysEntry for each curated descriptor, adding live columns
+      const entries: SysEntry[] = []
+      for (const [name, desc] of SYS_DESCRIPTORS) {
+        entries.push({
+          name,
+          qualifiedName: `sys.${name}`,
+          description: desc.description,
+          aliases: desc.aliases,
+          columns: colsByObject.get(name) ?? [],
+          exampleQuery: desc.exampleQuery,
+        })
+      }
+      return entries
+    } catch {
+      // Non-fatal: older SQL Server or restricted permissions
+      // Build entries without live column data (still fully searchable via aliases)
+      return [...SYS_DESCRIPTORS.entries()].map(([name, desc]) => ({
+        name,
+        qualifiedName: `sys.${name}`,
+        description: desc.description,
+        aliases: desc.aliases,
+        columns: [],
+        exampleQuery: desc.exampleQuery,
+      }))
+    }
   }
 
   // ── Serialization (persistent cache) ───────────────────────
@@ -178,13 +298,14 @@ export class CatalogGraph {
   /** Serialize to a JSON-safe snapshot for disk persistence. */
   toSnapshot(source = "default"): CatalogSnapshot {
     return {
-      version: 3,
+      version: 4,
       builtAt: this.builtAt.toISOString(),
       source,
       tables: [...this.tables.values()],
       implicitEdges: this.implicitEdges,
       lineage: [...this.lineageMap.values()],
       viewSourceRows: [...this.viewSourceRows.entries()].map(([name, sourceRows]) => ({ name, sourceRows })),
+      sysCatalog: [...this.sysCatalog.values()],
     }
   }
 
@@ -211,11 +332,38 @@ export class CatalogGraph {
     if (snap.viewSourceRows) {
       for (const { name, sourceRows } of snap.viewSourceRows) viewSourceRows.set(name, sourceRows)
     }
+    // Restore sys catalog from snapshot (re-overlay SYS_DESCRIPTORS to pick up any
+    // code-side updates to descriptions/aliases since the snapshot was written)
+    const sysCatalogEntries: SysEntry[] = []
+    if (snap.sysCatalog) {
+      for (const entry of snap.sysCatalog) {
+        const descriptor = SYS_DESCRIPTORS.get(entry.name.toLowerCase())
+        sysCatalogEntries.push({
+          name: entry.name,
+          qualifiedName: entry.qualifiedName,
+          // Use live columns from snapshot but always use the latest curated descriptions
+          columns: entry.columns,
+          description: descriptor?.description ?? entry.description,
+          aliases: descriptor?.aliases ?? entry.aliases,
+          exampleQuery: descriptor?.exampleQuery ?? entry.exampleQuery,
+        })
+      }
+    } else {
+      // Old snapshot without sys catalog: build entries from descriptors only (no live columns)
+      for (const [name, desc] of SYS_DESCRIPTORS) {
+        sysCatalogEntries.push({
+          name, qualifiedName: `sys.${name}`,
+          description: desc.description, aliases: desc.aliases,
+          columns: [], exampleQuery: desc.exampleQuery,
+        })
+      }
+    }
     return new CatalogGraph(
       tables, nameIndex, columnIndex, adjacency,
       snap.implicitEdges, new Date(snap.builtAt),
       (snap as any).lineage ?? [],
       viewSourceRows,
+      sysCatalogEntries,
     )
   }
 
@@ -279,7 +427,49 @@ export class CatalogGraph {
       this.implicitJoinIndex, this.conceptNodes, query, limit,
     )
   }
+  /**
+   * Search the sys catalog by keyword.
+   * Returns sys objects ranked by match quality:
+   *   alias match = +80 (semantic, highest value)
+   *   object name token match = +50
+   *   column name match = +10
+   * Only returns objects with score > 0. Limit defaults to 5 (sys results are supplemental).
+   */
+  searchSys(query: string, limit = 5): SysEntry[] {
+    const tokens = tokenize(query)
+    if (tokens.length === 0) return []
 
+    // Also consider the raw query string lowercased for multi-word alias matching
+    const rawTokens = query.toLowerCase().trim().split(/\s+/).filter((t) => t.length > 1)
+    const allTokens = [...new Set([...tokens, ...rawTokens])]
+
+    const scores = new Map<string, number>()
+    for (const tok of allTokens) {
+      const hits = this.sysIndex.get(tok) ?? new Set()
+      for (const key of hits) {
+        const entry = this.sysCatalog.get(key)
+        if (!entry) continue
+        // Determine match category for scoring
+        const inAlias = entry.aliases.some(
+          (a) => tokenize(a).includes(tok) || a.toLowerCase().includes(tok),
+        )
+        const inName = tokenize(entry.name).includes(tok)
+        const inCol = entry.columns.some((c) => tokenize(c.name).includes(tok))
+        const score = inAlias ? 80 : inName ? 50 : inCol ? 10 : 5
+        scores.set(key, (scores.get(key) ?? 0) + score)
+      }
+    }
+
+    return [...scores.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([key]) => this.sysCatalog.get(key)!)
+  }
+
+  /** Get a specific sys entry by name (case-insensitive). */
+  getSysEntry(name: string): SysEntry | null {
+    return this.sysCatalog.get(name.toLowerCase().replace(/^sys\./, "")) ?? null
+  }
   /** Concept-aware path finding between two tables (FK + implicit + concept edges). */
   findConceptPath(from: string, to: string, maxDepth = 6): ConceptPathResult[] {
     return findConceptPathModule(

@@ -15,6 +15,7 @@ export type {
     ImplicitEdge,
     LineageDimJoin,
     LineageSource,
+    SysEntry,
     ViewLineage
 } from "./types.js"
 

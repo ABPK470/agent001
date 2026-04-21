@@ -1,3 +1,40 @@
+## Tool Orchestration — How to Approach DB Questions
+
+**Before reaching for database tools, understand what the user is asking.**
+
+If a query uses a technical term you don't immediately recognise (e.g. "tombstone rows",
+"ghost records", "forwarded records", "page splits", "fill factor", "latches", "spinlocks",
+"WAL", "LSN"), do this first:
+
+1. **Search the internet** — use `fetch_url` to look up the term in context:
+   `https://learn.microsoft.com/en-us/search/?terms={term}+SQL+Server`
+   or a general search like `https://www.google.com/search?q={term}+SQL+Server+DMV`
+2. **Identify the mechanism** — is this an engine-internal concept tracked in a `sys.*` DMV?
+   An application pattern in user tables? An OS-level resource?
+3. **Then use the right tool**:
+   - Engine internals → `search_catalog(sys='…')` to find the DMV, then `query_mssql` to run it
+   - Application data → `search_catalog(table='…')` or `search_catalog(column='…')`
+   - Unknown DMV columns → `search_catalog(sys='…')` shows all columns with data types
+
+**Why this matters:** SQL Server has 400+ sys.* objects. Terms like "tombstone" appear nowhere in
+those object names — you must understand the concept first to know which DMV surfaces it
+(`sys.dm_db_column_store_row_group_physical_stats` → `state_desc = 'TOMBSTONE'`). If you had
+searched the web you would have found this immediately, without any hardcoded knowledge.
+
+**Canonical example flow:**
+```
+User: "which tables have tombstone rows?"
+→ fetch_url: google "tombstone rows SQL Server"
+→ Learn: columnstore index internal state tracked in sys.dm_db_column_store_row_group_physical_stats
+→ search_catalog(sys='dm_db_column_store_row_group_physical_stats') — see its columns
+→ query_mssql: SELECT ... WHERE state_desc = 'TOMBSTONE'
+```
+
+This applies to ANY unfamiliar technical concept — not just SQL Server internals.
+Do not guess. Do not assume. Look it up first.
+
+---
+
 ## Part 1: Metadata Schemas (ETL Platform Application Data)
 
 These schemas store the configuration, orchestration, and operational state of the ETL platform
@@ -170,11 +207,52 @@ are saved here. Naming mirrors the source table. Largest archives:
 - `coreArchive.*` / `gateArchive.*` for metadata changes.
 - `archive.*` for DWH data changes.
 
+**For tombstone rows (columnstore index internal state):**
+Use `search_catalog(sys='tombstone')` — the sys catalog will identify `sys.dm_db_column_store_row_group_physical_stats` and provide the exact query. Then call `query_mssql` to run it.
+
+**For soft-deleted / logically-deleted rows (isDeleted column):**
+See "SCD Type 2 / Soft-Delete Pattern (isDeleted column)" section below.
+
 **Important scale considerations:**
 - Several tables exceed 100M+ rows. Always use WHERE clauses with date filters.
 - Avoid SELECT * on large tables — specify columns.
 - Use `TOP` or date range filters when exploring large fact tables.
 - For `dim.Client` (~26M), `dim.Account` (~51M), `fact.AfricaFlexDailyBalances` (~798M) — always filter.
+
+---
+
+## SCD Type 2 / Soft-Delete Pattern (isDeleted column)
+
+`isDeleted` is an application-level flag set by the ETL pipeline — **not** a columnstore tombstone.
+For SQL Server internals (tombstones, index health, wait stats, etc.) use `search_catalog(sys='keyword')`.
+
+This DWH uses **SCD Type 2** (Slowly Changing Dimension) logic platform-wide. Every `dim.*`
+table and many `publish.*` tables/views carry a standard set of ETL-managed lifecycle columns:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `isDeleted` | bit | `1` = record is logically deleted. `0` = active. |
+| `isDirty` | bit | `1` = record modified since last pipeline run (pending refresh). |
+| `validFrom` | datetime | When this version of the record became active. |
+| `validTo` | datetime | When this version expired. NULL or far-future date = still active. |
+| `checkSum` | varbinary/bigint | Hash of source columns — used to detect changes. |
+| `changedBy` | varchar | Pipeline run ID or user who last modified the record. |
+
+**To find ALL tables with an `isDeleted` column:**
+```
+search_catalog(column='isDeleted')
+```
+
+Confirmed on key dim tables:
+- `dim.Client` (~26M rows), `dim.Book` (~19K rows), `dim.CostCentre` (~79K rows)
+- All `publish.Client*` views, `publish.BookManage`, `publish.CostCentre*`
+
+```sql
+-- Find logically-deleted clients
+SELECT TOP 10 pkClient, Name, validFrom, validTo
+FROM dim.Client WITH (NOLOCK)
+WHERE isDeleted = 1
+```
 
 ---
 
