@@ -8,6 +8,7 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useState } from "react"
+import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { useStore } from "../store"
 import { formatMs } from "../util"
 
@@ -94,18 +95,37 @@ export function StepTimeline() {
               {/* Expanded detail */}
               {expanded === step.id && (
                 <div className="mt-2 space-y-2">
-                  {step.input && Object.keys(step.input).length > 0 && (
-                    <div>
-                      <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
-                      <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-32 overflow-auto">
-                        {JSON.stringify(step.input, null, 2)}
-                      </pre>
-                    </div>
-                  )}
+                  {step.input && Object.keys(step.input).length > 0 && (() => {
+                    const extracted = extractToolCode(step.action, step.input)
+                    if (extracted) {
+                      const otherArgs = Object.fromEntries(
+                        Object.entries(step.input).filter(([k]) => k !== extracted.field)
+                      )
+                      return (
+                        <div className="space-y-1">
+                          <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
+                          {Object.keys(otherArgs).length > 0 && (
+                            <pre className="text-[12px] font-mono text-text-secondary bg-base rounded px-2 py-1 mt-0.5">
+                              {JSON.stringify(otherArgs, null, 2)}
+                            </pre>
+                          )}
+                          <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={180} />
+                        </div>
+                      )
+                    }
+                    return (
+                      <div>
+                        <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
+                        <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-40 overflow-auto">
+                          {JSON.stringify(step.input, null, 2)}
+                        </pre>
+                      </div>
+                    )
+                  })()}
                   {step.output && Object.keys(step.output).length > 0 && (
                     <div>
                       <span className="text-[13px] text-text-muted uppercase tracking-wide">Output</span>
-                      <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-32 overflow-auto">
+                      <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-40 overflow-auto">
                         {JSON.stringify(step.output, null, 2)}
                       </pre>
                     </div>

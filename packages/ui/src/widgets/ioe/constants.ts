@@ -468,6 +468,8 @@ export interface ChatMessage {
   role: "user" | "assistant" | "thinking" | "tool" | "system" | "input-request"
   content: string
   toolName?: string
+  /** Full JSON of tool call args — only present on tool-call messages (toolName is set). */
+  argsFormatted?: string
   options?: string[]
   sensitive?: boolean
 }
@@ -478,7 +480,7 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
     if (e.kind === "goal") msgs.push({ role: "user", content: e.text ?? "" })
     else if (e.kind === "thinking") msgs.push({ role: "thinking", content: e.text })
     else if (e.kind === "tool-call")
-      msgs.push({ role: "tool", content: `${e.tool}(${e.argsSummary || "..."})`, toolName: e.tool })
+      msgs.push({ role: "tool", content: `${e.tool}(${e.argsSummary || "..."})`, toolName: e.tool, argsFormatted: e.argsFormatted })
     else if (e.kind === "tool-result") msgs.push({ role: "tool", content: e.text })
     else if (e.kind === "tool-error") msgs.push({ role: "system", content: `Error: ${e.text}` })
     else if (e.kind === "answer") msgs.push({ role: "assistant", content: e.text })

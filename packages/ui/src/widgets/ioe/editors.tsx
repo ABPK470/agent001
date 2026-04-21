@@ -4,6 +4,7 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
@@ -705,14 +706,39 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           )}
           <span className="text-[10px] ml-auto" style={{ color: C.dim }}>{expanded ? "▾" : "▸"}</span>
         </div>
-        {expanded && (
-          <pre
-            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
-            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
-          >
-            {e.argsFormatted}
-          </pre>
-        )}
+        {expanded && (() => {
+          const extracted = extractToolCode(e.tool, e.argsFormatted)
+          if (extracted) {
+            // Show any remaining non-code args as compact inline JSON
+            let otherArgs: Record<string, unknown> | null = null
+            try {
+              const parsed = JSON.parse(e.argsFormatted) as Record<string, unknown>
+              const rest = Object.fromEntries(Object.entries(parsed).filter(([k]) => k !== extracted.field))
+              if (Object.keys(rest).length > 0) otherArgs = rest
+            } catch { /* noop */ }
+            return (
+              <div className="mt-1 ml-3 space-y-1.5">
+                {otherArgs && (
+                  <pre
+                    className="text-[12px] font-mono rounded px-2 py-1"
+                    style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+                  >
+                    {JSON.stringify(otherArgs, null, 2)}
+                  </pre>
+                )}
+                <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={220} />
+              </div>
+            )
+          }
+          return (
+            <pre
+              className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
+              style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
+            >
+              {e.argsFormatted}
+            </pre>
+          )
+        })()}
       </div>
     )
   }

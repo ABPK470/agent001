@@ -5,6 +5,7 @@
 
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import { SmartAnswer } from "../../components/SmartAnswer"
 import { truncate } from "../../util"
 import { C, type ChatMessage } from "./constants"
@@ -432,15 +433,39 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
     )
   }
   if (msg.role === "tool") {
+    // Tool-call message (has toolName): show code extracted from args, or args summary
+    if (msg.toolName) {
+      const extracted = msg.argsFormatted ? extractToolCode(msg.toolName, msg.argsFormatted) : null
+      return (
+        <div className="flex items-start gap-2 pl-9">
+          <Wrench size={14} className="shrink-0 mt-1" style={{ color: C.warning }} />
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="text-[12px] font-mono font-semibold" style={{ color: C.warning }}>
+              {msg.toolName}
+            </div>
+            {extracted ? (
+              <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={180} />
+            ) : (
+              <div
+                className="rounded px-2 py-1.5 text-[12px] font-mono"
+                style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {msg.argsFormatted ? truncate(msg.argsFormatted, 250) : truncate(msg.content, 250)}
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+    // Tool-result message (no toolName): render with SmartAnswer for tables/markdown support
     return (
       <div className="flex items-start gap-2 pl-9">
-        <Wrench size={14} className="shrink-0 mt-1" style={{ color: C.warning }} />
+        <span className="w-1 h-1 rounded-full shrink-0 mt-2" style={{ background: C.success + "80" }} />
         <div
-          className="flex-1 rounded px-2 py-1.5 text-[13px] font-mono break-all"
-          style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+          className="flex-1 min-w-0 rounded px-2 py-1.5 text-[13px]"
+          style={{ background: C.elevated, border: `1px solid ${C.border}` }}
         >
-          {msg.toolName && <span style={{ color: C.warning }}>{msg.toolName} </span>}
-          {truncate(msg.content, 300)}
+          <SmartAnswer text={msg.content.length > 2000 ? msg.content.slice(0, 2000) + "\n…(truncated)" : msg.content} />
         </div>
       </div>
     )
