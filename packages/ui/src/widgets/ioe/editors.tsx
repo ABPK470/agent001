@@ -4,7 +4,7 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
+import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOutput } from "../../components/CodeBlock"
 import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
@@ -422,19 +422,17 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
                   {hasDetail(step.input) && (
                     <div>
                       <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Input</span>
-                      <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
-                        style={{ color: C.textSecondary, background: C.base }}>
-                        {formatDetail(step.input)}
-                      </pre>
+                      <div className="mt-1">
+                        <ToolStepInput toolName={step.action} input={step.input as Record<string, unknown>} maxHeight={220} />
+                      </div>
                     </div>
                   )}
                   {hasDetail(step.output) && (
                     <div>
                       <span className="text-[13px] uppercase tracking-wide" style={{ color: C.dim }}>Output</span>
-                      <pre className="text-[13px] font-mono rounded-lg p-2 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all"
-                        style={{ color: C.textSecondary, background: C.base }}>
-                        {formatDetail(step.output)}
-                      </pre>
+                      <div className="mt-1">
+                        <ToolStepOutput output={step.output as Record<string, unknown>} maxHeight={300} />
+                      </div>
                     </div>
                   )}
                   {step.error && (
@@ -753,17 +751,14 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
           <span className="text-[13px] font-mono font-semibold" style={{ color: C.success }}>RSLT</span>
           {!expanded && (
             <span className="text-[13px] truncate" style={{ color: C.muted }}>
-              {e.text.length > 100 ? e.text.slice(0, 100) + "..." : e.text}
+              {e.text.replace(/\\n/g, " ").slice(0, 100)}{e.text.length > 100 ? "..." : ""}
             </span>
           )}
         </div>
         {expanded && (
-          <pre
-            className="text-[13px] rounded-lg p-2 mt-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap"
-            style={{ background: C.base, color: C.textSecondary, border: `1px solid ${C.border}` }}
-          >
-            {e.text}
-          </pre>
+          <div className="mt-1 ml-3">
+            <ToolResultTable text={e.text} maxHeight={280} />
+          </div>
         )}
       </div>
     )

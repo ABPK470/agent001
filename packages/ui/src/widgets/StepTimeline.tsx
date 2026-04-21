@@ -8,7 +8,7 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useState } from "react"
-import { CodeBlock, extractToolCode } from "../components/CodeBlock"
+import { CodeBlock, extractToolCode, ToolStepOutput } from "../components/CodeBlock"
 import { useStore } from "../store"
 import { formatMs } from "../util"
 
@@ -125,9 +125,9 @@ export function StepTimeline() {
                   {step.output && Object.keys(step.output).length > 0 && (
                     <div>
                       <span className="text-[13px] text-text-muted uppercase tracking-wide">Output</span>
-                      <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-40 overflow-auto">
-                        {JSON.stringify(step.output, null, 2)}
-                      </pre>
+                      <div className="mt-1">
+                        <ToolStepOutput output={step.output} maxHeight={260} />
+                      </div>
                     </div>
                   )}
                 </div>

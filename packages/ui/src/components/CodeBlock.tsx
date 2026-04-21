@@ -209,3 +209,300 @@ export function extractToolCode(
 
   return { code, lang, field: spec.field }
 }
+
+// ── Pipe-delimited table parser ──────────────────────────────────
+
+/**
+ * Parse the pipe-delimited table format produced by `formatResults` in
+ * packages/agent/src/tools/mssql/formatter.ts.
+ *
+ * Expected format (newlines are real \n characters):
+ *   (N rows)
+ *   col1 | col2 | col3
+ *   ---+-+---
+ *   val1 | val2 | val3
+ *   ...
+ */
+export interface ParsedTable {
+  rowCount: number | null
+  headers: string[]
+  rows: string[][]
+  truncated: boolean
+}
+
+export function parsePipeTable(text: string): ParsedTable | null {
+  // Normalise: real \n, or literal \n escape sequences
+  const normalised = text.replace(/\\n/g, "\n")
+  const lines = normalised.split("\n").map(l => l.trimEnd())
+  if (lines.length < 2) return null
+
+  let idx = 0
+  let rowCount: number | null = null
+
+  // Optional (N rows) first line
+  const countMatch = lines[0]?.match(/^\((\d+) rows?\)$/)
+  if (countMatch) {
+    rowCount = parseInt(countMatch[1], 10)
+    idx = 1
+  }
+
+  // Header line must contain " | "
+  const headerLine = lines[idx]
+  if (!headerLine || !headerLine.includes(" | ")) return null
+  const headers = headerLine.split(" | ").map(h => h.trim())
+  idx++
+
+  // Optional separator line (only dashes, plus signs, spaces)
+  if (lines[idx] && /^[-+\s]+$/.test(lines[idx])) idx++
+
+  let truncated = false
+  const rows: string[][] = []
+  while (idx < lines.length) {
+    const line = lines[idx++]
+    if (!line.trim()) continue
+    if (line.startsWith("... (") || line.includes("(output truncated)") || line.startsWith("--- Result set")) {
+      truncated = true
+      continue
+    }
+    rows.push(line.split(" | ").map(c => c.trim()))
+  }
+
+  if (rows.length === 0 && rowCount !== 0) return null
+
+  return { rowCount, headers, rows, truncated }
+}
+
+// ── ToolResultTable — renders pipe-table or falls back to pre ────
+
+function isNumericStr(val: string): boolean {
+  if (!val || val === "NULL") return false
+  const s = val.replace(/[,%$€£¥\s]/g, "")
+  return s !== "" && !isNaN(Number(s))
+}
+
+export function ToolResultTable({
+  text,
+  maxHeight = 300,
+}: {
+  text: string
+  maxHeight?: number
+}) {
+  const [copied, setCopied] = useState(false)
+  const parsed = parsePipeTable(text)
+
+  function copy() {
+    navigator.clipboard.writeText(text).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (!parsed) {
+    // Not a table — show as plain pre with proper newline handling
+    const display = text.replace(/\\n/g, "\n")
+    return (
+      <pre
+        className="text-[12.5px] font-mono leading-relaxed px-3 py-2.5 overflow-auto rounded-lg"
+        style={{
+          background: C.base,
+          color: C.textSecondary,
+          maxHeight,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          border: `1px solid ${C.border}`,
+        }}
+      >
+        {display}
+      </pre>
+    )
+  }
+
+  const { rowCount, headers, rows, truncated } = parsed
+  const numericCols = headers.map((_, ci) =>
+    rows.length > 0 && rows.every(row => !row[ci] || isNumericStr(row[ci]))
+  )
+
+  return (
+    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+      {/* Header bar */}
+      <div
+        className="flex items-center justify-between px-3 py-1"
+        style={{ background: C.elevated, borderBottom: `1px solid ${C.border}` }}
+      >
+        <span className="text-[11px] font-mono" style={{ color: C.dim }}>
+          {rowCount !== null ? `${rowCount} row${rowCount !== 1 ? "s" : ""}` : `${rows.length} rows`}
+          {truncated ? " (truncated)" : ""}
+        </span>
+        <button
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-white/5"
+          style={{ color: copied ? C.success : C.dim }}
+          onClick={copy}
+        >
+          {copied ? <Check size={11} /> : <Copy size={11} />}
+          <span>{copied ? "Copied" : "Copy"}</span>
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-auto" style={{ maxHeight: maxHeight - 32, background: C.base }}>
+        <table className="text-[12px] border-collapse" style={{ width: "max-content", minWidth: "100%" }}>
+          <thead className="sticky top-0 z-10">
+            <tr style={{ background: C.elevated }}>
+              {headers.map((h, ci) => (
+                <th
+                  key={ci}
+                  className="px-3 py-1.5 font-semibold whitespace-nowrap"
+                  style={{
+                    color: C.text,
+                    textAlign: numericCols[ci] ? "right" : "left",
+                    borderBottom: `1px solid ${C.border}`,
+                  }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr
+                key={ri}
+                style={{ background: ri % 2 !== 0 ? "rgba(255,255,255,0.015)" : "transparent" }}
+              >
+                {headers.map((_, ci) => {
+                  const val = row[ci] ?? ""
+                  const isNull = val === "NULL"
+                  return (
+                    <td
+                      key={ci}
+                      className="px-3 py-1"
+                      style={{
+                        color: isNull ? C.dim : numericCols[ci] ? C.peach : C.textSecondary,
+                        textAlign: numericCols[ci] ? "right" : "left",
+                        fontFamily: numericCols[ci] ? "monospace" : undefined,
+                        fontVariantNumeric: numericCols[ci] ? "tabular-nums" : undefined,
+                        borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isNull ? <span style={{ opacity: 0.5 }}>NULL</span> : val}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── ToolStepInput — smart step input display ─────────────────────
+
+export function ToolStepInput({
+  toolName,
+  input,
+  maxHeight = 220,
+}: {
+  toolName: string
+  input: Record<string, unknown>
+  maxHeight?: number
+}) {
+  const extracted = extractToolCode(toolName, input)
+  if (extracted) {
+    const otherArgs = Object.fromEntries(
+      Object.entries(input).filter(([k]) => k !== extracted.field)
+    )
+    return (
+      <div className="space-y-1.5">
+        {Object.keys(otherArgs).length > 0 && (
+          <pre
+            className="text-[12px] font-mono rounded px-2 py-1"
+            style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+          >
+            {JSON.stringify(otherArgs, null, 2)}
+          </pre>
+        )}
+        <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={maxHeight} />
+      </div>
+    )
+  }
+  return (
+    <pre
+      className="text-[12.5px] font-mono rounded-lg px-3 py-2 overflow-auto"
+      style={{
+        background: C.base,
+        color: C.textSecondary,
+        maxHeight,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      {JSON.stringify(input, null, 2)}
+    </pre>
+  )
+}
+
+// ── ToolStepOutput — smart step output display ───────────────────
+
+export function ToolStepOutput({
+  output,
+  maxHeight = 300,
+}: {
+  output: Record<string, unknown>
+  maxHeight?: number
+}) {
+  const resultStr = typeof output.result === "string" ? output.result : null
+  const durationMs = typeof output.durationMs === "number" ? output.durationMs : null
+  const attempts = typeof output.attempts === "number" ? output.attempts : null
+
+  // Non-result, non-meta fields to show as JSON
+  const META_FIELDS = new Set(["result", "durationMs", "attempts"])
+  const otherFields = Object.entries(output).filter(([k]) => !META_FIELDS.has(k))
+
+  return (
+    <div className="space-y-1.5">
+      {/* Metadata row */}
+      {(durationMs !== null || attempts !== null) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {durationMs !== null && (
+            <span
+              className="text-[11px] font-mono px-1.5 py-0.5 rounded"
+              style={{ background: C.elevated, color: C.dim }}
+            >
+              {durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)}s` : `${durationMs}ms`}
+            </span>
+          )}
+          {attempts !== null && attempts > 1 && (
+            <span
+              className="text-[11px] px-1.5 py-0.5 rounded"
+              style={{ background: `${C.warning}19`, color: C.warning }}
+            >
+              {attempts} attempts
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Main result */}
+      {resultStr !== null ? (
+        <ToolResultTable text={resultStr} maxHeight={maxHeight} />
+      ) : otherFields.length > 0 ? (
+        <pre
+          className="text-[12.5px] font-mono rounded-lg px-3 py-2 overflow-auto"
+          style={{
+            background: C.base,
+            color: C.textSecondary,
+            maxHeight,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          {JSON.stringify(Object.fromEntries(otherFields), null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  )
+}
