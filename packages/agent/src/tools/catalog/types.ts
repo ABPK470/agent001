@@ -31,6 +31,12 @@ export interface CatalogTable {
   columns: CatalogColumn[]
   fkOutgoing: CatalogFK[]       // this table references →
   fkIncoming: CatalogFK[]       // ← referenced BY
+  /**
+   * For VIEWs only: the full CREATE VIEW SQL text from sys.sql_modules.
+   * Loaded once at catalog build time — zero per-request cost.
+   * May be absent (encrypted modules, restricted permissions, or TABLE type).
+   */
+  viewDefinition?: string
 }
 
 export interface CatalogFK {
@@ -133,8 +139,11 @@ export interface ConceptPathResult {
 
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
-  /** Version 5: dynamic sys catalog (all sys objects from live DB, no curated filter). */
-  version: 1 | 2 | 3 | 4 | 5
+  /**
+   * Version 6: view definitions from sys.sql_modules stored in CatalogTable.viewDefinition.
+   * Previous: version 5 = dynamic sys catalog (all sys objects from live DB, no curated filter).
+   */
+  version: 1 | 2 | 3 | 4 | 5 | 6
   builtAt: string
   source: string
   tables: CatalogTable[]

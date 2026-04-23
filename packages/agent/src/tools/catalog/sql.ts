@@ -109,3 +109,22 @@ export const Q_FULL_VIEW_DEPS = `
     AND d.referencing_id  != d.referenced_id
   ORDER BY view_name, source_name
 `
+
+/**
+ * SQL definition text for every user-defined view.
+ * Sourced from sys.sql_modules (pure catalog metadata, runs in milliseconds).
+ * Stored in the catalog so the agent can read actual view SQL when needed for
+ * deeper analysis — no guessing about join conditions.
+ * Non-fatal: restricted permissions or encrypted modules return empty rows.
+ */
+export const Q_VIEW_DEFINITIONS = `
+  SELECT
+    s.name + '.' + o.name AS qualified_name,
+    m.definition           AS definition
+  FROM sys.sql_modules m
+  JOIN sys.objects o  ON m.object_id = o.object_id AND o.type = 'V'
+  JOIN sys.schemas s  ON o.schema_id = s.schema_id
+  WHERE o.is_ms_shipped = 0
+    AND m.definition IS NOT NULL
+  ORDER BY s.name, o.name
+`

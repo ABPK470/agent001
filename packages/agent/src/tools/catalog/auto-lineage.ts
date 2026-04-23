@@ -1,60 +1,6 @@
-import type { CatalogTable, LineageDimJoin, LineageSource, ViewLineage } from "./types.js"
+import type { CatalogTable, LineageSource, ViewLineage } from "./types.js"
 
 // ── Helpers ───────────────────────────────────────────────────────
-
-function approxRows(n: number): string {
-  if (n >= 1_000_000_000) return `~${(n / 1_000_000_000).toFixed(0)}B`
-  if (n >= 1_000_000)     return `~${(n / 1_000_000).toFixed(0)}M`
-  if (n >= 1_000)         return `~${(n / 1_000).toFixed(0)}K`
-  return `~${n}`
-}
-
-/**
- * Auto-detect dimension key joins from a view's output columns.
- * Any column matching /^pk[A-Z]/ where dim.<Suffix> exists in the catalog
- * is treated as a foreign key to that dimension table.
- *
- * pkClient  → dim.Client
- * pkMonth   → dim.Month
- * pkAccount → dim.Account  (flagged as "ALWAYS filter" if rowCount > 1M)
- */
-function detectDimJoins(
-  view: CatalogTable,
-  tables: Map<string, CatalogTable>,
-): LineageDimJoin[] {
-  const joins: LineageDimJoin[] = []
-  const seen = new Set<string>()
-
-  for (const col of view.columns) {
-    const cn = col.name
-    // Must start with pk + uppercase letter (pkClient, pkMonth, etc.)
-    if (!/^pk[A-Z]/.test(cn)) continue
-
-    // pkClient  → suffix = "Client"
-    // pk_Client → suffix = "Client" (snake_case variant)
-    const suffix = cn.startsWith("pk_") ? cn.slice(3) : cn.slice(2)
-    if (!suffix) continue
-
-    // Normalize to Title Case for dim lookup
-    const normalized = suffix.charAt(0).toUpperCase() + suffix.slice(1)
-    const dimKey = `dim.${normalized}`
-    if (seen.has(dimKey)) continue
-
-    const dimTable = tables.get(dimKey)
-    if (!dimTable) continue
-
-    seen.add(dimKey)
-    const large = dimTable.rowCount != null && dimTable.rowCount > 1_000_000
-    joins.push({
-      column: cn,
-      dimTable: dimKey,
-      dimRows: dimTable.rowCount != null ? approxRows(dimTable.rowCount) : "unknown",
-      note: large ? "ALWAYS filter — never full scan" : "",
-    })
-  }
-
-  return joins
-}
 
 /**
  * Extract a human-readable business area label from an object's qualified name.
@@ -112,17 +58,17 @@ export interface ViewDepRow {
  * Produces one ViewLineage per view that has any direct dependency:
  *
  *   • outputColumns: all columns the view exposes (from catalog)
- *   • dimJoins:      auto-detected via pkXxx column naming convention
+ *   • dimJoins:      always empty — no guessing; hand-curated lineage.json wins
  *   • sources:       every table/view the view directly depends on
+ *                    (true, from sys.sql_expression_dependencies)
  *
  * After build(), hand-curated lineage.json entries are loaded via loadLineage()
  * which calls mergeLineage() — that overwrites auto entries for the same view keys,
  * so curation always wins for the views that have it.
  *
- * This means:
- *   • publish.Revenue, publish.Balances → rich curated entries (59/10 sources, business groups, filters)
- *   • every other view                  → auto-discovered entries (schema groups, auto dim joins)
- *   • views with zero dependencies      → no lineage entry (e.g. simple synonym views)
+ * dimJoins are intentionally NOT auto-detected here. The old naming-convention
+ * approach (pkClient → dim.Client) was guesswork. Actual dim joins are only known
+ * by reading the view's SQL definition (viewDefinition field) or from lineage.json.
  */
 export function buildAutoLineage(
   tables: Map<string, CatalogTable>,
@@ -146,8 +92,6 @@ export function buildAutoLineage(
     const allSources = [...tableSet, ...viewSet]
     if (allSources.length === 0) continue
 
-    const dimJoins = detectDimJoins(view, tables)
-
     const sources: LineageSource[] = allSources.map((dep) => ({
       qualifiedName: dep,
       businessArea: extractBusinessArea(dep),
@@ -163,7 +107,7 @@ export function buildAutoLineage(
       view: viewKey,
       description: `Auto-discovered: reads from ${parts.join(" + ")}.`,
       outputColumns: view.columns.map((c) => c.name),
-      dimJoins,
+      dimJoins: [],   // never guessed — only set from hand-curated lineage.json
       sources,
     })
   }

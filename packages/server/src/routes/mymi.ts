@@ -289,7 +289,7 @@ export function registerMymiRoutes(app: FastifyInstance): void {
   )
 
   // ── Data lineage ─────────────────────────────────────────────
-  // Priority: catalog.lineageMap → etl convention → core.vDatasetLineage SQL
+  // Priority: catalog.lineageMap → etl convention → reverse lineage parents
   app.get<QS & { Params: { schema: string; table: string } }>(
     "/api/mymi/schema/:schema/table/:table/lineage",
     async (req, reply) => {
@@ -334,24 +334,7 @@ export function registerMymiRoutes(app: FastifyInstance): void {
         }
       }
 
-      // 3. core.vDatasetLineage SQL (only for objects not covered above)
-      let conn: Awaited<ReturnType<typeof acquirePool>>
-      try { conn = await acquirePool(connName(req.query)) } catch {
-        return { source: "none", object: qualifiedName, sources: [], dimJoins: [] }
-      }
-      try {
-        const lr = await conn.pool.request().query(`
-          SELECT TOP 50 SourceDataset, TargetDataset, SourceColumn, TargetColumn,
-            RuleId, RuleName, TransformationExpression
-          FROM core.vDatasetLineage
-          WHERE TargetDataset LIKE '%${table}%' OR SourceDataset LIKE '%${table}%'
-        `)
-        if (lr.recordset.length > 0) {
-          return { source: "vDatasetLineage", object: qualifiedName, entries: lr.recordset }
-        }
-      } catch { /* view may not exist */ }
-
-      // 4. Reverse lineage: this object is consumed by other views
+      // 3. Reverse lineage: this object is consumed by other views
       // getLineageParents() scans all lineage entries to find views where this table appears as a source
       const parents = catalog?.getLineageParents(qualifiedName) ?? []
       const concepts = catalog?.getTableConcepts(qualifiedName) ?? []
@@ -365,6 +348,19 @@ export function registerMymiRoutes(app: FastifyInstance): void {
             sourceView:  c.sourceView,
             description: c.description,
           })),
+        }
+      }
+
+      // 4. View SQL definition fallback — if catalog holds the CREATE VIEW SQL, return it so the
+      // UI can display the raw definition even when no curated lineage entry exists.
+      const tableEntry = catalog?.getTable(qualifiedName)
+      if (tableEntry?.viewDefinition) {
+        return {
+          source:         "viewDefinition",
+          object:         qualifiedName,
+          viewDefinition: tableEntry.viewDefinition,
+          sources:        [],
+          dimJoins:       [],
         }
       }
 

@@ -153,6 +153,9 @@ export function handleTable(catalog: CatalogGraph, tableName: string): string {
     }
     if (t.fkIncoming.length > 10) lines.push(`  ... +${t.fkIncoming.length - 10} more`)
   }
+  if (t.viewDefinition) {
+    lines.push("", `View SQL: available (${t.viewDefinition.length} chars) — use inspect_definition(object='${t.qualifiedName}') to read the full T-SQL with duplicate-join analysis.`)
+  }
   return lines.join("\n")
 }
 

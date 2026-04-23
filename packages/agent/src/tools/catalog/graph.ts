@@ -4,7 +4,7 @@ import { buildConceptGraph } from "./concepts.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey, tokenize } from "./helpers.js"
 import { findConceptPath as findConceptPathModule, findFkPath } from "./paths.js"
 import { searchCatalog } from "./search.js"
-import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_SYS_COLUMNS } from "./sql.js"
+import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_SYS_COLUMNS, Q_VIEW_DEFINITIONS } from "./sql.js"
 import type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -244,7 +244,21 @@ export class CatalogGraph {
       autoLineage = buildAutoLineage(tables, depRows)
     } catch { /* non-fatal — older SQL Server / restricted permissions */ }
 
-    // Step 7: Await sys catalog
+    // Step 7: Fetch view definitions from sys.sql_modules (non-fatal)
+    // Stores actual CREATE VIEW SQL in each view's record so the agent can read
+    // true join conditions instead of relying on naming conventions or guessing.
+    try {
+      const defResult = await pool.request().query(Q_VIEW_DEFINITIONS)
+      for (const r of defResult.recordset) {
+        const key = String(r.qualified_name)
+        const t = tables.get(key)
+        if (t && t.type === "VIEW") {
+          t.viewDefinition = String(r.definition)
+        }
+      }
+    } catch { /* non-fatal: encrypted modules or restricted permissions */ }
+
+    // Step 8: Await sys catalog
     const sysCatalog = await sysCatalogPromise
 
     const graph = new CatalogGraph(tables, nameIndex, columnIndex, adjacency, implEdges, undefined, undefined, viewSourceRows, sysCatalog)
@@ -285,7 +299,7 @@ export class CatalogGraph {
   /** Serialize to a JSON-safe snapshot for disk persistence. */
   toSnapshot(source = "default"): CatalogSnapshot {
     return {
-      version: 5,
+      version: 6,
       builtAt: this.builtAt.toISOString(),
       source,
       tables: [...this.tables.values()],
