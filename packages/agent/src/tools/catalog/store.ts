@@ -29,7 +29,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
       if (Date.now() - stat.mtimeMs < maxAge) {
         const raw = await fs.readFile(cachePath, "utf-8")
         const snap: CatalogSnapshot = JSON.parse(raw)
-        if (snap.version === 1 || snap.version === 2 || snap.version === 3 || snap.version === 4 || snap.version === 5) {
+        if (snap.version === 6) {
           const catalog = CatalogGraph.fromSnapshot(snap)
           _catalogs.set(conn, catalog)
           return catalog
@@ -38,7 +38,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
     } catch { /* no cache or invalid — build fresh */ }
   }
 
-  // Build from live database (expensive — 3 SQL queries)
+  // Build from live database (expensive — 5 SQL queries)
   const catalog = await CatalogGraph.build(conn)
   _catalogs.set(conn, catalog)
 

@@ -20,8 +20,10 @@ import {
     GitMerge,
     Key,
     Layers,
+    LayoutList,
     Link2,
     Loader2,
+    Network,
     RefreshCw,
     Search,
     Table2,
@@ -189,9 +191,11 @@ export function MymiDb() {
 
   const [relations, setRelations]       = useState<RelData | null>(null)
   const [relLoading, setRelLoading]     = useState(false)
+  const [relViewMode, setRelViewMode]   = useState<"list" | "visual">("visual")
 
   const [lineage, setLineage]           = useState<Record<string, unknown> | null>(null)
   const [lineageLoading, setLineageLoading] = useState(false)
+  const [lineageViewMode, setLineageViewMode] = useState<"list" | "visual">("visual")
 
   // ── Search state ─────────────────────────────────────────────
   const [searchQuery, setSearchQuery]   = useState("")
@@ -829,18 +833,41 @@ export function MymiDb() {
                     <>
                       {relLoading && <Spinner />}
                       {!relLoading && relations && (
-                        <RelationsGraph
-                          relations={relations}
-                          centerName={activeObject.name}
-                          centerSchema={activeSchema!}
-                          onNavigate={(schema, table, rowCount) => {
-                            setActiveSchema(schema)
-                            const found = objects.find((o) => o.name === table)
-                            const obj: DbObject = found ?? { name: table, type: "table", rowCount, sizeMb: 0, columnCount: 0 }
-                            setActiveObject(obj)
-                            setActiveTab("preview")
-                          }}
-                        />
+                        <div className="flex flex-col flex-1 min-h-0">
+                          <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-border/30">
+                            <button
+                              onClick={() => setRelViewMode("visual")}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+                                relViewMode === "visual" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                              }`}
+                            >
+                              <Network size={11} /> Visual
+                            </button>
+                            <button
+                              onClick={() => setRelViewMode("list")}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+                                relViewMode === "list" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                              }`}
+                            >
+                              <LayoutList size={11} /> List
+                            </button>
+                          </div>
+                          {relViewMode === "visual"
+                            ? <RelationsGraph
+                                relations={relations}
+                                centerName={activeObject.name}
+                                centerSchema={activeSchema!}
+                                onNavigate={(schema, table, rowCount) => {
+                                  setActiveSchema(schema)
+                                  const found = objects.find((o) => o.name === table)
+                                  const obj: DbObject = found ?? { name: table, type: "table", rowCount, sizeMb: 0, columnCount: 0 }
+                                  setActiveObject(obj)
+                                  setActiveTab("preview")
+                                }}
+                              />
+                            : <RelationsList relations={relations} centerSchema={activeSchema!} centerName={activeObject.name} />
+                          }
+                        </div>
                       )}
                     </>
                   )}
@@ -849,7 +876,32 @@ export function MymiDb() {
                   {activeTab === "lineage" && (
                     <>
                       {lineageLoading && <Spinner />}
-                      {!lineageLoading && lineage && <LineageView lineage={lineage} />}
+                      {!lineageLoading && lineage && (
+                        <div className="flex flex-col flex-1 min-h-0">
+                          <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-border/30">
+                            <button
+                              onClick={() => setLineageViewMode("visual")}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+                                lineageViewMode === "visual" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                              }`}
+                            >
+                              <Network size={11} /> Visual
+                            </button>
+                            <button
+                              onClick={() => setLineageViewMode("list")}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+                                lineageViewMode === "list" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
+                              }`}
+                            >
+                              <LayoutList size={11} /> List
+                            </button>
+                          </div>
+                          {lineageViewMode === "visual"
+                            ? <LineageGraph lineage={lineage} />
+                            : <LineageView lineage={lineage} />
+                          }
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -1064,11 +1116,254 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
   )
 }
 
+// ── RelationsList ─────────────────────────────────────────────────
+// Tabular list view of FK inbound/outbound + implicit joins.
+
+function RelationsList({ relations, centerSchema, centerName }: {
+  relations: RelData
+  centerSchema: string
+  centerName: string
+}) {
+  const center = `${centerSchema}.${centerName}`
+  const hasOut  = relations.outbound.length > 0
+  const hasIn   = relations.inbound.length > 0
+  const hasImpl = (relations.implicit ?? []).length > 0
+
+  if (!hasOut && !hasIn && !hasImpl) {
+    return <Empty msg="No relationships found (no FK constraints or shared-column joins)" />
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto divide-y divide-border/30">
+      {hasOut && (
+        <div className="p-3">
+          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Outbound FK ({relations.outbound.length}) — {centerName} references →
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-text-muted">
+                <th className="text-left pb-1 pr-3 font-semibold">Local column</th>
+                <th className="text-left pb-1 pr-3 font-semibold">References</th>
+                <th className="text-left pb-1 pr-3 font-semibold">Remote column</th>
+                <th className="text-left pb-1 font-semibold">Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relations.outbound.map((r, i) => (
+                <tr key={i} className="border-t border-border/20 hover:bg-elevated/20">
+                  <td className="py-1 pr-3 font-mono text-text">{r.localColumn}</td>
+                  <td className="py-1 pr-3 font-mono text-accent">{r.refSchema}.{r.refTable}</td>
+                  <td className="py-1 pr-3 font-mono text-text-muted">{r.refColumn}</td>
+                  <td className="py-1 text-text-muted">{r.refRowCount ? fmtRows(r.refRowCount) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasIn && (
+        <div className="p-3">
+          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Inbound FK ({relations.inbound.length}) — tables that reference {centerName}
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-text-muted">
+                <th className="text-left pb-1 pr-3 font-semibold">Source</th>
+                <th className="text-left pb-1 pr-3 font-semibold">Source column</th>
+                <th className="text-left pb-1 pr-3 font-semibold">→ Local column</th>
+                <th className="text-left pb-1 font-semibold">Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relations.inbound.map((r, i) => (
+                <tr key={i} className="border-t border-border/20 hover:bg-elevated/20">
+                  <td className="py-1 pr-3 font-mono text-accent">{r.srcSchema}.{r.srcTable}</td>
+                  <td className="py-1 pr-3 font-mono text-text-muted">{r.srcColumn}</td>
+                  <td className="py-1 pr-3 font-mono text-text">{r.localColumn}</td>
+                  <td className="py-1 text-text-muted">{r.srcRowCount ? fmtRows(r.srcRowCount) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasImpl && (
+        <div className="p-3">
+          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Implicit Joins ({(relations.implicit ?? []).length} shared columns)
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-text-muted">
+                <th className="text-left pb-1 pr-3 font-semibold">Column</th>
+                <th className="text-left pb-1 pr-3 font-semibold">Type</th>
+                <th className="text-left pb-1 font-semibold">Shared with</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(relations.implicit ?? []).map((edge, i) => (
+                <tr key={i} className="border-t border-border/20 hover:bg-elevated/20 align-top">
+                  <td className="py-1 pr-3 font-mono text-text">{edge.column}</td>
+                  <td className="py-1 pr-3 font-mono text-text-muted">{edge.dataType}</td>
+                  <td className="py-1">
+                    <div className="flex flex-wrap gap-1">
+                      {(edge.tables ?? []).filter((t) => t.qualifiedName !== center).slice(0, 12).map((t) => (
+                        <span key={t.qualifiedName} className="px-1 py-0 rounded bg-elevated text-[10px] font-mono text-accent/80">
+                          {t.qualifiedName}
+                        </span>
+                      ))}
+                      {(edge.tables ?? []).length > 13 && (
+                        <span className="text-[10px] text-text-muted">+{(edge.tables ?? []).length - 13} more</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── LineageGraph ──────────────────────────────────────────────────
+// SVG flow diagram: source nodes on the left, center view on the right
+// (or parent views on the right for reverse lineage).
+
+function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
+  const source = lineage["source"] as string
+
+  // For non-catalog/non-parents cases, fall back to list view
+  if (source === "none" || source === "convention" || source === "viewDefinition") {
+    return <LineageView lineage={lineage} />
+  }
+
+  const BOX_W = 170, BOX_H = 44, ROW_GAP = 10, COL_GAP = 110
+  const object = lineage["object"] as string
+  const centerLabel = object.includes(".") ? object.split(".").pop()! : object
+  const centerSchema = object.includes(".") ? object.split(".")[0] : ""
+
+  let nodes: string[] = []
+  let isReverse = false
+
+  if (source === "parents") {
+    const parents = lineage["parents"] as Array<{ view: string; businessArea: string }>
+    nodes = (parents ?? []).map((p) => p.view)
+    isReverse = true
+  } else {
+    // catalog or auto — sources array
+    const sources = lineage["sources"] as Array<Record<string, unknown>>
+    nodes = (sources ?? []).map((s) => s["qualifiedName"] as string)
+  }
+
+  if (nodes.length === 0) return <LineageView lineage={lineage} />
+
+  const total = nodes.length
+  const svgH = Math.max(total * (BOX_H + ROW_GAP) + ROW_GAP * 2, BOX_H + ROW_GAP * 4)
+  const svgW = BOX_W * 2 + COL_GAP + 60
+
+  const leftX  = 10
+  const rightX = leftX + BOX_W + COL_GAP
+  const centerY = svgH / 2
+  function nodeY(i: number) {
+    const blockH = total * BOX_H + (total - 1) * ROW_GAP
+    return svgH / 2 - blockH / 2 + i * (BOX_H + ROW_GAP)
+  }
+
+  // Color per schema
+  const schemaColor = (q: string) => {
+    const s = q.includes(".") ? q.split(".")[0].toLowerCase() : ""
+    if (s === "publish" || s === "persistedview") return { fill: "rgba(99,102,241,0.10)", stroke: "rgba(99,102,241,0.45)", text: "#818cf8" }
+    if (s === "fact")    return { fill: "rgba(239,68,68,0.08)",   stroke: "rgba(239,68,68,0.35)",   text: "#fca5a5" }
+    if (s === "dim")     return { fill: "rgba(59,130,246,0.08)",  stroke: "rgba(59,130,246,0.35)",  text: "#93c5fd" }
+    if (s === "etl")     return { fill: "rgba(234,179,8,0.08)",   stroke: "rgba(234,179,8,0.35)",   text: "#fde047" }
+    return { fill: "rgba(148,163,184,0.07)", stroke: "rgba(148,163,184,0.30)", text: "#cbd5e1" }
+  }
+
+  return (
+    <div className="flex-1 overflow-auto p-2">
+      <div className="text-[10px] text-text-muted px-2 pb-2 flex items-center gap-4">
+        {isReverse
+          ? <span>This object is a <span className="text-text font-semibold">source</span> — consumed by the views on the right</span>
+          : <span>Sources flowing into <span className="font-mono text-accent">{object}</span></span>
+        }
+      </div>
+      <svg width={svgW} height={svgH} className="font-mono overflow-visible" style={{ minWidth: svgW }}>
+        <defs>
+          <marker id="lgArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(99,102,241,0.7)" />
+          </marker>
+        </defs>
+
+        {/* Center node */}
+        {(() => {
+          const c = schemaColor(object)
+          const cx = isReverse ? leftX : rightX
+          return (
+            <g>
+              <rect x={cx} y={centerY - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
+                fill="rgba(99,102,241,0.18)" stroke="rgba(99,102,241,0.6)" strokeWidth={1.5} />
+              <text x={cx + BOX_W / 2} y={centerY - 5} textAnchor="middle" fontSize={11} fill="#818cf8" fontWeight="600">
+                {centerLabel.length > 20 ? centerLabel.slice(0, 19) + "…" : centerLabel}
+              </text>
+              <text x={cx + BOX_W / 2} y={centerY + 10} textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.7)">
+                {centerSchema}
+              </text>
+            </g>
+          )
+        })()}
+
+        {/* Source / parent nodes + edges */}
+        {nodes.map((q, i) => {
+          const c = schemaColor(q)
+          const label = q.includes(".") ? q.split(".").pop()! : q
+          const schema = q.includes(".") ? q.split(".")[0] : ""
+          const ny = nodeY(i)
+          const nx = isReverse ? rightX : leftX
+
+          // Edge: left-node right edge → right-node left edge
+          const sx = isReverse ? (leftX + BOX_W) : (nx + BOX_W)
+          const sy = centerY
+          const ex = isReverse ? rightX : (rightX)
+          const ey = ny + BOX_H / 2
+          const mx = (sx + ex) / 2
+
+          return (
+            <g key={q}>
+              <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
+                fill="none" stroke="rgba(99,102,241,0.35)" strokeWidth={1.5} markerEnd="url(#lgArrow)" />
+              <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
+                fill={c.fill} stroke={c.stroke} strokeWidth={1} />
+              <text x={nx + BOX_W / 2} y={ny + 14} textAnchor="middle" fontSize={10} fill={c.text} fontWeight="500">
+                {label.length > 20 ? label.slice(0, 19) + "…" : label}
+              </text>
+              <text x={nx + BOX_W / 2} y={ny + 27} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.6)">
+                {schema}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
 function LineageView({ lineage }: { lineage: Record<string, unknown> }) {
   const source = lineage["source"] as string
 
   if (source === "none") {
-    return <Empty msg="No lineage data found for this object" />
+    const obj = lineage["object"] as string | undefined
+    const isTable = obj ? !obj.toLowerCase().startsWith("publish.") && !obj.toLowerCase().startsWith("view") : false
+    return <Empty msg={
+      isTable
+        ? "This is a base table — it is a data source, not derived from anything."
+        : "No lineage data found. The view SQL could not be resolved by SQL Server."
+    } />
   }
 
   // Reverse lineage: this object is a source consumed by other views
@@ -1136,30 +1431,21 @@ function LineageView({ lineage }: { lineage: Record<string, unknown> }) {
     )
   }
 
-  if (source === "vDatasetLineage") {
-    const entries = lineage["entries"] as Record<string, unknown>[]
+  // View SQL definition — shown when sys.sql_expression_dependencies has no resolvable deps
+  // but sys.sql_modules has the raw CREATE VIEW text. True definition, zero guessing.
+  if (source === "viewDefinition") {
+    const sql = lineage["viewDefinition"] as string
+    const object = lineage["object"] as string
+    // Extract just the body after AS — skip the CREATE VIEW header line
+    const bodyMatch = sql.match(/\bAS\b[\s\S]*/i)
+    const body = bodyMatch ? bodyMatch[0].replace(/^AS\s*/i, "").trim() : sql
     return (
-      <div className="flex-1 overflow-auto p-3">
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="sticky top-0 bg-surface">
-              {["SourceDataset","TargetDataset","SourceColumn","TargetColumn","RuleId","RuleName"].map((h) => (
-                <th key={h} className="text-left px-2 py-1.5 text-text-muted font-semibold border-b border-border whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((row, i) => (
-              <tr key={i} className={i % 2 === 0 ? "" : "bg-base/30"}>
-                {["SourceDataset","TargetDataset","SourceColumn","TargetColumn","RuleId","RuleName"].map((k) => (
-                  <td key={k} className="px-2 py-1 border-b border-border/30 text-text whitespace-nowrap max-w-[180px] truncate font-mono">
-                    {row[k] != null ? String(row[k]) : <span className="text-text-muted italic">null</span>}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="text-xs text-text-muted">
+          SQL definition for <span className="font-mono text-accent">{object}</span>.
+          {" "}Dependencies could not be resolved by the SQL Server catalog — showing raw T-SQL.
+        </div>
+        <pre className="text-[11px] font-mono text-text bg-base rounded-lg p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed border border-border/40">{body}</pre>
       </div>
     )
   }

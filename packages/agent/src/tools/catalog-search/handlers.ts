@@ -33,18 +33,54 @@ export function handleLineage(catalog: CatalogGraph, viewName: string): string {
   const lineage = catalog.getLineage(viewName)
   if (lineage) return fmtLineage(lineage)
 
+  // Check if the table even exists before giving the "not found" path
+  const tableEntry = catalog.getTable(viewName)
+  const exists = tableEntry != null
+
   // Check if it's a source in another view's lineage
   const parents = catalog.getLineageParents(viewName)
   if (parents.length > 0) {
     const parentInfo = parents.map((p) => `  ${p.view} (as "${p.businessArea}")`).join("\n")
-    return `No standalone lineage map for '${viewName}', but it feeds into:\n${parentInfo}\n\nUse search_catalog(lineage='${parents[0].view}') to see the full map.`
+    return [
+      `No standalone lineage for '${viewName}' — it is a SOURCE consumed by:`,
+      parentInfo,
+      ``,
+      `NEXT: Use search_catalog(lineage='${parents[0].view}') to see the consuming view's full source map.`,
+    ].join("\n")
   }
 
-  const available = catalog.listLineage()
-  if (available.length > 0) {
-    return `No lineage map for '${viewName}'. Available lineage maps: ${available.join(", ")}`
+  // Object exists but no lineage entry — escalate to inspect_definition
+  if (exists) {
+    const isView = tableEntry!.type === "VIEW"
+    if (isView) {
+      const hasViewDef = !!tableEntry!.viewDefinition
+      return [
+        `No pre-computed lineage for '${viewName}'.`,
+        hasViewDef
+          ? `The view SQL is cached in the catalog.`
+          : `The view SQL was not captured (possible encryption or restricted permissions).`,
+        ``,
+        `NEXT STEPS (in order):`,
+        `  1. inspect_definition(object='${viewName}') — reads live T-SQL + shows all table/view references with duplicate-join detection.`,
+        `  2. inspect_definition(depends_on='${viewName}') — full transitive dependency tree (what does it ultimately read?).`,
+        `  3. search_catalog(refresh=true) — if catalog is stale, rebuild to pick up new view dependencies.`,
+      ].join("\n")
+    } else {
+      // It's a base table — it's a source, not derived
+      return [
+        `'${viewName}' is a TABLE — base tables don't have forward lineage (they ARE the source).`,
+        ``,
+        `NEXT STEPS:`,
+        `  1. search_catalog(joins='${viewName}') — show all FK + implicit join edges.`,
+        `  2. search_catalog(lineage='<view>') on any view that reads from this table to trace downstream usage.`,
+        tableEntry!.fkIncoming.length > 0
+          ? `  Note: ${tableEntry!.fkIncoming.length} views/tables have FK references INTO this table.`
+          : "",
+      ].filter(Boolean).join("\n")
+    }
   }
-  return `No lineage maps loaded. Lineage maps are curated files loaded at server startup.`
+
+  return `'${viewName}' not found in catalog. Use search_catalog(search='keyword') to find it, or search_catalog(refresh=true) if the object was recently created.`
 }
 
 export function handleConcepts(catalog: CatalogGraph, key: string): string {
