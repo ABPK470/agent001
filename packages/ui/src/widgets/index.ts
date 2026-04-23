@@ -12,6 +12,7 @@ import { CodeSeqDiagram } from "./CodeSeqDiagram"
 import { CommandCenter } from "./CommandCenter"
 import { DebugInspector } from "./DebugInspector"
 import { LiveLogs } from "./LiveLogs"
+import { MymiDb } from "./MymiDb"
 import { OperatorEnvironment } from "./OperatorEnvironment"
 import { PlatformDevLog } from "./PlatformDevLog"
 import { RunHistory } from "./RunHistory"
@@ -38,4 +39,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "platform-dev-log": PlatformDevLog,
   "universe-viz": UniverseViz,
   "code-seq-diagram": CodeSeqDiagram,
+  "mymi-db": MymiDb,
 }

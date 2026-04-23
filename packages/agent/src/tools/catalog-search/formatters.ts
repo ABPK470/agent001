@@ -121,14 +121,10 @@ export function fmtLineage(l: ViewLineage): string {
 export function fmtSysEntry(entry: SysEntry): string {
   const lines: string[] = []
   lines.push(`  [SYS] ${entry.qualifiedName}`)
-  lines.push(`    ${entry.description}`)
   if (entry.columns.length > 0) {
-    const shown = entry.columns.slice(0, 12)
+    const shown = entry.columns.slice(0, 15)
     const colStr = shown.map((c) => `${c.name} (${c.dataType})`).join(", ")
-    lines.push(`    Columns: ${colStr}${entry.columns.length > 12 ? ` (+${entry.columns.length - 12} more)` : ""}`)
-  }
-  if (entry.exampleQuery) {
-    lines.push(`    Example: ${entry.exampleQuery.slice(0, 200)}${entry.exampleQuery.length > 200 ? "..." : ""}`)
+    lines.push(`    Columns: ${colStr}${entry.columns.length > 15 ? ` (+${entry.columns.length - 15} more)` : ""}`)
   }
   lines.push(`    ⇒ Query with: query_mssql({ query: "SELECT ... FROM ${entry.qualifiedName} ..." })`)
   return lines.join("\n")

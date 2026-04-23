@@ -76,7 +76,7 @@ export function setupMssql(projectRoot: string): string {
     }
 
     const summary = dbConfigs.map((db) => `${db.name}(${db.host}/${db.database ?? "master"})`).join(", ")
-    console.log(`🗄️  MSSQL databases: ${summary}`)
+    console.log(`MSSQL databases: ${summary}`)
     return summary
   }
 

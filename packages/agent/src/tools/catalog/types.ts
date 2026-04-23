@@ -2,22 +2,16 @@
 
 /**
  * A SQL Server sys.* object entry in the sys catalog.
- * Columns are fetched live from the database (always accurate for the SQL Server version).
- * description and aliases are curated in sys-descriptors.ts (semantic keywords for search).
+ * Built entirely from live database metadata (sys.all_columns) at startup.
+ * No hand-curated descriptions or aliases — the column names ARE the semantic index.
  */
 export interface SysEntry {
   /** Object name without schema prefix, e.g. "dm_db_column_store_row_group_physical_stats" */
   name: string
   /** Schema-qualified: "sys.dm_db_column_store_row_group_physical_stats" */
   qualifiedName: string
-  /** Curated human-readable description of what this sys object does. */
-  description: string
-  /** Semantic keyword aliases — words users might search that relate to this object. */
-  aliases: string[]
-  /** Columns fetched from sys.all_columns at build time. */
+  /** Columns fetched from sys.all_columns at build time — indexed for keyword search. */
   columns: Array<{ name: string; dataType: string }>
-  /** Ready-to-paste example query (optional). */
-  exampleQuery?: string
 }
 
 export interface CatalogColumn {
@@ -139,15 +133,15 @@ export interface ConceptPathResult {
 
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
-  /** Version 4 adds sysCatalog. Versions 1–3 had no sys catalog layer. */
-  version: 1 | 2 | 3 | 4
+  /** Version 5: dynamic sys catalog (all sys objects from live DB, no curated filter). */
+  version: 1 | 2 | 3 | 4 | 5
   builtAt: string
   source: string
   tables: CatalogTable[]
   implicitEdges: ImplicitEdge[]
   lineage?: ViewLineage[]
   viewSourceRows?: Array<{ name: string; sourceRows: number }>
-  /** Added in version 4 — sys.* catalog entries with curated descriptions/aliases. */
+  /** Added in version 4 — sys.* catalog entries from live DB columns (all objects, no filter). */
   sysCatalog?: SysEntry[]
 }
 

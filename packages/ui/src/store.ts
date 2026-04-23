@@ -189,6 +189,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "platform-dev-log": { w: 8, h: 10, minW: 4, minH: 5 },
   "universe-viz": { w: 12, h: 10, minW: 8, minH: 6 },
   "code-seq-diagram": { w: 12, h: 12, minW: 8, minH: 6 },
+  "mymi-db": { w: 12, h: 12, minW: 8, minH: 6 },
 }
 
 const GRID_COLS = 12

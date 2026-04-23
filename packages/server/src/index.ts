@@ -59,6 +59,7 @@ import {
   registerLayoutRoutes,
   registerLlmRoutes,
   registerMemoryRoutes,
+  registerMymiRoutes,
   registerNotificationRoutes,
   registerPolicyRoutes,
   registerRunRoutes,
@@ -342,6 +343,7 @@ async function buildApp(opts: AppOpts) {
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
+  registerMymiRoutes(app)
   registerEventRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)

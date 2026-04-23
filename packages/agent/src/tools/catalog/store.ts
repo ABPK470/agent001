@@ -5,6 +5,7 @@ import type { CatalogBuildOptions, CatalogSnapshot, ViewLineage } from "./types.
 
 const _catalogs = new Map<string, CatalogGraph>()
 let _defaultCachePath: string | undefined
+let _defaultLineagePath: string | undefined  // remembered so refresh=true can re-apply lineage
 
 /**
  * Build or load the catalog.  If a cachePath is provided and a fresh-enough
@@ -28,7 +29,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
       if (Date.now() - stat.mtimeMs < maxAge) {
         const raw = await fs.readFile(cachePath, "utf-8")
         const snap: CatalogSnapshot = JSON.parse(raw)
-        if (snap.version === 1 || snap.version === 2 || snap.version === 3 || snap.version === 4) {
+        if (snap.version === 1 || snap.version === 2 || snap.version === 3 || snap.version === 4 || snap.version === 5) {
           const catalog = CatalogGraph.fromSnapshot(snap)
           _catalogs.set(conn, catalog)
           return catalog
@@ -40,6 +41,18 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
   // Build from live database (expensive — 3 SQL queries)
   const catalog = await CatalogGraph.build(conn)
   _catalogs.set(conn, catalog)
+
+  // Re-apply lineage after a forced rebuild so the in-memory graph stays consistent
+  // (lineage is loaded after buildCatalog at startup, so _defaultLineagePath is set)
+  if (o.forceFresh && _defaultLineagePath) {
+    try {
+      const fsNode = await import("node:fs/promises")
+      const { resolve } = await import("node:path")
+      const raw = await fsNode.readFile(resolve(_defaultLineagePath), "utf-8")
+      const lineages: ViewLineage[] = JSON.parse(raw)
+      catalog.mergeLineage(lineages)
+    } catch { /* non-fatal: lineage file may have been deleted */ }
+  }
 
   // Persist to cache for next startup
   if (cachePath) {
@@ -75,6 +88,7 @@ export async function loadLineage(
   filePath: string,
   connection = "default",
 ): Promise<number> {
+  _defaultLineagePath = filePath  // remember for re-apply after refresh=true
   const catalog = _catalogs.get(connection)
   if (!catalog) throw new Error("Catalog not built yet — call buildCatalog() first")
 

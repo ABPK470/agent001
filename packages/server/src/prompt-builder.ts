@@ -109,7 +109,7 @@ export function buildToolContext(tools: Tool[]): string {
       "  • To find which publish views are largest / have duplicate joins:",
       "      1. search_catalog(stats=true) → 'Largest publish VIEWS' section gives the ranked list",
       "      2. inspect_definition(object='publish.X') IN PARALLEL on each — any table in FROM/JOIN twice = duplicate join",
-      "      ⚠️ 'Largest tables' in stats output = physical tables, not views. Ignore for this task.",
+      "      'Largest tables' in stats output = physical tables, not views. Ignore for this task.",
       "  • inspect_definition(object='schema.view') → T-SQL source for a specific known view.",
       "  • inspect_definition(depends_on='view') → full dependency chain.",
       "  • inspect_definition(slow_queries=true) → most expensive live queries.",

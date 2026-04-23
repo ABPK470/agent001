@@ -264,6 +264,7 @@ export type WidgetType =
   | "platform-dev-log"
   | "universe-viz"
   | "code-seq-diagram"
+  | "mymi-db"
 
 export interface ViewConfig {
   id: string

@@ -10,6 +10,7 @@ import {
     BarChart3,
     Bug,
     Clock,
+    Database,
     Eye,
     Film,
     GitBranch,
@@ -50,6 +51,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "platform-dev-log", label: "Platform Dev Log", desc: "Real-time firehose of every WebSocket event — every operation, every query", Icon: Terminal },
   { type: "universe-viz", label: "Sequence Diagram", desc: "Real-time UML sequence diagram of all platform events with lifelines, arrows, and activation boxes", Icon: Globe },
   { type: "code-seq-diagram", label: "Code Sequence", desc: "Source-code-level UML sequence diagram — every function call, file path, and module interaction", Icon: GitBranch },
+  { type: "mymi-db", label: "Mymi DB", desc: "Visual explorer for the mymi MSSQL database — browse schemas, tables, views, and preview data", Icon: Database },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

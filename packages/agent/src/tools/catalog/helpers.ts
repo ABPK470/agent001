@@ -20,7 +20,7 @@ export function isJoinCandidate(colName: string): boolean {
   const l = colName.toLowerCase()
   return l.endsWith("id") || l.endsWith("key") || l.endsWith("code") ||
     l.endsWith("_fk") || l.endsWith("_pk") || l.includes("identifier") ||
-    l.startsWith("fk_") || l.startsWith("pk_")
+    l.startsWith("fk") || l.startsWith("pk")   // catches pk_xxx, pkXxx, fk_xxx, fkXxx
 }
 
 /**

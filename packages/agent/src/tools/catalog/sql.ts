@@ -64,8 +64,8 @@ export const Q_FKS = `
 /**
  * All columns for all sys.* schema objects (catalog views + DMVs + TVFs).
  * Fetched at catalog build time so the agent knows what columns each sys object has.
- * We fetch ALL sys objects and filter locally to those in SYS_DESCRIPTORS, avoiding
- * a large IN clause. Runs once at startup — ~4000 rows, fast.
+ * Covers ALL objects in the sys schema — not filtered — so every catalog view, DMV,
+ * TVF, and system table is indexed for keyword search. Runs once at startup.
  */
 export const Q_SYS_COLUMNS = `
   SELECT
@@ -81,24 +81,31 @@ export const Q_SYS_COLUMNS = `
 `
 
 /**
- * View → source table dependencies.
- * Used at catalog build time to compute per-view "underlying source rows" by summing
- * the row counts of each physical table a view directly or indirectly references.
- * sys.sql_expression_dependencies is catalog metadata — this runs in milliseconds.
- * referenced_class = 1 filters to OBJECT_OR_COLUMN references (physical tables/views).
- * We only follow one level: view → the tables/views it directly FROM/JOINs.
+ * All view → source (table + view) dependencies — the single dep query used at startup.
+ *
+ * Replaces the old Q_VIEW_DEPS (view→table only) and Q_PUBLISH_VIEW_DEPS (publish→publish).
+ * source_type: 'U' = physical table, 'V' = view.
+ *
+ * Used for two purposes in graph.ts build():
+ *   (1) viewSourceRows: filter source_type='U', sum physical table row counts per view
+ *   (2) auto-lineage:   build ViewLineage entries for ALL views from this dep graph
+ *
+ * sys.sql_expression_dependencies is pure catalog metadata — runs in milliseconds.
+ * referenced_class = 1 = OBJECT_OR_COLUMN dependencies (tables and views).
+ * Self-references excluded (referencing_id != referenced_id).
  */
-export const Q_VIEW_DEPS = `
+export const Q_FULL_VIEW_DEPS = `
   SELECT
-    vs.name  AS view_schema,
-    v.name   AS view_name,
-    rs.name  AS ref_schema,
-    rt.name  AS ref_name
+    vs.name + '.' + v.name   AS view_name,
+    rs.name + '.' + rt.name  AS source_name,
+    rt.type                   AS source_type
   FROM sys.sql_expression_dependencies d
-  JOIN sys.objects v  ON d.referencing_id = v.object_id  AND v.type  = 'V'
+  JOIN sys.objects v  ON d.referencing_id = v.object_id  AND v.type        = 'V'
   JOIN sys.schemas vs ON v.schema_id       = vs.schema_id
-  JOIN sys.objects rt ON d.referenced_id   = rt.object_id AND rt.type = 'U'
+  JOIN sys.objects rt ON d.referenced_id   = rt.object_id AND rt.type IN ('U','V')
   JOIN sys.schemas rs ON rt.schema_id      = rs.schema_id
   WHERE d.referenced_class = 1
     AND rt.is_ms_shipped   = 0
+    AND d.referencing_id  != d.referenced_id
+  ORDER BY view_name, source_name
 `

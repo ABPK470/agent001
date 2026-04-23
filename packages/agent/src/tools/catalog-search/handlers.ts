@@ -305,18 +305,12 @@ export function handleSys(catalog: CatalogGraph, query: string): string {
     const lines = [
       `SQL Server sys object: ${directEntry.qualifiedName}`,
       "",
-      directEntry.description,
-      "",
     ]
     if (directEntry.columns.length > 0) {
       lines.push(`Columns (${directEntry.columns.length}):`)
       for (const col of directEntry.columns) {
         lines.push(`  ${col.name} (${col.dataType})`)
       }
-    }
-    if (directEntry.exampleQuery) {
-      lines.push("", "Example query:")
-      lines.push(directEntry.exampleQuery)
     }
     lines.push(
       "",

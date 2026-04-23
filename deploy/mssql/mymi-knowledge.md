@@ -16,10 +16,11 @@ If a query uses a technical term you don't immediately recognise (e.g. "tombston
    - Application data → `search_catalog(table='…')` or `search_catalog(column='…')`
    - Unknown DMV columns → `search_catalog(sys='…')` shows all columns with data types
 
-**Why this matters:** SQL Server has 400+ sys.* objects. Terms like "tombstone" appear nowhere in
-those object names — you must understand the concept first to know which DMV surfaces it
-(`sys.dm_db_column_store_row_group_physical_stats` → `state_desc = 'TOMBSTONE'`). If you had
-searched the web you would have found this immediately, without any hardcoded knowledge.
+**Why this matters:** SQL Server has 400+ sys.* objects. The `sys=` catalog indexes ALL of them
+from the live database — every catalog view, DMV, TVF, and system table — using their actual
+column names as the search index. If you search `search_catalog(sys='fragmentation')`, it
+finds `dm_db_index_physical_stats` because that object contains a column called
+`avg_fragmentation_in_percent`. No curated descriptions or hand-written aliases are involved.
 
 **Canonical example flow:**
 ```
@@ -571,18 +572,37 @@ ORDER BY TABLE_NAME
 
 ## Part 4: Critical View Lineage
 
-Lineage maps for critical views like `publish.Revenue` and `publish.Balances` are stored as
-structured data in the schema catalog — NOT in this file.
+Lineage maps are stored in the schema catalog and cover **every view in the database** —
+not just the two hand-curated critical views. The catalog builds lineage dynamically at
+startup using `sys.sql_expression_dependencies` (a metadata-only query that runs in
+milliseconds) and requires no configuration.
+
+**For each view, the catalog records automatically:**
+- All direct source tables and views (one level deep)
+- Output columns (from the live schema)
+- Dimension joins — auto-detected from `pk*` column naming (`pkClient` → `dim.Client`, etc.)
+- Source grouping by schema
+
+**Hand-curated additions** (in `deploy/mssql/lineage.json`) add richer context for the two most
+critical views: business area groupings (RBB, UNO, CPA, Africa, IMEX, etc.), filter conditions
+per source, and narrative descriptions. These always overwrite the auto-discovered entries.
 
 **To access lineage:**
-- `search_catalog(lineage='publish.Revenue')` → full map: 59 source views, dimension joins, business areas
-- `search_catalog(lineage='publish.Balances')` → full map: 10 source views, balance sheet categories
+- `search_catalog(lineage='publish.Revenue')` → curated map: 59 source views, business areas, dimension joins, filter conditions
+- `search_catalog(lineage='publish.Balances')` → curated map: 10 source views, balance sheet categories
+- `search_catalog(lineage='publish.AnyOtherView')` → auto-discovered: direct sources, dim joins, schema groups
+- `search_catalog(stats=true)` → see which views have lineage entries
+
+**Concept graph** — the catalog also builds a semantic concept graph from lineage:
+- Every view with sources creates a ConceptNode (e.g. `Revenue`, `Balances`, `ClientBase`)
+- Source tables are tagged with the concepts they contribute to
+- `search_catalog(concepts='fact.CommissionAllocation')` → which business concepts this table feeds
+- `search_catalog(concept_path=['fact.SomeTable','publish.Revenue'])` → trace join path via FK + implicit + concept edges
 
 **What lineage tells you:**
-- Which `publish.Mapping*` views feed into the critical view
-- How sources are grouped by business area (RBB, UNO, CPA, Africa, IMEX, etc.)
-- Which dimension tables join via pk* keys (dim.Client, dim.Product, etc.)
-- Filter conditions applied to each source
+- Which source tables/views feed into a publish view
+- Which dimension tables join via pk* keys (auto-detected)
+- For curated views: filter conditions applied to each source, business area breakdown
 
 **Use lineage for:**
 - Tracing a revenue number to its source fact table
