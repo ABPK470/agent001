@@ -86,6 +86,48 @@ export const SLOW_QUERIES = `
   ORDER BY avg_cpu_ms DESC
 `
 
+/**
+ * Bulk fetch T-SQL definitions for many objects at once.
+ *
+ * Used by `scan_duplicates` to answer questions like
+ *   "how many of these N datasets have duplicate joins?"
+ * in a single round-trip instead of N invocations of inspect_definition.
+ *
+ * Filters:
+ *   @schemaFilter — optional schema name (NULL = all schemas)
+ *   @namesCsv     — optional comma-separated list of qualified names
+ *                   (e.g. "core.vDataset,publish.Revenue") — NULL = all
+ *   @objectTypes  — comma-separated type filter
+ *                   (e.g. "VIEW,SQL_STORED_PROCEDURE,SQL_TABLE_VALUED_FUNCTION")
+ */
+export const BULK_DEFINITIONS = `
+  ;WITH wanted AS (
+    SELECT value AS qname
+    FROM STRING_SPLIT(ISNULL(@namesCsv, ''), ',')
+    WHERE LTRIM(RTRIM(value)) <> ''
+  ),
+  types AS (
+    SELECT LTRIM(RTRIM(value)) AS t
+    FROM STRING_SPLIT(@objectTypes, ',')
+    WHERE LTRIM(RTRIM(value)) <> ''
+  )
+  SELECT
+    s.name        AS schema_name,
+    o.name        AS object_name,
+    o.type_desc   AS object_type,
+    sm.definition AS definition
+  FROM sys.sql_modules sm
+  JOIN sys.objects o ON sm.object_id = o.object_id
+  JOIN sys.schemas s ON o.schema_id = s.schema_id
+  WHERE (@schemaFilter IS NULL OR s.name = @schemaFilter)
+    AND o.type_desc IN (SELECT t FROM types)
+    AND (
+      NOT EXISTS (SELECT 1 FROM wanted)
+      OR (s.name + '.' + o.name) IN (SELECT qname FROM wanted)
+    )
+    AND sm.definition IS NOT NULL
+`
+
 /** Index usage stats for a specific table. */
 export const INDEX_USAGE = `
   SELECT

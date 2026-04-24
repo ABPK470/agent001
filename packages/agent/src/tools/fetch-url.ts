@@ -31,9 +31,17 @@ export function setFetchKillSignal(signal: AbortSignal | null): void {
 export const fetchUrlTool: Tool = {
   name: "fetch_url",
   description:
-    "Fetch a URL and return its content as plain text. " +
-    "Use this to read web pages, API endpoints, or any HTTP resource. " +
-    "HTML tags are stripped — you get readable text.",
+    "Fetch a URL and return its content as plain text. HTML tags are stripped.\n" +
+    "\n" +
+    "DO NOT GUESS URLs. If you do not have a real URL that someone has shown you (in the conversation, " +
+    "a tool result, or a search result), you MUST search first. Use a search engine URL like:\n" +
+    "  https://www.google.com/search?q=<your+query>\n" +
+    "  https://duckduckgo.com/?q=<your+query>\n" +
+    "  https://html.duckduckgo.com/html/?q=<your+query>\n" +
+    "then follow the real result links.\n" +
+    "\n" +
+    "Inventing a plausible-looking URL (e.g. guessing a docs path on learn.microsoft.com or stackoverflow.com) " +
+    "is NOT acceptable \u2014 it almost always returns 404.",
   parameters: {
     type: "object",
     properties: {
@@ -72,7 +80,9 @@ export const fetchUrlTool: Tool = {
       const ipErr = checkResolvedIp(resolved.address)
       if (ipErr) return ipErr
     } catch {
-      return `Error: Could not resolve hostname "${parsed.hostname}"`
+      return `Error: hostname "${parsed.hostname}" does not resolve (DNS lookup failed). ` +
+        `DO NOT guess URLs. Search first via https://www.google.com/search?q=<your+query> ` +
+        `or https://duckduckgo.com/?q=<your+query> and follow real result links.`
     }
 
     // Follow redirects manually to re-check each hop
@@ -154,7 +164,17 @@ export const fetchUrlTool: Tool = {
       return `Error: HTTP ${response.status} ${response.statusText} (browser fallback also failed)`
     }
 
-    if (!response.ok) return `Error: HTTP ${response.status} ${response.statusText}`
+    if (!response.ok) {
+      // 4xx (especially 404) is almost always a guessed URL. Tell the model
+      // explicitly to search instead of trying another guess.
+      if (response.status >= 400 && response.status < 500) {
+        return `Error: HTTP ${response.status} ${response.statusText} for ${currentUrl}. ` +
+          `This URL likely does not exist \u2014 do NOT guess another similar URL. ` +
+          `Search for the topic first via https://www.google.com/search?q=<your+query> ` +
+          `or https://duckduckgo.com/?q=<your+query>, then fetch a real result link.`
+      }
+      return `Error: HTTP ${response.status} ${response.statusText}`
+    }
 
     // Read body with size limit
     let text: string

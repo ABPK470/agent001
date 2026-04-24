@@ -66,6 +66,7 @@ export async function runCompletionGuards(
     ?? checkVerificationFailed(ctx)
     ?? (await checkCompletionValidator(ctx))
     ?? checkPrematureHandoff(ctx)
+    ?? checkAnswerGroundedness(ctx)
   )
 }
 
@@ -188,6 +189,14 @@ function checkPostDelegationVerification(ctx: CompletionGuardContext): Completio
   const { state } = ctx
   if (!state.lastRoundHadDelegation) return null
 
+  // Read-only / analytical delegations have nothing to verify with run_command
+  // or read_file. Let the agent answer directly from the child's text result.
+  if (state.lastDelegationWasReadOnly) {
+    state.lastRoundHadDelegation = false
+    state.lastDelegationWasReadOnly = false
+    return null
+  }
+
   state.lastRoundHadDelegation = false
   state.inPostDelegationVerification = true
   return {
@@ -297,3 +306,67 @@ function checkPrematureHandoff(ctx: CompletionGuardContext): CompletionGuardResu
   }
   return null
 }
+
+/**
+ * Detect a degenerate / ungrounded final answer.
+ *
+ * Symptoms (real example: "There are 4" when the tool returned `distinct_datasets = 4262`):
+ *   - Final answer is very short (< 60 chars).
+ *   - Most recent tool result contains a clear scalar value (number).
+ *   - The answer does NOT contain that exact value.
+ *
+ * In that case we nudge once: re-read the last tool result and answer again.
+ */
+function checkAnswerGroundedness(ctx: CompletionGuardContext): CompletionGuardResult | null {
+  const { state, response, messages } = ctx
+  if (state.groundednessNudged) return null
+
+  const answer = (response.content ?? "").trim()
+  if (!answer || answer.length >= 60) return null
+
+  // Find the most recent tool message
+  let lastToolContent: string | null = null
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === "tool" && typeof m.content === "string" && m.content.trim()) {
+      lastToolContent = m.content
+      break
+    }
+    if (m.role === "user") break
+  }
+  if (!lastToolContent) return null
+
+  // Extract candidate scalar values from the tool output.
+  // Patterns we care about:
+  //   "column = 4262"           → scalar formatter
+  //   bare line containing only a number (legacy table format)
+  const scalarValues: string[] = []
+
+  // Pattern 1: `name = value` (new scalar format)
+  const eqMatch = /^[\w]+\s*=\s*([^\n]+?)\s*$/m.exec(lastToolContent)
+  if (eqMatch) scalarValues.push(eqMatch[1].trim())
+
+  // Pattern 2: legacy table — a line containing only a numeric value
+  const numericLine = /^\s*(-?\d[\d,]*(?:\.\d+)?)\s*$/m.exec(lastToolContent)
+  if (numericLine) scalarValues.push(numericLine[1].trim())
+
+  if (scalarValues.length === 0) return null
+
+  // Normalise: strip commas/whitespace for comparison
+  const norm = (s: string): string => s.replace(/[,\s]/g, "")
+  const answerNorm = norm(answer)
+  const missing = scalarValues.filter((v) => !answerNorm.includes(norm(v)))
+  if (missing.length === 0) return null
+
+  state.groundednessNudged = true
+  const preview = missing.slice(0, 3).join(", ")
+  return {
+    tag: "ungrounded-answer",
+    message:
+      "UNGROUNDED ANSWER: your reply is short and does not contain the value(s) returned by the most recent tool call. " +
+      `Expected the answer to reference: ${preview}. ` +
+      "Re-read the last tool result and answer the user's question with the exact value(s) from it. " +
+      "Do NOT re-run the query — the result is already in your context.",
+  }
+}
+

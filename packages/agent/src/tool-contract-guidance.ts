@@ -61,6 +61,12 @@ export interface ToolContractContext {
   readonly availableToolNames: readonly string[]
   /** The last round included a delegate / delegate_parallel call. */
   readonly lastRoundHadDelegation: boolean
+  /**
+   * The last delegation restricted the child to read-only / analytical tools.
+   * Such delegations don't need post-hoc verification — there's nothing to
+   * "verify" via run_command/read_file (the child only produced text).
+   */
+  readonly lastDelegationWasReadOnly: boolean
   /** Currently in the post-delegation verification window. */
   readonly inPostDelegationVerification: boolean
   /** Paths that must be read before a mutation is allowed. */
@@ -106,6 +112,10 @@ const delegationVerificationResolver: ResolverEntry = {
   name: "delegation-verification",
   fn(ctx) {
     if (!ctx.lastRoundHadDelegation && !ctx.inPostDelegationVerification) return null
+    // Skip verification routing for analysis-only delegations — there's nothing
+    // for run_command/read_file to verify, and forcing it produces useless
+    // performative calls like `echo 'Verification complete.'`.
+    if (ctx.lastDelegationWasReadOnly) return null
     if (ctx.lastRoundHadDelegation) {
       const verifyTools = ctx.availableToolNames.filter(
         t => t === "read_file" || t === "run_command" || t === "browser_check" || t === "list_directory",

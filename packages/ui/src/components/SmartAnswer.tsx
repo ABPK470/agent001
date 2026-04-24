@@ -12,6 +12,7 @@
  */
 
 import type React from "react";
+import { DataTable } from "./DataTable";
 
 // ── Block types ────────────────────────────────────────────────
 
@@ -149,13 +150,6 @@ function InlineText({ text }: { text: string }): React.ReactElement {
   return <>{parts}</>
 }
 
-// ── Helpers ─────────────────────────────────────────────────────
-
-function isNumericCell(val: string): boolean {
-  const stripped = val.replace(/[,%$€£¥\s]/g, "")
-  return stripped !== "" && !isNaN(Number(stripped))
-}
-
 // ── Component ──────────────────────────────────────────────────
 
 export function SmartAnswer({ text, streaming }: { text: string; streaming?: boolean }) {
@@ -228,47 +222,14 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
         }
 
         if (block.type === "table") {
-          const { headers, rows } = block
-          // Detect numeric columns — right-align and use tabular nums
-          const numericCols = headers.map((_, ci) =>
-            rows.length > 0 && rows.every((row) => !row[ci] || isNumericCell(row[ci]))
-          )
           return (
-            <div key={bi} className="w-full min-w-0 rounded-lg border border-white/[0.08]">
-              <div className="overflow-x-auto overflow-y-auto max-h-80">
-                <table className="text-[12px] border-collapse" style={{ width: "max-content", minWidth: "100%" }}>
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-elevated">
-                    {headers.map((h, ci) => (
-                      <th
-                        key={ci}
-                        className={`px-3 py-2 font-semibold text-text whitespace-nowrap border-b border-white/[0.08] ${numericCols[ci] ? "text-right" : "text-left"}`}
-                      >
-                        <InlineText text={h} />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, ri) => (
-                    <tr
-                      key={ri}
-                      className={`border-b border-white/[0.04] transition-colors ${ri % 2 === 0 ? "" : "bg-white/[0.015]"} hover:bg-accent/[0.05]`}
-                    >
-                      {headers.map((_, ci) => (
-                        <td
-                          key={ci}
-                          className={`px-3 py-1.5 text-text-secondary ${numericCols[ci] ? "text-right tabular-nums font-mono" : "text-left"}`}
-                        >
-                          <InlineText text={row[ci] ?? ""} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </div>
+            <DataTable
+              key={bi}
+              headers={block.headers}
+              rows={block.rows}
+              renderCell={(v) => <InlineText text={v} />}
+              renderHeader={(v) => <InlineText text={v} />}
+            />
           )
         }
 

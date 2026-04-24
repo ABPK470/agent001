@@ -43,6 +43,8 @@ export interface PostRoundContext {
   allToolCalls: ToolCallRecord[]
   failuresThisRound: number
   delegationThisRound: boolean
+  /** True when the only delegation this round was restricted to read-only tools. */
+  delegationThisRoundWasReadOnly: boolean
 }
 
 /**
@@ -79,6 +81,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
 
   // ── Checkpoint ──
   state.lastRoundHadDelegation = ctx.delegationThisRound
+  state.lastDelegationWasReadOnly = ctx.delegationThisRound && ctx.delegationThisRoundWasReadOnly
   state.lastRoundToolCallsSnapshot = roundToolCalls.map(c => ({ name: c.name, isError: c.isError }))
 
   // ── Recovery hints ──

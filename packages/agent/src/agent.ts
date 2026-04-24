@@ -235,6 +235,7 @@ export class Agent {
         iteration: i,
         availableToolNames: this.toolList.map(t => t.name),
         lastRoundHadDelegation: state.lastRoundHadDelegation,
+        lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
         inPostDelegationVerification: state.inPostDelegationVerification,
         artifactsRequiringReadBeforeMutation: state.artifactsRequiringReadBeforeMutation,
         wroteUnverifiedFiles: state.wroteUnverifiedFiles,
@@ -367,6 +368,7 @@ export class Agent {
         allToolCalls: this.allToolCalls,
         failuresThisRound: roundResult.failuresThisRound,
         delegationThisRound: roundResult.delegationThisRound,
+        delegationThisRoundWasReadOnly: roundResult.delegationThisRoundWasReadOnly,
       })
 
       if (postRound.finalAnswer) {

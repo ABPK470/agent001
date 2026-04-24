@@ -1,4 +1,5 @@
 import { Agent } from "../../agent.js"
+import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
 import type { Tool } from "../../types.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate.js"
 import type { ChildSpec } from "./helpers.js"
@@ -21,13 +22,42 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // Resolve tools: named agent's tools > explicit tool list > all tools
   let childTools: Tool[]
   let childPrompt: string | undefined
+  // Note appended to the child's system prompt to inform it of read-only tools
+  // it has access to but might not have considered. Built when we auto-expand
+  // an over-restrictive read-only whitelist (Fix B / Fix C).
+  let toolBundleNote: string | undefined
 
   if (resolvedAgent) {
     childTools = resolvedAgent.tools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
     childPrompt = resolvedAgent.systemPrompt
   } else if (spec.tools && spec.tools.length > 0) {
     const requested = new Set(spec.tools)
-    childTools = ctx.availableTools.filter(t => requested.has(t.name))
+    // Fix B: if every requested tool is read-only, auto-expand to include the
+    // full read-only bundle. The parent often over-restricts (e.g. tools=["inspect_definition"])
+    // which leaves the child stuck if its first choice is insufficient — it
+    // can't even SEE that other tools exist. Adding sibling read-only tools
+    // is risk-free (they have no side effects) and gives the child an escape
+    // hatch for self-recovery.
+    const allRequestedAreReadOnly = [...requested].every((name) => READ_ONLY_TOOL_NAMES.has(name))
+    let effectiveRequested = requested
+    if (allRequestedAreReadOnly) {
+      effectiveRequested = new Set(requested)
+      for (const t of ctx.availableTools) {
+        if (READ_ONLY_TOOL_NAMES.has(t.name)) effectiveRequested.add(t.name)
+      }
+      const added = [...effectiveRequested].filter((n) => !requested.has(n))
+      if (added.length > 0) {
+        // Fix C: tell the child these adjacent tools exist so it knows the
+        // escape hatch is available.
+        toolBundleNote =
+          `\n\n--- Available read-only tools ---\n` +
+          `Your task was scoped to: ${[...requested].join(", ")}.\n` +
+          `For self-recovery (if your primary tool is insufficient), you ALSO have access to ` +
+          `these read-only tools: ${added.join(", ")}.\n` +
+          `Use them only if needed — start with your scoped tools first.`
+      }
+    }
+    childTools = ctx.availableTools.filter(t => effectiveRequested.has(t.name))
   } else {
     childTools = ctx.availableTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
   }
@@ -65,9 +95,12 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   const basePrompt = ctx.parentSystemPrompt
     ? `${ctx.parentSystemPrompt}\n\n---\n\n${CHILD_SYSTEM_PROMPT}`
     : CHILD_SYSTEM_PROMPT
-  const effectivePrompt = childPrompt
+  const withAgentPrompt = childPrompt
     ? `${basePrompt}\n\n--- Agent-specific instructions ---\n${childPrompt}`
     : basePrompt
+  const effectivePrompt = toolBundleNote
+    ? `${withAgentPrompt}${toolBundleNote}`
+    : withAgentPrompt
 
   const effectiveGoal = spec.instructions
     ? `${spec.goal}\n\nAdditional instructions:\n${spec.instructions}`

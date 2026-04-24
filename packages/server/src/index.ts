@@ -51,7 +51,7 @@ import {
   pruneOldData, saveApiRequest,
 } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
-import { prune as pruneMemory } from "./memory.js"
+import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import {
   registerAgentRoutes,
@@ -141,6 +141,7 @@ function initDatabase(): void {
   migrateApiRequests()
   migrateEventLog()
   migrateWebhookDrains()
+  migrateMemory()
   console.log("Database initialized (~/.agent001/agent001.db)")
 
   const pruneResult = pruneOldData()

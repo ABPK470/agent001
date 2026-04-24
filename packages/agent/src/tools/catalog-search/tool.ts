@@ -39,6 +39,7 @@ export const searchCatalogTool: Tool = {
     type: "object",
     properties: {
       search: { type: "string", description: "Keyword search across all table names and column names." },
+      schema: { type: "string", description: "Filter search results to a specific schema, e.g. 'fact', 'publish', 'core'. Use with search= to scope results." },
       table: { type: "string", description: "Get full details for a specific table. Schema-qualified: 'publish.Revenue', 'dim.Client'." },
       column: { type: "string", description: "Find all tables that have a column with this exact name." },
       joins: { type: "string", description: "Show ALL join edges for a table — FK relationships and implicit joins. Schema-qualified: 'dim.Client'." },
@@ -115,7 +116,10 @@ export const searchCatalogTool: Tool = {
       return handlePath(catalog, from, to)
     }
 
-    if (args.search) return handleSearch(catalog, String(args.search).trim())
+    if (args.search) {
+      const schemaFilter = args.schema ? String(args.schema).trim() : undefined
+      return handleSearch(catalog, String(args.search).trim(), schemaFilter)
+    }
 
     return "Error: Provide at least one parameter: search, table, column, joins, path, lineage, stats, or refresh."
   },

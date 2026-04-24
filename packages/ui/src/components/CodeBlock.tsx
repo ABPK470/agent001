@@ -10,6 +10,7 @@
 import { Check, Copy } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
+import { DataTable } from "./DataTable"
 
 // ── SQL keyword set ──────────────────────────────────────────────
 
@@ -272,13 +273,7 @@ export function parsePipeTable(text: string): ParsedTable | null {
   return { rowCount, headers, rows, truncated }
 }
 
-// ── ToolResultTable — renders pipe-table or falls back to pre ────
-
-function isNumericStr(val: string): boolean {
-  if (!val || val === "NULL") return false
-  const s = val.replace(/[,%$€£¥\s]/g, "")
-  return s !== "" && !isNaN(Number(s))
-}
+// ── ToolResultTable — renders pipe-table via DataTable, or plain pre ────
 
 export function ToolResultTable({
   text,
@@ -287,14 +282,7 @@ export function ToolResultTable({
   text: string
   maxHeight?: number
 }) {
-  const [copied, setCopied] = useState(false)
   const parsed = parsePipeTable(text)
-
-  function copy() {
-    navigator.clipboard.writeText(text).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   if (!parsed) {
     // Not a table — show as plain pre with proper newline handling
@@ -317,83 +305,14 @@ export function ToolResultTable({
   }
 
   const { rowCount, headers, rows, truncated } = parsed
-  const numericCols = headers.map((_, ci) =>
-    rows.length > 0 && rows.every(row => !row[ci] || isNumericStr(row[ci]))
-  )
-
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-      {/* Header bar */}
-      <div
-        className="flex items-center justify-between px-3 py-1"
-        style={{ background: C.elevated, borderBottom: `1px solid ${C.border}` }}
-      >
-        <span className="text-[11px] font-mono" style={{ color: C.dim }}>
-          {rowCount !== null ? `${rowCount} row${rowCount !== 1 ? "s" : ""}` : `${rows.length} rows`}
-          {truncated ? " (truncated)" : ""}
-        </span>
-        <button
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-white/5"
-          style={{ color: copied ? C.success : C.dim }}
-          onClick={copy}
-        >
-          {copied ? <Check size={11} /> : <Copy size={11} />}
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-auto" style={{ maxHeight: maxHeight - 32, background: C.base }}>
-        <table className="text-[12px] border-collapse" style={{ width: "max-content", minWidth: "100%" }}>
-          <thead className="sticky top-0 z-10">
-            <tr style={{ background: C.elevated }}>
-              {headers.map((h, ci) => (
-                <th
-                  key={ci}
-                  className="px-3 py-1.5 font-semibold whitespace-nowrap"
-                  style={{
-                    color: C.text,
-                    textAlign: numericCols[ci] ? "right" : "left",
-                    borderBottom: `1px solid ${C.border}`,
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr
-                key={ri}
-                style={{ background: ri % 2 !== 0 ? "rgba(255,255,255,0.015)" : "transparent" }}
-              >
-                {headers.map((_, ci) => {
-                  const val = row[ci] ?? ""
-                  const isNull = val === "NULL"
-                  return (
-                    <td
-                      key={ci}
-                      className="px-3 py-1"
-                      style={{
-                        color: isNull ? C.dim : numericCols[ci] ? C.peach : C.textSecondary,
-                        textAlign: numericCols[ci] ? "right" : "left",
-                        fontFamily: numericCols[ci] ? "monospace" : undefined,
-                        fontVariantNumeric: numericCols[ci] ? "tabular-nums" : undefined,
-                        borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {isNull ? <span style={{ opacity: 0.5 }}>NULL</span> : val}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <DataTable
+      headers={headers}
+      rows={rows}
+      totalRowsHint={rowCount}
+      truncated={truncated}
+      maxHeight={maxHeight}
+    />
   )
 }
 

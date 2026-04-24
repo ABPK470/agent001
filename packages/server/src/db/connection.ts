@@ -33,9 +33,12 @@ export function _setDb(db: Database.Database): void {
 
 // ── Current seed data (bump SEED_VERSION when changing) ──────
 
-const SEED_VERSION = 10
+const SEED_VERSION = 11
 
-const DEFAULT_TOOLS = ["read_file", "write_file", "append_file", "replace_in_file", "list_directory", "search_files", "run_command", "think", "fetch_url", "browser_check", "browse_web", "ask_user", "search_catalog", "query_mssql", "explore_mssql_schema", "discover_relationships", "profile_data", "inspect_definition"]
+const DEFAULT_TOOLS = ["read_file", "write_file", "append_file", "replace_in_file", "list_directory", "search_files", "run_command", "think", "fetch_url", "browser_check", "browse_web", "ask_user", "search_catalog", "query_mssql", "explore_mssql_schema", "export_query_to_file", "discover_relationships", "profile_data", "inspect_definition"]
+
+/** @internal — exported for tests only. Do not use in app code. */
+export const _DEFAULT_TOOLS_FOR_TESTS: ReadonlyArray<string> = DEFAULT_TOOLS
 
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {

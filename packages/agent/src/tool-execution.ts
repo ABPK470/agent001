@@ -6,6 +6,7 @@
  */
 
 import type { AgentLoopState } from "./agent-loop-state.js"
+import { READ_ONLY_TOOL_NAMES } from "./constants.js"
 import * as log from "./logger.js"
 import type { ToolCallRecord } from "./tool-result.js"
 import { buildSemanticToolCallKey, didToolCallFail } from "./tool-result.js"
@@ -18,6 +19,41 @@ import type { AgentConfig, Message, Tool } from "./types.js"
 
 const FILE_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])
 
+/** Min characters required to treat a write payload as "substantial" for the anti-paste check. */
+const ANTIPASTE_MIN_CONTENT_LEN = 400
+/** Length of the needle extracted from a truncated query result. */
+const ANTIPASTE_NEEDLE_LEN = 120
+/** How many recent truncated-query fingerprints to retain. */
+const MAX_TRUNCATED_FINGERPRINTS = 4
+
+/**
+ * Extract a distinctive substring ("needle") from a truncated query_mssql
+ * result so we can later detect when the model copy-pastes that result into
+ * a file mutation. We skip the first ~200 chars (header / column names) and
+ * grab a slice from the data body where two outputs are unlikely to coincide.
+ */
+function extractTruncationFingerprint(result: string): string | null {
+  if (typeof result !== "string" || result.length < ANTIPASTE_MIN_CONTENT_LEN) return null
+  const start = Math.min(250, Math.max(0, result.length - ANTIPASTE_NEEDLE_LEN - 50))
+  const needle = result.slice(start, start + ANTIPASTE_NEEDLE_LEN).trim()
+  return needle.length >= 60 ? needle : null
+}
+
+/** Pull the writable payload string out of a file-mutation tool call. */
+function extractWritePayload(name: string, args: Record<string, unknown>): string {
+  if (name === "replace_in_file") return typeof args.new_string === "string" ? args.new_string : ""
+  // write_file and append_file both use `content`
+  return typeof args.content === "string" ? args.content : ""
+}
+
+/**
+ * READ_ONLY_TOOL_NAMES is shared with delegate-spawn (see constants.ts).
+ * A delegation restricted to these tools is purely analytical — its output
+ * cannot meaningfully be "verified" by re-running a command or reading a
+ * file. We use this to suppress the post-delegation verification routing
+ * for analysis-only delegations.
+ */
+
 export function normalizeArtifactPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\//, "").trim()
 }
@@ -27,6 +63,12 @@ export interface ToolRoundResult {
   roundToolCalls: ToolCallRecord[]
   failuresThisRound: number
   delegationThisRound: boolean
+  /**
+   * True when the only delegation this round restricted the child to read-only
+   * tools (analysis-only). Such delegations don't need post-hoc "verification"
+   * via run_command/read_file — there's nothing to verify.
+   */
+  delegationThisRoundWasReadOnly: boolean
   forcedAbortRoundMessage: string | null
   forcedAbortLoopMessage: string | null
 }
@@ -76,6 +118,9 @@ export async function executeToolRound(
   const { tools, state, messages, config } = ctx
   let failuresThisRound = 0
   let delegationThisRound = false
+  // Start true; flip to false as soon as we see ANY delegation that grants the
+  // child a mutating tool (or doesn't restrict tools at all).
+  let delegationThisRoundWasReadOnly = true
   const roundToolCalls: ToolCallRecord[] = []
   let forcedAbortRoundMessage: string | null = null
   let forcedAbortLoopMessage: string | null = null
@@ -85,12 +130,12 @@ export async function executeToolRound(
   if (circuitStatus) {
     const cbMsg = `CIRCUIT BREAKER: ${circuitStatus.reason} — change your approach.`
     messages.push({ role: "system", content: cbMsg, section: "history" })
-    return { roundToolCalls, failuresThisRound, delegationThisRound, forcedAbortRoundMessage: cbMsg, forcedAbortLoopMessage }
+    return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage: cbMsg, forcedAbortLoopMessage }
   }
 
   for (const call of calls) {
     if (config.signal?.aborted) {
-      return { roundToolCalls, failuresThisRound, delegationThisRound, forcedAbortRoundMessage: null, forcedAbortLoopMessage: "Agent was cancelled." }
+      return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage: null, forcedAbortLoopMessage: "Agent was cancelled." }
     }
     if (config.verbose) log.logToolCall(call.name, call.arguments)
 
@@ -134,6 +179,53 @@ export async function executeToolRound(
     const requestedPath = typeof call.arguments.path === "string"
       ? normalizeArtifactPath(String(call.arguments.path))
       : ""
+    // Anti-paste guard: detect when the model is about to dump a previously
+    // truncated query_mssql result into write_file / replace_in_file. This is
+    // a known failure mode that produces broken/partial files. Direct the
+    // model to export_query_to_file instead, which streams the full result
+    // set to disk.
+    if (FILE_MUTATION_TOOLS.has(call.name) && state.recentTruncatedQueries.length > 0) {
+      const payload = extractWritePayload(call.name, call.arguments)
+      if (payload.length >= ANTIPASTE_MIN_CONTENT_LEN) {
+        const matched = state.recentTruncatedQueries.find((entry) => payload.includes(entry.fingerprint))
+        if (matched) {
+          const targetPath = requestedPath || "<your path>"
+          const blockedMsg =
+            `BLOCKED: this ${call.name} content came from a TRUNCATED query_mssql preview. ` +
+            `query_mssql only returns the first ~200 rows; writing this preview produces a broken/partial file.\n` +
+            `\n` +
+            `→ Make THIS exact next call instead (do not run query_mssql again):\n` +
+            `\n` +
+            `  export_query_to_file({\n` +
+            `    "query": ${JSON.stringify(matched.query)},\n` +
+            `    "path": ${JSON.stringify(targetPath)}\n` +
+            `  })\n` +
+            `\n` +
+            `It streams the FULL result set directly to disk and returns a 20-row preview. ` +
+            `If the SELECT contains wide JSON/blob columns, narrow it to only the columns the user actually needs first.`
+          if (config.verbose) log.logToolError(blockedMsg)
+          messages.push({ role: "tool", toolCallId: call.id, content: blockedMsg, section: "history" })
+          roundToolCalls.push({
+            name: call.name, args: call.arguments, result: blockedMsg, isError: true,
+            outcome: {
+              ok: false,
+              summary: `Anti-paste guard: blocked ${call.name} of truncated query result`,
+              severity: "recoverable",
+              directive: "abort_round",
+              errorCode: "truncated_query_paste_blocked",
+              details: [`Use export_query_to_file with query=${JSON.stringify(matched.query)} path=${JSON.stringify(targetPath)}.`],
+            },
+          })
+          // One-shot: clear the matched entry so a deliberate retry isn't
+          // permanently blocked once the model switches strategies.
+          state.recentTruncatedQueries = state.recentTruncatedQueries.filter((e) => e !== matched)
+          failuresThisRound++
+          forcedAbortRoundMessage = `Anti-paste guard: call export_query_to_file with the SQL above instead of ${call.name}.`
+          break
+        }
+      }
+    }
+
     if (FILE_MUTATION_TOOLS.has(call.name) && requestedPath && state.artifactsRequiringReadBeforeMutation.has(requestedPath)) {
       const blockedMsg =
         `MUTATION BLOCKED for ${requestedPath} — you must read the current artifact before attempting another mutation.\n` +
@@ -209,8 +301,32 @@ export async function executeToolRound(
         trackToolCallFailureState(false, semanticKey, state.toolLoopState)
       }
 
+      // Capture truncation fingerprints from query_mssql so the anti-paste
+      // guard above can recognize copy-pasted truncated output on later turns.
+      // Also record the SQL so the guard can suggest the exact
+      // export_query_to_file call to make.
+      if (call.name === "query_mssql") {
+        const wasTruncated = /TRUNCATION WARNING|ROW LIMIT WARNING|\(output truncated\)/.test(enriched)
+        if (wasTruncated) {
+          const needle = extractTruncationFingerprint(enriched)
+          const query = typeof call.arguments.query === "string" ? call.arguments.query : ""
+          if (needle && query) {
+            state.recentTruncatedQueries.push({ fingerprint: needle, query })
+            if (state.recentTruncatedQueries.length > MAX_TRUNCATED_FINGERPRINTS) {
+              state.recentTruncatedQueries.shift()
+            }
+          }
+        }
+      }
+
       if (call.name === "delegate" || call.name === "delegate_parallel") {
         delegationThisRound = true
+        // Inspect the child's tool whitelist. If absent OR contains any
+        // non-read-only tool, treat the delegation as potentially mutating.
+        const childTools = collectChildToolNames(call.arguments)
+        if (childTools === null || childTools.some((t) => !READ_ONLY_TOOL_NAMES.has(t))) {
+          delegationThisRoundWasReadOnly = false
+        }
       }
 
       // Artifact tracking
@@ -231,7 +347,34 @@ export async function executeToolRound(
     }
   }
 
-  return { roundToolCalls, failuresThisRound, delegationThisRound, forcedAbortRoundMessage, forcedAbortLoopMessage }
+  return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage, forcedAbortLoopMessage }
+}
+
+/**
+ * Pull the child tool whitelist from a delegate / delegate_parallel call.
+ * Returns null if no whitelist was provided (child gets all tools — must be
+ * treated as potentially mutating).
+ */
+function collectChildToolNames(args: Record<string, unknown>): string[] | null {
+  // delegate: { tools: string[] }
+  if (Array.isArray(args.tools)) {
+    return (args.tools as unknown[]).map((t) => String(t))
+  }
+  // delegate_parallel: { tasks: [{ tools: string[] }, ...] }
+  if (Array.isArray(args.tasks)) {
+    const all: string[] = []
+    let anyMissing = false
+    for (const t of args.tasks as unknown[]) {
+      if (t && typeof t === "object" && Array.isArray((t as Record<string, unknown>).tools)) {
+        for (const n of (t as { tools: unknown[] }).tools) all.push(String(n))
+      } else {
+        anyMissing = true
+      }
+    }
+    if (anyMissing) return null
+    return all
+  }
+  return null
 }
 
 // ── Internal helpers ────────────────────────────────────────────

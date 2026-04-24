@@ -13,6 +13,7 @@ import {
     browseWebTool,
     createDelegateTools,
     discoverRelationshipsTool,
+    exportQueryToFileTool,
     fetchUrlTool,
     inspectDefinitionTool,
     listDirectoryTool,
@@ -52,6 +53,7 @@ const ALL_TOOLS: Tool[] = [
   askUserTool,
   mssqlTool,
   mssqlSchemaTool,
+  exportQueryToFileTool,
   discoverRelationshipsTool,
   profileDataTool,
   inspectDefinitionTool,
@@ -98,13 +100,47 @@ export function getToolMap(): ReadonlyMap<string, Tool> {
   return toolMap
 }
 
+/**
+ * Tools that guard messages, formatter warnings, or prompt sections explicitly
+ * direct the model to use as a fallback. If any of these are missing from an
+ * agent's resolved whitelist, the guard messages will reference a tool the
+ * model cannot actually call — producing infinite loops where the model retries
+ * the blocked path because it has no alternative.
+ *
+ * When you add a new guard message that says "use X instead", add X here.
+ */
+const GUARD_REFERENCED_TOOLS: ReadonlyArray<{ name: string; referencedBy: string }> = [
+  { name: "export_query_to_file", referencedBy: "mssql formatter ROW LIMIT/TRUNCATION warnings, query_mssql tool description, write_file anti-paste guard" },
+]
+
+/**
+ * Validate that every tool referenced by guard messages/prompts is present in
+ * the resolved set. Logs a loud warning (not a throw) so a deliberately-trimmed
+ * agent doesn't hard-fail at construction, but the operator sees the gap.
+ */
+function warnOnMissingGuardTools(resolvedNames: ReadonlySet<string>): void {
+  for (const { name, referencedBy } of GUARD_REFERENCED_TOOLS) {
+    if (!resolvedNames.has(name)) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[tools] WARNING: tool "${name}" is NOT in this agent's whitelist, ` +
+        `but is referenced by: ${referencedBy}. ` +
+        `The model will be told to call "${name}" as a fallback and will loop because the tool is unavailable. ` +
+        `Either add "${name}" to the agent's tools, or remove the guard reference.`,
+      )
+    }
+  }
+}
+
 /** Resolve an array of tool names into Tool objects. Throws on unknown names. */
 export function resolveTools(names: string[]): Tool[] {
-  return names.map((name) => {
+  const resolved = names.map((name) => {
     const tool = toolMap.get(name)
     if (!tool) throw new Error(`Unknown tool: ${name}`)
     return tool
   })
+  warnOnMissingGuardTools(new Set(resolved.map((t) => t.name)))
+  return resolved
 }
 
 /** List all available tool names + descriptions (for API/UI). */

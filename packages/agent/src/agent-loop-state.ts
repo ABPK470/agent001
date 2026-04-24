@@ -40,6 +40,12 @@ export interface AgentLoopState {
 
   // ── Delegation & verification tracking ──
   lastRoundHadDelegation: boolean
+  /**
+   * True when the most recent delegation restricted the child to read-only
+   * tools (analysis only). Such delegations don't need post-hoc verification
+   * via run_command/read_file — there's nothing to verify.
+   */
+  lastDelegationWasReadOnly: boolean
   wroteUnverifiedFiles: boolean
   writeVerifyNudged: boolean
   writtenButNotReread: Set<string>
@@ -54,6 +60,7 @@ export interface AgentLoopState {
   // ── One-shot guards ──
   earlyExitNudged: boolean
   budgetNudged: boolean
+  groundednessNudged: boolean
   completionValidated: boolean
   completionAttempted: boolean
 
@@ -68,6 +75,14 @@ export interface AgentLoopState {
 
   // ── Coherent execution ──
   coherentExecution: CoherentExecutionState | null
+
+  /**
+   * Recent query_mssql results that hit the truncation cap. Each entry stores
+   * the fingerprint (a distinctive substring of the rendered output) AND the
+   * SQL that produced it, so the write_file anti-paste guard can suggest the
+   * exact export_query_to_file call to make. Bounded to the last 4.
+   */
+  recentTruncatedQueries: Array<{ fingerprint: string; query: string }>
 }
 
 const INITIAL_FULL_COMPACTION_OFFSET = -8
@@ -88,6 +103,7 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     coherentRepairReadOnlyRounds: 0,
     circuitBreaker: new ToolFailureCircuitBreaker(),
     lastRoundHadDelegation: false,
+    lastDelegationWasReadOnly: false,
     wroteUnverifiedFiles: false,
     writeVerifyNudged: false,
     writtenButNotReread: new Set(),
@@ -100,11 +116,13 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     verificationFoundIssues: false,
     earlyExitNudged: false,
     budgetNudged: false,
+    groundednessNudged: false,
     completionValidated: false,
     completionAttempted: false,
     lastRoundToolCallsSnapshot: [],
     lastFullCompactionIteration: INITIAL_FULL_COMPACTION_OFFSET,
     absoluteIterationCap: maxIterations + 10,
     coherentExecution: null,
+    recentTruncatedQueries: [],
   }
 }

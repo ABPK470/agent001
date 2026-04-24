@@ -182,7 +182,7 @@ export { inspectDefinitionTool } from "./tools/mssql-inspector.js"
 export { profileDataTool } from "./tools/mssql-profiler.js"
 export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
 export {
-    closeMssqlPool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
+    closeMssqlPool, exportQueryToFileTool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"

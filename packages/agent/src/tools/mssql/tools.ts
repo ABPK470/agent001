@@ -10,9 +10,16 @@ export const mssqlTool: Tool = {
   name: "query_mssql",
   description:
     "Execute a T-SQL query against Microsoft SQL Server. Read-only by default (SELECT/WITH only). " +
+    "Use this for INSPECTION and ANALYSIS — counting rows, computing aggregates, looking at a sample. " +
+    "DO NOT use this when the user wants to EXPORT or SAVE many rows to a file: " +
+    "the result is truncated at 1000 rows / 50KB, and copying that truncated text into write_file " +
+    "produces a broken file. For exports, call export_query_to_file instead — it streams the full " +
+    "result set directly to disk and returns only a 20-row preview. " +
     "CRITICAL: NEVER guess column names. Before writing ANY query, call explore_mssql_schema first " +
     "to get the exact column names and types for each table you plan to query. " +
     "Always use schema-qualified table names (e.g. agent.PipelineRun, not just PipelineRun). " +
+    "Always SELECT only the columns you actually need — never SELECT * on tables with wide JSON/blob columns " +
+    "(e.g. core.Dataset has a 50KB+ controlFlow column). " +
     "When data spans multiple tables/views, explore EACH table first, then JOIN them. " +
     "For large tables (>1M rows), always include WHERE clauses with date filters and use TOP. " +
     "Returns results as plain text table format.",

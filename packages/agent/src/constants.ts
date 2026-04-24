@@ -195,3 +195,21 @@ export const TOOL_RESULT_PRIORITY_KEYS = [
   "error", "stderr", "stdout", "exitcode", "status", "message",
   "result", "output", "url", "title", "text", "data",
 ] as const
+
+/**
+ * Tool names that have no observable side effects on the filesystem, network,
+ * database, or external state. Reading-only / analytical / inspection tools.
+ *
+ * Used in two places:
+ *   1. tool-execution.ts — to detect "read-only delegations" and skip the
+ *      post-delegation verification routing (nothing to verify).
+ *   2. delegate-spawn — to expand an over-restrictive read-only whitelist
+ *      to the full read-only bundle so the child can self-recover if its
+ *      first tool choice is insufficient.
+ */
+export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "read_file", "list_directory", "search_files",
+  "search_catalog", "query_mssql", "explore_mssql_schema",
+  "discover_relationships", "profile_data", "inspect_definition",
+  "think", "fetch_url", "check_messages",
+])

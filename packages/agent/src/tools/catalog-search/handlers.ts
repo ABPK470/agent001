@@ -262,15 +262,24 @@ export function handlePath(catalog: CatalogGraph, from: string, to: string): str
   return lines.join("\n")
 }
 
-export function handleSearch(catalog: CatalogGraph, query: string): string {
-  const hits = catalog.search(query)
+export function handleSearch(catalog: CatalogGraph, query: string, schemaFilter?: string): string {
+  let hits = catalog.search(query)
   const sysHits = catalog.searchSys(query)
-  if (hits.length === 0 && sysHits.length === 0) {
-    return `No matches found for '${query}'. Try different keywords or check spelling.`
+
+  // Apply schema filter if requested
+  if (schemaFilter) {
+    const sf = schemaFilter.toLowerCase()
+    hits = hits.filter((h) => h.table.schema.toLowerCase() === sf)
   }
 
+  if (hits.length === 0 && sysHits.length === 0) {
+    const extra = schemaFilter ? ` (filtered to schema '${schemaFilter}')` : ""
+    return `No matches found for '${query}'${extra}. Try different keywords or check spelling.`
+  }
+
+  const scopeNote = schemaFilter ? ` (schema: ${schemaFilter})` : ""
   const lines = [
-    `Schema Catalog Search: '${query}' — ${hits.length} matches`,
+    `Schema Catalog Search: '${query}'${scopeNote} — ${hits.length} matches`,
     "",
   ]
 
