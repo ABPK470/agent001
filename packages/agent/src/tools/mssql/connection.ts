@@ -1,4 +1,5 @@
 import sql from "mssql"
+import { AsyncLocalStorage } from "node:async_hooks"
 
 // ── Named connection registry ────────────────────────────────────
 
@@ -11,17 +12,35 @@ export interface DatabaseEntry {
 
 const _databases = new Map<string, DatabaseEntry>()
 
-/** Per-tool-call kill signal — when aborted, cancels any in-flight query. */
-let _killSignal: AbortSignal | null = null
+/**
+ * Per-tool-call kill signal — when aborted, cancels any in-flight query.
+ *
+ * Two storage layers (concurrency-safe):
+ *   1. AsyncLocalStorage scoped per tool execution (preferred). The
+ *      orchestrator wraps each tool call in `runWithMssqlKillSignal()` so
+ *      concurrent runs see their own signal even when interleaved.
+ *   2. A module-level fallback for callers that don't enter the ALS scope
+ *      (single-user CLI mode, legacy tests). Setting null clears it.
+ *
+ * The fallback was the *only* path before multi-user — it's a real
+ * concurrency bug under multi-user load (last writer wins). ALS fixes it.
+ */
+const killSignalAls = new AsyncLocalStorage<AbortSignal>()
+let _fallbackKillSignal: AbortSignal | null = null
 
-/** Set by the orchestrator when a per-tool kill is registered/cleared. */
+/** Set the fallback (non-ALS) kill signal. Prefer runWithMssqlKillSignal. */
 export function setMssqlKillSignal(signal: AbortSignal | null): void {
-  _killSignal = signal
+  _fallbackKillSignal = signal
 }
 
-/** Get the current kill signal (used by tools to cancel in-flight queries). */
+/** Get the active kill signal (ALS-scoped > fallback). */
 export function getMssqlKillSignal(): AbortSignal | null {
-  return _killSignal
+  return killSignalAls.getStore() ?? _fallbackKillSignal
+}
+
+/** Run `fn` with `signal` as the active mssql kill signal for its async context. */
+export function runWithMssqlKillSignal<T>(signal: AbortSignal, fn: () => T): T {
+  return killSignalAls.run(signal, fn)
 }
 
 /**

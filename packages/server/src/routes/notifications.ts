@@ -2,19 +2,32 @@
  * Notification API routes.
  */
 
-import type { FastifyInstance } from "fastify"
-import * as db from "../db.js"
-import type { AgentOrchestrator } from "../orchestrator.js"
+import type { FastifyInstance } from "fastify";
+import { canAccessRun } from "../auth/access.js";
+import * as db from "../db.js";
+import type { AgentOrchestrator } from "../orchestrator.js";
+
+/** Returns true if the request's session may see/mutate this notification. */
+function canSee(session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,
+                n: { run_id: string | null }): boolean {
+  if (session?.isAdmin) return true
+  if (!n.run_id) return true
+  const run = db.getRun(n.run_id)
+  return canAccessRun(session as never, run ?? null)
+}
 
 export function registerNotificationRoutes(
   app: FastifyInstance,
   orchestrator: AgentOrchestrator,
 ): void {
 
-  // List notifications
+  // List notifications (filtered for non-admins)
   app.get<{ Querystring: { limit?: string } }>("/api/notifications", async (req) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200)
-    const notifications = db.listNotifications(limit)
+    const s = req.session
+    const notifications = s?.isAdmin
+      ? db.listNotifications(limit)
+      : db.listNotificationsForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null }, limit)
     return notifications.map((n) => ({
       id: n.id,
       type: n.type,
@@ -28,20 +41,33 @@ export function registerNotificationRoutes(
     }))
   })
 
-  // Get unread count
-  app.get("/api/notifications/unread-count", async () => {
-    return { count: db.getUnreadNotificationCount() }
+  // Get unread count (filtered for non-admins)
+  app.get("/api/notifications/unread-count", async (req) => {
+    const s = req.session
+    return {
+      count: s?.isAdmin
+        ? db.getUnreadNotificationCount()
+        : db.getUnreadNotificationCountForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null }),
+    }
   })
 
-  // Mark one notification as read
-  app.post<{ Params: { id: string } }>("/api/notifications/:id/read", async (req) => {
+  // Mark one notification as read (owner only)
+  app.post<{ Params: { id: string } }>("/api/notifications/:id/read", async (req, reply) => {
+    const n = db.getNotification(req.params.id)
+    if (!n || !canSee(req.session, n)) { reply.code(404); return { error: "Not found" } }
     db.markNotificationRead(req.params.id)
     return { ok: true }
   })
 
-  // Mark all notifications as read
-  app.post("/api/notifications/read-all", async () => {
-    db.markAllNotificationsRead()
+  // Mark all notifications as read (scoped for non-admins)
+  app.post("/api/notifications/read-all", async (req) => {
+    const s = req.session
+    if (s?.isAdmin) {
+      db.markAllNotificationsRead()
+    } else {
+      const list = db.listNotificationsForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null }, 10_000)
+      for (const n of list) if (n.read === 0) db.markNotificationRead(n.id)
+    }
     return { ok: true }
   })
 
@@ -49,6 +75,8 @@ export function registerNotificationRoutes(
   app.post<{ Params: { id: string }; Body: { action: string; data?: Record<string, unknown> } }>(
     "/api/notifications/:id/action",
     async (req, reply) => {
+      const n = db.getNotification(req.params.id)
+      if (!n || !canSee(req.session, n)) { reply.code(404); return { error: "Not found" } }
       const { action, data } = req.body
       db.markNotificationRead(req.params.id)
 

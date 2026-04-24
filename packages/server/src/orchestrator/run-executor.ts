@@ -10,9 +10,9 @@ import {
     runCompleted,
     runFailed,
     runStarted,
+    runWithMssqlKillSignal,
     setBrowseKillSignal,
     setFetchKillSignal,
-    setMssqlKillSignal,
     setShellSignal,
     spawnChildForPlan,
     startPlanning,
@@ -201,29 +201,42 @@ export async function executeRunImpl(
 
   let prevTotalTokens = 0
 
-  const killManager: ToolKillManager = {
-    register: (toolCallId: string, toolName: string) => {
-      const perToolCtrl = new AbortController()
-      const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
-      setShellSignal(composed)
-      setFetchKillSignal(composed)
-      setBrowseKillSignal(composed)
-      setMssqlKillSignal(composed)
-      return new Promise<string>((resolve) => {
-        const key = `${runId}:${toolCallId}`
-        ctx.pendingKills.set(key, { resolve, perToolCtrl })
-        broadcast({ type: "tool_call.executing", data: { runId, toolCallId, toolName } })
-      })
-    },
-    unregister: (toolCallId: string) => {
-      ctx.pendingKills.delete(`${runId}:${toolCallId}`)
-      setShellSignal(controller.signal)
-      setFetchKillSignal(null)
-      setBrowseKillSignal(null)
-      setMssqlKillSignal(null)
-      broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
-    },
-  }
+  const killManager: ToolKillManager = (() => {
+    // Per-tool-call composed signal map. wrap() reads from here to install
+    // an ALS scope around tool.execute(), so concurrent runs each see their
+    // own mssql kill signal (no last-writer-wins module global).
+    const callSignals = new Map<string, AbortSignal>()
+    return {
+      register: (toolCallId: string, toolName: string) => {
+        const perToolCtrl = new AbortController()
+        const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
+        callSignals.set(toolCallId, composed)
+        // Legacy globals — kept for browser/fetch/shell tools that haven't been
+        // migrated to ALS yet. mssql now uses ALS via wrap() below.
+        setShellSignal(composed)
+        setFetchKillSignal(composed)
+        setBrowseKillSignal(composed)
+        return new Promise<string>((resolve) => {
+          const key = `${runId}:${toolCallId}`
+          ctx.pendingKills.set(key, { resolve, perToolCtrl })
+          broadcast({ type: "tool_call.executing", data: { runId, toolCallId, toolName } })
+        })
+      },
+      unregister: (toolCallId: string) => {
+        callSignals.delete(toolCallId)
+        ctx.pendingKills.delete(`${runId}:${toolCallId}`)
+        setShellSignal(controller.signal)
+        setFetchKillSignal(null)
+        setBrowseKillSignal(null)
+        broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
+      },
+      wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
+        const sig = callSignals.get(toolCallId)
+        if (!sig) return fn()
+        return runWithMssqlKillSignal(sig, fn) as Promise<T>
+      },
+    }
+  })()
 
   // eslint-disable-next-line prefer-const
   let agent!: Agent
@@ -283,7 +296,6 @@ export async function executeRunImpl(
     setShellSignal(controller.signal)
     setFetchKillSignal(null)
     setBrowseKillSignal(null)
-    setMssqlKillSignal(null)
     const answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
 
     if (controller.signal.aborted) {
@@ -354,7 +366,6 @@ export async function executeRunImpl(
     setShellSignal(null)
     setFetchKillSignal(null)
     setBrowseKillSignal(null)
-    setMssqlKillSignal(null)
     releaseSlot()
     bus.dispose()
     ctx.pendingInputs.delete(runId)

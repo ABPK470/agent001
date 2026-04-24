@@ -22,53 +22,56 @@ config({
 })
 
 import {
-  buildCatalog, closeMssqlPool, loadLineage, setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setSearchBasePath,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict
+    buildCatalog, closeMssqlPool, loadLineage, setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setSearchBasePath,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict
 } from "@agent001/agent"
+import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify from "fastify"
+import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import {
-  clearTransactionalData,
-  getDb, getDbStats, getLlmConfig,
-  migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-  pruneOldData, saveApiRequest,
+    clearTransactionalData,
+    getDb, getDbStats, getLlmConfig,
+    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
+    pruneOldData, saveApiRequest,
 } from "./db.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import {
-  registerAgentRoutes,
-  registerEventRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMymiRoutes,
-  registerNotificationRoutes,
-  registerPolicyRoutes,
-  registerRunRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes,
+    registerAdminRoutes,
+    registerAgentRoutes,
+    registerEventRoutes,
+    registerLayoutRoutes,
+    registerLlmRoutes,
+    registerMemoryRoutes,
+    registerMymiRoutes,
+    registerNotificationRoutes,
+    registerPolicyRoutes,
+    registerRunRoutes,
+    registerUsageRoutes,
+    registerWebhookRoutes,
 } from "./routes/index.js"
 import { initSandbox } from "./sandbox.js"
 import { setupMssql } from "./setup-mssql.js"
-import { addClient, broadcast } from "./ws.js"
+import { addClient, addSseClient, broadcast } from "./ws.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -289,16 +292,24 @@ interface AppOpts {
 async function buildApp(opts: AppOpts) {
   const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace } = opts
 
-  const app = Fastify({ logger: false })
-  await app.register(cors, { origin: true })
+  // trustProxy: when behind a corporate HTTPS terminator (proxy-https, IIS,
+  // nginx) Fastify needs to honour X-Forwarded-* headers so req.ip reflects
+  // the real client and Secure cookies survive the hop.
+  const app = Fastify({ logger: false, trustProxy: true })
+  await app.register(cors, { origin: true, credentials: true })
+  await app.register(cookie, { secret: process.env["AGENT001_COOKIE_SECRET"] ?? undefined })
   await app.register(websocket)
+
+  // Identity middleware — resolves req.session and seeds AsyncLocalStorage.
+  // Must be registered AFTER @fastify/cookie. Adds GET/POST /api/me.
+  await registerIdentity(app)
 
   app.addHook("onRequest", (req, _reply, done) => {
     ;(req as any)._startTime = Date.now()
     done()
   })
   app.addHook("onResponse", (req, reply, done) => {
-    if (req.url.startsWith("/ws") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
+    if (req.url.startsWith("/ws") || req.url.startsWith("/api/events/stream") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
       done()
       return
     }
@@ -316,6 +327,13 @@ async function buildApp(opts: AppOpts) {
       saveApiRequest(entry)
       broadcast({ type: "api.request", data: entry as unknown as Record<string, unknown> })
     } catch { /* don't break responses if logging fails */ }
+    // Multi-user observability: stamp user identity on console for ops greppability.
+    // Only for non-trivial endpoints (skip /api/me polling noise).
+    if (!req.url.startsWith("/api/me") && !req.url.startsWith("/api/admin/sessions") && !req.url.startsWith("/api/admin/active-runs") && !req.url.startsWith("/api/admin/users")) {
+      const s = (req as { session?: { upn?: string | null; displayName?: string; sid?: string } }).session
+      const who = s?.upn ?? s?.displayName ?? s?.sid?.slice(0, 12) ?? "anon"
+      console.log(`[${who}] ${req.method} ${req.url} → ${reply.statusCode} (${duration}ms)`)
+    }
     done()
   })
 
@@ -337,7 +355,36 @@ async function buildApp(opts: AppOpts) {
     reply.code(status).send({ error: message })
   })
 
-  app.get("/ws", { websocket: true }, (socket) => { addClient(socket) })
+  app.get("/ws", { websocket: true }, (socket, req) => {
+    // The identity middleware ran before this handler — req.session is set.
+    addClient(socket, {
+      upn:     req.session?.upn ?? null,
+      sid:     req.session?.sid ?? "anon",
+      isAdmin: req.session?.isAdmin ?? false,
+    })
+  })
+
+  // Server-Sent Events fallback for deployments behind HTTP-only reverse
+  // proxies that don't forward WebSocket upgrades. Same broadcaster, same
+  // per-user filtering. The UI prefers this transport when available.
+  app.get("/api/events/stream", (req, reply) => {
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    })
+    const dispose = addSseClient(reply.raw, {
+      upn:     req.session?.upn ?? null,
+      sid:     req.session?.sid ?? "anon",
+      isAdmin: req.session?.isAdmin ?? false,
+    })
+    // Heartbeat every 25s — keeps intermediaries from idle-closing the stream.
+    const heartbeat = setInterval(() => {
+      try { reply.raw.write(`: ping\n\n`) } catch { /* dropped */ }
+    }, 25_000)
+    req.raw.on("close", () => { clearInterval(heartbeat); dispose() })
+  })
 
   registerRunRoutes(app, orchestrator)
   registerAgentRoutes(app, orchestrator)
@@ -353,6 +400,7 @@ async function buildApp(opts: AppOpts) {
     orchestrator.setLlm(newClient)
     console.log("LLM client hot-swapped")
   })
+  registerAdminRoutes(app, orchestrator)
 
   app.get("/api/health", async () => ({
     status: "ok",

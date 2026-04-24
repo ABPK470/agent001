@@ -13,6 +13,7 @@
 
 import type React from "react";
 import { DataTable } from "./DataTable";
+import { InlineDiagram, isDiagramLang } from "./InlineDiagram";
 
 // ── Block types ────────────────────────────────────────────────
 
@@ -177,6 +178,9 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
         }
 
         if (block.type === "code") {
+          if (isDiagramLang(block.lang)) {
+            return <InlineDiagram key={bi} kind={block.lang} source={block.text} />
+          }
           return (
             <div key={bi} className="rounded-lg overflow-hidden border border-white/[0.08]">
               {block.lang && (

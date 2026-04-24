@@ -4,6 +4,7 @@
 
 import type { ComponentType } from "react"
 import type { WidgetType } from "../types"
+import { ActiveUsers } from "./ActiveUsers"
 import { AgentChat } from "./AgentChat"
 import { AgentTrace } from "./AgentTrace"
 import { AgentViz } from "./AgentViz"
@@ -40,4 +41,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "universe-viz": UniverseViz,
   "code-seq-diagram": CodeSeqDiagram,
   "mymi-db": MymiDb,
+  "active-users": ActiveUsers,
 }

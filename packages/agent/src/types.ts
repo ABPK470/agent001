@@ -186,6 +186,13 @@ export interface ToolKillManager {
   register(toolCallId: string, toolName: string): Promise<string>
   /** Unregister when done (tool completed or killed). */
   unregister(toolCallId: string): void
+  /**
+   * Optional. If provided, the agent calls `wrap(toolCallId, () => tool.execute(args))`
+   * so the orchestrator can install AsyncLocalStorage scopes (e.g. per-tool-call
+   * mssql kill signal) that are correct under concurrent runs. Without this,
+   * orchestrators must use module-level globals which break under concurrency.
+   */
+  wrap?<T>(toolCallId: string, fn: () => Promise<T>): Promise<T>
 }
 
 /**

@@ -3,6 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { canAccessRun } from "../auth/access.js"
 import * as db from "../db.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
 import { resolveTools } from "../tools.js"
@@ -12,9 +13,12 @@ export function registerRunRoutes(
   orchestrator: AgentOrchestrator,
 ): void {
 
-  // List all runs (with token usage)
-  app.get("/api/runs", async () => {
-    const runs = db.listRunsWithUsage()
+  // List all runs (with token usage). Non-admin visitors see only their own.
+  app.get("/api/runs", async (req) => {
+    const s = req.session
+    const runs = s?.isAdmin
+      ? db.listRunsWithUsage()
+      : db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null })
     return runs.map((r) => ({
       pendingWorkspaceChanges: (() => {
         const diff = orchestrator.getRunWorkspaceDiff(r.id)
@@ -41,6 +45,11 @@ export function registerRunRoutes(
   app.get<{ Params: { id: string } }>("/api/runs/:id", async (req, reply) => {
     const run = db.getRun(req.params.id)
     if (!run) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    // Non-admin visitors can only fetch their own runs (404 to avoid leaking existence).
+    if (!canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
@@ -120,6 +129,8 @@ export function registerRunRoutes(
 
   // Cancel a run
   app.post<{ Params: { id: string } }>("/api/runs/:id/cancel", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) { reply.code(404); return { error: "Run not found" } }
     const ok = orchestrator.cancelRun(req.params.id)
     if (!ok) {
       reply.code(404)
@@ -130,6 +141,8 @@ export function registerRunRoutes(
 
   // Resume a failed run
   app.post<{ Params: { id: string } }>("/api/runs/:id/resume", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) { reply.code(404); return { error: "Run not found" } }
     const newRunId = orchestrator.resumeRun(req.params.id)
     if (!newRunId) {
       reply.code(404)
@@ -142,7 +155,7 @@ export function registerRunRoutes(
   // Re-run: start a fresh run with the same goal and agent as a previous run
   app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", async (req, reply) => {
     const original = db.getRun(req.params.id)
-    if (!original) {
+    if (!original || !canAccessRun(req.session, original)) {
       reply.code(404)
       return { error: "Run not found" }
     }
@@ -171,6 +184,8 @@ export function registerRunRoutes(
 
   // Respond to a pending ask_user request
   app.post<{ Params: { id: string }; Body: { response: string } }>("/api/runs/:id/respond", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) { reply.code(404); return { error: "Run not found" } }
     const { response } = req.body
     if (!response && response !== "") {
       reply.code(400)
@@ -186,6 +201,8 @@ export function registerRunRoutes(
 
   // Kill a specific tool call and provide a user steering message
   app.post<{ Params: { id: string }; Body: { toolCallId: string; message: string } }>("/api/runs/:id/kill-tool", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) { reply.code(404); return { error: "Run not found" } }
     const { toolCallId, message } = req.body
     if (!toolCallId) {
       reply.code(400)
@@ -202,7 +219,7 @@ export function registerRunRoutes(
   // Get run trace
   app.get<{ Params: { id: string } }>("/api/runs/:id/trace", async (req, reply) => {
     const run = db.getRun(req.params.id)
-    if (!run) {
+    if (!run || !canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
@@ -213,7 +230,7 @@ export function registerRunRoutes(
   // Get isolated workspace diff for a completed run
   app.get<{ Params: { id: string } }>("/api/runs/:id/workspace-diff", async (req, reply) => {
     const run = db.getRun(req.params.id)
-    if (!run) {
+    if (!run || !canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
@@ -236,7 +253,7 @@ export function registerRunRoutes(
   // Apply approved isolated workspace diff back to source workspace
   app.post<{ Params: { id: string } }>("/api/runs/:id/workspace-diff/apply", async (req, reply) => {
     const run = db.getRun(req.params.id)
-    if (!run) {
+    if (!run || !canAccessRun(req.session, run)) {
       reply.code(404)
       return { error: "Run not found" }
     }
@@ -254,9 +271,15 @@ export function registerRunRoutes(
     }
   })
 
-  // Get active runs
-  app.get("/api/runs/active", async () => {
-    return { runIds: orchestrator.getActiveRunIds() }
+  // Get active runs (filtered for non-admins)
+  app.get("/api/runs/active", async (req) => {
+    const ids = orchestrator.getActiveRunIds()
+    if (req.session?.isAdmin) return { runIds: ids }
+    const visible = ids.filter((id) => {
+      const r = db.getRun(id)
+      return canAccessRun(req.session, r ?? null)
+    })
+    return { runIds: visible }
   })
 
   // Queue stats

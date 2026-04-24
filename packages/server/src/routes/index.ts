@@ -1,3 +1,4 @@
+export { registerAdminRoutes } from "./admin.js"
 export { registerAgentRoutes } from "./agents.js"
 export { registerEventRoutes } from "./events.js"
 export { registerLayoutRoutes } from "./layouts.js"

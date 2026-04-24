@@ -40,10 +40,37 @@ export function saveNotification(n: DbNotification): void {
   `).run(n)
 }
 
+export function getNotification(id: string): DbNotification | undefined {
+  return getDb().prepare("SELECT * FROM notifications WHERE id = ?").get(id) as DbNotification | undefined
+}
+
 export function listNotifications(limit = 50): DbNotification[] {
   return getDb()
     .prepare("SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?")
     .all(limit) as DbNotification[]
+}
+
+/**
+ * Notifications visible to a non-admin user. Includes:
+ *   - notifications with no run_id (system-wide), and
+ *   - notifications whose run is owned by this user (matched by upn or sid).
+ */
+export function listNotificationsForUser(
+  opts: { upn?: string | null; sid?: string | null },
+  limit = 50,
+): DbNotification[] {
+  const upn = opts.upn ?? null
+  const sid = opts.sid ?? null
+  return getDb()
+    .prepare(`
+      SELECT n.* FROM notifications n
+      LEFT JOIN runs r ON r.id = n.run_id
+      WHERE n.run_id IS NULL
+         OR (@upn IS NOT NULL AND r.upn = @upn)
+         OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
+      ORDER BY n.created_at DESC LIMIT @limit
+    `)
+    .all({ upn, sid, limit }) as DbNotification[]
 }
 
 export function markNotificationRead(id: string): void {
@@ -56,5 +83,21 @@ export function markAllNotificationsRead(): void {
 
 export function getUnreadNotificationCount(): number {
   const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as { count: number }
+  return row.count
+}
+
+export function getUnreadNotificationCountForUser(opts: { upn?: string | null; sid?: string | null }): number {
+  const upn = opts.upn ?? null
+  const sid = opts.sid ?? null
+  const row = getDb()
+    .prepare(`
+      SELECT COUNT(*) as count FROM notifications n
+      LEFT JOIN runs r ON r.id = n.run_id
+      WHERE n.read = 0 AND (
+        n.run_id IS NULL
+        OR (@upn IS NOT NULL AND r.upn = @upn)
+        OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
+      )
+    `).get({ upn, sid }) as { count: number }
   return row.count
 }

@@ -2,8 +2,9 @@
  * Toolbar — top bar with branding, view tabs, menu dropdown, and widget button.
  */
 
-import { Activity, Bot, LayoutGrid, Menu, Plus, Shield, X } from "lucide-react"
+import { Activity, Bot, LayoutGrid, LogOut, Menu, Plus, Shield, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
 import { AgentEditor } from "./AgentEditor"
 import { Logo } from "./Logo"
@@ -13,9 +14,10 @@ import { UsageModal } from "./UsageModal"
 
 interface Props {
   onAddWidget?: () => void
+  me?: Me | null
 }
 
-export function Toolbar({ onAddWidget }: Props) {
+export function Toolbar({ onAddWidget, me }: Props) {
   const connected = useStore((s) => s.connected)
   const views = useStore((s) => s.views)
   const activeViewId = useStore((s) => s.activeViewId)
@@ -112,15 +114,15 @@ export function Toolbar({ onAddWidget }: Props) {
           </button>
         </div>
 
-        {/* Right controls */}
-        <div className="flex items-center gap-2.5">
+        {/* Right controls — uniform 36px icon buttons; greeting pinned far right */}
+        <div className="flex items-center gap-1">
           {onAddWidget && (
             <button
-              className="flex items-center gap-2 px-3.5 py-2 text-sm text-text-secondary hover:text-white border border-white/10 hover:border-white/25 rounded-lg transition-colors"
+              className="flex items-center gap-2 h-9 px-3 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
               onClick={onAddWidget}
               title="Add Widget"
             >
-              <LayoutGrid size={15} />
+              <LayoutGrid size={16} />
               <span className="hidden sm:inline">Add Widget</span>
             </button>
           )}
@@ -128,7 +130,7 @@ export function Toolbar({ onAddWidget }: Props) {
           {/* Notifications */}
           <NotificationPanel />
 
-          {/* Menu dropdown */}
+          {/* Menu dropdown — visible to everyone; items gated by role */}
           <div className="relative" ref={menuRef}>
             <button
               className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-white hover:bg-white/[0.06] transition-colors"
@@ -140,13 +142,15 @@ export function Toolbar({ onAddWidget }: Props) {
 
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-48 bg-elevated border border-border rounded-xl shadow-xl shadow-black/40 py-1.5 z-50">
-                <button
-                  className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] transition-colors"
-                  onClick={() => { setAgentOpen(true); setMenuOpen(false) }}
-                >
-                  <Bot size={15} className="text-text-muted" />
-                  Agents
-                </button>
+                {me?.isAdmin && (
+                  <button
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] transition-colors"
+                    onClick={() => { setAgentOpen(true); setMenuOpen(false) }}
+                  >
+                    <Bot size={15} className="text-text-muted" />
+                    Agents
+                  </button>
+                )}
                 <button
                   className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] transition-colors"
                   onClick={() => { setUsageOpen(true); setMenuOpen(false) }}
@@ -154,16 +158,42 @@ export function Toolbar({ onAddWidget }: Props) {
                   <Activity size={15} className="text-text-muted" />
                   Usage
                 </button>
-                <button
-                  className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] transition-colors"
-                  onClick={() => { setPolicyOpen(true); setMenuOpen(false) }}
-                >
-                  <Shield size={15} className="text-text-muted" />
-                  Policies
-                </button>
+                {me?.isAdmin && (
+                  <button
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-white hover:bg-white/[0.06] transition-colors"
+                    onClick={() => { setPolicyOpen(true); setMenuOpen(false) }}
+                  >
+                    <Shield size={15} className="text-text-muted" />
+                    Policies
+                  </button>
+                )}
               </div>
             )}
           </div>
+
+          {/* Greeting — pinned far right, separated by a thin divider */}
+          {me && me.displayName && me.displayName !== "Anonymous" && (
+            <div className="hidden md:flex items-center gap-2 ml-2 pl-3 border-l border-white/[0.08] text-sm text-text-muted">
+              <span className="leading-none">
+                Hi, <span className="text-text-secondary">{me.displayName.split(" ")[0]}</span>
+              </span>
+              {me.isAdmin && (
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/15 text-accent leading-none">
+                  admin
+                </span>
+              )}
+              <button
+                onClick={async () => {
+                  await fetch("/api/me/clear", { method: "POST", credentials: "include" })
+                  window.location.reload()
+                }}
+                title="Switch user"
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

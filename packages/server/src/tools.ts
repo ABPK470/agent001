@@ -152,3 +152,38 @@ export function listAvailableTools(): ToolInfo[] {
 export function getAllTools(): Tool[] {
   return [...ALL_TOOLS]
 }
+
+/**
+ * Tools available to non-admin "visitor" users. NO `shellTool` (no shell
+ * access from chat), NO `browseWebTool` (no headless-browser side effects).
+ * Read/write filesystem stays scoped to the run's sandbox by existing
+ * filesystem-security checks.
+ */
+const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "read_file",
+  "write_file",
+  "append_file",
+  "replace_in_file",
+  "list_directory",
+  "search_files",
+  "think",
+  "fetch_url",
+  "ask_user",
+  "search_catalog",
+  "query_mssql",
+  "explore_mssql_schema",
+  "export_query_to_file",
+  "discover_relationships",
+  "profile_data",
+  "inspect_definition",
+])
+
+/** Filter a tool list down to the visitor allowlist. */
+export function filterToolsForVisitor(tools: Tool[]): Tool[] {
+  return tools.filter((t) => VISITOR_TOOL_NAMES.has(t.name))
+}
+
+/** Returns true if the named tool is in the visitor allowlist. */
+export function isVisitorTool(name: string): boolean {
+  return VISITOR_TOOL_NAMES.has(name)
+}

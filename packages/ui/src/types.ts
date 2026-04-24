@@ -265,6 +265,21 @@ export type WidgetType =
   | "universe-viz"
   | "code-seq-diagram"
   | "mymi-db"
+  | "active-users"
+
+/**
+ * Widget types visible to non-admin "visitor" users. Everything else is
+ * admin-only (the admin sees the burger menu, model picker, and the full
+ * widget catalogue).
+ */
+export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
+  "agent-chat",
+  "agent-viz",
+  "audit-trail",
+  "run-history",
+  "run-status",
+  "step-timeline",
+])
 
 export interface ViewConfig {
   id: string

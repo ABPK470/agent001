@@ -24,7 +24,9 @@ function scheduleSave() {
   }, DEBOUNCE_MS)
 }
 
-/** Load dashboard state from server and apply it. */
+/** Load dashboard state from server and apply it. If the server has no
+ *  state for this user (new visitor), reset to a clean default view and
+ *  clear stale localStorage from a prior user on the same browser. */
 export async function restoreDashboardState(): Promise<void> {
   try {
     const state = await api.getDashboardState() as { views: ViewConfig[]; activeViewId: string } | null
@@ -33,14 +35,24 @@ export async function restoreDashboardState(): Promise<void> {
         views: state.views,
         activeViewId: state.activeViewId,
       })
+    } else {
+      // Fresh user: wipe whatever the previous browser user left behind.
+      try { localStorage.removeItem("agent001-dashboard") } catch { /* ignore */ }
+      useStore.setState({
+        views: [{ id: "default", name: "Main", widgets: [], layouts: {} }],
+        activeViewId: "default",
+      })
     }
   } catch {
     // Server not available — use localStorage (zustand persist)
   }
 }
 
-/** Start watching for store changes and auto-saving to server. */
+/** Start watching for store changes and auto-saving to server. Idempotent. */
+let syncStarted = false
 export function startDashboardSync() {
+  if (syncStarted) return
+  syncStarted = true
   // Subscribe to views/activeViewId changes
   useStore.subscribe(
     (state, prev) => {

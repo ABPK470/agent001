@@ -6,103 +6,49 @@
  */
 
 // Connection (singleton + testing hook)
-export { getDb, _setDb } from "./db/connection.js"
+export { _setDb, getDb } from "./db/connection.js"
 
 // Internal migration export for testing
 export { _migrate } from "./db/connection.js"
 
 // Runs, audit, checkpoints, logs, traces, token usage
 export {
-  type DbRun,
-  type DbRunWithUsage,
-  saveRun,
-  getRun,
-  listRuns,
-  listRunsWithUsage,
-  findStaleRuns,
-  markRunCrashed,
-  type DbAudit,
-  saveAudit,
-  getAuditLog,
-  type DbCheckpoint,
-  saveCheckpoint,
-  getCheckpoint,
-  type DbLog,
-  saveLog,
-  getLogs,
-  type DbTraceEntry,
-  saveTraceEntry,
-  getTraceEntries,
-  type DbTokenUsage,
-  saveTokenUsage,
-  getTokenUsage,
-  listTokenUsage,
-  type UsageTotals,
-  getUsageTotals,
+    findStaleRuns, getAuditLog, getCheckpoint, getLogs, getRun, getTokenUsage, getTraceEntries, getUsageTotals, listRuns,
+    listRunsWithUsage,
+    listRunsWithUsageForUser, listTokenUsage, markRunCrashed, saveAudit, saveCheckpoint, saveLog, saveRun, saveTokenUsage, saveTraceEntry, type DbAudit, type DbCheckpoint, type DbLog, type DbRun,
+    type DbRunWithUsage, type DbTokenUsage, type DbTraceEntry, type UsageTotals
 } from "./db/runs.js"
 
 // Layouts & policies
 export {
-  type DbLayout,
-  saveLayout,
-  getLayouts,
-  getLayout,
-  deleteLayout,
-  type DbPolicyRule,
-  listPolicyRules,
-  savePolicyRule,
-  deletePolicyRule,
+    deleteLayout, deletePolicyRule, getLayout, getLayouts, listPolicyRules, saveLayout, savePolicyRule, type DbLayout, type DbPolicyRule
 } from "./db/config.js"
 
 // LLM config & agent definitions
 export {
-  type LlmProvider,
-  type DbLlmConfig,
-  getLlmConfig,
-  saveLlmConfig,
-  type DbAgentDefinition,
-  listAgentDefinitions,
-  getAgentDefinition,
-  saveAgentDefinition,
-  deleteAgentDefinition,
+    deleteAgentDefinition, getAgentDefinition, getLlmConfig, listAgentDefinitions, saveAgentDefinition, saveLlmConfig,
+    type DbAgentDefinition, type DbLlmConfig, type LlmProvider
 } from "./db/agents.js"
 
 // Notifications
 export {
-  type DbNotification,
-  migrateNotifications,
-  saveNotification,
-  listNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  getUnreadNotificationCount,
+    getNotification, getUnreadNotificationCount, getUnreadNotificationCountForUser, listNotifications, listNotificationsForUser, markAllNotificationsRead, markNotificationRead, migrateNotifications,
+    saveNotification, type DbNotification
 } from "./db/notifications.js"
 
 // API request logging
 export {
-  type DbApiRequest,
-  migrateApiRequests,
-  saveApiRequest,
-  listApiRequests,
+    listApiRequests, migrateApiRequests,
+    saveApiRequest, type DbApiRequest
 } from "./db/api-requests.js"
 
 // Event log & webhook drains
 export {
-  type DbEvent,
-  migrateEventLog,
-  saveEvent,
-  listEvents,
-  type DbWebhookDrain,
-  migrateWebhookDrains,
-  listWebhookDrains,
-  getWebhookDrain,
-  saveWebhookDrain,
-  deleteWebhookDrain,
+    deleteWebhookDrain, getWebhookDrain, listEvents, listWebhookDrains, migrateEventLog, migrateWebhookDrains, saveEvent, saveWebhookDrain, type DbEvent, type DbWebhookDrain
 } from "./db/events.js"
 
 // Data lifecycle — reset, pruning, stats
 export {
-  clearTransactionalData,
-  pruneOldData,
-  getDbStats,
+    clearTransactionalData, getDbStats, pruneOldData
 } from "./db/lifecycle.js"
+

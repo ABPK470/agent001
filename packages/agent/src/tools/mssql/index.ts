@@ -3,6 +3,7 @@ export {
     getMssqlConfig,
     getMssqlKillSignal,
     getPool,
+    runWithMssqlKillSignal,
     setMssqlConfig,
     setMssqlConfigs,
     setMssqlKillSignal,

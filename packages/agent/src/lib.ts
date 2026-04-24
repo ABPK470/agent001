@@ -161,6 +161,7 @@ export type {
 } from "./engine/index.js"
 
 // LLM clients
+export { DatabricksClient } from "./llm/databricks.js"
 export { OpenAIClient } from "./llm/openai.js"
 
 // Built-in tools
@@ -182,7 +183,7 @@ export { inspectDefinitionTool } from "./tools/mssql-inspector.js"
 export { profileDataTool } from "./tools/mssql-profiler.js"
 export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
 export {
-    closeMssqlPool, exportQueryToFileTool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
+    closeMssqlPool, exportQueryToFileTool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, runWithMssqlKillSignal, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"

@@ -2,29 +2,70 @@
  * Layouts API routes — save/load dashboard configurations.
  */
 
-import type { FastifyInstance } from "fastify"
-import { randomUUID } from "node:crypto"
-import * as db from "../db.js"
+import type { FastifyInstance } from "fastify";
+import { randomUUID } from "node:crypto";
+import * as db from "../db.js";
 
-// Well-known ID for auto-saved dashboard state
-const DASHBOARD_STATE_ID = "__dashboard_state__"
+/**
+ * Per-user well-known dashboard ID. Falls back to session_id for cookie-only
+ * (no UPN) visitors so each browser session gets its own layout. Anonymous
+ * (pre-welcome) requests get a transient sid that won't persist anyway.
+ */
+function dashboardIdFor(req: { session?: { upn?: string | null; sid?: string } }): string {
+  const s = req.session
+  const key = (s?.upn ?? s?.sid ?? "anon").toLowerCase()
+  return `dashboard:${key}`
+}
+
+/** Pre-multi-user dashboard id (single global layout). Used as a one-time
+ *  fallback for admins so the layout from before the per-user split isn't lost. */
+const LEGACY_DASHBOARD_ID = "__dashboard_state__"
+
+/** True if a saved dashboard config has no actual content (a single empty view).
+ *  Used to detect the throw-away default the UI saves on first mount so we
+ *  can still hand the admin the legacy layout. */
+function isEmptyDashboard(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object") return true
+  const views = (parsed as { views?: Array<{ widgets?: unknown[] }> }).views
+  if (!Array.isArray(views) || views.length === 0) return true
+  return views.every((v) => !Array.isArray(v.widgets) || v.widgets.length === 0)
+}
 
 export function registerLayoutRoutes(app: FastifyInstance): void {
 
   // ── Auto-save dashboard state ────────────────────────────────
 
-  app.get("/api/dashboard-state", async () => {
-    const state = db.getLayout(DASHBOARD_STATE_ID)
-    if (!state) return null
-    return JSON.parse(state.config)
+  app.get("/api/dashboard-state", async (req) => {
+    const id = dashboardIdFor(req)
+    const state = db.getLayout(id)
+    const parsed = state ? JSON.parse(state.config) : null
+
+    // Admin-only legacy fallback: if there's no saved state OR the saved state
+    // is an empty default (the UI auto-saves a blank "Main" on first mount),
+    // hand back the pre-split global dashboard and copy it under the admin's
+    // key so it persists across reloads.
+    if (req.session?.isAdmin && (!parsed || isEmptyDashboard(parsed))) {
+      const legacy = db.getLayout(LEGACY_DASHBOARD_ID)
+      if (legacy) {
+        const legacyParsed = JSON.parse(legacy.config)
+        db.saveLayout({
+          id,
+          name: `Dashboard for ${req.session.displayName ?? "admin"}`,
+          config: legacy.config,
+          updated_at: new Date().toISOString(),
+        })
+        return legacyParsed
+      }
+    }
+    return parsed
   })
 
   app.put<{ Body: { views: unknown; activeViewId: string } }>(
     "/api/dashboard-state",
     async (req) => {
       db.saveLayout({
-        id: DASHBOARD_STATE_ID,
-        name: "Dashboard Auto-Save",
+        id: dashboardIdFor(req),
+        name: `Dashboard for ${req.session?.displayName ?? "anon"}`,
         config: JSON.stringify({
           views: req.body.views,
           activeViewId: req.body.activeViewId,

@@ -16,7 +16,7 @@
 
 import type { WebSocket } from "@fastify/websocket"
 import { createHmac } from "node:crypto"
-import { listWebhookDrains, saveEvent } from "./db.js"
+import { getRun, listWebhookDrains, saveEvent } from "./db.js"
 
 export interface WsEvent {
   type: string
@@ -24,16 +24,30 @@ export interface WsEvent {
   timestamp: string
 }
 
+/** Identity attached to a connected WebSocket client. */
+export interface WsClientIdentity {
+  upn: string | null
+  sid: string
+  isAdmin: boolean
+}
+
+/** Minimal SSE sink — Node.js raw response stream. */
+export interface SseSink {
+  write: (chunk: string) => boolean
+  end: () => void
+  on: (event: "close" | "error", listener: () => void) => void
+}
+
 // ── EventBroadcaster ─────────────────────────────────────────────
 
 export class EventBroadcaster {
-  private readonly clients = new Set<WebSocket>()
+  private readonly clients = new Map<WebSocket, WsClientIdentity>()
+  private readonly sseClients = new Map<symbol, { sink: SseSink; identity: WsClientIdentity }>()
+  /** Tiny LRU of runId → owner. Cleared after this many entries. */
+  private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
 
-  addClient(ws: WebSocket): void {
-    this.clients.add(ws)
-    // Disable Nagle's algorithm so each WS frame is flushed immediately.
-    // Without this, rapid small sends (e.g. token streaming) get coalesced
-    // by the TCP stack and arrive at the browser all at once.
+  addClient(ws: WebSocket, identity: WsClientIdentity): void {
+    this.clients.set(ws, identity)
     ;(ws as unknown as { _socket?: { setNoDelay?: (v: boolean) => void } })._socket?.setNoDelay?.(true)
     ws.on("close", () => this.clients.delete(ws))
     ws.on("error", () => this.clients.delete(ws))
@@ -45,17 +59,59 @@ export class EventBroadcaster {
     })
   }
 
+  /**
+   * Register a Server-Sent Events client. Returns a disposer that the route
+   * handler must call when the underlying response closes.
+   *
+   * SSE is preferred for production deployments behind HTTP-only reverse
+   * proxies (e.g. proxy-https on the corp Windows host) that don't forward
+   * WebSocket Upgrade frames. The wire format is plain text-event-stream:
+   * each event is serialised as `data: <json>\n\n`.
+   */
+  addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
+    const key = Symbol()
+    this.sseClients.set(key, { sink, identity })
+    const dispose = () => { this.sseClients.delete(key) }
+    sink.on("close", dispose)
+    sink.on("error", dispose)
+    // Initial padding + hello event
+    sink.write(`: connected\n\n`)
+    sink.write(`data: ${JSON.stringify({
+      type: "ws.connected",
+      data: { version: "0.1.0", clients: this.clientCount() },
+      timestamp: new Date().toISOString(),
+    })}\n\n`)
+    return dispose
+  }
+
   broadcast(event: Omit<WsEvent, "timestamp">): void {
     const msg: WsEvent = {
       ...event,
       timestamp: new Date().toISOString(),
     }
     const json = JSON.stringify(msg)
+    const sseFrame = `data: ${json}\n\n`
 
-    // 1. Push to all WS clients
-    for (const client of this.clients) {
-      if (client.readyState === 1) {
-        client.send(json)
+    // Resolve run owner once if this event is run-scoped, then send only to
+    // clients that are admin OR own that run. Events without a runId go to all.
+    const runId = typeof msg.data["runId"] === "string" ? (msg.data["runId"] as string) : null
+    const owner = runId ? this.resolveOwner(runId) : null
+
+    const allowed = (identity: WsClientIdentity): boolean => {
+      if (!owner || identity.isAdmin) return true
+      const matchesUpn = !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
+      const matchesSid = !identity.upn && !!owner.sid && owner.sid === identity.sid
+      return matchesUpn || matchesSid
+    }
+
+    for (const [client, identity] of this.clients) {
+      if (client.readyState !== 1) continue
+      if (allowed(identity)) client.send(json)
+    }
+
+    for (const [, { sink, identity }] of this.sseClients) {
+      if (allowed(identity)) {
+        try { sink.write(sseFrame) } catch { /* dropped client; close handler cleans up */ }
       }
     }
 
@@ -71,8 +127,20 @@ export class EventBroadcaster {
     this.pushToWebhooks(msg, json).catch(() => {})
   }
 
+  /** Look up which session/upn owns a runId. Cached for perf. */
+  private resolveOwner(runId: string): { upn: string | null; sid: string | null } | null {
+    const hit = this.ownerCache.get(runId)
+    if (hit) return hit
+    const run = getRun(runId)
+    if (!run) return null
+    const owner = { upn: run.upn ?? null, sid: run.session_id ?? null }
+    if (this.ownerCache.size > 1024) this.ownerCache.clear()
+    this.ownerCache.set(runId, owner)
+    return owner
+  }
+
   clientCount(): number {
-    return this.clients.size
+    return this.clients.size + this.sseClients.size
   }
 
   private send(ws: WebSocket, event: WsEvent): void {
@@ -116,8 +184,12 @@ export class EventBroadcaster {
 
 const _default = new EventBroadcaster()
 
-export function addClient(ws: WebSocket): void {
-  _default.addClient(ws)
+export function addClient(ws: WebSocket, identity: WsClientIdentity): void {
+  _default.addClient(ws, identity)
+}
+
+export function addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
+  return _default.addSseClient(sink, identity)
 }
 
 export function broadcast(event: Omit<WsEvent, "timestamp">): void {

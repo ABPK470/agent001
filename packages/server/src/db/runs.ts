@@ -2,6 +2,7 @@
  * Run persistence — CRUD for agent runs, checkpoints, audit logs, traces.
  */
 
+import { getCurrentSession } from "../auth/context.js"
 import { getDb } from "./connection.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -18,15 +19,28 @@ export interface DbRun {
   data: string
   created_at: string
   completed_at: string | null
+  session_id?: string | null
+  upn?: string | null
+  display_name?: string | null
 }
 
 const upsertRun = () => getDb().prepare(`
-  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, data, created_at, completed_at)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @data, @created_at, @completed_at)
+  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, data, created_at, completed_at, session_id, upn, display_name)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @data, @created_at, @completed_at, @session_id, @upn, @display_name)
 `)
 
 export function saveRun(run: DbRun): void {
-  upsertRun().run(run)
+  // Stamp session/upn from AsyncLocalStorage if the caller didn't provide them.
+  // Existing rows keep their stamp on update (we read first via getRun and merge).
+  const existing = getDb().prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?").get(run.id) as
+    { session_id: string | null; upn: string | null; display_name: string | null } | undefined
+  const ctx = getCurrentSession()
+  upsertRun().run({
+    ...run,
+    session_id:   run.session_id   ?? existing?.session_id   ?? ctx?.sid         ?? null,
+    upn:          run.upn          ?? existing?.upn          ?? ctx?.upn         ?? null,
+    display_name: run.display_name ?? existing?.display_name ?? ctx?.displayName ?? null,
+  })
 }
 
 export function getRun(id: string): DbRun | undefined {
@@ -55,6 +69,30 @@ export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
       ORDER BY r.created_at DESC LIMIT ? OFFSET ?
     `)
     .all(limit, offset) as DbRunWithUsage[]
+}
+
+/**
+ * Scoped listing for non-admin visitors. Matches by upn when set, otherwise
+ * by session_id (so anonymous-cookie users only see runs they themselves
+ * started in this browser session).
+ */
+export function listRunsWithUsageForUser(
+  opts: { upn?: string | null; sid?: string | null },
+  limit = 100,
+  offset = 0,
+): DbRunWithUsage[] {
+  const { upn, sid } = opts
+  if (!upn && !sid) return []
+  return getDb()
+    .prepare(`
+      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
+      FROM runs r
+      LEFT JOIN token_usage t ON t.run_id = r.id
+      WHERE (@upn IS NOT NULL AND r.upn = @upn)
+         OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
+      ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
+    `)
+    .all({ upn: upn ?? null, sid: sid ?? null, limit, offset }) as DbRunWithUsage[]
 }
 
 export function findStaleRuns(): DbRun[] {

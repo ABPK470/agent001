@@ -1,15 +1,18 @@
 import { Activity, MoreVertical, Shield, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { api, createWs } from "./api"
+import { AdminLoginModal } from "./components/AdminLoginModal"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
 import { UsageModal } from "./components/UsageModal"
+import { WelcomeModal } from "./components/WelcomeModal"
 import { WidgetCatalog } from "./components/WidgetCatalog"
 import { WidgetModal } from "./components/WidgetModal"
 import { restoreDashboardState, startDashboardSync } from "./dashboardSync"
 import { useIsMobile } from "./hooks/useIsMobile"
+import { useMe } from "./hooks/useMe"
 import { useStore } from "./store"
 import type { WidgetType } from "./types"
 import { widgetRegistry } from "./widgets"
@@ -31,6 +34,8 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "platform-dev-log": "Platform Dev Log",
   "universe-viz": "Sequence",
   "code-seq-diagram": "Code Seq",
+  "mymi-db": "MyMI DB",
+  "active-users": "Active Users",
 }
 
 const SYNC_CHANNEL = "agent001-active-run"
@@ -62,8 +67,22 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [adminLoginOpen, setAdminLoginOpen] = useState(false)
+  const { me, needsWelcome, refresh: refreshMe, setIdentity } = useMe()
 
   const popOut = getPopOutWidget()
+
+  // Ctrl+Shift+A → admin login modal (fallback when UPN whitelist unavailable).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        e.preventDefault()
+        setAdminLoginOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   // Connect WebSocket
   useEffect(() => {
@@ -71,10 +90,20 @@ export function App() {
     return () => ws.close()
   }, [handleWsEvent, setConnected])
 
-  // Load initial runs + auto-select the most recent
+  // Load initial runs + auto-select the most recent. Re-runs on identity
+  // change so each user only sees runs the server scopes to them.
   useEffect(() => {
+    if (!me) return
     api.listRuns().then(async (runs) => {
       setRuns(runs)
+      // Reset active run on identity change to avoid showing stale selection
+      // from the previous user.
+      const currentActive = useStore.getState().activeRunId
+      const stillVisible = currentActive && runs.some((r) => r.id === currentActive)
+      if (!stillVisible) {
+        setActiveRun(null)
+        setSteps([]); setLogs([]); setAudit([]); setTrace([])
+      }
       if (runs.length > 0 && !useStore.getState().activeRunId) {
         const latest = runs[0]
         setActiveRun(latest.id)
@@ -90,12 +119,15 @@ export function App() {
         } catch { /* ignore */ }
       }
     }).catch(() => {})
-  }, [setRuns, setActiveRun, setSteps, setLogs, setAudit, setTrace])
+  }, [me?.sessionId, me?.upn, setRuns, setActiveRun, setSteps, setLogs, setAudit, setTrace])
 
-  // Restore dashboard layout from server + start auto-sync
+  // Restore dashboard layout from server + start auto-sync.
+  // Re-runs when identity changes (welcome modal submit / switch user) so
+  // each user gets their own per-user layout instead of sharing one.
   useEffect(() => {
+    if (!me) return
     restoreDashboardState().then(() => startDashboardSync())
-  }, [])
+  }, [me?.sessionId, me?.upn])
 
   // Pop-out: load latest runs + follow active run from main window
   useEffect(() => {
@@ -163,6 +195,14 @@ export function App() {
       <div className="flex flex-col h-screen bg-surface p-4">
         <Widget />
       </div>
+    )
+  }
+
+  // Block the SPA on first visit until the user introduces themselves.
+  // (Skip for pop-outs — they inherit the parent's cookie.)
+  if (needsWelcome) {
+    return (
+      <WelcomeModal onSubmit={async (displayName, upn) => { await setIdentity(displayName, upn) }} />
     )
   }
 
@@ -263,9 +303,15 @@ export function App() {
   // ── Desktop layout ─────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-base">
-      <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} />
+      <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} me={me} />
       <Canvas ref={canvasRef} />
       <WidgetModal />
+      {adminLoginOpen && (
+        <AdminLoginModal
+          onClose={() => setAdminLoginOpen(false)}
+          onSuccess={() => { setAdminLoginOpen(false); refreshMe() }}
+        />
+      )}
     </div>
   )
 }

@@ -9,18 +9,18 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { api } from "./api"
 import type {
-    AuditEntry,
-    LayoutItem,
-    LogEntry,
-    Notification,
-    Run,
-    RunDetail,
-    Step,
-    TraceEntry,
-    ViewConfig,
-    Widget,
-    WidgetType,
-    WsEvent,
+  AuditEntry,
+  LayoutItem,
+  LogEntry,
+  Notification,
+  Run,
+  RunDetail,
+  Step,
+  TraceEntry,
+  ViewConfig,
+  Widget,
+  WidgetType,
+  WsEvent,
 } from "./types"
 import { randomId } from "./util"
 
@@ -190,6 +190,7 @@ const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, 
   "universe-viz": { w: 12, h: 10, minW: 8, minH: 6 },
   "code-seq-diagram": { w: 12, h: 12, minW: 8, minH: 6 },
   "mymi-db": { w: 12, h: 12, minW: 8, minH: 6 },
+  "active-users": { w: 10, h: 10, minW: 6, minH: 5 },
 }
 
 const GRID_COLS = 12

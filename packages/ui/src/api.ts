@@ -24,7 +24,8 @@ const BASE = ""
 async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...opts?.headers as Record<string, string> }
   if (opts?.body) headers["Content-Type"] = "application/json"
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers })
+  // credentials: include — sends the session cookie cross-port (UI on 5173, server on 3102 in dev).
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include" })
   return res.json() as Promise<T>
 }
 
@@ -256,7 +257,12 @@ export const api = {
     }>(`/api/mymi/datamodel${db ? `?db=${encodeURIComponent(db)}` : ""}`),
 }
 
-// ── WebSocket + cross-tab relay via BroadcastChannel ─────────────
+// ── Live event stream + cross-tab relay via BroadcastChannel ─────
+//
+// Transport: Server-Sent Events (HTTP streaming). Works through any HTTP
+// reverse proxy without WebSocket upgrade support — including the corp
+// proxy-https on the Windows host. Auto-reconnects via the browser's
+// EventSource implementation.
 
 const BC_CHANNEL = "agent001-ws-relay"
 
@@ -264,14 +270,12 @@ export function createWs(
   onEvent: (event: { type: string, data: Record<string, unknown>, timestamp: string }) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-  const url = `${protocol}//${window.location.host}/ws`
+  const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
 
-  let ws: WebSocket | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let es: EventSource | null = null
   let alive = true
 
-  // Deduplicate events across WS + BroadcastChannel
+  // Deduplicate events across stream + BroadcastChannel
   const seen = new Set<string>()
   function eventKey(e: { type: string; timestamp: string; data: Record<string, unknown> }): string {
     // debug.trace events need entry-level uniqueness (kind + seq) since
@@ -284,11 +288,7 @@ export function createWs(
     const key = eventKey(event)
     if (seen.has(key)) return false
     seen.add(key)
-    // Keep set bounded
     if (seen.size > 500) {
-      const it = seen.values()
-      for (let i = 0; i < 250; i++) it.next()
-      // Rebuild with recent half
       const arr = [...seen].slice(-250)
       seen.clear()
       arr.forEach((k) => seen.add(k))
@@ -296,7 +296,7 @@ export function createWs(
     return true
   }
 
-  // Cross-tab relay: share WS events between all windows
+  // Cross-tab relay: share events between all windows
   const bc = new BroadcastChannel(BC_CHANNEL)
   bc.onmessage = (e) => {
     try {
@@ -306,29 +306,25 @@ export function createWs(
 
   function connect() {
     if (!alive) return
-    ws = new WebSocket(url)
+    es = new EventSource(url, { withCredentials: true })
 
-    ws.onopen = () => onStatus(true)
+    es.onopen = () => onStatus(true)
 
-    ws.onmessage = (e) => {
+    es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data as string)
         if (dedupe(event)) {
           onEvent(event)
-          // Relay to other tabs/windows
           bc.postMessage(event)
         }
       } catch { /* ignore malformed messages */ }
     }
 
-    ws.onclose = () => {
+    es.onerror = () => {
       onStatus(false)
-      if (alive) {
-        reconnectTimer = setTimeout(connect, 2000)
-      }
+      // EventSource auto-reconnects; nothing else to do unless we've torn down.
+      if (!alive) es?.close()
     }
-
-    ws.onerror = () => ws?.close()
   }
 
   connect()
@@ -337,8 +333,7 @@ export function createWs(
     close() {
       alive = false
       bc.close()
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
+      es?.close()
     },
   }
 }

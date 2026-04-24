@@ -27,8 +27,10 @@ import {
 } from "lucide-react"
 import type { ComponentType } from "react"
 import { useIsMobile } from "../hooks/useIsMobile"
+import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
+import { VISITOR_WIDGETS } from "../types"
 
 interface Props {
   onClose: () => void
@@ -52,6 +54,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "universe-viz", label: "Sequence Diagram", desc: "Real-time UML sequence diagram of all platform events with lifelines, arrows, and activation boxes", Icon: Globe },
   { type: "code-seq-diagram", label: "Code Sequence", desc: "Source-code-level UML sequence diagram — every function call, file path, and module interaction", Icon: GitBranch },
   { type: "mymi-db", label: "Mymi DB", desc: "Visual explorer for the mymi MSSQL database — browse schemas, tables, views, and preview data", Icon: Database },
+  { type: "active-users", label: "Active Users", desc: "Live admin view: who's online, what they're running, and which model they're using", Icon: Activity },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
@@ -60,6 +63,8 @@ export function WidgetCatalog({ onClose }: Props) {
   const addWidget = useStore((s) => s.addWidget)
   const removeWidget = useStore((s) => s.removeWidget)
   const isMobile = useIsMobile()
+  const { me } = useMe()
+  const isAdmin = me?.isAdmin ?? false
 
   const activeView = views.find((v) => v.id === activeViewId)
   const activeTypes = new Set(activeView?.widgets.map((w) => w.type) ?? [])
@@ -100,7 +105,7 @@ export function WidgetCatalog({ onClose }: Props) {
         </div>
 
         <div className={`grid gap-2.5 p-5 overflow-y-auto ${isMobile ? "grid-cols-1 flex-1" : "grid-cols-3"}`}>
-          {CATALOG.map((item) => {
+          {CATALOG.filter((item) => isAdmin || VISITOR_WIDGETS.has(item.type)).map((item) => {
             const isActive = activeTypes.has(item.type)
             return (
               <button

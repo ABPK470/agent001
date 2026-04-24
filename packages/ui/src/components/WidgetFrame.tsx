@@ -30,6 +30,8 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "platform-dev-log": "Platform Dev Log",
   "universe-viz": "Sequence",
   "code-seq-diagram": "Code Seq",
+  "mymi-db": "Mymi DB",
+  "active-users": "Active Users",
 }
 
 interface Props {

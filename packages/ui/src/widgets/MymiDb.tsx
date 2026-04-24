@@ -114,10 +114,17 @@ function classifyObject(schema: string, name: string, isTable: boolean): string 
   return isTable ? "Table" : "View"
 }
 
-function fmtRows(n: number): string {
+function fmtRows(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "–"
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+/** Safely truncate a string that may be null/undefined. Always returns a string. */
+function truncStr(s: string | null | undefined, max: number, fallback = "—"): string {
+  if (s == null) return fallback
+  return s.length > max ? s.slice(0, max - 1) + "…" : s
 }
 
 function fmtMb(n: number): string {
@@ -296,18 +303,18 @@ export function MymiDb() {
   }, [debouncedSearch, activeDb, searchSchemas])
 
   // ── Derived ──────────────────────────────────────────────────
-  const maxSchemaRows = Math.max(...stats.map((s) => s.totalRows), 1)
-  const maxObjRows    = Math.max(...objects.map((o) => o.rowCount), 1)
+  const maxSchemaRows = Math.max(...stats.map((s) => s.totalRows ?? 0), 1)
+  const maxObjRows    = Math.max(...objects.map((o) => o.rowCount ?? 0), 1)
 
   const filteredObjects = objects
     .filter((o) =>
       (typeFilter === "all" || o.type === typeFilter) &&
-      (!objectFilter || o.name.toLowerCase().includes(objectFilter.toLowerCase())),
+      (!objectFilter || (o.name ?? "").toLowerCase().includes(objectFilter.toLowerCase())),
     )
-    .sort((a, b) => objectSort === "rows" ? b.rowCount - a.rowCount : a.name.localeCompare(b.name))
+    .sort((a, b) => objectSort === "rows" ? (b.rowCount ?? 0) - (a.rowCount ?? 0) : (a.name ?? "").localeCompare(b.name ?? ""))
 
   const filteredCols = colFilter
-    ? columns.filter((c) => c.name.toLowerCase().includes(colFilter.toLowerCase()))
+    ? columns.filter((c) => (c.name ?? "").toLowerCase().includes(colFilter.toLowerCase()))
     : columns
 
   const activeDbInfo = databases.find((d) => d.name === activeDb)
@@ -335,13 +342,10 @@ export function MymiDb() {
   ]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden text-text">
+    <div className="flex flex-col h-full overflow-hidden text-text -m-3">
 
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* ── Header (toolbar — title comes from WidgetFrame) ───────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 bg-surface">
-        <Database size={14} className="text-accent shrink-0" />
-        <span className="text-sm font-semibold text-text">Mymi DB</span>
-
         {/* DB selector */}
         {databases.length > 1 && (
           <select
@@ -355,15 +359,15 @@ export function MymiDb() {
           </select>
         )}
         {databases.length === 1 && activeDbInfo && (
-          <span className="text-xs text-text-muted font-mono">{activeDbInfo.server} / {activeDbInfo.database}</span>
+          <span className="text-sm text-text-muted font-mono">{activeDbInfo.server} / {activeDbInfo.database}</span>
         )}
 
         {/* Global search */}
         <div className="flex-1 mx-2 relative max-w-lg">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             ref={searchInputRef}
-            className="w-full bg-base rounded-lg pl-8 pr-8 py-1 text-xs text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
+            className="w-full bg-base rounded-lg pl-8 pr-8 py-1.5 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
             placeholder="Search tables, views, columns…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -391,7 +395,7 @@ export function MymiDb() {
               key={key}
               onClick={() => setTopMode(key)}
               className={[
-                "px-2 py-0.5 rounded text-[11px] transition-colors",
+                "px-2 py-1 rounded text-xs transition-colors",
                 topMode === key
                   ? "bg-accent/20 text-accent font-medium"
                   : "text-text-muted hover:text-text hover:bg-elevated",
@@ -496,8 +500,8 @@ export function MymiDb() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Schema panel */}
-          <div className="w-[11rem] shrink-0 border-r border-border flex flex-col overflow-hidden">
-            <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted border-b border-border/50">
+          <div className="w-[12rem] shrink-0 border-r border-border flex flex-col overflow-hidden">
+            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border/50">
               Schemas
             </div>
 
@@ -529,16 +533,16 @@ export function MymiDb() {
                     <div className="absolute left-0 bottom-0 h-0.5 bg-accent/30 transition-all"
                       style={{ width: `${rowPct}%` }} />
                     <div className="flex items-center gap-1">
-                      <ChevronRight size={10} className={[
+                      <ChevronRight size={11} className={[
                         "shrink-0 transition-transform text-text-muted",
                         activeSchema === s.name ? "rotate-90 text-accent" : "",
                       ].join(" ")} />
                       <span className={[
-                        "text-xs font-mono font-medium truncate",
+                        "text-sm font-mono font-medium truncate",
                         activeSchema === s.name ? "text-accent" : "text-text",
                       ].join(" ")}>{s.name}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5 pl-3.5 text-[10px] text-text-muted">
+                    <div className="flex items-center gap-1.5 mt-0.5 pl-4 text-[11px] text-text-muted">
                       <span>{s.tableCount}T</span>
                       {s.viewCount > 0 && <span>{s.viewCount}V</span>}
                       {stat && stat.totalRows > 0 && (
@@ -552,29 +556,29 @@ export function MymiDb() {
           </div>
 
           {/* Object list */}
-          <div className="w-56 shrink-0 border-r border-border flex flex-col overflow-hidden">
-            <div className="px-2 py-1.5 border-b border-border/50 shrink-0 space-y-1.5">
+          <div className="w-64 shrink-0 border-r border-border flex flex-col overflow-hidden">
+            <div className="px-2 py-2 border-b border-border/50 shrink-0 space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted truncate">
+                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted truncate">
                   {activeSchema ?? "Objects"}
                 </span>
                 {objects.length > 0 && (
-                  <span className="ml-auto text-[10px] text-text-muted">{objects.length}</span>
+                  <span className="ml-auto text-[11px] text-text-muted">{objects.length}</span>
                 )}
               </div>
               {activeSchema && (
                 <div className="flex gap-1">
                   <div className="relative flex-1">
-                    <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted" />
+                    <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted" />
                     <input
-                      className="w-full bg-base rounded pl-6 pr-2 py-0.5 text-[11px] text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
+                      className="w-full bg-base rounded pl-6 pr-2 py-1 text-xs text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent"
                       placeholder="Filter…"
                       value={objectFilter}
                       onChange={(e) => setObjectFilter(e.target.value)}
                     />
                   </div>
                   <select
-                    className="bg-base text-[11px] text-text-muted px-1 rounded border-none outline-none focus:ring-1 focus:ring-accent"
+                    className="bg-base text-xs text-text-muted px-1 rounded border-none outline-none focus:ring-1 focus:ring-accent"
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value as "all" | "table" | "view")}
                   >
@@ -584,7 +588,7 @@ export function MymiDb() {
                   </select>
                   <button
                     className={[
-                      "text-[10px] px-1.5 rounded transition-colors",
+                      "text-[11px] px-1.5 rounded transition-colors",
                       objectSort === "rows"
                         ? "bg-accent/20 text-accent"
                         : "text-text-muted hover:text-text",
@@ -606,7 +610,7 @@ export function MymiDb() {
 
             <div className="flex-1 overflow-y-auto">
               {!activeSchema && !objectsLoading && (
-                <div className="px-3 py-4 text-text-muted text-xs">← Select a schema</div>
+                <div className="px-3 py-4 text-text-muted text-sm">← Select a schema</div>
               )}
               {filteredObjects.map((obj) => {
                 const isActive = activeObject?.name === obj.name && activeObject?.type === obj.type
@@ -622,13 +626,13 @@ export function MymiDb() {
                     <SizeBar value={obj.rowCount} max={maxObjRows} />
                     <div className="relative flex items-center gap-1.5 w-full">
                       {obj.type === "view"
-                        ? <Eye size={10} className="shrink-0 text-text-muted" />
-                        : <Table2 size={10} className="shrink-0 text-text-muted" />}
+                        ? <Eye size={11} className="shrink-0 text-text-muted" />
+                        : <Table2 size={11} className="shrink-0 text-text-muted" />}
                       <span className={[
-                        "truncate text-[11px] font-mono",
+                        "truncate text-xs font-mono",
                         isActive ? "text-accent font-semibold" : "text-text",
                       ].join(" ")}>{obj.name}</span>
-                      <span className="ml-auto text-[10px] text-text-muted shrink-0">
+                      <span className="ml-auto text-[11px] text-text-muted shrink-0">
                         {obj.type === "table" ? fmtRows(obj.rowCount) : <span className="opacity-50">view</span>}
                       </span>
                     </div>
@@ -966,8 +970,8 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
   const COL_GAP = 100
   const ROW_GAP = 12
 
-  const inNodes  = relations.inbound
-  const outNodes = relations.outbound
+  const inNodes  = relations.inbound  ?? []
+  const outNodes = relations.outbound ?? []
   const implNodes = relations.implicit ?? []
   const totalIn  = inNodes.length
   const totalOut = outNodes.length
@@ -1025,25 +1029,30 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
 
         {/* Outbound — this table → them */}
         {outNodes.map((r, i) => {
+          const refSchema = r?.refSchema ?? "?"
+          const refTable  = r?.refTable  ?? "—"
+          const refCol    = r?.refColumn ?? "—"
+          const localCol  = r?.localColumn ?? "—"
+          const refRows   = r?.refRowCount ?? 0
           const nx = centerX + BOX_W + COL_GAP
           const ny = nodeY(i, totalOut)
           const sx = centerX + BOX_W, sy = centerY
           const ex = nx, ey = ny + BOX_H / 2
           const mx = (sx + ex) / 2
           return (
-            <g key={`out-${i}`} className="cursor-pointer" onClick={() => onNavigate(r.refSchema, r.refTable, r.refRowCount)}>
+            <g key={`out-${i}`} className="cursor-pointer" onClick={() => onNavigate(refSchema, refTable, refRows)}>
               <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
                 fill="none" stroke="rgb(96,165,250)" strokeWidth={1.5} strokeOpacity={0.65} markerEnd="url(#arrowOut)" />
               <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
                 fill="rgba(96,165,250,0.07)" stroke="rgba(96,165,250,0.35)" strokeWidth={1} />
               <text x={nx + BOX_W / 2} y={ny + 16} textAnchor="middle" fontSize={10} fill="rgb(147,197,253)" fontWeight="500">
-                {r.refTable.length > 18 ? r.refTable.slice(0, 17) + "…" : r.refTable}
+                {truncStr(refTable, 18)}
               </text>
               <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.7)">
-                {r.refSchema} · {fmtRows(r.refRowCount)}
+                {refSchema} · {fmtRows(refRows)}
               </text>
               <text x={nx + BOX_W / 2} y={ny + 40} textAnchor="middle" fontSize={8} fill="rgba(96,165,250,0.55)">
-                {r.localColumn} → {r.refColumn}
+                {localCol} → {refCol}
               </text>
             </g>
           )
@@ -1051,25 +1060,30 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
 
         {/* Inbound — they → this table */}
         {inNodes.map((r, i) => {
+          const srcSchema = r?.srcSchema ?? "?"
+          const srcTable  = r?.srcTable  ?? "—"
+          const srcCol    = r?.srcColumn ?? "—"
+          const localCol  = r?.localColumn ?? "—"
+          const srcRows   = r?.srcRowCount ?? 0
           const nx = 20
           const ny = nodeY(i, totalIn)
           const sx = nx + BOX_W, sy = ny + BOX_H / 2
           const ex = centerX, ey = centerY
           const mx = (sx + ex) / 2
           return (
-            <g key={`in-${i}`} className="cursor-pointer" onClick={() => onNavigate(r.srcSchema, r.srcTable, r.srcRowCount)}>
+            <g key={`in-${i}`} className="cursor-pointer" onClick={() => onNavigate(srcSchema, srcTable, srcRows)}>
               <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
                 fill="none" stroke="rgb(148,163,184)" strokeWidth={1.5} strokeOpacity={0.45} markerEnd="url(#arrowIn)" />
               <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
                 fill="rgba(148,163,184,0.05)" stroke="rgba(148,163,184,0.25)" strokeWidth={1} />
               <text x={nx + BOX_W / 2} y={ny + 16} textAnchor="middle" fontSize={10} fill="rgb(203,213,225)" fontWeight="500">
-                {r.srcTable.length > 18 ? r.srcTable.slice(0, 17) + "…" : r.srcTable}
+                {truncStr(srcTable, 18)}
               </text>
               <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.7)">
-                {r.srcSchema} · {fmtRows(r.srcRowCount)}
+                {srcSchema} · {fmtRows(srcRows)}
               </text>
               <text x={nx + BOX_W / 2} y={ny + 40} textAnchor="middle" fontSize={8} fill="rgba(148,163,184,0.5)">
-                {r.srcColumn} → {r.localColumn}
+                {srcCol} → {localCol}
               </text>
             </g>
           )
@@ -1090,18 +1104,18 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
             Implicit Joins ({implNodes.length} shared columns)
             <span className="ml-2 font-normal normal-case text-[10px]">tables sharing this column name + type</span>
           </div>
-          {implNodes.map((edge) => (
-            <div key={edge.column} className="rounded-lg border border-border/40 bg-base/50 px-3 py-2">
+          {implNodes.map((edge, ei) => (
+            <div key={edge.column ?? `impl-${ei}`} className="rounded-lg border border-border/40 bg-base/50 px-3 py-2">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-mono text-xs text-text font-semibold">{edge.column}</span>
-                <span className="text-[10px] text-text-muted bg-elevated px-1.5 py-0.5 rounded">{edge.dataType}</span>
+                <span className="font-mono text-xs text-text font-semibold">{edge.column ?? "—"}</span>
+                <span className="text-[10px] text-text-muted bg-elevated px-1.5 py-0.5 rounded">{edge.dataType ?? "?"}</span>
                 <span className="text-[10px] text-text-muted ml-auto">{(edge.tables ?? []).length} table{(edge.tables ?? []).length !== 1 ? "s" : ""}</span>
               </div>
               <div className="flex flex-wrap gap-1">
-                {(edge.tables ?? []).slice(0, 20).map((t) => (
-                  <span key={t.qualifiedName} className="px-1.5 py-0.5 rounded bg-elevated text-[10px] font-mono text-accent/80">
-                    {t.qualifiedName}
-                    {t.rowCount ? <span className="text-text-muted ml-1">({fmtRows(t.rowCount)})</span> : null}
+                {(edge.tables ?? []).slice(0, 20).map((t, ti) => (
+                  <span key={t?.qualifiedName ?? `t-${ti}`} className="px-1.5 py-0.5 rounded bg-elevated text-[10px] font-mono text-accent/80">
+                    {t?.qualifiedName ?? "—"}
+                    {t?.rowCount ? <span className="text-text-muted ml-1">({fmtRows(t.rowCount)})</span> : null}
                   </span>
                 ))}
                 {(edge.tables ?? []).length > 20 && (
@@ -1125,9 +1139,12 @@ function RelationsList({ relations, centerSchema, centerName }: {
   centerName: string
 }) {
   const center = `${centerSchema}.${centerName}`
-  const hasOut  = relations.outbound.length > 0
-  const hasIn   = relations.inbound.length > 0
-  const hasImpl = (relations.implicit ?? []).length > 0
+  const outbound = relations.outbound ?? []
+  const inbound  = relations.inbound  ?? []
+  const implicit = relations.implicit ?? []
+  const hasOut  = outbound.length > 0
+  const hasIn   = inbound.length > 0
+  const hasImpl = implicit.length > 0
 
   if (!hasOut && !hasIn && !hasImpl) {
     return <Empty msg="No relationships found (no FK constraints or shared-column joins)" />
@@ -1138,7 +1155,7 @@ function RelationsList({ relations, centerSchema, centerName }: {
       {hasOut && (
         <div className="p-3">
           <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
-            Outbound FK ({relations.outbound.length}) — {centerName} references →
+            Outbound FK ({outbound.length}) — {centerName} references →
           </div>
           <table className="w-full text-[11px]">
             <thead>
@@ -1150,7 +1167,7 @@ function RelationsList({ relations, centerSchema, centerName }: {
               </tr>
             </thead>
             <tbody>
-              {relations.outbound.map((r, i) => (
+              {outbound.map((r, i) => (
                 <tr key={i} className="border-t border-border/20 hover:bg-elevated/20">
                   <td className="py-1 pr-3 font-mono text-text">{r.localColumn}</td>
                   <td className="py-1 pr-3 font-mono text-accent">{r.refSchema}.{r.refTable}</td>
@@ -1166,7 +1183,7 @@ function RelationsList({ relations, centerSchema, centerName }: {
       {hasIn && (
         <div className="p-3">
           <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
-            Inbound FK ({relations.inbound.length}) — tables that reference {centerName}
+            Inbound FK ({inbound.length}) — tables that reference {centerName}
           </div>
           <table className="w-full text-[11px]">
             <thead>
@@ -1178,7 +1195,7 @@ function RelationsList({ relations, centerSchema, centerName }: {
               </tr>
             </thead>
             <tbody>
-              {relations.inbound.map((r, i) => (
+              {inbound.map((r, i) => (
                 <tr key={i} className="border-t border-border/20 hover:bg-elevated/20">
                   <td className="py-1 pr-3 font-mono text-accent">{r.srcSchema}.{r.srcTable}</td>
                   <td className="py-1 pr-3 font-mono text-text-muted">{r.srcColumn}</td>
@@ -1194,7 +1211,7 @@ function RelationsList({ relations, centerSchema, centerName }: {
       {hasImpl && (
         <div className="p-3">
           <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
-            Implicit Joins ({(relations.implicit ?? []).length} shared columns)
+            Implicit Joins ({implicit.length} shared columns)
           </div>
           <table className="w-full text-[11px]">
             <thead>
@@ -1205,15 +1222,15 @@ function RelationsList({ relations, centerSchema, centerName }: {
               </tr>
             </thead>
             <tbody>
-              {(relations.implicit ?? []).map((edge, i) => (
+              {implicit.map((edge, i) => (
                 <tr key={i} className="border-t border-border/20 hover:bg-elevated/20 align-top">
-                  <td className="py-1 pr-3 font-mono text-text">{edge.column}</td>
-                  <td className="py-1 pr-3 font-mono text-text-muted">{edge.dataType}</td>
+                  <td className="py-1 pr-3 font-mono text-text">{edge.column ?? "—"}</td>
+                  <td className="py-1 pr-3 font-mono text-text-muted">{edge.dataType ?? "?"}</td>
                   <td className="py-1">
                     <div className="flex flex-wrap gap-1">
-                      {(edge.tables ?? []).filter((t) => t.qualifiedName !== center).slice(0, 12).map((t) => (
-                        <span key={t.qualifiedName} className="px-1 py-0 rounded bg-elevated text-[10px] font-mono text-accent/80">
-                          {t.qualifiedName}
+                      {(edge.tables ?? []).filter((t) => t?.qualifiedName !== center).slice(0, 12).map((t, ti) => (
+                        <span key={t?.qualifiedName ?? `t-${ti}`} className="px-1 py-0 rounded bg-elevated text-[10px] font-mono text-accent/80">
+                          {t?.qualifiedName ?? "—"}
                         </span>
                       ))}
                       {(edge.tables ?? []).length > 13 && (
@@ -1984,10 +2001,10 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
                     <text x={pos.x + 8} y={pos.y + 14} fontSize={9}
                       fontWeight={hasEdge ? "600" : "400"}
                       fill={hasEdge ? st.text : "rgb(148,163,184)"}>
-                      {t.name.length > 23 ? t.name.slice(0, 22) + "…" : t.name}
+                      {truncStr(t.name, 23)}
                     </text>
                     <text x={pos.x + 8} y={pos.y + 27} fontSize={7.5} fill="rgba(148,163,184,0.5)">
-                      {t.isTable ? (t.rowCount > 0 ? fmtRows(t.rowCount) : "table") : "view"} · {t.columnCount}c
+                      {t.isTable ? ((t.rowCount ?? 0) > 0 ? fmtRows(t.rowCount) : "table") : "view"} · {t.columnCount ?? 0}c
                     </text>
                   </g>
                 )

@@ -7,6 +7,7 @@ import {
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
+import { getCurrentSession } from "../auth/context.js"
 import type { MessageRouter } from "../channels/router.js"
 import * as db from "../db.js"
 import { migrateEffects } from "../effects.js"
@@ -14,7 +15,7 @@ import { migrateMemory } from "../memory.js"
 import { RunQueue, type RunPriority } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
-import { getAllTools, resolveTools } from "../tools.js"
+import { filterToolsForVisitor, getAllTools, resolveTools } from "../tools.js"
 import { broadcast } from "../ws.js"
 import { createNotification, saveTrace } from "./persistence.js"
 import { recoverStaleRunsImpl } from "./recovery.js"
@@ -62,7 +63,15 @@ export class AgentOrchestrator {
     const controller = new AbortController()
     const services = createEngineServices()
     const agentId = config?.agentId ?? null
-    const tools = config?.tools ?? getAllTools()
+    let tools = config?.tools ?? getAllTools()
+    // Visitor allowlist: non-admin sessions get the safe subset (no shell, no
+    // headless browser). Captured here at run-start time when AsyncLocalStorage
+    // still holds the originating request's session. Admin sessions get the
+    // full toolset unchanged.
+    const session = getCurrentSession()
+    if (session && !session.isAdmin) {
+      tools = filterToolsForVisitor(tools)
+    }
     const bus = new AgentBus(runId)
 
     const dbRules = db.listPolicyRules()
@@ -119,6 +128,12 @@ export class AgentOrchestrator {
         tools = resolveTools(JSON.parse(agentDef.tools) as string[])
         systemPrompt = agentDef.system_prompt
       }
+    }
+    // Visitor allowlist on resume too — safety net even if agentDef requests
+    // tools the visitor isn't allowed to use.
+    const session = getCurrentSession()
+    if (session && !session.isAdmin) {
+      tools = filterToolsForVisitor(tools)
     }
 
     this.executeRun(newRunId, originalRun.goal, tools, systemPrompt, originalRun.agent_id ?? null, services, controller, bus, { messages, iteration, parentRunId: runId }).catch((err) => {

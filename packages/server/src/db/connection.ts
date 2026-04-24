@@ -155,6 +155,19 @@ export function _migrate(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid TEXT PRIMARY KEY,
+      upn TEXT,
+      display_name TEXT,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_upn ON sessions(upn);
+    CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at);
   `)
 
   // Column migrations
@@ -167,6 +180,11 @@ export function _migrate(db: Database.Database): void {
     }
   }
   addColumnIfMissing("ALTER TABLE runs ADD COLUMN agent_id TEXT")
+  addColumnIfMissing("ALTER TABLE runs ADD COLUMN session_id TEXT")
+  addColumnIfMissing("ALTER TABLE runs ADD COLUMN upn TEXT")
+  addColumnIfMissing("ALTER TABLE runs ADD COLUMN display_name TEXT")
+  addColumnIfMissing("ALTER TABLE audit_log ADD COLUMN session_id TEXT")
+  addColumnIfMissing("ALTER TABLE audit_log ADD COLUMN upn TEXT")
 
   // Seed default agent
   db.prepare(`
