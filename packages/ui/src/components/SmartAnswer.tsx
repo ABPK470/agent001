@@ -13,7 +13,7 @@
 
 import type React from "react";
 import { DataTable } from "./DataTable";
-import { InlineDiagram, isDiagramLang } from "./InlineDiagram";
+import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram";
 
 // ── Block types ────────────────────────────────────────────────
 
@@ -24,6 +24,111 @@ type Block =
   | { type: "code"; lang: string; text: string }
   | { type: "bullet-list"; items: string[] }
   | { type: "ordered-list"; items: { num: number; text: string }[] }
+
+// ── Structured ordered-list → table heuristic ─────────────────
+// Detects "**Name**: detail, detail, detail" items and builds a multi-column
+// DataTable.  Each comma-segment becomes its own column with an auto-derived
+// header (e.g. "Revenue of 5,593,737.53 ZAR" → header "Revenue (ZAR)",
+// cell "5,593,737.53"; "region Gauteng" → header "Region", cell "Gauteng").
+
+function tryConvertOrderedListToTable(
+  items: { num: number; text: string }[]
+): { headers: string[]; rows: string[][] } | null {
+  if (items.length < 2) return null
+  const RE = /^\*{0,2}([^:*]+?)\*{0,2}:\s+(.+)$/
+  const parsed = items.map((item) => item.text.match(RE))
+  if (!parsed.every(Boolean)) return null
+
+  const names = parsed.map((m) => m![1].trim())
+  const details = parsed.map((m) => m![2].trim())
+
+  // Split each detail into segments by ", " followed by a letter
+  // (commas inside numbers like "1,234" are followed by a digit, so they survive)
+  const segmented = details.map((d) => d.split(/,\s+(?=[A-Za-z])/))
+  const segCount = segmented[0].length
+  const uniform = segmented.every((s) => s.length === segCount)
+
+  if (uniform && segCount > 1) {
+    const cols: { header: string; values: string[] }[] = []
+    for (let c = 0; c < segCount; c++) {
+      const segs = segmented.map((s) => s[c].replace(/\*{2}/g, ""))
+      cols.push(extractColumn(segs))
+    }
+    return {
+      headers: ["#", "Name", ...cols.map((c) => c.header)],
+      rows: items.map((_, i) => [
+        String(items[i].num ?? i + 1),
+        names[i],
+        ...cols.map((c) => c.values[i]),
+      ]),
+    }
+  }
+
+  // Single segment per row — still try to extract a clean header
+  const cleaned = details.map((d) => d.replace(/\*{2}/g, ""))
+  const col = extractColumn(cleaned)
+  return {
+    headers: ["#", "Name", col.header],
+    rows: items.map((_, i) => [
+      String(items[i].num ?? i + 1),
+      names[i],
+      col.values[i],
+    ]),
+  }
+}
+
+/**
+ * Given an array of same-position segment strings (one per row),
+ * derive a column header and per-row cell values.
+ */
+function extractColumn(segs: string[]): { header: string; values: string[] } {
+  // P1: "Label of <number> [UNIT]" — e.g. "Revenue of 225,332,051.63 ZAR"
+  const reOf = /^(.+?)\s+of\s+([\d,]+(?:\.\d+)?)\s*([A-Z]{2,5})?\s*$/
+  const mOf = segs.map((s) => s.match(reOf))
+  if (mOf.every(Boolean)) {
+    const label = mOf[0]![1]
+    if (mOf.every((m) => m![1] === label)) {
+      const unit = mOf[0]![3]
+      return {
+        header: unit ? `${label} (${unit})` : label,
+        values: mOf.map((m) => m![2]),
+      }
+    }
+  }
+
+  // P2: longest common word-prefix where remaining parts differ
+  const wordArrays = segs.map((s) => s.split(/\s+/))
+  let prefixLen = 0
+  for (let w = 0; w < wordArrays[0].length; w++) {
+    if (!wordArrays.every((wa) => w < wa.length && wa[w] === wordArrays[0][w])) break
+    prefixLen = w + 1
+  }
+
+  // If every segment is identical the prefix eats everything — back off to the
+  // first uppercase word (likely the data boundary, e.g. "located in | South Africa")
+  if (prefixLen === wordArrays[0].length && segs.every((s) => s === segs[0])) {
+    for (let w = 0; w < wordArrays[0].length; w++) {
+      if (/^[A-Z]/.test(wordArrays[0][w]) && w > 0) {
+        prefixLen = w
+        break
+      }
+    }
+  }
+
+  if (prefixLen > 0) {
+    const prefix = wordArrays[0].slice(0, prefixLen).join(" ")
+    const values = segs.map((_, i) => wordArrays[i].slice(prefixLen).join(" "))
+    let header = prefix.replace(/\s+(of|in|at|from|by|for|with|is|as|the)$/i, "").trim()
+    if (!header) header = prefix
+    if (/^located$/i.test(header)) header = "Location"
+    else if (/^based$/i.test(header)) header = "Location"
+    else header = header.replace(/\b\w/g, (c) => c.toUpperCase())
+    return { header, values }
+  }
+
+  // Fallback
+  return { header: "Details", values: segs }
+}
 
 // ── Parser ─────────────────────────────────────────────────────
 
@@ -181,6 +286,16 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
           if (isDiagramLang(block.lang)) {
             return <InlineDiagram key={bi} kind={block.lang} source={block.text} />
           }
+          // Defensive: the agent sometimes wraps a chart payload in a generic
+          // ```json (or untagged) fence. If the JSON shape is recognisable as
+          // a known chart kind, render it as a diagram instead of raw text.
+          const lowerLang = (block.lang ?? "").toLowerCase()
+          if (lowerLang === "" || lowerLang === "json" || lowerLang === "json5") {
+            const inferred = tryInferDiagramKind(block.text)
+            if (inferred) {
+              return <InlineDiagram key={bi} kind={inferred} source={block.text} />
+            }
+          }
           return (
             <div key={bi} className="rounded-lg overflow-hidden border border-white/[0.08]">
               {block.lang && (
@@ -209,6 +324,18 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
         }
 
         if (block.type === "ordered-list") {
+          const tableData = tryConvertOrderedListToTable(block.items)
+          if (tableData) {
+            return (
+              <DataTable
+                key={bi}
+                headers={tableData.headers}
+                rows={tableData.rows}
+                renderCell={(v) => <InlineText text={v} />}
+                renderHeader={(v) => <InlineText text={v} />}
+              />
+            )
+          }
           return (
             <ol key={bi} className="space-y-1.5">
               {block.items.map((item, ii) => (

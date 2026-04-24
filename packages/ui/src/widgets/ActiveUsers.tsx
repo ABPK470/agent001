@@ -147,19 +147,22 @@ export function ActiveUsers(): ReactNode {
   if (error)   return <div className="text-sm text-red-400">{error}</div>
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] overflow-hidden">
-        {/* Stat strip — visually integrated with the table below via shared border */}
-        {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-white/[0.06] border-b border-white/[0.06]">
+    <div className="h-full overflow-auto space-y-4">
+      {/* Stat strip — its own card, visually distinct from the table */}
+      {summary && (
+        <div className="rounded-lg border border-white/[0.06] bg-white/[0.025] overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-white/[0.06]">
             <Stat label="Online"         value={String(summary.online)}        accent={summary.online > 0 ? "emerald" : undefined} />
             <Stat label="Users (7d)"     value={String(summary.users)} />
             <Stat label="Runs in flight" value={String(summary.runsInFlight)}  accent={summary.runsInFlight > 0 ? "blue" : undefined} />
             <Stat label="Runs (24h)"     value={String(summary.runs24h)} />
             <Stat label="Tokens (24h)"   value={formatCompact(summary.tokens24h)} />
           </div>
-        )}
+        </div>
+      )}
 
+      {/* Per-user table — separate card */}
+      <div className="rounded-lg border border-white/[0.06] bg-white/[0.015] overflow-hidden">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="text-text-muted text-left border-b border-white/[0.06] text-xs uppercase tracking-wider bg-white/[0.02]">

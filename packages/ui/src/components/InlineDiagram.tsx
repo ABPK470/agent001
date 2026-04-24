@@ -29,6 +29,42 @@ export function isDiagramLang(lang: string): lang is DiagramKind {
   return isChartKind(lang) || (GRAPH_KINDS as readonly string[]).includes(lang as GraphKind)
 }
 
+/** Attempt to recognise a chart/diagram payload inside a generic ```json fence
+ *  that the agent emitted with the wrong language tag. Returns the inferred
+ *  diagram kind or null if the JSON does not look like a known chart spec. */
+export function tryInferDiagramKind(source: string): DiagramKind | null {
+  let payload: unknown
+  try { payload = JSON.parse(source) } catch { return null }
+  if (!payload || typeof payload !== "object") return null
+  const p = payload as Record<string, unknown>
+
+  // Explicit hint wins.
+  for (const field of ["kind", "type", "chart"] as const) {
+    const v = p[field]
+    if (typeof v === "string") {
+      const k = v.toLowerCase()
+      if (isChartKind(k) || (GRAPH_KINDS as readonly string[]).includes(k as GraphKind)) return k as DiagramKind
+    }
+  }
+
+  // Shape-based inference — be conservative so plain JSON examples don't get hijacked.
+  if (Array.isArray(p.nodes) && p.nodes.length > 0 && Array.isArray(p.edges)) return "relationships"
+  if (Array.isArray(p.items) && p.items.length > 0 && typeof (p.items[0] as Record<string, unknown>)?.width === "number") return "dashboard"
+  if (Array.isArray(p.cards) && p.cards.length > 0) return "kpi"
+  if (Array.isArray(p.kpis) && p.kpis.length > 0) return "kpi"
+  if (Array.isArray(p.matrix) && Array.isArray(p.rows) && Array.isArray(p.columns)) return "heatmap"
+  if (Array.isArray(p.points) && p.points.length > 0 && typeof (p.points[0] as Record<string, unknown>)?.x === "number") return "scatter"
+  if (Array.isArray(p.slices) && p.slices.length > 0) return "pie"
+  // For series+categories the explicit "smooth"/x-axis hints distinguish line from bar.
+  if (Array.isArray(p.series) && Array.isArray(p.categories)) {
+    if (p.smooth === true || p.showPoints !== undefined || p.xLabel !== undefined) return "line"
+    return "bar"
+  }
+  // Bare series without categories is likely a line chart
+  if (Array.isArray(p.series) && p.series.length > 0) return "line"
+  return null
+}
+
 export function InlineDiagram({ kind, source }: { kind: DiagramKind; source: string }): React.ReactElement {
   let payload: unknown
   try {
@@ -99,11 +135,43 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
   })
   const sortedLayers = [...layers.entries()].sort(([a], [b]) => a - b)
 
-  const BOX_W = 150, BOX_H = 48, COL_GAP = 80, ROW_GAP = 14
+  const BOX_W = 170, BOX_H = 56, COL_GAP = 150, ROW_GAP = 22
   const colCount = sortedLayers.length
   const maxRows = Math.max(...sortedLayers.map(([, ns]) => ns.length), 1)
+
+  // ── Parallel edge bookkeeping ──────────────────────────────────
+  // Group edges that connect the same pair of nodes (regardless of direction).
+  // We fan them out symmetrically so they stop overlapping. The outermost edge
+  // in a group must arc clearly outside the box vertical range so neither the
+  // line nor its label intrudes on the boxes themselves.
+  const edgeGroups = new Map<string, number[]>()
+  edges.forEach((e, i) => {
+    const key = e.from < e.to ? `${e.from}\u0001${e.to}` : `${e.to}\u0001${e.from}`
+    const arr = edgeGroups.get(key) ?? []
+    arr.push(i)
+    edgeGroups.set(key, arr)
+  })
+  const indexInGroup = new Map<number, { idx: number; total: number }>()
+  edgeGroups.forEach((arr) => arr.forEach((edgeIdx, idx) => indexInGroup.set(edgeIdx, { idx, total: arr.length })))
+  const maxParallel = Math.max(1, ...[...edgeGroups.values()].map((a) => a.length))
+
+  // Per-edge offset (control-point Δy). We require the *outermost* curve to
+  // arc at least BOX_H/2 + 16 px from the row centreline so it clears the box.
+  const minOuterOffset = BOX_H / 2 + 16
+  const edgeOffset = (idx: number, total: number): number => {
+    if (total === 1) return 0
+    const half = (total - 1) / 2
+    const step = minOuterOffset / half
+    return (idx - half) * step
+  }
+
+  // The cubic bezier peak (at t=0.5) sits at offset * 0.75 from the row baseline.
+  const labelDy = (offset: number): number => offset * 0.75 + (offset >= 0 ? 12 : -6)
+
+  // Reserve vertical headroom for the curves and labels above/below each row.
+  const verticalPad = maxParallel > 1 ? minOuterOffset + 18 : 14
   const svgW = colCount * BOX_W + (colCount - 1) * COL_GAP + 20
-  const svgH = maxRows * BOX_H + (maxRows - 1) * ROW_GAP + 20
+  const svgH = maxRows * BOX_H + (maxRows - 1) * ROW_GAP + verticalPad * 2
 
   const pos = new Map<string, { x: number; y: number }>()
   sortedLayers.forEach(([, ns], colIdx) => {
@@ -122,11 +190,11 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
           <div className="ml-auto text-[10px] text-text-muted font-mono uppercase tracking-wide">{kind}</div>
         </div>
       )}
-      <div className="p-3 overflow-x-auto">
-        <svg width={svgW} height={svgH} className="font-mono" style={{ minWidth: svgW, maxWidth: "100%" }}>
+      <div className="p-3 overflow-x-auto flex justify-center">
+        <svg width={svgW} height={svgH} className="font-mono block mx-auto" style={{ minWidth: svgW, maxWidth: "100%" }}>
           <defs>
-            <marker id="rel-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-              <path d="M0,0 L0,6 L8,3 z" fill="rgba(96,165,250,0.85)" />
+            <marker id="rel-arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="rgba(96,165,250,0.95)" />
             </marker>
           </defs>
 
@@ -135,14 +203,22 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
             if (!a || !b) return null
             const sx = a.x + BOX_W, sy = a.y + BOX_H / 2
             const ex = b.x,         ey = b.y + BOX_H / 2
+            const { idx, total } = indexInGroup.get(i) ?? { idx: 0, total: 1 }
+            const offset = edgeOffset(idx, total)
+
             const mx = (sx + ex) / 2
-            const path = `M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`
+            const baseY = (sy + ey) / 2
+            const labelY = baseY + labelDy(offset)
+            const path = `M ${sx} ${sy} C ${mx} ${sy + offset}, ${mx} ${ey + offset}, ${ex} ${ey}`
             return (
               <g key={`e${i}`}>
-                <path d={path} fill="none" stroke="rgba(96,165,250,0.6)" strokeWidth={1.5} markerEnd="url(#rel-arrow)" />
+                <path d={path} fill="none" stroke="rgba(96,165,250,0.65)" strokeWidth={1.5} markerEnd="url(#rel-arrow)" />
                 {e.label && (
-                  <text x={mx} y={(sy + ey) / 2 - 4} textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.85)">
-                    {e.label}
+                  // Halo-stroke text → stays legible over the curve and any neighbour labels.
+                  <text x={mx} y={labelY} textAnchor="middle" fontSize={10}
+                    stroke="#0a0a0f" strokeWidth={3.5} strokeLinejoin="round" paintOrder="stroke"
+                    fill="rgba(226,232,240,0.95)">
+                    {truncate(e.label, 28)}
                   </text>
                 )}
               </g>

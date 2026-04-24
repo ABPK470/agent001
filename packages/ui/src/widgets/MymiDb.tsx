@@ -342,7 +342,7 @@ export function MymiDb() {
   ]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden text-text -m-3">
+    <div className="flex flex-col h-full overflow-hidden text-text">
 
       {/* ── Header (toolbar — title comes from WidgetFrame) ───────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 bg-surface">
@@ -1343,11 +1343,12 @@ function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
           const ny = nodeY(i)
           const nx = isReverse ? rightX : leftX
 
-          // Edge: left-node right edge → right-node left edge
+          // Edge: source-node right edge → center-node left edge
+          // (reversed when this object is a source consumed by parents)
           const sx = isReverse ? (leftX + BOX_W) : (nx + BOX_W)
-          const sy = centerY
-          const ex = isReverse ? rightX : (rightX)
-          const ey = ny + BOX_H / 2
+          const sy = isReverse ? centerY : (ny + BOX_H / 2)
+          const ex = isReverse ? rightX : rightX
+          const ey = isReverse ? (ny + BOX_H / 2) : centerY
           const mx = (sx + ex) / 2
 
           return (

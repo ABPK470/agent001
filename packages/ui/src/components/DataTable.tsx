@@ -55,6 +55,37 @@ function numericValue(val: string): number {
   return Number(stripped)
 }
 
+/** Returns true if the column header looks like a monetary / large financial value. */
+const MONEY_KEYWORDS = /revenue|amount|balance|profit|cost|fee|income|value|zar|usd|eur|gbp|total|sum|price|salary/i
+function isMoneyHeader(h: string): boolean { return MONEY_KEYWORDS.test(h) }
+
+/** Format a raw numeric string that came from the database into a readable number.
+ *  If the absolute value >= 1B, abbreviate (33.19B). Otherwise use comma-thousands + 2dp. */
+function formatMoneyCell(raw: string): string {
+  const n = numericValue(raw)
+  if (isNaN(n)) return raw
+  const abs = Math.abs(n)
+  const sign = n < 0 ? "−" : ""
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B`
+  if (abs >= 1_000_000)     return `${sign}${(abs / 1_000_000).toFixed(2)}M`
+  // For smaller values just add comma separators
+  return n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** Format any large unformatted number string for display. */
+function formatNumericCell(raw: string, isMoney: boolean): string {
+  if (!raw || raw === "NULL") return raw
+  // If it already has commas or letters (already formatted / abbreviated) leave it
+  if (/[,KMBkmb]/.test(raw)) return raw
+  if (!isNumericCell(raw)) return raw
+  if (isMoney) return formatMoneyCell(raw)
+  const n = numericValue(raw)
+  if (isNaN(n)) return raw
+  // Large plain numbers: add thousands separator
+  if (Math.abs(n) >= 1000) return n.toLocaleString("en-ZA", { maximumFractionDigits: 4 })
+  return raw
+}
+
 function escapeCsvCell(v: string): string {
   if (v.includes(",") || v.includes("\"") || v.includes("\n")) {
     return `"${v.replace(/"/g, "\"\"")}"`
@@ -90,6 +121,17 @@ export function DataTable({
   const numericCols = useMemo(
     () => headers.map((_, ci) => rows.length > 0 && rows.every((row) => !row[ci] || isNumericCell(row[ci]))),
     [headers, rows],
+  )
+
+  // Detect money columns: numeric + header matches money keywords, or values are suspiciously large (>= 1M)
+  const moneyCols = useMemo(
+    () => headers.map((h, ci) => {
+      if (!numericCols[ci]) return false
+      if (isMoneyHeader(h)) return true
+      // If any value >= 1M, treat as money
+      return rows.some((row) => row[ci] && Math.abs(numericValue(row[ci])) >= 1_000_000)
+    }),
+    [headers, numericCols, rows],
   )
 
   // Filter
@@ -274,7 +316,7 @@ export function DataTable({
                         }}
                         title={val.length > 60 ? val : undefined}
                       >
-                        {isNull ? <span style={{ opacity: 0.5 }}>NULL</span> : displayCell(val, ci)}
+                        {isNull ? <span style={{ opacity: 0.5 }}>NULL</span> : displayCell(formatNumericCell(val, moneyCols[ci]), ci)}
                       </td>
                     )
                   })}

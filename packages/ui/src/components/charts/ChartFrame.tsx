@@ -30,7 +30,7 @@ export function ChartFrame({
           )}
         </div>
       )}
-      <div className="p-3 overflow-x-auto">{children}</div>
+      <div className="p-3 overflow-x-auto flex justify-center">{children}</div>
       {showLegend && (
         <div className="px-3 pb-2 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
           {legend!.map((entry, i) => (
