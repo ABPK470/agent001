@@ -7,7 +7,7 @@
  * @module
  */
 
-import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../index-normalize.js"
+import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize.js"
 import type {
     Plan,
     PlanDiagnostic,

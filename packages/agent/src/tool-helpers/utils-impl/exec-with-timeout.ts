@@ -11,7 +11,7 @@ import {
     didToolCallFail,
     extractToolFailureText,
     normalizeToolExecutionOutput,
-} from "../tool-result.js"
+} from "../result.js"
 import type { ToolResultEnvelope } from "../../types.js"
 
 export interface ToolExecutionConfig {

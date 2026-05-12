@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { AgentLoopState } from "../agent-loop-state.js"
+import type { AgentLoopState } from "../state.js"
 import { canonicalizeRelative } from "../../internal/index.js"
 import type { ToolCallRecord } from "../../tool-helpers/index.js"
 import type { AgentConfig, Message, Tool } from "../../types.js"

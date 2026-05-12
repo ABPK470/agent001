@@ -18,7 +18,7 @@ import {
     injectWarningsIntoSteps,
     normalizePlanOutputDirectory,
     remediateValidationErrors,
-} from "../index-normalize.js"
+} from "../normalize.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type { PlannerCoherentBootstrap } from "../types.js"
 import { validatePlan } from "../validate.js"

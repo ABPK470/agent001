@@ -15,8 +15,8 @@ import {
     MAX_CONSECUTIVE_IDENTICAL_FAILURES,
     MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS,
 } from "../../constants.js"
-import type { ToolCallRecord } from "../tool-result.js"
-import { buildSemanticToolCallKey, didToolCallFail } from "../tool-result.js"
+import type { ToolCallRecord } from "../result.js"
+import { buildSemanticToolCallKey, didToolCallFail } from "../result.js"
 
 /** Mutable state for per-call failure tracking within a tool round. */
 export interface ToolLoopState {

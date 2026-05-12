@@ -10,16 +10,16 @@
  * remains importable directly inside the delegation cluster.
  */
 
-export * from "./delegation-decision.js"
+export * from "./decision.js"
 export * from "./check-decision-safety.js"
-export * from "./delegation-learning.js"
-export * from "./delegation-validation.js"
+export * from "./learning.js"
+export * from "./validation.js"
 export * from "./correct-validation.js"
 export * from "./escalation.js"
 
 // delegation-validation-patterns.ts re-exports ALL constants and helpers EXCEPT
 // `normalizeArtifactPath` (collides with loop/tool-execution).
-export * from "./delegation-validation-patterns/constants.js"
+export * from "./validation-patterns-impl/constants.js"
 export {
     getToolCallPathArg
 } from "./validation-patterns.js"

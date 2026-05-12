@@ -8,7 +8,7 @@
  */
 
 import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract.js"
-import { inferOutputDir } from "../index-normalize.js"
+import { inferOutputDir } from "../normalize.js"
 import type {
     Plan,
     PlanEdge,

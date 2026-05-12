@@ -8,7 +8,7 @@
  */
 
 
-import type { AgentLoopState } from "./agent-loop-state.js"
+import type { AgentLoopState } from "./state.js"
 import { checkCoherentVerification } from "./completion-guards/check-coherent.js"
 import type { PlannerContext } from "../planner/index.js"
 import type { VerifierDecision } from "../planner/index.js"

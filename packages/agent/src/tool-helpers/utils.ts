@@ -12,23 +12,23 @@
  * @module
  */
 
-import type { ToolCallRecord } from "./tool-result.js"
-import { didToolCallFail } from "./tool-result.js"
+import type { ToolCallRecord } from "./result.js"
+import { didToolCallFail } from "./result.js"
 
 // Re-export normalizeToolExecutionOutput for backwards compatibility
-export { normalizeToolExecutionOutput } from "./tool-result.js"
+export { normalizeToolExecutionOutput } from "./result.js"
 
 // ── Permissions ─────────────────────────────────────────────────
-export { checkToolCallPermission } from "./tool-utils/permission.js"
-export type { ToolCallAction, ToolCallPermissionResult } from "./tool-utils/permission.js"
+export { checkToolCallPermission } from "./utils-impl/permission.js"
+export type { ToolCallAction, ToolCallPermissionResult } from "./utils-impl/permission.js"
 
 // ── Argument parsing ────────────────────────────────────────────
 export {
     MAX_TOOL_CALL_ARGUMENT_PREVIEW_CHARS,
     parseToolCallArguments,
     sanitizeToolCallArgumentsForReplay,
-} from "./tool-utils/argument-parsing.js"
-export type { ParseToolCallArgsResult } from "./tool-utils/argument-parsing.js"
+} from "./utils-impl/argument-parsing.js"
+export type { ParseToolCallArgsResult } from "./utils-impl/argument-parsing.js"
 
 // ── Tool execution + retry classification ───────────────────────
 export {
@@ -36,32 +36,32 @@ export {
     isHighRiskToolCall,
     isLikelyTransportFailure,
     isToolRetrySafe,
-} from "./tool-utils/exec-with-timeout.js"
+} from "./utils-impl/exec-with-timeout.js"
 export type {
     ToolExecutionConfig,
     ToolExecutionResult,
-} from "./tool-utils/exec-with-timeout.js"
+} from "./utils-impl/exec-with-timeout.js"
 
 // ── Stuck-loop detection ────────────────────────────────────────
 export {
     checkToolLoopStuckDetection,
     trackToolCallFailureState,
-} from "./tool-utils/stuck-detection.js"
+} from "./utils-impl/stuck-detection.js"
 export type {
     RoundStuckState,
     StuckDetectionResult,
     ToolLoopState,
-} from "./tool-utils/stuck-detection.js"
+} from "./utils-impl/stuck-detection.js"
 
 // ── Progress summary + budget extension (re-exports) ────────────
 export {
     evaluateToolRoundBudgetExtension,
     summarizeToolRoundProgress,
-} from "./tool-progress.js"
+} from "./progress.js"
 export type {
     ToolRoundBudgetExtensionResult,
     ToolRoundProgressSummary,
-} from "./tool-progress.js"
+} from "./progress.js"
 
 // ── Enrichment helpers (kept here — small + tightly bound to tool-result) ──
 

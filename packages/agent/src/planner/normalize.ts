@@ -165,7 +165,7 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
 }
 
 // ============================================================================
-// Contract injection — extracted to ./index-normalize/contract-injection.ts
+// Contract injection — extracted to ./normalize-impl/contract-injection.ts
 // ============================================================================
 
 import {
@@ -174,7 +174,7 @@ import {
   injectHelperDependencyContracts,
   injectSharedDataContract,
   injectVisualStyleContracts,
-} from "./index-normalize/contract-injection.js"
+} from "./normalize-impl/contract-injection.js"
 
 export {
   injectBrowserRuntimeContracts,
@@ -183,7 +183,7 @@ export {
   injectSharedDataContract,
   injectSharedStateOwnershipContract,
   injectVisualStyleContracts
-} from "./index-normalize/contract-injection.js"
+} from "./normalize-impl/contract-injection.js"
 
 export function uniqueList(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))]

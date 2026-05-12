@@ -5,9 +5,9 @@
  * Files inside `governance/` are private implementation details.
  */
 
-export * from "./governance.js"
-export * from "./governance-types.js"
-export * from "./governance-report.js"
+export * from "./govern.js"
+export * from "./types.js"
+export * from "./report.js"
 export * from "./govern-tool.js"
 export * from "./compute-quality-proxy.js"
 export * from "./code-quality.js"

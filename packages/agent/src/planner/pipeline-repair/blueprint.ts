@@ -20,7 +20,7 @@ import type { SubagentStepValidationContext } from "./artifacts.js"
 import { normalizeToolCallPath } from "./reconcile.js"
 
 export interface SubagentValidationFailure {
-  code?: import("../../delegation/delegation-validation.js").DelegationOutputValidationCode
+  code?: import("../../delegation/validation.js").DelegationOutputValidationCode
   message: string
 }
 

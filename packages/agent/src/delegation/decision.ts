@@ -4,7 +4,7 @@
  * Controls whether a set of subagent steps should be delegated or kept inline.
  * 21 decision reason codes cover safety, economics, coupling, and structural limits.
  *
- * Internals split into ./delegation-decision/<module>:
+ * Internals split into ./decision-impl/<module>:
  *   types          — type definitions, default constants, clamp helpers
  *   config         — resolveDelegationDecisionConfig
  *   economics      — computeEconomics (decomposition / coordination / latency)
@@ -19,18 +19,18 @@ import {
     computeSafetyRisk,
     detectHardBlockedTaskClass,
 } from "./check-decision-safety.js"
-import { buildDecision } from "./delegation-decision/build-decision.js"
-import { resolveDelegationDecisionConfig } from "./delegation-decision/config.js"
-import { computeEconomics } from "./delegation-decision/economics.js"
+import { buildDecision } from "./decision-impl/build-decision.js"
+import { resolveDelegationDecisionConfig } from "./decision-impl/config.js"
+import { computeEconomics } from "./decision-impl/economics.js"
 import {
     SAFETY_RISK_HARD_BLOCK_THRESHOLD,
     clamp01,
     type DelegationDecision,
     type DelegationDecisionInput,
-} from "./delegation-decision/types.js"
+} from "./decision-impl/types.js"
 
 // Public re-exports preserve original shape
-export { resolveDelegationDecisionConfig } from "./delegation-decision/config.js"
+export { resolveDelegationDecisionConfig } from "./decision-impl/config.js"
 export type {
     DelegationDecision,
     DelegationDecisionConfig,
@@ -40,7 +40,7 @@ export type {
     DelegationHardBlockedTaskClass,
     DelegationSubagentStepProfile,
     ResolvedDelegationDecisionConfig,
-} from "./delegation-decision/types.js"
+} from "./decision-impl/types.js"
 
 /**
  * Assess whether a delegation should proceed based on safety, economics,

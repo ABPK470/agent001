@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { GovernedResult } from "./governance.js"
+import type { GovernedResult } from "./govern.js"
 
 export function printGovernanceReport(result: GovernedResult): void {
   const { run, auditTrail, stats } = result

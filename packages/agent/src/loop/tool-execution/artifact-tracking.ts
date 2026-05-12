@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { AgentLoopState } from "../agent-loop-state.js"
+import type { AgentLoopState } from "../state.js"
 import { executeToolWithTimeout } from "../../tool-helpers/index.js"
 import { normalizeArtifactPath } from "./types.js"
 

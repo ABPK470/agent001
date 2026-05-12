@@ -30,7 +30,7 @@ import {
     startPlanning,
     startRunning,
 } from "../engine/index.js"
-import { type EngineServices, type GovernedResult, type RunState } from "./governance-types.js"
+import { type EngineServices, type GovernedResult, type RunState } from "./types.js"
 import { governTool } from "./govern-tool.js"
 import type { AgentConfig, LLMClient, Tool } from "../types.js"
 
@@ -126,6 +126,6 @@ export async function runGoverned(
 // ── Pretty-print a governed result ───────────────────────────────
 
 // Re-export governance report for backwards compatibility
-export { printGovernanceReport } from "./governance-report.js"
-export { createEngineServices, createToolStep, type EngineServices, type GovernedResult, type RunState } from "./governance-types.js"
+export { printGovernanceReport } from "./report.js"
+export { createEngineServices, createToolStep, type EngineServices, type GovernedResult, type RunState } from "./types.js"
 

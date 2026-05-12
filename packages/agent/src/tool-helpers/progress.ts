@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { ToolCallRecord } from "./tool-result.js"
-import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText } from "./tool-result.js"
+import type { ToolCallRecord } from "./result.js"
+import { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText } from "./result.js"
 
 // ============================================================================
 // Constants

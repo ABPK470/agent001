@@ -4,7 +4,7 @@
  */
 
 import type { DelegationTrajectoryRecord } from "../../delegation/index.js"
-import { synthesizeAnswer } from "../index-synthesize.js"
+import { synthesizeAnswer } from "../synthesize.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineResult, Plan, PlannerRepairCompatibilityMode, VerifierDecision } from "../types.js"
 import { deriveAcceptanceState } from "../verification-model.js"

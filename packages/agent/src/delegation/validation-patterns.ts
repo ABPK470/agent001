@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { DelegationContractSpec } from "./delegation-validation.js"
+import type { DelegationContractSpec } from "./validation.js"
 import type { ToolCallRecord } from "../tool-helpers/index.js"
 import {
     DOCUMENTATION_TASK_RE,
@@ -26,10 +26,10 @@ import {
     SHELL_SCAFFOLD_RE,
     VALIDATION_TASK_RE,
     WORKSPACE_FILE_EXT_RE,
-} from "./delegation-validation-patterns/constants.js"
+} from "./validation-patterns-impl/constants.js"
 
 // Re-export every constant so existing call-sites still work
-export * from "./delegation-validation-patterns/constants.js"
+export * from "./validation-patterns-impl/constants.js"
 
 // ── Path / artifact helpers ─────────────────────────────────────
 

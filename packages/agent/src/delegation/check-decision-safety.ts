@@ -12,7 +12,7 @@ import type {
     DelegationHardBlockedTaskClass,
     DelegationSubagentStepProfile,
     ResolvedDelegationDecisionConfig,
-} from "./delegation-decision.js"
+} from "./decision.js"
 
 // ============================================================================
 // Risk patterns

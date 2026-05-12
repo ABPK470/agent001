@@ -5,8 +5,8 @@
  * Files inside `tool-helpers/` are private implementation details.
  */
 
-export * from "./tool-contract-guidance.js"
-export * from "./tool-progress.js"
-export * from "./tool-result.js"
-export * from "./tool-utils.js"
+export * from "./contract-guidance.js"
+export * from "./progress.js"
+export * from "./result.js"
+export * from "./utils.js"
 

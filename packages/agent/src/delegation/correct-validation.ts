@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { DelegationOutputValidationCode } from "./delegation-validation.js"
+import type { DelegationOutputValidationCode } from "./validation.js"
 
 /**
  * Get targeted retry guidance for a specific validation failure.

@@ -5,7 +5,7 @@
  * extension, recovery hint injection, and post-delegation verification.
  */
 
-import type { AgentLoopState } from "./agent-loop-state.js"
+import type { AgentLoopState } from "./state.js"
 import * as log from "../logger.js"
 import { buildRecoveryHints } from "../recovery/index.js"
 import type { ToolCallRecord } from "../tool-helpers/index.js"

@@ -19,29 +19,29 @@ import {
     gateBlockedPhase,
     gatePresence,
     gateUnresolvedHandoff,
-} from "./delegation-validation/gates-presence.js"
+} from "./validation-impl/gates-presence.js"
 import {
     gateFileMutation,
     gateRequiredSourceEvidence,
     gateSuccessfulTool,
     gateWorkspaceInspection,
-} from "./delegation-validation/gates-tools.js"
+} from "./validation-impl/gates-tools.js"
 import {
     gateBrowserEvidence,
     gateFileArtifactEvidence,
     gateTargetCoverage,
-} from "./delegation-validation/gates-coverage.js"
+} from "./validation-impl/gates-coverage.js"
 import {
     gateAcceptanceCriteria,
     gateContradictoryCompletion,
     gateExecutableVerification,
-} from "./delegation-validation/gates-completion.js"
+} from "./validation-impl/gates-completion.js"
 import type {
     DelegationContractSpec,
     DelegationOutputValidationCode,
     DelegationOutputValidationResult,
     GateParams,
-} from "./delegation-validation/types.js"
+} from "./validation-impl/types.js"
 import type { ToolCallRecord } from "../tool-helpers/index.js"
 
 // ── Public re-exports (preserve original public API) ─────────────
@@ -51,7 +51,7 @@ export {
     type DelegationContractSpec,
     type DelegationOutputValidationCode,
     type DelegationOutputValidationResult,
-} from "./delegation-validation/types.js"
+} from "./validation-impl/types.js"
 
 export { getCorrectionGuidance } from "./correct-validation.js"
 export {

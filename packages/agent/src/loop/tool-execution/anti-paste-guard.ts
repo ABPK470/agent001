@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { AgentLoopState } from "../agent-loop-state.js"
+import type { AgentLoopState } from "../state.js"
 import {
     ANTIPASTE_MIN_CONTENT_LEN,
     ANTIPASTE_NEEDLE_LEN,
