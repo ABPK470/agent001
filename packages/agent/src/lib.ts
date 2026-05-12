@@ -8,6 +8,8 @@
 
 // ── Core ────────────────────────────────────────────────────────────
 export { Agent } from "./agent.js"
+export { AgentRuntime } from "./agent-runtime.js"
+export type { AgentRuntimeOptions } from "./agent-runtime.js"
 
 // ── Types & constants ───────────────────────────────────────────────
 export {

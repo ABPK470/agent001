@@ -267,4 +267,13 @@ export interface AgentConfig {
    * Used by child agents to enforce code quality before exit.
    */
   completionValidator?: () => Promise<string | null>
+
+  /**
+   * Per-agent runtime container (Phase 2). Owns state that previously lived
+   * in tool-module globals (mssql pool, shell cwd, browse-web sessions, sync
+   * registries, etc.). When omitted, the agent uses a process-wide default
+   * runtime — fine for single-process CLI use; the server should pass an
+   * explicit instance so concurrent runs stay isolated.
+   */
+  runtime?: import("./agent-runtime.js").AgentRuntime
 }

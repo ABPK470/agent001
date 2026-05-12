@@ -5,8 +5,11 @@
  * Every HTTP request runs inside `als.run({ session }, handler)`. Anywhere
  * downstream, `getCurrentSession()` returns the session or null.
  *
- * Also hosts the per-run AbortController map, replacing the dangerous
- * module-level `setMssqlKillSignal()` global. (Hooked up in a later phase.)
+ * Also hosts the per-run AbortController map; tools register a per-run
+ * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@agent001/agent`)
+ * picks it up via AsyncLocalStorage. The legacy module-global
+ * `setMssqlKillSignal()` was deleted in agent Phase 2 — this is the only
+ * supported path now.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -31,7 +34,7 @@ export function getCurrentSession(): CurrentSession | null {
   return sessionAls.getStore()?.session ?? null
 }
 
-// ── Per-run kill signals (replaces module-global setMssqlKillSignal) ──
+// ── Per-run kill signals (provided to tools via runWithMssqlKillSignal) ──
 
 const runSignals = new Map<string, AbortController>()
 

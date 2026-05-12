@@ -216,19 +216,7 @@ export class DelegationBanditTuner {
   }
 }
 
-// ============================================================================
-// Module-level default instance
-// ============================================================================
-
-let _globalTuner: DelegationBanditTuner | null = null
-
-/** Get (or lazily create) the global delegation bandit tuner. */
-export function getGlobalDelegationBanditTuner(): DelegationBanditTuner {
-  if (!_globalTuner) _globalTuner = new DelegationBanditTuner()
-  return _globalTuner
-}
-
-/** Override the global tuner (useful for testing or custom configurations). */
-export function setGlobalDelegationBanditTuner(tuner: DelegationBanditTuner | null): void {
-  _globalTuner = tuner
-}
+// The bandit tuner is owned by the caller (PlannerContext.delegationBanditTuner)
+// or by AgentRuntime. There is no module-global instance — Phase 2 deleted
+// the legacy `getGlobalDelegationBanditTuner` / `setGlobalDelegationBanditTuner`
+// helpers because nothing called them.

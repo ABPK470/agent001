@@ -23,6 +23,7 @@ import { executeToolCallsBranch } from "./agent/iteration-tool-round.js"
 import { runCompletionGuards } from "./loop/index.js"
 import * as log from "./logger.js"
 import { attemptPlannerRouting } from "./planner-routing.js"
+import { AgentRuntime, getDefaultAgentRuntime } from "./agent-runtime.js"
 import type { PlannerContext } from "./planner/index.js"
 import type { VerifierDecision } from "./planner/types.js"
 import { DEFAULT_SYSTEM_PROMPT } from "./loop/index.js"
@@ -57,6 +58,13 @@ export class Agent {
     deferRecoveryHintsUntilCompletionAttempt: AgentConfig["deferRecoveryHintsUntilCompletionAttempt"]
   }
 
+  /**
+   * Per-agent runtime container. Owns state that previously lived in tool
+   * module-globals. Per-tool migrations land incrementally; today this is
+   * mostly a placeholder, but it's the canonical home for future state.
+   */
+  readonly runtime: AgentRuntime
+
   /** Cumulative token usage across all LLM calls in this agent's run. */
   readonly usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   /** Number of LLM API calls made. */
@@ -68,6 +76,9 @@ export class Agent {
     this.llm = llm
     this.tools = new Map(tools.map((t) => [t.name, t]))
     this.toolList = tools
+    this.runtime = config.runtime ?? getDefaultAgentRuntime()
+    if (config.workspaceRoot) this.runtime.workspaceRoot = config.workspaceRoot
+    if (config.signal) this.runtime.signal = config.signal
     this.config = {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
