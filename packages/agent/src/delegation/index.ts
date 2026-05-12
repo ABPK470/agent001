@@ -11,10 +11,10 @@
  */
 
 export * from "./delegation-decision.js"
-export * from "./delegation-decision-safety.js"
+export * from "./check-decision-safety.js"
 export * from "./delegation-learning.js"
 export * from "./delegation-validation.js"
-export * from "./delegation-validation-correction.js"
+export * from "./correct-validation.js"
 export * from "./escalation.js"
 
 // delegation-validation-patterns.ts re-exports ALL constants and helpers EXCEPT
@@ -22,4 +22,4 @@ export * from "./escalation.js"
 export * from "./delegation-validation-patterns/constants.js"
 export {
     getToolCallPathArg
-} from "./delegation-validation-patterns.js"
+} from "./validation-patterns.js"

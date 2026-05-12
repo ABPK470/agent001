@@ -29,7 +29,7 @@ import {
     tryNpmHint,
     tryTestRunnerHint,
     type AdvancedHintContext,
-} from "./advanced-build.js"
+} from "./build-advanced.js"
 import type { ToolCallRecord } from "../tool-helpers/index.js"
 import { extractToolFailureText, parseToolResultObject } from "../tool-helpers/index.js"
 

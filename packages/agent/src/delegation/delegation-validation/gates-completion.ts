@@ -14,7 +14,7 @@ import {
     isExecutableVerificationToolCall,
     specRequiresFileMutationEvidence,
     UNRESOLVED_WORK_RE,
-} from "../delegation-validation-patterns.js"
+} from "../validation-patterns.js"
 import type { DelegationOutputValidationResult, GateParams } from "./types.js"
 
 export function gateContradictoryCompletion(p: GateParams): DelegationOutputValidationResult | null {

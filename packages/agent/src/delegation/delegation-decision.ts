@@ -18,7 +18,7 @@
 import {
     computeSafetyRisk,
     detectHardBlockedTaskClass,
-} from "./delegation-decision-safety.js"
+} from "./check-decision-safety.js"
 import { buildDecision } from "./delegation-decision/build-decision.js"
 import { resolveDelegationDecisionConfig } from "./delegation-decision/config.js"
 import { computeEconomics } from "./delegation-decision/economics.js"

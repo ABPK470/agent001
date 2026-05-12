@@ -53,7 +53,7 @@ export {
     type DelegationOutputValidationResult,
 } from "./delegation-validation/types.js"
 
-export { getCorrectionGuidance } from "./delegation-validation-correction.js"
+export { getCorrectionGuidance } from "./correct-validation.js"
 export {
     classifyTaskIntent,
     extractAcceptanceTokens,
@@ -65,7 +65,7 @@ export {
     specRequiresSuccessfulToolEvidence,
     specRequiresWorkspaceInspection,
     type TaskIntent,
-} from "./delegation-validation-patterns.js"
+} from "./validation-patterns.js"
 
 export {
     buildSemanticToolCallKey,

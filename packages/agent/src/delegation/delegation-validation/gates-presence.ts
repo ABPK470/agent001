@@ -11,7 +11,7 @@ import {
     EMPTY_VALUES,
     specRequiresFileMutationEvidence,
     UNRESOLVED_HANDOFF_RE,
-} from "../delegation-validation-patterns.js"
+} from "../validation-patterns.js"
 import type { DelegationOutputValidationResult, GateParams } from "./types.js"
 
 export function gatePresence(p: GateParams): DelegationOutputValidationResult | null {

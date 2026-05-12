@@ -15,7 +15,7 @@ import {
     specRequiresFileMutationEvidence,
     specRequiresSuccessfulToolEvidence,
     specRequiresWorkspaceInspection,
-} from "../delegation-validation-patterns.js"
+} from "../validation-patterns.js"
 import {
     FILE_READ_TOOLS,
     SHELL_FILE_WRITE_RE,

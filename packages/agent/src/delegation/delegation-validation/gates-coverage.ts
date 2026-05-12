@@ -18,7 +18,7 @@ import {
     normalizeArtifactPath,
     specRequiresBrowserEvidence,
     specRequiresFileMutationEvidence,
-} from "../delegation-validation-patterns.js"
+} from "../validation-patterns.js"
 import {
     LOW_SIGNAL_BROWSER_TOOLS,
     type DelegationOutputValidationResult,

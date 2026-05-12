@@ -15,7 +15,7 @@
  */
 
 import { MAX_RUNTIME_SYSTEM_HINTS } from "../constants.js"
-import { inferRecoveryHint } from "./per-call-hints.js"
+import { inferRecoveryHint } from "./build-per-call-hints.js"
 import {
     didToolCallFail,
     type ToolCallRecord,

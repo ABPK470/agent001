@@ -11,7 +11,7 @@ import {
     isShellExecutionAnomalyFailure,
     isWatchModeOutput,
 } from "./recovery-detectors.js"
-import { inferAdvancedRecoveryHint } from "./recovery-hints-advanced.js"
+import { inferAdvancedRecoveryHint } from "./build-hints-advanced.js"
 import type { RecoveryHint } from "./recovery.js"
 import {
     extractToolFailureText,
