@@ -60,6 +60,4 @@ export interface OrchestratorRunCtx {
   completedRunWorkspaces: Map<string, RunWorkspaceContext>
   completedRunDiffs: Map<string, WorkspaceDiff>
   messageRouter: MessageRouter | null
-  /** Mutable reference to the workspace tool-context serialization queue. */
-  toolContextQueueRef: { current: Promise<void> }
 }

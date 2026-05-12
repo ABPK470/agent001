@@ -1,44 +1,9 @@
 import type { Tool } from "@agent001/agent"
-import { setBasePath, setBrowserCheckCwd, setSearchBasePath, setShellCwd } from "@agent001/agent"
 import { recordEffect, recordFileWrite } from "../effects.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { applyWorkspaceDiff, cleanupRunWorkspace, computeWorkspaceDiff } from "../run-workspace.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
-
-// ── Workspace context serialization ───────────────────────────────
-
-/**
- * Serialize tool calls that set workspace globals.
- * All tool.execute calls run sequentially through this queue,
- * so workspace path globals are set/restored atomically.
- */
-export async function withToolWorkspaceContext<T>(
-  queueRef: { current: Promise<void> },
-  workspace: string | null,
-  workspaceRoot: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const previous = queueRef.current
-  let release!: () => void
-  queueRef.current = new Promise<void>((resolve) => { release = resolve })
-
-  await previous
-  setBasePath(workspaceRoot)
-  setSearchBasePath(workspaceRoot)
-  setShellCwd(workspaceRoot)
-  setBrowserCheckCwd(workspaceRoot)
-
-  try {
-    return await fn()
-  } finally {
-    setBasePath(workspace ?? process.cwd())
-    setSearchBasePath(workspace ?? process.cwd())
-    setShellCwd(workspace ?? process.cwd())
-    setBrowserCheckCwd(workspace ?? process.cwd())
-    release()
-  }
-}
 
 // ── Effect-tracked tool wrappers ──────────────────────────────────
 
@@ -46,41 +11,41 @@ export async function withToolWorkspaceContext<T>(
  * Wrap a tool with effect tracking.
  * - write_file: captures pre-write snapshot + records file effect
  * - run_command: records command effect after execution
- * - all others: run inside the workspace context serializer
+ * - all others: pass through unchanged.
+ *
+ * Workspace cwd / basePath isolation is now provided by the per-request
+ * AgentRuntime mounted around `agent.run()`; no global serialization
+ * needed.
  */
 export function wrapWithEffects(
   tool: Tool,
   runId: string,
   workspaceRoot: string,
-  withCtx: <T>(workspaceRoot: string, fn: () => Promise<T>) => Promise<T>,
 ): Tool {
   if (tool.name === "write_file") {
     return {
       ...tool,
-      execute: async (args) => withCtx(workspaceRoot, async () => {
+      execute: async (args) => {
         const { resolve } = await import("node:path")
         const absPath = resolve(workspaceRoot, String(args.path))
         await recordFileWrite({ runId, tool: "write_file", filePath: absPath, newContent: String(args.content) })
         return tool.execute(args)
-      }),
+      },
     }
   }
 
   if (tool.name === "run_command") {
     return {
       ...tool,
-      execute: async (args) => withCtx(workspaceRoot, async () => {
+      execute: async (args) => {
         const result = await tool.execute(args)
         recordEffect({ runId, kind: "command", tool: "run_command", target: String(args.command ?? args.cmd ?? ""), metadata: { output: String(result).slice(0, 1000) } })
         return result
-      }),
+      },
     }
   }
 
-  return {
-    ...tool,
-    execute: async (args) => withCtx(workspaceRoot, () => tool.execute(args)),
-  }
+  return tool
 }
 
 // ── Run workspace diff ─────────────────────────────────────────────

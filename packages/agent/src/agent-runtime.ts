@@ -2,16 +2,25 @@
  * AgentRuntime — the per-agent container for state that previously lived
  * as module-level globals in tool and sync files.
  *
- * One pattern, used everywhere
- * ----------------------------
- * Every tool that used to keep configuration in a `let` or a `const _state`
- * record now reads from `AgentRuntime.current()`. The runtime owns:
+ * Two tiers of state
+ * ------------------
+ * Some state is inherently process-wide (mssql connection pools, the Docker
+ * shell executor, the catalog cache, the sync event sink the server installs
+ * at boot). Other state is inherently per-agent / per-request (the workspace
+ * cwd, the per-tool kill signal, the browse-web sessions a single agent
+ * spawned, the ask-user resolver a single chat session set up).
  *
- *   - tool configuration (shell / browser-check / filesystem cwd, executors,
- *     ask-user resolver, search excludes)
- *   - per-tool-call kill signals (fetch, browse-web, shell)
- *   - long-lived shared resources (mssql connection pools, browse-web
- *     sessions + cleanup timer, catalog cache, sync recipes / plans / events)
+ * `AgentRuntime` represents both. Construct one with no parent and you get
+ * the **root**: blank slates everywhere. Construct one with a parent (the
+ * default — newly created runtimes inherit from the process root) and you
+ * get a runtime that:
+ *
+ *   - **shares** infrastructure references with its parent (mssql databases
+ *     Map, executors, catalog instances, sync sinks, recipes, plans),
+ *   - **starts fresh** for per-request slots (browse sessions, kill signals,
+ *     ask-user resolver),
+ *   - **copies** scalar workspace defaults from the parent so it works
+ *     out of the box (cwd, basePath, defaultConnection).
  *
  * Looking up the runtime from inside a tool
  * -----------------------------------------
@@ -30,14 +39,14 @@
  * The setter functions exported by individual tool/sync files
  * (`setShellCwd`, `setMssqlConfig`, `setSyncEventSink`, …) are kept as
  * thin wrappers that mutate `currentRuntime()`. Calling them from server
- * startup mutates the root runtime (the one Agents will resolve to). No
- * code path observes the underlying object via a private name; everything
- * goes through this class.
+ * startup mutates the root runtime (the one Agents will later inherit
+ * shared slots from).
  *
  * Disposal
  * --------
- * `AgentRuntime#dispose()` closes mssql pools, kills browser sessions, and
- * clears the browse-web cleanup timer. Server shutdown should call it.
+ * `AgentRuntime#dispose()` always closes the calling runtime's own browse
+ * sessions. The root runtime additionally closes mssql pools and the
+ * browse-web cleanup timer (which it owns process-wide).
  */
 
 import type sql from "mssql"
@@ -63,9 +72,6 @@ import type {
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
-// Each sub-record maps 1:1 to the state that used to live in one tool /
-// sync file. The grouping makes it cheap to skim the runtime and see what
-// every subsystem needs.
 
 export interface MssqlEntry {
   config: sql.config
@@ -75,22 +81,25 @@ export interface MssqlEntry {
 }
 
 export interface MssqlState {
+  /** Process-wide pool registry — shared with parent runtime. */
   databases: Map<string, MssqlEntry>
   /** Override which named connection serves `connection: "default"`. */
   defaultConnection: string | null
 }
 
 export interface BrowseWebState {
+  /** Per-runtime browser sessions — disposed when the runtime is disposed. */
   sessions: Map<string, BrowserSession>
   counter: number
   /** Per-tool-call kill signal — closes the active page when aborted. */
   killSignal: AbortSignal | null
-  /** Periodic idle-session evictor; owned by `AgentRuntime#dispose()`. */
+  /** Process-wide idle-session evictor — owned by the root runtime. */
   cleanupTimer: NodeJS.Timeout | null
 }
 
 export interface ShellState {
   cwd: string
+  /** Process-wide shell executor (e.g. Docker sandbox). */
   executor: ShellExecutor | null
   sandboxStrict: boolean
   killSignal: AbortSignal | null
@@ -111,6 +120,7 @@ export interface FilesystemState {
 
 export interface SearchFilesState {
   basePath: string
+  /** Boot-config — shared across runtimes. */
   excludeDirs: Set<string>
 }
 
@@ -119,6 +129,7 @@ export interface AskUserState {
 }
 
 export interface CatalogState {
+  /** Expensive caches — shared across runtimes. */
   instances: Map<string, CatalogGraph>
   defaultCachePath: string | undefined
   defaultLineagePath: string | undefined
@@ -156,46 +167,101 @@ export class AgentRuntime {
    */
   signal: AbortSignal | null = null
 
-  // ── State slots ────────────────────────────────────────────────
-  // Marked `readonly` because the slot identity never changes; the values
-  // inside the slot are mutated in place by tool code.
-  readonly mssql: MssqlState = { databases: new Map(), defaultConnection: null }
-  readonly browseWeb: BrowseWebState = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null }
-  readonly shell: ShellState = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
-  readonly browserCheck: BrowserCheckState = { cwd: process.cwd(), executor: null }
-  readonly fetchUrl: FetchUrlState = { killSignal: null }
-  readonly filesystem: FilesystemState = { basePath: process.cwd() }
-  readonly searchFiles: SearchFilesState = { basePath: process.cwd(), excludeDirs: new Set() }
-  readonly askUser: AskUserState = { resolver: null }
-  readonly catalog: CatalogState = { instances: new Map(), defaultCachePath: undefined, defaultLineagePath: undefined }
-  readonly sync: SyncState = {
-    eventSink: () => { /* default no-op */ },
-    runSink: NOOP_RUN_SINK,
-    recipes: { bundle: null, loadedFromPath: null },
-    environments: new Map(),
-    plans: { diskRoot: null, memCache: new Map() },
-    dbProjectRoot: null,
-  }
+  // State slots — initialised in the constructor (depend on parent).
+  readonly mssql: MssqlState
+  readonly browseWeb: BrowseWebState
+  readonly shell: ShellState
+  readonly browserCheck: BrowserCheckState
+  readonly fetchUrl: FetchUrlState
+  readonly filesystem: FilesystemState
+  readonly searchFiles: SearchFilesState
+  readonly askUser: AskUserState
+  /** Shared with parent (caches are expensive — never duplicated). */
+  readonly catalog: CatalogState
+  /** Shared with parent (server installs sinks once at boot). */
+  readonly sync: SyncState
+
+  /** True only for the process root runtime. Affects dispose() semantics. */
+  readonly #isRoot: boolean
 
   // ── ALS plumbing ───────────────────────────────────────────────
-  // `als` resolves `currentRuntime()` to the runtime active in the calling
-  // async context. `root` is the fallback used when no scope is active.
   static #als = new AsyncLocalStorage<AgentRuntime>()
   static #root: AgentRuntime | null = null
 
   constructor(options: AgentRuntimeOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ?? process.cwd()
     this.signal = options.signal ?? null
+    this.#isRoot = options.isRoot === true
+
+    // Inherit infrastructure from parent (defaults to root). Skipped for
+    // the root itself: it has no parent and starts with blank slates.
+    const parent: AgentRuntime | null = this.#isRoot
+      ? null
+      : (options.inheritFrom ?? AgentRuntime.#root)
+
+    if (parent) {
+      // Process-wide infrastructure — shared by reference.
+      this.mssql = {
+        databases: parent.mssql.databases,
+        defaultConnection: parent.mssql.defaultConnection,
+      }
+      this.shell = {
+        cwd: parent.shell.cwd,
+        executor: parent.shell.executor,
+        sandboxStrict: parent.shell.sandboxStrict,
+        killSignal: null,
+      }
+      this.browserCheck = {
+        cwd: parent.browserCheck.cwd,
+        executor: parent.browserCheck.executor,
+      }
+      this.browseWeb = {
+        sessions: new Map(),
+        counter: 0,
+        killSignal: null,
+        cleanupTimer: parent.browseWeb.cleanupTimer,
+      }
+      this.fetchUrl = { killSignal: null }
+      this.filesystem = { basePath: parent.filesystem.basePath }
+      this.searchFiles = {
+        basePath: parent.searchFiles.basePath,
+        excludeDirs: parent.searchFiles.excludeDirs,
+      }
+      this.askUser = { resolver: null }
+      // Catalog and sync are shared whole — they hold expensive caches and
+      // server-installed sinks that are inherently process-wide.
+      this.catalog = parent.catalog
+      this.sync = parent.sync
+    } else {
+      // Root: fresh defaults everywhere.
+      this.mssql = { databases: new Map(), defaultConnection: null }
+      this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null }
+      this.shell = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
+      this.browserCheck = { cwd: process.cwd(), executor: null }
+      this.fetchUrl = { killSignal: null }
+      this.filesystem = { basePath: process.cwd() }
+      this.searchFiles = { basePath: process.cwd(), excludeDirs: new Set() }
+      this.askUser = { resolver: null }
+      this.catalog = { instances: new Map(), defaultCachePath: undefined, defaultLineagePath: undefined }
+      this.sync = {
+        eventSink: () => { /* default no-op */ },
+        runSink: NOOP_RUN_SINK,
+        recipes: { bundle: null, loadedFromPath: null },
+        environments: new Map(),
+        plans: { diskRoot: null, memCache: new Map() },
+        dbProjectRoot: null,
+      }
+    }
   }
 
   /**
    * The default runtime. Used when no `AgentRuntime#run(...)` scope is
    * active — i.e. server startup, CLI bootstrap, and tests. The server
-   * configures this one (mssql connections, sync sinks, executors) so
-   * Agents created later automatically inherit those settings.
+   * configures this one (mssql connections, sync sinks, executors) at
+   * boot. Per-request runtimes constructed later inherit those settings.
    */
   static root(): AgentRuntime {
-    if (!AgentRuntime.#root) AgentRuntime.#root = new AgentRuntime()
+    if (!AgentRuntime.#root) AgentRuntime.#root = new AgentRuntime({ isRoot: true })
     return AgentRuntime.#root
   }
 
@@ -220,12 +286,27 @@ export class AgentRuntime {
   }
 
   /**
-   * Release every resource owned by the runtime. Idempotent and safe to
-   * call from a shutdown hook. After disposal, callers should not reuse
-   * the runtime — make a fresh one.
+   * Release every resource owned by the runtime.
+   *
+   *   - Always closes this runtime's browse-web sessions.
+   *   - Root only: closes mssql pools and the cleanup timer (process-wide).
+   *
+   * Idempotent and safe to call from a shutdown hook. After disposal,
+   * callers should not reuse the runtime — make a fresh one.
    */
   async dispose(): Promise<void> {
-    // mssql pools
+    // Always: this runtime's own browser sessions
+    for (const [id, session] of this.browseWeb.sessions) {
+      try { await session.browser.close() } catch { /* ignore */ }
+      this.browseWeb.sessions.delete(id)
+    }
+    if (!this.#isRoot) return
+
+    // Root-only: shared infrastructure
+    if (this.browseWeb.cleanupTimer) {
+      clearInterval(this.browseWeb.cleanupTimer)
+      this.browseWeb.cleanupTimer = null
+    }
     for (const entry of this.mssql.databases.values()) {
       if (entry.pool) {
         try { await entry.pool.close() } catch { /* ignore */ }
@@ -233,22 +314,21 @@ export class AgentRuntime {
       }
     }
     this.mssql.databases.clear()
-
-    // browse-web sessions + cleanup timer
-    if (this.browseWeb.cleanupTimer) {
-      clearInterval(this.browseWeb.cleanupTimer)
-      this.browseWeb.cleanupTimer = null
-    }
-    for (const [id, session] of this.browseWeb.sessions) {
-      try { await session.browser.close() } catch { /* ignore */ }
-      this.browseWeb.sessions.delete(id)
-    }
   }
 }
 
 export interface AgentRuntimeOptions {
   workspaceRoot?: string
   signal?: AbortSignal | null
+  /**
+   * Inherit shared infrastructure (pool registry, executors, caches, sync
+   * sinks) from this runtime. Defaults to the process root. Pass `null` /
+   * set `isRoot: true` to construct a runtime with no parent at all
+   * (only the root itself does this).
+   */
+  inheritFrom?: AgentRuntime | null
+  /** Internal flag — only `AgentRuntime.root()` sets this. */
+  isRoot?: boolean
 }
 
 /** Convenience accessor — equivalent to `AgentRuntime.current()`. */

@@ -1,6 +1,7 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
 import { Agent } from "../../agent.js"
+import { AgentRuntime } from "../../agent-runtime.js"
 import { detectPlaceholderPatterns } from "../../governance/index.js"
 import type { DelegateResult } from "../../planner/index.js"
 import type { ExecutionEnvelope, SubagentTaskStep } from "../../planner/index.js"
@@ -125,6 +126,12 @@ export async function spawnChildForPlan(
     return null
   } : undefined
 
+  // Per-child AgentRuntime — see spawn-child.ts for rationale.
+  const childRuntime = new AgentRuntime({
+    inheritFrom: AgentRuntime.current(),
+    signal: ctx.signal,
+  })
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     // If the parent resolved system prompt is available (contains DB knowledge, schema context,
@@ -135,6 +142,7 @@ export async function spawnChildForPlan(
       : CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
+    runtime: childRuntime,
     deferRecoveryHintsUntilCompletionAttempt: true,
     completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
@@ -230,6 +238,7 @@ export async function spawnChildForPlan(
       execution: buildChildExecutionResult(output, child.allToolCalls),
     }
   } finally {
+    await childRuntime.dispose()
     releaseSlot?.()
   }
 }

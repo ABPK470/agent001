@@ -1,4 +1,5 @@
 import { Agent } from "../../agent.js"
+import { AgentRuntime } from "../../agent-runtime.js"
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
 import type { Tool } from "../../types.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate.js"
@@ -109,11 +110,21 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // Buffer LLM request/response events so they emit AFTER the iteration marker
   let pendingLlmEvents: Record<string, unknown>[] = []
 
+  // Per-child AgentRuntime — inherits shared infrastructure (mssql pools,
+  // executors, catalog cache, sync sinks) from the parent's runtime, but has
+  // its own browse-web sessions and kill signals so concurrent siblings
+  // cannot interfere with one another.
+  const childRuntime = new AgentRuntime({
+    inheritFrom: AgentRuntime.current(),
+    signal: ctx.signal,
+  })
+
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: effectivePrompt,
     verbose: false,
     signal: ctx.signal,
+    runtime: childRuntime,
     onThinking: (content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: "delegation-iteration",
@@ -201,6 +212,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
 
     return `Delegation failed: ${errMsg}`
   } finally {
+    await childRuntime.dispose()
     releaseSlot?.()
   }
 }
