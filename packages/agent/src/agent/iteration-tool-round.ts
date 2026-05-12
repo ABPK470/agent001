@@ -5,11 +5,11 @@
  * @module
  */
 
-import type { AgentLoopState } from "../loop/agent-loop-state.js"
+import type { AgentLoopState } from "../loop/index.js"
 import * as log from "../logger.js"
-import { processPostRound, type PostRoundContext } from "../loop/post-round.js"
-import { executeToolRound, type ToolExecContext } from "../loop/tool-execution.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
+import { processPostRound, type PostRoundContext } from "../loop/index.js"
+import { executeToolRound, type ToolExecContext } from "../loop/index.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
 import type { Message, Tool } from "../types.js"
 
 export interface ToolCallsBranchInput {

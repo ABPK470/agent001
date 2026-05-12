@@ -42,7 +42,7 @@ import type {
     DelegationOutputValidationResult,
     GateParams,
 } from "./delegation-validation/types.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
 
 // ── Public re-exports (preserve original public API) ─────────────
 
@@ -73,10 +73,10 @@ export {
     extractToolFailureText,
     parseToolResultObject,
     type ToolCallRecord,
-} from "../tool-helpers/tool-result.js"
+} from "../tool-helpers/index.js"
 
-export { computeQualityProxy } from "../governance/quality-proxy.js"
-export type { QualityProxyInput } from "../governance/quality-proxy.js"
+export { computeQualityProxy } from "../governance/index.js"
+export type { QualityProxyInput } from "../governance/index.js"
 
 // ── Master validation orchestrator ───────────────────────────────
 

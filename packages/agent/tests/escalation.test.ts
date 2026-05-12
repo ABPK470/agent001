@@ -7,7 +7,7 @@ import {
     buildEscalationInput,
     resolveEscalation,
     type EscalationInput,
-} from "../src/delegation/escalation.js"
+} from "../src/delegation/index.js"
 
 // ============================================================================
 // Helpers

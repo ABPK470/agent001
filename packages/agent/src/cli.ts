@@ -24,12 +24,12 @@ import {
   printGovernanceReport,
   runGoverned,
   type EngineServices,
-} from "./governance/governance.js"
-import { OpenAIClient } from "./llm/openai.js"
-import { fetchUrlTool } from "./tools/fetch-url.js"
-import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/filesystem.js"
-import { shellTool } from "./tools/shell.js"
-import { thinkTool } from "./tools/think.js"
+} from "./governance/index.js"
+import { OpenAIClient } from "./llm/index.js"
+import { fetchUrlTool } from "./tools/index.js"
+import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/index.js"
+import { shellTool } from "./tools/index.js"
+import { thinkTool } from "./tools/index.js"
 import type { LLMClient, Tool } from "./types.js"
 
 // ── Create LLM client from env ──────────────────────────────────

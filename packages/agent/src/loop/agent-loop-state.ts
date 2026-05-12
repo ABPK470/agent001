@@ -6,9 +6,9 @@
  * iterations lives here.
  */
 
-import { ToolFailureCircuitBreaker } from "../recovery/circuit-breaker.js"
+import { ToolFailureCircuitBreaker } from "../recovery/index.js"
 import type { CoherentSolutionBundle, Plan, VerifierDecision } from "../planner/types.js"
-import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tool-helpers/tool-utils.js"
+import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tool-helpers/index.js"
 
 /** Active coherent-generation execution context. */
 export interface CoherentExecutionState {

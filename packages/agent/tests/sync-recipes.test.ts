@@ -1,6 +1,6 @@
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
-import { getRecipe, loadSyncRecipes, selectRecipeTables, type SyncRecipe } from "../src/sync/recipes.js"
+import { getRecipe, loadSyncRecipes, selectRecipeTables, type SyncRecipe } from "../src/sync/index.js"
 
 describe("selectRecipeTables", () => {
   it("keeps FK-only tables disabled unless explicitly enabled", () => {

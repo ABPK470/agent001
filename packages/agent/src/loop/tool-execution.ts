@@ -33,12 +33,12 @@ import {
     type ToolExecContext,
     type ToolRoundResult,
 } from "./tool-execution/types.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
-import { buildSemanticToolCallKey, didToolCallFail } from "../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
+import { buildSemanticToolCallKey, didToolCallFail } from "../tool-helpers/index.js"
 import {
     enrichToolResultMetadata as enrichResult,
     trackToolCallFailureState,
-} from "../tool-helpers/tool-utils.js"
+} from "../tool-helpers/index.js"
 
 // Re-export public types/helpers for backwards compatibility.
 export { normalizeArtifactPath } from "./tool-execution/types.js"

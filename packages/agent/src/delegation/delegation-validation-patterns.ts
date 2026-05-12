@@ -7,7 +7,7 @@
  */
 
 import type { DelegationContractSpec } from "./delegation-validation.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
 import {
     DOCUMENTATION_TASK_RE,
     EXECUTABLE_VERIFICATION_CMD_RE,
@@ -33,7 +33,7 @@ export * from "./delegation-validation-patterns/constants.js"
 
 // ── Path / artifact helpers ─────────────────────────────────────
 
-/** Normalize artifact-like paths for resilient comparisons. */
+/** Normalize artifact-like paths for resilient comparisons. (Internal to delegation cluster.) */
 export function normalizeArtifactPath(value: string): string {
   const cleaned = value.trim().replace(/^['"`]|['"`]$/g, "")
   return cleaned.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+/g, "/").toLowerCase()

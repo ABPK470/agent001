@@ -24,6 +24,16 @@ export { validatePlan } from "./validate.js"
 export type { ValidationResult } from "./validate.js"
 export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.js"
 
+// Additional public symbols (previously imported directly by tests / other clusters).
+export { parseCoherentSolutionBundle } from "./coherent.js"
+export { parseBlueprintContractBlock } from "./blueprint-contract.js"
+export { compilePlannerRuntime } from "./runtime-model.js"
+export { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "./verification-model.js"
+
+// Platform-error helpers and failure polishing (used by server + lib.ts barrel).
+export * from "./platform-errors.js"
+export * from "./polish-failure.js"
+
 // Re-export all types
 export type {
     ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, RoutingConfidence, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,

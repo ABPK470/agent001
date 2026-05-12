@@ -4,15 +4,15 @@
  * @module
  */
 
-import type { AgentLoopState } from "../loop/agent-loop-state.js"
-import { truncateMessages } from "../context/context-management.js"
+import type { AgentLoopState } from "../loop/index.js"
+import { truncateMessages } from "../context/index.js"
 import {
     buildCoherentVerificationPipelineResult,
     summarizeCoherentVerifierDecision,
 } from "../planner/coherent.js"
 import type { VerifierDecision } from "../planner/types.js"
 import { verify } from "../planner/verifier.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 
 export interface CoherentVerificationDeps {

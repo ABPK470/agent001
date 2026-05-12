@@ -30,8 +30,8 @@ import {
     tryTestRunnerHint,
     type AdvancedHintContext,
 } from "./advanced-build.js"
-import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
-import { extractToolFailureText, parseToolResultObject } from "../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
+import { extractToolFailureText, parseToolResultObject } from "../tool-helpers/index.js"
 
 export interface RecoveryHint {
   key: string

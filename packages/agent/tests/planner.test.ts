@@ -3,8 +3,8 @@
  * pipeline execution, and circuit breaker behavior.
  */
 import { describe, expect, it, vi } from "vitest"
-import { ToolFailureCircuitBreaker } from "../src/recovery/circuit-breaker.js"
-import * as delegationDecision from "../src/delegation/delegation-decision.js"
+import { ToolFailureCircuitBreaker } from "../src/recovery/index.js"
+import * as delegationDecision from "../src/delegation/index.js"
 import { parseBlueprintContractBlock } from "../src/planner/blueprint-contract.js"
 import { parseCoherentSolutionBundle } from "../src/planner/coherent.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
@@ -17,7 +17,7 @@ import { validatePlan } from "../src/planner/validate.js"
 import { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "../src/planner/verification-model.js"
 import * as plannerVerifier from "../src/planner/verifier.js"
 import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
-import { CHILD_SYSTEM_PROMPT } from "../src/tools/delegate.js"
+import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
 import type { LLMClient, Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────

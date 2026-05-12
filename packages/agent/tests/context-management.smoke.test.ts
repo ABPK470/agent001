@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { compactMessages, estimateTokens } from "../src/context/context-management.js"
+import { compactMessages, estimateTokens } from "../src/context/index.js"
 import type { Message } from "../src/types.js"
 
 const m = (role: Message["role"], content: string, extra: Partial<Message> = {}): Message =>
