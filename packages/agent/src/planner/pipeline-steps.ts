@@ -2,13 +2,15 @@
  * Pipeline step execution — deterministic tool calls and subagent delegation
  * with validation, retry, and post-step syntax checking.
  *
- * Extracted from pipeline.ts for maintainability.
+ * Submodules:
+ *   pipeline-steps/deterministic.ts    — executeDeterministicStep
+ *   pipeline-steps/subagent-retry.ts   — runSubagentMandatoryRetry
  *
  * @module
  */
 
+import { executeDeterministicStep } from "./pipeline-steps/deterministic.js"
 import {
-    buildBlueprintRetryGuidance,
     isBlueprintLikeStep,
     type SubagentStepValidationContext,
 } from "./pipeline-repair.js"
@@ -16,10 +18,10 @@ import {
     runPostStepSyntaxValidation,
     validateSubagentCompletion,
 } from "./pipeline-validation.js"
+import { runSubagentMandatoryRetry } from "./pipeline-steps/subagent-retry.js"
 import type { DelegateFn, ToolExecFn } from "./pipeline.js"
 import { detectPlatformUnconfigured } from "./platform-errors.js"
 import type {
-    DeterministicToolStep,
     PipelineStepResult,
     PlanStep,
     SubagentTaskStep,
@@ -40,119 +42,8 @@ export async function executeStep(
 
   if (step.stepType === "deterministic_tool") {
     return executeDeterministicStep(step, toolExecFn, t0, signal)
-  } else {
-    return executeSubagentStep(step, delegateFn, t0, signal, validationCtx)
   }
-}
-
-// ============================================================================
-// Deterministic tool step
-// ============================================================================
-
-async function executeDeterministicStep(
-  step: DeterministicToolStep,
-  toolExecFn: ToolExecFn,
-  t0: number,
-  signal?: AbortSignal,
-): Promise<PipelineStepResult> {
-  const maxRetries = step.maxRetries ?? 2
-  let lastError: string | undefined
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (signal?.aborted) {
-      return {
-        name: step.name,
-        status: "failed",
-        executionState: "failed",
-        acceptanceState: "rejected",
-        error: "Aborted",
-        durationMs: Date.now() - t0,
-      }
-    }
-
-    try {
-      let args = step.args
-      if (step.tool === "browser_check" && !args.path && (args.key || args.url)) {
-        args = { ...args, path: String(args.key ?? args.url) }
-        delete (args as Record<string, unknown>).key
-        delete (args as Record<string, unknown>).url
-      }
-
-      let output = await toolExecFn(step.tool, args)
-
-      if (
-        step.tool === "write_file" &&
-        typeof args.path === "string" &&
-        /EISDIR|illegal operation on a directory/i.test(output) &&
-        String(args.content ?? "").trim().length === 0
-      ) {
-        const mkdirCmd = `mkdir -p ${JSON.stringify(String(args.path))}`
-        const mkdirOutput = await toolExecFn("run_command", { command: mkdirCmd })
-        if (!mkdirOutput.startsWith("Error:")) {
-          output = `Recovered directory scaffold via run_command: ${mkdirCmd}`
-        }
-      }
-
-      // Platform-unconfigured short-circuit. Some tools surface the missing
-      // config as an "Error: ..." string; others swallow it and embed the
-      // diagnosis inside an otherwise success-shaped response (e.g. an
-      // mssql-aware tool that returns a narrative explaining the gap). We
-      // scan ALL output text — not just the "Error:" prefix — because the
-      // verifier-driven repair loop will burn its budget either way.
-      const platformInOutput = detectPlatformUnconfigured(output)
-      if (platformInOutput) {
-        return {
-          name: step.name,
-          status: "failed",
-          executionState: "failed",
-          acceptanceState: "rejected",
-          error: output,
-          failureClass: "platform_unconfigured",
-          durationMs: Date.now() - t0,
-        }
-      }
-
-      if (output.startsWith("Error:")) {
-        lastError = output
-        continue
-      }
-
-      return {
-        name: step.name,
-        status: "completed",
-        executionState: "executed",
-        acceptanceState: "accepted",
-        output,
-        durationMs: Date.now() - t0,
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      // Same short-circuit applies if the tool throws rather than returning a
-      // string — e.g. getPool() throwing "MSSQL connection ... not configured".
-      const platform = detectPlatformUnconfigured(msg)
-      if (platform) {
-        return {
-          name: step.name,
-          status: "failed",
-          executionState: "failed",
-          acceptanceState: "rejected",
-          error: msg,
-          failureClass: "platform_unconfigured",
-          durationMs: Date.now() - t0,
-        }
-      }
-      lastError = msg
-    }
-  }
-
-  return {
-    name: step.name,
-    status: "failed",
-    executionState: "failed",
-    acceptanceState: "rejected",
-    error: lastError ?? "Unknown error",
-    durationMs: Date.now() - t0,
-  }
+  return executeSubagentStep(step, delegateFn, t0, signal, validationCtx)
 }
 
 // ============================================================================
@@ -178,98 +69,27 @@ async function executeSubagentStep(
 
     // Platform-unconfigured short-circuit (subagent path). If the child's
     // narrative output OR any of its tool-call results contain the missing
-    // platform-config marker, treat the whole step as unrecoverable so the
-    // verifier/repair loop is bypassed. Without this, the planner would
-    // burn its retry budget asking the same subagent to fix a configuration
-    // it has no power to change.
+    // platform-config marker, treat the whole step as unrecoverable.
     const subagentTexts = [output, ...(childToolCalls?.map((c) => c.result) ?? [])]
     for (const text of subagentTexts) {
       if (typeof text !== "string") continue
       if (detectPlatformUnconfigured(text)) {
-        return {
-          name: step.name,
-          status: "failed",
-          executionState: "failed",
-          acceptanceState: "rejected",
-          error: text,
-          failureClass: "platform_unconfigured",
-          durationMs: Date.now() - t0,
-          toolCalls: childToolCalls,
-          childResult: childExecution,
-          producedArtifacts: childExecution?.producedArtifacts,
-          modifiedArtifacts: childExecution?.modifiedArtifacts,
-          verificationAttempts: childExecution?.verificationAttempts,
-        }
+        return failed(step, text, "platform_unconfigured", "rejected", t0, childToolCalls, childExecution)
       }
     }
 
     if (output.startsWith("Delegation failed:")) {
       const isSpawnError = output.includes("not found") || output.includes("spawn")
-      return {
-        name: step.name,
-        status: "failed",
-        executionState: "failed",
-        acceptanceState: "rejected",
-        error: output,
-        failureClass: isSpawnError ? "spawn_error" : "unknown",
-        durationMs: Date.now() - t0,
-        toolCalls: childToolCalls,
-        childResult: childExecution,
-        producedArtifacts: childExecution?.producedArtifacts,
-        modifiedArtifacts: childExecution?.modifiedArtifacts,
-        verificationAttempts: childExecution?.verificationAttempts,
-      }
+      return failed(step, output, isSpawnError ? "spawn_error" : "unknown", "rejected", t0, childToolCalls, childExecution)
     }
-
     if (output.includes("DELEGATION INCOMPLETE")) {
-      return {
-        name: step.name,
-        status: "failed",
-        executionState: "failed",
-        acceptanceState: "repair_required",
-        error: output,
-        failureClass: "budget_exceeded",
-        durationMs: Date.now() - t0,
-        toolCalls: childToolCalls,
-        childResult: childExecution,
-        producedArtifacts: childExecution?.producedArtifacts,
-        modifiedArtifacts: childExecution?.modifiedArtifacts,
-        verificationAttempts: childExecution?.verificationAttempts,
-      }
+      return failed(step, output, "budget_exceeded", "repair_required", t0, childToolCalls, childExecution)
     }
-
     if (output.includes("stuck in a tool loop")) {
-      return {
-        name: step.name,
-        status: "failed",
-        executionState: "failed",
-        acceptanceState: "repair_required",
-        error: output,
-        failureClass: "tool_misuse",
-        durationMs: Date.now() - t0,
-        toolCalls: childToolCalls,
-        childResult: childExecution,
-        producedArtifacts: childExecution?.producedArtifacts,
-        modifiedArtifacts: childExecution?.modifiedArtifacts,
-        verificationAttempts: childExecution?.verificationAttempts,
-      }
+      return failed(step, output, "tool_misuse", "repair_required", t0, childToolCalls, childExecution)
     }
-
     if (output.includes("cancelled") || output.includes("aborted")) {
-      return {
-        name: step.name,
-        status: "failed",
-        executionState: "failed",
-        acceptanceState: "rejected",
-        error: output,
-        failureClass: "cancelled",
-        durationMs: Date.now() - t0,
-        toolCalls: childToolCalls,
-        childResult: childExecution,
-        producedArtifacts: childExecution?.producedArtifacts,
-        modifiedArtifacts: childExecution?.modifiedArtifacts,
-        verificationAttempts: childExecution?.verificationAttempts,
-      }
+      return failed(step, output, "cancelled", "rejected", t0, childToolCalls, childExecution)
     }
 
     const strictFailure = await validateSubagentCompletion(
@@ -279,116 +99,20 @@ async function executeSubagentStep(
       validationCtx,
     )
     if (strictFailure) {
-      if (
+      // Trigger a single mandatory-retry path when the step required file
+      // mutations (or BLUEPRINT contract) but produced none.
+      const eligibleForRetry =
         (strictFailure.code === "missing_file_mutation_evidence"
-          || (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message))) &&
-        step.executionContext.targetArtifacts.length > 0
-      ) {
-        const blueprintRepairBlock = validationCtx && isBlueprintLikeStep(step)
-          ? `\n\n[MANDATORY RETRY — BLUEPRINT CONTRACT REPAIR]\n${buildBlueprintRetryGuidance(step, validationCtx.plan, [strictFailure.message])}`
-          : ""
-        const retryStep: SubagentTaskStep = {
-          ...step,
-          objective:
-            `${step.objective}\n\n` +
-            `[MANDATORY RETRY — WRITE EVIDENCE REQUIRED]\n` +
-            `You must create or modify the target artifacts in this attempt.\n` +
-            `Use write_file (or replace_in_file after reading the existing file) on the exact target paths.\n` +
-            `Do not stop at analysis or narrative summary. Produce real file mutations before finishing.` +
-            blueprintRepairBlock,
-        }
-
-        const retryResult = await delegateFn(retryStep, retryStep.executionContext)
-        const retryOutput = retryResult.output
-        const retryCalls = retryResult.toolCalls
-
-        if (retryOutput.startsWith("Delegation failed:")) {
-          const isSpawnError = retryOutput.includes("not found") || retryOutput.includes("spawn")
-          return {
-            name: step.name,
-            status: "failed",
-            executionState: "failed",
-            acceptanceState: "rejected",
-            error: retryOutput,
-            failureClass: isSpawnError ? "spawn_error" : "unknown",
-            durationMs: Date.now() - t0,
-            toolCalls: retryCalls,
-            childResult: retryResult.execution,
-            producedArtifacts: retryResult.execution?.producedArtifacts,
-            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
-            verificationAttempts: retryResult.execution?.verificationAttempts,
-          }
-        }
-        if (retryOutput.includes("DELEGATION INCOMPLETE")) {
-          return {
-            name: step.name,
-            status: "failed",
-            executionState: "failed",
-            acceptanceState: "repair_required",
-            error: retryOutput,
-            failureClass: "budget_exceeded",
-            durationMs: Date.now() - t0,
-            toolCalls: retryCalls,
-            childResult: retryResult.execution,
-            producedArtifacts: retryResult.execution?.producedArtifacts,
-            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
-            verificationAttempts: retryResult.execution?.verificationAttempts,
-          }
-        }
-        if (retryOutput.includes("stuck in a tool loop")) {
-          return {
-            name: step.name,
-            status: "failed",
-            executionState: "failed",
-            acceptanceState: "repair_required",
-            error: retryOutput,
-            failureClass: "tool_misuse",
-            durationMs: Date.now() - t0,
-            toolCalls: retryCalls,
-            childResult: retryResult.execution,
-            producedArtifacts: retryResult.execution?.producedArtifacts,
-            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
-            verificationAttempts: retryResult.execution?.verificationAttempts,
-          }
-        }
-
-        const retryStrictFailure = await validateSubagentCompletion(
+          || (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message)))
+        && step.executionContext.targetArtifacts.length > 0
+      if (eligibleForRetry) {
+        return runSubagentMandatoryRetry({
           step,
-          retryOutput,
-          retryCalls,
+          originalFailureMessage: strictFailure.message,
+          delegateFn,
           validationCtx,
-        )
-        if (!retryStrictFailure) {
-          return {
-            name: step.name,
-            status: "completed",
-            executionState: "executed",
-            acceptanceState: "pending_verification",
-            output: retryOutput,
-            durationMs: Date.now() - t0,
-            toolCalls: retryCalls,
-            childResult: retryResult.execution,
-            producedArtifacts: retryResult.execution?.producedArtifacts,
-            modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
-            verificationAttempts: retryResult.execution?.verificationAttempts,
-          }
-        }
-
-        return {
-          name: step.name,
-          status: "failed",
-          executionState: "failed",
-          acceptanceState: "repair_required",
-          error: retryStrictFailure.message,
-          failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(retryStrictFailure.message) ? "blueprint_contract" : "unknown",
-          durationMs: Date.now() - t0,
-          toolCalls: retryCalls,
-          childResult: retryResult.execution,
-          producedArtifacts: retryResult.execution?.producedArtifacts,
-          modifiedArtifacts: retryResult.execution?.modifiedArtifacts,
-          verificationAttempts: retryResult.execution?.verificationAttempts,
-          validationCode: retryStrictFailure.code,
-        }
+          t0,
+        })
       }
 
       return {
@@ -456,5 +180,30 @@ async function executeSubagentStep(
       failureClass: isTransient ? "transient_provider_error" : "unknown",
       durationMs: Date.now() - t0,
     }
+  }
+}
+
+function failed(
+  step: SubagentTaskStep,
+  error: string,
+  failureClass: PipelineStepResult["failureClass"],
+  acceptanceState: PipelineStepResult["acceptanceState"],
+  t0: number,
+  toolCalls: PipelineStepResult["toolCalls"],
+  childExec: PipelineStepResult["childResult"],
+): PipelineStepResult {
+  return {
+    name: step.name,
+    status: "failed",
+    executionState: "failed",
+    acceptanceState,
+    error,
+    failureClass,
+    durationMs: Date.now() - t0,
+    toolCalls,
+    childResult: childExec,
+    producedArtifacts: childExec?.producedArtifacts,
+    modifiedArtifacts: childExec?.modifiedArtifacts,
+    verificationAttempts: childExec?.verificationAttempts,
   }
 }
