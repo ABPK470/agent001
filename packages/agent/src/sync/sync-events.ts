@@ -22,7 +22,7 @@
  * would create a cycle), so the server injects the sink at startup.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage } from "node:async_hooks"
 import { currentRuntime } from "../agent-runtime.js"
 
 export type SyncEvent = { type: string; data: Record<string, unknown> }

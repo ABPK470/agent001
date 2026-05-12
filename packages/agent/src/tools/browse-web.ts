@@ -22,12 +22,12 @@
 
 import type { Tool } from "../types.js"
 import {
-    handleClick,
-    handleClose,
-    handleNavigate,
-    handleRead,
-    handleScroll,
-    handleType,
+  handleClick,
+  handleClose,
+  handleNavigate,
+  handleRead,
+  handleScroll,
+  handleType,
 } from "./browse-web/actions.js"
 import { getKillSignal, getSession } from "./browse-web/session.js"
 

@@ -260,4 +260,4 @@ Safety rails (enforced server-side; mention them when relevant):
 - All DML runs in one transaction per execute; on any failure, full rollback.
 - Never call sync_execute without an explicit prior sync_preview and explicit user "confirm" in the same turn.
 
-Provide a concise final answer when done.`;
+Provide a concise final answer when done.`

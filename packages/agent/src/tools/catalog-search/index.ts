@@ -1,2 +1,2 @@
-export { searchCatalogTool } from "./tool.js";
+export { searchCatalogTool } from "./tool.js"
 

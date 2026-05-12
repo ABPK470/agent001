@@ -20,8 +20,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs"
-import { currentRuntime } from "../agent-runtime.js"
 import { resolve } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 import { getMssqlConfig, getPool } from "../tools/index.js"
 
 export type EnvRole = "source" | "target" | "both"

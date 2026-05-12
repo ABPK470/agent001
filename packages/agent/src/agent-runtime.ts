@@ -40,27 +40,27 @@
  * clears the browse-web cleanup timer. Server shutdown should call it.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks"
 import type sql from "mssql"
+import { AsyncLocalStorage } from "node:async_hooks"
 
 // ── Type-only forward declarations ────────────────────────────────
 // These imports are erased at runtime, so there is no circular dependency
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-  AskUserResolver,
-  BrowserCheckExecutor,
-  BrowserSession,
-  CatalogGraph,
-  ShellExecutor,
-} from "./tools/index.js"
-import type {
-  SyncEnvironment,
-  SyncEventSink,
-  SyncPlan,
-  SyncRecipeBundle,
-  SyncRunSink,
+    SyncEnvironment,
+    SyncEventSink,
+    SyncPlan,
+    SyncRecipeBundle,
+    SyncRunSink,
 } from "./sync/index.js"
+import type {
+    AskUserResolver,
+    BrowserCheckExecutor,
+    BrowserSession,
+    CatalogGraph,
+    ShellExecutor,
+} from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
 // Each sub-record maps 1:1 to the state that used to live in one tool /

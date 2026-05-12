@@ -15,8 +15,8 @@
  */
 
 import { stat } from "node:fs/promises"
-import { currentRuntime } from "../agent-runtime.js"
 import { join } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
 import { startStaticServer } from "./browser-check/static-server.js"
 

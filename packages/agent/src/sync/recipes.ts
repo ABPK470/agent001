@@ -16,8 +16,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs"
-import { currentRuntime } from "../agent-runtime.js"
 import { resolve } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 
 export type EntityType =
   | "contract"

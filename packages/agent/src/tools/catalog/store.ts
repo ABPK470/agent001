@@ -1,5 +1,5 @@
-import { CatalogGraph } from "./graph.js"
 import { currentRuntime } from "../../agent-runtime.js"
+import { CatalogGraph } from "./graph.js"
 import type { CatalogBuildOptions, CatalogSnapshot, ViewLineage } from "./types.js"
 
 // ── Global catalog store (per connection, with disk cache) ───────

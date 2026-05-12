@@ -1,4 +1,4 @@
-import { tableKey } from "./helpers.js";
+import { tableKey } from "./helpers.js"
 import type {
     CatalogFK,
     CatalogTable,
@@ -7,7 +7,7 @@ import type {
     ConceptPathResult,
     ConceptPathStep,
     ImplicitEdge,
-} from "./types.js";
+} from "./types.js"
 
 /** BFS path-finding between two tables via FK edges only. */
 export function findFkPath(

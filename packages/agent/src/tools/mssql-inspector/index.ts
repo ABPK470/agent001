@@ -1,2 +1,2 @@
-export { inspectDefinitionTool } from "./tool.js";
+export { inspectDefinitionTool } from "./tool.js"
 
