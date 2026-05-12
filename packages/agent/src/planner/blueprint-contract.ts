@@ -1,3 +1,4 @@
+import { canonicalizeRelative } from "../internal/paths.js"
 import type { Plan, SubagentTaskStep } from "./types.js"
 
 export interface BlueprintFunctionSpec {
@@ -34,7 +35,7 @@ export interface ParsedBlueprintContractBlock {
 const BLUEPRINT_CONTRACT_BLOCK_RE = /```blueprint-contract\s*([\s\S]*?)```/iu
 
 export function normalizeSpecPath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/^\.\//, "").trim()
+  return canonicalizeRelative(value).trim()
 }
 
 export function normalizeBasename(value: string): string {

@@ -6,15 +6,11 @@
  * @module
  */
 
+import { asNonEmptyString as _asNonEmptyString, isRecord } from "../internal/json.js"
 import type { CoherentArchitectureArtifact, CoherentSharedContract, CoherentSystemInvariant, PlanEdge } from "./types.js"
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-export function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null
-}
+// Re-exported to preserve the public surface; canonical definition lives in internal/json.
+export const asNonEmptyString = _asNonEmptyString
 
 export function parseJsonObject(raw: string): Record<string, unknown> | null {
   let jsonStr = raw.trim()

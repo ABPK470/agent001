@@ -1,3 +1,4 @@
+import { canonicalizeRelative } from "../internal/paths.js"
 import type { ToolCallRecord } from "../recovery.js"
 import type { Message, Tool, ToolResultEnvelope } from "../types.js"
 import {
@@ -47,7 +48,7 @@ function normalizeToolResult(result: string | ToolResultEnvelope): { ok: boolean
 }
 
 function normalizeArtifactPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.\//, "").trim()
+  return canonicalizeRelative(path).trim()
 }
 
 function uniqueStrings(values: readonly string[]): string[] {

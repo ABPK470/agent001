@@ -6,6 +6,7 @@
  * @module
  */
 
+import { isRecord as _isRecord, asNonEmptyString as _asNonEmptyString } from "../internal/json.js"
 import { isValidArtifactPath } from "./generate.js"
 import type {
   CoherentSharedContract,
@@ -13,6 +14,10 @@ import type {
   CoherentSystemInvariant,
   PlanEdge,
 } from "./types.js"
+
+// Re-exports preserve the existing public surface of this module.
+export const isRecord = _isRecord
+export const asNonEmptyString = _asNonEmptyString
 
 export const COHERENT_GENERATION_PROMPT = `You are generating a coherent multi-file implementation bundle.
 
@@ -45,14 +50,6 @@ Return JSON of this shape:
   "sharedContracts": [{ "name": "contract", "description": "exact shared contract" }],
   "invariants": [{ "id": "invariant_id", "description": "system-level invariant" }]
 }`
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-export function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null
-}
 
 export function parseJsonObject(raw: string): Record<string, unknown> | null {
   // Strategy 1: try direct parse — clean responses with no prose/fencing
