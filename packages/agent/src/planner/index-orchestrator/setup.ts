@@ -5,7 +5,6 @@
  * @module
  */
 
-import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../delegation-decision.js"
 import { assessPlannerDecision } from "../decision.js"
 import { generateCoherentBootstrap, generatePlan } from "../generate.js"
 import { injectBlueprintStep, strengthenExistingBlueprintSteps } from "../index-blueprint.js"
@@ -21,9 +20,10 @@ import {
     remediateValidationErrors,
 } from "../index-normalize.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
-import type { PlannerCoherentBootstrap, PlanStep } from "../types.js"
+import type { PlannerCoherentBootstrap } from "../types.js"
 import { validatePlan } from "../validate.js"
 import { buildPlannerFailurePayload, resolvePlannerCompatibilityMode, resolvePlannerCompatibilityThreshold } from "./helpers.js"
+import { runDelegationGate } from "./setup-delegation.js"
 import type { PlannerContext, PlannerResult, PlannerSetupContext } from "./types.js"
 
 /** Discriminated union returned by runPlannerSetup. */
@@ -264,106 +264,9 @@ export async function runPlannerSetup(
   })
 
   // Step 3b: Delegation decision gate — safety, economics, hard-block checks
-  // Build step profiles for the delegation decision system
-  const subagentSteps = plan.steps.filter(
-    (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task",
-  )
-  const subagentProfiles: DelegationSubagentStepProfile[] = subagentSteps.map((s) => {
-    // Map planner's EffectClass to delegation-decision's effectClass
-    const effectMap: Record<string, "read_only" | "write" | "mixed"> = {
-      readonly: "read_only",
-      filesystem_write: "write",
-      filesystem_scaffold: "write",
-      shell: "mixed",
-      mixed: "mixed",
-    }
-    return {
-      name: s.name,
-      objective: s.objective,
-      dependsOn: s.dependsOn ? [...s.dependsOn] : undefined,
-      acceptanceCriteria: [...s.acceptanceCriteria],
-      requiredToolCapabilities: [...s.requiredToolCapabilities],
-      canRunParallel: s.canRunParallel,
-      effectClass: effectMap[s.executionContext.effectClass] ?? "mixed",
-    }
-  })
-
-  let banditTrajectory: import("../../delegation-learning.js").DelegationTrajectoryRecord | undefined
-
-  if (subagentProfiles.length > 0) {
-    // ── Bandit tuner: select arm and adjust threshold ──────────────────────
-    let banditArmId: import("../../delegation-learning.js").BanditArmId | undefined
-    let banditThresholdAdjustment = 0
-    if (banditTuner) {
-      banditArmId = banditTuner.selectArm()
-      banditThresholdAdjustment = banditTuner.getThresholdAdjustment(banditArmId)
-    }
-
-    const delegationInput: DelegationDecisionInput = {
-      messageText: goal,
-      plannerConfidence: decision.score / 10,
-      complexityScore: decision.score,
-      totalSteps: plan.steps.length,
-      synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
-      subagentSteps: subagentProfiles,
-      // When the planner already chose full_planner_decomposition, this IS an explicit
-      // delegation decision — weight decompositionBenefit accordingly.
-      explicitDelegationRequested: decision.route === "full_planner_decomposition",
-      config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined,
-    }
-
-    const delegationDecision = assessDelegationDecision(delegationInput)
-
-    // Record pre-pipeline trajectory for bandit learning
-    if (banditTuner && banditArmId) {
-      banditTrajectory = banditTuner.buildTrajectory({
-        armId: banditArmId,
-        appliedThreshold: 0.2 + banditThresholdAdjustment,
-        complexityScore: decision.score,
-        fanoutCount: subagentProfiles.length,
-        stepCount: plan.steps.length,
-        nestingDepth: 1,
-        parallelFraction: subagentProfiles.filter(s => s.canRunParallel).length / Math.max(1, subagentProfiles.length),
-        shouldDelegate: delegationDecision.shouldDelegate,
-        utilityScore: delegationDecision.utilityScore,
-      })
-    }
-
-    ctx.onTrace?.({
-      kind: "planner-delegation-decision",
-      shouldDelegate: delegationDecision.shouldDelegate,
-      reason: delegationDecision.reason,
-      utilityScore: delegationDecision.utilityScore,
-      safetyRisk: delegationDecision.safetyRisk,
-      confidence: delegationDecision.confidence,
-      hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass,
-      banditArmId,
-      banditThresholdAdjustment,
-    })
-
-    if (!delegationDecision.shouldDelegate) {
-      const reason = `Delegation blocked: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`
-      return {
-        ready: false,
-        result: {
-          handled: true,
-          answer: buildPlannerFailurePayload({
-            stage: "delegation",
-            reason,
-            diagnostics: [{
-              utilityScore: delegationDecision.utilityScore,
-              safetyRisk: delegationDecision.safetyRisk,
-              reason: delegationDecision.reason,
-            }],
-            score: decision.score,
-            plannerReason: decision.reason,
-          }),
-          plan,
-          skipReason: reason,
-        },
-      }
-    }
-  }
+  const gate = runDelegationGate(plan, goal, decision, ctx, banditTuner)
+  if (gate.blocked) return { ready: false, result: gate.result }
+  const banditTrajectory = gate.banditTrajectory
 
   const compatibilityMode = resolvePlannerCompatibilityMode()
   const compatibilityThreshold = resolvePlannerCompatibilityThreshold()

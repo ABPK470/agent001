@@ -3,8 +3,93 @@
  * @module
  */
 
-import type { PipelineResult, PlannerRepairCompatibilityMode, VerifierDecision } from "../types.js"
+import { synthesizeAnswer } from "../index-synthesize.js"
+import { detectPlatformUnconfigured } from "../platform-errors.js"
+import type { PipelineResult, Plan, PlannerRepairCompatibilityMode, VerifierDecision } from "../types.js"
 import { deriveAcceptanceState } from "../verification-model.js"
+import type { PlannerContext, PlannerResult } from "./types.js"
+import type { DelegationTrajectoryRecord } from "../../delegation-learning.js"
+
+/**
+ * If the pipeline failed because a platform integration (eg MSSQL) is
+ * not configured, no retry can fix it — short-circuit with a user-safe
+ * answer and emit operator-only diagnostics.
+ */
+export function tryPlatformUnconfiguredShortCircuit(
+  ctx: PlannerContext,
+  plan: Plan,
+  pipelineResult: PipelineResult,
+): PlannerResult | undefined {
+  const platformUnconfiguredStep = [...pipelineResult.stepResults.values()]
+    .find((r) => r.failureClass === "platform_unconfigured")
+  if (!platformUnconfiguredStep) return undefined
+  const hit = platformUnconfiguredStep.error
+    ? detectPlatformUnconfigured(platformUnconfiguredStep.error)
+    : null
+  ctx.onTrace?.({
+    kind: "planner-platform-unconfigured",
+    stepName: platformUnconfiguredStep.name,
+    subject: hit?.subject ?? "unknown integration",
+    remediation: hit?.remediation ?? "Check server configuration.",
+    rawError: platformUnconfiguredStep.error ?? "",
+  })
+  ctx.onTrace?.({
+    kind: "planner-retry-abort",
+    reason: `Platform integration not configured (${platformUnconfiguredStep.name}) — no retry can repair operator-owned config`,
+  })
+  return {
+    handled: true,
+    answer: synthesizeAnswer(plan, pipelineResult, {
+      overall: "fail",
+      confidence: 1,
+      steps: [],
+      systemChecks: [],
+      unresolvedItems: [],
+    }),
+    plan,
+  }
+}
+
+/**
+ * Synthesise the final answer, record the bandit outcome, and shape the
+ * structured PlannerResult (including the soft-fail skipReason when
+ * verification didn't pass after all retries).
+ */
+export function finalizePlannerRun(
+  plan: Plan,
+  pipelineResult: PipelineResult,
+  verifierDecision: VerifierDecision,
+  banditTuner: PlannerContext["delegationBanditTuner"] | undefined,
+  banditTrajectory: DelegationTrajectoryRecord | undefined,
+  pipelineStartMs: number,
+): PlannerResult {
+  const answer = synthesizeAnswer(plan, pipelineResult, verifierDecision)
+  if (banditTuner && banditTrajectory) {
+    const failedSteps = [...pipelineResult.stepResults.values()].filter(r => r.status === "failed").length
+    const verifierPassed = verifierDecision.overall === "pass"
+    const qualityProxy = verifierPassed
+      ? verifierDecision.confidence
+      : (verifierDecision.overall === "retry" ? 0.4 : 0.1)
+    banditTuner.recordOutcome(banditTrajectory, {
+      durationMs: Date.now() - pipelineStartMs,
+      tokenCount: 0,
+      errorCount: failedSteps,
+      qualityProxy,
+      verifierPassed,
+    })
+  }
+  if (verifierDecision.overall !== "pass") {
+    return {
+      handled: true,
+      answer,
+      plan,
+      pipelineResult,
+      verifierDecision,
+      skipReason: "Verification failed after retries — structured execution halted",
+    }
+  }
+  return { handled: true, answer, plan, pipelineResult, verifierDecision }
+}
 
 export function resolvePlannerCompatibilityMode(): PlannerRepairCompatibilityMode {
   const raw = (process.env["AGENT_PLANNER_COMPAT_MODE"] ?? "shadow").trim().toLowerCase()

@@ -9,16 +9,15 @@
 import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../../escalation.js"
 import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
-import { synthesizeAnswer } from "../index-synthesize.js"
 import type { DelegateFn } from "../pipeline.js"
 import { executePipeline } from "../pipeline.js"
-import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineResult, RepairPlan, VerifierDecision } from "../types.js"
 import { buildIssueIdentity, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility } from "../verification-model.js"
 import { verify } from "../verifier.js"
-import { applyVerificationAcceptanceStates } from "./helpers.js"
+import { applyVerificationAcceptanceStates, finalizePlannerRun, tryPlatformUnconfiguredShortCircuit } from "./helpers.js"
 import { checkStubCountRegression } from "./regression.js"
 import { runPlannerSetup } from "./setup.js"
+import { buildPipelineCallbacks, emitRepairPlanTraces, emitRetryTraces, emitVerificationTraces } from "./traces.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
 
 /**
@@ -87,6 +86,7 @@ export async function executePlannerPath(
       maxRetries: MAX_PIPELINE_RETRIES + 1,
     })
 
+    const callbacks = buildPipelineCallbacks(ctx, attempt)
     pipelineResult = await executePipeline(
       plan,
       ctx.tools as Tool[],
@@ -98,43 +98,8 @@ export async function executePlannerPath(
         repairPlan: retryOpts.repairPlan,
         runtimeModel,
         signal: ctx.signal,
-        onStepStart: (step) => ctx.onTrace?.({
-          kind: "planner-step-start",
-          stepName: step.name,
-          stepType: step.stepType,
-        }),
-        onStepEnd: (step, result) => {
-          ctx.onTrace?.({
-            kind: "planner-step-end",
-            stepName: step.name,
-            status: result.status,
-            executionState: result.executionState,
-            acceptanceState: result.acceptanceState,
-            durationMs: result.durationMs,
-            error: result.error,
-            validationCode: result.validationCode,
-            producedArtifacts: result.producedArtifacts,
-            verificationAttempts: result.verificationAttempts,
-            reconciliation: result.reconciliation
-              ? {
-                  compliant: result.reconciliation.compliant,
-                  findings: result.reconciliation.findings.map((finding) => ({
-                    code: finding.code,
-                    severity: finding.severity,
-                    message: finding.message,
-                  })),
-                }
-              : undefined,
-          })
-          ctx.onTrace?.({
-            kind: "planner-step-transition",
-            attempt: attempt + 1,
-            stepName: step.name,
-            phase: "execution",
-            state: result.acceptanceState ?? result.status,
-            timestamp: Date.now(),
-          })
-        },
+        onStepStart: callbacks.onStepStart,
+        onStepEnd: callbacks.onStepEnd,
       },
     )
 
@@ -147,41 +112,10 @@ export async function executePlannerPath(
 
     // Platform-unconfigured short-circuit. If any step failed because a
     // required platform integration is missing (e.g. MSSQL not configured),
-    // there is nothing the verifier or repair loop can do — every retry will
-    // hit the exact same missing-config and burn tokens. Bypass verification
-    // entirely, synthesize an opaque user-safe answer, and exit. The
-    // operator-only technical detail (subject + remediation) is emitted as
-    // a dedicated trace event so the server can log it for the admin while
-    // the chat user sees nothing about env vars or file paths.
-    const platformUnconfiguredStep = [...pipelineResult.stepResults.values()]
-      .find((r) => r.failureClass === "platform_unconfigured")
-    if (platformUnconfiguredStep) {
-      const hit = platformUnconfiguredStep.error
-        ? detectPlatformUnconfigured(platformUnconfiguredStep.error)
-        : null
-      ctx.onTrace?.({
-        kind: "planner-platform-unconfigured",
-        stepName: platformUnconfiguredStep.name,
-        subject: hit?.subject ?? "unknown integration",
-        remediation: hit?.remediation ?? "Check server configuration.",
-        rawError: platformUnconfiguredStep.error ?? "",
-      })
-      ctx.onTrace?.({
-        kind: "planner-retry-abort",
-        reason: `Platform integration not configured (${platformUnconfiguredStep.name}) — no retry can repair operator-owned config`,
-      })
-      return {
-        handled: true,
-        answer: synthesizeAnswer(plan, pipelineResult, {
-          overall: "fail",
-          confidence: 1,
-          steps: [],
-          systemChecks: [],
-          unresolvedItems: [],
-        }),
-        plan,
-      }
-    }
+    // there is nothing the verifier or repair loop can do — bypass
+    // verification entirely and exit with a user-safe answer.
+    const shortCircuit = tryPlatformUnconfiguredShortCircuit(ctx, plan, pipelineResult)
+    if (shortCircuit) return shortCircuit
 
     // Update pipeline budget state — track progress for extension decisions
     const prevBudget = budgetState
@@ -228,59 +162,15 @@ export async function executePlannerPath(
         : "repair"
     pipelineResult = applyVerificationAcceptanceStates(pipelineResult, verifierDecision)
 
-    ctx.onTrace?.({
-      kind: "planner-verification",
-      overall: verifierDecision.overall,
-      confidence: verifierDecision.confidence,
-      verifierRound: verifierRounds + 1,
-      systemChecks: verifierDecision.systemChecks?.map((check) => ({
-        code: check.code,
-        severity: check.severity,
-        summary: check.summary,
-        confidence: check.confidence,
-      })),
-      steps: verifierDecision.steps.map(s => ({
-        stepName: s.stepName,
-        outcome: s.outcome,
-        issues: s.issues,
-        issueCodes: s.issueDetails?.map(issue => issue.code) ?? [],
-        ownershipModes: s.issueDetails?.map(issue => issue.ownershipMode) ?? [],
-        issueConfidences: s.issueDetails?.map(issue => issue.confidence) ?? [],
-        acceptanceState: pipelineResult?.stepResults.get(s.stepName)?.acceptanceState,
-      })),
-    })
-    if (plan.coherentBootstrap) {
-      ctx.onTrace?.({
-        kind: "planner-architecture-state",
-        lane: plan.route ?? decision.route,
-        status: verifierDecision.overall === "pass" ? "preserved" : "repairing_in_place",
-        reason: verifierDecision.overall === "pass" ? "verification_passed" : "architecture_preserving_repair",
-        architecture: plan.coherentBootstrap.architecture,
-      })
-    }
-    ctx.onTrace?.({
-      kind: "planner-issue-timeline",
-      attempt: attempt + 1,
-      verifierRound: verifierRounds + 1,
-      issues: verifierDecision.steps.flatMap((step) => (step.issueDetails ?? []).map((issue) => ({
-        stepName: step.stepName,
-        code: issue.code,
-        confidence: issue.confidence,
-        ownershipMode: issue.ownershipMode,
-        primaryOwner: issue.primaryOwner,
-        suspectedOwners: [...issue.suspectedOwners],
-      }))),
-    })
-    for (const step of verifierDecision.steps) {
-      ctx.onTrace?.({
-        kind: "planner-step-transition",
-        attempt: attempt + 1,
-        stepName: step.stepName,
-        phase: "verification",
-        state: pipelineResult?.stepResults.get(step.stepName)?.acceptanceState ?? step.outcome,
-        timestamp: Date.now(),
-      })
-    }
+    emitVerificationTraces(
+      ctx,
+      plan,
+      pipelineResult,
+      verifierDecision,
+      decision.route,
+      attempt,
+      verifierRounds + 1,
+    )
 
     verifierRounds++
 
@@ -288,45 +178,14 @@ export async function executePlannerPath(
       break
     }
 
-    ctx.onTrace?.({
-      kind: "planner-repair-plan",
-      attempt: attempt + 1,
-      epoch: attempt + 1,
-      rerunOrder: verifierDecision.repairPlan?.rerunOrder ?? [],
-      tasks: verifierDecision.repairPlan?.tasks.map(task => ({
-        stepName: task.stepName,
-        mode: task.mode,
-        ownedIssueCodes: task.ownedIssues.map(issue => issue.code),
-        dependencyIssueCodes: task.dependencyContext.map(issue => issue.code),
-      })) ?? [],
-    })
-    ctx.onTrace?.({
-      kind: "planner-repair-compatibility",
-      attempt: attempt + 1,
-      mode: repairCompatibility.mode,
-      activePath: activeCompatibilityPath,
-      diverged: repairCompatibility.diverged,
-      divergenceScore: repairCompatibility.divergenceScore,
-      divergenceThreshold: compatibilityThreshold,
-      pinnedToLegacy: compatibilityMode === "shadow" && legacyPinnedForRun,
-      reasons: [...repairCompatibility.reasons],
-      legacy: {
-        rerunOrder: repairCompatibility.legacyPlan.rerunOrder,
-        tasks: repairCompatibility.legacyPlan.tasks.map((task) => ({
-          stepName: task.stepName,
-          mode: task.mode,
-          ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
-        })),
-      },
-      repair: {
-        rerunOrder: repairCompatibility.repairPlan.rerunOrder,
-        tasks: repairCompatibility.repairPlan.tasks.map((task) => ({
-          stepName: task.stepName,
-          mode: task.mode,
-          ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
-          dependencyIssueCodes: task.dependencyContext.map((issue) => issue.code),
-        })),
-      },
+    emitRepairPlanTraces(ctx, {
+      attempt,
+      verifierDecision,
+      repairCompatibility,
+      activeCompatibilityPath,
+      compatibilityMode,
+      legacyPinnedForRun,
+      compatibilityThreshold,
     })
 
     // agenc-core pattern: strict retry gating via escalation graph.
@@ -405,30 +264,13 @@ export async function executePlannerPath(
       break
     }
 
-    ctx.onTrace?.({
-      kind: "planner-retry",
-      attempt: attempt + 1,
-      reason: verifierDecision.unresolvedItems.join("; "),
-      skippedSteps: regression.priorResults.size,
-      retrySteps: regression.retryableTaskCount,
-      rerunOrder: regression.activeRepairPlan.rerunOrder,
-    })
-    for (const task of regression.activeRepairPlan.tasks) {
-      ctx.onTrace?.({
-        kind: "planner-step-transition",
-        attempt: attempt + 1,
-        stepName: task.stepName,
-        phase: "repair",
-        state: task.mode,
-        timestamp: Date.now(),
-      })
-    }
+    emitRetryTraces(ctx, attempt, verifierDecision, regression)
 
     // Store retry context for next iteration
     retryOpts = { priorResults: regression.priorResults, repairPlan: regression.activeRepairPlan }
   }
 
-  // Step 6: Synthesize final answer
+  // Step 6: Synthesize final answer + record bandit outcome
   if (forceReplanForFatalPattern) {
     ctx.onTrace?.({
       kind: "planner-escalation",
@@ -437,41 +279,12 @@ export async function executePlannerPath(
     })
   }
 
-  const answer = synthesizeAnswer(plan, pipelineResult!, verifierDecision!)
-
-  // Record bandit outcome now that we have a verifier decision and final pipeline state
-  if (banditTuner && banditTrajectory) {
-    const failedSteps = [...pipelineResult!.stepResults.values()].filter(r => r.status === "failed").length
-    const verifierPassed = verifierDecision!.overall === "pass"
-    const qualityProxy = verifierPassed ? verifierDecision!.confidence : (verifierDecision!.overall === "retry" ? 0.4 : 0.1)
-    banditTuner.recordOutcome(banditTrajectory, {
-      durationMs: Date.now() - pipelineStartMs,
-      tokenCount: 0,  // not available at this layer
-      errorCount: failedSteps,
-      qualityProxy,
-      verifierPassed,
-    })
-  }
-
-  // Contract-governed-first behavior: if verification didn't pass after all
-  // retries, DO NOT fall through to the unstructured direct tool loop.
-  // Return a structured failure response and keep remediation in planner mode.
-  if (verifierDecision!.overall !== "pass") {
-    return {
-      handled: true,
-      answer,
-      plan,
-      pipelineResult,
-      verifierDecision,
-      skipReason: "Verification failed after retries — structured execution halted",
-    }
-  }
-
-  return {
-    handled: true,
-    answer,
+  return finalizePlannerRun(
     plan,
-    pipelineResult,
-    verifierDecision,
-  }
+    pipelineResult!,
+    verifierDecision!,
+    banditTuner,
+    banditTrajectory,
+    pipelineStartMs,
+  )
 }
