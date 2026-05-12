@@ -6,7 +6,7 @@
 
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../code-quality.js"
+import { detectPlaceholderPatterns } from "../../governance/code-quality.js"
 import type { ToolResultEnvelope } from "../../types.js"
 import { checkWriteIntegrity, extractDefinedNames, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, getBasePath, safePathResolved } from "../filesystem-security.js"

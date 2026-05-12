@@ -19,10 +19,10 @@ import {
     isUnsupportedWorkspaceProtocolFailure,
     isVitestUnsupportedThreadsFlagFailure,
     isWatchModeTestRunnerFailure,
-} from "../recovery-detectors.js"
-import type { RecoveryHint } from "../recovery.js"
-import type { ToolCallRecord } from "../tool-result.js"
-import { parseToolResultObject } from "../tool-result.js"
+} from "./recovery-detectors.js"
+import type { RecoveryHint } from "./recovery.js"
+import type { ToolCallRecord } from "../tool-helpers/tool-result.js"
+import { parseToolResultObject } from "../tool-helpers/tool-result.js"
 
 export interface AdvancedHintContext {
   readonly call: ToolCallRecord

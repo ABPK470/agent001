@@ -1,8 +1,8 @@
 // ============================================================================
 // Pipeline execution types (extracted from types.ts)
 // ============================================================================
-import type { DelegationOutputValidationCode } from "../delegation-validation.js"
-import type { ToolCallRecord } from "../recovery.js"
+import type { DelegationOutputValidationCode } from "../delegation/delegation-validation.js"
+import type { ToolCallRecord } from "../recovery/recovery.js"
 
 export type PipelineStepStatus =
   | "pending"

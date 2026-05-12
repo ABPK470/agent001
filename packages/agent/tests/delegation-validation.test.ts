@@ -19,7 +19,7 @@ import {
     validateDelegatedOutputContract,
     type DelegationContractSpec,
     type ToolCallRecord
-} from "../src/delegation-validation.js"
+} from "../src/delegation/delegation-validation.js"
 
 // ============================================================================
 // Helpers

@@ -9,7 +9,7 @@ import {
     buildContractSpec,
     getCorrectionGuidance,
     validateDelegatedOutputContract,
-} from "../../delegation-validation.js"
+} from "../../delegation/delegation-validation.js"
 import type {
     PipelineResult,
     Plan,

@@ -15,7 +15,7 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../recovery.js"
+import type { ToolCallRecord } from "../recovery/recovery.js"
 import type { Tool } from "../types.js"
 import { injectPriorContext } from "./pipeline-context.js"
 import {

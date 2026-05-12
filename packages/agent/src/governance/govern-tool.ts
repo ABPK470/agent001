@@ -17,9 +17,9 @@ import {
     stepFailed,
     stepStarted
 } from "../engine/index.js"
-import { type EngineServices, type RunState, createToolStep } from "../governance-types.js"
-import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../retry.js"
-import { normalizeToolExecutionOutput } from "../tool-result.js"
+import { type EngineServices, type RunState, createToolStep } from "./governance-types.js"
+import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recovery/retry.js"
+import { normalizeToolExecutionOutput } from "../tool-helpers/tool-result.js"
 import type { Tool } from "../types.js"
 
 // ── Tool governance options ──────────────────────────────────────

@@ -1,6 +1,6 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../code-quality.js"
+import { detectPlaceholderPatterns } from "../../governance/code-quality.js"
 import type { Tool } from "../../types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, getBasePath, safePath, safePathResolved } from "../filesystem-security.js"

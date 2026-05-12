@@ -9,8 +9,8 @@
  * @module
  */
 
-import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../delegation-decision.js"
-import type { BanditArmId, DelegationBanditTuner, DelegationTrajectoryRecord } from "../../delegation-learning.js"
+import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../delegation/delegation-decision.js"
+import type { BanditArmId, DelegationBanditTuner, DelegationTrajectoryRecord } from "../../delegation/delegation-learning.js"
 import type { Plan, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"

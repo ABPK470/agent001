@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../recovery.js"
-import { normalizeToolExecutionOutput } from "../../tool-utils.js"
+import type { ToolCallRecord } from "../../recovery/recovery.js"
+import { normalizeToolExecutionOutput } from "../../tool-helpers/tool-utils.js"
 import type { Tool } from "../../types.js"
 import {
     buildBlueprintSeedTemplate,
@@ -20,7 +20,7 @@ import type { SubagentStepValidationContext } from "./artifacts.js"
 import { normalizeToolCallPath } from "./reconcile.js"
 
 export interface SubagentValidationFailure {
-  code?: import("../../delegation-validation.js").DelegationOutputValidationCode
+  code?: import("../../delegation/delegation-validation.js").DelegationOutputValidationCode
   message: string
 }
 

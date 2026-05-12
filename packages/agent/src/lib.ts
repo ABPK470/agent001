@@ -28,24 +28,24 @@ export type {
 export {
     createEngineServices, createToolStep, governTool, printGovernanceReport,
     runGoverned
-} from "./governance.js"
-export type { EngineServices, GovernedResult, GovernToolOptions, RunState } from "./governance.js"
+} from "./governance/governance.js"
+export type { EngineServices, GovernedResult, GovernToolOptions, RunState } from "./governance/governance.js"
 
 // Retry
-export { isRetryableError, TOOL_RETRY_POLICY, withToolRetry } from "./retry.js"
-export type { ToolRetryPolicy, ToolRetryResult } from "./retry.js"
+export { isRetryableError, TOOL_RETRY_POLICY, withToolRetry } from "./recovery/retry.js"
+export type { ToolRetryPolicy, ToolRetryResult } from "./recovery/retry.js"
 
 // Recovery & resilience (ported from agenc-core)
-export { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
-export type { CircuitBreakerConfig } from "./circuit-breaker.js"
-export { applyPromptBudget, derivePromptBudgetPlan } from "./prompt-budget.js"
-export type { PromptBudgetAllocationResult, PromptBudgetConfig, PromptBudgetDiagnostics } from "./prompt-budget.js"
-export { buildRecoveryHints, buildSemanticToolCallKey, computeQualityProxy, didToolCallFail, extractToolFailureText } from "./recovery.js"
-export type { QualityProxyInput, RecoveryHint, ToolCallRecord } from "./recovery.js"
+export { ToolFailureCircuitBreaker } from "./recovery/circuit-breaker.js"
+export type { CircuitBreakerConfig } from "./recovery/circuit-breaker.js"
+export { applyPromptBudget, derivePromptBudgetPlan } from "./context/prompt-budget.js"
+export type { PromptBudgetAllocationResult, PromptBudgetConfig, PromptBudgetDiagnostics } from "./context/prompt-budget.js"
+export { buildRecoveryHints, buildSemanticToolCallKey, computeQualityProxy, didToolCallFail, extractToolFailureText } from "./recovery/recovery.js"
+export type { QualityProxyInput, RecoveryHint, ToolCallRecord } from "./recovery/recovery.js"
 
 // Tool contract guidance (agenc-core enhancement)
-export { applyToolContractGuidance, resolveToolContractGuidance } from "./tool-contract-guidance.js"
-export type { AppliedToolContractGuidance, ToolContractContext, ToolContractEnforcement, ToolContractGuidance, ToolContractLifetime } from "./tool-contract-guidance.js"
+export { applyToolContractGuidance, resolveToolContractGuidance } from "./tool-helpers/tool-contract-guidance.js"
+export type { AppliedToolContractGuidance, ToolContractContext, ToolContractEnforcement, ToolContractGuidance, ToolContractLifetime } from "./tool-helpers/tool-contract-guidance.js"
 
 // Context compaction (ArtifactCompactionState + LLMStatefulResumeAnchor)
 export {
@@ -53,23 +53,23 @@ export {
     buildResumeAnchorMessage,
     extractCompactionState,
     shouldApplyFullCompaction
-} from "./context-compaction.js"
-export type { ArtifactCompactionState, CompactedFileRecord } from "./context-compaction.js"
+} from "./context/context-compaction.js"
+export type { ArtifactCompactionState, CompactedFileRecord } from "./context/context-compaction.js"
 
 // Context management (message compaction & truncation)
-export { compactMessages, estimateTokens, truncateMessages } from "./context-management.js"
-export type { TruncationResult } from "./context-management.js"
+export { compactMessages, estimateTokens, truncateMessages } from "./context/context-management.js"
+export type { TruncationResult } from "./context/context-management.js"
 
 // System prompt
-export { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
+export { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "./loop/system-prompt.js"
 
 // Delegation bandit learning (agenc-core enhancement)
 export {
     DelegationBanditTuner,
     getGlobalDelegationBanditTuner,
     setGlobalDelegationBanditTuner
-} from "./delegation-learning.js"
-export type { BanditArm, BanditArmId, DelegationTrajectoryRecord } from "./delegation-learning.js"
+} from "./delegation/delegation-learning.js"
+export type { BanditArm, BanditArmId, DelegationTrajectoryRecord } from "./delegation/delegation-learning.js"
 
 // Tool utils (ported from agenc-core tool-loop + tool-utils)
 export {
@@ -78,7 +78,7 @@ export {
     evaluateToolRoundBudgetExtension,
     executeToolWithTimeout,
     summarizeToolRoundProgress
-} from "./tool-utils.js"
+} from "./tool-helpers/tool-utils.js"
 export type {
     RoundStuckState,
     StuckDetectionResult,
@@ -88,10 +88,10 @@ export type {
     ToolLoopState,
     ToolRoundBudgetExtensionResult,
     ToolRoundProgressSummary
-} from "./tool-utils.js"
+} from "./tool-helpers/tool-utils.js"
 
 // Delegation decision (ported from agenc-core delegation-decision.ts)
-export { assessDelegationDecision, resolveDelegationDecisionConfig } from "./delegation-decision.js"
+export { assessDelegationDecision, resolveDelegationDecisionConfig } from "./delegation/delegation-decision.js"
 export type {
     DelegationDecision,
     DelegationDecisionConfig,
@@ -99,7 +99,7 @@ export type {
     DelegationDecisionReason,
     DelegationHardBlockedTaskClass,
     DelegationSubagentStepProfile
-} from "./delegation-decision.js"
+} from "./delegation/delegation-decision.js"
 
 // Constants (ported from agenc-core chat-executor-constants.ts)
 export {

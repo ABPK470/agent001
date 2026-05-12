@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { applyPromptBudget, derivePromptBudgetPlan } from "../src/prompt-budget.js"
+import { applyPromptBudget, derivePromptBudgetPlan } from "../src/context/prompt-budget.js"
 import type { Message } from "../src/types.js"
 
 describe("derivePromptBudgetPlan smoke", () => {

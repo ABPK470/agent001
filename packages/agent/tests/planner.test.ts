@@ -3,8 +3,8 @@
  * pipeline execution, and circuit breaker behavior.
  */
 import { describe, expect, it, vi } from "vitest"
-import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
-import * as delegationDecision from "../src/delegation-decision.js"
+import { ToolFailureCircuitBreaker } from "../src/recovery/circuit-breaker.js"
+import * as delegationDecision from "../src/delegation/delegation-decision.js"
 import { parseBlueprintContractBlock } from "../src/planner/blueprint-contract.js"
 import { parseCoherentSolutionBundle } from "../src/planner/coherent.js"
 import { assessPlannerDecision } from "../src/planner/decision.js"
@@ -752,9 +752,9 @@ describe("Planner path execution", () => {
     // full_planner_decomposition, explicitDelegationRequested must be set to true so
     // the decompositionBenefit term is counted and utility clears the 0.20 threshold.
     const capturedDelegationInputs: unknown[] = []
-    const realAssess = (await import("../src/delegation-decision.js")).assessDelegationDecision
+    const realAssess = (await import("../src/delegation/delegation-decision.js")).assessDelegationDecision
     const delegationSpy = vi.spyOn(
-      await import("../src/delegation-decision.js"),
+      await import("../src/delegation/delegation-decision.js"),
       "assessDelegationDecision",
     ).mockImplementation((input) => {
       capturedDelegationInputs.push(input)

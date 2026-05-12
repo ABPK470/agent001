@@ -24,7 +24,7 @@ import {
   printGovernanceReport,
   runGoverned,
   type EngineServices,
-} from "./governance.js"
+} from "./governance/governance.js"
 import { OpenAIClient } from "./llm/openai.js"
 import { fetchUrlTool } from "./tools/fetch-url.js"
 import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/filesystem.js"

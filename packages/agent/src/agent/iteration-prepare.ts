@@ -5,11 +5,11 @@
  * @module
  */
 
-import type { AgentLoopState } from "../agent-loop-state.js"
-import { applyFullCompaction, shouldApplyFullCompaction } from "../context-compaction.js"
-import { compactMessages, truncateMessages } from "../context-management.js"
+import type { AgentLoopState } from "../loop/agent-loop-state.js"
+import { applyFullCompaction, shouldApplyFullCompaction } from "../context/context-compaction.js"
+import { compactMessages, truncateMessages } from "../context/context-management.js"
 import * as log from "../logger.js"
-import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tool-contract-guidance.js"
+import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tool-helpers/tool-contract-guidance.js"
 import type { AgentConfig, Message, Tool } from "../types.js"
 
 export interface IterationPrepResult {

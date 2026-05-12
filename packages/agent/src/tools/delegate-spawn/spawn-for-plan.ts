@@ -1,7 +1,7 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
 import { Agent } from "../../agent.js"
-import { detectPlaceholderPatterns } from "../../code-quality.js"
+import { detectPlaceholderPatterns } from "../../governance/code-quality.js"
 import type { DelegateResult } from "../../planner/pipeline.js"
 import type { ExecutionEnvelope, SubagentTaskStep } from "../../planner/types.js"
 import type { Tool } from "../../types.js"

@@ -10,13 +10,13 @@
 import {
     isShellExecutionAnomalyFailure,
     isWatchModeOutput,
-} from "../recovery-detectors.js"
-import { inferAdvancedRecoveryHint } from "../recovery-hints-advanced.js"
-import type { RecoveryHint } from "../recovery.js"
+} from "./recovery-detectors.js"
+import { inferAdvancedRecoveryHint } from "./recovery-hints-advanced.js"
+import type { RecoveryHint } from "./recovery.js"
 import {
     extractToolFailureText,
     type ToolCallRecord,
-} from "../tool-result.js"
+} from "../tool-helpers/tool-result.js"
 
 export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result

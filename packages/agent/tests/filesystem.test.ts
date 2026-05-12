@@ -8,7 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { normalizeToolExecutionOutput } from "../src/tool-utils.js"
+import { normalizeToolExecutionOutput } from "../src/tool-helpers/tool-utils.js"
 import { readFileTool, replaceInFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
 
 let tempDir: string
