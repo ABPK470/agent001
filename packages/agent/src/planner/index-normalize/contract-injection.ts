@@ -6,8 +6,8 @@
  * @module
  */
 
-import type { Plan, SubagentTaskStep } from "../types.js"
 import { uniqueList } from "../index-normalize.js"
+import type { Plan, SubagentTaskStep } from "../types.js"
 
 export function injectSharedDataContract(plan: Plan): void {
   const subagentSteps = plan.steps.filter(

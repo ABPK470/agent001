@@ -4,6 +4,7 @@
  * @module
  */
 
+import type { LLMClient, Message } from "../../types.js"
 import {
     asNonEmptyString,
     COHERENT_BOOTSTRAP_SYSTEM_PROMPT,
@@ -13,7 +14,6 @@ import {
     parseBootstrapInvariants,
     parseJsonObject,
 } from "../generate-prompts.js"
-import type { LLMClient, Message } from "../../types.js"
 import type { PlanDiagnostic, PlannerCoherentBootstrap } from "../types.js"
 
 export interface CoherentBootstrapGenerationContext {

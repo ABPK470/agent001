@@ -7,14 +7,14 @@
  */
 
 import type { Tool } from "../../types.js"
-import type { PipelineExecutorOptions } from "../pipeline.js"
-import { isGibberishIssue } from "../pipeline-validation.js"
 import {
     buildAutonomousRepairBlock,
     buildBlueprintRetryGuidance,
     getUnresolvedAcceptanceBlockers,
     summarizeRepairTask,
 } from "../pipeline-repair.js"
+import { isGibberishIssue } from "../pipeline-validation.js"
+import type { PipelineExecutorOptions } from "../pipeline.js"
 import type {
     PipelineStepResult,
     Plan,

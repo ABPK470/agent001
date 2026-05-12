@@ -60,18 +60,18 @@ import {
 } from "../decision-patterns.js"
 import type { PlannerDecision, PlannerRoute, RoutingConfidence } from "../types.js"
 import {
+    isSanityOverrideBoundedBuild,
+    shouldUseBoundedCoherentGeneration,
+    shouldUsePlannerWithCoherentBootstrap,
+} from "./coherent-gates.js"
+import { callLLMRouter } from "./llm-router.js"
+import {
     type RoutingAxes,
     collectSignals,
     computeRoutingConfidence,
     evaluateRoutingAxes,
     isHighConfidenceSingleArtifactBurst,
 } from "./signals.js"
-import { callLLMRouter } from "./llm-router.js"
-import {
-    isSanityOverrideBoundedBuild,
-    shouldUseBoundedCoherentGeneration,
-    shouldUsePlannerWithCoherentBootstrap,
-} from "./coherent-gates.js"
 
 // ============================================================================
 // Main decision function

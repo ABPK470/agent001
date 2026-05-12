@@ -8,12 +8,12 @@
 
 import type { AgentLoopState } from "./agent-loop-state.js"
 import * as log from "./logger.js"
+import { attemptCoherentGeneration } from "./planner-routing/coherent-generation.js"
+import { handleVerificationFailure } from "./planner-routing/verification-failure.js"
 import { assessPlannerDecision } from "./planner/decision.js"
 import type { PlannerContext } from "./planner/index.js"
 import { executePlannerPath } from "./planner/index.js"
 import type { VerifierDecision } from "./planner/types.js"
-import { attemptCoherentGeneration } from "./planner-routing/coherent-generation.js"
-import { handleVerificationFailure } from "./planner-routing/verification-failure.js"
 import type { ToolCallRecord } from "./tool-result.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
 

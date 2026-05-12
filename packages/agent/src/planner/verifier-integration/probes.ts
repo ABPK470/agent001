@@ -7,22 +7,22 @@
 import { normalizeSpecPath } from "../blueprint-contract.js"
 import type { Plan, VerifierStepAssessment } from "../types.js"
 import {
-    type IntegrationProbe,
-    type IntegrationProbeContext,
-    collectIntegrationArtifacts,
-    collectReachableRuntimeArtifacts,
-    extractDefinedCssClasses,
-    extractHtmlScriptRefs,
-    extractModuleExports,
-    extractModuleImports,
-    extractReferencedCssClassesFromHtml,
-    extractReferencedCssClassesFromScript,
-    findWsRootForStep,
-    probeArtifactViaTool,
-    readArtifactContentViaTool,
-    readIntegrationArtifactContents,
-    resolveArtifactImport,
-    resolveArtifactReference
+  type IntegrationProbe,
+  type IntegrationProbeContext,
+  collectIntegrationArtifacts,
+  collectReachableRuntimeArtifacts,
+  extractDefinedCssClasses,
+  extractHtmlScriptRefs,
+  extractModuleExports,
+  extractModuleImports,
+  extractReferencedCssClassesFromHtml,
+  extractReferencedCssClassesFromScript,
+  findWsRootForStep,
+  probeArtifactViaTool,
+  readArtifactContentViaTool,
+  readIntegrationArtifactContents,
+  resolveArtifactImport,
+  resolveArtifactReference
 } from "./helpers.js"
 import { probeCrossFileFunctionSignatures } from "./probes/signatures.js"
 import { probeWebEntrypointRuntimeWiring } from "./probes/web-entrypoint.js"

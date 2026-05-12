@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { Plan, SubagentTaskStep } from "../types.js"
+import type { Plan, SubagentTaskStep } from "../types.js";
 
 export function detectPathMismatchIssues(
   probeCache: ReadonlyMap<string, { found: boolean; resolvedPath: string }>,

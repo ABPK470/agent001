@@ -13,6 +13,12 @@ import {
 import type { PipelineStepResult, Plan, SubagentTaskStep } from "../types.js"
 import { escapeRegExp } from "../verifier-helpers.js"
 import {
+    buildBlueprintArtifactCoverageIssues,
+    buildBlueprintFunctionContractIssues,
+    buildBlueprintSharedTypeContractIssues,
+    isBlueprintLikeStepForVerifier,
+} from "./contract-issues.js"
+import {
     type ArtifactSpecMapping,
     type BlueprintFunctionSpec,
     type StepSpecEvidence,
@@ -20,17 +26,11 @@ import {
     detectStructuralMarkersInArtifact,
     parseBlueprintSpec,
 } from "./core.js"
-import {
-    buildBlueprintArtifactCoverageIssues,
-    buildBlueprintFunctionContractIssues,
-    buildBlueprintSharedTypeContractIssues,
-    isBlueprintLikeStepForVerifier,
-} from "./contract-issues.js"
 
 export {
     buildBlueprintArtifactCoverageIssues,
     collectPlannedBlueprintArtifacts,
-    isBlueprintLikeStepForVerifier,
+    isBlueprintLikeStepForVerifier
 } from "./contract-issues.js"
 
 // ============================================================================

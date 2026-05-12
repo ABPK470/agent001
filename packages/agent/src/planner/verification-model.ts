@@ -229,7 +229,7 @@ export function buildRepairPlan(
 
 export {
     buildLegacyRetryPlan,
-    compareRepairPlanCompatibility,
+    compareRepairPlanCompatibility
 } from "./verification-model/legacy-compat.js"
 
 export function deriveAcceptanceState(assessment: VerifierStepAssessment | undefined, prior: StepAcceptanceState | undefined): StepAcceptanceState {

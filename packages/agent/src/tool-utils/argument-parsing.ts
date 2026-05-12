@@ -4,7 +4,7 @@
  * @module
  */
 
-import { MAX_TOOL_CALL_ARGUMENT_CHARS } from "../constants.js"
+import { MAX_TOOL_CALL_ARGUMENT_CHARS } from "../constants.js";
 
 /** Max chars of raw preview kept when tool-call args are truncated. */
 export const MAX_TOOL_CALL_ARGUMENT_PREVIEW_CHARS = 4_000

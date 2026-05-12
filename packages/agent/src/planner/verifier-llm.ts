@@ -21,8 +21,8 @@ import {
     analyzeCodeStructure,
     wrapArtifactWithStructureAnalysis,
 } from "./verifier-llm/code-structure.js"
-export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
 export type { CodeStructureAnalysis } from "./verifier-llm/code-structure.js"
+export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
 
 // ============================================================================
 // Code structure analysis lives in verifier-llm/code-structure.ts

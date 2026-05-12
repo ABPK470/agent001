@@ -21,12 +21,12 @@ import {
     validateSharedDataContract,
     validateVisualCompleteness,
 } from "./validate-checks.js"
-import { validateGraph, validateToolReferences } from "./validate/graph.js"
 import {
     validateArtifactOwnership,
     validateStepContracts,
     validateVerificationCoverage,
 } from "./validate/contracts.js"
+import { validateGraph, validateToolReferences } from "./validate/graph.js"
 
 const RUNTIME_CODE_ARTIFACT_RE = /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i
 
@@ -140,11 +140,12 @@ function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanD
 // ============================================================================
 
 export {
-  validateGraph,
-  validateToolReferences,
-} from "./validate/graph.js"
-export {
-  validateArtifactOwnership,
-  validateStepContracts,
-  validateVerificationCoverage,
+    validateArtifactOwnership,
+    validateStepContracts,
+    validateVerificationCoverage
 } from "./validate/contracts.js"
+export {
+    validateGraph,
+    validateToolReferences
+} from "./validate/graph.js"
+

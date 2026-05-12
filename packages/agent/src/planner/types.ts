@@ -21,7 +21,7 @@ export type {
     PlannerDecision,
     PlannerNeedLevel,
     PlannerRoute,
-    RoutingConfidence,
+    RoutingConfidence
 } from "./types-decision.js"
 export type {
     ArtifactRelation,
@@ -32,16 +32,15 @@ export type {
     SharedStateContract,
     StepRole,
     VerificationMode,
-    WorkflowStepContract,
+    WorkflowStepContract
 } from "./types-execution.js"
 
 // ============================================================================
 // Plan steps
 // ============================================================================
 
-import type { ExecutionEnvelope, WorkflowStepContract } from "./types-execution.js"
 import type { PlannerCoherentBootstrap, PlannerRoute } from "./types-decision.js"
-import type { ArtifactRelation } from "./types-execution.js"
+import type { ArtifactRelation, ExecutionEnvelope, WorkflowStepContract } from "./types-execution.js"
 
 /**
  * A deterministic tool step — exact tool call with known arguments.

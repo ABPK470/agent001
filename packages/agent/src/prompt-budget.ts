@@ -7,7 +7,6 @@
  * @module
  */
 
-import { derivePromptBudgetPlan } from "./prompt-budget/derive-plan.js"
 import {
     createSectionCapMap,
     estimateMessageChars,
@@ -23,6 +22,7 @@ import {
     type PromptBudgetConfig,
     type PromptBudgetSectionStats,
 } from "./prompt-budget-types.js"
+import { derivePromptBudgetPlan } from "./prompt-budget/derive-plan.js"
 import type { Message, PromptBudgetSection } from "./types.js"
 
 // Re-export plan derivation

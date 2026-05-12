@@ -2,21 +2,21 @@ import { canonicalizeRelative } from "../internal/paths.js"
 import type { ToolCallRecord } from "../recovery.js"
 import type { Message } from "../types.js"
 import {
-    asNonEmptyString,
-    COHERENT_GENERATION_PROMPT,
-    parseArtifacts,
-    parseEdges,
-    parseInvariants,
-    parseJsonObject,
-    parseSharedContracts,
+  asNonEmptyString,
+  COHERENT_GENERATION_PROMPT,
+  parseArtifacts,
+  parseEdges,
+  parseInvariants,
+  parseJsonObject,
+  parseSharedContracts,
 } from "./coherent-parse.js"
 import type {
-    ArtifactRelation,
-    CoherentSolutionArtifact,
-    CoherentSolutionBundle,
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
+  ArtifactRelation,
+  CoherentSolutionArtifact,
+  CoherentSolutionBundle,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
 } from "./types.js"
 
 export interface CoherentBundleParseResult {
@@ -24,8 +24,8 @@ export interface CoherentBundleParseResult {
   readonly diagnostics: readonly string[]
 }
 
-export type { CoherentMaterializationResult } from "./coherent/materialize.js"
 export { materializeCoherentSolutionBundle } from "./coherent/materialize.js"
+export type { CoherentMaterializationResult } from "./coherent/materialize.js"
 
 const COHERENT_STEP_NAME = "coherent_bundle"
 
@@ -258,9 +258,9 @@ export function buildCoherentVerificationPipelineResult(
 }
 
 export {
-    buildCoherentPlannerEscalationGoal,
-    buildCoherentRepairInstructions,
-    summarizeCoherentVerifierDecision,
+  buildCoherentPlannerEscalationGoal,
+  buildCoherentRepairInstructions,
+  summarizeCoherentVerifierDecision
 } from "./coherent/repair-instructions.js"
 
 // materializeCoherentSolutionBundle moved to ./coherent/materialize.ts

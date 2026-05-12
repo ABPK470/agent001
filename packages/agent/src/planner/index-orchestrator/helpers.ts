@@ -3,12 +3,12 @@
  * @module
  */
 
+import type { DelegationTrajectoryRecord } from "../../delegation-learning.js"
 import { synthesizeAnswer } from "../index-synthesize.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineResult, Plan, PlannerRepairCompatibilityMode, VerifierDecision } from "../types.js"
 import { deriveAcceptanceState } from "../verification-model.js"
 import type { PlannerContext, PlannerResult } from "./types.js"
-import type { DelegationTrajectoryRecord } from "../../delegation-learning.js"
 
 /**
  * If the pipeline failed because a platform integration (eg MSSQL) is

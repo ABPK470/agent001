@@ -12,13 +12,13 @@
 import type { LLMClient, Message, Tool } from "../types.js"
 import { parsePlanFromResponse } from "./generate-parse.js"
 import {
-    PLANNER_SYSTEM_PROMPT,
+  PLANNER_SYSTEM_PROMPT,
 } from "./generate-prompts.js"
 import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "./types.js"
 
 export { isValidArtifactPath } from "./generate-parse.js"
-export type { CoherentBootstrapGenerationResult } from "./generate/bootstrap.js"
 export { generateCoherentBootstrap } from "./generate/bootstrap.js"
+export type { CoherentBootstrapGenerationResult } from "./generate/bootstrap.js"
 
 // ============================================================================
 // Plan generation
@@ -201,7 +201,7 @@ export async function generatePlan(
 // ============================================================================
 
 import {
-    normalizeWorkspaceRoots,
-    salvagePlanFromMalformedResponse,
+  normalizeWorkspaceRoots,
+  salvagePlanFromMalformedResponse,
 } from "./generate/normalize.js"
 

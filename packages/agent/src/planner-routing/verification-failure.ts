@@ -5,10 +5,10 @@
  */
 
 import * as log from "../logger.js"
-import { executePlannerPath } from "../planner/index.js"
-import type { PlannerContext, PlannerResult } from "../planner/index.js"
-import type { SubagentTaskStep } from "../planner/types.js"
 import type { PlannerRoutingContext } from "../planner-routing.js"
+import type { PlannerContext, PlannerResult } from "../planner/index.js"
+import { executePlannerPath } from "../planner/index.js"
+import type { SubagentTaskStep } from "../planner/types.js"
 
 export async function handleVerificationFailure(
   ctx: PlannerRoutingContext,

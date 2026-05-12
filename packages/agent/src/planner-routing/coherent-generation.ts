@@ -4,6 +4,7 @@
  * @module
  */
 
+import type { PlannerRoutingContext } from "../planner-routing.js"
 import {
     buildCoherentGenerationMessages,
     buildCoherentRepairInstructions,
@@ -13,7 +14,6 @@ import {
     summarizeCoherentVerifierDecision,
 } from "../planner/coherent.js"
 import type { Message } from "../types.js"
-import type { PlannerRoutingContext } from "../planner-routing.js"
 
 export async function attemptCoherentGeneration(
   ctx: PlannerRoutingContext,

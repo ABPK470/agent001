@@ -8,9 +8,9 @@
  */
 
 import type {
-    Plan,
-    PlanDiagnostic,
-    SubagentTaskStep
+  Plan,
+  PlanDiagnostic,
+  SubagentTaskStep
 } from "./types.js"
 
 // ============================================================================
@@ -169,20 +169,20 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
 // ============================================================================
 
 import {
-    injectBrowserRuntimeContracts,
-    injectDependencyWiringCriteria,
-    injectHelperDependencyContracts,
-    injectSharedDataContract,
-    injectVisualStyleContracts,
+  injectBrowserRuntimeContracts,
+  injectDependencyWiringCriteria,
+  injectHelperDependencyContracts,
+  injectSharedDataContract,
+  injectVisualStyleContracts,
 } from "./index-normalize/contract-injection.js"
 
 export {
-    injectBrowserRuntimeContracts,
-    injectDependencyWiringCriteria,
-    injectHelperDependencyContracts,
-    injectSharedDataContract,
-    injectSharedStateOwnershipContract,
-    injectVisualStyleContracts,
+  injectBrowserRuntimeContracts,
+  injectDependencyWiringCriteria,
+  injectHelperDependencyContracts,
+  injectSharedDataContract,
+  injectSharedStateOwnershipContract,
+  injectVisualStyleContracts
 } from "./index-normalize/contract-injection.js"
 
 export function uniqueList(values: readonly string[]): string[] {
