@@ -40,7 +40,6 @@
 
 import type { LLMClient, Message } from "../../types.js"
 import {
-    BOUNDED_COHERENT_SCOPE_RE,
     CONVERSATIONAL_DATA_QUERY_RE,
     DATA_FETCH_PIPELINE_RE,
     DB_INVESTIGATION_RE,
@@ -52,7 +51,6 @@ import {
     EXISTING_CODE_COUPLING_RE,
     EXPLICIT_ENV_ACTION_RE,
     EXTERNAL_SERVICE_RE,
-    LARGE_GREENFIELD_BOOTSTRAP_RE,
     PLAN_CREATION_RE,
     REVIEW_QUESTION_RE,
     RUN_HISTORY_QUERY_RE,
@@ -60,141 +58,20 @@ import {
     SIMPLE_FUNCTION_WRITE_RE,
     SINGLE_ARTIFACT_BURST_RE
 } from "../decision-patterns.js"
-import type { PlannerDecision, PlannerNeedLevel, PlannerRoute, RoutingConfidence } from "../types.js"
+import type { PlannerDecision, PlannerRoute, RoutingConfidence } from "../types.js"
 import {
-    type RequestSignals,
     type RoutingAxes,
     collectSignals,
     computeRoutingConfidence,
     evaluateRoutingAxes,
-    hasRealOwnershipSeparation,
     isHighConfidenceSingleArtifactBurst,
 } from "./signals.js"
-
-// ============================================================================
-// Layer 4: LLM-assisted routing (optional, async)
-// ============================================================================
-
-interface LLMRouterResult {
-  coherence_need: PlannerNeedLevel
-  coordination_need: PlannerNeedLevel
-  reasoning: string
-}
-
-const LLM_ROUTER_SYSTEM = `You are a task routing classifier for an AI agent system.
-Classify the following user task to determine the correct execution path.
-
-Return ONLY valid JSON — no prose, no markdown fences:
-{
-  "coherence_need": "low" | "medium" | "high",
-  "coordination_need": "low" | "medium" | "high",
-  "reasoning": "<one sentence>"
-}
-
-Definitions:
-- coherence_need HIGH: the task is a single bounded deliverable that benefits from one cohesive generation pass (a game, an app, a tool, a widget, a dashboard, a single system).
-- coordination_need HIGH: the task genuinely requires parallel or sequential INDEPENDENT work units with separate file ownership (e.g. multiple unrelated components, a multi-service architecture, an enumerated list of separate features).
-- When in doubt, prefer coherence_need=high and coordination_need=low (simplicity default — attempt the whole thing in one coherent pass before over-committing to a plan).
-
-Key distinctions:
-- "all project files" in an organizational preamble ("Create a tmp dir where all files will be stored. Build a chess game") → coordination_need=low, the chess game is one bounded task.
-- "multiple independent components" enumerated as separate deliverables → coordination_need=high.
-- A single app/game/tool mentioning several features → coordination_need=low (features co-exist in one codebase).`
-
-async function callLLMRouter(
-  normalized: string,
-  llm: LLMClient,
-  signal?: AbortSignal,
-): Promise<LLMRouterResult | null> {
-  try {
-    const response = await llm.chat(
-      [
-        { role: "system", content: LLM_ROUTER_SYSTEM },
-        { role: "user", content: `Task:\n${normalized.slice(0, 1200)}` },
-      ],
-      [],
-      { signal },
-    )
-    const raw = (response.content ?? "").trim()
-    // Strip optional markdown code fences
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim()
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>
-    if (
-      typeof parsed.coherence_need === "string"
-      && typeof parsed.coordination_need === "string"
-      && ["low", "medium", "high"].includes(parsed.coherence_need)
-      && ["low", "medium", "high"].includes(parsed.coordination_need)
-    ) {
-      return {
-        coherence_need: parsed.coherence_need as PlannerNeedLevel,
-        coordination_need: parsed.coordination_need as PlannerNeedLevel,
-        reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
-      }
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-// ============================================================================
-// Layer 5: Sanity override + simplicity bias gates
-// ============================================================================
-
-/**
- * Sanity override: a clearly bounded single-system build with no external
- * service dependencies and no genuine coordination signals should never be
- * routed to the full planner.
- *
- * This implements the user-facing principle: if a task looks like a bounded
- * deliverable (game/app/tool/widget), has no external service dependencies,
- * involves no multi-step workflow, and shows no real ownership separation
- * (e.g. parallel ownership of different files by different logical agents),
- * prefer coherent single-pass generation. Avoid premature decomposition.
- *
- * Note: this is called AFTER shouldUseBoundedCoherentGeneration, so it only
- * fires for cases that gate missed (e.g. multiple explicit target files that
- * are still obviously a bounded single-system build).
- */
-function isSanityOverrideBoundedBuild(signals: RequestSignals, axes: RoutingAxes): boolean {
-  if (!signals.hasImplementationScopeCue) return false
-  if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  // Hard blocks: these always need planning coordination
-  if (EXTERNAL_SERVICE_RE.test(signals.normalized)) return false
-  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
-  if (LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized)) return false
-  if (signals.hasMultiStepCue) return false
-  if (signals.structuredBulletCount > 0) return false
-  if (axes.coordinationNeed === "high") return false
-  if (signals.priorToolMessages >= 4) return false
-  // Real ownership separation signals: genuinely parallel work units
-  if (hasRealOwnershipSeparation(signals)) return false
-  // When the user enumerates multiple explicit output files, they are signalling
-  // file-by-file ownership — that coordination boundary should stay in the planner.
-  if (signals.targetFilePaths.length > 1) return false
-  return true
-}
-
-function shouldUseBoundedCoherentGeneration(signals: RequestSignals, axes: RoutingAxes): boolean {
-  if (!signals.hasImplementationScopeCue) return false
-  if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  if (axes.coordinationNeed !== "low") return false
-  if (hasRealOwnershipSeparation(signals)) return false
-  if (signals.priorToolMessages >= 4) return false
-  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
-  if (signals.targetFilePaths.length > 1) return false
-  return true
-}
-
-function shouldUsePlannerWithCoherentBootstrap(signals: RequestSignals, axes: RoutingAxes): boolean {
-  if (!signals.hasImplementationScopeCue) return false
-  if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  if (!LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized) && signals.structuredBulletCount < 3 && signals.targetFilePaths.length < 3) return false
-  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
-  if (axes.coherenceNeed !== "high") return false
-  if (axes.coordinationNeed === "low") return false
-  return !(signals.hasDelegationCue && signals.hasMultiStepCue)
-}
+import { callLLMRouter } from "./llm-router.js"
+import {
+    isSanityOverrideBoundedBuild,
+    shouldUseBoundedCoherentGeneration,
+    shouldUsePlannerWithCoherentBootstrap,
+} from "./coherent-gates.js"
 
 // ============================================================================
 // Main decision function
