@@ -37,7 +37,7 @@ export class DatabricksClient implements LLMClient {
   async chat(
     messages: Message[],
     tools: Tool[],
-    opts?: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void },
+    opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void },
   ): Promise<LLMResponse> {
     const token = await this.getToken()
     // Databricks serving endpoints expose an OpenAI-compatible API at

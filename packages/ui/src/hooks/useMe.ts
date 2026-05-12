@@ -8,7 +8,7 @@
  * After the welcome modal posts to /api/me, callers can refresh().
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export interface Me {
   sessionId: string
@@ -28,20 +28,30 @@ export function useMe(): {
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Epoch counter: incremented by setIdentity to invalidate any in-flight
+  // refresh() response.  React 18 strict-mode double-mounts every effect,
+  // so TWO fetch("/api/me") requests race.  If the slower one resolves
+  // AFTER setIdentity, it overwrites the real identity with "Anonymous",
+  // flipping needsWelcome back to true mid-animation.
+  const epoch = useRef(0)
+
   const refresh = useCallback(async () => {
+    const v = ++epoch.current
     setLoading(true)
     try {
       const res = await fetch("/api/me", { credentials: "include" })
       const data = (await res.json()) as Me
+      if (epoch.current !== v) return          // stale — discard
       setMe(data)
     } finally {
-      setLoading(false)
+      if (epoch.current === v) setLoading(false)
     }
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
   const setIdentity = useCallback(async (displayName: string, upn: string): Promise<Me> => {
+    ++epoch.current                            // invalidate any in-flight refresh
     const res = await fetch("/api/me", {
       method: "POST",
       credentials: "include",
@@ -54,6 +64,7 @@ export function useMe(): {
     }
     const data = (await res.json()) as Me
     setMe(data)
+    setLoading(false)
     return data
   }, [])
 

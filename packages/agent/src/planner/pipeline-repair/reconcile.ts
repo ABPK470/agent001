@@ -154,7 +154,11 @@ export function applyPostExecutionReconciliation(
     })
   }
 
-  const missingOutputs = step.executionContext.effectClass !== "readonly"
+  // Skip missing-output check when the child explicitly reported success with no blockers:
+  // the target artifacts were already produced in a prior attempt and remain on disk.
+  const childAlreadySatisfied = stepResult.childResult?.status === "success" &&
+    (stepResult.childResult.unresolvedBlockers.length ?? 0) === 0
+  const missingOutputs = step.executionContext.effectClass !== "readonly" && !childAlreadySatisfied
     ? [...targetArtifacts].filter((artifact) => !reportedArtifacts.has(artifact))
     : []
   if (missingOutputs.length > 0) {

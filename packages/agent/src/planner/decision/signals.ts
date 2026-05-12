@@ -55,7 +55,13 @@ export function collectSignals(messageText: string, history: readonly Message[])
 
   const priorToolMessages = history.filter(m => m.role === "tool").length
   const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//, "")))]
-  const historyTail = history.slice(-10)
+  // Exclude system messages: the episodic memory in the system prompt often contains
+  // "stuck" from a prior run in the session, which would poison routing for all
+  // subsequent unrelated queries. Only assistant / user / tool messages can legitimately
+  // indicate that the CURRENT goal is a retry of a failed direct-loop attempt.
+  // Limit to the last 4 non-system messages (≈ 2 exchanges) so a stuck event
+  // from several turns ago does not affect today's semantically different queries.
+  const historyTail = history.filter(m => m.role !== "system").slice(-4)
   const hasPriorNoProgressSignal = historyTail.some(
     m => typeof m.content === "string" && RECOVERY_HINT_RE.test(m.content),
   )

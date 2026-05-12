@@ -56,7 +56,7 @@ function Card({ card, accent }: { card: KpiCard; accent: string }): React.ReactE
     : "text-error"
 
   return (
-    <div className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-1 min-w-0">
+    <div className="rounded-md border border-border-subtle bg-overlay-1 p-2.5 flex flex-col gap-1 min-w-0">
       <div className="text-[11px] text-text-muted truncate" title={card.label}>{card.label}</div>
       <div className="text-lg font-semibold text-text tabular-nums leading-tight">
         {formatValue(card.value, fmt, precision, card.unit)}

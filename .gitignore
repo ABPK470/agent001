@@ -1,12 +1,33 @@
+# ── Dependencies ─────────────────────────────────────────────────
 node_modules
+
+# ── Build output ─────────────────────────────────────────────────
 dist
+*.tsbuildinfo
+coverage
+
+# ── Runtime data (catalog caches, sync-plan snapshots, queues) ───
+# Each package writes its own state under packages/<name>/data/.
+# These are environment-specific and must never be committed.
+packages/*/data/
+
+# ── Environment / secrets ────────────────────────────────────────
 .env
-docs
+.env.local
+.env.*.local
+.npmrc
+
+# ── Editor / OS ──────────────────────────────────────────────────
 .vscode
+.idea
 .DS_Store
-/tmp
+*.swp
+
+# ── Logs / caches / scratch ──────────────────────────────────────
 *.log
 *.cache
-.npmrc
+/tmp
+
+# ── Personal scratch (kept local, not shared) ────────────────────
 notes
-catalog-cache.json
+docs

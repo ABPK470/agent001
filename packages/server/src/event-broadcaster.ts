@@ -1,20 +1,43 @@
 /**
- * WebSocket manager — real-time event broadcasting + persistence + webhook push.
+ * Real-time event broadcaster.
  *
- * All connected clients receive every agent event as it happens:
- * run starts, steps execute, tools fire, audit entries log.
- * This is how the dashboard stays live.
+ * Single transport: Server-Sent Events. Wire format `data: <json>\n\n` over a
+ * long-lived HTTP response held open by `GET /api/events/stream`. The browser's
+ * native `EventSource` API handles connection, reconnect, and parsing.
  *
- * Events are also:
- *   - Persisted to the event_log table (for replay/backfill)
- *   - Pushed to registered webhook drains (selective subscription)
+ * Why SSE and not WebSocket:
+ *   - Every event is server → client. There is zero client → server traffic
+ *     over the realtime channel (commands go through normal HTTP POST).
+ *     SSE is the right tool for one-way push; WS adds a duplex channel we
+ *     never use plus more proxy fragility (Upgrade frames get dropped by
+ *     HTTP-only reverse proxies).
+ *   - `EventSource` reconnect is built into the browser; WS reconnect is
+ *     application code we'd have to maintain.
+ *   - One transport = one client map, one fanout loop, one identity-attach
+ *     code path. The previous implementation had both and the WS branch
+ *     was effectively dead code.
  *
- * EventBroadcaster holds the client Set as instance state.
- * A default singleton is exported for convenience; create fresh
- * instances in tests to avoid shared state.
+ * Every `broadcast()` call:
+ *   1. Stamps a timestamp + serialises once.
+ *   2. Resolves the originating run's owner (`runId` field on the event)
+ *      and fans out only to clients that own the run or are admin.
+ *      Non-run-scoped events go to every connected client.
+ *   3. Persists to the `event_log` SQLite table (skipping high-frequency
+ *      `answer.chunk` events) so disconnected clients can replay history
+ *      and webhook drains have a durable source.
+ *   4. Pushes to registered HMAC-signed webhook drains (filtered by
+ *      event-type prefix).
+ *
+ * `EventBroadcaster` holds client state as instance fields. A default
+ * singleton is exported via the module-level helpers; tests should construct
+ * fresh instances to avoid shared state.
+ *
+ * Backend-internal event flow (agent → server) does NOT use this transport.
+ * It uses in-process callback injection (`setSyncEventSink`,
+ * `engineServices` listeners, `onProgress`) which the server then forwards
+ * here via `broadcast(...)`.
  */
 
-import type { WebSocket } from "@fastify/websocket"
 import { createHmac } from "node:crypto"
 import { getRun, listWebhookDrains, saveEvent } from "./db.js"
 
@@ -24,7 +47,7 @@ export interface WsEvent {
   timestamp: string
 }
 
-/** Identity attached to a connected WebSocket client. */
+/** Identity attached to a connected SSE client. */
 export interface WsClientIdentity {
   upn: string | null
   sid: string
@@ -41,32 +64,15 @@ export interface SseSink {
 // ── EventBroadcaster ─────────────────────────────────────────────
 
 export class EventBroadcaster {
-  private readonly clients = new Map<WebSocket, WsClientIdentity>()
   private readonly sseClients = new Map<symbol, { sink: SseSink; identity: WsClientIdentity }>()
+  /** Internal subscribers — notified after every broadcast() call. */
+  private readonly subscribers = new Set<(event: WsEvent) => void>()
   /** Tiny LRU of runId → owner. Cleared after this many entries. */
   private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
 
-  addClient(ws: WebSocket, identity: WsClientIdentity): void {
-    this.clients.set(ws, identity)
-    ;(ws as unknown as { _socket?: { setNoDelay?: (v: boolean) => void } })._socket?.setNoDelay?.(true)
-    ws.on("close", () => this.clients.delete(ws))
-    ws.on("error", () => this.clients.delete(ws))
-
-    this.send(ws, {
-      type: "ws.connected",
-      data: { version: "0.1.0", clients: this.clients.size },
-      timestamp: new Date().toISOString(),
-    })
-  }
-
   /**
-   * Register a Server-Sent Events client. Returns a disposer that the route
-   * handler must call when the underlying response closes.
-   *
-   * SSE is preferred for production deployments behind HTTP-only reverse
-   * proxies (e.g. proxy-https on the corp Windows host) that don't forward
-   * WebSocket Upgrade frames. The wire format is plain text-event-stream:
-   * each event is serialised as `data: <json>\n\n`.
+   * Register an SSE client. Returns a disposer that the route handler must
+   * call when the underlying response closes.
    */
   addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
     const key = Symbol()
@@ -77,7 +83,7 @@ export class EventBroadcaster {
     // Initial padding + hello event
     sink.write(`: connected\n\n`)
     sink.write(`data: ${JSON.stringify({
-      type: "ws.connected",
+      type: "events.connected",
       data: { version: "0.1.0", clients: this.clientCount() },
       timestamp: new Date().toISOString(),
     })}\n\n`)
@@ -100,13 +106,15 @@ export class EventBroadcaster {
     const allowed = (identity: WsClientIdentity): boolean => {
       if (!owner || identity.isAdmin) return true
       const matchesUpn = !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
-      const matchesSid = !identity.upn && !!owner.sid && owner.sid === identity.sid
+      // Sid match was previously gated on `!identity.upn`. That gate caused
+      // the chat-stuck-on-Thinking bug: a client whose SSE socket was opened
+      // pre-welcome (identity.upn=null) and later got a new cookie (new sid
+      // + upn) could never receive run events again — matchesUpn was false
+      // (server-side identity still had upn=null) AND matchesSid was false
+      // (sid mismatch). Sids are per-cookie unique, so matching by sid is
+      // safe regardless of whether the client also carries a UPN.
+      const matchesSid = !!owner.sid && !!identity.sid && owner.sid === identity.sid
       return matchesUpn || matchesSid
-    }
-
-    for (const [client, identity] of this.clients) {
-      if (client.readyState !== 1) continue
-      if (allowed(identity)) client.send(json)
     }
 
     for (const [, { sink, identity }] of this.sseClients) {
@@ -115,16 +123,30 @@ export class EventBroadcaster {
       }
     }
 
-    // 2. Persist to event_log (skip high-frequency ephemeral events to avoid
-    //    blocking the Node.js event loop between WS frame sends)
-    if (msg.type !== "answer.chunk") {
+    // Persist to event_log (skip high-frequency ephemeral events to keep
+    // the table compact and avoid blocking between SSE writes).
+    if (msg.type !== "answer.chunk" && msg.type !== "stream.reset") {
       try {
         saveEvent(msg.type, msg.data, msg.timestamp)
       } catch { /* don't break broadcast if DB write fails */ }
     }
 
-    // 3. Push to webhook drains (fire-and-forget, async)
+    // Push to webhook drains (fire-and-forget, async)
     this.pushToWebhooks(msg, json).catch(() => {})
+    // Notify internal subscribers
+    for (const fn of this.subscribers) {
+      try { fn(msg) } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Subscribe to every broadcast event. Returns an unsubscribe function.
+   * Used by internal SSE endpoints (e.g. /api/operations/stream) that need
+   * to react to events without being a real client.
+   */
+  subscribe(fn: (event: WsEvent) => void): () => void {
+    this.subscribers.add(fn)
+    return () => this.subscribers.delete(fn)
   }
 
   /** Look up which session/upn owns a runId. Cached for perf. */
@@ -140,13 +162,7 @@ export class EventBroadcaster {
   }
 
   clientCount(): number {
-    return this.clients.size + this.sseClients.size
-  }
-
-  private send(ws: WebSocket, event: WsEvent): void {
-    if (ws.readyState === 1) {
-      ws.send(JSON.stringify(event))
-    }
+    return this.sseClients.size
   }
 
   private async pushToWebhooks(event: WsEvent, json: string): Promise<void> {
@@ -180,13 +196,9 @@ export class EventBroadcaster {
   }
 }
 
-// ── Default singleton + backward-compatible exports ──────────────
+// ── Default singleton + module-level helpers ─────────────────────
 
 const _default = new EventBroadcaster()
-
-export function addClient(ws: WebSocket, identity: WsClientIdentity): void {
-  _default.addClient(ws, identity)
-}
 
 export function addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
   return _default.addSseClient(sink, identity)
@@ -198,4 +210,8 @@ export function broadcast(event: Omit<WsEvent, "timestamp">): void {
 
 export function clientCount(): number {
   return _default.clientCount()
+}
+
+export function subscribeToEvents(fn: (event: WsEvent) => void): () => void {
+  return _default.subscribe(fn)
 }

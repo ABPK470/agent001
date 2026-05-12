@@ -596,7 +596,7 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
     || g.header.kind === "planner-decision"
     || g.header.kind === "planner-pipeline-start"
     || g.header.kind === "direct_loop_fallback"
-  const headerColor = isPlannerHeader ? "#C084FC" : C.accent
+  const headerColor = isPlannerHeader ? "var(--color-accent-hover)" : C.accent
 
   let headerLabel: string
   let headerBadge: string
@@ -641,7 +641,7 @@ function IterationGroup({ group: g, isLast }: { group: TraceGroupData; isLast: b
 
       {/* Iteration header node */}
       <div
-        className="relative pl-6 pb-0.5 flex items-center gap-2 cursor-pointer hover:bg-white/[0.02] rounded transition-colors"
+        className="relative pl-6 pb-0.5 flex items-center gap-2 cursor-pointer hover:bg-overlay-1 rounded transition-colors"
         onClick={() => setCollapsed(!collapsed)}
       >
         <div
@@ -693,7 +693,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5">
         <div
-          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-overlay-1 rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.warning }} />
@@ -744,7 +744,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-3">
         <div
-          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-overlay-1 rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
           <span className="w-1 h-1 rounded-full shrink-0" style={{ background: C.success + "80" }} />
@@ -784,7 +784,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#6CB4EE" }}>DELEG ▶</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-info)" }}>DELEG ▶</span>
           {e.agentName && <span className="text-[13px]" style={{ color: C.textSecondary }}>[{e.agentName}]</span>}
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>d{e.depth}</span>
         </div>
@@ -800,7 +800,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-end") {
     return (
       <div className="py-1 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>DELEG ◀</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "var(--color-info)" }}>DELEG ◀</span>
         <span className="text-[13px] font-mono" style={{ color: e.status === "done" ? C.success : C.coral }}>{e.status}</span>
         {e.answer && (
           <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.textSecondary }}>
@@ -823,7 +823,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-start") {
     return (
       <div className="py-1 pl-2 mt-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ▶</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "var(--color-info)" }}>PARLL ▶</span>
         <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.taskCount} tasks</span>
         {e.goals.map((goal, i) => (
           <div key={i} className="pl-4 text-[13px]" style={{ color: C.muted }}>• {truncate(goal, 80)}</div>
@@ -834,7 +834,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
   if (e.kind === "delegation-parallel-end") {
     return (
       <div className="py-0.5 pl-2 mb-0.5" style={{ borderLeft: `2px solid #6CB4EE40` }}>
-        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#6CB4EE" }}>PARLL ◀</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "var(--color-info)" }}>PARLL ◀</span>
         <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.fulfilled}/{e.taskCount} ok, {e.rejected} failed</span>
       </div>
     )
@@ -860,7 +860,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid ${C.dim}30` }}>
         <div
-          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-overlay-1 rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
           <span className="text-[13px] font-mono font-semibold" style={{ color: C.dim }}>?</span>
@@ -888,8 +888,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PREFLIGHT</span>
-          <span className="text-[13px] font-mono" style={{ color: "#C084FC" }}>{e.mode}</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PREFLIGHT</span>
+          <span className="text-[13px] font-mono" style={{ color: "var(--color-accent-hover)" }}>{e.mode}</span>
         </div>
         <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>
           Planner routing is evaluated before direct-loop iteration numbering begins.
@@ -901,8 +901,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[13px] font-mono" style={{ color: e.shouldPlan ? "#C084FC" : C.dim }}>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: e.shouldPlan ? "var(--color-accent-hover)" : C.dim }}>
             {e.shouldPlan ? "▶ activated" : "▷ skipped"}
           </span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>score {e.score.toFixed(2)}</span>
@@ -922,8 +922,8 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
-          <span className="text-[13px] font-mono" style={{ color: "#C084FC" }}>✓ {e.stepCount} steps</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PLAN</span>
+          <span className="text-[13px] font-mono" style={{ color: "var(--color-accent-hover)" }}>✓ {e.stepCount} steps</span>
         </div>
         <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{e.reason}</div>
         <div className="text-[13px] font-mono mt-0.5 pl-2" style={{ color: C.dim }}>
@@ -937,7 +937,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       <div>
         <TreeRow onClick={() => setExpanded(!expanded)} open={expanded}
           label={`RUNTIME · ${e.executionSteps.length} steps`}
-          labelColor={"#60A5FA"}
+          labelColor={"var(--color-info)"}
           detail={!expanded ? `${e.ownershipArtifacts.length} artifacts · ${e.runtimeEntities.length} entities` : undefined}
         />
         {expanded && (
@@ -956,13 +956,13 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     )
   }
   if (e.kind === "planner-output-root-forced") {
-    return <FlatRow label="OUTPUT ROOT" labelColor={"#C084FC"} detail={e.outputRoot} />
+    return <FlatRow label="OUTPUT ROOT" labelColor={"var(--color-accent-hover)"} detail={e.outputRoot} />
   }
   if (e.kind === "planner-generation-failed" || e.kind === "planner-validation-failed") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.coral}40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PLAN</span>
           <span className="text-[13px] font-mono" style={{ color: C.coral }}>
             ✗ {e.kind === "planner-generation-failed" ? "generation" : "validation"} failed
           </span>
@@ -979,7 +979,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.warning}40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PLAN</span>
           <span className="text-[13px] font-mono" style={{ color: C.warning }}>warnings {e.warningCount}</span>
         </div>
         {e.diagnostics.map((diagnostic, index) => (
@@ -994,7 +994,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${C.success}40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>PLAN</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>PLAN</span>
           <span className="text-[13px] font-mono" style={{ color: C.success }}>
             ✓ validation auto-remediated
           </span>
@@ -1055,12 +1055,12 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     )
   }
   if (e.kind === "planner-step-transition") {
-    return <FlatRow label={`STEP TRANSITION · ${e.stepName}`} labelColor={"#C084FC"} detail={`${e.phase} → ${e.state}`} />
+    return <FlatRow label={`STEP TRANSITION · ${e.stepName}`} labelColor={"var(--color-accent-hover)"} detail={`${e.phase} → ${e.state}`} />
   }
   if (e.kind === "planner-pipeline-end") {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
-        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#C084FC" }}>PIPE</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "var(--color-accent-hover)" }}>PIPE</span>
         <span className="text-[13px] font-mono" style={{ color: e.status === "completed" ? C.success : C.coral }}>
           ◀ {e.status}
         </span>
@@ -1074,7 +1074,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #C084FC40` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#C084FC" }}>VRFY</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>VRFY</span>
           <span className="text-[13px] font-mono" style={{ color: e.overall === "pass" ? C.success : e.overall === "partial" ? C.warning : C.coral }}>
             {e.overall}
           </span>
@@ -1112,7 +1112,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #34D39940` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#34D399" }}>ISSUES</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-success)" }}>ISSUES</span>
           <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>round {e.verifierRound}</span>
         </div>
@@ -1128,7 +1128,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #E879A840` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#E879A8" }}>REPAIR</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>REPAIR</span>
           <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>epoch {e.epoch ?? e.attempt}</span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>rerun {e.rerunOrder.join(" → ") || "none"}</span>
@@ -1145,7 +1145,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-1 pl-2" style={{ borderLeft: `2px solid #F9731640` }}>
         <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#F97316" }}>COMPAT</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-warning)" }}>COMPAT</span>
           <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>mode {e.mode}</span>
           <span className="text-[13px] font-mono" style={{ color: C.dim }}>active {e.activePath}</span>
@@ -1171,7 +1171,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return <FlatRow label="RETRY SKIPPED" labelColor={C.warning} detail={e.reason} />
   }
   if (e.kind === "planner-budget-extended") {
-    return <FlatRow label="BUDGET EXTENDED" labelColor={"#C084FC"} detail={`completed ${e.completedSteps} · budget ${e.effectiveBudget} · ext ${e.extensions}`} />
+    return <FlatRow label="BUDGET EXTENDED" labelColor={"var(--color-accent-hover)"} detail={`completed ${e.completedSteps} · budget ${e.effectiveBudget} · ext ${e.extensions}`} />
   }
   if (e.kind === "planner-escalation") {
     return <FlatRow label={`ESCALATION · ${e.action}`} labelColor={C.coral} detail={e.reason} />
@@ -1186,7 +1186,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     const total = e.diff.added.length + e.diff.modified.length + e.diff.deleted.length
     return (
       <div className="py-1 pl-2" style={{ borderLeft: "2px solid #22d3ee66" }}>
-        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "#22d3ee" }}>DIFF</span>
+        <span className="text-[13px] font-mono font-semibold mr-1.5" style={{ color: "var(--color-info)" }}>DIFF</span>
         <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>
           {total} pending (+{e.diff.added.length} ~{e.diff.modified.length} -{e.diff.deleted.length})
         </span>
@@ -1208,10 +1208,10 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="py-0.5 pl-2" style={{ borderLeft: `2px solid #FF6B6B40` }}>
         <div
-          className="flex items-center gap-1.5 cursor-pointer hover:bg-white/[0.02] rounded px-1 -mx-1 transition-colors"
+          className="flex items-center gap-1.5 cursor-pointer hover:bg-overlay-1 rounded px-1 -mx-1 transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-error)" }}>NUDGE</span>
           <span className="text-[13px] font-mono" style={{ color: C.muted }}>{e.tag}</span>
           {!expanded && (
             <span className="text-[13px] truncate" style={{ color: C.dim }}>
@@ -1594,7 +1594,7 @@ function LlmCallBlock({ call }: { call: LlmCall }) {
     <div className="mb-1">
       {/* ── Header row ── */}
       <div
-        className="flex items-center gap-2 py-1.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.04]"
+        className="flex items-center gap-2 py-1.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
         style={{ background: open ? "rgba(255,255,255,0.02)" : undefined }}
       >
@@ -1685,7 +1685,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
           label={`PLANNER · ${e.shouldPlan ? "activated" : "skipped"}`}
-          labelColor={e.shouldPlan ? "#C084FC" : C.dim}
+          labelColor={e.shouldPlan ? "var(--color-accent-hover)" : C.dim}
           detail={`score ${e.score.toFixed(2)}`}
         />
         {open && (
@@ -1705,7 +1705,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
           label={`BOOTSTRAP · ${e.decompositionStrategy}`}
-          labelColor={"#C084FC"}
+          labelColor={"var(--color-accent-hover)"}
           detail={`${e.artifactCount} artifacts`}
         />
         {open && (
@@ -1785,7 +1785,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`PLAN · ${e.stepCount} steps`} labelColor={"#C084FC"}
+          label={`PLAN · ${e.stepCount} steps`} labelColor={"var(--color-accent-hover)"}
           detail={!open ? e.reason : undefined}
         />
         {open && (
@@ -1803,7 +1803,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "planner-pipeline-start") {
-    return <FlatRow label="PIPELINE START" labelColor={"#C084FC"} detail={`attempt ${e.attempt}/${e.maxRetries}`} />
+    return <FlatRow label="PIPELINE START" labelColor={"var(--color-accent-hover)"} detail={`attempt ${e.attempt}/${e.maxRetries}`} />
   }
 
   if (e.kind === "planner-pipeline-end") {
@@ -1812,7 +1812,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "planner-step-start") {
-    return <FlatRow label={`STEP · ${e.stepName}`} labelColor={"#C084FC"} detail={e.stepType} />
+    return <FlatRow label={`STEP · ${e.stepName}`} labelColor={"var(--color-accent-hover)"} detail={e.stepType} />
   }
 
   if (e.kind === "planner-step-end") {
@@ -1824,7 +1824,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}`} labelColor={"#6CB4EE"}
+          label={`DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}`} labelColor={"var(--color-info)"}
           detail={!open ? truncate(e.goal, 80) : `d${e.depth} · ${e.tools.length} tools`}
         />
         {open && (
@@ -1843,22 +1843,22 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "delegation-iteration") {
-    return <FlatRow label={`DELEGATE ITER ${e.iteration}/${e.maxIterations}`} labelColor={"#6CB4EE"} />
+    return <FlatRow label={`DELEGATE ITER ${e.iteration}/${e.maxIterations}`} labelColor={"var(--color-info)"} />
   }
 
   if (e.kind === "delegation-parallel-start") {
-    return <FlatRow label={`PARALLEL · ${e.taskCount} tasks`} labelColor={"#6CB4EE"} />
+    return <FlatRow label={`PARALLEL · ${e.taskCount} tasks`} labelColor={"var(--color-info)"} />
   }
 
   if (e.kind === "delegation-parallel-end") {
-    return <FlatRow label={`PARALLEL END`} labelColor={"#6CB4EE"} detail={`${e.fulfilled}/${e.taskCount} ok`} />
+    return <FlatRow label={`PARALLEL END`} labelColor={"var(--color-info)"} detail={`${e.fulfilled}/${e.taskCount} ok`} />
   }
 
   if (e.kind === "planner-delegation-start") {
     return (
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`CHILD AGENT · ${e.stepName}`} labelColor={"#E879A8"}
+          label={`CHILD AGENT · ${e.stepName}`} labelColor={"var(--color-accent-hover)"}
           detail={!open ? `budget ${e.budget.computedMaxIterations} · ${truncate(e.goal, 56)}` : `d${e.depth} · ${e.tools.length} tools · hint ${e.budget.parsedHint} · floor ${e.budget.contractFloor} · boost ${e.budget.complexityBoost}`}
         />
         {open && (
@@ -1883,7 +1883,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "planner-delegation-iteration") {
-    return <FlatRow label={`${e.stepName} · ITER ${e.iteration}/${e.maxIterations}`} labelColor={"#E879A8"} />
+    return <FlatRow label={`${e.stepName} · ITER ${e.iteration}/${e.maxIterations}`} labelColor={"var(--color-accent-hover)"} />
   }
 
   if (e.kind === "planner-verification") {
@@ -1924,14 +1924,14 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`REPAIR PLAN · attempt ${e.attempt}`} labelColor={"#E879A8"}
+          label={`REPAIR PLAN · attempt ${e.attempt}`} labelColor={"var(--color-accent-hover)"}
           detail={e.rerunOrder.length > 0 ? `rerun ${e.rerunOrder.join(" → ")}` : "no reruns"}
         />
         {open && (
           <div className="ml-5 space-y-0.5 py-0.5">
             {e.tasks.map((task, ti) => (
               <div key={ti}>
-                <span className="font-semibold" style={{ color: "#E879A8" }}>{task.mode}</span>
+                <span className="font-semibold" style={{ color: "var(--color-accent-hover)" }}>{task.mode}</span>
                 <span className="ml-2" style={{ color: C.text }}>{task.stepName}</span>
                 {task.ownedIssueCodes.length > 0 && <div className="ml-4" style={{ color: C.dim }}>own: {task.ownedIssueCodes.join(", ")}</div>}
                 {task.dependencyIssueCodes.length > 0 && <div className="ml-4" style={{ color: C.dim }}>deps: {task.dependencyIssueCodes.join(", ")}</div>}
@@ -2046,7 +2046,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
   }
 
   if (e.kind === "planner-generating") {
-    return <FlatRow label="GENERATING PLAN" labelColor={"#C084FC"} />
+    return <FlatRow label="GENERATING PLAN" labelColor={"var(--color-accent-hover)"} />
   }
 
   if (e.kind === "workspace_diff") {
@@ -2055,7 +2055,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
           label={`WORKSPACE DIFF · ${total} pending`}
-          labelColor="#22d3ee"
+          labelColor="var(--color-info)"
           detail={!open ? `+${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}` : undefined}
         />
         {open && (
@@ -2102,7 +2102,7 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div>
         <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`NUDGE · ${e.tag}`} labelColor="#FF6B6B"
+          label={`NUDGE · ${e.tag}`} labelColor="var(--color-error)"
           detail={!open ? truncate(e.message, 100) : `iter ${e.iteration}`}
         />
         {open && <div className="ml-5 py-0.5"><Pane text={e.message} maxH={300} /></div>}
@@ -2207,7 +2207,7 @@ function PipelineBlock({ pipeline: p }: { pipeline: PipelineGroup }) {
     <div className="mb-1">
       <TreeRow onClick={() => setOpen(!open)} open={open}
         label={`PIPELINE · attempt ${p.start.attempt}/${p.start.maxRetries}`}
-        labelColor="#C084FC"
+        labelColor="var(--color-accent-hover)"
       />
       {open && (
         <div className="ml-4">
@@ -2367,7 +2367,7 @@ function PlannerChildBlock({ start, end, iterations }: {
   return (
     <div className="mb-0.5">
       <TreeRow onClick={() => setOpen(!open)} open={open}
-        label="CHILD AGENT" labelColor="#E879A8"
+        label="CHILD AGENT" labelColor="var(--color-accent-hover)"
         detail={truncate(start.goal, 80)}
       />
       {open && (
@@ -2421,7 +2421,7 @@ function PlannerIterBlock({ iter }: { iter: IterGroup }) {
   ].filter(Boolean).join(" · ")
 
   // Color red for empty iterations (agent spun without acting)
-  const iterColor = iter.events.length === 0 ? C.warning : "#E879A8"
+  const iterColor = iter.events.length === 0 ? C.warning : "var(--color-accent-hover)"
 
   return (
     <div>
@@ -2485,7 +2485,7 @@ function RequestSection2({ messages, toolCount }: {
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
         style={{
           borderLeft: `2px solid ${C.accent}`,
@@ -2525,7 +2525,7 @@ function ResponseSection2({ response: resp }: {
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
         style={{
           borderLeft: `2px solid ${C.success}`,
@@ -2571,7 +2571,7 @@ function ExecutionSection({ events }: { events: TraceEntry[] }) {
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
         style={{
           borderLeft: `2px solid ${C.warning}`,
@@ -2585,7 +2585,7 @@ function ExecutionSection({ events }: { events: TraceEntry[] }) {
         <span style={{ color: C.dim }}>
           {calls} tool call{calls !== 1 ? "s" : ""}
           {errors > 0 && <span style={{ color: C.coral }}> · {errors} error{errors !== 1 ? "s" : ""}</span>}
-          {nudges > 0 && <span style={{ color: "#FF6B6B" }}> · {nudges} nudge{nudges !== 1 ? "s" : ""}</span>}
+          {nudges > 0 && <span style={{ color: "var(--color-error)" }}> · {nudges} nudge{nudges !== 1 ? "s" : ""}</span>}
         </span>
       </div>
       {open && (
@@ -2664,7 +2664,7 @@ const ROLE_COLORS: Record<string, string> = {
   system: C.accent,
   user: C.success,
   assistant: C.warning,
-  tool: "#6CB4EE",
+  tool: "var(--color-info)",
 }
 
 function MessageRow2({ msg, index }: {
@@ -2690,7 +2690,7 @@ function MessageRow2({ msg, index }: {
   return (
     <div className="px-1">
       <div
-        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
       >
         <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2725,7 +2725,7 @@ function ToolCallInline({ tc }: {
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+        className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
         onClick={() => setOpen(!open)}
       >
         <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2754,7 +2754,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="px-1">
         <div
-          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
           onClick={() => setOpen(!open)}
         >
           <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2795,7 +2795,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="px-1">
         <div
-          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
           onClick={() => setOpen(!open)}
         >
           <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2818,7 +2818,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="px-1">
         <div
-          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
           onClick={() => setOpen(!open)}
         >
           <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2836,7 +2836,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="px-1">
         <div
-          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
           onClick={() => setOpen(!open)}
         >
           <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
@@ -2855,17 +2855,17 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
     return (
       <div className="px-1">
         <div
-          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-white/[0.03]"
+          className="flex items-center gap-2 py-0.5 px-2 cursor-pointer rounded transition-colors hover:bg-overlay-2"
           onClick={() => setOpen(!open)}
         >
           <span style={{ color: C.dim, width: 10, flexShrink: 0, textAlign: "center" }}>
             {open ? "▾" : "▸"}
           </span>
-          <span className="font-semibold" style={{ color: "#FF6B6B" }}>NUDGE</span>
-          <span style={{ color: "#FF6B6B", opacity: 0.7 }}>{e.tag}</span>
+          <span className="font-semibold" style={{ color: "var(--color-error)" }}>NUDGE</span>
+          <span style={{ color: "var(--color-error)", opacity: 0.7 }}>{e.tag}</span>
           {!open && <span className="truncate" style={{ color: C.dim }}>{truncate(e.message, 80)}</span>}
         </div>
-        {open && <div className="ml-5 py-0.5"><Pane text={e.message} color="#FF6B6B" /></div>}
+        {open && <div className="ml-5 py-0.5"><Pane text={e.message} color="var(--color-error)" /></div>}
       </div>
     )
   }
@@ -2887,7 +2887,7 @@ function TreeRow({ onClick, open, label, labelColor, detail }: {
 }) {
   return (
     <div
-      className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded hover:bg-white/[0.03] transition-colors"
+      className="flex items-center gap-2 py-1 px-2 cursor-pointer rounded hover:bg-overlay-2 transition-colors"
       onClick={onClick}
       style={{ fontSize: 13 }}
     >
@@ -2967,7 +2967,7 @@ function Pane({ text, maxH = 400, color }: { text: string; maxH?: number; color?
 import type { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d"
 import ForceGraph2D from "react-force-graph-2d"
 
-const AGENT_COLORS = [C.accent, "#D17877", "#F49D6C", "#EA6248", C.success, C.plum, "#6CB4EE", "#B8A9C9"]
+const AGENT_COLORS = [C.accent, "#D17877", "#F49D6C", "#EA6248", C.success, C.plum, "var(--color-info)", "#B8A9C9"]
 
 const MAP_TOOL_LABELS: Record<string, string> = {
   read_file: "Read",
@@ -3266,7 +3266,7 @@ export function MapPanel({
           id: nodeId,
           type: isChild ? "planner-child" : "planstep",
           label: step.name,
-          color: stepStatus?.status === "error" ? C.coral : "#A78BFA",
+          color: stepStatus?.status === "error" ? C.coral : "var(--color-accent)",
           delegateStatus: stepStatus?.status === "active" ? "active" : stepStatus?.status === "done" ? "done" : stepStatus?.status === "error" ? "error" : undefined,
           planStepType: step.type,
           plannerChildGoal: childData?.goal,
@@ -3360,7 +3360,7 @@ export function MapPanel({
     // Planner deterministic step nodes (small rectangles for inline tool executions)
     for (const ps of tracePlanSteps) {
       const psId = `planstep:${ps.key}`
-      const color = ps.status === "active" ? "#C084FC" : ps.status === "error" ? C.coral : "#C084FC"
+      const color = ps.status === "active" ? "var(--color-accent-hover)" : ps.status === "error" ? C.coral : "var(--color-accent-hover)"
       nodes.push({
         id: psId, type: "planstep", label: ps.name, color,
         delegateDepth: 1, delegateStatus: ps.status, planStepType: ps.type,
@@ -3374,7 +3374,7 @@ export function MapPanel({
     // Planner child agent nodes (circles — spawned subagent_task delegations)
     for (const pc of tracePlannerChildren) {
       const pcId = `planner-child:${pc.key}`
-      const baseColor = "#A78BFA"
+      const baseColor = "var(--color-accent)"
       const color = pc.status === "error" ? C.coral : baseColor
       const childIdx = tracePlannerChildren.indexOf(pc)
       nodes.push({
@@ -3924,16 +3924,16 @@ export function MapPanel({
 
       {/* Zoom controls — bottom center */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-lg px-1 py-0.5" style={{ background: C.surface + "cc" }}>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-overlay-3" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 0.7, 200) }}>
           <span className="text-[13px]">−</span>
         </button>
         <span className="text-[10px] font-mono w-8 text-center" style={{ color: C.muted }}>{zoomLevel}%</span>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-overlay-3" style={{ color: C.muted }}
           onClick={() => { const fg = graphRef.current; if (fg) fg.zoom(fg.zoom() * 1.4, 200) }}>
           <span className="text-[13px]">+</span>
         </button>
-        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-white/10" style={{ color: C.muted }}
+        <button className="flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer hover:bg-overlay-3" style={{ color: C.muted }}
           onClick={() => {
             const fg = graphRef.current; if (!fg) return
             const nodes = graphData.nodes; if (nodes.length === 0) return

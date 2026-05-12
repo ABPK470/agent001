@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { Effect, FileSnapshot } from "./types.js"
 
 // ── Hashing utility (also used by tracker and rollback) ──────────

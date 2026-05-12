@@ -3,7 +3,7 @@
  *
  * Starts Fastify with:
  *   - CORS (for dev: UI on different port)
- *   - WebSocket (real-time events)
+ *   - SSE event stream (single real-time transport, see /api/events/stream)
  *   - Static file serving (production: serves built UI)
  *   - REST API routes (runs, layouts)
  *   - Agent orchestrator (starts/stops/resumes runs)
@@ -15,25 +15,27 @@ import { existsSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
 // Load .env — from CWD when running as installed package, from monorepo root in dev
-const _pkgRoot = process.env["AGENT001_PACKAGE_ROOT"]
+const _pkgRoot = process.env["MIA_PACKAGE_ROOT"]
 const _projectRoot = _pkgRoot ? process.cwd() : resolve(import.meta.dirname, "../../..")
 config({
   path: resolve(_projectRoot, ".env"),
 })
 
 import {
-    buildCatalog, closeMssqlPool, loadLineage, setBasePath,
+    buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage, setBasePath,
     setBrowserCheckCwd,
     setBrowserCheckExecutor,
     setSearchBasePath,
     setShellCwd,
     setShellExecutor,
-    setShellSandboxStrict
+    setShellSandboxStrict,
+    setSyncEventSink,
+    setSyncRunSink,
+    setupEnvironments
 } from "@agent001/agent"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
-import websocket from "@fastify/websocket"
 import Fastify from "fastify"
 import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
@@ -50,8 +52,9 @@ import {
     clearTransactionalData,
     getDb, getDbStats, getLlmConfig,
     migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    pruneOldData, saveApiRequest,
+    pruneOldData, recordSyncRunFinish, recordSyncRunStart, saveApiRequest,
 } from "./db.js"
+import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
@@ -64,14 +67,15 @@ import {
     registerMemoryRoutes,
     registerMymiRoutes,
     registerNotificationRoutes,
+    registerOperationRoutes,
     registerPolicyRoutes,
     registerRunRoutes,
+    registerSyncRoutes,
     registerUsageRoutes,
     registerWebhookRoutes,
 } from "./routes/index.js"
 import { initSandbox } from "./sandbox.js"
 import { setupMssql } from "./setup-mssql.js"
-import { addClient, addSseClient, broadcast } from "./ws.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -82,6 +86,26 @@ async function main() {
   let currentWorkspace = resolveWorkspace()
   const sandbox = await configureSandbox(() => currentWorkspace)
   const mssqlSummary = setupMssql(_projectRoot)
+
+  // ── ABI sync subsystem ──
+  await setupEnvironments(_projectRoot)
+  configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
+  configureSyncOrchestrator(_projectRoot)
+  // Fan sync events out via broadcast(): WS+SSE for live UI, event_log table
+  // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
+  // for the full list of emitted event types.
+  setSyncEventSink((ev) => broadcast({ type: ev.type, data: ev.data }))
+  // Persist every executeSync() invocation as a SyncRun row in SQLite for
+  // the audit trail / "active syncs" dashboard / drift forensics.
+  setSyncRunSink({
+    start: (i) => {
+      try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
+    },
+    finish: (i) => {
+      try { recordSyncRunFinish(i) } catch (e) { console.warn("[sync] recordSyncRunFinish failed:", e) }
+    },
+  })
+
   const llm = await buildLlmAndCatalog(mssqlSummary)
 
   const orchestrator = new AgentOrchestrator({ llm, workspace: currentWorkspace })
@@ -145,7 +169,7 @@ function initDatabase(): void {
   migrateEventLog()
   migrateWebhookDrains()
   migrateMemory()
-  console.log("Database initialized (~/.agent001/agent001.db)")
+  console.log("Database initialized (~/.mia/mia.db)")
 
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
@@ -236,20 +260,36 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
   if (mssqlSummary !== "not configured") {
     try {
       const maxAgeHours = Number(process.env.CATALOG_MAX_AGE_HOURS || 168)
-      const cachePath = process.env.CATALOG_CACHE_PATH || "./data/catalog-cache.json"
-      console.log(`Loading schema catalog (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
-      const catalog = await buildCatalog({ cachePath, maxAgeMs: maxAgeHours * 3600_000 })
-      const s = catalog.stats()
-      const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
-      const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
-      console.log(`Schema catalog ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges`)
-
+      const baseCachePath = process.env.CATALOG_CACHE_PATH || "./data/catalog-cache.json"
       const lineagePath = process.env.LINEAGE_FILE || resolve(_projectRoot, "deploy/mssql/lineage.json")
-      try {
-        const count = await loadLineage(lineagePath)
-        console.log(`Lineage maps loaded: ${count} critical view(s) from ${lineagePath}`)
-      } catch {
-        // Non-fatal — lineage file may not exist
+
+      // Build catalog per configured connection so the Mymi DB explorer
+      // (and any catalog-backed tool) works against the actual DB the user picks.
+      // Cache file name is derived from the connection name to avoid collisions.
+      const configs = getMssqlConfig()
+      const conns = configs.length > 0 ? configs.map((c) => c.name) : ["default"]
+
+      for (const conn of conns) {
+        const cachePath = conns.length === 1
+          ? baseCachePath
+          : baseCachePath.replace(/\.json$/i, `.${conn}.json`)
+        console.log(`Loading schema catalog for "${conn}" (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
+        try {
+          const catalog = await buildCatalog({ connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
+          const s = catalog.stats()
+          const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
+          const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
+          console.log(`Catalog [${conn}] ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs`)
+
+          try {
+            const count = await loadLineage(lineagePath, conn)
+            console.log(`Lineage maps loaded for [${conn}]: ${count} critical view(s)`)
+          } catch {
+            // Non-fatal — lineage file may not exist
+          }
+        } catch (e) {
+          console.warn(`Failed to build catalog for "${conn}":`, e instanceof Error ? e.message : e)
+        }
       }
     } catch (e) {
       console.warn("Failed to build schema catalog:", e instanceof Error ? e.message : e)
@@ -297,8 +337,7 @@ async function buildApp(opts: AppOpts) {
   // the real client and Secure cookies survive the hop.
   const app = Fastify({ logger: false, trustProxy: true })
   await app.register(cors, { origin: true, credentials: true })
-  await app.register(cookie, { secret: process.env["AGENT001_COOKIE_SECRET"] ?? undefined })
-  await app.register(websocket)
+  await app.register(cookie, { secret: process.env["MIA_COOKIE_SECRET"] ?? undefined })
 
   // Identity middleware — resolves req.session and seeds AsyncLocalStorage.
   // Must be registered AFTER @fastify/cookie. Adds GET/POST /api/me.
@@ -309,7 +348,7 @@ async function buildApp(opts: AppOpts) {
     done()
   })
   app.addHook("onResponse", (req, reply, done) => {
-    if (req.url.startsWith("/ws") || req.url.startsWith("/api/events/stream") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
+    if (req.url.startsWith("/api/events/stream") || req.url.endsWith("/stream") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
       done()
       return
     }
@@ -340,7 +379,7 @@ async function buildApp(opts: AppOpts) {
   if (existsSync(uiDist)) {
     await app.register(fastifyStatic, { root: uiDist, prefix: "/", wildcard: false })
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api") || req.url.startsWith("/ws") || req.url.startsWith("/webhooks")) {
+      if (req.url.startsWith("/api") || req.url.startsWith("/webhooks")) {
         reply.code(404).send({ error: "Not found" })
       } else {
         reply.sendFile("index.html")
@@ -355,18 +394,12 @@ async function buildApp(opts: AppOpts) {
     reply.code(status).send({ error: message })
   })
 
-  app.get("/ws", { websocket: true }, (socket, req) => {
-    // The identity middleware ran before this handler — req.session is set.
-    addClient(socket, {
-      upn:     req.session?.upn ?? null,
-      sid:     req.session?.sid ?? "anon",
-      isAdmin: req.session?.isAdmin ?? false,
-    })
-  })
-
-  // Server-Sent Events fallback for deployments behind HTTP-only reverse
-  // proxies that don't forward WebSocket upgrades. Same broadcaster, same
-  // per-user filtering. The UI prefers this transport when available.
+  // Server-Sent Events — the single real-time transport. The platform used
+  // to also expose `GET /ws` (WebSocket), but the UI only ever consumed SSE
+  // and there was zero client→server traffic over the WS channel, so it was
+  // removed in favour of one transport. SSE is also more proxy-friendly
+  // (works through HTTP-only reverse proxies that drop Upgrade frames) and
+  // browsers handle reconnect automatically via EventSource.
   app.get("/api/events/stream", (req, reply) => {
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -374,6 +407,9 @@ async function buildApp(opts: AppOpts) {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     })
+    // Disable Nagle's algorithm so each SSE frame is sent immediately
+    // instead of being coalesced with subsequent writes into one TCP packet.
+    reply.raw.socket?.setNoDelay(true)
     const dispose = addSseClient(reply.raw, {
       upn:     req.session?.upn ?? null,
       sid:     req.session?.sid ?? "anon",
@@ -392,7 +428,9 @@ async function buildApp(opts: AppOpts) {
   registerPolicyRoutes(app)
   registerUsageRoutes(app)
   registerMymiRoutes(app)
+  registerSyncRoutes(app, _projectRoot)
   registerEventRoutes(app)
+  registerOperationRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)
   registerNotificationRoutes(app, orchestrator)
   registerMemoryRoutes(app, orchestrator)
@@ -447,10 +485,10 @@ function printBanner({ mssqlSummary, channelConfigs, uiDist }: {
 }): void {
   const uiExists = existsSync(uiDist)
   console.log(`\n${"═".repeat(50)}`)
-  console.log(`  AGENT001 COMMAND CENTER`)
+  console.log(`  MI:A COMMAND CENTER`)
   console.log(`${"═".repeat(50)}`)
   console.log(`  Server:    http://localhost:${PORT}`)
-  console.log(`  WebSocket: ws://localhost:${PORT}/ws`)
+  console.log(`  Events:    http://localhost:${PORT}/api/events/stream  (SSE)`)
   console.log(`  API:       http://localhost:${PORT}/api`)
   console.log(`  Teams:     ${uiExists ? `https://<host>/webhooks/teams` : `http://localhost:${PORT}/webhooks/teams`}`)
   console.log(`  Dashboard: ${uiExists ? `http://localhost:${PORT}` : "http://localhost:5179 (dev)"}`)

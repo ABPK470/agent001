@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { DEFAULT_RETRY_POLICY, withRetry } from "./retry.js"
 import type { Channel, ChannelType, DeliveryStatus, OutboundMessage, RetryPolicy } from "./types.js"
 

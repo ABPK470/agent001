@@ -61,7 +61,7 @@ export { compactMessages, estimateTokens, truncateMessages } from "./context-man
 export type { TruncationResult } from "./context-management.js"
 
 // System prompt
-export { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
+export { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
 
 // Delegation bandit learning (agenc-core enhancement)
 export {
@@ -183,10 +183,52 @@ export { inspectDefinitionTool } from "./tools/mssql-inspector.js"
 export { profileDataTool } from "./tools/mssql-profiler.js"
 export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
 export {
-    closeMssqlPool, exportQueryToFileTool, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, runWithMssqlKillSignal, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
+    closeMssqlPool, exportQueryToFileTool, getDefaultMssqlConnectionName, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, runWithMssqlKillSignal, setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
 } from "./tools/mssql.js"
 export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
 export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"
 export type { ShellExecResult } from "./tools/shell.js"
+export { compareCatalogsTool, listEnvironmentsTool, syncExecuteTool, syncPreviewTool } from "./tools/sync-tools.js"
 export { thinkTool } from "./tools/think.js"
+
+// ── Sync subsystem (environments, recipes, plans, orchestration) ─
+export { detectCatalogDrift, tableHasTriggers, type CatalogDriftResult } from "./sync/catalog-drift.js"
+export { getEnvironment, getEnvironments, setEnvironments, setupEnvironments, type EnvRole, type SyncEnvironment } from "./sync/environments.js"
+export {
+    configureSyncOrchestrator, executeSync, previewSync, searchEntities, setSyncEventSink, setSyncRunSink,
+    type EntitySearchResult, type ExecuteOptions, type ExecuteProgress, type PreviewInput, type SyncEvent, type SyncEventSink, type SyncRunFinishInput, type SyncRunSink, type SyncRunStartInput
+} from "./sync/orchestrator.js"
+export {
+    allocPlanId, configurePlanStore, deletePlan, loadPlan, planTooOldToExecute, savePlan,
+    type SyncPlan, type SyncPlanConflict, type SyncPlanGraph, type SyncPlanGraphNode, type SyncPlanRowSample, type SyncPlanTable, type SyncPlanTableCounts, type SyncPlanTotals
+} from "./sync/plan-store.js"
+export {
+    clearSyncRecipesCache, getRecipe, instantiatePredicate, loadSyncRecipes,
+    type DiscoverySource, type EntityType, type SyncRecipe, type SyncRecipeBundle, type SyncRecipeDiscrepancy, type SyncRecipeTable
+} from "./sync/recipes.js"
+
+// ── Planner platform-error helpers (server-side enrichment of opaque user
+//    answers with run reference + operator-only logging) ─
+export {
+    detectInternalFailure,
+    detectPlatformUnconfigured,
+    fillRunReference,
+    GENERIC_FAILURE_PREFIX,
+    isGenericFailureAnswer,
+    isPlatformUnconfiguredAnswer,
+    isPolishedFailureAnswer,
+    isUserSafeFailureAnswer,
+    markPolishedFailure,
+    PLATFORM_UNCONFIGURED_PREFIX,
+    POLISHED_FAILURE_MARKER,
+    synthesizeGenericFailureAnswer,
+    type InternalFailureHit,
+    type PlatformUnconfiguredHit
+} from "./planner/platform-errors.js"
+
+export {
+    mapFailureKindForPolish,
+    polishFailureForUser,
+    type PolishFailureInput
+} from "./planner/polish-failure.js"
 

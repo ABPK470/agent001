@@ -47,7 +47,7 @@ export function ViewTabs({ onAddWidget: _onAddWidget }: Props) {
               group flex items-center gap-1.5 px-3 h-9 text-[13px] cursor-pointer shrink-0
               transition-colors
               ${view.id === activeViewId
-                ? "text-white font-semibold"
+                ? "text-text font-semibold"
                 : "text-text-muted hover:text-text-secondary"
               }
             `}

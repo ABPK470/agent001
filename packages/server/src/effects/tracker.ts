@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { captureSnapshot, hashContent } from "./snapshots.js"
 import type { Effect, EffectKind } from "./types.js"
 

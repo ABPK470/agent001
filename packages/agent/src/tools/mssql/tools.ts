@@ -32,11 +32,20 @@ export const mssqlTool: Tool = {
       },
       connection: {
         type: "string",
-        description: "Named database connection to use (configured at startup). Omit to use the default connection.",
+        description:
+          "Named server/pool to connect to (e.g. 'prod', 'uat'). " +
+          "This selects WHICH pre-configured SQL Server instance to use — it is NOT passed to SQL. " +
+          "Omit to use the default connection (stated in your system prompt). " +
+          "⚠️ NEVER pass an environment name here as the 'database' parameter — that generates " +
+          "USE [name] SQL which will fail with 'Database does not exist'.",
       },
       database: {
         type: "string",
-        description: "Optional: switch to a different database before running the query. Equivalent to USE [database].",
+        description:
+          "Optional: switch catalog database on the CURRENT server before running the query (generates USE [database]). " +
+          "Use this ONLY when the target catalog has a different name than the connection's default database " +
+          "(e.g. switching from 'mymi' to 'master' on the same server). " +
+          "⚠️ Do NOT pass an environment/connection name here (e.g. 'dev', 'uat', 'prod') — those are connection names, not database names.",
       },
     },
     required: ["query"],

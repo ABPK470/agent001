@@ -18,7 +18,7 @@ export function RunHistory() {
   const setActiveRun = useStore((s) => s.setActiveRun)
   const setSteps = useStore((s) => s.setSteps)
   const setAudit = useStore((s) => s.setAudit)
-  const setLogs = useStore((s) => s.setLogs)
+  const mergeLogs = useStore((s) => s.mergeLogs)
   const setTrace = useStore((s) => s.setTrace)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
@@ -43,7 +43,7 @@ export function RunHistory() {
       ])
       setSteps(detail.data.steps ?? [])
       setAudit(detail.audit)
-      setLogs(detail.logs)
+      if (detail.logs?.length) mergeLogs(detail.logs)
       setTrace(trace as import("../types").TraceEntry[])
     } catch {
       // Run might still be in-memory only
@@ -75,8 +75,11 @@ export function RunHistory() {
         >
           {/* Status dot */}
           <div
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ background: statusColor(run.status) }}
+            className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-border"
+            style={{
+              background: statusColor(run.status),
+              boxShadow: `0 0 8px ${statusColor(run.status)}66`,
+            }}
           />
 
           {/* Info */}
@@ -109,19 +112,19 @@ export function RunHistory() {
           </div>
 
           {/* Inline actions (visible on hover) */}
-          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
             {isActive && (
               <button
-                className="p-1.5 text-error/70 hover:text-error rounded transition-colors"
+                className="p-1.5 text-error/80 hover:text-error hover:bg-error/10 rounded-md ring-1 ring-border hover:ring-error/30 transition-colors"
                 onClick={(e) => { e.stopPropagation(); api.cancelRun(run.id).catch(() => {}) }}
                 title="Cancel"
               >
-                <Square size={13} />
+                <Square size={14} strokeWidth={2.25} />
               </button>
             )}
             {(run.status === "failed" || run.status === "cancelled") && (
               <button
-                className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
+                className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   api.resumeRun(run.id).then((r) => {
@@ -130,12 +133,12 @@ export function RunHistory() {
                 }}
                 title="Resume from checkpoint"
               >
-                <RotateCcw size={13} />
+                <RotateCcw size={14} strokeWidth={2.25} />
               </button>
             )}
             {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
               <button
-                className="p-1.5 text-accent/70 hover:text-accent rounded transition-colors"
+                className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   api.rerunRun(run.id).then((r) => {
@@ -144,12 +147,12 @@ export function RunHistory() {
                 }}
                 title="Re-run with same goal"
               >
-                <Play size={13} />
+                <Play size={14} strokeWidth={2.25} />
               </button>
             )}
             {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && !rolledBackIds.has(run.id) && (
               <button
-                className="p-1.5 text-warning/70 hover:text-warning rounded transition-colors"
+                className="p-1.5 text-warning/80 hover:text-warning hover:bg-warning/10 rounded-md ring-1 ring-border hover:ring-warning/30 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   if (confirm("Rollback all file changes from this run?")) {
@@ -160,7 +163,7 @@ export function RunHistory() {
                 }}
                 title="Rollback file changes"
               >
-                <Undo2 size={13} />
+                <Undo2 size={14} strokeWidth={2.25} />
               </button>
             )}
           </div>

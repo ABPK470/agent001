@@ -1,6 +1,6 @@
 import type { DomainEvent, EngineServices } from "@agent001/agent"
 import * as db from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { NotificationOpts } from "./types.js"
 
 type RunLike = {
@@ -53,8 +53,10 @@ export function wireEventBroadcasting(
         const input = (data["input"] as Record<string, unknown>) ?? {}
         const argsFormatted = JSON.stringify(input, null, 2)
         const keys = Object.keys(input)
+        // Keep the full single-arg value; the UI clips with CSS ellipsis
+        // so users see "…" when the available width runs out.
         const argsSummary = keys.length > 0
-          ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`.slice(0, 60) : `${keys.length} args`
+          ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
           : ""
         saveTrace(runId, { kind: "tool-call", tool: toolName, argsSummary, argsFormatted })
       } else if (eventType === "step.completed") {
@@ -65,10 +67,31 @@ export function wireEventBroadcasting(
         saveTrace(runId, { kind: "tool-error", text: (data["error"] as string) ?? "unknown error" })
       }
 
+      // Save a human-readable log (not raw JSON) with the type group
+      // so historical logs display identically to live SSE events.
+      const typeGroup = eventType.startsWith("step.") || eventType.startsWith("tool_call.") ? "step" : "run"
+      const isError = eventType.includes("failed")
+      let logMsg: string
+      switch (eventType) {
+        case "run.started":
+          logMsg = `Started — run ${(data["runId"] as string)?.slice(0, 8) ?? "?"}`
+          break
+        case "step.started":
+          logMsg = `${(data["action"] as string) ?? "unknown"} started`
+          break
+        case "step.completed":
+          logMsg = `${(data["action"] as string) ?? "unknown"} completed`
+          break
+        case "step.failed":
+          logMsg = `${(data["action"] as string) ?? "unknown"} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`
+          break
+        default:
+          logMsg = eventType.replace(/^[^.]+\./, "")
+      }
       db.saveLog({
         run_id: runId,
-        level: eventType.includes("failed") ? "error" : "info",
-        message: `${eventType}: ${JSON.stringify(event)}`,
+        level: isError ? `${typeGroup}:error` : typeGroup,
+        message: logMsg,
         timestamp: new Date().toISOString(),
       })
     })

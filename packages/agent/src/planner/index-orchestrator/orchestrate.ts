@@ -12,6 +12,7 @@ import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import { synthesizeAnswer } from "../index-synthesize.js"
 import type { DelegateFn } from "../pipeline.js"
 import { executePipeline } from "../pipeline.js"
+import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineResult, RepairPlan, VerifierDecision } from "../types.js"
 import { buildIssueIdentity, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility } from "../verification-model.js"
 import { verify } from "../verifier.js"
@@ -144,6 +145,44 @@ export async function executePlannerPath(
       totalSteps: pipelineResult.totalSteps,
     })
 
+    // Platform-unconfigured short-circuit. If any step failed because a
+    // required platform integration is missing (e.g. MSSQL not configured),
+    // there is nothing the verifier or repair loop can do — every retry will
+    // hit the exact same missing-config and burn tokens. Bypass verification
+    // entirely, synthesize an opaque user-safe answer, and exit. The
+    // operator-only technical detail (subject + remediation) is emitted as
+    // a dedicated trace event so the server can log it for the admin while
+    // the chat user sees nothing about env vars or file paths.
+    const platformUnconfiguredStep = [...pipelineResult.stepResults.values()]
+      .find((r) => r.failureClass === "platform_unconfigured")
+    if (platformUnconfiguredStep) {
+      const hit = platformUnconfiguredStep.error
+        ? detectPlatformUnconfigured(platformUnconfiguredStep.error)
+        : null
+      ctx.onTrace?.({
+        kind: "planner-platform-unconfigured",
+        stepName: platformUnconfiguredStep.name,
+        subject: hit?.subject ?? "unknown integration",
+        remediation: hit?.remediation ?? "Check server configuration.",
+        rawError: platformUnconfiguredStep.error ?? "",
+      })
+      ctx.onTrace?.({
+        kind: "planner-retry-abort",
+        reason: `Platform integration not configured (${platformUnconfiguredStep.name}) — no retry can repair operator-owned config`,
+      })
+      return {
+        handled: true,
+        answer: synthesizeAnswer(plan, pipelineResult, {
+          overall: "fail",
+          confidence: 1,
+          steps: [],
+          systemChecks: [],
+          unresolvedItems: [],
+        }),
+        plan,
+      }
+    }
+
     // Update pipeline budget state — track progress for extension decisions
     const prevBudget = budgetState
     budgetState = maybeExtendBudget(budgetState, pipelineResult.completedSteps)
@@ -242,6 +281,13 @@ export async function executePlannerPath(
         timestamp: Date.now(),
       })
     }
+
+    verifierRounds++
+
+    if (verifierDecision.overall === "pass") {
+      break
+    }
+
     ctx.onTrace?.({
       kind: "planner-repair-plan",
       attempt: attempt + 1,
@@ -282,12 +328,6 @@ export async function executePlannerPath(
         })),
       },
     })
-
-    verifierRounds++
-
-    if (verifierDecision.overall === "pass") {
-      break
-    }
 
     // agenc-core pattern: strict retry gating via escalation graph.
     // The escalation graph is a pure deterministic function that maps
@@ -403,7 +443,7 @@ export async function executePlannerPath(
   if (banditTuner && banditTrajectory) {
     const failedSteps = [...pipelineResult!.stepResults.values()].filter(r => r.status === "failed").length
     const verifierPassed = verifierDecision!.overall === "pass"
-    const qualityProxy = verifierPassed ? verifierDecision!.confidence : (verifierDecision!.overall === "partial" ? 0.4 : 0.1)
+    const qualityProxy = verifierPassed ? verifierDecision!.confidence : (verifierDecision!.overall === "retry" ? 0.4 : 0.1)
     banditTuner.recordOutcome(banditTrajectory, {
       durationMs: Date.now() - pipelineStartMs,
       tokenCount: 0,  // not available at this layer

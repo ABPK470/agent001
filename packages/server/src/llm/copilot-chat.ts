@@ -170,6 +170,7 @@ export class CopilotChatClient implements LLMClient {
         "Editor-Version": "vscode/1.96.0",
         "Editor-Plugin-Version": "copilot/1.255.0",
       },
+      signal: AbortSignal.timeout(15_000),
     })
 
     if (res.status === 401) {

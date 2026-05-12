@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 import { embedEntry } from "./vectors.js"
@@ -129,21 +129,14 @@ export function ingestRunTurns(run: {
   tools: string[]
   stepCount: number
   error?: string | null
-  trace: Array<{ kind: string; tool?: string; text?: string; argsSummary?: string }>
+  trace: Array<{ kind: string; tool?: string; text?: string; argsSummary?: string; argsFormatted?: string }>
 }): void {
   const sessionId = run.agentId ?? "default"
 
-  // 1. Store the user's goal
-  ingestTurn({
-    tier: "working",
-    role: "user",
-    content: run.goal,
-    metadata: { type: "goal", runId: run.id },
-    source: "user",
-    confidence: 0.8,
-    sessionId,
-    runId: run.id,
-  })
+  // 1. (goal text intentionally NOT stored in working memory — it is INPUT,
+  //    not working state, and is already captured in episodic memory at step 4.
+  //    Storing it here would pollute working memory with previous goal texts,
+  //    which get retrieved by semantic similarity into future runs' system prompts.)
 
   // 2. Store significant tool calls and results
   for (const t of run.trace) {
@@ -200,9 +193,29 @@ export function ingestRunTurns(run: {
   }
   if (run.error) lines.push(`Error: ${run.error}`)
 
+  // Auto-detect tool failures in the trace and record them as corrections so future
+  // runs don't repeat the same failing approach (e.g. querying a non-existent table).
+  const toolErrors: string[] = []
+  for (const t of run.trace) {
+    if (t.kind === "tool-error" && t.tool && t.text) {
+      toolErrors.push(`${t.tool}: ${t.text.slice(0, 200)}`)
+    } else if (t.kind === "tool-result" && t.text) {
+      // Catch SQL Server "Invalid object name" / "does not exist" errors surfaced as results
+      if (/invalid object name|does not exist|cannot find|object.*not found|no such table/i.test(t.text)) {
+        const tool = t.tool ?? "tool"
+        toolErrors.push(`${tool} result contained error: ${t.text.slice(0, 200)}`)
+      }
+    }
+  }
+  if (toolErrors.length > 0) {
+    lines.push(`Corrections (do NOT repeat these approaches):`)
+    for (const e of toolErrors) lines.push(`  - ${e}`)
+  }
+
   const episodicContent = lines.join("\n")
-  const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status }
-  const episodicConfidence = run.status === "completed" ? 0.7 : 0.3
+  const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status, hasCorrections: toolErrors.length > 0 }
+  // Lower confidence when tool errors were detected — the approach was flawed.
+  const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === "completed" ? 0.7 : 0.3
 
   // Check for an existing summary for the same goal across ALL sessions.
   // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
@@ -242,4 +255,28 @@ export function ingestRunTurns(run: {
       runId: run.id,
     })
   }
+}
+
+/**
+ * Mark a run's episodic memory entry as unhelpful / incorrect.
+ * Prepends a FEEDBACK block to the content and drops confidence to near-zero
+ * so the entry is retrieved with very low weight in future runs.
+ */
+export function flagRunMemory(runId: string, note?: string): boolean {
+  const row = getDb().prepare(
+    `SELECT id, content, confidence FROM memory_entries
+     WHERE run_id = ? AND tier = 'episodic' AND role = 'summary'
+     ORDER BY updated_at DESC LIMIT 1`,
+  ).get(runId) as { id: string; content: string; confidence: number } | undefined
+
+  if (!row) return false
+
+  const prefix = `FEEDBACK: User marked this answer as NOT useful${note ? ` — ${note}` : ""}. ` +
+    `Do NOT reuse the approaches described below. Find a different strategy.\n`
+  const updated = prefix + row.content
+  const now = new Date().toISOString()
+  getDb().prepare(
+    `UPDATE memory_entries SET content = ?, confidence = 0.05, salience = 0.1, updated_at = ? WHERE id = ?`,
+  ).run(updated, now, row.id)
+  return true
 }

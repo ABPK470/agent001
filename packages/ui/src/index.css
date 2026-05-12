@@ -1,30 +1,213 @@
 @import "tailwindcss";
 
-/* ── Design Tokens ─────────────────────────────────────────────── */
+/* ── Tailwind dark variant (`dark:` classes follow data-theme) ──── */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-@theme {
-  --color-base: #09090b;
-  --color-surface: #121214;
-  --color-elevated: #1c1c1f;
-  --color-border: #27272a;
-  --color-border-focus: #3f3f46;
-  --color-text: #f4f4f5;
-  --color-text-secondary: #d4d4d8;
-  --color-text-muted: #a1a1aa;
-  --color-accent: #7B6FC7;
-  --color-accent-hover: #9189D4;
-  --color-success: #5db078;
-  --color-warning: #d4a64a;
-  --color-error: #c95a4a;
-  /* Visualization palette */
+/* ── Design tokens ──────────────────────────────────────────────────
+   Every colour the UI uses goes through this single token vocabulary.
+   Tokens are theme-aware: each `--color-*` token in @theme references
+   a `--*` CSS variable defined in the per-theme blocks below, so every
+   Tailwind utility (bg-canvas, text-text-muted, etc.) flips
+   automatically when `data-theme` changes on <html>.
+
+   Naming buckets:
+     • Surfaces   canvas | panel | panel-2 | panel-3   (low → high)
+     • Overlays   overlay-1 | -2 | -3 | -hover         (subtle → strong)
+     • Borders    border-subtle | border | border-strong | border-focus
+     • Text       text | text-secondary | text-muted | text-faint
+     • Accent     accent | accent-hover | accent-soft
+     • Status     success | warning | error | info  (each has -soft)
+     • Chrome     scrim | bubble-user
+     • Datatype   datatype-int|string|date|bool|real|bin  (MymiDb)
+     • Viz        viz-deep|mid|plum|rose|peach|coral     (unchanged)
+
+   LEGACY ALIASES (`base`, `surface`, `elevated`) are preserved as
+   theme-aware aliases over the new tokens so existing code keeps
+   working through the refactor.                                       */
+
+@theme inline {
+  /* Surfaces */
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  /* Legacy surface aliases */
+  --color-base: var(--canvas);
+  --color-surface: var(--panel);
+  --color-elevated: var(--panel-2);
+
+  /* Neutral overlays — replaces ~260 `bg-white/[0.0X]` occurrences */
+  --color-overlay-1: var(--overlay-1);
+  --color-overlay-2: var(--overlay-2);
+  --color-overlay-3: var(--overlay-3);
+  --color-overlay-hover: var(--overlay-hover);
+
+  /* Borders */
+  --color-border-subtle: var(--border-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+
+  /* Text */
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-text-on-accent: var(--text-on-accent);
+
+  /* Accent */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+
+  /* Status — solid + soft (tinted background variant) */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  /* Chrome */
+  --color-scrim: var(--scrim);
+  --color-bubble-user: var(--bubble-user);
+
+  /* MymiDb datatype palette — semantic across types, theme-aware */
+  --color-datatype-int: var(--dt-int);
+  --color-datatype-string: var(--dt-string);
+  --color-datatype-date: var(--dt-date);
+  --color-datatype-bool: var(--dt-bool);
+  --color-datatype-real: var(--dt-real);
+  --color-datatype-bin: var(--dt-bin);
+
+  /* Visualization palette — same in both themes */
   --color-viz-deep: #342F57;
   --color-viz-mid: #584770;
   --color-viz-plum: #825776;
   --color-viz-rose: #D17877;
   --color-viz-peach: #F49D6C;
   --color-viz-coral: #EA6248;
+
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+}
+
+/* ── Dark theme (default) ──────────────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #09090b;
+  --panel: #121214;
+  --panel-2: #1c1c1f;
+  --panel-3: #27272a;
+
+  --overlay-1: rgba(255, 255, 255, 0.025);
+  --overlay-2: rgba(255, 255, 255, 0.05);
+  --overlay-3: rgba(255, 255, 255, 0.08);
+  --overlay-hover: rgba(255, 255, 255, 0.06);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --border-focus: #52525b;
+
+  --text: #f4f4f5;
+  --text-secondary: #d4d4d8;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --text-on-accent: #ffffff;
+
+  --accent: #7B6FC7;
+  --accent-hover: #9189D4;
+  --accent-soft: rgba(123, 111, 199, 0.18);
+
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.14);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.14);
+
+  --scrim: rgba(0, 0, 0, 0.65);
+  --bubble-user: #3f3f46;
+  --shadow-bubble: 0 6px 20px rgba(0, 0, 0, 0.22);
+
+  --dt-int: #93c5fd;
+  --dt-string: #c4b5fd;
+  --dt-date: #fcd34d;
+  --dt-bool: #fda4af;
+  --dt-real: #6ee7b7;
+  --dt-bin: #f9a8d4;
+
+  /* Shimmer text gradient */
+  --sa: #e7e5e4;
+  --sd: #52525b;
+
+  /* Welcome component alias */
+  --bg: #09090b;
+}
+
+/* ── Light theme ───────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Warm off-white / paper aesthetic per design reference */
+  --canvas: #efeae0;
+  --panel: #f6f2ea;
+  --panel-2: #fbf8f1;
+  --panel-3: #ffffff;
+
+  --overlay-1: rgba(0, 0, 0, 0.025);
+  --overlay-2: rgba(0, 0, 0, 0.05);
+  --overlay-3: rgba(0, 0, 0, 0.08);
+  --overlay-hover: rgba(0, 0, 0, 0.05);
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border: rgba(0, 0, 0, 0.14);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --border-focus: rgba(0, 0, 0, 0.32);
+
+  --text: #0e0e10;
+  --text-secondary: #2a2a2e;
+  --text-muted: #5a5a62;
+  --text-faint: #8a8a92;
+  --text-on-accent: #ffffff;
+
+  /* Accent darkened for AA contrast on warm light bg */
+  --accent: #5D4FB0;
+  --accent-hover: #4a3e94;
+  --accent-soft: rgba(93, 79, 176, 0.14);
+
+  --success: #15803d;
+  --success-soft: rgba(21, 128, 61, 0.12);
+  --warning: #b45309;
+  --warning-soft: rgba(180, 83, 9, 0.12);
+  --error: #b91c1c;
+  --error-soft: rgba(185, 28, 28, 0.10);
+  --info: #1d4ed8;
+  --info-soft: rgba(29, 78, 216, 0.10);
+
+  --scrim: rgba(0, 0, 0, 0.40);
+  --bubble-user: #e8e2d3;
+  --shadow-bubble: 0 2px 8px rgba(60, 50, 30, 0.06);
+
+  --dt-int: #1d4ed8;
+  --dt-string: #6d28d9;
+  --dt-date: #b45309;
+  --dt-bool: #be123c;
+  --dt-real: #047857;
+  --dt-bin: #be185d;
+
+  /* Shimmer dark-on-light */
+  --sa: #18181b;
+  --sd: #c0bbac;
+
+  --bg: #efeae0;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -38,6 +221,29 @@
   display: none;
 }
 
+/* Opt-in: show a slim scrollbar (e.g. wide diff tables where the
+   horizontal-scroll affordance must be visible). Apply `.show-scrollbar`
+   to any element to override the global hidden-scrollbar default. */
+.show-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-focus) transparent;
+}
+.show-scrollbar::-webkit-scrollbar {
+  display: block;
+  height: 8px;
+  width: 8px;
+}
+.show-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.show-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-border-focus);
+  border-radius: 4px;
+}
+.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -48,7 +254,7 @@ html, body, #root {
 
 body {
   font-family: var(--font-sans);
-  background: var(--color-base);
+  background: var(--color-canvas);
   color: var(--color-text);
   font-size: 14px;
   line-height: 1.5;
@@ -60,6 +266,50 @@ body {
 
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Activity shimmer — "Thinking" sweep animation ────────────── */
+
+/* Bright spot sweeps left → right through the text and loops.
+   Default --sa / --sd come from the active theme; can be overridden
+   via inline style on individual usages.                              */
+@keyframes shimmer-sweep {
+  0%   { background-position: 0 0; }
+  100% { background-position: -160px 0; }
+}
+
+.activity-shimmer {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--sd) 0 52px,
+    var(--sa) 68px 92px,
+    var(--sd) 108px 160px
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 2s linear infinite;
+  display: inline-block;
+}
+
+.activity-shimmer-tight {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--sd) 0 20px,
+    var(--sa) 36px 56px,
+    var(--sd) 72px 100px
+  );
+  background-size: 200px 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep-tight 2.2s linear infinite;
+  display: inline-block;
+}
+
+@keyframes shimmer-sweep-tight {
+  0%   { background-position: -100px 0; }
+  100% { background-position: 100px 0; }
 }
 
 /* ── Logo eye animations ───────────────────────────────────────── */
@@ -114,33 +364,43 @@ body {
   border-radius: 12px !important;
 }
 
+.react-resizable {
+  position: relative;
+}
+
 .react-resizable-handle {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  bottom: 0;
-  right: 0;
-  cursor: se-resize;
   z-index: 10;
-}
-
-.react-resizable-handle::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--color-border-focus);
-  border-bottom: 2px solid var(--color-border-focus);
-  border-radius: 0 0 2px 0;
+  background: none !important;
+  background-image: none !important;
+  border: none !important;
+  padding: 0 !important;
+  transform: none !important;
   opacity: 0;
-  transition: opacity 0.15s;
 }
 
-.react-grid-item:hover .react-resizable-handle::after {
+/* Kill the ::after indicator from react-grid-layout/css/styles.css */
+.react-grid-item > .react-resizable-handle::after {
+  display: none !important;
+}
+
+/* Cursor change is sufficient feedback.
+   Resize handles become visible only when actively hovering the widget. */
+.react-grid-item:hover > .react-resizable-handle {
   opacity: 1;
 }
+
+/* Corner handles — invisible hit targets */
+.react-resizable-handle-se { width: 16px; height: 16px; bottom: 0; right: 0; cursor: se-resize; }
+.react-resizable-handle-sw { width: 16px; height: 16px; bottom: 0; left: 0; cursor: sw-resize; }
+.react-resizable-handle-ne { width: 16px; height: 16px; top: 0; right: 0; cursor: ne-resize; }
+.react-resizable-handle-nw { width: 16px; height: 16px; top: 0; left: 0; cursor: nw-resize; }
+
+/* Edge handles — invisible hit targets */
+.react-resizable-handle-e { width: 8px; height: 100%; top: 0; right: 0; cursor: e-resize; }
+.react-resizable-handle-w { width: 8px; height: 100%; top: 0; left: 0; cursor: w-resize; }
+.react-resizable-handle-s { width: 100%; height: 8px; bottom: 0; left: 0; cursor: s-resize; }
+.react-resizable-handle-n { width: 100%; height: 8px; top: 0; left: 0; cursor: n-resize; }
 
 /* ── Mobile ────────────────────────────────────────────────────── */
 

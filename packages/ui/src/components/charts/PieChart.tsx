@@ -21,9 +21,7 @@ export interface PieChartData {
 export function PieChart({ data }: { data: PieChartData }): React.ReactElement {
   const slices = (data.slices ?? []).filter((s) => typeof s.value === "number" && isFinite(s.value) && s.value > 0)
   if (slices.length === 0) {
-    return <ChartFrame title={data.title} badge={data.donut ? "donut" : "pie"}>
-      <div className="text-text-muted text-xs italic px-2 py-4">No data</div>
-    </ChartFrame>
+    return null as unknown as React.ReactElement
   }
 
   const total = slices.reduce((a, s) => a + s.value, 0)
@@ -52,12 +50,12 @@ export function PieChart({ data }: { data: PieChartData }): React.ReactElement {
       <div className="flex items-start gap-4 flex-wrap">
         <svg width={SIZE} height={SIZE} className="font-mono shrink-0">
           {segments.map((s, i) => (
-            <path key={i} d={s.path} fill={s.color} stroke="#09090b" strokeWidth={1.5}>
+            <path key={i} d={s.path} fill={s.color} stroke="var(--color-canvas)" strokeWidth={1.5}>
               <title>{`${s.label}: ${formatValue(s.value, fmt, precision, data.unit)} (${s.pct.toFixed(1)}%)`}</title>
             </path>
           ))}
           {data.donut && (
-            <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill="#f4f4f5" fontWeight="600">
+            <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill="var(--color-text)" fontWeight="600">
               {formatValue(total, fmt, precision, data.unit)}
             </text>
           )}

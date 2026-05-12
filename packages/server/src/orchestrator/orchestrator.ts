@@ -11,12 +11,12 @@ import { getCurrentSession } from "../auth/context.js"
 import type { MessageRouter } from "../channels/router.js"
 import * as db from "../db.js"
 import { migrateEffects } from "../effects.js"
+import { broadcast } from "../event-broadcaster.js"
 import { migrateMemory } from "../memory.js"
 import { RunQueue, type RunPriority } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
-import { filterToolsForVisitor, getAllTools, resolveTools } from "../tools.js"
-import { broadcast } from "../ws.js"
+import { filterToolsForVisitor, getAllTools } from "../tools.js"
 import { createNotification, saveTrace } from "./persistence.js"
 import { recoverStaleRunsImpl } from "./recovery.js"
 import { executeRunImpl } from "./run-executor.js"
@@ -92,8 +92,21 @@ export class AgentOrchestrator {
 
   cancelRun(runId: string): boolean {
     const active = this.activeRuns.get(runId)
-    if (!active) return this.queue.remove(runId)
+    if (!active) {
+      // No in-memory run — it's either queued, or stuck in DB as 'running'
+      // because a previous run never observed its abort signal. Persist the
+      // cancel either way so list/status calls reflect reality immediately.
+      db.markRunCancelled(runId)
+      const removed = this.queue.remove(runId)
+      broadcast({ type: "run.cancelled", data: { runId } })
+      return removed || true
+    }
     active.controller.abort()
+    // Persist eagerly. The executor's abort handler also persists once the
+    // loop unwinds, but if the LLM call hangs and never observes the signal
+    // the row would stay 'running' forever. This is a no-op if the loop
+    // races us to completion (markRunCancelled only touches active rows).
+    db.markRunCancelled(runId)
     broadcast({ type: "run.cancelled", data: { runId } })
     return true
   }
@@ -124,10 +137,7 @@ export class AgentOrchestrator {
     let systemPrompt: string | undefined
     if (originalRun.agent_id) {
       const agentDef = db.getAgentDefinition(originalRun.agent_id)
-      if (agentDef) {
-        tools = resolveTools(JSON.parse(agentDef.tools) as string[])
-        systemPrompt = agentDef.system_prompt
-      }
+      if (agentDef) systemPrompt = agentDef.system_prompt
     }
     // Visitor allowlist on resume too — safety net even if agentDef requests
     // tools the visitor isn't allowed to use.
@@ -183,6 +193,14 @@ export class AgentOrchestrator {
 
   getRunWorkspaceDiff(runId: string): WorkspaceDiff | null {
     return this.completedRunDiffs.get(runId) ?? null
+  }
+
+  getRunWorkspaceSourceRoot(runId: string): string | null {
+    return this.completedRunWorkspaces.get(runId)?.sourceRoot ?? null
+  }
+
+  getRunWorkspaceExecutionRoot(runId: string): string | null {
+    return this.completedRunWorkspaces.get(runId)?.executionRoot ?? null
   }
 
   async applyRunWorkspaceDiff(runId: string): Promise<{ added: number; modified: number; deleted: number } | null> {

@@ -1,4 +1,4 @@
-import { setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled } from "@agent001/agent"
+import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled } from "@agent001/agent"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
@@ -73,6 +73,14 @@ export function setupMssql(projectRoot: string): string {
 
     for (const db of dbConfigs) {
       if (db.writeEnabled) setMssqlWriteEnabled(true, db.name)
+    }
+
+    // Optional: pin which named connection is the agent's "home" default.
+    // Without this the agent falls back to the first entry in the array.
+    const defaultConn = process.env["MSSQL_DEFAULT_CONNECTION"]
+    if (defaultConn) {
+      setDefaultMssqlConnection(defaultConn)
+      console.log(`MSSQL default connection: ${defaultConn}`)
     }
 
     const summary = dbConfigs.map((db) => `${db.name}(${db.host}/${db.database ?? "master"})`).join(", ")

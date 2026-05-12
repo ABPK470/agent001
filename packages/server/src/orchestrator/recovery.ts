@@ -11,14 +11,21 @@ interface RecoveryDeps {
 // ── Recovery ──────────────────────────────────────────────────────
 
 /**
- * On startup, find runs that were "running" when the server crashed,
- * mark them failed, and auto-resume from checkpoint where possible.
+ * On startup, find runs that were "running" / "pending" / "planning" when the
+ * server crashed (or was restarted) and mark them failed.
+ *
+ * We deliberately DO NOT auto-resume from checkpoint here — silently spinning
+ * up a fresh run on boot is surprising and tends to produce phantom "running"
+ * rows in the UI when the resumed loop fails immediately. Instead, the
+ * notification gives the user a one-click Resume action.
+ *
+ * `activeDeps` is kept on the signature for parity with callers and possible
+ * future opt-in auto-resume; it's intentionally unused right now.
  */
 export function recoverStaleRunsImpl(
-  activeDeps: RecoveryDeps,
+  _activeDeps: RecoveryDeps,
 ): { recovered: string[]; failed: string[] } {
   const staleRuns = db.findStaleRuns()
-  const recovered: string[] = []
   const failed: string[] = []
 
   for (const stale of staleRuns) {
@@ -27,28 +34,16 @@ export function recoverStaleRunsImpl(
 
     const checkpoint = db.getCheckpoint(stale.id)
     if (checkpoint) {
-      const newRunId = activeDeps.resumeRun(stale.id)
-      if (newRunId) {
-        recovered.push(newRunId)
-        createNotification({
-          type: "run.recovered",
-          title: "Run auto-recovered",
-          message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart and has been automatically resumed.`,
-          runId: newRunId,
-          actions: [{ label: "View Run", action: "view-run", data: { runId: newRunId } }],
-        })
-      } else {
-        createNotification({
-          type: "run.failed",
-          title: "Run interrupted",
-          message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`,
-          runId: stale.id,
-          actions: [
-            { label: "Review", action: "view-run", data: { runId: stale.id } },
-            { label: "Resume", action: "resume-run", data: { runId: stale.id } },
-          ],
-        })
-      }
+      createNotification({
+        type: "run.failed",
+        title: "Run interrupted",
+        message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`,
+        runId: stale.id,
+        actions: [
+          { label: "Review", action: "view-run", data: { runId: stale.id } },
+          { label: "Resume", action: "resume-run", data: { runId: stale.id } },
+        ],
+      })
     } else {
       createNotification({
         type: "run.failed",
@@ -60,5 +55,5 @@ export function recoverStaleRunsImpl(
     }
   }
 
-  return { recovered, failed }
+  return { recovered: [], failed }
 }

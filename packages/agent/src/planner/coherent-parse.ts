@@ -8,10 +8,10 @@
 
 import { isValidArtifactPath } from "./generate.js"
 import type {
-    CoherentSharedContract,
-    CoherentSolutionArtifact,
-    CoherentSystemInvariant,
-    PlanEdge,
+  CoherentSharedContract,
+  CoherentSolutionArtifact,
+  CoherentSystemInvariant,
+  PlanEdge,
 } from "./types.js"
 
 export const COHERENT_GENERATION_PROMPT = `You are generating a coherent multi-file implementation bundle.
@@ -55,15 +55,57 @@ export function asNonEmptyString(value: unknown): string | null {
 }
 
 export function parseJsonObject(raw: string): Record<string, unknown> | null {
-  let jsonStr = raw.trim()
-  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (codeBlockMatch?.[1]) jsonStr = codeBlockMatch[1].trim()
+  // Strategy 1: try direct parse — clean responses with no prose/fencing
+  const trimmed = raw.trim()
   try {
-    const parsed = JSON.parse(jsonStr) as unknown
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
+    const parsed = JSON.parse(trimmed) as unknown
+    if (isRecord(parsed)) return parsed
+  } catch { /* fall through */ }
+
+  // Strategy 2: extract from a code block, if present.
+  // Use a GREEDY match so that file contents that contain their own
+  // triple-backtick sequences (e.g. markdown inside a README artifact)
+  // don't truncate the capture at the first inner fence.
+  let candidate = trimmed
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*)```/)
+  if (codeBlockMatch?.[1]) {
+    candidate = codeBlockMatch[1].trim()
+    try {
+      const parsed = JSON.parse(candidate) as unknown
+      if (isRecord(parsed)) return parsed
+    } catch { /* fall through */ }
   }
+
+  // Strategy 3: balanced-brace extraction — handles responses with
+  // prose before/after the JSON, and truncated responses where the LLM
+  // hit the output-token ceiling mid-JSON (the most common failure mode).
+  // Finds the first '{' and walks characters tracking nesting depth,
+  // skipping over string contents so inner braces don't confuse the count.
+  const start = candidate.indexOf("{")
+  if (start === -1) return null
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i]
+    if (escape) { escape = false; continue }
+    if (ch === "\\") { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) {
+        try {
+          const parsed = JSON.parse(candidate.slice(start, i + 1)) as unknown
+          if (isRecord(parsed)) return parsed
+        } catch { /* truncated or structurally invalid — no recovery */ }
+        break
+      }
+    }
+  }
+
+  return null
 }
 
 export function parseArtifacts(value: unknown, diagnostics: string[]): CoherentSolutionArtifact[] {

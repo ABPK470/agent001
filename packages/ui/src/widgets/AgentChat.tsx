@@ -6,12 +6,43 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, ChevronDown, MessageSquare, Mic, MicOff, Paperclip, Send, User, X } from "lucide-react"
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { AskUserPrompt } from "../components/AskUserPrompt"
 import { SmartAnswer } from "../components/SmartAnswer"
+import { TypewriterAnswer } from "../components/TypewriterAnswer"
+import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
-import type { AgentDefinition, TraceEntry } from "../types"
+import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
+import { formatMs } from "../util"
+
+// ── User-safe failure detection ─────────────────────────────
+// These prefix sentinels are produced by the agent (platform-errors module)
+// when something went wrong that the user cannot fix. The chat must render
+// these as a small notice card with the run reference, NOT as a normal
+// agent answer. Keep these strings in lockstep with
+// packages/agent/src/planner/platform-errors.ts.
+const PLATFORM_UNCONFIGURED_PREFIX = "This request can\u2019t be completed right now."
+const GENERIC_FAILURE_PREFIX = "This request couldn\u2019t be completed."
+// Invisible marker prepended to LLM-polished failure replies (zero-width
+// joiner sequence — won't render but lets the UI flag the message as a
+// failure card with the run-ref chip).
+const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
+function isUserSafeFailureAnswer(text: string): boolean {
+  return text.startsWith(PLATFORM_UNCONFIGURED_PREFIX)
+    || text.startsWith(GENERIC_FAILURE_PREFIX)
+    || text.startsWith(POLISHED_FAILURE_MARKER)
+}
+function stripFailureMarkers(text: string): string {
+  if (text.startsWith(POLISHED_FAILURE_MARKER)) return text.slice(POLISHED_FAILURE_MARKER.length)
+  return text
+}
+function extractRunRef(text: string): string | null {
+  // Accept "Reference: <id>", "reference: <id>", or "include the reference: <id>"
+  const m = text.match(/reference:\s*([A-Za-z0-9._-]+)/i)
+  return m ? m[1] : null
+}
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -37,7 +68,7 @@ const TOOL_LABELS: Record<string, string> = {
   search_catalog:        "Searching catalog",
   inspect_definition:    "Inspecting definition",
   explore_mssql_schema:  "Exploring schema",
-  query_mssql:           "Running query",
+  query_mssql:           "Running SQL query",
   profile_data:          "Profiling data",
   discover_relationships:"Discovering relationships",
   read_file:             "Reading file",
@@ -52,6 +83,267 @@ const TOOL_LABELS: Record<string, string> = {
   think:                 "Thinking",
   ask_user:              "Asking user",
   browser_check:         "Checking browser",
+  sync_preview:          "Previewing sync",
+  sync_execute:          "Executing sync",
+  list_environments:     "Listing environments",
+  compare_catalogs:      "Comparing catalogs",
+}
+
+// Brief detail extractor — pulls the most human-readable arg from tool inputs
+function getToolDetail(tool: string, input: Record<string, unknown>): string | null {
+  switch (tool) {
+    case "query_mssql":
+    case "export_query_to_file": {
+      const q = String(input["query"] ?? "").trim()
+      if (!q) return null
+      // First meaningful line, stripped of leading whitespace, max 120 chars
+      const firstLine = q.replace(/\s+/g, " ").slice(0, 120)
+      return firstLine + (q.length > 120 ? "…" : "")
+    }
+    case "search_catalog":
+      return String(input["query"] ?? input["q"] ?? "")  || null
+    case "inspect_definition":
+      return String(input["name"] ?? input["objectName"] ?? "") || null
+    case "explore_mssql_schema":
+      return String(input["table"] ?? input["schema"] ?? "") || null
+    case "read_file":
+    case "write_file":
+    case "append_file":
+    case "replace_in_file":
+    case "list_directory":
+      return String(input["path"] ?? input["filePath"] ?? "") || null
+    case "search_files":
+      return String(input["pattern"] ?? input["query"] ?? "") || null
+    case "run_command":
+      return String(input["command"] ?? "").slice(0, 120) || null
+    case "fetch_url":
+    case "browse_web":
+      return String(input["url"] ?? "") || null
+    case "sync_preview":
+    case "sync_execute": {
+      const parts: string[] = []
+      if (input["planId"]) parts.push(`planId=${input["planId"]}`)
+      if (input["confirm"] !== undefined) parts.push(`confirm=${input["confirm"]}`)
+      if (input["entityType"]) parts.push(`${input["entityType"]}`)
+      if (input["entityId"]) parts.push(`#${input["entityId"]}`)
+      return parts.join(" ") || null
+    }
+    default:
+      // Fallback: first string-valued arg
+      for (const v of Object.values(input)) {
+        if (typeof v === "string" && v.trim()) return v.slice(0, 100)
+      }
+      return null
+  }
+}
+
+// Running tool call card — shows label, detail, elapsed timer, and expandable input
+function ToolCallCard({
+  tool,
+  input,
+  startedAt,
+  onCancel,
+}: {
+  tool: string
+  input: Record<string, unknown>
+  startedAt: string | null
+  onCancel?: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const t0 = startedAt ? new Date(startedAt).getTime() : Date.now()
+    const tick = () => setElapsed(Math.floor((Date.now() - t0) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+
+  const label = TOOL_LABELS[tool] ?? tool
+  const detail = getToolDetail(tool, input)
+  const hasInput = Object.keys(input).length > 0
+
+  return (
+    <div className="rounded-lg border border-border-subtle bg-elevated/40 overflow-hidden text-base">
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        {/* Animated spinner dot */}
+        <span className="relative flex shrink-0 h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-success/80" />
+        </span>
+
+        <span className="font-medium text-text flex-1 min-w-0 truncate">{label}</span>
+
+        <span className="flex items-center gap-1 text-text-muted font-mono shrink-0">
+          <Clock size={10} />
+          {elapsed}s
+        </span>
+
+        {onCancel && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCancel() }}
+            className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
+            title="Stop this tool call"
+          >
+            <Square size={9} fill="currentColor" />
+          </button>
+        )}
+
+        {hasInput && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="shrink-0 text-text-muted hover:text-text transition-colors"
+          >
+            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </button>
+        )}
+      </div>
+
+      {/* Detail line — SQL / path / query preview */}
+      {detail && !expanded && (
+        <div className="px-3 pb-2 font-mono text-base text-text-muted leading-snug border-t border-border-subtle pt-1.5 select-all cursor-text truncate">
+          {detail}
+        </div>
+      )}
+
+      {/* Expanded input */}
+      {expanded && (
+        <div className="border-t border-border-subtle px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
+          {Object.entries(input).map(([k, v]) => (
+            <div key={k} className="flex gap-2 min-w-0">
+              <span className="text-text-muted shrink-0 w-20 truncate">{k}</span>
+              <span className="font-mono text-text-secondary break-all leading-snug whitespace-pre-wrap">
+                {typeof v === "string" ? v : JSON.stringify(v)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Workspace changes card ─────────────────────────────────────────
+// Rendered inline in the chat when the agent produced isolated file changes.
+// Styled consistent with AskUserPrompt — same "action required" visual.
+function WorkspaceChangesCard({
+  runId,
+  onDismiss,
+}: {
+  runId: string
+  onDismiss: () => void
+}) {
+  const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [applied, setApplied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const upsertRun = useStore((s) => s.upsertRun)
+
+  useEffect(() => {
+    api.getRunWorkspaceDiff(runId)
+      .then(setDiff)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load changes"))
+  }, [runId])
+
+  async function handleApply() {
+    setApplying(true)
+    setError(null)
+    try {
+      await api.applyRunWorkspaceDiff(runId)
+      upsertRun({ id: runId, pendingWorkspaceChanges: 0 })
+      setApplied(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Apply failed")
+      setApplying(false)
+    }
+  }
+
+  if (applied) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-success/30 bg-success/5 text-base text-success">
+        <CheckCircle2 size={14} className="shrink-0" />
+        <span>Changes saved to workspace</span>
+      </div>
+    )
+  }
+
+  const total = diff?.total ?? 0
+  const isCreatedOnly = diff != null && diff.added.length > 0 && diff.modified.length === 0 && diff.deleted.length === 0
+
+  return (
+    <div
+      className="rounded-xl border border-success/40 bg-success/5 overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+        <span className="relative flex shrink-0 h-2 w-2">
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+        </span>
+        <FolderOpen size={13} className="text-success shrink-0" />
+        <span className="text-base font-semibold text-success uppercase tracking-wide">
+          {diff
+            ? `Agent ${isCreatedOnly ? "created" : "changed"} ${total} file${total !== 1 ? "s" : ""}`
+            : "Agent made file changes"}
+        </span>
+      </div>
+
+      {/* File list */}
+      {diff && (
+        <div className="px-3 pb-2 space-y-0.5 max-h-40 overflow-y-auto">
+          {diff.sourceRoot && (
+            <p className="text-xs text-text-muted font-mono mb-1.5 truncate" title={diff.sourceRoot}>
+              → {diff.sourceRoot}
+            </p>
+          )}
+          {diff.added.map((f) => (
+            <div key={f} className="flex items-center gap-1.5 text-xs font-mono">
+              <span className="text-success shrink-0 w-3 select-none">+</span>
+              <span className="text-text-secondary truncate">{f}</span>
+            </div>
+          ))}
+          {diff.modified.map((f) => (
+            <div key={f} className="flex items-center gap-1.5 text-xs font-mono">
+              <span className="text-accent shrink-0 w-3 select-none">~</span>
+              <span className="text-text-secondary truncate">{f}</span>
+            </div>
+          ))}
+          {diff.deleted.map((f) => (
+            <div key={f} className="flex items-center gap-1.5 text-xs font-mono">
+              <span className="text-error shrink-0 w-3 select-none">−</span>
+              <span className="text-text-muted line-through truncate">{f}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!diff && !error && (
+        <p className="px-3 pb-2 text-xs text-text-muted">Loading changes…</p>
+      )}
+      {error && (
+        <p className="px-3 pb-2 text-xs text-error">{error}</p>
+      )}
+
+      {/* Action buttons */}
+      <div className="px-3 pb-3 flex gap-2">
+        <button
+          className="flex-1 px-3 py-1.5 rounded-lg bg-success hover:bg-success/80 text-text text-base font-medium transition-colors disabled:opacity-40"
+          onClick={handleApply}
+          disabled={applying || !diff}
+        >
+          {applying ? "Saving…" : "Save to workspace"}
+        </button>
+        <button
+          className="px-3 py-1.5 rounded-lg border border-border text-base text-text-muted hover:text-text hover:border-border-strong transition-colors"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function AgentChat() {
@@ -66,32 +358,134 @@ export function AgentChat() {
   const setActiveRun = useStore((s) => s.setActiveRun)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
+  const pendingInput = useStore((s) => s.pendingInput)
+  const clearPendingInput = useStore((s) => s.clearPendingInput)
+  const dismissedWorkspaceDiffRunIds = useStore((s) => s.dismissedWorkspaceDiffRunIds)
+  const dismissWorkspaceDiff = useStore((s) => s.dismissWorkspaceDiff)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const messagesInnerRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { width: rootWidth } = useContainerSize(rootRef)
+  const compact = rootWidth > 0 && rootWidth < 420
 
   const steps = useStore((s) => s.steps)
-  const trace = useStore((s) => s.trace)
-  const streamingAnswer = useStore((s) => s.streamingAnswer)
+  const liveUsage = useStore((s) => s.liveUsage)
+  const executingToolCalls = useStore((s) => s.executingToolCalls)
   const activeRun = runs.find((r) => r.id === activeRunId)
+  const trace = activeRun?.trace ?? []
+  const streamingAnswer = activeRun?.streamingAnswer ?? ""
+  const coherentStream = activeRun?.coherentStream ?? ""
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
-  const currentActivity = useMemo(() => {
-    if (!activeRun || activeRun.status === "pending") return null
-    if (activeRun.status === "planning") return "Planning"
-    const running = [...steps].reverse().find((s) => s.status === "running")
-    if (running) return TOOL_LABELS[running.action] ?? running.name
+  // Currently-running step for progress display
+  const runningStep = useMemo(() => {
+    return [...steps].reverse().find((s) => s.status === "running") ?? null
+  }, [steps])
+
+  // Recent tool trail — last tool calls grouped by consecutive same tool (loop detection)
+  const recentToolTrail = useMemo(() => {
+    type ToolCallEntry = Extract<TraceEntry, { kind: "tool-call" }>
+    const toolEntries = trace.filter((e): e is ToolCallEntry => e.kind === "tool-call")
+    const last = toolEntries.slice(-12)
+    const grouped: { tool: string; label: string; count: number }[] = []
+    for (const e of last) {
+      const prev = grouped[grouped.length - 1]
+      if (prev?.tool === e.tool) { prev.count++ }
+      else grouped.push({ tool: e.tool, label: TOOL_LABELS[e.tool] ?? e.tool, count: 1 })
+    }
+    return grouped.slice(-5)
+  }, [trace])
+
+  // Latest iteration from trace
+  const latestIteration = useMemo(() => {
+    type IterEntry = Extract<TraceEntry, { kind: "iteration" }>
     for (let i = trace.length - 1; i >= 0; i--) {
-      const e = trace[i] as TraceEntry
-      if (e.kind === "tool-call") return TOOL_LABELS[e.tool] ?? e.tool
-      if (e.kind === "iteration") return `iter ${e.current} / ${e.max}`
-      if (e.kind === "delegation-start") return "Delegating to sub-agent"
+      const e = trace[i]
+      if (e?.kind === "iteration") return e as IterEntry
     }
     return null
-  }, [activeRun, steps, trace])
+  }, [trace])
+
+  // Elapsed timer from run start — ticks every second while running
+  const [totalElapsed, setTotalElapsed] = useState(0)
+  useEffect(() => {
+    if (!activeRun || !isRunning) { setTotalElapsed(0); return }
+    const t0 = new Date(activeRun.createdAt).getTime()
+    const tick = () => setTotalElapsed(Math.floor((Date.now() - t0) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [activeRun?.id, isRunning])
+
+  // currentPhase — tracks what the agent is doing RIGHT NOW by scanning recent trace events.
+  // Returned string is shown (1) as the "bouncing dots" label before any steps appear and
+  // (2) as a persistent footer line below the step list card while the run is active.
+  const currentPhase = useMemo((): string | null => {
+    if (!activeRun || activeRun.status === "pending") return null
+    if (activeRun.status === "planning" && trace.length === 0) return "Plan"
+
+    // Track ended planner-pipeline steps so we can skip them when scanning backwards
+    const endedSteps = new Set<string>()
+
+    for (let i = trace.length - 1; i >= 0; i--) {
+      const e = trace[i] as TraceEntry
+
+      // Pipeline step lifecycle
+      if (e.kind === "planner-step-end") { endedSteps.add(e.stepName); continue }
+      if (e.kind === "planner-step-start" && !endedSteps.has(e.stepName)) {
+        // Convert snake_case step name to human label: "blueprint_chess_contract" → "Generating blueprint chess contract"
+        const label = String(e.stepName).replace(/_/g, " ")
+        return `Generating ${label}`
+      }
+
+      // Planner repair / verification
+      if (e.kind === "planner-repair-plan") return `Repairing (attempt ${e.attempt})`
+      if (e.kind === "planner-verification") return "Verifying"
+      if (e.kind === "planner-retry") return `Retry #${e.attempt}`
+      if (e.kind === "planner-escalation") return "Escalating"
+
+      // Coherent generation phases
+      if (e.kind === "coherent-generation-repair-needed") return `Repairing — ${e.issueCount} issue${e.issueCount !== 1 ? "s" : ""}`
+      if (e.kind === "coherent-generation-verified") return "Verifying"
+      if (e.kind === "coherent-generation-materialized") return "Writing files"
+      if (e.kind === "coherent-generation-bundle") return `Bundling ${e.artifactCount} file${e.artifactCount !== 1 ? "s" : ""}`
+      if (e.kind === "coherent-generation-start") return "Generating"
+
+      // Planner pipeline phases
+      if (e.kind === "planner-pipeline-start") return "Pipeline"
+      if (e.kind === "planner-plan-generated") return `Plan — ${e.stepCount} step${e.stepCount !== 1 ? "s" : ""}`
+      if (e.kind === "planner-generating") return "Generating plan"
+      if (e.kind === "planning_preflight") return "Plan"
+
+      // Delegation
+      if (e.kind === "planner-delegation-start") return e.stepName
+      if (e.kind === "delegation-start") return "Delegating"
+
+      // Direct tool loop — use the tool label as activity hint, then stop scanning further
+      if (e.kind === "tool-call") return TOOL_LABELS[e.tool] ?? e.tool
+      if (e.kind === "iteration") break
+    }
+
+    if (runningStep) return TOOL_LABELS[runningStep.action] ?? runningStep.name
+    return activeRun.status === "planning" ? "Planning" : null
+  }, [activeRun, runningStep, trace])
+
+  async function handleCancel() {
+    if (!activeRunId) return
+    try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
+  }
+
+  async function handleRespond(response: string) {
+    if (!pendingInput) return
+    clearPendingInput()
+    try { await api.respondToRun(pendingInput.runId, response) } catch { /* ignore */ }
+  }
 
   // Load agents on mount
   useEffect(() => {
@@ -111,7 +505,31 @@ export function AgentChat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: streamingAnswer ? "instant" : "smooth" })
-  }, [runs, streamingAnswer])
+  }, [runs, streamingAnswer, steps])
+
+  // ResizeObserver: auto-scroll whenever the message content grows (new tool cards,
+  // TypewriterAnswer word reveals, etc.) — but only when already near the bottom.
+  useEffect(() => {
+    const inner = messagesInnerRef.current
+    const outer = scrollContainerRef.current
+    if (!inner || !outer) return
+    const ro = new ResizeObserver(() => {
+      const distFromBottom = outer.scrollHeight - outer.scrollTop - outer.clientHeight
+      if (distFromBottom < 200) {
+        bottomRef.current?.scrollIntoView({ behavior: "instant" })
+      }
+    })
+    ro.observe(inner)
+    return () => ro.disconnect()
+  }, [])
+
+  // Scroll to bottom on initial mount (after DOM paints)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "instant" })
+    }, 100)
+    return () => clearTimeout(t)
+  }, [])
 
   // Cleanup recognition on unmount
   useEffect(() => {
@@ -220,54 +638,85 @@ export function AgentChat() {
   const recentRuns = runs.slice(0, 20)
 
   return (
-    <div className="flex flex-col h-full gap-2">
+    <div ref={rootRef} className="flex flex-col h-full gap-2">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto space-y-3 py-1">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={messagesInnerRef} className="space-y-3 py-1">
         {recentRuns.length === 0 && (
           <div className="text-text-muted text-sm text-center pt-8">
-            Send a goal to start the agent
+            {/* Hi there! I'm MI:A */}
           </div>
         )}
 
         {[...recentRuns].reverse().map((run) => (
           <div
             key={run.id}
-            className={`space-y-2 cursor-pointer rounded-lg p-2 transition-colors ${
-              run.id === activeRunId ? "bg-elevated/50" : "hover:bg-elevated/25"
-            }`}
-            onClick={() => setActiveRun(run.id)}
+            className="space-y-2 rounded-lg p-2"
           >
             {/* Goal (user message) — right-aligned */}
             <div className="flex justify-end">
-              <div className="flex items-start gap-2 max-w-[85%]">
-                <span className="text-text text-sm bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">{run.goal}</span>
+              <div className="flex items-start gap-2 max-w-[95%]">
+                <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">{run.goal}</span>
                 <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-accent/20">
                   <User size={14} className="text-accent" />
                 </div>
               </div>
             </div>
 
-            {/* Answer (agent response) — left-aligned */}
+            {/* Answer (agent response) — left-aligned. User-safe failure
+                messages get a distinct, smaller notice style with the run
+                reference highlighted so the user can copy/share it. */}
             {run.answer && (
-              <div className="flex items-start gap-2 w-full">
-                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
-                  <MessageSquare size={14} className="text-success" />
+              isUserSafeFailureAnswer(run.answer) ? (() => {
+                const ref = extractRunRef(run.answer)
+                // Strip invisible marker + the trailing "Reference: <id>"
+                // line so we render only the model's friendly prose.
+                const stripped = stripFailureMarkers(run.answer)
+                const body = (ref
+                  ? stripped.replace(/\n*\s*Reference:\s*[A-Za-z0-9._-]+\s*$/i, "")
+                  : stripped
+                ).trim()
+                return (
+                  <div className="flex items-start gap-2 w-full">
+                    <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-warning/20">
+                      <ShieldAlert size={14} className="text-warning" />
+                    </div>
+                    <div className="flex-1 min-w-0 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                      <div className="text-text text-base leading-relaxed whitespace-pre-wrap">
+                        {body}
+                      </div>
+                      {ref && (
+                        <div className="mt-2 inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-2 py-1 font-mono text-base text-accent select-all">
+                          <span className="text-accent/60">ref</span>
+                          <span className="text-text">{ref}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })() : (
+                <div className="flex items-start gap-2 w-full">
+                  <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
+                    <MessageSquare size={14} className="text-success" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {run.id === activeRunId && !runningStep && executingToolCalls.size === 0
+                      ? <TypewriterAnswer text={run.answer} streaming={run.status === "running" || run.status === "planning"} />
+                      : <SmartAnswer text={run.answer} />
+                    }
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <SmartAnswer text={run.answer} />
-                </div>
-              </div>
+              )
             )}
 
-            {/* Streaming answer — shown live for the active run while it runs */}
-            {run.id === activeRunId && !run.answer && streamingAnswer && (
-              <div className="flex items-start gap-2 w-full">
-                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
-                  <MessageSquare size={14} className="text-success" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <SmartAnswer text={streamingAnswer} streaming />
-                </div>
+            {/* Streaming answer — live preview while the agent is generating.
+                Only shown when there are no active tool calls — during tool use
+                the agent streams internal reasoning/markdown that looks garbled.
+                We only reveal streaming text when the agent is in "pure answer"
+                mode (no running step, no executing tool calls). */}
+            {run.id === activeRunId && !run.answer && streamingAnswer && !runningStep && executingToolCalls.size === 0 && (
+              <div className="flex-1 min-w-0">
+                <TypewriterAnswer text={streamingAnswer} streaming />
               </div>
             )}
 
@@ -275,35 +724,177 @@ export function AgentChat() {
             {run.error && (
               <div className="flex items-start gap-2">
                 <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
-                <span className="text-error/80 text-sm">{run.error}</span>
+                <span className="text-error/80 text-base">{run.error}</span>
               </div>
             )}
 
-            {/* Progress indicator — shown while agent is working and not yet streaming text */}
-            {(run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && !(run.id === activeRunId && streamingAnswer) && (
-              <div className="flex items-center gap-2">
-                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
-                  <MessageSquare size={14} className="text-success" />
+            {/* Pending workspace file changes — accept/reject card (like ask_user) */}
+            {(run.pendingWorkspaceChanges ?? 0) > 0 && !dismissedWorkspaceDiffRunIds.has(run.id) && (
+              <WorkspaceChangesCard
+                runId={run.id}
+                onDismiss={() => dismissWorkspaceDiff(run.id)}
+              />
+            )}
+
+            {/* Rich progress — shown while agent is working and no answer yet. */}
+            {run.id === activeRunId && (run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && (
+              <div className="flex items-start gap-2 w-full">
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  {run.status === "pending" ? (
+                    <span className="text-base text-text-muted">Queued…</span>
+                  ) : pendingInput?.runId === run.id ? (
+                    /* ask_user is active — show the response prompt */
+                    <AskUserPrompt
+                      question={pendingInput.question}
+                      options={pendingInput.options}
+                      sensitive={pendingInput.sensitive}
+                      onSubmit={handleRespond}
+                    />
+                  ) : (
+                    <>
+                      {/* Copilot-style inline step list — shows each tool call as a
+                          row with its status icon, label, and detail. Running step
+                          gets a spinner + cancel; completed steps show a checkmark.
+                          Matches GitHub Copilot Chat's "Used tools" inline display. */}
+                      {steps.length > 0 ? (
+                        <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
+                          <div className="divide-y divide-border-subtle">
+                            {steps.slice(-8).map((step) => {
+                              const isRunning = step.status === "running"
+                              const isFailed = step.status === "failed"
+                              const label = TOOL_LABELS[step.action] ?? step.action
+                              const detail = getToolDetail(step.action, step.input)
+                              const duration = step.startedAt && step.completedAt
+                                ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
+                                : null
+                              const tc = isRunning
+                                ? [...executingToolCalls.values()].find((t) => t.toolName === step.action)
+                                : null
+                              return (
+                                <div
+                                  key={step.id}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 ${isRunning ? "bg-overlay-1" : ""}`}
+                                >
+                                  {/* Status icon */}
+                                  {isRunning ? (
+                                    <Loader2 size={12} className="shrink-0 text-accent animate-spin" />
+                                  ) : isFailed ? (
+                                    <XCircle size={12} className="shrink-0 text-error" />
+                                  ) : (
+                                    <CheckCircle2 size={12} className="shrink-0 text-success/50" />
+                                  )}
+
+                                  {/* Tool label */}
+                                  <span className={`text-base shrink-0 ${isRunning ? "text-text" : "text-text-muted"}`}>
+                                    {label}
+                                  </span>
+
+                                  {/* Brief detail — path, query, command, etc. */}
+                                  {detail ? (
+                                    <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
+                                      {detail}
+                                    </span>
+                                  ) : (
+                                    <span className="flex-1" />
+                                  )}
+
+                                  {/* Duration (completed) or cancel (running) */}
+                                  {duration !== null && !isRunning && (
+                                    <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
+                                  )}
+                                  {isRunning && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (tc) {
+                                          api.killToolCall(activeRunId!, tc.toolCallId, "Cancelled by user").catch(() => {})
+                                        } else {
+                                          handleCancel()
+                                        }
+                                      }}
+                                      className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
+                                      title="Stop this tool call"
+                                    >
+                                      <Square size={8} fill="currentColor" />
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        /* No steps yet — show phase label with animated dots */
+                        <div className="flex flex-col gap-1.5 py-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:0ms]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:150ms]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:300ms]" />
+                            <span className="text-base text-text-muted font-mono">
+                              {currentPhase ?? (run.status === "planning" ? "Plan" : "Thinking")}
+                            </span>
+                          </div>
+                          {coherentStream && (
+                            <div className="ml-6 max-w-xs overflow-hidden">
+                              <span className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-tight">
+                                {coherentStream.slice(-120)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Active phase label — current pipeline step name or macro phase.
+                          Shown below the step list so the user always knows WHY the
+                          tool calls are happening (e.g. "Generating blueprint chess contract"). */}
+                      {currentPhase && steps.length > 0 && (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="relative flex shrink-0 h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-40" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent/60" />
+                            </span>
+                            <span className="text-xs text-text-muted font-mono truncate">{currentPhase}</span>
+                          </div>
+                          {coherentStream && (
+                            <div className="ml-3 max-w-xs overflow-hidden">
+                              <span className="text-xs text-text-muted/50 font-mono whitespace-pre-wrap break-all leading-tight">
+                                {coherentStream.slice(-120)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Live stats row — iteration · tokens · elapsed */}
+                      {(latestIteration || liveUsage.totalTokens > 0 || totalElapsed > 0) && (
+                        <div className="flex items-center gap-3 text-xs text-text-muted font-mono opacity-70 pt-0.5">
+                          {latestIteration && (
+                            <span>iter {latestIteration.current}/{latestIteration.max}</span>
+                          )}
+                          {liveUsage.totalTokens > 0 && (
+                            <span>{liveUsage.totalTokens.toLocaleString()} tk</span>
+                          )}
+                          {liveUsage.llmCalls > 0 && (
+                            <span>{liveUsage.llmCalls} LLM calls</span>
+                          )}
+                          {totalElapsed > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              <Clock size={9} />
+                              {totalElapsed}s
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                {run.status === "pending" ? (
-                  <span className="text-[12px] text-text-muted">Queued</span>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
-                    </div>
-                    <span className="text-[12px] text-text-muted font-mono truncate max-w-[220px]">
-                      {run.id === activeRunId && currentActivity ? currentActivity : run.status === "planning" ? "Planning" : "Thinking"}
-                    </span>
-                  </>
-                )}
               </div>
             )}
           </div>
         ))}
         <div ref={bottomRef} />
+      </div>
       </div>
 
       {/* Agent picker + Input */}
@@ -312,7 +903,7 @@ export function AgentChat() {
         {agents.length > 1 && (
           <div className="relative" ref={pickerRef}>
             <button
-              className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary transition-colors"
+              className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
               onClick={() => setPickerOpen(!pickerOpen)}
             >
               <Bot size={12} className="text-accent" />
@@ -321,14 +912,14 @@ export function AgentChat() {
             </button>
 
             {pickerOpen && (
-              <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-white/[0.08] rounded-lg shadow-xl z-10 overflow-hidden">
+              <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-border-subtle rounded-lg shadow-xl z-10 overflow-hidden">
                 {agents.map((agent) => (
                   <button
                     key={agent.id}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm transition-colors ${
                       agent.id === selectedAgent?.id
                         ? "bg-accent/10 text-accent"
-                        : "text-text-secondary hover:bg-white/[0.04] hover:text-text"
+                        : "text-text-secondary hover:bg-overlay-2 hover:text-text"
                     }`}
                     onClick={() => {
                       setSelectedAgent(agent.id)
@@ -339,7 +930,7 @@ export function AgentChat() {
                     <div className="min-w-0">
                       <div className="truncate">{agent.name}</div>
                       {agent.description && (
-                        <div className="text-[11px] text-text-muted truncate">{agent.description}</div>
+                        <div className="text-sm text-text-muted truncate">{agent.description}</div>
                       )}
                     </div>
                   </button>
@@ -355,7 +946,7 @@ export function AgentChat() {
             {attachments.map((att, i) => (
               <span
                 key={i}
-                className="flex items-center gap-1 text-[11px] bg-elevated text-text-secondary rounded-md pl-2 pr-1 py-0.5 max-w-[180px]"
+                className="flex items-center gap-1 text-sm bg-elevated text-text-secondary rounded-md pl-2 pr-1 py-0.5 max-w-[180px]"
               >
                 <Paperclip size={10} className="shrink-0 text-accent" />
                 <span className="truncate" title={att.name}>{att.name}</span>
@@ -378,7 +969,12 @@ export function AgentChat() {
             rows={1}
             className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all resize-none overflow-hidden"
             style={{ maxHeight: "9rem" }}
-            placeholder={listening ? "Listening..." : isRunning ? "Agent is working..." : "Enter a goal..."}
+            placeholder={
+              pendingInput ? "Respond in the prompt above ↑" :
+              listening ? "Listening..." :
+              isRunning ? "Agent is working..." :
+              "Enter a goal..."
+            }
             value={input}
             onChange={(e) => {
               setInput(e.target.value)
@@ -389,7 +985,7 @@ export function AgentChat() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
             }}
-            disabled={sending}
+            disabled={sending || !!pendingInput}
           />
           {/* Hidden file input — triggered by Paperclip button */}
           <input
@@ -400,7 +996,7 @@ export function AgentChat() {
             onChange={handleFileChange}
           />
           <button
-            className="shrink-0 flex items-center justify-center w-11 h-11 bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors"
+            className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors`}
             onClick={() => fileInputRef.current?.click()}
             title="Attach file"
           >
@@ -408,7 +1004,7 @@ export function AgentChat() {
           </button>
           {SpeechRecognition && (
             <button
-              className={`shrink-0 flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${
+              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} rounded-lg transition-colors ${
                 listening
                   ? "bg-error/20 text-error hover:bg-error/30"
                   : "bg-elevated text-text-muted hover:text-text hover:bg-elevated/80"
@@ -419,13 +1015,24 @@ export function AgentChat() {
               {listening ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
           )}
-          <button
-            className="shrink-0 flex items-center justify-center w-11 h-11 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-40"
-            onClick={handleSend}
-            disabled={sending || (!input.trim() && attachments.length === 0)}
-          >
-            <Send size={16} />
-          </button>
+          {/* Cancel (while running) / Send (idle) */}
+          {isRunning ? (
+            <button
+              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-error/15 hover:bg-error/25 text-error rounded-lg transition-colors`}
+              onClick={handleCancel}
+              title="Stop agent"
+            >
+              <Square size={16} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-accent hover:bg-accent-hover text-text rounded-lg transition-colors disabled:opacity-40`}
+              onClick={handleSend}
+              disabled={sending || (!input.trim() && attachments.length === 0)}
+            >
+              <Send size={16} />
+            </button>
+          )}
         </div>
       </div>
     </div>

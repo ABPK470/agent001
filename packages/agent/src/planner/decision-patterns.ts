@@ -15,9 +15,16 @@
 export const MULTI_STEP_RE =
   /\b(?:first|then|next|after that|step \d|phase \d|\d+\.\s|\bfinally\b)/i
 
-/** Tool diversity: mentions different tool categories */
+/**
+ * Tool diversity: mentions construction/execution verbs that imply multiple tool categories.
+ *
+ * Intentionally excludes "test" and "check" — both are extremely common nouns in
+ * domain-specific data questions ("test rules", "test cases", "check constraints",
+ * "health check") and cause false-positive planner routing when they appear in
+ * conversational DB queries. Use VERIFICATION_RE for test/check intent detection.
+ */
 export const TOOL_DIVERSITY_RE =
-  /\b(?:create|write|build|implement|test|verify|check|run|deploy|configure|install)\b/i
+  /\b(?:create|write|build|implement|verify|run|deploy|configure|install)\b/i
 
 /**
  * Delegation cue: multiple independent components or parallel work.
@@ -74,6 +81,34 @@ export const PLAN_CREATION_RE =
   /\b(?:write|create|draft|make)\s+(?:a\s+)?(?:plan|spec|proposal|document|outline|summary|report|readme|changelog)\b/i
 
 /**
+ * Conversational data/metadata query: "are there any X created by Y",
+ * "which X was modified by Z", "find X authored by W", etc.
+ *
+ * These are single-shot lookup tasks (run a DB query / git search and return results).
+ * Routing them to the full planner always produces fictional tool names — the planner
+ * has no way to introspect live schema at plan-generation time.
+ *
+ * Two-part match:
+ *   (a) Question or imperative opener: "are there any", "which", "do we have", "find"
+ *   (b) Author / modifier filter: "[action] by" — "created by", "modified by", etc.
+ *       The [\s\S]{0,200} bridge allows "created or modified by" multi-word filters.
+ *
+ * Must be checked BEFORE the scoring gate so that conversational questions with
+ * incidental signals (e.g. "test" as a noun, prior tool history) never reach the
+ * shouldPlan threshold path.
+ */
+export const CONVERSATIONAL_DATA_QUERY_RE =
+  /\b(?:are\s+there\s+(?:any|some)|do\s+(?:any|some|we\s+have)|which\b|find\b|show\s+me\b)\b[\s\S]{0,200}\b(?:created|modified|changed|updated|authored|owned|added|deleted)\b[\s\S]{0,60}\bby\b/i
+
+/**
+ * Run-history / execution-history lookup: questions like "what was the first
+ * failed run", "show the latest failed pipeline", etc. These are single-shot
+ * investigation tasks against runtime logs and should never enter planner setup.
+ */
+export const RUN_HISTORY_QUERY_RE =
+  /\b(?:what|which|show|list|find)\b[\s\S]{0,120}\b(?:first|latest|last|earliest|recent|oldest|failed|failure|successful|status)\b[\s\S]{0,120}\b(?:run|runs|pipeline|pipelines|job|jobs|execution|executions)\b/i
+
+/**
  * Database investigation task: explore schema structure, find views/joins/tables,
  * analyze performance, inspect definitions — pure tool-call work that produces
  * answers, not code files.
@@ -104,6 +139,15 @@ export const DATA_FETCH_PIPELINE_RE =
 /** High-throughput direct coding: single-artifact implementation in one file */
 export const SINGLE_ARTIFACT_BURST_RE =
   /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b|\b(?:in|into)\s+[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/i
+
+/**
+ * Simple function/script write: "create/implement/write a factorial function",
+ * "write a sorting algorithm", etc. These are single-file, single-concern tasks
+ * that the parent agent can complete inline — planner decomposition adds cost
+ * with no benefit.
+ */
+export const SIMPLE_FUNCTION_WRITE_RE =
+  /^\s*(?:create|implement|write|add|make)\b[^\n]{0,80}\b(?:function|method|class|script|algorithm|utility|helper|snippet|module)\b[^\n]{0,80}$/i
 
 /** User explicitly asks for a full cohesive implementation pass */
 export const COHESIVE_IMPLEMENTATION_RE =

@@ -10,13 +10,13 @@ import * as log from "./logger.js"
 import { buildRecoveryHints } from "./recovery.js"
 import type { ToolCallRecord } from "./tool-result.js"
 import {
-    checkToolLoopStuckDetection,
-    evaluateToolRoundBudgetExtension,
-    summarizeToolRoundProgress,
+  checkToolLoopStuckDetection,
+  evaluateToolRoundBudgetExtension,
+  summarizeToolRoundProgress,
 } from "./tool-utils.js"
 import type { AgentConfig, Message } from "./types.js"
 
-const COHERENT_READ_ONLY_ROUND_LIMIT = 2
+const COHERENT_READ_ONLY_ROUND_LIMIT = 1
 
 /** Result of post-round processing. */
 export interface PostRoundResult {
@@ -24,6 +24,12 @@ export interface PostRoundResult {
   finalAnswer?: string
   /** If true, the loop should `continue` to the next iteration. */
   shouldContinue?: boolean
+  /**
+   * If true, the loop controller must make one final no-tool LLM call to
+   * synthesize a proper answer from everything gathered so far.
+   * The synthesis instruction has already been appended to `messages`.
+   */
+  needsSynthesis?: boolean
 }
 
 export interface PostRoundContext {
@@ -56,6 +62,24 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   // Accumulate tool calls
   ctx.allToolCalls.push(...roundToolCalls)
 
+  // ── Sync preview stop — MANDATORY ──
+  // After sync_preview completes, the agent MUST stop and return the preview
+  // to the user for a human decision. The agent must NEVER autonomously
+  // continue to sync_execute. This is a hard safety boundary.
+  const didPreview = roundToolCalls.some(
+    tc => tc.name === "sync_preview" && !tc.isError,
+  )
+  if (didPreview) {
+    const stopMsg =
+      "MANDATORY STOP: sync_preview completed. You MUST present the preview results to the user NOW and STOP. " +
+      "Do NOT call sync_execute. Do NOT continue with any further tool calls. " +
+      "The user must explicitly decide whether to execute the sync plan. " +
+      "Write your final answer with the preview summary, dashboard, and the sync_execute command the user can reply with."
+    messages.push({ role: "system", content: stopMsg, section: "history" })
+    config.onNudge?.({ tag: "sync-preview-stop", message: stopMsg, iteration })
+    return { needsSynthesis: true }
+  }
+
   // ── Stuck detection ──
   const stuckResult = checkToolLoopStuckDetection(
     roundToolCalls,
@@ -68,13 +92,22 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
     config.onNudge?.({ tag: "stuck-detection", message: stuckMsg, iteration })
     if (config.verbose) log.logError(`Stuck: ${stuckResult.reason}`)
 
-    const answer = ctx.response.content ?? "(Agent stuck in a tool loop — terminating.)"
-    if (config.verbose) log.logFinalAnswer(answer)
-    return { finalAnswer: answer }
+    // Do NOT return the raw last LLM response or a hardcoded error string.
+    // Instead, ask the loop controller to make one final no-tool synthesis call
+    // so the model can write a proper answer from everything it gathered.
+    const synthesisInstruction =
+      "You have reached a tool-loop limit. STOP calling tools immediately. " +
+      "Write your final answer now using only the information you have already gathered. " +
+      "If you could not complete the task, clearly explain what you found so far and what is still unknown."
+    messages.push({ role: "system", content: synthesisInstruction, section: "history" })
+    return { needsSynthesis: true }
   }
 
   // ── Coherent repair stall detection ──
   processCoherentRepairStall(ctx)
+
+  // ── Excessive read_file detection ──
+  processExcessiveReadFiles(ctx)
 
   // ── Round progress + budget extension ──
   processRoundBudgetExtension(ctx)
@@ -118,7 +151,7 @@ function processCoherentRepairStall(ctx: PostRoundContext): void {
   state.coherentRepairReadOnlyRounds = 0
   const repairFiles = ce.bundle.artifacts.map(a => a.path).join(", ")
   const spinMsg =
-    `REPAIR STALL DETECTED: You have read files ${COHERENT_READ_ONLY_ROUND_LIMIT} iterations in a row without writing anything. ` +
+    `REPAIR STALL DETECTED: You read files without writing anything in the previous iteration. ` +
     `Stop reading and write the fix NOW.\n` +
     `Files in scope: ${repairFiles}\n` +
     `REQUIRED NEXT ACTION: call write_file (or replace_in_file) to apply the fix. ` +
@@ -127,6 +160,83 @@ function processCoherentRepairStall(ctx: PostRoundContext): void {
   messages.push({ role: "system", content: spinMsg, section: "history" })
   config.onNudge?.({ tag: "coherent-repair-stall", message: spinMsg, iteration })
   if (config.verbose) log.logError(`Coherent repair stall at iteration ${iteration}`)
+}
+
+/**
+ * Fires a nudge when the agent reads files excessively — either within a
+ * single round (>4 reads) OR cumulatively across rounds without writing
+ * (sandwich-read pattern: same file re-read via both relative and absolute
+ * sandbox path many times while no writes happen).
+ *
+ * Two thresholds:
+ *  - Per-round: > 4 reads in one round → immediate nudge
+ *  - Cumulative: any single file (by basename) read > 5 times total → nudge
+ *    (resets on any successful write_file / replace_in_file)
+ */
+function processExcessiveReadFiles(ctx: PostRoundContext): void {
+  const { roundToolCalls, state, messages, config, iteration } = ctx
+
+  const reads = roundToolCalls.filter(tc => tc.name === "read_file" && !tc.isError)
+  if (reads.length === 0) return
+
+  // Accumulate cumulative read counts per basename.
+  // Reset on write so the counter tracks reads *without writes*.
+  const roundHadWrite = roundToolCalls.some(
+    tc => !tc.isError && (tc.name === "write_file" || tc.name === "replace_in_file"),
+  )
+  if (roundHadWrite) {
+    // Writing is progress — clear the slate
+    state.cumulativeReadFileHistory.clear()
+  }
+
+  const pathsRead = reads.map(tc => {
+    const p = String(tc.args["path"] ?? "")
+    return p.split(/[\\/]/).pop() ?? p
+  })
+
+  for (const basename of pathsRead) {
+    state.cumulativeReadFileHistory.set(
+      basename,
+      (state.cumulativeReadFileHistory.get(basename) ?? 0) + 1,
+    )
+  }
+
+  // Per-round threshold: > 4 reads in this single round
+  if (reads.length > 4) {
+    const uniqueFiles = new Set(pathsRead)
+    const msg =
+      `OVER-READING: You called read_file ${reads.length} times this iteration` +
+      (uniqueFiles.size < reads.length
+        ? ` (reading ${reads.length - uniqueFiles.size} duplicate file(s): ${
+            pathsRead.filter((p, i) => pathsRead.indexOf(p) !== i).join(", ")})`
+        : "") +
+      `. Stop re-reading files — you already have the content you need. ` +
+      `Do NOT read absolute sandbox/temp paths; use relative project paths only. ` +
+      `Proceed to write your next change.`
+    messages.push({ role: "system", content: msg, section: "history" })
+    config.onNudge?.({ tag: "excessive-reads", message: msg, iteration })
+    if (config.verbose) log.logError(`Excessive reads: ${reads.length} read_file calls at iteration ${iteration}`)
+    return
+  }
+
+  // Cumulative threshold: any file read > 5 times without a write in between
+  const overReadFiles = [...state.cumulativeReadFileHistory.entries()]
+    .filter(([, count]) => count > 5)
+    .map(([basename]) => basename)
+
+  if (overReadFiles.length > 0) {
+    const msg =
+      `REPEATED READS WITHOUT PROGRESS: You have read ${overReadFiles.map(f => `"${f}"`).join(", ")} ` +
+      `more than 5 times across iterations without writing anything. ` +
+      `Reading the same file repeatedly via different paths (relative vs absolute /var/folders/...) ` +
+      `gives you the same truncated view every time. ` +
+      `You already have all the file content available. Stop reading and write your fix now.`
+    messages.push({ role: "system", content: msg, section: "history" })
+    config.onNudge?.({ tag: "excessive-reads-cumulative", message: msg, iteration })
+    if (config.verbose) log.logError(`Cumulative excessive reads: ${overReadFiles.join(", ")} at iteration ${iteration}`)
+    // Reset so the nudge doesn't fire every iteration after this
+    for (const f of overReadFiles) state.cumulativeReadFileHistory.delete(f)
+  }
 }
 
 function processRoundBudgetExtension(ctx: PostRoundContext): void {

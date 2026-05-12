@@ -5,8 +5,15 @@ import {
     completeRun,
     createDelegateTools,
     createRun,
+    detectInternalFailure,
     failRun,
+    fillRunReference,
     governTool,
+    isPlatformUnconfiguredAnswer,
+    isUserSafeFailureAnswer,
+    mapFailureKindForPolish,
+    markPolishedFailure,
+    polishFailureForUser,
     runCompleted,
     runFailed,
     runStarted,
@@ -17,28 +24,31 @@ import {
     spawnChildForPlan,
     startPlanning,
     startRunning,
+    synthesizeGenericFailureAnswer,
     type DelegateContext,
     type EngineServices,
     type Message,
     type ResolvedAgent,
     type RunState,
     type Tool,
-    type ToolKillManager,
+    type ToolKillManager
 } from "@agent001/agent"
 import { AgentBus, createBusTools } from "../agent-bus.js"
 import * as db from "../db.js"
 import { resetEffectSeq } from "../effects.js"
+import { broadcast } from "../event-broadcaster.js"
 import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory.js"
 import type { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
-import { resolveTools } from "../tools.js"
-import { broadcast } from "../ws.js"
+import { getAllTools } from "../tools.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
 import { buildSystemMessages } from "./system-messages.js"
 import type { OrchestratorRunCtx } from "./types.js"
 import { captureRunWorkspaceDiff, withToolWorkspaceContext, wrapWithEffects } from "./workspace-effects.js"
+
+const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
 // ── Run executor ──────────────────────────────────────────────────
 
@@ -78,7 +88,7 @@ export async function executeRunImpl(
   startPlanning(run)
   startRunning(run, [])
 
-  // Wire domain events → WebSocket
+  // Wire domain events → SEE
   const boundSaveTrace = (rId: string, entry: Record<string, unknown>) => saveTrace(ctx.activeRuns, rId, entry)
   wireEventBroadcasting(services, runId, run, boundSaveTrace, createNotification)
 
@@ -94,8 +104,13 @@ export async function executeRunImpl(
   const withCtx = <T>(workspaceRoot: string, fn: () => Promise<T>) =>
     withToolWorkspaceContext(ctx.toolContextQueueRef, ctx.workspace, workspaceRoot, fn)
 
+  const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
+    signal: controller.signal,
+    ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
+  })
+
   const trackedTools = tools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot, withCtx))
-  const governedTools = trackedTools.map((t) => governTool(t, services, state, { signal: controller.signal }))
+  const governedTools = trackedTools.map(governRuntimeTool)
 
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const agentName = agentId ? (db.getAgentDefinition(agentId)?.name ?? "Agent") : "Universal Agent"
@@ -112,7 +127,7 @@ export async function executeRunImpl(
     resolveAgent: (aId: string): ResolvedAgent | null => {
       const def = db.getAgentDefinition(aId)
       if (!def) return null
-      const agentTools = resolveTools(JSON.parse(def.tools) as string[]).map((t) => governTool(t, services, state, { signal: controller.signal }))
+      const agentTools = getAllTools().map(governRuntimeTool)
       return { id: def.id, name: def.name, systemPrompt: def.system_prompt, tools: agentTools }
     },
     onChildTrace: (entry) => {
@@ -173,14 +188,111 @@ export async function executeRunImpl(
     },
   }
 
-  const allTools = [...governedTools, ...delegateTools, ...busTools, runAskUserTool]
+  // ask_user needs full step tracking (shows in Tool Timeline) but no timeout —
+  // it blocks until the user responds, so timeoutMs: 0 disables the timeout racer.
+  const governedAskUser = governTool(runAskUserTool, services, state, { signal: controller.signal, timeoutMs: 0 })
+  const allToolsBase = [...governedTools, ...delegateTools, ...busTools, governedAskUser]
+
+  // Wrap sync tools to emit global SSE events so the Sync widget can react
+  // to agent-triggered previews and executes without needing to go through
+  // the HTTP route.
+  const allTools = allToolsBase.map((t) => {
+    if (t.name === "sync_preview") {
+      return {
+        ...t,
+        execute: async (args: Record<string, unknown>) => {
+          const result = await t.execute(args)
+          if (typeof result === "string") {
+            const m = result.match(/^Plan\s+([a-f0-9-]{36})\b/)
+            if (m) {
+              const planId = m[1]
+              // Record in sync_runs so this preview appears in history.
+              // Intentionally avoid loadPlan() here — the plan-store Map lives
+              // in the agent package module scope; importing it here can resolve
+              // to a different instance (ESM singleton issue), causing loadPlan
+              // to return null and silently skip the write. Use args instead.
+              const totalsMatch = result.match(/Totals:\s*\+(\d+)\s*~(\d+)\s*-(\d+)\s*\(=(\d+)\s*unchanged\)\s*across\s*(\d+)/)
+              const previewTotals = totalsMatch
+                ? { insert: Number(totalsMatch[1]), update: Number(totalsMatch[2]), delete: Number(totalsMatch[3]), unchanged: Number(totalsMatch[4]), tablesCount: Number(totalsMatch[5]) }
+                : {}
+              try {
+                db.recordSyncRunStart({
+                  planId,
+                  entityType: String(args["entityType"] ?? ""),
+                  entityId: String(args["entityId"] ?? ""),
+                  entityDisplayName: null,   // not available without loadPlan; executeSync sink will fill it
+                  source: String(args["source"] ?? ""),
+                  target: String(args["target"] ?? ""),
+                  actorUpn: "agent",
+                  previewTotals,
+                })
+              } catch (e) {
+                console.warn("[sync-history] recordSyncRunStart failed:", e instanceof Error ? e.message : e)
+              }
+              broadcast({
+                type: "sync.agent.preview",
+                data: {
+                  runId,
+                  planId,
+                  entityType: String(args["entityType"] ?? ""),
+                  entityId: String(args["entityId"] ?? ""),
+                  source: String(args["source"] ?? ""),
+                  target: String(args["target"] ?? ""),
+                },
+              })
+            }
+          }
+          return result
+        },
+      }
+    }
+    if (t.name === "sync_execute") {
+      return {
+        ...t,
+        execute: async (args: Record<string, unknown>) => {
+          const planId = String(args["planId"] ?? "")
+          broadcast({ type: "sync.agent.execute.started", data: { runId, planId } })
+          const t0 = Date.now()
+          const result = await t.execute(args)
+          const success = typeof result === "string" && result.toLowerCase().includes("successfully")
+          // Also persist finish via db directly, in case executeSync threw before
+          // calling getSyncRunSink().finish() internally. INSERT OR REPLACE means
+          // if the row already has the correct status from the sink, this is a no-op.
+          try {
+            db.recordSyncRunFinish({
+              planId,
+              status: success ? "success" : "failed",
+              error: success ? null : (typeof result === "string" ? result : null),
+              durationMs: Date.now() - t0,
+            })
+          } catch (e) {
+            console.warn("[sync-history] recordSyncRunFinish failed:", e instanceof Error ? e.message : e)
+          }
+          broadcast({
+            type: "sync.agent.execute.completed",
+            data: { runId, planId, success, result: typeof result === "string" ? result : String(result) },
+          })
+          return result
+        },
+      }
+    }
+    return t
+  })
   resetEffectSeq(runId)
 
   // Build memory context
   const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !resume)
-  const { perTier } = shouldUseMemory
-    ? await retrieveContext(goal, { sessionId: agentId ?? "default", runId })
-    : { perTier: { working: "", episodic: "", semantic: "" } }
+  let perTier: { working: string; episodic: string; semantic: string } = { working: "", episodic: "", semantic: "" }
+  if (shouldUseMemory) {
+    try {
+      const result = await retrieveContext(goal, { sessionId: agentId ?? "default", runId })
+      perTier = result.perTier
+    } catch (memErr) {
+      // FTS virtual-table corruption (SQLITE_CORRUPT_VTAB) or other memory errors
+      // must not crash the run — continue without injected context.
+      console.warn(`[run ${runId}] memory retrieval failed, running without context:`, (memErr as Error).message)
+    }
+  }
 
   const systemMessages = await buildSystemMessages({ goal, systemPrompt, allTools, runWorkspace, perTier, runId })
   const effectivePrompt = systemMessages.map((m) => m.content).join("\n\n")
@@ -290,13 +402,78 @@ export async function executeRunImpl(
     onToken: (token) => {
       broadcast({ type: "answer.chunk", data: { runId, chunk: token } })
     },
+    onStreamDiscard: () => {
+      broadcast({ type: "stream.reset", data: { runId } })
+    },
   })
 
   try {
     setShellSignal(controller.signal)
     setFetchKillSignal(null)
     setBrowseKillSignal(null)
-    const answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
+    let answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
+
+    // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
+    // so the user has a concrete reference to forward to the platform admin.
+    // The actual technical detail (env var, missing service) is logged
+    // separately via the planner-platform-unconfigured trace handler — never
+    // shown to the end user. We also try to LLM-polish into a friendlier
+    // reply; canned message is the safety net.
+    if (isPlatformUnconfiguredAnswer(answer)) {
+      const polished = await polishFailureForUser(ctx.llm, {
+        goal,
+        operatorSummary: "A required backend integration is not configured on this server.",
+        failureKind: "platform_unconfigured",
+        runRef: runId,
+      }, { signal: controller.signal })
+      answer = polished
+        ? markPolishedFailure(polished)
+        : fillRunReference(answer, runId)
+    }
+
+    // Catch internal failures the agent surfaced as raw text/JSON
+    // (planner_failure JSON dump, "Task FAILED" / "Task verification FAILED"
+    // walls). The chat user must see a short, friendly natural-language
+    // reply (LLM-polished from the operator-only failure context) plus a
+    // run reference; the raw detail goes to db logs + audit so admins can
+    // debug. If the LLM polish fails or looks like it leaked technical
+    // detail, we fall back to the canned synthesizeGenericFailureAnswer().
+    const internalFailure = detectInternalFailure(answer)
+    if (internalFailure) {
+      const truncatedRaw = internalFailure.rawDetail.slice(0, 4000)
+      try {
+        db.saveLog({
+          run_id: runId,
+          level: "run:error",
+          message: `[user-safe-failure] ${internalFailure.kind} — ${internalFailure.summary}\n${truncatedRaw}`,
+          timestamp: new Date().toISOString(),
+        })
+      } catch { /* don't break run on log failure */ }
+      try {
+        await services.auditService.log({
+          actor,
+          action: "agent.user_safe_failure",
+          resourceType: "AgentRun",
+          resourceId: runId,
+          detail: { kind: internalFailure.kind, summary: internalFailure.summary, raw: truncatedRaw },
+        })
+      } catch { /* best-effort */ }
+      try {
+        broadcast({ type: "run.user_safe_failure", data: { runId, kind: internalFailure.kind, summary: internalFailure.summary } })
+      } catch { /* best-effort */ }
+      console.error(`[run-executor] Internal failure for run ${runId} (${internalFailure.kind}): ${internalFailure.summary}`)
+
+      const polished = await polishFailureForUser(ctx.llm, {
+        goal,
+        operatorSummary: internalFailure.summary,
+        failureKind: mapFailureKindForPolish(internalFailure.kind),
+        runRef: runId,
+      }, { signal: controller.signal })
+
+      answer = polished
+        ? markPolishedFailure(polished)
+        : fillRunReference(synthesizeGenericFailureAnswer(), runId)
+    }
 
     if (controller.signal.aborted) {
       cancelRun(run)
@@ -306,6 +483,7 @@ export async function executeRunImpl(
       await persistAuditLog(services, runId)
       persistTokenUsage(runId, agent)
       broadcast({ type: "run.cancelled", data: { runId, status: "cancelled", stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
+      db.saveLog({ run_id: runId, level: "run:error", message: "Cancelled", timestamp: new Date().toISOString() })
       createNotification({ type: "run.cancelled", title: "Run cancelled", message: `"${goal.slice(0, 80)}" was cancelled after ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: "view-run", data: { runId } }, { label: "Rollback", action: "rollback-run", data: { runId } }] })
       return
     }
@@ -322,18 +500,40 @@ export async function executeRunImpl(
     await captureRunWorkspaceDiff(runId, ctx.activeRuns, ctx.completedRunWorkspaces, ctx.completedRunDiffs, boundSaveTrace, createNotification)
     const pendingDiff = ctx.completedRunDiffs.get(runId)
     const pendingChangeCount = pendingDiff ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length : 0
+    const persistedToolTrace = run.steps.map((step) => {
+      const input = step.input ?? {}
+      const keys = Object.keys(input)
+      // UI clips long values with CSS ellipsis; keep the full string here.
+      const argsSummary = keys.length > 0
+        ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
+        : ""
+      return {
+        kind: "tool-call" as const,
+        tool: step.action,
+        text: `${step.action}(${argsSummary || "..."})`,
+        argsSummary,
+        argsFormatted: JSON.stringify(input, null, 2),
+      }
+    })
 
-    // A run can return an answer that starts with "Task FAILED" when the planner
-    // internally synthesizes a failure (all steps incomplete, unresolved blockers, etc.).
-    // The orchestrator sees no exception, so the run "completed" at the infrastructure
-    // level — but episodic memory must record it as failed so it is NOT used as
-    // positive evidence by the ⚠️ MEMORY HIT directive in future runs.
-    const taskInternallyFailed = answer.startsWith("Task FAILED")
-    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
-    extractProcedural({ id: runId, goal, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
+    // A run can return an answer that starts with "Task FAILED" or
+    // "Task verification FAILED" when the planner internally synthesizes a
+    // failure (all steps incomplete, unresolved blockers, etc.). It can
+    // also return a platform-unconfigured opaque message when an operator-
+    // owned integration is missing. The orchestrator sees no exception, so
+    // the run "completed" at the infrastructure level — but episodic memory
+    // must record it as failed so it is NOT used as positive evidence by
+    // the ⚠️ MEMORY HIT directive in future runs.
+    const taskInternallyFailed =
+      answer.startsWith("Task FAILED")
+      || answer.startsWith("Task verification FAILED")
+      || isUserSafeFailureAnswer(answer)
+    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: persistedToolTrace })
+    extractProcedural({ id: runId, goal, trace: persistedToolTrace })
     consolidate({ minAgeHours: 24 })
 
     broadcast({ type: "run.completed", data: { runId, answer, status: "completed", stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls, pendingWorkspaceChanges: pendingChangeCount } })
+    db.saveLog({ run_id: runId, level: "run", message: `Completed — ${run.steps.length} steps`, timestamp: new Date().toISOString() })
     createNotification({ type: "run.completed", title: "Run completed", message: pendingChangeCount > 0 ? `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.` : `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: "view-run", data: { runId } }] })
 
     if (ctx.messageRouter) {
@@ -341,6 +541,21 @@ export async function executeRunImpl(
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
+    const persistedToolTrace = run.steps.map((step) => {
+      const input = step.input ?? {}
+      const keys = Object.keys(input)
+      // UI clips long values with CSS ellipsis; keep the full string here.
+      const argsSummary = keys.length > 0
+        ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
+        : ""
+      return {
+        kind: "tool-call" as const,
+        tool: step.action,
+        text: `${step.action}(${argsSummary || "..."})`,
+        argsSummary,
+        argsFormatted: JSON.stringify(input, null, 2),
+      }
+    })
     failRun(run)
     await services.eventBus.publish(runFailed(run.id, errMsg))
     await services.auditService.log({ actor, action: "agent.failed", resourceType: "AgentRun", resourceId: run.id, detail: { goal, error: errMsg, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
@@ -357,9 +572,10 @@ export async function executeRunImpl(
     boundSaveTrace(runId, { kind: "error", text: errMsg })
     await captureRunWorkspaceDiff(runId, ctx.activeRuns, ctx.completedRunWorkspaces, ctx.completedRunDiffs, boundSaveTrace, createNotification)
 
-    ingestRunTurns({ id: runId, goal, answer: null, status: "failed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: run.steps.map((s) => ({ kind: "tool-call" as const, tool: s.action, text: `${s.action}(${Object.keys(s.input).join(", ")})`, argsSummary: Object.keys(s.input).join(", ") })) })
+    ingestRunTurns({ id: runId, goal, answer: null, status: "failed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: persistedToolTrace })
 
     broadcast({ type: "run.failed", data: { runId, error: errMsg, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
+    db.saveLog({ run_id: runId, level: "run:error", message: `Failed — ${errMsg.slice(0, 200)}`, timestamp: new Date().toISOString() })
     const hasCheckpoint = !!db.getCheckpoint(runId)
     createNotification({ type: "run.failed", title: "Run failed", message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`, runId, actions: [{ label: "Review", action: "view-run", data: { runId } }, ...(hasCheckpoint ? [{ label: "Resume", action: "resume-run", data: { runId } }] : []), { label: "Rollback", action: "rollback-run", data: { runId } }] })
   } finally {

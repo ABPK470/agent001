@@ -1,5 +1,5 @@
 /**
- * Logo — agent001 brand mark.
+ * Logo — MI:A brand mark.
  *
  * Eyes glow purple when online (slow blink), disappear when offline.
  *
@@ -14,9 +14,9 @@ interface Props {
   className?: string
 }
 
-const EYE_ONLINE  = "#34d399" // emerald-400
-const EYE_OFFLINE = "#f87171" // red-400
-const BODY        = "#7B6FC7" // indigo
+const EYE_ONLINE  = "var(--color-success)"
+const EYE_OFFLINE = "var(--color-error)"
+const BODY        = "var(--color-accent)"
 
 export function Logo({ size = 32, online = true, className }: Props) {
   const eye = online ? EYE_ONLINE : EYE_OFFLINE
@@ -28,7 +28,7 @@ export function Logo({ size = 32, online = true, className }: Props) {
       width={size}
       height={size}
       shapeRendering="crispEdges"
-      aria-label={online ? "agent001 — online" : "agent001 — offline"}
+      aria-label={online ? "MI:A — online" : "MI:A — offline"}
       role="img"
       className={className}
       style={{ flexShrink: 0, display: "block" }}

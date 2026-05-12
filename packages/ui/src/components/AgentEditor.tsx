@@ -118,19 +118,19 @@ export function AgentEditor({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-2xl w-full max-w-[720px] h-[85vh] max-sm:h-[92vh] mx-4 sm:mx-auto flex flex-col shadow-2xl max-sm:rounded-xl"
+        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-2.5">
             {view === "edit" && (
               <button
-                className="text-text-muted hover:text-text p-1 rounded-lg hover:bg-white/[0.06] transition-colors mr-1"
+                className="text-text-muted hover:text-text p-1 rounded-lg hover:bg-overlay-3 transition-colors mr-1"
                 onClick={() => { setView("list"); setError(null) }}
               >
                 <ChevronLeft size={18} />
@@ -141,7 +141,7 @@ export function AgentEditor({ onClose }: Props) {
               {view === "list" ? "Agents" : editId ? "Edit Agent" : "New Agent"}
             </h2>
           </div>
-          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" onClick={onClose}>
+          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
@@ -167,7 +167,7 @@ export function AgentEditor({ onClose }: Props) {
               {agents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04] cursor-pointer hover:border-white/[0.08] transition-colors"
+                  className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle cursor-pointer hover:border-border-subtle transition-colors"
                   onClick={() => openEdit(agent)}
                 >
                   <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
@@ -188,7 +188,7 @@ export function AgentEditor({ onClose }: Props) {
                   </div>
                   {agent.id !== "default" && (
                     <button
-                      className="text-text-muted hover:text-error p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors shrink-0"
+                      className="text-text-muted hover:text-error p-1.5 rounded-lg hover:bg-overlay-3 transition-colors shrink-0"
                       title="Delete agent"
                       onClick={(e) => { e.stopPropagation(); handleDelete(agent) }}
                     >
@@ -199,7 +199,7 @@ export function AgentEditor({ onClose }: Props) {
               ))}
 
               <button
-                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-dashed border-white/[0.08] text-text-muted hover:text-text hover:border-white/[0.15] transition-colors"
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-dashed border-border-subtle text-text-muted hover:text-text hover:border-text-secondary/[0.15] transition-colors"
                 onClick={openCreate}
               >
                 <Plus size={16} />
@@ -257,14 +257,14 @@ export function AgentEditor({ onClose }: Props) {
                         className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-colors ${
                           active
                             ? "border-accent/30 bg-accent/5 text-text"
-                            : "border-white/[0.04] bg-white/[0.02] text-text-muted hover:border-white/[0.08]"
+                            : "border-border-subtle bg-overlay-1 text-text-muted hover:border-border-subtle"
                         }`}
                         onClick={() => toggleTool(tool.name)}
                       >
                         <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                          active ? "bg-accent border-accent" : "border-white/20"
+                          active ? "bg-accent border-accent" : "border-border-strong"
                         }`}>
-                          {active && <Check size={10} className="text-white" />}
+                          {active && <Check size={10} className="text-text" />}
                         </div>
                         <div className="min-w-0">
                           <span className="text-[13px] font-mono block truncate">{tool.name}</span>
@@ -279,7 +279,7 @@ export function AgentEditor({ onClose }: Props) {
               {/* Save */}
               <div className="flex justify-end pt-2">
                 <button
-                  className="px-5 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
+                  className="px-5 py-2 bg-accent hover:bg-accent-hover text-text text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
                   onClick={handleSave}
                   disabled={saving}
                 >

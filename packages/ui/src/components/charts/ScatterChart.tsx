@@ -31,9 +31,7 @@ const AXIS_LABEL_GAP = 14
 export function ScatterChart({ data }: { data: ScatterChartData }): React.ReactElement {
   const series = (data.series ?? []).filter((s) => Array.isArray(s.points) && s.points.length > 0)
   if (series.length === 0) {
-    return <ChartFrame title={data.title} badge="scatter">
-      <div className="text-text-muted text-xs italic px-2 py-4">No data</div>
-    </ChartFrame>
+    return null as unknown as React.ReactElement
   }
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
@@ -71,7 +69,7 @@ export function ScatterChart({ data }: { data: ScatterChartData }): React.ReactE
       <svg width={W} height={H} className="font-mono" style={{ minWidth: W, maxWidth: "100%" }}>
         {data.yLabel && (
           <text x={12} y={plotTop + PLOT_H / 2} textAnchor="middle"
-            fontSize={11} fill="#a1a1aa"
+            fontSize={11} fill="var(--color-text-muted)"
             transform={`rotate(-90 12 ${plotTop + PLOT_H / 2})`}>
             {data.yLabel}
           </text>
@@ -83,7 +81,7 @@ export function ScatterChart({ data }: { data: ScatterChartData }): React.ReactE
           return (
             <g key={i}>
               <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="rgba(255,255,255,0.05)" />
-              <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="#a1a1aa">{formatTick(t)}</text>
+              <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="var(--color-text-muted)">{formatTick(t)}</text>
             </g>
           )
         })}
@@ -94,7 +92,7 @@ export function ScatterChart({ data }: { data: ScatterChartData }): React.ReactE
           return (
             <g key={`xt-${i}`}>
               <line x1={x} y1={plotTop} x2={x} y2={plotBottom} stroke="rgba(255,255,255,0.05)" />
-              <text x={x} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="#a1a1aa">{formatTick(t)}</text>
+              <text x={x} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="var(--color-text-muted)">{formatTick(t)}</text>
             </g>
           )
         })}
@@ -119,7 +117,7 @@ export function ScatterChart({ data }: { data: ScatterChartData }): React.ReactE
         <line x1={plotLeft} y1={plotTop}    x2={plotLeft}  y2={plotBottom} stroke="rgba(255,255,255,0.18)" />
 
         {data.xLabel && (
-          <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="#a1a1aa">
+          <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">
             {data.xLabel}
           </text>
         )}

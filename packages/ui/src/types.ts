@@ -20,6 +20,11 @@ export interface Run {
   completionTokens: number
   llmCalls: number
   pendingWorkspaceChanges?: number
+  trace?: TraceEntry[]
+  streamingAnswer?: string
+  coherentStream?: string
+  auditTrail?: AuditEntry[]
+  stepData?: Step[]
 }
 
 export interface RunDetail extends Run {
@@ -38,6 +43,10 @@ export interface WorkspaceDiff {
   modified: string[]
   deleted: string[]
   total: number
+  /** Source workspace root where changes will be applied. */
+  sourceRoot?: string
+  /** Isolated run workspace root where the generated files currently live. */
+  executionRoot?: string
 }
 
 export interface WorkspaceDiffApplyResult {
@@ -77,9 +86,16 @@ export interface AuditEntry {
 // ── Log ──────────────────────────────────────────────────────────
 
 export interface LogEntry {
-  level: string
+  /** Event group: run, step, sync, agent, api, system. */
+  type: string
+  /** true for failed / killed / cancelled events — drives red highlighting. */
+  error?: boolean
   message: string
   timestamp: string
+  /** Original SSE event name — e.g. "run.started", "sync.preview.sql". */
+  eventName?: string
+  /** Raw event payload — all fields from the SSE event. */
+  data?: Record<string, unknown>
 }
 
 // ── Trace (rich agent execution trace) ───────────────────────────
@@ -88,9 +104,9 @@ export type TraceEntry =
   | { kind: "goal"; text: string }
   | { kind: "iteration"; current: number; max: number }
   | { kind: "thinking"; text: string }
-  | { kind: "tool-call"; tool: string; argsSummary: string; argsFormatted: string }
-  | { kind: "tool-result"; text: string }
-  | { kind: "tool-error"; text: string }
+  | { kind: "tool-call"; invocationId: string; toolCallId?: string | null; tool: string; argsSummary: string; argsFormatted: string }
+  | { kind: "tool-result"; invocationId?: string; toolCallId?: string | null; text: string }
+  | { kind: "tool-error"; invocationId?: string; toolCallId?: string | null; text: string }
   | { kind: "answer"; text: string }
   | { kind: "error"; text: string }
   | { kind: "usage"; iterationTokens: number; totalTokens: number; promptTokens: number; completionTokens: number; llmCalls: number }
@@ -249,36 +265,33 @@ export interface Widget {
 
 export type WidgetType =
   | "agent-chat"
+  | "term-chat"
   | "run-status"
-  | "agent-trace"
   | "agent-viz"
   | "live-logs"
   | "audit-trail"
   | "step-timeline"
   | "tool-stats"
   | "run-history"
-  | "command-center"
-  | "trajectory-replay"
   | "operator-env"
   | "debug-inspector"
-  | "platform-dev-log"
-  | "universe-viz"
-  | "code-seq-diagram"
   | "mymi-db"
   | "active-users"
+  | "env-sync"
+  | "operation-log"
 
 /**
- * Widget types visible to non-admin "visitor" users. Everything else is
- * admin-only (the admin sees the burger menu, model picker, and the full
- * widget catalogue).
+ * Widget types visible AND interactive for non-admin "visitor" users.
+ * Other widgets still appear in the catalogue (so visitors see what
+ * exists) but are rendered as disabled cards. Admins get the full set.
  */
 export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
-  "agent-chat",
-  "agent-viz",
-  "audit-trail",
+  "term-chat",
+  "env-sync",
+  "live-logs",
+  "operation-log",
+  "mymi-db",
   "run-history",
-  "run-status",
-  "step-timeline",
 ])
 
 export interface ViewConfig {
@@ -304,6 +317,139 @@ export interface WsEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string
+}
+
+// ── ABI Environment Sync ─────────────────────────────────────────
+
+export type SyncEntityType =
+  | "contract"
+  | "dataset"
+  | "rule"
+  | "pipelineActivity"
+  | "gateMetadata"
+  | "content"
+
+export interface SyncEnvironment {
+  name: string
+  displayName: string
+  color: string
+  role: "source" | "target" | "both"
+  linkedServerName: string | null
+  ringOrder: number
+  syncAllowlist: string[]
+  linkedServiceName?: string | null
+}
+
+export interface SyncRecipeTable {
+  name: string
+  scopeColumn: string | null
+  predicate: string
+  source: "fk+pipeline" | "fk-only" | "pipeline-only"
+  verified: boolean
+  groundedByPipeline?: boolean
+  enabledByDefault?: boolean
+  userControllable?: boolean
+  note?: string
+}
+
+export interface SyncRecipe {
+  entityType: SyncEntityType
+  displayName: string
+  rootTable: string
+  rootKeyColumn: string
+  rootNameColumn: string | null
+  legacyPipelineId: number | null
+  legacyEntrySproc?: string
+  tables: SyncRecipeTable[]
+  executionOrder: string[]
+  reverseOrder: string[]
+  discrepancies: Array<{ table: string; kind: "leak" | "implicit" | "drift"; note: string }>
+  generatedAt: string
+}
+
+export interface SyncRecipeBundle {
+  version: 1
+  generatedAt: string
+  introspectedFrom: string | null
+  recipes: Record<SyncEntityType, SyncRecipe | null>
+}
+
+export interface SyncPlanTableCounts {
+  insert: number
+  update: number
+  delete: number
+  unchanged: number
+  lowConfidence: number
+  conflicts: number
+}
+
+export interface SyncPlanConflict {
+  pk: unknown
+  expectedScope: unknown
+  actualScope: unknown
+  summary: string
+}
+
+export interface SyncPlanRowSample {
+  values?: Record<string, unknown>
+  newValues?: Record<string, unknown>
+  oldValues?: Record<string, unknown>
+  changedColumns?: string[]
+}
+
+export interface SyncPlanTable {
+  table: string
+  scopePredicate: string
+  counts: SyncPlanTableCounts
+  samples: {
+    insert: SyncPlanRowSample[]
+    update: SyncPlanRowSample[]
+    delete: SyncPlanRowSample[]
+  }
+  conflicts: SyncPlanConflict[]
+  warnings: string[]
+  diffDurationMs: number
+}
+
+export interface SyncPlanGraph {
+  nodes: Array<{ id: string; label: string; status: "unchanged" | "updates" | "deletes" | "inserts"; counts: SyncPlanTableCounts }>
+  edges: Array<{ from: string; to: string; label?: string }>
+}
+
+export interface SyncPlanTotals {
+  insert: number
+  update: number
+  delete: number
+  unchanged: number
+  lowConfidence: number
+  conflicts: number
+  tablesCount: number
+}
+
+export interface SyncPlan {
+  planId: string
+  createdAt: string
+  createdAtMs: number
+  entity: { type: SyncEntityType; id: string | number; displayName: string | null }
+  source: string
+  target: string
+  preflight: { catalogCompatible: boolean; issues: string[] }
+  tables: SyncPlanTable[]
+  totals: SyncPlanTotals
+  dependencyGraph: SyncPlanGraph
+  warnings: string[]
+  estimatedDurationSec: number
+  recipeSnapshot: { entityType: SyncEntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+}
+
+export interface SyncExecuteProgress {
+  type: "started" | "step" | "table-started" | "table-progress" | "table-done" | "completed" | "failed"
+  table?: string
+  step?: string
+  rowsApplied?: number
+  rowsTotal?: number
+  message?: string
+  error?: string
 }
 
 // ── Agent Definitions ────────────────────────────────────────────

@@ -4,12 +4,12 @@
  * Resolution order:
  *   1. Opportunistic header `From-User-Name` (free win if some intranet
  *      proxy injects it; not required, not configured by us).
- *   2. Signed `agent001_sid` cookie (set by the welcome modal via
+ *   2. Signed `mia_sid` cookie (set by the welcome modal via
  *      POST /api/me).
  *   3. Anonymous fallback — assigns a transient sid so the request
  *      still works; client should pop the welcome modal.
  *
- * Auto-admin: any UPN matching AGENT001_ADMIN_UPNS (comma-separated,
+ * Auto-admin: any UPN matching MIA_ADMIN_UPNS (comma-separated,
  * case-insensitive) is promoted to admin without further checks. Plus
  * an optional admin password cookie (verified by auth/session.ts) for
  * cases where UPN spoofing is a concern.
@@ -19,6 +19,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
+import { randomBytes } from "node:crypto"
 import { touchSession } from "../db/sessions.js"
 import { sessionAls, type CurrentSession } from "./context.js"
 import { ADMIN_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS, newSid, signSession, verifyAdminCookie, verifySession, type SessionPayload } from "./session.js"
@@ -30,7 +31,7 @@ declare module "fastify" {
 }
 
 function getAdminUpns(): Set<string> {
-  const raw = process.env["AGENT001_ADMIN_UPNS"] ?? ""
+  const raw = process.env["MIA_ADMIN_UPNS"] ?? ""
   return new Set(
     raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
   )
@@ -84,7 +85,8 @@ function resolveSession(req: FastifyRequest): CurrentSession {
       sid: payload.sid,
       displayName: payload.displayName,
       upn: payload.upn,
-      isAdmin: isAdminUpn(payload.upn) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
+      // isAdmin baked at login takes priority; fall back to live UPN check and admin cookie
+      isAdmin: payload.isAdmin === true || isAdminUpn(payload.upn) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
       ip: req.ip,
       userAgent: String(req.headers["user-agent"] ?? ""),
     }
@@ -107,9 +109,32 @@ function resolveSession(req: FastifyRequest): CurrentSession {
  * Must be called AFTER @fastify/cookie is registered.
  */
 export async function registerIdentity(app: FastifyInstance): Promise<void> {
-  app.addHook("onRequest", async (req: FastifyRequest, _reply: FastifyReply) => {
+  app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     const session = resolveSession(req)
     req.session = session
+    // Sticky anonymous identity. If we just created a transient anon sid
+    // (no header, no cookie), persist it as a signed session cookie so that
+    // every subsequent request from this browser carries the SAME sid.
+    // Without this, every request gets a fresh `anon:${random}` and the SSE
+    // socket / run owner stamp end up with different sids → broadcast filter
+    // drops every event for the user, chat sticks on "Thinking" forever.
+    if (session.sid.startsWith("anon:") && !req.cookies?.[SESSION_COOKIE]) {
+      const payload: SessionPayload = {
+        sid: session.sid,
+        displayName: session.displayName,
+        upn: null,
+        createdAt: Date.now(),
+      }
+      try {
+        reply.setCookie(SESSION_COOKIE, signSession(payload), {
+          httpOnly: true,
+          sameSite: "lax",
+          secure:   process.env["NODE_ENV"] === "production",
+          path:     "/",
+          maxAge:   SESSION_TTL_SECONDS,
+        })
+      } catch { /* SSE responses already streamed headers — best-effort */ }
+    }
     // enterWith persists the ALS store for the rest of this async chain
     // (handlers, db calls, tool calls) so getCurrentSession() works downstream.
     sessionAls.enterWith({ session })
@@ -130,9 +155,9 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
 
   // POST /api/me — welcome modal submits { displayName, upn } to set the cookie
   app.post<{ Body: { displayName?: string; upn?: string } }>("/api/me", async (req, reply) => {
-    const displayName = (req.body?.displayName ?? "").trim()
+    const rawName = (req.body?.displayName ?? "").trim()
     const upn = (req.body?.upn ?? "").trim()
-    if (!displayName) {
+    if (!rawName) {
       reply.code(400)
       return { error: "displayName is required" }
     }
@@ -140,11 +165,30 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
       reply.code(400)
       return { error: "upn must not contain whitespace" }
     }
+    // For anonymous users (no UPN) without an existing suffix, append #xxxx so
+    // "john" becomes "john #ab12". This makes every login session visibly distinct
+    // in the admin panel without requiring a UPN. The suffix is generated here on
+    // the BE so the identity is stable for this session (FE just sends the raw name).
+    const displayName = (!upn && !/#[a-f0-9]{4}$/i.test(rawName))
+      ? `${rawName} #${randomBytes(2).toString("hex")}`
+      : rawName
+    // Reuse existing stable sid if the browser already has one — avoids
+    // creating a fresh orphan session row every time the modal is submitted
+    // from the same browser (e.g. new tab, page reload before cookie expires).
+    const existingCookie = req.cookies?.[SESSION_COOKIE]
+    const existingPayload = existingCookie ? verifySession(existingCookie) : null
+    const sid = (existingPayload && !existingPayload.sid.startsWith("anon:"))
+      ? existingPayload.sid
+      : newSid()
+    const isAdmin = isAdminUpn(upn || null) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE])
     const payload: SessionPayload = {
-      sid: newSid(),
+      sid,
       displayName,
-      upn: upn || null,
-      createdAt: Date.now(),
+      // Admin access codes are a pure auth gate — don't bake them into identity as a UPN.
+      // This way changing MIA_ADMIN_UPNS never creates a new identity / fragments session history.
+      upn: isAdmin && isAdminUpn(upn || null) ? null : (upn || null),
+      isAdmin,
+      createdAt: existingPayload?.createdAt ?? Date.now(),
     }
     const value = signSession(payload)
     reply.setCookie(SESSION_COOKIE, value, {
@@ -158,7 +202,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
       sessionId:   payload.sid,
       displayName: payload.displayName,
       upn:         payload.upn,
-      isAdmin:     isAdminUpn(payload.upn),
+      isAdmin:     isAdmin,
     }
   })
 

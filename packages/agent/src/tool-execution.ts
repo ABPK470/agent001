@@ -15,7 +15,7 @@ import {
     executeToolWithTimeout,
     trackToolCallFailureState,
 } from "./tool-utils.js"
-import type { AgentConfig, Message, Tool } from "./types.js"
+import type { AgentConfig, Message, Tool, ToolResultEnvelope } from "./types.js"
 
 const FILE_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])
 
@@ -394,7 +394,7 @@ async function executeWithKillManager(
   // If the killManager exposes wrap(), use it so the orchestrator can install
   // per-tool-call AsyncLocalStorage scopes (e.g. mssql kill signal) that work
   // correctly under concurrent runs. Falls back to a direct call otherwise.
-  const runExecute = (a: Record<string, unknown>): Promise<string> =>
+  const runExecute = (a: Record<string, unknown>): Promise<string | ToolResultEnvelope> =>
     killManager?.wrap
       ? killManager.wrap(call.id, () => tool.execute(a))
       : tool.execute(a)
@@ -455,7 +455,7 @@ function handleReplaceInFileMiss(
 }
 
 function processArtifactOutcome(
-  call: { name: string; arguments: Record<string, unknown> },
+  _call: { name: string; arguments: Record<string, unknown> },
   execResult: Awaited<ReturnType<typeof executeToolWithTimeout>>,
   state: AgentLoopState,
 ): string | null {

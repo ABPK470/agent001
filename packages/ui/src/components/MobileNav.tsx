@@ -7,27 +7,25 @@
 
 import {
     Activity,
+    ArrowLeftRight,
     BarChart3,
     Bug,
     Clock,
-    Film,
+    Database,
     GitBranch,
-    Globe,
     History,
     LayoutDashboard,
-    LayoutGrid,
-    ListTree,
     MessageSquare,
     Plus,
     ScrollText,
     Shield,
+    Users,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Widget, WidgetType } from "../types";
 
 const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?: string }>> = {
   "agent-chat": MessageSquare,
-  "agent-trace": ListTree,
   "agent-viz": GitBranch,
   "run-status": Activity,
   "live-logs": ScrollText,
@@ -35,18 +33,16 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
   "step-timeline": Clock,
   "tool-stats": BarChart3,
   "run-history": History,
-  "command-center": LayoutGrid,
-  "trajectory-replay": Film,
   "operator-env": LayoutDashboard,
   "debug-inspector": Bug,
-  "platform-dev-log": ScrollText,
-  "universe-viz": Globe,
-  "code-seq-diagram": GitBranch,
+  "mymi-db": Database,
+  "active-users": Users,
+  "env-sync": ArrowLeftRight,
+  "operation-log": History,
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Chat",
-  "agent-trace": "Trace",
   "agent-viz": "Graph",
   "run-status": "Status",
   "live-logs": "Events",
@@ -54,13 +50,12 @@ const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
   "step-timeline": "Steps",
   "tool-stats": "Stats",
   "run-history": "History",
-  "command-center": "Center",
-  "trajectory-replay": "Replay",
   "operator-env": "IOE",
-  "debug-inspector": "Debug",
-  "platform-dev-log": "DevLog",
-  "universe-viz": "Sequence",
-  "code-seq-diagram": "CodeSeq",
+  "debug-inspector": "Trace",
+  "mymi-db": "MyMI",
+  "active-users": "Users",
+  "env-sync": "Sync",
+  "operation-log": "Pipelines",
 }
 
 interface Props {

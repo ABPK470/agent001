@@ -12,24 +12,25 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 
-export const SESSION_COOKIE = "agent001_sid"
+export const SESSION_COOKIE = "mia_sid"
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30   // 30 days
 
 export interface SessionPayload {
   sid: string                 // random per-user id (stable across requests)
   displayName: string         // e.g. Joe Smith — whatever the user entered in the welcome modal
   upn: string | null          // e.g. "joe.smith@domain.com" — may be null for anonymous
+  isAdmin?: boolean           // stamped at login; survives server restarts / .env changes
   createdAt: number           // epoch ms
 }
 
 function getSecret(): Buffer {
-  const raw = process.env["AGENT001_COOKIE_SECRET"]
+  const raw = process.env["MIA_COOKIE_SECRET"]
   if (!raw || raw.length < 16) {
     // Dev fallback: a fixed-but-warned secret. In production this MUST be set.
     if (process.env["NODE_ENV"] === "production") {
-      throw new Error("AGENT001_COOKIE_SECRET must be set in production (>= 16 chars)")
+      throw new Error("MIA_COOKIE_SECRET must be set in production (>= 16 chars)")
     }
-    return Buffer.from("dev-only-cookie-secret-do-not-use-in-prod-please-set-AGENT001_COOKIE_SECRET")
+    return Buffer.from("dev-only-cookie-secret-do-not-use-in-prod-please-set-MIA_COOKIE_SECRET")
   }
   return Buffer.from(raw)
 }
@@ -75,7 +76,7 @@ export function newSid(): string {
   return randomBytes(16).toString("hex")
 }
 
-export const ADMIN_COOKIE = "agent001_admin"
+export const ADMIN_COOKIE = "mia_admin"
 
 export function signAdminCookie(): string {
   // Just a signed marker — the value is the timestamp so we can later add expiry.

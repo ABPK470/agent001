@@ -42,8 +42,8 @@ export function AdminLoginModal({ onClose, onSuccess }: AdminLoginModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-bg border border-white/10 shadow-2xl p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim backdrop-blur-sm p-4" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-bg border border-border shadow-2xl p-6">
         <h2 className="text-lg font-semibold text-text mb-1">Admin login</h2>
         <p className="text-sm text-text-muted mb-4">Fallback gate. Use only if the UPN whitelist isn't reaching us.</p>
         <input
@@ -52,9 +52,9 @@ export function AdminLoginModal({ onClose, onSuccess }: AdminLoginModalProps) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Admin password"
           autoFocus
-          className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono"
+          className="w-full px-3 py-2 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono"
         />
-        {error && <p className="mt-3 text-[13px] text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-[13px] text-error">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-lg text-sm text-text-muted hover:text-text">Cancel</button>
           <button type="submit" disabled={busy} className="px-4 py-1.5 rounded-lg bg-accent text-bg text-sm font-semibold hover:bg-accent/90 disabled:opacity-50">

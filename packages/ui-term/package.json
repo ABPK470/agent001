@@ -1,0 +1,22 @@
+{
+  "name": "ui-term",
+  "version": "1.0.0",
+  "private": true,
+  "description": "agent001 — terminal-philosophy UI (TUI 2.0). Runs alongside the classic dashboard; user toggles at runtime.",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.3.1"
+  },
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build"
+  }
+}

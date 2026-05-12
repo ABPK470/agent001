@@ -38,15 +38,13 @@ describe("resolveTools — guard-referenced tool validation", () => {
   })
 })
 
-describe("DEFAULT_TOOLS — guard contract", () => {
+describe("getAllTools — guard contract", () => {
   it("includes every guard-referenced tool", async () => {
-    // Read the seed list directly from the connection module's source. We
-    // avoid importing connection.ts (which initialises better-sqlite3) by
-    // re-deriving the contract: resolveTools(DEFAULT_TOOLS) should not warn.
-    const { _DEFAULT_TOOLS_FOR_TESTS } = await import("../src/db/connection.js")
+    // getAllTools() is the single source of truth — no DB involved.
+    const { getAllTools } = await import("../src/tools.js")
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      resolveTools([..._DEFAULT_TOOLS_FOR_TESTS])
+      resolveTools(getAllTools().map((t) => t.name))
       const messages = warnSpy.mock.calls.map((c) => String(c[0]))
       expect(messages.filter((m) => m.startsWith("[tools] WARNING"))).toEqual([])
     } finally {

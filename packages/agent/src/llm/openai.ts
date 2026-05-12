@@ -52,12 +52,12 @@ export class OpenAIClient implements LLMClient {
     this.baseUrl = opts.baseUrl ?? "https://api.openai.com"
   }
 
-  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
     if (opts?.onToken) return this.chatStream(messages, tools, opts)
     return this.chatComplete(messages, tools, opts)
   }
 
-  private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
@@ -65,6 +65,7 @@ export class OpenAIClient implements LLMClient {
       stream: true,
       stream_options: { include_usage: true },
     }
+    if (opts?.temperature !== undefined) body.temperature = opts.temperature
     if (tools.length > 0) body.tools = tools.map(formatTool)
 
     const maxRetries = 5
@@ -134,12 +135,13 @@ export class OpenAIClient implements LLMClient {
     }
   }
 
-  private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number }): Promise<LLMResponse> {
+  private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
       max_completion_tokens: opts?.maxTokens ?? 16384,
     }
+    if (opts?.temperature !== undefined) body.temperature = opts.temperature
 
     if (tools.length > 0) {
       body.tools = tools.map(formatTool)

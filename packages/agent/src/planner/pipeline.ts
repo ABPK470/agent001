@@ -17,6 +17,18 @@
 
 import type { ToolCallRecord } from "../recovery.js"
 import type { Tool } from "../types.js"
+import { injectPriorContext } from "./pipeline-context.js"
+import {
+    applyPostExecutionReconciliation,
+    buildAutonomousRepairBlock,
+    buildBlueprintRetryGuidance,
+    collectAcceptedArtifacts,
+    getRepairTaskForStep,
+    getUnresolvedAcceptanceBlockers,
+    summarizeRepairTask,
+} from "./pipeline-repair.js"
+import { executeStep } from "./pipeline-steps.js"
+import { isGibberishIssue } from "./pipeline-validation.js"
 import { compilePlannerRuntime } from "./runtime-model.js"
 import type {
     ChildExecutionResult,
@@ -31,19 +43,6 @@ import type {
     SubagentTaskStep,
 } from "./types.js"
 import { buildChildRepairPayload } from "./verification-model.js"
-import {
-    applyPostExecutionReconciliation,
-    buildAutonomousRepairBlock,
-    buildBlueprintRetryGuidance,
-    collectAcceptedArtifacts,
-    getRepairTaskForStep,
-    getUnresolvedAcceptanceBlockers,
-    isBlueprintLikeStep,
-    summarizeRepairTask,
-} from "./pipeline-repair.js"
-import { injectPriorContext } from "./pipeline-context.js"
-import { executeStep } from "./pipeline-steps.js"
-import { isGibberishIssue } from "./pipeline-validation.js"
 
 // Re-exports for backwards compatibility
 export { isGibberishIssue } from "./pipeline-validation.js"

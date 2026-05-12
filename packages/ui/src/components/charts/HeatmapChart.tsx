@@ -25,9 +25,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
   const yCats = data.yCategories ?? []
   const values = data.values ?? []
   if (xCats.length === 0 || yCats.length === 0 || values.length === 0) {
-    return <ChartFrame title={data.title} badge="heatmap">
-      <div className="text-text-muted text-xs italic px-2 py-4">No data</div>
-    </ChartFrame>
+    return null as unknown as React.ReactElement
   }
 
   const fmt: ValueFormat = data.valueFormat ?? "number"
@@ -66,7 +64,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
         {/* Y-axis label */}
         {data.yLabel && (
           <text x={10} y={PAD_TOP + (cellSize * yCats.length) / 2} textAnchor="middle"
-            fontSize={11} fill="#a1a1aa"
+            fontSize={11} fill="var(--color-text-muted)"
             transform={`rotate(-90 10 ${PAD_TOP + (cellSize * yCats.length) / 2})`}>
             {data.yLabel}
           </text>
@@ -92,7 +90,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
           const x = PAD_LEFT + xi * cellSize + cellSize / 2
           const y = PAD_TOP + yi * cellSize + cellSize / 2 + 3
           return (
-            <text key={`v-${yi}-${xi}`} x={x} y={y} textAnchor="middle" fontSize={9} fill="#f4f4f5">
+            <text key={`v-${yi}-${xi}`} x={x} y={y} textAnchor="middle" fontSize={9} fill="var(--color-text)">
               {formatValue(v, fmt, precision)}
             </text>
           )
@@ -102,7 +100,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
         {yCats.map((cat, yi) => (
           <text key={`yl-${yi}`}
             x={PAD_LEFT - 6} y={PAD_TOP + yi * cellSize + cellSize / 2 + 3}
-            textAnchor="end" fontSize={10} fill="#d4d4d8">
+            textAnchor="end" fontSize={10} fill="var(--color-text-secondary)">
             {truncate(cat, 18)}
           </text>
         ))}
@@ -112,7 +110,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
           <text key={`xl-${xi}`}
             x={PAD_LEFT + xi * cellSize + cellSize / 2}
             y={PAD_TOP + cellSize * yCats.length + 14}
-            textAnchor="middle" fontSize={10} fill="#d4d4d8">
+            textAnchor="middle" fontSize={10} fill="var(--color-text-secondary)">
             {truncate(cat, 8)}
           </text>
         ))}
@@ -120,7 +118,7 @@ export function HeatmapChart({ data }: { data: HeatmapChartData }): React.ReactE
         {/* X-axis label */}
         {data.xLabel && (
           <text x={PAD_LEFT + (cellSize * xCats.length) / 2} y={H - 4}
-            textAnchor="middle" fontSize={11} fill="#a1a1aa">
+            textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">
             {data.xLabel}
           </text>
         )}
@@ -152,8 +150,8 @@ function ColorScale({ x, y, height, minV, maxV, fmt, precision, unit, scale }: {
   return (
     <g>
       {stops}
-      <text x={x + W + 4} y={y + 8} fontSize={10} fill="#a1a1aa">{formatValue(maxV, fmt, precision, unit)}</text>
-      <text x={x + W + 4} y={y + height} fontSize={10} fill="#a1a1aa">{formatValue(minV, fmt, precision, unit)}</text>
+      <text x={x + W + 4} y={y + 8} fontSize={10} fill="var(--color-text-muted)">{formatValue(maxV, fmt, precision, unit)}</text>
+      <text x={x + W + 4} y={y + height} fontSize={10} fill="var(--color-text-muted)">{formatValue(minV, fmt, precision, unit)}</text>
     </g>
   )
 }

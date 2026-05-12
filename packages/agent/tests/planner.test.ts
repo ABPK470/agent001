@@ -217,6 +217,12 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.reason).toBe("dialogue_memory_turn")
   })
 
+  it("keeps simple run-history questions in direct path", async () => {
+    const decision = await assessPlannerDecision("what was the first failed run in our system (agent001)", [])
+    expect(decision.shouldPlan).toBe(false)
+    expect(decision.route).toBe("direct")
+  })
+
   it("routes with higher score when prior tool activity is high", async () => {
     const history = Array.from({ length: 5 }, () => ({
       role: "tool" as const,
@@ -6211,10 +6217,9 @@ describe("synthesizeAnswer — verification status rendering", () => {
       unresolvedItems: [],
     }
     const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
-    expect(answer).toContain("All tasks completed and verified successfully")
-    expect(answer).toContain("✓ build_chess")
-    expect(answer).toContain("completed")
-    expect(answer).not.toContain("incomplete")
+    expect(answer).toBe("All files written successfully")
+    expect(answer).not.toContain("All tasks completed and verified successfully")
+    expect(answer).not.toContain("✓ build_chess")
   })
 
   it("marks step ⚠ incomplete when verifier says retry with issues", () => {
@@ -6306,6 +6311,37 @@ describe("synthesizeAnswer — verification status rendering", () => {
     expect(answer).toContain("✓ setup_board")
     expect(answer).toContain("⚠ add_rules")
     expect(answer).toContain("incomplete")
+  })
+
+  it("uses ordered unique step outputs for successful multi-step runs", () => {
+    const multiPlan = makePlan({
+      reason: "build chess game",
+      steps: [
+        makeSubagentStep("setup_board"),
+        makeSubagentStep("add_rules", { objective: "Add game rules" }),
+      ],
+    })
+    const pipelineResult: PipelineResult = {
+      status: "completed",
+      completedSteps: 2,
+      totalSteps: 2,
+      stepResults: new Map([
+        ["setup_board", { name: "setup_board", status: "completed", output: "Done: created tmp/chess/index.html", durationMs: 3000 }],
+        ["add_rules", { name: "add_rules", status: "completed", output: "Verified in browser successfully.", durationMs: 4000 }],
+      ]),
+    }
+    const decision: VerifierDecision = {
+      overall: "pass",
+      confidence: 0.92,
+      steps: [
+        { stepName: "setup_board", outcome: "pass", confidence: 0.95, issues: [], retryable: false },
+        { stepName: "add_rules", outcome: "pass", confidence: 0.9, issues: [], retryable: false },
+      ],
+      unresolvedItems: [],
+    }
+
+    const answer = synthesizeAnswer(multiPlan, pipelineResult, decision)
+    expect(answer).toBe("created tmp/chess/index.html\n\nVerified in browser successfully.")
   })
 })
 

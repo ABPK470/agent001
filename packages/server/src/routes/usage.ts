@@ -7,8 +7,12 @@ import * as db from "../db.js"
 
 export function registerUsageRoutes(app: FastifyInstance): void {
 
-  // Get usage summary (totals + per-run breakdown)
-  app.get("/api/usage", async () => {
+  // Get usage summary (totals + per-run breakdown) — admin only
+  app.get("/api/usage", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "Forbidden" }
+    }
     const totals = db.getUsageTotals()
     const perRun = db.listTokenUsage(50)
 

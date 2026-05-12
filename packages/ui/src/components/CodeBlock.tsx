@@ -125,7 +125,7 @@ export function CodeBlock({
           {label || "code"}
         </span>
         <button
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-white/5"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-overlay-2"
           style={{ color: copied ? C.success : C.dim }}
           onClick={copy}
           title="Copy to clipboard"

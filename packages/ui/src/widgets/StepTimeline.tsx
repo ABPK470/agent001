@@ -7,7 +7,7 @@
  */
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolStepOutput } from "../components/CodeBlock"
 import { useStore } from "../store"
 import { formatMs } from "../util"
@@ -15,6 +15,23 @@ import { formatMs } from "../util"
 export function StepTimeline() {
   const steps = useStore((s) => s.steps)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when new steps are added, but only if already near
+  // the bottom (within 120px) so we don't hijack the user scrolling up.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (dist < 120) el.scrollTop = el.scrollHeight
+  }, [steps.length])
+
+  // Keep the running step in view even when the user hasn't scrolled away.
+  const hasRunning = steps.some((s) => s.status === "running")
+  useEffect(() => {
+    if (!hasRunning) return
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
+  }, [hasRunning])
 
   if (steps.length === 0) {
     return (
@@ -25,7 +42,7 @@ export function StepTimeline() {
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-0">
+    <div ref={scrollRef} className="h-full overflow-y-auto space-y-0">
       {steps.map((step, i) => {
         const isLast = i === steps.length - 1
         const isRunning = step.status === "running"

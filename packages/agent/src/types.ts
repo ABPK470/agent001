@@ -139,7 +139,7 @@ export interface LLMResponse {
  * The agent doesn't care which model is behind this interface.
  */
 export interface LLMClient {
-  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }): Promise<LLMResponse>
+  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse>
 }
 
 // ── Agent config ─────────────────────────────────────────────────
@@ -224,6 +224,12 @@ export interface AgentConfig {
   onThinking?: (content: string | null, toolCalls: ToolCall[], iteration: number) => void
   /** Called with each streamed text token from the LLM as it arrives. */
   onToken?: (token: string) => void
+  /**
+   * Called when a streaming batch must be discarded — i.e. the LLM response
+   * that was streaming turned out to include tool calls (intermediate reasoning,
+   * not the final answer). The UI should clear any in-progress streaming buffer.
+   */
+  onStreamDiscard?: () => void
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
   /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */

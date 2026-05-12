@@ -35,7 +35,8 @@ export function searchCatalog(
         if (!scores.has(key)) scores.set(key, { nameScore: 0, colMatches: [] })
         const entry = scores.get(key)!
 
-        const table = tables.get(key)!
+        const table = tables.get(key)
+        if (!table) continue
         // Exact table-name token match scores highest
         const tableTokens = tokenize(table.name)
         if (tableTokens.includes(token)) {
@@ -82,7 +83,8 @@ export function searchCatalog(
   // Build ranked results
   const hits: CatalogSearchHit[] = []
   for (const [key, { nameScore, colMatches }] of scores) {
-    const table = tables.get(key)!
+    const table = tables.get(key)
+    if (!table) continue  // concept-graph key may reference a table not in the catalog
     const colScore = colMatches.length * 10
     const rowBonus = table.rowCount ? Math.min(Math.log10(table.rowCount + 1) * 2, 20) : 0
 

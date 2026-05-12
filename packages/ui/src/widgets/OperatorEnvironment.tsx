@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -91,7 +92,6 @@ export function OperatorEnvironment() {
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setTrace = useStore((s) => s.setTrace)
   const setSteps = useStore((s) => s.setSteps)
-  const setLogs = useStore((s) => s.setLogs)
   const setAudit = useStore((s) => s.setAudit)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
@@ -158,8 +158,18 @@ export function OperatorEnvironment() {
   const [searchQuery, setSearchQuery] = useState("")
 
   const logRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { width: rootWidth } = useContainerSize(rootRef)
+  const compact = rootWidth > 0 && rootWidth < 800
+  const sidebarAutoCollapsed = useRef(false)
 
-  // ── Fetch system data ─────────────────────────────────────────
+  // Auto-collapse sidebar on first render when widget is narrow
+  useEffect(() => {
+    if (rootWidth === 0 || sidebarAutoCollapsed.current) return
+    sidebarAutoCollapsed.current = true
+    if (compact) setSidebarVisible(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootWidth])
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => {})
     api.listTools().then(setTools).catch(() => {})
@@ -174,24 +184,32 @@ export function OperatorEnvironment() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs.length])
   // ── Load run data on selection ─────────────────────────────────────
+  //
+  // For LIVE runs (running/pending/planning), do nothing here — steps/logs/
+  // audit/trace all stream in via SSE and `store.logs` also accumulates
+  // platform-wide events (sync, system, etc) from any source. Overwriting
+  // with a DB snapshot would clobber those live events the moment this
+  // widget mounts (e.g. user switches to the IOE view mid-sync).
+  //
+  // For COMPLETED/historical runs, hydrate from the DB so the widget shows
+  // what was persisted for that run.
   useEffect(() => {
     if (!activeRunId) return
+    const run = useStore.getState().runs.find((r) => r.id === activeRunId)
+    const isLive = run?.status === "running" || run?.status === "pending" || run?.status === "planning"
+    if (isLive) return
     api.getRun(activeRunId).then((detail) => {
       if (detail.data?.steps) setSteps(detail.data.steps)
       if (detail.audit) setAudit(detail.audit)
-      if (detail.logs) setLogs(detail.logs)
+      // Merge run-specific logs into the platform-wide log stream rather
+      // than replacing — preserves sync events, system events, and entries
+      // from other runs that LiveLogs is showing.
+      if (detail.logs?.length) useStore.getState().mergeLogs(detail.logs)
     }).catch(() => {})
-    // Only fetch trace from DB for completed/historical runs.
-    // For running/pending runs, trace streams in live via WS — fetching
-    // from DB would clobber the live stream with a stale snapshot.
-    const run = useStore.getState().runs.find((r) => r.id === activeRunId)
-    const isLive = !run || run.status === "running" || run.status === "pending"
-    if (!isLive) {
-      api.getRunTrace(activeRunId).then((entries) => {
-        if (Array.isArray(entries) && entries.length > 0) setTrace(entries as unknown as TraceEntry[])
-      }).catch(() => {})
-    }
-  }, [activeRunId, setSteps, setAudit, setLogs, setTrace])
+    api.getRunTrace(activeRunId).then((entries) => {
+      if (Array.isArray(entries) && entries.length > 0) setTrace(entries as unknown as TraceEntry[])
+    }).catch(() => {})
+  }, [activeRunId, setSteps, setAudit, setTrace])
   // ── Derived data ──────────────────────────────────────────────
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "running"
@@ -412,7 +430,7 @@ export function OperatorEnvironment() {
       </div>
       {showSplitToggle && (
         <button
-          className="px-2 mx-1 my-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+          className="px-2 mx-1 my-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
           style={{ color: sidebarSplit ? C.text : C.dim }}
           onClick={() => setSidebarSplit(!sidebarSplit)}
           title={sidebarSplit ? "Unsplit sidebar" : "Split sidebar"}
@@ -472,6 +490,7 @@ export function OperatorEnvironment() {
 
   return (
     <div
+      ref={rootRef}
       className="flex flex-col h-full overflow-hidden"
       style={{ background: C.base, color: C.text, fontFamily: "var(--font-sans)", fontSize: 13 }}
     >
@@ -491,7 +510,7 @@ export function OperatorEnvironment() {
             autoFocus
           />
           <button
-            className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1 rounded hover:bg-overlay-3 transition-colors cursor-pointer"
             style={{ color: C.muted }}
             onClick={() => { setSearchOpen(false); setSearchQuery("") }}
           >
@@ -512,7 +531,7 @@ export function OperatorEnvironment() {
         {/* ── Activity Bar ──────────────────────────────────── */}
         <div
           className="flex flex-col items-center py-1 shrink-0 select-none"
-          style={{ width: 52, background: C.surface, borderRight: `1px solid ${C.borderSolid}`, paddingRight: 4 }}
+          style={{ width: compact ? 40 : 52, background: C.surface, borderRight: `1px solid ${C.borderSolid}`, paddingRight: 4 }}
         >
           {activityItems.map((item) => {
             const active = sidebarVisible && sidebarSection === item.id
@@ -651,7 +670,7 @@ export function OperatorEnvironment() {
                 iter {currentIteration.current}/{currentIteration.max}
               </span>
             )}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 flex-wrap justify-end">
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
               {(isFailed || isCancelled) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
               {(activeRun?.status === "completed" || isFailed || isCancelled) && (
@@ -680,14 +699,14 @@ export function OperatorEnvironment() {
           {executingToolCalls.size > 0 && !pendingKill && (
             <div
               className="flex items-center gap-2 px-3 py-1 shrink-0 text-[12px] font-mono overflow-x-auto"
-              style={{ background: "#ef444408", borderBottom: `1px solid #ef444420` }}
+              style={{ background: "color-mix(in oklab, var(--color-error) 3%, transparent)", borderBottom: `1px solid color-mix(in oklab, var(--color-error) 12%, transparent)` }}
             >
-              <span style={{ color: "#ef4444", opacity: 0.7 }}>EXECUTING:</span>
+              <span style={{ color: "var(--color-error)", opacity: 0.7 }}>EXECUTING:</span>
               {[...executingToolCalls.values()].map((tc) => (
                 <button
                   key={tc.toolCallId}
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer transition-colors hover:brightness-125 shrink-0"
-                  style={{ background: "#ef444415", color: "#ef4444", border: "1px solid #ef444430" }}
+                  style={{ background: "color-mix(in oklab, var(--color-error) 8%, transparent)", color: "var(--color-error)", border: "1px solid color-mix(in oklab, var(--color-error) 19%, transparent)" }}
                   onClick={() => setPendingKill(tc)}
                   title={`Kill ${tc.toolName}`}
                 >
@@ -700,13 +719,13 @@ export function OperatorEnvironment() {
           {pendingKill && (
             <div
               className="flex items-center gap-2 px-3 py-1.5 shrink-0 text-[12px]"
-              style={{ background: "#ef444410", borderBottom: `1px solid #ef444440` }}
+              style={{ background: "color-mix(in oklab, var(--color-error) 6%, transparent)", borderBottom: `1px solid color-mix(in oklab, var(--color-error) 25%, transparent)` }}
             >
-              <span style={{ color: "#ef4444" }}>Kill <span className="font-mono font-medium">{pendingKill.toolName}</span>:</span>
+              <span style={{ color: "var(--color-error)" }}>Kill <span className="font-mono font-medium">{pendingKill.toolName}</span>:</span>
               <input
                 type="text"
                 className="flex-1 bg-transparent outline-none text-[12px] font-mono min-w-0"
-                style={{ color: C.text, caretColor: "#ef4444" }}
+                style={{ color: C.text, caretColor: "var(--color-error)" }}
                 placeholder="steering message (or press Enter to skip)..."
                 autoFocus
                 onKeyDown={(e) => {
@@ -718,7 +737,7 @@ export function OperatorEnvironment() {
               />
               <button
                 className="px-1.5 py-0.5 rounded text-[11px] cursor-pointer"
-                style={{ color: "#ef4444", border: "1px solid #ef444430" }}
+                style={{ color: "var(--color-error)", border: "1px solid color-mix(in oklab, var(--color-error) 19%, transparent)" }}
                 onClick={() => setPendingKill(null)}
               >
                 Cancel
@@ -741,7 +760,7 @@ export function OperatorEnvironment() {
                 <div className="flex-1" />
                 {editorTab === "llm-calls" && trace.length > 0 && (
                   <button
-                    className="px-2 py-1 mr-0.5 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                    className="px-2 py-1 mr-0.5 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                     style={{ color: C.dim }}
                     onClick={() => exportAgentLoop(trace)}
                     title="Export Agent Loop"
@@ -750,7 +769,7 @@ export function OperatorEnvironment() {
                   </button>
                 )}
                 <button
-                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                   style={{ color: editorSplit ? C.text : C.dim }}
                   onClick={() => setEditorSplit(!editorSplit)}
                   title="Split editor"
@@ -780,7 +799,7 @@ export function OperatorEnvironment() {
                     <div className="flex-1" />
                     {editorRightTab === "llm-calls" && trace.length > 0 && (
                       <button
-                        className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                        className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                         style={{ color: C.dim }}
                         onClick={() => exportAgentLoop(trace)}
                         title="Export Agent Loop"
@@ -853,7 +872,7 @@ export function OperatorEnvironment() {
                   </>
                 )}
                 <button
-                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-white/[0.06]"
+                  className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                   style={{ color: bottomSplit ? C.text : C.dim }}
                   onClick={() => setBottomSplit(!bottomSplit)}
                   title="Split bottom panel"

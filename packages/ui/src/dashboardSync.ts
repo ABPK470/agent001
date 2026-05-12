@@ -27,21 +27,28 @@ function scheduleSave() {
 /** Load dashboard state from server and apply it. If the server has no
  *  state for this user (new visitor), reset to a clean default view and
  *  clear stale localStorage from a prior user on the same browser. */
+let _suppressSave = false
+
 export async function restoreDashboardState(): Promise<void> {
+
   try {
     const state = await api.getDashboardState() as { views: ViewConfig[]; activeViewId: string } | null
     if (state?.views?.length) {
+      _suppressSave = true   // don't echo the server's own data back as a save
       useStore.setState({
         views: state.views,
         activeViewId: state.activeViewId,
       })
+      _suppressSave = false
     } else {
       // Fresh user: wipe whatever the previous browser user left behind.
-      try { localStorage.removeItem("agent001-dashboard") } catch { /* ignore */ }
+      try { localStorage.removeItem("mia-dashboard") } catch { /* ignore */ }
+      _suppressSave = true
       useStore.setState({
         views: [{ id: "default", name: "Main", widgets: [], layouts: {} }],
         activeViewId: "default",
       })
+      _suppressSave = false
     }
   } catch {
     // Server not available — use localStorage (zustand persist)
@@ -56,7 +63,7 @@ export function startDashboardSync() {
   // Subscribe to views/activeViewId changes
   useStore.subscribe(
     (state, prev) => {
-      if (state.views !== prev.views || state.activeViewId !== prev.activeViewId) {
+      if (!_suppressSave && (state.views !== prev.views || state.activeViewId !== prev.activeViewId)) {
         scheduleSave()
       }
     },

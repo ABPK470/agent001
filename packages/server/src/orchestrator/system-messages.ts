@@ -1,7 +1,19 @@
 import type { Message, Tool } from "@agent001/agent"
-import { DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
 import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
+
+// ── Sync goal detection ───────────────────────────────────────────
+
+/**
+ * Returns true when the goal is related to ABI environment sync / data sync
+ * operations. Only in these cases is the full ABI_SYNC_SECTION injected into
+ * the system prompt. For all other goals the section is omitted entirely —
+ * it's 3-5K tokens of context that is irrelevant for coding, analysis, etc.
+ */
+function isSyncRelatedGoal(goal: string): boolean {
+  return /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\buspSync|\bmymi\b|\bpipelineActivity\b|\bgateMetadata\b|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i.test(goal)
+}
 
 // ── System message construction ───────────────────────────────────
 
@@ -18,7 +30,7 @@ export async function buildSystemMessages(opts: {
   perTier: { working: string; episodic: string; semantic: string }
   runId: string
 }): Promise<Message[]> {
-  const { goal: _goal, systemPrompt, allTools, runWorkspace, perTier } = opts
+  const { goal, systemPrompt, allTools, runWorkspace, perTier } = opts
 
   const systemMessages: Message[] = []
 
@@ -30,6 +42,17 @@ export async function buildSystemMessages(opts: {
     content: `${basePrompt}\n${envBlock}`,
     section: "system_anchor",
   })
+
+  // Section 1b: ABI sync SME — injected ONLY when the goal is sync-related.
+  // Keeping this out of the default system prompt saves 3-5K tokens per call
+  // on all non-sync tasks (coding, data analysis, etc.).
+  if (isSyncRelatedGoal(goal)) {
+    systemMessages.push({
+      role: "system",
+      content: ABI_SYNC_SECTION,
+      section: "system_anchor",
+    })
+  }
 
   // Section 2: system_runtime — tool capabilities (droppable)
   const toolCtx = buildToolContext(allTools)

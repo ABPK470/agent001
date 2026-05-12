@@ -41,6 +41,7 @@
 import type { LLMClient, Message } from "../../types.js"
 import {
     BOUNDED_COHERENT_SCOPE_RE,
+    CONVERSATIONAL_DATA_QUERY_RE,
     DATA_FETCH_PIPELINE_RE,
     DB_INVESTIGATION_RE,
     DIALOGUE_MEMORY_RE,
@@ -54,7 +55,9 @@ import {
     LARGE_GREENFIELD_BOOTSTRAP_RE,
     PLAN_CREATION_RE,
     REVIEW_QUESTION_RE,
+    RUN_HISTORY_QUERY_RE,
     SIMPLE_DIALOGUE_RE,
+    SIMPLE_FUNCTION_WRITE_RE,
     SINGLE_ARTIFACT_BURST_RE
 } from "../decision-patterns.js"
 import type { PlannerDecision, PlannerNeedLevel, PlannerRoute, RoutingConfidence } from "../types.js"
@@ -268,6 +271,17 @@ export async function assessPlannerDecision(
   if (EDIT_ARTIFACT_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return makeDecision("direct", score, "edit_artifact_direct_path", axes, "decisive_coherent", false)
   }
+  // Single function/script write — no multi-step structure, no external deps, one concern.
+  // The parent agent handles this inline; planner decomposition adds 30K+ token overhead.
+  if (
+    SIMPLE_FUNCTION_WRITE_RE.test(signals.normalized)
+    && !signals.hasDelegationCue
+    && !signals.hasMultiStepCue
+    && !EXTERNAL_SERVICE_RE.test(signals.normalized)
+    && !EXISTING_CODE_COUPLING_RE.test(signals.normalized)
+  ) {
+    return makeDecision("direct", score, "simple_function_write_direct_path", axes, "decisive_coherent", false)
+  }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return makeDecision("direct", score, "plan_generation_direct_path", axes, "decisive_coherent", false)
   }
@@ -282,6 +296,24 @@ export async function assessPlannerDecision(
   // Data-fetch pipelines use direct tool loop for real query results
   if (DATA_FETCH_PIPELINE_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return makeDecision("direct", score, "data_fetch_pipeline_direct_path", axes, "decisive_coherent", false)
+  }
+  if (
+    RUN_HISTORY_QUERY_RE.test(signals.normalized)
+    && !signals.hasDelegationCue
+    && !signals.hasImplementationScopeCue
+  ) {
+    return makeDecision("direct", score, "run_history_query_direct_path", axes, "decisive_coherent", false)
+  }
+  // Conversational data/metadata query: "are there any X created by Y", "which X was
+  // modified by Z", etc. These are single-shot DB lookups — the planner cannot infer
+  // correct tool names for them and will hallucinate step definitions. Route direct
+  // unconditionally when the request has no delegation or implementation-scope intent.
+  if (
+    CONVERSATIONAL_DATA_QUERY_RE.test(signals.normalized)
+    && !signals.hasDelegationCue
+    && !signals.hasImplementationScopeCue
+  ) {
+    return makeDecision("direct", score, "conversational_data_query_direct_path", axes, "decisive_coherent", false)
   }
   // Single-artifact implementation burst
   if (SINGLE_ARTIFACT_BURST_RE.test(signals.normalized) && isHighConfidenceSingleArtifactBurst(signals)) {
@@ -329,7 +361,7 @@ export async function assessPlannerDecision(
     return makeDecision("planner_with_coherent_bootstrap", score, "planner_with_coherent_bootstrap", effectiveAxes, routingConfidence, llmClassified)
   }
 
-  const shouldPlan = score >= 3
+  const shouldPlan = score >= 4
   return {
     score,
     shouldPlan,

@@ -36,7 +36,7 @@ const COPY_IGNORE_FILES = new Set([
   ".DS_Store",
 ])
 
-const RUN_WORKSPACE_ROOT_NAME = "agent001-runs"
+const RUN_WORKSPACE_ROOT_NAME = "mia-runs"
 
 export function getRunWorkspaceRoot(): string {
   return resolve(tmpdir(), RUN_WORKSPACE_ROOT_NAME)

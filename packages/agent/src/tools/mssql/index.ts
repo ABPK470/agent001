@@ -1,9 +1,11 @@
 export {
     closeMssqlPool,
+    getDefaultMssqlConnectionName,
     getMssqlConfig,
     getMssqlKillSignal,
     getPool,
     runWithMssqlKillSignal,
+    setDefaultMssqlConnection,
     setMssqlConfig,
     setMssqlConfigs,
     setMssqlKillSignal,

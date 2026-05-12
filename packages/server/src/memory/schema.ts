@@ -47,7 +47,7 @@ export function migrateMemory(): void {
     );
   `)
 
-  // FTS5 for memory_entries
+  // FTS5 for memory_entries — create then integrity-check and rebuild if corrupt.
   try {
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS memory_entries_fts USING fts5(
@@ -58,6 +58,37 @@ export function migrateMemory(): void {
       );
     `)
   } catch { /* already exists */ }
+
+  // Detect and auto-repair a corrupted FTS index (SQLITE_CORRUPT_VTAB).
+  // `integrity-check` returns one row per error; an empty result means healthy.
+  try {
+    const ftsErrors = db
+      .prepare("INSERT INTO memory_entries_fts(memory_entries_fts) VALUES ('integrity-check')")
+      .run()
+    void ftsErrors
+  } catch {
+    // FTS is corrupt — drop and rebuild from the base table.
+    console.warn("[memory] memory_entries_fts corrupt — rebuilding FTS index...")
+    try {
+      db.exec("DROP TABLE IF EXISTS memory_entries_fts")
+      db.exec(`
+        CREATE VIRTUAL TABLE memory_entries_fts USING fts5(
+          content,
+          metadata,
+          content='memory_entries',
+          content_rowid='rowid'
+        );
+      `)
+      // Repopulate from the main table.
+      db.exec(`
+        INSERT INTO memory_entries_fts(rowid, content, metadata)
+        SELECT rowid, content, metadata FROM memory_entries;
+      `)
+      console.warn("[memory] FTS index rebuilt successfully.")
+    } catch (rebuildErr) {
+      console.error("[memory] FTS rebuild failed:", rebuildErr)
+    }
+  }
 
   // FTS5 for procedural
   try {

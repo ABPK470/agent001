@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { MessageQueue } from "./queue.js"
 import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
 
@@ -42,6 +42,15 @@ export class MessageRouter {
   private readonly queue: MessageQueue
   private readonly store: ConversationStore
   private readonly runTrigger: RunTrigger
+  /**
+   * Maps runId → conversationId for every run started via handleInbound.
+   *
+   * Root-cause fix: getByRunId() queries `WHERE active_run_id = ?`, which
+   * returns nothing once a second message arrives and overwrites the field.
+   * Keeping an in-memory map lets sendReply always find the right conversation
+   * regardless of how many messages have arrived since.
+   */
+  private readonly runToConv = new Map<string, string>()
 
   constructor(
     queue: MessageQueue,
@@ -91,6 +100,10 @@ export class MessageRouter {
     // Start a new agent run with the user's message
     const runId = this.runTrigger.startRun(message.text)
 
+    // Track run → conversation so sendReply works even if active_run_id
+    // is later overwritten by a subsequent inbound message.
+    this.runToConv.set(runId, conv.id)
+
     // Link the run to the conversation
     conv.activeRunId = runId
     conv.updatedAt = new Date()
@@ -120,8 +133,14 @@ export class MessageRouter {
    * for delivery with retry.
    */
   async sendReply(runId: string, text: string): Promise<void> {
-    const conv = this.store.getByRunId(runId)
+    // Prefer the in-memory map: the DB query (`WHERE active_run_id = ?`) fails
+    // once a newer message has overwritten active_run_id on the conversation.
+    const convId = this.runToConv.get(runId)
+    const conv = convId ? this.store.get(convId) : this.store.getByRunId(runId)
     if (!conv) return // Run wasn't triggered by a chat message
+
+    // Clean up the tracking entry
+    this.runToConv.delete(runId)
 
     // Clear active run
     this.store.updateActiveRun(conv.id, null)

@@ -23,8 +23,8 @@ import { compactMessages, truncateMessages } from "./context-management.js"
 import * as log from "./logger.js"
 import { attemptPlannerRouting } from "./planner-routing.js"
 import {
-  buildCoherentVerificationPipelineResult,
-  summarizeCoherentVerifierDecision,
+    buildCoherentVerificationPipelineResult,
+    summarizeCoherentVerifierDecision,
 } from "./planner/coherent.js"
 import type { PlannerContext } from "./planner/index.js"
 import type { VerifierDecision } from "./planner/types.js"
@@ -50,6 +50,7 @@ export class Agent {
     verbose: boolean
     onThinking: AgentConfig["onThinking"]
     onToken: AgentConfig["onToken"]
+    onStreamDiscard: AgentConfig["onStreamDiscard"]
     onStep: AgentConfig["onStep"]
     onLlmCall: AgentConfig["onLlmCall"]
     onNudge: AgentConfig["onNudge"]
@@ -81,6 +82,7 @@ export class Agent {
       verbose: config.verbose ?? true,
       onThinking: config.onThinking,
       onToken: config.onToken,
+      onStreamDiscard: config.onStreamDiscard,
       onStep: config.onStep,
       onLlmCall: config.onLlmCall,
       onNudge: config.onNudge,
@@ -259,12 +261,20 @@ export class Agent {
       }
 
       // ── LLM call ──
+      // Stream tokens live to the UI via onToken. If this iteration turns out
+      // to have tool calls (intermediate reasoning), we call onStreamDiscard so
+      // the UI clears the partial text. Only final-answer iterations are kept.
+      // This gives genuine real-time streaming without fake setTimeout replays.
+      const iterOnToken: ((t: string) => void) | undefined = this.config.onToken
+
       this.config.onLlmCall?.({ phase: "request", messages: contractMessages, tools: chatToolsForLLM, iteration: i })
       const t0 = Date.now()
       let response
       try {
-        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal, onToken: this.config.onToken })
+        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal, onToken: iterOnToken })
       } catch (err) {
+        // If streaming was in progress when the error occurred, discard the partial buffer
+        this.config.onStreamDiscard?.()
         if (err instanceof Error && err.message.includes("finish_reason=length")) {
           const truncMsg =
             "⚠ OUTPUT TRUNCATED: Your last response was cut off because it exceeded the completion token limit. " +
@@ -307,6 +317,9 @@ export class Agent {
             if (this.config.verbose) log.logFinalAnswer(guardResult.finalAnswer)
             return guardResult.finalAnswer
           }
+          // Guard fired — the LLM's draft answer was rejected. Discard the
+          // buffered tokens so a partial/incorrect answer never shows in chat.
+          this.config.onStreamDiscard?.()
           // Guard fired — inject messages and continue
           messages.push({ role: "assistant", content: response.content, section: "history" })
           messages.push({ role: "system", content: guardResult.message, section: "history" })
@@ -314,13 +327,17 @@ export class Agent {
           continue
         }
 
-        // All guards passed — return the final answer
+        // All guards passed — this IS the final answer. Tokens already
+        // streamed live; nothing more to do.
         const answer = response.content ?? "(no response)"
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
       }
 
       // ── Execute tool calls ──
+      // This iteration was intermediate — discard the buffered tokens.
+      // The UI never saw them, so no visible flash of garbage reasoning text.
+      this.config.onStreamDiscard?.()
       messages.push({
         role: "assistant",
         content: response.content,
@@ -375,11 +392,46 @@ export class Agent {
         if (this.config.verbose) log.logFinalAnswer(postRound.finalAnswer)
         return postRound.finalAnswer
       }
+
+      // Stuck detection asked for a synthesis call — do it with no tools so
+      // the model can only write text, not call more tools.
+      if (postRound.needsSynthesis) {
+        const synthesisAnswer = await this.synthesizeFinalAnswer(messages)
+        if (this.config.verbose) log.logFinalAnswer(synthesisAnswer)
+        return synthesisAnswer
+      }
     }
 
-    const maxIterMsg = `Agent stopped after ${this.config.maxIterations} iterations.`
-    if (this.config.verbose) log.logError(maxIterMsg)
-    return maxIterMsg
+    // Max iterations reached — synthesize instead of returning a dead-end string.
+    const maxIterSynthesisInstruction =
+      `You have used all ${this.config.maxIterations} iterations. STOP calling tools. ` +
+      `Write your final answer now using only the information already gathered. ` +
+      `If the task is incomplete, clearly state what you found and what remains unknown.`
+    messages.push({ role: "system", content: maxIterSynthesisInstruction, section: "history" })
+    const maxIterAnswer = await this.synthesizeFinalAnswer(messages)
+    if (this.config.verbose) log.logFinalAnswer(maxIterAnswer)
+    return maxIterAnswer
+  }
+
+  /**
+   * Make one final no-tool LLM call to synthesize a proper answer from the
+   * conversation so far. Used by stuck detection and max-iterations fallback.
+   * Passes an empty tool list so the model cannot call any tools.
+   */
+  private async synthesizeFinalAnswer(messages: Message[]): Promise<string> {
+    try {
+      const truncationResult = truncateMessages(messages)
+      const response = await this.llm.chat(truncationResult.messages, [], { signal: this.config.signal })
+      this.llmCalls++
+      if (response.usage) {
+        this.usage.promptTokens += response.usage.promptTokens
+        this.usage.completionTokens += response.usage.completionTokens
+        this.usage.totalTokens += response.usage.totalTokens
+      }
+      return response.content ?? "(The agent was unable to produce a final answer.)"
+    } catch {
+      return "(The agent was unable to produce a final answer.)"
+    }
   }
 
   private buildInitialMessages(goal: string): Message[] {

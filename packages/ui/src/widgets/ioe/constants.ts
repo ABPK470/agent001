@@ -9,22 +9,28 @@ import type {
 } from "../../types"
 
 // ── Design tokens ────────────────────────────────────────────────
+//
+// Resolved at runtime via CSS variables defined in `packages/ui/src/index.css`
+// so that every IOE inline style automatically follows the active theme
+// (light / dark / system) instead of being baked in.
 
 export const C = {
-  base: "#09090b",
-  surface: "#121214",
-  elevated: "#1c1c1f",
-  border: "rgba(255,255,255,0.08)",
-  borderSolid: "#27272a",
-  text: "#f4f4f5",
-  textSecondary: "#d4d4d8",
-  muted: "#a1a1aa",
-  dim: "#52525b",
-  accent: "#7B6FC7",
-  accentHover: "#9189D4",
-  success: "#5db078",
-  warning: "#d4a64a",
-  error: "#c95a4a",
+  base: "var(--color-canvas)",
+  surface: "var(--color-panel)",
+  elevated: "var(--color-panel-2)",
+  border: "var(--color-border-subtle)",
+  borderSolid: "var(--color-border)",
+  text: "var(--color-text)",
+  textSecondary: "var(--color-text-secondary)",
+  muted: "var(--color-text-muted)",
+  dim: "var(--color-text-faint)",
+  accent: "var(--color-accent)",
+  accentHover: "var(--color-accent-hover)",
+  success: "var(--color-success)",
+  warning: "var(--color-warning)",
+  error: "var(--color-error)",
+  // Decorative accents — kept as palette entries (used in the IOE
+  // status / kind iconography). These are not theme-flipped today.
   coral: "#EA6248",
   peach: "#F49D6C",
   plum: "#825776",

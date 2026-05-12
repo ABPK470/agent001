@@ -15,7 +15,7 @@ export { _migrate } from "./db/connection.js"
 export {
     findStaleRuns, getAuditLog, getCheckpoint, getLogs, getRun, getTokenUsage, getTraceEntries, getUsageTotals, listRuns,
     listRunsWithUsage,
-    listRunsWithUsageForUser, listTokenUsage, markRunCrashed, saveAudit, saveCheckpoint, saveLog, saveRun, saveTokenUsage, saveTraceEntry, type DbAudit, type DbCheckpoint, type DbLog, type DbRun,
+    listRunsWithUsageForUser, listTokenUsage, markRunCancelled, markRunCrashed, saveAudit, saveCheckpoint, saveLog, saveRun, saveTokenUsage, saveTraceEntry, type DbAudit, type DbCheckpoint, type DbLog, type DbRun,
     type DbRunWithUsage, type DbTokenUsage, type DbTraceEntry, type UsageTotals
 } from "./db/runs.js"
 
@@ -51,4 +51,9 @@ export {
 export {
     clearTransactionalData, getDbStats, pruneOldData
 } from "./db/lifecycle.js"
+
+// Sync runs (ABI environment sync history)
+export {
+    getSyncRun, listSyncRuns, recordSyncRunFinish, recordSyncRunStart, type SyncRunRow
+} from "./db/sync-runs.js"
 

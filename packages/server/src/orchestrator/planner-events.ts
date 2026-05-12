@@ -1,5 +1,6 @@
 import type { EngineServices } from "@agent001/agent"
-import { broadcast } from "../ws.js"
+import * as db from "../db.js"
+import { broadcast } from "../event-broadcaster.js"
 
 // ── Planner trace event dispatcher ───────────────────────────────
 
@@ -41,6 +42,21 @@ export function handlePlannerTrace(
   } else if (kind === "planner-validation-failed") {
     broadcast({ type: "planner.validation.failed", data: { runId, diagnostics: e.diagnostics } })
     services.auditService.log({ actor: "agent", action: "planner.validation.failed", resourceType: "AgentRun", resourceId: runId, detail: { diagnostics: e.diagnostics } }).catch(() => {})
+  } else if (kind === "planner-platform-unconfigured") {
+    // Operator-only event — the user-facing answer is opaque on purpose.
+    // Persist the technical detail to the run logs (visible to admins via the
+    // run detail view), audit log, and the realtime stream so admins can
+    // diagnose without scraping stdout. Logged at error level so it sorts
+    // alongside other actionable failures.
+    const subject = String(e.subject ?? "unknown")
+    const remediation = String(e.remediation ?? "")
+    const stepName = String(e.stepName ?? "?")
+    const message = `Platform integration not configured: ${subject} (step "${stepName}"). ${remediation}`
+    db.saveLog({ run_id: runId, level: "run:error", message, timestamp: new Date().toISOString() })
+    broadcast({ type: "planner.platform.unconfigured", data: { runId, stepName, subject, remediation, rawError: e.rawError } })
+    services.auditService.log({ actor: "agent", action: "planner.platform.unconfigured", resourceType: "AgentRun", resourceId: runId, detail: { stepName, subject, remediation, rawError: e.rawError } }).catch(() => {})
+    // eslint-disable-next-line no-console
+    console.error(`[run ${runId}] ${message}`)
   } else if (kind === "planner-validation-remediated") {
     broadcast({ type: "planner.validation.remediated", data: { runId, diagnostics: e.diagnostics } })
     services.auditService.log({ actor: "agent", action: "planner.validation.remediated", resourceType: "AgentRun", resourceId: runId, detail: { diagnostics: e.diagnostics } }).catch(() => {})

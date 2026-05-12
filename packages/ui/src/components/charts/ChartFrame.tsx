@@ -20,9 +20,9 @@ export function ChartFrame({
   const showHeader = !!(title || subtitle || badge)
   const showLegend = legend && legend.length > 0
   return (
-    <div className="rounded-lg overflow-hidden border border-white/[0.08] bg-base">
+    <div className="rounded-lg overflow-hidden border border-border-subtle bg-base">
       {showHeader && (
-        <div className="px-3 pt-2 pb-1.5 border-b border-white/[0.06] flex items-baseline gap-2 flex-wrap">
+        <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
           {title && <div className="text-sm font-semibold text-text">{title}</div>}
           {subtitle && <div className="text-[11px] text-text-muted">{subtitle}</div>}
           {badge && (

@@ -106,40 +106,98 @@ export function listUsersWithStats(opts?: {
   const rows = getDb().prepare(`
     WITH grouped_sessions AS (
       SELECT
-        COALESCE(upn, 'sid:' || sid) AS identifier,
+        -- For UPN-identified users: group by UPN.
+        -- For anon users who share a display_name (same person, different sids):
+        --   group by display_name so ghost sessions from repeated modal
+        --   submissions collapse into one row.
+        -- For truly anonymous (no UPN, no display_name): group by sid.
+        CASE
+          WHEN upn IS NOT NULL THEN upn
+          WHEN display_name IS NOT NULL AND display_name != '' AND display_name != 'Anonymous'
+            THEN 'name:' || LOWER(display_name)
+          ELSE 'sid:' || sid
+        END                          AS identifier,
         MAX(upn)                     AS upn,
-        MAX(display_name)            AS display_name,
+        -- Use the most-recently-seen display_name, not MAX() which picks
+        -- lexicographically-largest (e.g. 'pk' beats 'admin').
+        (SELECT display_name FROM sessions s2
+           WHERE CASE
+             WHEN s2.upn IS NOT NULL THEN s2.upn
+             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(s2.display_name)
+             ELSE 'sid:' || s2.sid
+           END = CASE
+             WHEN sessions.upn IS NOT NULL THEN sessions.upn
+             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(sessions.display_name)
+             ELSE 'sid:' || sessions.sid
+           END
+           ORDER BY s2.last_seen_at DESC LIMIT 1) AS display_name,
         COUNT(*)                     AS session_count,
         MIN(created_at)              AS first_seen_at,
         MAX(last_seen_at)            AS last_seen_at,
         (SELECT ip         FROM sessions s2
-           WHERE COALESCE(s2.upn, 'sid:' || s2.sid) = COALESCE(sessions.upn, 'sid:' || sessions.sid)
+           WHERE CASE
+             WHEN s2.upn IS NOT NULL THEN s2.upn
+             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(s2.display_name)
+             ELSE 'sid:' || s2.sid
+           END = CASE
+             WHEN sessions.upn IS NOT NULL THEN sessions.upn
+             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(sessions.display_name)
+             ELSE 'sid:' || sessions.sid
+           END
            ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
         (SELECT user_agent FROM sessions s2
-           WHERE COALESCE(s2.upn, 'sid:' || s2.sid) = COALESCE(sessions.upn, 'sid:' || sessions.sid)
+           WHERE CASE
+             WHEN s2.upn IS NOT NULL THEN s2.upn
+             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(s2.display_name)
+             ELSE 'sid:' || s2.sid
+           END = CASE
+             WHEN sessions.upn IS NOT NULL THEN sessions.upn
+             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
+               THEN 'name:' || LOWER(sessions.display_name)
+             ELSE 'sid:' || sessions.sid
+           END
            ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
       FROM sessions
       WHERE last_seen_at >= datetime('now', ?)
       GROUP BY identifier
     ),
     run_totals AS (
+      -- Resolve each run to the same identifier space used by grouped_sessions:
+      -- UPN → upn, named-anon → 'name:'||lower(display_name), else 'sid:'||sid.
       SELECT
-        COALESCE(upn, 'sid:' || session_id) AS identifier,
+        CASE
+          WHEN r.upn IS NOT NULL THEN r.upn
+          WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
+            THEN 'name:' || LOWER(s.display_name)
+          ELSE 'sid:' || r.session_id
+        END AS identifier,
         COUNT(*) AS total_runs,
-        SUM(CASE WHEN created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
-        SUM(CASE WHEN created_at >= datetime('now', ?) AND status IN ('error','failed','timeout') THEN 1 ELSE 0 END) AS runs_failed_24h,
-        MAX(created_at) AS last_run_at
-      FROM runs
-      WHERE upn IS NOT NULL OR session_id IS NOT NULL
+        SUM(CASE WHEN r.created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
+        SUM(CASE WHEN r.created_at >= datetime('now', ?) AND r.status IN ('error','failed','timeout') THEN 1 ELSE 0 END) AS runs_failed_24h,
+        MAX(r.created_at) AS last_run_at
+      FROM runs r
+      LEFT JOIN sessions s ON s.sid = r.session_id
+      WHERE r.upn IS NOT NULL OR r.session_id IS NOT NULL
       GROUP BY identifier
     ),
     token_totals AS (
       SELECT
-        COALESCE(r.upn, 'sid:' || r.session_id) AS identifier,
+        CASE
+          WHEN r.upn IS NOT NULL THEN r.upn
+          WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
+            THEN 'name:' || LOWER(s.display_name)
+          ELSE 'sid:' || r.session_id
+        END AS identifier,
         SUM(t.total_tokens) AS total_tokens_24h,
         SUM(t.llm_calls)    AS total_llm_calls_24h
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
+      LEFT JOIN sessions s ON s.sid = r.session_id
       WHERE r.created_at >= datetime('now', ?)
       GROUP BY identifier
     ),
@@ -148,11 +206,24 @@ export function listUsersWithStats(opts?: {
         identifier, model
       FROM (
         SELECT
-          COALESCE(r.upn, 'sid:' || r.session_id) AS identifier,
+          CASE
+            WHEN r.upn IS NOT NULL THEN r.upn
+            WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
+              THEN 'name:' || LOWER(s.display_name)
+            ELSE 'sid:' || r.session_id
+          END AS identifier,
           t.model,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(r.upn, 'sid:' || r.session_id) ORDER BY t.created_at DESC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY
+            CASE
+              WHEN r.upn IS NOT NULL THEN r.upn
+              WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
+                THEN 'name:' || LOWER(s.display_name)
+              ELSE 'sid:' || r.session_id
+            END
+          ORDER BY t.created_at DESC) AS rn
         FROM runs r
         JOIN token_usage t ON t.run_id = r.id
+        LEFT JOIN sessions s ON s.sid = r.session_id
       )
       WHERE rn = 1
     )
@@ -231,43 +302,60 @@ export interface UserHistoryRunRow {
  * anonymous visitors). Joined with token_usage so the widget can render
  * tokens / model in one round-trip.
  */
-export function listUserHistory(identifier: string, limit = 25): UserHistoryRunRow[] {
-  const isSid = identifier.startsWith("sid:")
-  const key = isSid ? identifier.slice(4) : identifier
-  const sql = isSid
+export function listUserHistory(identifier: string, limit = 25, offset = 0): { runs: UserHistoryRunRow[]; total: number } {
+  const isSid  = identifier.startsWith("sid:")
+  const isName = identifier.startsWith("name:")
+  const key = isSid ? identifier.slice(4) : isName ? identifier.slice(5) : identifier
+
+  // Three identifier spaces match the CTE in listUsersWithStats:
+  //   upn       → runs.upn = ?
+  //   sid:<sid> → runs.session_id = ? AND runs.upn IS NULL
+  //   name:<dn> → join sessions on session_id, match display_name (case-insensitive), upn IS NULL
+  const joinClause  = isName ? `LEFT JOIN sessions s ON s.sid = r.session_id` : ``
+  const whereClause = isSid
     ? `WHERE r.session_id = ? AND r.upn IS NULL`
-    : `WHERE r.upn = ?`
+    : isName
+      ? `WHERE r.upn IS NULL AND LOWER(s.display_name) = LOWER(?)`
+      : `WHERE r.upn = ?`
+  const countSql = `SELECT COUNT(*) AS cnt FROM runs r ${joinClause} ${whereClause}`
+  const total = (getDb().prepare(countSql).get(key) as { cnt: number }).cnt
   const rows = getDb().prepare(`
     SELECT
       r.id, r.goal, r.status, r.step_count, r.created_at, r.completed_at, r.error,
       t.total_tokens, t.llm_calls, t.model
     FROM runs r
     LEFT JOIN token_usage t ON t.run_id = r.id
-    ${sql}
+    ${joinClause}
+    ${whereClause}
     ORDER BY r.created_at DESC
-    LIMIT ?
-  `).all(key, limit) as Array<{
+    LIMIT ? OFFSET ?
+  `).all(key, limit, offset) as Array<{
     id: string; goal: string; status: string; step_count: number
     created_at: string; completed_at: string | null; error: string | null
     total_tokens: number | null; llm_calls: number | null; model: string | null
   }>
-  return rows.map((r) => {
-    const startedMs   = Date.parse(r.created_at + "Z")
-    const completedMs = r.completed_at ? Date.parse(r.completed_at + "Z") : null
-    return {
-      runId:       r.id,
-      goal:        r.goal,
-      status:      r.status,
-      stepCount:   r.step_count,
-      createdAt:   r.created_at,
-      completedAt: r.completed_at,
-      durationMs:  completedMs ? completedMs - startedMs : null,
-      totalTokens: r.total_tokens,
-      llmCalls:    r.llm_calls,
-      model:       r.model,
-      error:       r.error,
-    }
-  })
+  return {
+    total,
+    runs: rows.map((r) => {
+      const parseTs = (s: string) =>
+        /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? Date.parse(s) : Date.parse(s.replace(" ", "T") + "Z")
+      const startedMs   = parseTs(r.created_at)
+      const completedMs = r.completed_at ? parseTs(r.completed_at) : null
+      return {
+        runId:       r.id,
+        goal:        r.goal,
+        status:      r.status,
+        stepCount:   r.step_count,
+        createdAt:   r.created_at,
+        completedAt: r.completed_at,
+        durationMs:  completedMs ? completedMs - startedMs : null,
+        totalTokens: r.total_tokens,
+        llmCalls:    r.llm_calls,
+        model:       r.model,
+        error:       r.error,
+      }
+    }),
+  }
 }
 
 

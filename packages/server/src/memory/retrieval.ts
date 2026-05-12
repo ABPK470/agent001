@@ -1,5 +1,5 @@
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { searchProcedures } from "./procedural.js"
 import { rowToEntry } from "./schema.js"
 import {

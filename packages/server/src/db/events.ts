@@ -64,6 +64,46 @@ export function listEvents(opts?: {
     .all(...params) as DbEvent[]
 }
 
+/** Full-text search across event_log data JSON. Used by the DB-fallback
+ *  search in LiveLogs widget when in-memory buffer has no matches. */
+export function searchEvents(q: string, opts?: {
+  limit?: number
+  types?: string[]
+  type_patterns?: string[]
+  before?: string
+  after?: string
+}): DbEvent[] {
+  const limit = Math.min(opts?.limit ?? 200, 1000)
+  const conditions: string[] = []
+  const params: unknown[] = []
+
+  // Free-text: search both the data JSON blob AND the type column so that
+  // e.g. searching "failed" finds events whose type contains "failed".
+  if (q.length >= 2) {
+    conditions.push("(data LIKE ? OR type LIKE ?)")
+    params.push(`%${q}%`, `%${q}%`)
+  }
+  if (opts?.before) { conditions.push("created_at < ?"); params.push(opts.before) }
+  if (opts?.after)  { conditions.push("created_at > ?"); params.push(opts.after) }
+  if (opts?.types?.length) {
+    conditions.push(`type IN (${opts.types.map(() => "?").join(",")})`)
+    params.push(...opts.types)
+  }
+  // type_patterns: OR'd LIKE filters on the type column. Used by err:1 to
+  // find events like sync.execute.step.failed / run.failed / agent.error.
+  if (opts?.type_patterns?.length) {
+    const pats = opts.type_patterns.map(() => "type LIKE ?")
+    conditions.push(`(${pats.join(" OR ")})`)
+    params.push(...opts.type_patterns.map((p) => `%${p}%`))
+  }
+
+  if (!conditions.length) return []
+  params.push(limit)
+  return getDb()
+    .prepare(`SELECT * FROM event_log WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params) as DbEvent[]
+}
+
 // ── Webhook drains ───────────────────────────────────────────────
 
 export function migrateWebhookDrains(): void {

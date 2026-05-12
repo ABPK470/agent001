@@ -402,7 +402,7 @@ export function RunsPanel({
         runs.map((r) => (
           <button
             key={r.id}
-            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.03] cursor-pointer"
+            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-overlay-2 cursor-pointer"
             style={{ background: r.id === activeRunId ? "rgba(123,111,199,0.08)" : "transparent" }}
             onClick={() => onSelect(r.id)}
           >
@@ -441,7 +441,7 @@ export function SearchResultsList({ results }: { results: SearchResult[] | null 
       {results.map((r, i) => (
         <div
           key={i}
-          className="flex items-center gap-2 px-2 py-1 rounded text-[13px] hover:bg-white/5 cursor-pointer"
+          className="flex items-center gap-2 px-2 py-1 rounded text-[13px] hover:bg-overlay-2 cursor-pointer"
           style={{ color: C.textSecondary }}
         >
           <span className="text-[13px] uppercase shrink-0 w-8" style={{ color: C.dim }}>{r.type}</span>

@@ -11,13 +11,14 @@ export function fmtRow(n: number | null): string {
 }
 
 export function fmtTable(
-  t: CatalogTable,
+  t: CatalogTable | undefined | null,
   matchedCols?: string[],
   catalog?: {
     getImplicitJoins(key: string, limit?: number): { column: string; dataType: string; tables: string[] }[]
     getTableConcepts(key: string): { concept: string; sourceView: string }[]
   },
 ): string {
+  if (!t) return "(unknown table)"
   const lines: string[] = []
   const rowInfo = fmtRow(t.rowCount)
 

@@ -259,11 +259,21 @@ export async function verify(
 
   // Read actual file contents for code artifacts to give the LLM verifier
   // concrete code to assess (not just the child's self-reported output).
+  // Re-use a per-path content cache so each file is read at most once across
+  // the deterministic-probe phase and this LLM-prep phase.
   const artifactContents = new Map<string, string>()
   const stepSpecEvidence = new Map<string, StepSpecEvidence>()
   const toolMap = new Map(tools.map(t => [t.name, t]))
   const readFile = toolMap.get("read_file")
   const runCommand = toolMap.get("run_command")
+  // Content cache: populated on first read, reused on subsequent reads.
+  const contentCache = new Map<string, string | null>()
+  async function cachedReadArtifactContent(path: string): Promise<string | null> {
+    if (contentCache.has(path)) return contentCache.get(path)!
+    const result = readFile ? await readArtifactContent(readFile, path, runCommand) : null
+    contentCache.set(path, result)
+    return result
+  }
   if (readFile) {
     for (const step of plan.steps) {
       if (step.stepType !== "subagent_task") continue
@@ -285,7 +295,7 @@ export async function verify(
         )
         if (probe.found) {
           try {
-            const content = await readArtifactContent(readFile, probe.resolvedPath, runCommand)
+            const content = await cachedReadArtifactContent(probe.resolvedPath)
             if (typeof content === "string" && content.length > 0) {
               artifactContents.set(artifact, content)
             }

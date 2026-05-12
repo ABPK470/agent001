@@ -84,7 +84,7 @@ export async function generateCoherentBootstrap(
 
   let rawResponse: string | null = null
   try {
-    const response = await llm.chat(messages, [], { signal: opts?.signal })
+    const response = await llm.chat(messages, [], { signal: opts?.signal, temperature: 0 })
     rawResponse = response.content
     if (!rawResponse) {
       return {
@@ -219,7 +219,7 @@ export async function generatePlan(
 
     let rawResponse: string | null = null
     try {
-      const response = await llm.chat(messages, [], { signal: opts?.signal })
+      const response = await llm.chat(messages, [], { signal: opts?.signal, temperature: 0 })
       rawResponse = response.content
 
       if (!rawResponse) {

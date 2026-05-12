@@ -103,7 +103,25 @@ export function findStaleRuns(): DbRun[] {
 
 export function markRunCrashed(runId: string): void {
   getDb().prepare(
-    "UPDATE runs SET status = 'failed', error = 'Server restarted — run interrupted', completed_at = datetime('now') WHERE id = ?"
+    "UPDATE runs SET status = 'failed', error = 'Server restarted \u2014 run interrupted', completed_at = datetime('now') WHERE id = ?"
+  ).run(runId)
+}
+
+/**
+ * Mark a run as cancelled in the DB immediately.
+ *
+ * The agent loop also persists status='cancelled' once the abort signal is
+ * observed, but if the loop is blocked (e.g. on an LLM stream that ignores
+ * the signal) that may never happen — leaving the row stuck on 'running'
+ * across server restarts. Calling this from the orchestrator's cancelRun
+ * makes the DB state match the user's intent regardless of loop progress.
+ *
+ * Only updates rows that are still in an active state, so it can't clobber
+ * a run that has already finished, failed, or completed in the meantime.
+ */
+export function markRunCancelled(runId: string): void {
+  getDb().prepare(
+    "UPDATE runs SET status = 'cancelled', completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND status IN ('running', 'pending', 'planning')"
   ).run(runId)
 }
 

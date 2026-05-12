@@ -122,7 +122,7 @@ export async function probeArtifactViaTool(
   path: string,
   _actualPaths: string[],
   wsRoot?: string,
-  runCommand?: Tool,
+  _runCommand?: Tool,
 ): Promise<{ found: boolean; resolvedPath: string }> {
   const candidates: string[] = []
   if (wsRoot && !path.startsWith(wsRoot)) {

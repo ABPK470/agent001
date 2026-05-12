@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { getRunEffects } from "./queries.js"
 import { hashContent } from "./snapshots.js"
 import type { RollbackPreview, RollbackResult } from "./types.js"

@@ -140,11 +140,11 @@ export function governTool(
           // Race: tool execution vs timeout vs abort
           const racers: Promise<string>[] = [
             tool.execute(args).then(value => normalizeToolExecutionOutput(value).result),
-            new Promise<never>((_, reject) => {
+            ...(timeoutMs > 0 ? [new Promise<never>((_, reject) => {
               const id = setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
               // If tool finishes first, prevent dangling timer
               if (typeof id === "object" && "unref" in id) (id as NodeJS.Timeout).unref()
-            }),
+            })] : []),
           ]
 
           // If we have an abort signal, add it to the race

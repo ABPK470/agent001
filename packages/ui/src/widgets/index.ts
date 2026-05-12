@@ -6,26 +6,23 @@ import type { ComponentType } from "react"
 import type { WidgetType } from "../types"
 import { ActiveUsers } from "./ActiveUsers"
 import { AgentChat } from "./AgentChat"
-import { AgentTrace } from "./AgentTrace"
 import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
-import { CodeSeqDiagram } from "./CodeSeqDiagram"
-import { CommandCenter } from "./CommandCenter"
 import { DebugInspector } from "./DebugInspector"
+import { EnvSync } from "./EnvSync"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
+import { OperationLog } from "./OperationLog"
 import { OperatorEnvironment } from "./OperatorEnvironment"
-import { PlatformDevLog } from "./PlatformDevLog"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
+import { TermChat } from "./TermChat"
 import { ToolStats } from "./ToolStats"
-import { TrajectoryReplay } from "./TrajectoryReplay"
-import { UniverseViz } from "./UniverseViz"
 
 export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "agent-chat": AgentChat,
-  "agent-trace": AgentTrace,
+  "term-chat": TermChat,
   "agent-viz": AgentViz,
   "run-status": RunStatus,
   "live-logs": LiveLogs,
@@ -33,13 +30,10 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "step-timeline": StepTimeline,
   "tool-stats": ToolStats,
   "run-history": RunHistory,
-  "command-center": CommandCenter,
-  "trajectory-replay": TrajectoryReplay,
   "operator-env": OperatorEnvironment,
   "debug-inspector": DebugInspector,
-  "platform-dev-log": PlatformDevLog,
-  "universe-viz": UniverseViz,
-  "code-seq-diagram": CodeSeqDiagram,
   "mymi-db": MymiDb,
   "active-users": ActiveUsers,
+  "env-sync": EnvSync,
+  "operation-log": OperationLog,
 }

@@ -11,6 +11,11 @@ import type {
     Run,
     RunDetail,
     SavedLayout,
+    SyncEntityType,
+    SyncEnvironment,
+    SyncExecuteProgress,
+    SyncPlan,
+    SyncRecipeBundle,
     ToolInfo,
     ViewConfig,
     WorkspaceDiff,
@@ -26,6 +31,11 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   if (opts?.body) headers["Content-Type"] = "application/json"
   // credentials: include — sends the session cookie cross-port (UI on 5173, server on 3102 in dev).
   const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include" })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const msg = body && typeof body === "object" && "error" in body ? (body as { error: string }).error : `HTTP ${res.status}`
+    throw new Error(msg)
+  }
   return res.json() as Promise<T>
 }
 
@@ -255,6 +265,141 @@ export const api = {
       objects: Array<{ schema: string; name: string; isTable: boolean; rowCount: number; sizeMb: number; columnCount: number; fkOut: number; fkIn: number }>
       relations: Array<{ srcSchema: string; srcTable: string; refSchema: string; refTable: string }>
     }>(`/api/mymi/datamodel${db ? `?db=${encodeURIComponent(db)}` : ""}`),
+
+  // ── ABI Environment Sync ────────────────────────────────────
+  syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
+  syncRecipes: () => json<SyncRecipeBundle>("/api/sync/recipes"),
+  syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
+    json<Array<{ id: string | number; name: string | null }>>(
+      `/api/sync/search?entityType=${encodeURIComponent(params.entityType)}&source=${encodeURIComponent(params.source)}&q=${encodeURIComponent(params.q)}${params.limit ? `&limit=${params.limit}` : ""}`,
+    ),
+  syncPreview: (params: { entityType: SyncEntityType; entityId: string | number; source: string; target: string; force?: boolean; enabledOptionalTables?: string[] }) =>
+    json<SyncPlan & { error?: string }>("/api/sync/preview", { method: "POST", body: JSON.stringify(params) }),
+  syncPlan: (planId: string) => json<SyncPlan & { error?: string }>(`/api/sync/plan/${encodeURIComponent(planId)}`),
+  syncExecute: (planId: string) =>
+    json<{ planId: string; success: boolean; error?: string }>(
+      `/api/sync/execute/${encodeURIComponent(planId)}`,
+      { method: "POST" },
+    ),
+  syncHistory: (limit = 100) =>
+    json<Array<{ planId: string; actor: string; action: string; detail: unknown; timestamp: string }>>(
+      `/api/sync/history?limit=${limit}`,
+    ),
+  /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
+  syncRuns: (limit = 25) =>
+    json<Array<{
+      planId: string
+      entityType: string
+      entityId: string
+      entityDisplayName: string | null
+      source: string
+      target: string
+      actorUpn: string | null
+      status: "started" | "success" | "failed"
+      error: string | null
+      startedAt: string
+      finishedAt: string | null
+      durationMs: number | null
+    }>>(`/api/sync/runs?limit=${limit}`),
+
+  /**
+   * Recent persisted events from the unified `event_log` table.
+   * Used on cold start to backfill the LiveLogs widget so prior sync /
+   * agent / system events survive a server restart.
+   */
+  recentEvents: (limit = 500) =>
+    json<{ events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>; count: number; hasMore: boolean }>(
+      `/api/events?limit=${limit}`,
+    ),
+
+  /** Full-text search of the persistent event_log table. Used by LiveLogs DB-fallback. */
+  searchEvents: (q: string, opts: { types?: string[]; limit?: number; before?: string; after?: string } = {}) => {
+    const p = new URLSearchParams({ q })
+    if (opts.types?.length) p.set("type", opts.types.join(","))
+    if (opts.limit) p.set("limit", String(opts.limit))
+    if (opts.before) p.set("before", opts.before)
+    if (opts.after) p.set("after", opts.after)
+    return json<{ events: Array<{ id: number; type: string; data: Record<string, unknown>; timestamp: string }>; count: number }>(
+      `/api/events/search?${p.toString()}`,
+    )
+  },
+
+  /**
+   * Operation Log — three-level grouped history of pipelines → activities → events.
+   * Server bundles related events into pipelines (agent runs, sync previews,
+   * sync executes, system minute-buckets) so the UI can render an expandable
+   * tree.
+   */
+  operations: (opts: { limit?: number; before?: string; search?: string; kind?: string; status?: string } = {}) => {
+    const params = new URLSearchParams()
+    if (opts.limit != null) params.set("limit", String(opts.limit))
+    if (opts.before) params.set("before", opts.before)
+    if (opts.search) params.set("search", opts.search)
+    if (opts.kind) params.set("kind", opts.kind)
+    if (opts.status) params.set("status", opts.status)
+    const qs = params.toString()
+    return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`)
+  },
+}
+
+export type OperationKind = "agent-run" | "sync-preview" | "sync-execute" | "system"
+export type OperationStatus = "running" | "success" | "failed" | "cancelled" | "unknown"
+
+export interface OperationEvent {
+  type: string
+  timestamp: string
+  data: Record<string, unknown>
+}
+export interface OperationActivity {
+  id: string
+  name: string
+  status: OperationStatus
+  startedAt: string
+  endedAt: string | null
+  durationMs: number | null
+  summary?: string
+  error?: string
+  events: OperationEvent[]
+}
+export interface OperationPipeline {
+  id: string
+  kind: OperationKind
+  title: string
+  subtitle?: string
+  status: OperationStatus
+  startedAt: string
+  endedAt: string | null
+  durationMs: number | null
+  activityCount: number
+  eventCount: number
+  error?: string
+  activities: OperationActivity[]
+}
+export interface OperationsResponse {
+  operations: OperationPipeline[]
+  scannedEvents: number
+  oldestTimestamp: string | null
+}
+
+/**
+ * Open an SSE stream for a sync execution. Returns a `close()` function.
+ * `onEvent` is called for each progress event (started → table-* → completed/failed).
+ */
+export function syncExecuteStream(
+  planId: string,
+  onEvent: (e: SyncExecuteProgress) => void,
+  onError?: (err: string) => void,
+): { close: () => void } {
+  const es = new EventSource(`/api/sync/execute/${encodeURIComponent(planId)}/stream`, { withCredentials: true })
+  es.onmessage = (msg) => {
+    try { onEvent(JSON.parse(msg.data) as SyncExecuteProgress) }
+    catch (e) { onError?.(e instanceof Error ? e.message : String(e)) }
+  }
+  es.onerror = () => {
+    onError?.("SSE connection error")
+    es.close()
+  }
+  return { close: () => es.close() }
 }
 
 // ── Live event stream + cross-tab relay via BroadcastChannel ─────
@@ -264,9 +409,9 @@ export const api = {
 // proxy-https on the Windows host. Auto-reconnects via the browser's
 // EventSource implementation.
 
-const BC_CHANNEL = "agent001-ws-relay"
+const BC_CHANNEL = "mia-ws-relay"
 
-export function createWs(
+export function createEventStream(
   onEvent: (event: { type: string, data: Record<string, unknown>, timestamp: string }) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
@@ -336,4 +481,20 @@ export function createWs(
       es?.close()
     },
   }
+}
+
+/**
+ * Pop-out window event relay — listens via BroadcastChannel only (no SSE).
+ * Avoids duplicate connections and prevents SSE replays from clearing live state.
+ */
+export function createPopoutEventRelay(
+  onEvent: (event: { type: string; data: Record<string, unknown>; timestamp: string }) => void,
+  onStatus: (connected: boolean) => void,
+): { close: () => void } {
+  const bc = new BroadcastChannel(BC_CHANNEL)
+  onStatus(true) // assume connected — main window manages the SSE
+  bc.onmessage = (e) => {
+    try { onEvent(e.data) } catch { /* ignore */ }
+  }
+  return { close: () => bc.close() }
 }

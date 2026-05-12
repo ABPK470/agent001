@@ -30,7 +30,8 @@ import {
     type PromptBudgetAllocationResult,
     type PromptBudgetConfig,
     type PromptBudgetPlan,
-    type PromptBudgetSectionStats
+    type PromptBudgetSectionStats,
+    type SectionSpec,
 } from "./prompt-budget-types.js"
 import type { Message, PromptBudgetSection } from "./types.js"
 

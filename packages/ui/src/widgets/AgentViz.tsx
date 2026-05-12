@@ -106,7 +106,6 @@ interface VizLink {
 type VizMode = "live" | "reflect"
 
 export function AgentViz() {
-  const liveTrace = useStore((s) => s.trace)
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
 
@@ -128,10 +127,14 @@ export function AgentViz() {
   const [mode, setMode] = useState<VizMode>("live")
   const [reflectRunId, setReflectRunId] = useState<string | null>(null)
   const [reflectTrace, setReflectTrace] = useState<TraceEntry[]>([])
+  const [liveTrace, setLiveTrace] = useState<TraceEntry[]>([])
   const [loadingReflect, setLoadingReflect] = useState(false)
 
   // Pulsing animation for status dot — declared here, used after isRunning is derived
   const [pulse, setPulse] = useState(true)
+
+  const activeRun = runs.find((r) => r.id === activeRunId)
+  const rawLiveTrace = activeRun?.trace ?? []
 
   // Close picker on outside click
   useEffect(() => {
@@ -144,6 +147,16 @@ export function AgentViz() {
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [pickerOpen])
+
+  // Throttle live trace propagation so mounted heavy widgets do not re-drive
+  // the entire force-graph on every single incoming trace append.
+  useEffect(() => {
+    if (mode !== "live") return
+    const timer = window.setTimeout(() => {
+      setLiveTrace((prev) => (prev === rawLiveTrace ? prev : rawLiveTrace))
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [mode, rawLiveTrace])
 
   // Active trace depends on mode
   const trace = mode === "live" ? liveTrace : reflectTrace
@@ -210,7 +223,6 @@ export function AgentViz() {
   }, [activeRunId, runs, mode])
 
   // Derive state
-  const activeRun = runs.find((r) => r.id === activeRunId)
   const reflectRun = reflectRunId ? runs.find((r) => r.id === reflectRunId) : null
   const displayRun = mode === "live" ? activeRun : reflectRun
   const isRunning = mode === "live" && activeRun?.status === "running"

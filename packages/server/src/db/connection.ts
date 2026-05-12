@@ -3,6 +3,7 @@
  *
  * All domain-specific persistence modules import getDb() from here.
  * Data lives in ~/.agent001/agent001.db — survives server restarts.
+ * Env override: MIA_DATA_DIR (AGENT001_DATA_DIR accepted for backwards compat).
  */
 
 import { DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
@@ -11,7 +12,7 @@ import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const DATA_DIR = process.env["AGENT001_DATA_DIR"] || join(homedir(), ".agent001")
+const DATA_DIR = process.env["MIA_DATA_DIR"] || process.env["AGENT001_DATA_DIR"] || join(homedir(), ".agent001")
 mkdirSync(DATA_DIR, { recursive: true })
 
 let _db: Database.Database | null = null
@@ -32,13 +33,12 @@ export function _setDb(db: Database.Database): void {
 }
 
 // ── Current seed data (bump SEED_VERSION when changing) ──────
+// Tools are no longer stored in the DB. The live ALL_TOOLS array in tools.ts
+// is always used at runtime regardless of what agent_definitions.tools says.
+// agent_definitions.tools is kept as an empty sentinel so the NOT NULL column
+// constraint is satisfied, but it is never read for tool resolution.
 
-const SEED_VERSION = 11
-
-const DEFAULT_TOOLS = ["read_file", "write_file", "append_file", "replace_in_file", "list_directory", "search_files", "run_command", "think", "fetch_url", "browser_check", "browse_web", "ask_user", "search_catalog", "query_mssql", "explore_mssql_schema", "export_query_to_file", "discover_relationships", "profile_data", "inspect_definition"]
-
-/** @internal — exported for tests only. Do not use in app code. */
-export const _DEFAULT_TOOLS_FOR_TESTS: ReadonlyArray<string> = DEFAULT_TOOLS
+const SEED_VERSION = 13
 
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {
@@ -168,6 +168,27 @@ export function _migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_upn ON sessions(upn);
     CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at);
+
+    CREATE TABLE IF NOT EXISTS sync_runs (
+      plan_id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      entity_display_name TEXT,
+      source TEXT NOT NULL,
+      target TEXT NOT NULL,
+      actor_upn TEXT,
+      preview_totals_json TEXT NOT NULL,
+      execute_totals_json TEXT,
+      status TEXT NOT NULL,
+      error TEXT,
+      drift_detected_pct REAL,
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at TEXT,
+      duration_ms INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_runs_started ON sync_runs(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_sync_runs_target  ON sync_runs(target);
+    CREATE INDEX IF NOT EXISTS idx_sync_runs_actor   ON sync_runs(actor_upn);
   `)
 
   // Column migrations
@@ -195,7 +216,7 @@ export function _migrate(db: Database.Database): void {
     "Universal Agent",
     "General-purpose agent with all tools. Handles any task.",
     DEFAULT_SYSTEM_PROMPT,
-    JSON.stringify(DEFAULT_TOOLS),
+    '[]',
   )
 
   // Seed default policies
@@ -220,9 +241,17 @@ export function _migrate(db: Database.Database): void {
     if (existing) {
       const isUserCustomized = !isKnownOldSeedPrompt(existing.system_prompt)
       if (!isUserCustomized) {
+        // Update system_prompt to latest; clear the stale tools list (tools
+        // are now always resolved from ALL_TOOLS in code, not from this column).
         db.prepare(
-          "UPDATE agent_definitions SET system_prompt = ?, tools = ?, updated_at = datetime('now') WHERE id = 'default'"
-        ).run(DEFAULT_SYSTEM_PROMPT, JSON.stringify(DEFAULT_TOOLS))
+          "UPDATE agent_definitions SET system_prompt = ?, tools = '[]', updated_at = datetime('now') WHERE id = 'default'"
+        ).run(DEFAULT_SYSTEM_PROMPT)
+      } else {
+        // User has customised the prompt but we still need to clear the stale
+        // tools list so it doesn't mislead anyone inspecting the DB.
+        db.prepare(
+          "UPDATE agent_definitions SET tools = '[]', updated_at = datetime('now') WHERE id = 'default'"
+        ).run()
       }
     }
 

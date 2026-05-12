@@ -1,5 +1,5 @@
 import type { Tool } from "../../types.js"
-import { buildCatalog, getCatalog } from "../catalog.js"
+import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog.js"
 import {
     handleColumn,
     handleConceptPath,
@@ -83,10 +83,12 @@ export const searchCatalogTool: Tool = {
 
     const catalog = getCatalog(connName)
     if (!catalog) {
-      return (
-        "Schema catalog not available. The catalog is built at server startup when MSSQL is configured. " +
-        "Try search_catalog(refresh=true) to build it now, or check that MSSQL_HOST / MSSQL_DATABASES is set."
-      )
+      const available = getCatalogConnectionNames()
+      const hint = available.length > 0
+        ? `Available connections: ${available.join(", ")}. Pass connection='${available[0]}' to target that database, or omit for auto-select.`
+        : "No catalogs loaded. The catalog is built at server startup when MSSQL is configured. " +
+          "Try search_catalog(refresh=true) to build it now, or check that MSSQL_HOST / MSSQL_DATABASES is set."
+      return `Schema catalog not available for connection '${connName}'. ${hint}`
     }
 
     if (args.stats) return handleStats(catalog)

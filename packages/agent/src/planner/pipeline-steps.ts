@@ -17,6 +17,7 @@ import {
     validateSubagentCompletion,
 } from "./pipeline-validation.js"
 import type { DelegateFn, ToolExecFn } from "./pipeline.js"
+import { detectPlatformUnconfigured } from "./platform-errors.js"
 import type {
     DeterministicToolStep,
     PipelineStepResult,
@@ -92,6 +93,25 @@ async function executeDeterministicStep(
         }
       }
 
+      // Platform-unconfigured short-circuit. Some tools surface the missing
+      // config as an "Error: ..." string; others swallow it and embed the
+      // diagnosis inside an otherwise success-shaped response (e.g. an
+      // mssql-aware tool that returns a narrative explaining the gap). We
+      // scan ALL output text — not just the "Error:" prefix — because the
+      // verifier-driven repair loop will burn its budget either way.
+      const platformInOutput = detectPlatformUnconfigured(output)
+      if (platformInOutput) {
+        return {
+          name: step.name,
+          status: "failed",
+          executionState: "failed",
+          acceptanceState: "rejected",
+          error: output,
+          failureClass: "platform_unconfigured",
+          durationMs: Date.now() - t0,
+        }
+      }
+
       if (output.startsWith("Error:")) {
         lastError = output
         continue
@@ -106,7 +126,22 @@ async function executeDeterministicStep(
         durationMs: Date.now() - t0,
       }
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err)
+      const msg = err instanceof Error ? err.message : String(err)
+      // Same short-circuit applies if the tool throws rather than returning a
+      // string — e.g. getPool() throwing "MSSQL connection ... not configured".
+      const platform = detectPlatformUnconfigured(msg)
+      if (platform) {
+        return {
+          name: step.name,
+          status: "failed",
+          executionState: "failed",
+          acceptanceState: "rejected",
+          error: msg,
+          failureClass: "platform_unconfigured",
+          durationMs: Date.now() - t0,
+        }
+      }
+      lastError = msg
     }
   }
 
@@ -140,6 +175,33 @@ async function executeSubagentStep(
     const output = delegateResult.output
     const childToolCalls = delegateResult.toolCalls
     const childExecution = delegateResult.execution
+
+    // Platform-unconfigured short-circuit (subagent path). If the child's
+    // narrative output OR any of its tool-call results contain the missing
+    // platform-config marker, treat the whole step as unrecoverable so the
+    // verifier/repair loop is bypassed. Without this, the planner would
+    // burn its retry budget asking the same subagent to fix a configuration
+    // it has no power to change.
+    const subagentTexts = [output, ...(childToolCalls?.map((c) => c.result) ?? [])]
+    for (const text of subagentTexts) {
+      if (typeof text !== "string") continue
+      if (detectPlatformUnconfigured(text)) {
+        return {
+          name: step.name,
+          status: "failed",
+          executionState: "failed",
+          acceptanceState: "rejected",
+          error: text,
+          failureClass: "platform_unconfigured",
+          durationMs: Date.now() - t0,
+          toolCalls: childToolCalls,
+          childResult: childExecution,
+          producedArtifacts: childExecution?.producedArtifacts,
+          modifiedArtifacts: childExecution?.modifiedArtifacts,
+          verificationAttempts: childExecution?.verificationAttempts,
+        }
+      }
+    }
 
     if (output.startsWith("Delegation failed:")) {
       const isSpawnError = output.includes("not found") || output.includes("spawn")

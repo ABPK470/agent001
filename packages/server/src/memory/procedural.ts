@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { getDb } from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import { sanitizeFtsQuery } from "./scoring.js"
 import type { ProceduralMemory } from "./types.js"
 

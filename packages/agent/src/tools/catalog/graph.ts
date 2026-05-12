@@ -58,23 +58,6 @@ export class CatalogGraph {
   readonly sysCatalog: Map<string, SysEntry>
   /** Token → Set<sys object name> — built from curated aliases + actual column names. */
   private readonly sysIndex: Map<string, Set<string>>
-  readonly columnIndex: Map<string, Set<string>>
-  readonly adjacency: Map<string, Array<{ target: string; fk: CatalogFK }>>
-  /** tableKey → implicit edges involving this table */
-  readonly implicitJoinIndex: Map<string, ImplicitEdge[]>
-  /**
-   * For every publish VIEW: sum of row_counts of the physical tables it directly references.
-   * Built at catalog-build time from Q_VIEW_DEPS — zero runtime cost for the agent.
-   * Key = "publish.ViewName", value = total source rows.
-   */
-  readonly viewSourceRows: Map<string, number>
-
-  /** Concept nodes indexed by concept name (lowercase) — e.g. "revenue" → ConceptNode */
-  readonly conceptNodes: Map<string, ConceptNode>
-  /** Source view (lowercase) → ConceptNode — fast lookup by view name */
-  readonly conceptByView: Map<string, ConceptNode>
-  /** tableKey → list of concept nodes this table contributes to (reverse index) */
-  readonly conceptEdgeIndex: Map<string, ConceptNode[]>
 
   private constructor(
     tables: Map<string, CatalogTable>,

@@ -30,7 +30,6 @@ import type { ToolCallRecord } from "./tool-result.js"
 import {
     didToolCallFail,
     extractToolFailureText,
-    parseToolResultObject
 } from "./tool-result.js"
 
 // Re-export from tool-result for backwards compatibility
@@ -130,9 +129,7 @@ function inferRoundRecoveryHint(roundCalls: readonly ToolCallRecord[]): Recovery
 function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result
   const resultLower = result.toLowerCase()
-  const parsedResult = parseToolResultObject(result)
   const failureText = extractToolFailureText(call)
-  const failureTextLower = failureText.toLowerCase()
 
   // ── Success-path hints (detect problems in non-error results) ─────
 

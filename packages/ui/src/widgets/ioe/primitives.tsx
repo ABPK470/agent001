@@ -177,7 +177,7 @@ export function TreeSection({
   return (
     <div>
       <button
-        className="w-full flex items-center gap-1 px-2 py-1 text-[13px] uppercase tracking-wide hover:bg-white/[0.03] transition-colors font-semibold cursor-pointer"
+        className="w-full flex items-center gap-1 px-2 py-1 text-[13px] uppercase tracking-wide hover:bg-overlay-2 transition-colors font-semibold cursor-pointer"
         style={{ color: C.muted }}
         onClick={() => setOpen(!open)}
       >

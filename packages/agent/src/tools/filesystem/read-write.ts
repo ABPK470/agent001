@@ -61,12 +61,20 @@ export const writeFileTool: Tool = {
 
       // ── Regression guard: snapshot existing file before overwrite ──
       let priorNames: Set<string> | undefined
+      let existingContent: string | null = null
       let hadExistingFile = false
       try {
         const existing = await readFile(target, "utf-8")
         hadExistingFile = true
         if (existing.length > 0) {
-          priorNames = extractDefinedNames(existing)
+          // Only extract definition names from code files — applying this to
+          // Markdown, JSON, YAML, etc. produces false positives (e.g. the word
+          // "that" in a markdown sentence matching const/let/var patterns).
+          if (isCodeFile) {
+            priorNames = extractDefinedNames(existing)
+          }
+          // Cap at 24 KB — enough to fit any reasonable source file in the LLM context
+          existingContent = existing.length <= 24576 ? existing : existing.slice(0, 24576) + "\n// [truncated — file exceeds 24 KB]"
         }
       } catch { /* file doesn't exist yet — no regression possible */ }
 
@@ -141,7 +149,9 @@ export const writeFileTool: Tool = {
             details: [
               ...integrityWarnings,
               hadExistingFile ? "The existing file was kept unchanged." : "No file was written because the proposed content was structurally invalid.",
-              hadExistingFile ? "Use read_file to inspect current content before any further mutation attempt." : "Plan a corrected full write and retry; there is no current file to inspect.",
+              hadExistingFile && existingContent
+                ? `Write_file again with ALL the definitions listed below preserved, plus your fix. Do NOT call read_file — the current content is already provided here:\n\`\`\`\n${existingContent}\n\`\`\``
+                : "Plan a corrected full write and retry; there is no current file to inspect.",
             ],
             artifacts: [{ path: filePath, preservedExisting: hadExistingFile, requiresReadBeforeMutation: hadExistingFile }],
             retryable: true,

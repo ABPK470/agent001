@@ -7,7 +7,6 @@
  * @module
  */
 
-import { detectPlaceholderPatterns } from "../code-quality.js"
 import type { Tool } from "../types.js"
 import type {
     PipelineResult,
@@ -18,15 +17,9 @@ import type {
 import { buildStepSpecEvidence } from "./verifier-blueprint.js"
 import {
     computeGibberishScore,
-    detectCodeCorruption,
-    detectHtmlCorruption,
-    detectPotentialLinearGridStriping,
-    detectPotentialUseBeforeDeclaration,
-    detectUnresolvedBareHelpers,
-    detectUnresolvedMethods,
     isBlockingCriteriaProofGap,
     outputIntersectsArtifacts,
-    safeParseJson,
+    safeParseJson
 } from "./verifier-helpers.js"
 import { runIntegrationProbes } from "./verifier-integration.js"
 import {
@@ -255,28 +248,6 @@ export async function runDeterministicProbes(
         }
       }
 
-      // Functional complexity heuristic
-      if (readFile && sa.acceptanceCriteria.length >= 5) {
-        let totalCodeLines = 0
-        for (const artifact of sa.executionContext.targetArtifacts) {
-          const cached = probeCache.get(artifact)
-          if (!cached?.found) continue
-          if (!/\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(artifact)) continue
-          try {
-            const content = await readArtifactContent(readFile, cached.resolvedPath, runCommand)
-            if (typeof content === "string") {
-              totalCodeLines += content.split("\n").filter(l => l.trim().length > 0 && !l.trim().startsWith("//") && !l.trim().startsWith("/*") && !l.trim().startsWith("*")).length
-            }
-          } catch { /* skip */ }
-        }
-        const minExpectedLines = sa.acceptanceCriteria.length * 8
-        if (totalCodeLines > 0 && totalCodeLines < minExpectedLines) {
-          issues.push(
-            `Implementation appears skeletal: ${totalCodeLines} non-comment code lines for ${sa.acceptanceCriteria.length} acceptance criteria (expected at least ${minExpectedLines}). The code likely lacks real logic for most criteria.`,
-          )
-        }
-      }
-
       // Criteria proof checks
       probeCriteriaProof(sa, outputText, executedModalities, issues)
 
@@ -354,6 +325,15 @@ export async function runDeterministicProbes(
           ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" as const : "retry" as const)
           : "pass" as const
 
+      // Collect definitive positive signals from deterministic probes.
+      // These are passed to the LLM verifier so it can weigh them against
+      // uncertainty-based issues (e.g. "cannot verify completeness due to truncation").
+      const positiveSignals: string[] = []
+      if (browserCheckPassed) {
+        const htmlNames = htmlArtifacts.map(a => a.split("/").pop()).join(", ")
+        positiveSignals.push(`browser_check: ✓ all HTML artifacts load without errors (${htmlNames})`)
+      }
+
       assessments.push({
         stepName: step.name,
         outcome,
@@ -362,6 +342,7 @@ export async function runDeterministicProbes(
           ? [...structuralIssues, ...nonStructuralIssues.map(i => `[non-blocking] ${i}`)]
           : issues,
         retryable: !hasBlockingGap,
+        positiveSignals: positiveSignals.length > 0 ? positiveSignals : undefined,
       })
     } else {
       assessments.push({

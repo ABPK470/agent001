@@ -69,7 +69,21 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
 
 /** Get a previously built/loaded catalog. */
 export function getCatalog(connection = "default"): CatalogGraph | null {
-  return _catalogs.get(connection) ?? null
+  // Exact match first
+  const exact = _catalogs.get(connection)
+  if (exact) return exact
+  // In multi-database mode, connections are named (e.g. "uat", "dev") and
+  // there is no "default" entry. Fall back to the first available catalog so
+  // tools that don't pass an explicit connection= still work.
+  if (connection === "default" && _catalogs.size > 0) {
+    return _catalogs.values().next().value ?? null
+  }
+  return null
+}
+
+/** Return the name of every loaded connection, in insertion order. */
+export function getCatalogConnectionNames(): string[] {
+  return Array.from(_catalogs.keys())
 }
 
 export function hasCatalog(): boolean {
@@ -77,7 +91,7 @@ export function hasCatalog(): boolean {
 }
 
 export function getCatalogPromptSummary(connection = "default"): string {
-  return _catalogs.get(connection)?.promptSummary() ?? ""
+  return getCatalog(connection)?.promptSummary() ?? ""
 }
 
 /**

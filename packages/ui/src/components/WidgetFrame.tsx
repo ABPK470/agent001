@@ -15,7 +15,7 @@ import type { WidgetType } from "../types"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
-  "agent-trace": "Agent Trace",
+  "term-chat": "MI:A Chat",
   "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
@@ -23,15 +23,12 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "step-timeline": "Step Timeline",
   "tool-stats": "Tool Stats",
   "run-history": "Run History",
-  "command-center": "Command Center",
-  "trajectory-replay": "Trajectory Replay",
-  "operator-env": "Operator Environment",
-  "debug-inspector": "Debug Inspector",
-  "platform-dev-log": "Platform Dev Log",
-  "universe-viz": "Sequence",
-  "code-seq-diagram": "Code Seq",
+  "operator-env": "IOE",
+  "debug-inspector": "Trace",
   "mymi-db": "Mymi DB",
   "active-users": "Active Users",
+  "env-sync": "Sync",
+  "operation-log": "Pipelines",
 }
 
 interface Props {
@@ -44,20 +41,45 @@ interface Props {
 export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
   const removeWidget = useStore((s) => s.removeWidget)
 
-  function handlePopOut() {
-    const activeRunId = useStore.getState().activeRunId
+  function handlePopOut(event?: React.MouseEvent<HTMLButtonElement>) {
+    const state = useStore.getState()
     const params = new URLSearchParams()
     params.set("type", type)
-    if (activeRunId) params.set("runId", activeRunId)
+    if (state.activeRunId) params.set("runId", state.activeRunId)
+
+    // Transfer current live state so the popout starts with identical content
+    try {
+      localStorage.setItem("mia-popout-state", JSON.stringify({
+        logs: state.logs,
+        steps: state.steps,
+        audit: state.audit,
+        trace: state.trace,
+        activeRunId: state.activeRunId,
+      }))
+    } catch { /* quota exceeded — popout will fall back to API fetch */ }
+
+    // Size the popout to mirror the source widget when possible, capped to the screen
+    const sourceEl = (event?.currentTarget as HTMLElement | undefined)?.closest(".react-grid-item") as HTMLElement | null
+    const sourceRect = sourceEl?.getBoundingClientRect()
+    const screenW = window.screen.availWidth
+    const screenH = window.screen.availHeight
+    const desiredW = Math.round(Math.max(420, Math.min(sourceRect?.width ?? 800, screenW * 0.8)))
+    const desiredH = Math.round(Math.max(360, Math.min(sourceRect?.height ?? 600, screenH * 0.85)))
+    const features = `width=${desiredW},height=${desiredH},menubar=no,toolbar=no,location=no,status=no`
+
     window.open(
       `/?widget=${type}&${params.toString()}`,
       `widget-${widgetId}`,
-      "width=600,height=500,menubar=no,toolbar=no",
+      features,
     )
   }
 
+  const isTransparent = type === "term-chat"
+
   return (
-    <div className="flex flex-col h-full bg-surface rounded-xl overflow-hidden">
+    <div
+      className={`flex flex-col h-full rounded-xl overflow-hidden ${isTransparent ? "bg-panel" : "bg-panel"}`}
+    >
       {/* Header — drag handle */}
       <div className="widget-drag-handle flex items-center justify-between px-3 h-8 cursor-move shrink-0 select-none">
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
@@ -66,25 +88,27 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
         <div className="widget-controls flex items-center gap-1">
           <button
             className="text-text-muted hover:text-text p-1 rounded transition-colors"
-            onClick={handlePopOut}
+            onClick={(e) => handlePopOut(e)}
             title="Pop out"
           >
-            <ExternalLink size={14} />
+            <ExternalLink size={18} />
           </button>
           <button
             className="text-text-muted hover:text-error p-1 rounded transition-colors"
             onClick={() => removeWidget(viewId, widgetId)}
             title="Remove"
           >
-            <X size={14} />
+            <X size={18} />
           </button>
         </div>
       </div>
 
       {/* Content area — widget-content class used by draggableCancel in Canvas.tsx */}
-      <div className="widget-content flex-1 overflow-hidden p-3">
+      <div
+        className={`widget-content flex-1 overflow-hidden ${isTransparent ? "p-0" : "p-3"}`}
+      >
         {children}
       </div>
     </div>
-  )
+  );
 }

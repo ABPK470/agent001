@@ -78,14 +78,39 @@ export function buildCoherentGenerationMessages(
   workspaceRoot: string,
   history: readonly Message[],
 ): Message[] {
-  // Keep anchor/persona system messages but strip the workspace directory listing.
-  // The directory listing shows existing source directories (e.g. packages/ui,
-  // packages/server) which cause the LLM to write generated code into the host
-  // repo's own source tree instead of a fresh project subdirectory.
+  // Keep anchor/persona system messages only.
+  //
+  // Stripped sections:
+  //   - "Workspace:" directory listing → LLM writes into host repo src tree instead of fresh dir
+  //   - system_runtime sections (tool context, DB schema, environment context) → irrelevant for
+  //     code generation; the DB schema context alone can be 100K+ chars and causes 422 errors
+  //     on the no-tool coherent generation call when the context budget is exceeded.
+  //   - memory_* sections (episodic, semantic, working) → prior DB query runs are noise for
+  //     fresh code generation tasks
+  //
+  // Retained: system_anchor (base prompt + ABI sync stub if injected) — gives the LLM its
+  // persona, output format rules, and file-editing conventions which are always relevant.
   const baseSystemMessages = history.filter(
-    (message) =>
-      message.role === "system" &&
-      !message.content?.trimStart().startsWith("Workspace:"),
+    (message) => {
+      if (message.role !== "system") return false
+      const content = message.content ?? ""
+      // Strip workspace directory listing
+      if (content.trimStart().startsWith("Workspace:")) return false
+      // Strip memory tiers (all noisy for code gen)
+      if (content.trimStart().startsWith("<working_memory>")) return false
+      if (content.trimStart().startsWith("<episodic_memory>")) return false
+      if (content.trimStart().startsWith("<semantic_memory>")) return false
+      // Strip large runtime sections (DB schema, tool context, env context)
+      // identified by their section tag or by being suspiciously large (>8K chars)
+      // and containing database-specific keywords.
+      const section = (message as { section?: string }).section
+      if (section === "system_runtime") {
+        // Keep small runtime messages (e.g. the ABI sync stub line is ~200 chars)
+        // but drop large ones (DB schema context, tool orchestration docs, etc.)
+        if (content.length > 4000) return false
+      }
+      return true
+    },
   )
   return [
     ...baseSystemMessages,

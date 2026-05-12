@@ -58,22 +58,21 @@ API gateway / UI layer metadata — users, permissions, content management:
 - **Content**: `Content`, `ContentLink`, `ContentType`, `JsonSchema` — structured content served through the platform UI.
 - **Metadata registry**: `MetaColumn`, `MetaTable`, `MetaView` — metadata about database objects themselves (table/column descriptions, data lineage annotations).
 - **Notifications**: `Notification`, `NotificationType`, `NotificationUserInfo` — alerts and user notifications.
-- **Testing**: `Test`, `TestAction`, `TestActionHistory` — data quality test definitions and results.
 - **Key gate views**: `vMetaTable`, `vMetaView`, `vUserInfo`, `vNotificationAll`, `vContentFullPath`.
 
 ### `log` (11 tables, 5 views)
 Run execution logs — tracks every ETL job execution:
-- `Detail` (~72M rows) — granular execution log entries (the main audit trail).
+- `Detail` (~74M rows) — granular execution log entries (the main audit trail).
 - `Sync` (~300K rows) — data synchronization run records.
 - `File` — file-based load tracking.
 - `QvDatasetRun`, `QvDetail`, `QvDetailTrace`, `QvFile` — QlikView/Qlik dataset processing logs.
 - `ShellRun`, `SqlRun` — shell and SQL command execution logs.
 - `dataSync` — data sync operation tracking.
-- **Key log views**: `vDatasync`, `vQvDatasetRun`, `vShellRunCommand`, `vSqlRunCommand`.
+- **Key log views**: `vDatasync`, `vQvDatasetRun`, `vQvModelRun`, `vShellRunCommand`, `vSqlRunCommand`.
 
 ### `agent` (7 tables, 4 views)
 ETL orchestration agent — pipeline execution state:
-- `PipelineRun` (~457K rows), `PipelineRunArchive` (~1.5M rows) — pipeline execution history.
+- `PipelineRun` (~467K rows), `PipelineRunArchive` (~1.5M rows) — pipeline execution history.
 - `ActivityRun` (~5.5M rows), `ActivityRunArchive` (~4.4M rows) — individual activity (step) execution records.
 - `ActivityRunLog` (~446K rows) — detailed activity execution logging.
 - `Semaphore` — concurrency control (prevents parallel runs of the same pipeline).
@@ -125,7 +124,7 @@ Descriptive lookup/reference data. Key dimensions:
 Transactional and periodic business data. Major fact tables by domain:
 
 **Banking Balances & Financials:**
-- `AfricaFlexDailyBalances` (~798M) — daily account-level balances across Africa subsidiaries.
+- `AfricaFlexDailyBalances` (~823M) — daily account-level balances across Africa subsidiaries.
 - `AfricaFlex` (~235M), `AfricaBrains` (~20M), `AfricaBrainsDailyBalances` (~107M) — regional banking data.
 - `FinancialDisclosureDaily` (~570M), `FinancialDisclosureDailySAP` (~272M) — regulatory financial disclosure.
 - `BackdatedTransactions` (~367M) — historical transaction adjustments.
@@ -133,7 +132,7 @@ Transactional and periodic business data. Major fact tables by domain:
 **Risk & Capital:**
 - `RWA` (~484M) — Risk-Weighted Assets (Basel regulatory capital).
 - `ACMFacility` (~163M), `ACMCounterpartyCreditTeam` (~37M), `ACMAccountFacilityMapping` (~199M) — credit risk / facilities.
-- `CounterpartyStructures` (~294M) — counterparty relationship structures.
+- `CounterpartyStructures` (~305M) — counterparty relationship structures.
 - `Impairment`, `ImpairmentSAP` — credit loss provisioning (IFRS 9).
 
 **Markets & Trading:**
@@ -149,13 +148,13 @@ Transactional and periodic business data. Major fact tables by domain:
 - `Expenses` — operational expenses.
 - `AfricaCards` (~36M) — card product analytics.
 
-### `ext` (216 tables) — External Loads (Hadoop/Big Data)
+### `ext` (214 tables) — External Loads (Hadoop/Big Data)
 Data loaded from Hadoop/HDFS or external big-data systems into SQL Server:
-- `BotswanaDailyAccountsAll` (~852M), `GhanaDailyAccountsAll` (~1B), `ZambiaDailyAccountsAll` (~682M) — Africa subsidiary daily account data from Hadoop.
+- `BotswanaDailyAccountsAll` (~856M), `GhanaDailyAccountsAll` (~1B), `ZambiaDailyAccountsAll` (~684M) — Africa subsidiary daily account data from Hadoop.
 - `AfricaFlexDailyBalancesKenyaCASA` (~222M) — Kenya CASA balances.
 - Various other external data loads mirroring fact table structures from big data sources.
 
-### `list` (212 tables, 5 views) — Reference/Lookup Lists
+### `list` (213 tables, 5 views) — Reference/Lookup Lists
 Simple configuration and mapping lists used by business rules:
 - `BookToBookGroupMapping`, `BookReplacement` — trading book mappings.
 - `AROEntityToClient` (~232K) — entity-to-client resolution.
@@ -163,14 +162,14 @@ Simple configuration and mapping lists used by business rules:
 - `AfricaFTPRates` (~50K) — Funds Transfer Pricing rates.
 - Various product, segment, and mapping lists.
 
-### `publish` (248 tables, 790 views) — Published Business Data
+### `publish` (246 tables, 791 views) — Published Business Data
 The primary consumption layer for reports and analytics. Contains:
 - **Tables**: Materialized result sets for high-performance querying.
-- **Views** (790): The main BI interface — these views are what business users, reports (QlikView, Power BI), and dashboards query. Views typically apply business rules, joins, and aggregations on top of `fact`/`dim` tables.
+- **Views** (791): The main BI interface — these views are what business users, reports (QlikView, Power BI), and dashboards query. Views typically apply business rules, joins, and aggregations on top of `fact`/`dim` tables.
 - Key view categories: Client hierarchies, Book/Desk structures, Balances, Sales Credits, Risk (RWA, ACM, Impairments), Budget, Revenue, Financial Disclosure, Africa regional analytics, Merchant Services, Cards.
 - Examples: `publish.Client`, `publish.Book`, `publish.Balances`, `publish.BudgetClientProductRules`, `publish.AfricaSalesCreditTradesRules`, `publish.FinancialDisclosureRules`.
 
-### `persistedView` (354 views) — Indexed/Materialized Views
+### `persistedView` (356 views) — Indexed/Materialized Views
 Performance-optimized materialized views for heavy queries. Named with dot-separated prefixes
 indicating their source schema:
 - `persistedView.publish.*` (292 views) — persisted versions of publish views.
@@ -180,7 +179,7 @@ indicating their source schema:
 - `persistedView.map.*` (3 views) — persisted mapping lookups.
 - When querying large datasets, prefer `persistedView.publish.X` over `publish.X` if available — same data, better performance.
 
-### `archive` (783 tables)
+### `archive` (784 tables)
 Historical data archive. When records are deleted or updated in DWH tables, previous versions
 are saved here. Naming mirrors the source table. Largest archives:
 - `Expenses` (~73M), `MarketRiskRWA` (~64M), `Account` (~30M), `BudgetLock` (~26M).
@@ -201,8 +200,11 @@ are saved here. Naming mirrors the source table. Largest archives:
 
 **For data quality / audit questions:**
 - Use `audit.*` views for load verification.
-- Check `gate.Test` / `gate.TestAction` for test definitions and results.
 - Use `gate.vMetaTable` / `gate.vMetaView` for column-level documentation.
+
+**For "rules" or "test rules" created/modified by a user:**
+- Query `core.Rule` or `core.vRule` with `changedBy LIKE '%<username>%'`.
+- `core.Rule` is the ETL transformation rule engine (12K+ rows) with columns `ruleId`, `name`, `changedBy`, `validFrom`, `validTo`, `ruleTypeId`.
 
 **For "what changed" questions:**
 - `coreArchive.*` / `gateArchive.*` for metadata changes.
@@ -218,7 +220,7 @@ See "SCD Type 2 / Soft-Delete Pattern (isDeleted column)" section below.
 - Several tables exceed 100M+ rows. Always use WHERE clauses with date filters.
 - Avoid SELECT * on large tables — specify columns.
 - Use `TOP` or date range filters when exploring large fact tables.
-- For `dim.Client` (~26M), `dim.Account` (~51M), `fact.AfricaFlexDailyBalances` (~798M) — always filter.
+- For `dim.Client` (~26M), `dim.Account` (~51M), `fact.AfricaFlexDailyBalances` (~823M) — always filter.
 
 ---
 
@@ -362,19 +364,19 @@ Always treat it as a high-scale system — unfiltered queries on large tables wi
 | `fact.UnoTranspose` | ~2.4 billion | Transactional data pivot — NEVER scan without filters |
 | `fact.IMEXCommissionsDealBalance` | ~1.6 billion | Fee/commission data — always date-filter |
 | `ext.GhanaDailyAccountsAll` | ~1 billion | External Hadoop load |
-| `ext.BotswanaDailyAccountsAll` | ~852 million | External Hadoop load |
-| `fact.AfricaFlexDailyBalances` | ~798 million | Daily balances — use date ranges |
+| `ext.BotswanaDailyAccountsAll` | ~856 million | External Hadoop load |
+| `fact.AfricaFlexDailyBalances` | ~823 million | Daily balances — use date ranges |
 | `fact.FinancialDisclosureDaily` | ~570 million | Regulatory disclosure |
 | `fact.FinancialDisclosureDailySAP` | ~272 million | SAP variant |
 | `fact.BackdatedTransactions` | ~367 million | Backdated adjustments |
-| `fact.CounterpartyStructures` | ~294 million | Counterparty risk |
+| `fact.CounterpartyStructures` | ~305 million | Counterparty risk |
 | `fact.ACMAccountFacilityMapping` | ~199 million | Credit facilities |
 | `fact.AfricaFrontArena` | ~156 million | Markets trading |
 | `dim.Account` | ~51 million | Always filter before joining |
 | `dim.Client` | ~26 million | Central client master — heavy join target |
 | `agent.ActivityRun` | ~5.5 million | ETL activity execution records |
 | `agent.ActivityRunArchive` | ~4.4 million | Historical activity runs |
-| `log.Detail` | ~72 million | Granular ETL execution logs |
+| `log.Detail` | ~74 million | Granular ETL execution logs |
 
 ### Query efficiency rules
 
@@ -504,7 +506,7 @@ Business question
 
 The platform has 4 view layers stacked on top of base tables:
 1. **`core.*` views** (`vDataset`, `vRule`, etc.) — metadata/config pre-joins
-2. **`publish.*` views** (248+) — business-ready star-schema joins; what BI tools query
+2. **`publish.*` views** (246+) — business-ready star-schema joins; what BI tools query
 3. **`persistedView.publish.*`** (292) — SQL Server indexed views materializing `publish.*`
 4. **`audit.*` views** (9) — data quality monitors
 

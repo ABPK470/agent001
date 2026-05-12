@@ -1,7 +1,7 @@
 import type { Agent, EngineServices } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import * as db from "../db.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
 
 // ── Trace ─────────────────────────────────────────────────────────

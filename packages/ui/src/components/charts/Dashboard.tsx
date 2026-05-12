@@ -4,10 +4,11 @@
  */
 
 import type React from "react"
+import { InlineDiagram, isDiagramLang } from "../InlineDiagram"
 import { renderChart, type ChartKind } from "./index"
 
 export interface DashboardItem {
-  kind: ChartKind | "text"
+  kind: ChartKind | "relationships" | "flow" | "text"
   width?: number          // 1..12 (defaults to 12)
   spec: unknown
 }
@@ -20,23 +21,28 @@ export interface DashboardData {
 
 export function Dashboard({ data }: { data: DashboardData }): React.ReactElement {
   const items = data.items ?? []
+
   return (
-    <div className="rounded-lg overflow-hidden border border-white/[0.10] bg-base">
+    <div className="rounded-lg overflow-hidden border border-border bg-base">
       {(data.title || data.subtitle) && (
-        <div className="px-3 py-2 border-b border-white/[0.08] flex items-baseline gap-2 flex-wrap bg-white/[0.03]">
+        <div className="px-3 py-2 border-b border-border-subtle flex items-baseline gap-2 flex-wrap bg-overlay-2">
           {data.title && <div className="text-sm font-bold text-text">{data.title}</div>}
-          {data.subtitle && <div className="text-[11px] text-text-muted">{data.subtitle}</div>}
+          {data.subtitle && <div className="text-sm text-text-muted">{data.subtitle}</div>}
           <div className="ml-auto text-[10px] text-text-muted font-mono uppercase tracking-wide">dashboard</div>
         </div>
       )}
-      <div className="p-2 grid gap-2" style={{ gridTemplateColumns: "repeat(12, minmax(0, 1fr))" }}>
+      <div className="p-2 flex flex-col gap-2">
         {items.map((item, i) => {
-          const w = Math.max(1, Math.min(12, item.width ?? 12))
+          const el = item.kind === "text"
+            ? <TextPanel spec={item.spec} />
+            : isDiagramLang(item.kind)
+              ? <InlineDiagram kind={item.kind} source={JSON.stringify(item.spec)} />
+              : renderChart(item.kind as ChartKind, item.spec)
+          // Skip charts that have nothing to show (null return)
+          if (el === null) return null
           return (
-            <div key={i} className="min-w-0" style={{ gridColumn: `span ${w} / span ${w}` }}>
-              {item.kind === "text"
-                ? <TextPanel spec={item.spec} />
-                : renderChart(item.kind, item.spec)}
+            <div key={i} className="min-w-0 w-full">
+              {el}
             </div>
           )
         })}
@@ -51,7 +57,7 @@ function TextPanel({ spec }: { spec: unknown }): React.ReactElement {
     : ""
   const title = (spec as { title?: string })?.title
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-base p-3 text-sm text-text-secondary leading-relaxed">
+    <div className="rounded-lg border border-border-subtle bg-base p-3 text-sm text-text-secondary leading-relaxed">
       {title && <div className="text-sm font-semibold text-text mb-1">{title}</div>}
       <div className="whitespace-pre-wrap">{text}</div>
     </div>

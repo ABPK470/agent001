@@ -85,8 +85,8 @@ export function InlineDiagram({ kind, source }: { kind: DiagramKind; source: str
 
 function DiagramError({ kind, source, message }: { kind: string; source: string; message: string }): React.ReactElement {
   return (
-    <div className="rounded-lg overflow-hidden border border-white/[0.08]">
-      <div className="px-3 py-1 bg-white/[0.04] text-[11px] text-error font-mono border-b border-white/[0.06]">
+    <div className="rounded-lg overflow-hidden border border-border-subtle">
+      <div className="px-3 py-1 bg-overlay-2 text-[11px] text-error font-mono border-b border-border-subtle">
         {kind} (parse error: {message})
       </div>
       <pre className="px-3 py-2.5 text-[12px] font-mono text-text-secondary overflow-x-auto bg-base">{source}</pre>
@@ -165,10 +165,7 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
     return (idx - half) * step
   }
 
-  // The cubic bezier peak (at t=0.5) sits at offset * 0.75 from the row baseline.
-  const labelDy = (offset: number): number => offset * 0.75 + (offset >= 0 ? 12 : -6)
-
-  // Reserve vertical headroom for the curves and labels above/below each row.
+  // Reserve vertical headroom for the curves above/below each row.
   const verticalPad = maxParallel > 1 ? minOuterOffset + 18 : 14
   const svgW = colCount * BOX_W + (colCount - 1) * COL_GAP + 20
   const svgH = maxRows * BOX_H + (maxRows - 1) * ROW_GAP + verticalPad * 2
@@ -182,9 +179,9 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
   })
 
   return (
-    <div className="rounded-lg overflow-hidden border border-white/[0.08] bg-base">
+    <div className="rounded-lg overflow-hidden border border-border-subtle bg-base">
       {(data.title || data.subtitle) && (
-        <div className="px-3 pt-2 pb-1.5 border-b border-white/[0.06] flex items-baseline gap-2 flex-wrap">
+        <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
           {data.title && <div className="text-sm font-semibold text-text">{data.title}</div>}
           {data.subtitle && <div className="text-[11px] text-text-muted">{data.subtitle}</div>}
           <div className="ml-auto text-[10px] text-text-muted font-mono uppercase tracking-wide">{kind}</div>
@@ -208,32 +205,31 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
 
             const mx = (sx + ex) / 2
             const baseY = (sy + ey) / 2
-            const labelY = baseY + labelDy(offset)
+            void baseY // retained for potential future use
             const path = `M ${sx} ${sy} C ${mx} ${sy + offset}, ${mx} ${ey + offset}, ${ex} ${ey}`
             return (
               <g key={`e${i}`}>
-                <path d={path} fill="none" stroke="rgba(96,165,250,0.65)" strokeWidth={1.5} markerEnd="url(#rel-arrow)" />
-                {e.label && (
-                  // Halo-stroke text → stays legible over the curve and any neighbour labels.
-                  <text x={mx} y={labelY} textAnchor="middle" fontSize={10}
-                    stroke="#0a0a0f" strokeWidth={3.5} strokeLinejoin="round" paintOrder="stroke"
-                    fill="rgba(226,232,240,0.95)">
-                    {truncate(e.label, 28)}
-                  </text>
-                )}
+                {e.label && <title>{e.label}</title>}
+                {/* Invisible wider hit target so the tooltip triggers easily */}
+                <path d={path} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: "default" }} />
+                <path d={path} fill="none" stroke="rgba(96,165,250,0.65)" strokeWidth={1.5} markerEnd="url(#rel-arrow)" style={{ pointerEvents: "none" }} />
               </g>
             )
           })}
 
           {nodes.map((n) => {
             const p = pos.get(n.id); if (!p) return null
+            const label = n.label ?? n.id
+            const tooltipParts = [label]
+            if (n.subtitle) tooltipParts.push(n.subtitle)
             return (
-              <g key={n.id}>
+              <g key={n.id} style={{ cursor: "default" }}>
+                <title>{tooltipParts.join(" — ")}</title>
                 <rect x={p.x} y={p.y} width={BOX_W} height={BOX_H} rx={6}
                   fill="rgba(123,111,199,0.10)" stroke="rgba(123,111,199,0.45)" strokeWidth={1} />
                 <text x={p.x + BOX_W / 2} y={p.y + (n.subtitle ? 18 : 28)} textAnchor="middle"
-                  fontSize={11} fill="#f4f4f5" fontWeight="600">
-                  {truncate(n.label ?? n.id, 22)}
+                  fontSize={11} fill="var(--color-text)" fontWeight="600">
+                  {truncate(label, 22)}
                 </text>
                 {n.subtitle && (
                   <text x={p.x + BOX_W / 2} y={p.y + 34} textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.85)">

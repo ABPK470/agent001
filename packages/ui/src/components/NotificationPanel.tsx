@@ -145,15 +145,14 @@ export function NotificationPanel() {
     <div className="relative" ref={panelRef}>
       {/* Bell icon */}
       <button
-        className="relative flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="relative flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-3 transition-colors"
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
       >
         <Bell size={18} />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold text-white rounded-full px-1"
-            style={{ background: "var(--color-error)" }}
+            className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold rounded-full px-1 bg-accent text-text-on-accent"
           >
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
@@ -162,12 +161,12 @@ export function NotificationPanel() {
 
       {/* Dropdown panel */}
       {open && (
-        <div
-          className="absolute right-0 top-full mt-1.5 w-80 max-h-[480px] bg-elevated border border-border rounded-xl shadow-xl shadow-black/40 z-50 flex flex-col overflow-hidden"
-        >
+        <div className="absolute right-0 top-full mt-1.5 w-80 max-h-[480px] bg-elevated border border-border rounded-xl shadow-xl shadow-black/40 z-50 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 pt-3 pb-2.5 border-b border-border shrink-0">
-            <span className="text-sm font-semibold text-text">Notifications</span>
+            <span className="text-sm font-semibold text-text">
+              Notifications
+            </span>
             {unreadCount > 0 && (
               <button
                 className="text-[12px] text-accent hover:text-accent-hover transition-colors"
@@ -186,14 +185,14 @@ export function NotificationPanel() {
               </div>
             ) : (
               notifications.map((n) => {
-                const Icon = TYPE_ICON[n.type] ?? Bell
-                const color = TYPE_COLOR[n.type] ?? "var(--color-text-muted)"
+                const Icon = TYPE_ICON[n.type] ?? Bell;
+                const color = TYPE_COLOR[n.type] ?? "var(--color-text-muted)";
 
                 return (
                   <div
                     key={n.id}
                     className={`px-4 py-3 border-b border-border/50 transition-colors ${
-                      n.read ? "opacity-60" : "bg-white/[0.02]"
+                      n.read ? "opacity-60" : "bg-overlay-1"
                     }`}
                   >
                     <div className="flex gap-3">
@@ -232,12 +231,12 @@ export function NotificationPanel() {
                       </div>
                     </div>
                   </div>
-                )
+                );
               })
             )}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }

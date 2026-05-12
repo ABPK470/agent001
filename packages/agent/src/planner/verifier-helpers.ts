@@ -7,7 +7,6 @@
  * @module
  */
 
-import { uniqueStrings } from "./blueprint-contract.js"
 import type { VerifierDecision, VerifierOutcome, VerifierStepAssessment } from "./types.js"
 
 // ============================================================================

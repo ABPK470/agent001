@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { Listbox, type ListboxOption } from "../components/Listbox";
+import { useContainerSize } from "../hooks/useContainerSize";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -69,18 +71,18 @@ type ModelRelation = { srcSchema: string; srcTable: string; refSchema: string; r
 // ── Helpers ──────────────────────────────────────────────────────
 
 const SCHEMA_CATEGORY_COLORS: Record<string, string> = {
-  Dimension: "text-blue-400",
-  Fact: "text-orange-400",
-  List: "text-green-400",
-  Publish: "text-purple-400",
-  "Mapping View": "text-fuchsia-400",
-  "Persisted View": "text-cyan-400",
-  Core: "text-yellow-400",
-  External: "text-red-400",
-  Staging: "text-slate-400",
-  Hadoop: "text-amber-400",
-  ETL: "text-lime-400",
-  QVD: "text-teal-400",
+  Dimension: "text-datatype-int",
+  Fact: "text-datatype-bool",
+  List: "text-datatype-real",
+  Publish: "text-datatype-string",
+  "Mapping View": "text-datatype-string",
+  "Persisted View": "text-datatype-bin",
+  Core: "text-datatype-date",
+  External: "text-error",
+  Staging: "text-text-muted",
+  Hadoop: "text-warning",
+  ETL: "text-success",
+  QVD: "text-datatype-bin",
   Table: "text-text",
   View: "text-text-muted",
 }
@@ -134,11 +136,11 @@ function fmtMb(n: number): string {
 }
 
 function typeColor(dt: string): string {
-  if (/int|bigint|smallint|tinyint/.test(dt)) return "text-blue-400"
-  if (/decimal|numeric|float|real|money/.test(dt)) return "text-purple-400"
-  if (/char|text|xml|json/.test(dt)) return "text-green-400"
-  if (/date|time/.test(dt)) return "text-yellow-400"
-  if (/bit|bool/.test(dt)) return "text-orange-400"
+  if (/int|bigint|smallint|tinyint/.test(dt)) return "text-datatype-int"
+  if (/decimal|numeric|float|real|money/.test(dt)) return "text-datatype-real"
+  if (/char|text|xml|json/.test(dt)) return "text-datatype-string"
+  if (/date|time/.test(dt)) return "text-datatype-date"
+  if (/bit|bool/.test(dt)) return "text-datatype-bool"
   return "text-text-muted"
 }
 
@@ -212,6 +214,10 @@ export function MymiDb() {
   const [searchLoading, setSearchLoading] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { width: rootWidth } = useContainerSize(rootRef)
+  const compact = rootWidth > 0 && rootWidth < 700
+  const narrow  = rootWidth > 0 && rootWidth < 520
   const isSearchMode = debouncedSearch.length >= 2
 
   // ── Bootstrap ────────────────────────────────────────────────
@@ -342,22 +348,29 @@ export function MymiDb() {
   ]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden text-text">
+    <div ref={rootRef} className="flex flex-col h-full overflow-hidden text-text">
 
       {/* ── Header (toolbar — title comes from WidgetFrame) ───────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 bg-surface">
         {/* DB selector */}
-        {databases.length > 1 && (
-          <select
-            className="bg-base text-text text-xs px-2 py-1 rounded border border-border outline-none focus:ring-1 focus:ring-accent"
-            value={activeDb}
-            onChange={(e) => setActiveDb(e.target.value)}
-          >
-            {databases.map((d) => (
-              <option key={d.name} value={d.name}>{d.name} ({d.database})</option>
-            ))}
-          </select>
-        )}
+        {databases.length > 1 && (() => {
+          const dbOpts: ListboxOption<string>[] = databases.map((d) => ({
+            value: d.name,
+            label: d.name.toUpperCase(),
+            hint: d.database,
+          }))
+          return (
+            <Listbox
+              value={activeDb}
+              options={dbOpts}
+              onChange={(v) => setActiveDb(v)}
+              size="md"
+              variant="card"
+              ariaLabel="Database"
+              className="min-w-[140px]"
+            />
+          )
+        })()}
         {databases.length === 1 && activeDbInfo && (
           <span className="text-sm text-text-muted font-mono">{activeDbInfo.server} / {activeDbInfo.database}</span>
         )}
@@ -500,7 +513,7 @@ export function MymiDb() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Schema panel */}
-          <div className="w-[12rem] shrink-0 border-r border-border flex flex-col overflow-hidden">
+          <div className={`${narrow ? "w-24" : "w-[12rem]"} shrink-0 border-r border-border flex flex-col overflow-hidden`}>
             <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted border-b border-border/50">
               Schemas
             </div>
@@ -556,7 +569,7 @@ export function MymiDb() {
           </div>
 
           {/* Object list */}
-          <div className="w-64 shrink-0 border-r border-border flex flex-col overflow-hidden">
+          <div className={`${narrow ? "w-36" : "w-64"} shrink-0 border-r border-border flex flex-col overflow-hidden`}>
             <div className="px-2 py-2 border-b border-border/50 shrink-0 space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wider text-text-muted truncate">
@@ -778,7 +791,7 @@ export function MymiDb() {
                                     <td className="px-3 py-1 border-b border-border/30 text-text-muted">{col.ordinal}</td>
                                     <td className="px-2 py-1 border-b border-border/30">
                                       <div className="flex items-center gap-1.5">
-                                        {col.isPk && <Key size={10} className="text-yellow-400 shrink-0" title="Primary key" />}
+                                        {col.isPk && <Key size={10} className="text-warning shrink-0" title="Primary key" />}
                                         <span className="font-mono font-medium text-text">{col.name}</span>
                                         {col.fkTable && (
                                           <button
@@ -943,8 +956,8 @@ function Empty({ msg }: { msg: string }) {
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
   const cls: Record<string, string> = {
-    blue:   "bg-blue-500/15 text-blue-400",
-    purple: "bg-purple-500/15 text-purple-400",
+    blue:   "bg-info-soft text-info",
+    purple: "bg-accent-soft text-accent",
     accent: "bg-accent/15 text-accent",
   }
   return (
@@ -996,11 +1009,11 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
         <div className="p-2">
           <div className="text-[10px] text-text-muted px-2 pb-2 flex items-center gap-4">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-0.5 bg-blue-400/70" />
+              <span className="inline-block w-4 h-0.5 bg-info/70" />
               References (outbound FK)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-0.5 bg-slate-400/50" />
+              <span className="inline-block w-4 h-0.5 bg-text-muted/50" />
               Referenced by (inbound FK)
             </span>
             <span className="ml-auto opacity-50">click nodes to navigate</span>
@@ -1017,13 +1030,13 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
 
         {/* Center node */}
         <rect x={centerX} y={centerY - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
-          fill="rgba(99,102,241,0.18)" stroke="rgba(99,102,241,0.6)" strokeWidth={1.5} />
+          fill="color-mix(in oklab, var(--color-accent) 20%, transparent)" stroke="color-mix(in oklab, var(--color-accent) 60%, transparent)" strokeWidth={1.5} />
         <text x={centerX + BOX_W / 2} y={centerY - 7} textAnchor="middle" fontSize={11}
-          fill="#818cf8" fontWeight="600">
+          fill="var(--color-accent)" fontWeight="600">
           {centerName.length > 18 ? centerName.slice(0, 17) + "…" : centerName}
         </text>
         <text x={centerX + BOX_W / 2} y={centerY + 10} textAnchor="middle" fontSize={9}
-          fill="rgba(148,163,184,0.8)">
+          fill="var(--color-text-secondary)">
           {centerSchema}
         </text>
 
@@ -1048,7 +1061,7 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
               <text x={nx + BOX_W / 2} y={ny + 16} textAnchor="middle" fontSize={10} fill="rgb(147,197,253)" fontWeight="500">
                 {truncStr(refTable, 18)}
               </text>
-              <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.7)">
+              <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="var(--color-text-muted)">
                 {refSchema} · {fmtRows(refRows)}
               </text>
               <text x={nx + BOX_W / 2} y={ny + 40} textAnchor="middle" fontSize={8} fill="rgba(96,165,250,0.55)">
@@ -1075,14 +1088,14 @@ function RelationsGraph({ relations, centerName, centerSchema, onNavigate }: Rel
               <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
                 fill="none" stroke="rgb(148,163,184)" strokeWidth={1.5} strokeOpacity={0.45} markerEnd="url(#arrowIn)" />
               <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
-                fill="rgba(148,163,184,0.05)" stroke="rgba(148,163,184,0.25)" strokeWidth={1} />
-              <text x={nx + BOX_W / 2} y={ny + 16} textAnchor="middle" fontSize={10} fill="rgb(203,213,225)" fontWeight="500">
+                fill="color-mix(in oklab, var(--color-text-muted) 8%, transparent)" stroke="var(--color-border-subtle)" strokeWidth={1} />
+              <text x={nx + BOX_W / 2} y={ny + 16} textAnchor="middle" fontSize={10} fill="var(--color-text-secondary)" fontWeight="500">
                 {truncStr(srcTable, 18)}
               </text>
-              <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.7)">
+              <text x={nx + BOX_W / 2} y={ny + 28} textAnchor="middle" fontSize={8.5} fill="var(--color-text-muted)">
                 {srcSchema} · {fmtRows(srcRows)}
               </text>
-              <text x={nx + BOX_W / 2} y={ny + 40} textAnchor="middle" fontSize={8} fill="rgba(148,163,184,0.5)">
+              <text x={nx + BOX_W / 2} y={ny + 40} textAnchor="middle" fontSize={8} fill="var(--color-text-faint)">
                 {srcCol} → {localCol}
               </text>
             </g>
@@ -1292,14 +1305,16 @@ function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
     return svgH / 2 - blockH / 2 + i * (BOX_H + ROW_GAP)
   }
 
-  // Color per schema
+  // Color per schema — uses semantic accent (purple), info (blue),
+  // error (red), warning (yellow), and muted (slate) tokens so the
+  // diagram theme-flips with the rest of the UI.
   const schemaColor = (q: string) => {
     const s = q.includes(".") ? q.split(".")[0].toLowerCase() : ""
-    if (s === "publish" || s === "persistedview") return { fill: "rgba(99,102,241,0.10)", stroke: "rgba(99,102,241,0.45)", text: "#818cf8" }
-    if (s === "fact")    return { fill: "rgba(239,68,68,0.08)",   stroke: "rgba(239,68,68,0.35)",   text: "#fca5a5" }
-    if (s === "dim")     return { fill: "rgba(59,130,246,0.08)",  stroke: "rgba(59,130,246,0.35)",  text: "#93c5fd" }
-    if (s === "etl")     return { fill: "rgba(234,179,8,0.08)",   stroke: "rgba(234,179,8,0.35)",   text: "#fde047" }
-    return { fill: "rgba(148,163,184,0.07)", stroke: "rgba(148,163,184,0.30)", text: "#cbd5e1" }
+    if (s === "publish" || s === "persistedview") return { fill: "color-mix(in oklab, var(--color-accent) 12%, transparent)", stroke: "color-mix(in oklab, var(--color-accent) 50%, transparent)", text: "var(--color-accent)" }
+    if (s === "fact")    return { fill: "color-mix(in oklab, var(--color-error) 10%, transparent)",  stroke: "color-mix(in oklab, var(--color-error) 40%, transparent)",  text: "var(--color-error)" }
+    if (s === "dim")     return { fill: "color-mix(in oklab, var(--color-info) 10%, transparent)",   stroke: "color-mix(in oklab, var(--color-info) 40%, transparent)",   text: "var(--color-info)" }
+    if (s === "etl")     return { fill: "color-mix(in oklab, var(--color-warning) 10%, transparent)",stroke: "color-mix(in oklab, var(--color-warning) 40%, transparent)",text: "var(--color-warning)" }
+    return { fill: "color-mix(in oklab, var(--color-text-muted) 8%, transparent)", stroke: "color-mix(in oklab, var(--color-text-muted) 35%, transparent)", text: "var(--color-text-secondary)" }
   }
 
   return (
@@ -1313,7 +1328,7 @@ function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
       <svg width={svgW} height={svgH} className="font-mono overflow-visible" style={{ minWidth: svgW }}>
         <defs>
           <marker id="lgArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="rgba(99,102,241,0.7)" />
+            <path d="M0,0 L0,6 L8,3 z" fill="color-mix(in oklab, var(--color-accent) 70%, transparent)" />
           </marker>
         </defs>
 
@@ -1324,11 +1339,11 @@ function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
           return (
             <g>
               <rect x={cx} y={centerY - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
-                fill="rgba(99,102,241,0.18)" stroke="rgba(99,102,241,0.6)" strokeWidth={1.5} />
-              <text x={cx + BOX_W / 2} y={centerY - 5} textAnchor="middle" fontSize={11} fill="#818cf8" fontWeight="600">
+                fill="color-mix(in oklab, var(--color-accent) 20%, transparent)" stroke="color-mix(in oklab, var(--color-accent) 60%, transparent)" strokeWidth={1.5} />
+              <text x={cx + BOX_W / 2} y={centerY - 5} textAnchor="middle" fontSize={11} fill="var(--color-accent)" fontWeight="600">
                 {centerLabel.length > 20 ? centerLabel.slice(0, 19) + "…" : centerLabel}
               </text>
-              <text x={cx + BOX_W / 2} y={centerY + 10} textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.7)">
+              <text x={cx + BOX_W / 2} y={centerY + 10} textAnchor="middle" fontSize={9} fill="var(--color-text-muted)">
                 {centerSchema}
               </text>
             </g>
@@ -1354,13 +1369,13 @@ function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
           return (
             <g key={q}>
               <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
-                fill="none" stroke="rgba(99,102,241,0.35)" strokeWidth={1.5} markerEnd="url(#lgArrow)" />
+                fill="none" stroke="color-mix(in oklab, var(--color-accent) 35%, transparent)" strokeWidth={1.5} markerEnd="url(#lgArrow)" />
               <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
                 fill={c.fill} stroke={c.stroke} strokeWidth={1} />
               <text x={nx + BOX_W / 2} y={ny + 14} textAnchor="middle" fontSize={10} fill={c.text} fontWeight="500">
                 {label.length > 20 ? label.slice(0, 19) + "…" : label}
               </text>
-              <text x={nx + BOX_W / 2} y={ny + 27} textAnchor="middle" fontSize={8.5} fill="rgba(148,163,184,0.6)">
+              <text x={nx + BOX_W / 2} y={ny + 27} textAnchor="middle" fontSize={8.5} fill="var(--color-text-muted)">
                 {schema}
               </text>
             </g>
@@ -1791,10 +1806,10 @@ function DataModelTable({
                 {o.isTable && o.sizeMb > 0 ? o.sizeMb.toFixed(1) : <span className="text-text-muted">—</span>}
               </td>
               <td className="px-2 py-1 text-right">
-                {o.fkOut > 0 ? <span className="text-blue-400">{o.fkOut}</span> : <span className="text-text-muted">—</span>}
+                {o.fkOut > 0 ? <span className="text-info">{o.fkOut}</span> : <span className="text-text-muted">—</span>}
               </td>
               <td className="px-2 py-1 text-right">
-                {o.fkIn > 0 ? <span className="text-slate-400">{o.fkIn}</span> : <span className="text-text-muted">—</span>}
+                {o.fkIn > 0 ? <span className="text-text-secondary">{o.fkIn}</span> : <span className="text-text-muted">—</span>}
               </td>
             </tr>
           ))}
@@ -1832,7 +1847,7 @@ const DM_COLORS: Record<string, { stroke: string; fill: string; text: string }> 
   cyan:    { stroke: "rgba(34,211,238,0.5)",  fill: "rgba(34,211,238,0.07)",  text: "rgb(103,232,249)" },
   yellow:  { stroke: "rgba(250,204,21,0.5)",  fill: "rgba(250,204,21,0.07)",  text: "rgb(253,224,71)"  },
   red:     { stroke: "rgba(248,113,113,0.5)", fill: "rgba(248,113,113,0.07)", text: "rgb(252,165,165)" },
-  slate:   { stroke: "rgba(148,163,184,0.4)", fill: "rgba(148,163,184,0.05)", text: "rgb(203,213,225)" },
+  slate:   { stroke: "var(--color-border)", fill: "color-mix(in oklab, var(--color-text-muted) 8%, transparent)", text: "var(--color-text-secondary)" },
   amber:   { stroke: "rgba(251,191,36,0.5)",  fill: "rgba(251,191,36,0.07)",  text: "rgb(252,211,77)"  },
   lime:    { stroke: "rgba(163,230,53,0.5)",  fill: "rgba(163,230,53,0.07)",  text: "rgb(190,242,100)" },
   teal:    { stroke: "rgba(45,212,191,0.5)",  fill: "rgba(45,212,191,0.07)",  text: "rgb(94,234,212)"  },
@@ -1928,7 +1943,7 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
   return (
     <div className="flex-1 overflow-auto p-2">
       {truncated && (
-        <div className="text-[10px] text-amber-400/80 px-2 pb-1">
+        <div className="text-[10px] text-warning/80 px-2 pb-1">
           Showing first {TL_MAX} of {objects.length} objects — use schema filter to drill into specific tables.
         </div>
       )}
@@ -1938,7 +1953,7 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
       <svg width={svgW} height={svgH} className="overflow-visible font-mono" style={{ minWidth: svgW }}>
         <defs>
           <marker id="tlArrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-            <path d="M0,0 L0,5 L5,2.5 z" fill="rgba(148,163,184,0.6)" />
+            <path d="M0,0 L0,5 L5,2.5 z" fill="var(--color-text-muted)" />
           </marker>
         </defs>
 
@@ -1964,7 +1979,7 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
           return (
             <path key={i}
               d={`M ${x1} ${y1} C ${x1 + cp} ${y1} ${x2 - cp} ${y2} ${x2} ${y2}`}
-              fill="none" stroke="rgba(148,163,184,0.3)" strokeWidth={1}
+              fill="none" stroke="var(--color-border-subtle)" strokeWidth={1}
               markerEnd="url(#tlArrow)"
             />
           )
@@ -1984,7 +1999,7 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
                 fontSize={11} fontWeight="700" fill={st.text}>{s}
               </text>
               <text x={x + TL_W / 2} y={TL_PAD + 26} textAnchor="middle"
-                fontSize={8} fill="rgba(148,163,184,0.6)">
+                fontSize={8} fill="var(--color-text-muted)">
                 {objs.filter((o) => o.isTable).length}T · {objs.filter((o) => !o.isTable).length}V
               </text>
 
@@ -2004,7 +2019,7 @@ function TableGraph({ objects, relations }: { objects: ModelObject[]; relations:
                       fill={hasEdge ? st.text : "rgb(148,163,184)"}>
                       {truncStr(t.name, 23)}
                     </text>
-                    <text x={pos.x + 8} y={pos.y + 27} fontSize={7.5} fill="rgba(148,163,184,0.5)">
+                    <text x={pos.x + 8} y={pos.y + 27} fontSize={7.5} fill="var(--color-text-faint)">
                       {t.isTable ? ((t.rowCount ?? 0) > 0 ? fmtRows(t.rowCount) : "table") : "view"} · {t.columnCount ?? 0}c
                     </text>
                   </g>
@@ -2101,7 +2116,7 @@ function DataModelVisual({
           <svg width={svgW} height={svgH} className="overflow-visible font-mono" style={{ minWidth: svgW }}>
             <defs>
               <marker id="dmArrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="rgba(148,163,184,0.5)" />
+                <path d="M0,0 L0,6 L6,3 z" fill="var(--color-text-faint)" />
               </marker>
             </defs>
 
@@ -2117,10 +2132,10 @@ function DataModelVisual({
                 <g key={i}>
                   <path
                     d={`M ${sx} ${sy} Q ${mx + (sy - ty) * 0.15} ${my - (sx - tx) * 0.15} ${tx} ${ty}`}
-                    fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth={1}
+                    fill="none" stroke="var(--color-border-subtle)" strokeWidth={1}
                     markerEnd="url(#dmArrow)"
                   />
-                  <text x={mx} y={my} textAnchor="middle" fontSize={8} fill="rgba(148,163,184,0.5)">{e.count}</text>
+                  <text x={mx} y={my} textAnchor="middle" fontSize={8} fill="var(--color-text-faint)">{e.count}</text>
                 </g>
               )
             })}
@@ -2144,11 +2159,11 @@ function DataModelVisual({
                     {s.length > 16 ? s.slice(0, 15) + "…" : s}
                   </text>
                   <text x={pos.x + SCHEMA_BOX_W / 2} y={pos.y + 31} textAnchor="middle"
-                    fontSize={9} fill="rgba(148,163,184,0.6)">
+                    fontSize={9} fill="var(--color-text-muted)">
                     {displayName !== s ? displayName : ""}
                   </text>
                   <text x={pos.x + SCHEMA_BOX_W / 2} y={pos.y + 47} textAnchor="middle"
-                    fontSize={9} fill="rgba(148,163,184,0.7)">
+                    fontSize={9} fill="var(--color-text-muted)">
                     {tables > 0 ? `${tables}T ` : ""}{views > 0 ? `${views}V` : ""}
                     {totalMb > 0 ? ` · ${totalMb >= 1024 ? (totalMb / 1024).toFixed(1) + " GB" : totalMb.toFixed(0) + " MB"}` : ""}
                   </text>

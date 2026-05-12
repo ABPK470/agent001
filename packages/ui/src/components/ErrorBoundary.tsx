@@ -17,13 +17,13 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 32, fontFamily: "monospace", color: "#f87171", background: "#09090b", minHeight: "100vh" }}>
+        <div style={{ padding: 32, fontFamily: "monospace", color: "var(--color-error)", background: "var(--color-canvas)", minHeight: "100vh" }}>
           <h2 style={{ marginBottom: 8 }}>UI Crashed</h2>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#fbbf24" }}>{this.state.error.message}</pre>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#71717a", fontSize: 12, marginTop: 12 }}>{this.state.error.stack}</pre>
+          <pre style={{ whiteSpace: "pre-wrap", color: "var(--color-warning)" }}>{this.state.error.message}</pre>
+          <pre style={{ whiteSpace: "pre-wrap", color: "var(--color-text-muted)", fontSize: 12, marginTop: 12 }}>{this.state.error.stack}</pre>
           <button
             onClick={() => { this.setState({ error: null }); window.location.reload() }}
-            style={{ marginTop: 16, padding: "8px 16px", background: "#7B6FC7", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}
+            style={{ marginTop: 16, padding: "8px 16px", background: "var(--color-accent)", color: "var(--color-text-on-accent)", border: "none", borderRadius: 6, cursor: "pointer" }}
           >
             Reload
           </button>

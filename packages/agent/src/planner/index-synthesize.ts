@@ -3,18 +3,66 @@
  * @module
  */
 
+import { synthesizePlatformUnconfiguredAnswer } from "./platform-errors.js"
 import type { PipelineResult, Plan, VerifierDecision } from "./types.js"
+
+function normalizeSuccessfulOutput(text: string): string {
+  return text
+    .trim()
+    .replace(/^done:\s*/i, "")
+    .replace(/^completed:\s*/i, "")
+}
+
+function synthesizeSuccessfulAnswer(plan: Plan, pipelineResult: PipelineResult): string {
+  const outputs = plan.steps
+    .map((step) => pipelineResult.stepResults.get(step.name)?.output)
+    .filter((output): output is string => typeof output === "string" && output.trim().length > 0)
+    .map(normalizeSuccessfulOutput)
+
+  const uniqueOutputs = [...new Set(outputs)]
+  if (uniqueOutputs.length > 0) {
+    return uniqueOutputs.join("\n\n")
+  }
+
+  const producedArtifacts = plan.steps
+    .flatMap((step) => pipelineResult.stepResults.get(step.name)?.producedArtifacts ?? [])
+  const uniqueArtifacts = [...new Set(producedArtifacts)]
+  if (uniqueArtifacts.length === 1) {
+    return `Created ${uniqueArtifacts[0]}.`
+  }
+  if (uniqueArtifacts.length > 1) {
+    return `Created ${uniqueArtifacts.length} files: ${uniqueArtifacts.join(", ")}.`
+  }
+
+  return pipelineResult.completedSteps === pipelineResult.totalSteps
+    ? "Completed successfully."
+    : `Completed ${pipelineResult.completedSteps} of ${pipelineResult.totalSteps} steps.`
+}
 
 export function synthesizeAnswer(
   plan: Plan,
   pipelineResult: PipelineResult,
   verifierDecision: VerifierDecision,
 ): string {
-  const parts: string[] = []
+  // Platform-unconfigured short-circuit — if any step failed because a required
+  // platform integration is missing, the verbose "Task verification FAILED" wall
+  // is misleading and leaks operator-only details to the end user. Emit an
+  // opaque, user-safe message instead. The technical detail (env var to set,
+  // missing service name) is logged server-side by run-executor; the user
+  // gets a run reference they can forward to the platform admin.
+  const hasPlatformUnconfigured = [...pipelineResult.stepResults.values()]
+    .some((r) => r.failureClass === "platform_unconfigured")
+  if (hasPlatformUnconfigured) {
+    return synthesizePlatformUnconfiguredAnswer()
+  }
 
   if (verifierDecision.overall === "pass") {
-    parts.push("All tasks completed and verified successfully.")
-  } else if (verifierDecision.overall === "retry") {
+    return synthesizeSuccessfulAnswer(plan, pipelineResult)
+  }
+
+  const parts: string[] = []
+
+  if (verifierDecision.overall === "retry") {
     parts.push("Task verification FAILED — the following issues remain unresolved after all retry attempts:")
   } else {
     parts.push("Task FAILED — critical errors prevented completion:")

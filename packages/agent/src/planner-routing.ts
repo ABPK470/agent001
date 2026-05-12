@@ -17,7 +17,7 @@ import {
     summarizeCoherentVerifierDecision,
 } from "./planner/coherent.js"
 import { assessPlannerDecision } from "./planner/decision.js"
-import type { PlannerContext } from "./planner/index.js"
+import type { PlannerContext, PlannerResult } from "./planner/index.js"
 import { executePlannerPath } from "./planner/index.js"
 import type { VerifierDecision } from "./planner/types.js"
 import type { ToolCallRecord } from "./tool-result.js"
@@ -64,15 +64,38 @@ export interface PlannerRoutingContext {
 export async function attemptPlannerRouting(
   ctx: PlannerRoutingContext,
 ): Promise<PlannerRoutingResult> {
-  const { goal, messages, state, config } = ctx
+  const { goal, messages, config } = ctx
 
   if (!config.enablePlanner || !config.plannerDelegateFn) return {}
+  const routingDecision = await assessPlannerDecision(goal, messages, ctx.llm, config.signal)
+  config.onPlannerTrace?.({
+    kind: "planner-decision",
+    score: routingDecision.score,
+    shouldPlan: routingDecision.shouldPlan,
+    route: routingDecision.route,
+    reason: routingDecision.reason,
+    coherenceNeed: routingDecision.coherenceNeed,
+    coordinationNeed: routingDecision.coordinationNeed,
+  })
 
-  config.onPlannerTrace?.({ kind: "planning_preflight", mode: "planner-first" })
+  if (routingDecision.route === "direct" || routingDecision.route === "single_artifact_direct_burst") {
+    config.onPlannerTrace?.({
+      kind: "direct_loop_fallback",
+      source: "planner_declined",
+      reason: `route=${routingDecision.route} score=${routingDecision.score} (${routingDecision.reason})`,
+    })
+    return {}
+  }
+
+  if (routingDecision.route !== "bounded_coherent_generation") {
+    config.onPlannerTrace?.({ kind: "planning_preflight", mode: "planner-first" })
+  }
   const plannerCtx = ctx.createPlannerContext()
 
   // ── Execute planner path ──
-  const plannerResult = await executePlannerPath(goal, plannerCtx, config.plannerDelegateFn)
+  const plannerResult = routingDecision.route === "bounded_coherent_generation"
+    ? { handled: false as const }
+    : await executePlannerPath(goal, plannerCtx, config.plannerDelegateFn)
 
   if (plannerResult.handled) {
     const answer = plannerResult.answer ?? "(planner produced no answer)"
@@ -80,14 +103,23 @@ export async function attemptPlannerRouting(
     return { finalAnswer: answer }
   }
 
-  // ── LLM routing decision ──
-  const routingDecision = await assessPlannerDecision(goal, messages, ctx.llm, config.signal)
-
   let coherentGenerationFailed = false
 
   // ── Coherent generation path ──
   if (routingDecision.route === "bounded_coherent_generation") {
-    const coherentResult = await attemptCoherentGeneration(ctx, routingDecision.route)
+    let coherentResult: { failed: boolean }
+    try {
+      coherentResult = await attemptCoherentGeneration(ctx, routingDecision.route)
+    } catch (err) {
+      // HTTP 422/413 (context too large), 429 (rate limit), network errors, etc.
+      // Treat as a failed coherent gen and fall through to the full planner.
+      config.onPlannerTrace?.({
+        kind: "coherent-generation-failed",
+        stage: "llm_error",
+        diagnostics: [String(err)],
+      })
+      coherentResult = { failed: true }
+    }
     if (coherentResult.failed) {
       coherentGenerationFailed = true
     }
@@ -157,7 +189,20 @@ async function attemptCoherentGeneration(
   config.onLlmCall?.({ phase: "request", messages: coherentMessages, tools: [], iteration: 0 })
 
   const t0 = Date.now()
-  const coherentResponse = await ctx.llm.chat(coherentMessages, [], { signal: config.signal, maxTokens: 16384 })
+  // Hard cap: the Copilot Chat API (and most proxied LLM endpoints) reject
+  // max_completion_tokens above ~16384 with HTTP 422 Unprocessable Entity.
+  // If the LLM hits the output limit mid-JSON we catch that in the repair block
+  // below and ask for a smaller, more concise solution.
+  const coherentTokens = 16384
+  const coherentResponse = await ctx.llm.chat(
+    coherentMessages,
+    [],
+    {
+      signal: config.signal,
+      maxTokens: coherentTokens,
+      onToken: (token) => config.onPlannerTrace?.({ kind: "coherent-generation-token", token }),
+    },
+  )
   const durationMs = Date.now() - t0
   ctx.incrementLlmCalls()
   config.onLlmCall?.({ phase: "response", response: coherentResponse, iteration: 0, durationMs })
@@ -168,14 +213,54 @@ async function attemptCoherentGeneration(
     ctx.usage.totalTokens += coherentResponse.usage.totalTokens
   }
 
-  const coherentParse = parseCoherentSolutionBundle(coherentResponse.content ?? "")
+  let coherentParse = parseCoherentSolutionBundle(coherentResponse.content ?? "")
   if (!coherentParse.bundle) {
-    config.onPlannerTrace?.({
-      kind: "coherent-generation-failed",
-      stage: "bundle_parse",
-      diagnostics: [...coherentParse.diagnostics],
-    })
-    return { failed: true }
+    // One repair attempt before giving up: send the failed response back with
+    // an explicit instruction to retry as clean JSON. This handles cases where
+    // the LLM added prose preamble, used a non-standard fence tag, or produced
+    // a very slightly malformed response despite the greedy-brace fallback.
+    const repairMessages: import("./types.js").Message[] = [
+      ...coherentMessages,
+      { role: "assistant", content: coherentResponse.content ?? "" },
+      {
+        role: "user",
+        content:
+          "Your previous response could not be parsed as JSON.\n" +
+          "Diagnostics: " + coherentParse.diagnostics.join("; ") + "\n\n" +
+          "Reply with ONLY the JSON object — no markdown fences, no preamble, no prose. " +
+          "Start with { and end with }. " +
+          "IMPORTANT: The output token budget is limited (~16K tokens). " +
+          "If your previous response was cut off mid-JSON, produce a SIMPLER solution: " +
+          "fewer files, shorter comments, minimal inline examples. " +
+          "Combine multiple small files into one. Aim for the smallest valid bundle.",
+      },
+    ]
+    const repairResponse = await ctx.llm.chat(
+      repairMessages,
+      [],
+      {
+        signal: config.signal,
+        maxTokens: coherentTokens,
+        onToken: (token) => config.onPlannerTrace?.({ kind: "coherent-generation-token", token }),
+      },
+    )
+    ctx.incrementLlmCalls()
+    if (repairResponse.usage) {
+      ctx.usage.promptTokens += repairResponse.usage.promptTokens
+      ctx.usage.completionTokens += repairResponse.usage.completionTokens
+      ctx.usage.totalTokens += repairResponse.usage.totalTokens
+    }
+    config.onLlmCall?.({ phase: "response", response: repairResponse, iteration: 0, durationMs: 0 })
+
+    coherentParse = parseCoherentSolutionBundle(repairResponse.content ?? "")
+    if (!coherentParse.bundle) {
+      config.onPlannerTrace?.({
+        kind: "coherent-generation-failed",
+        stage: "bundle_parse",
+        diagnostics: [...coherentParse.diagnostics],
+      })
+      return { failed: true }
+    }
   }
 
   config.onPlannerTrace?.({
@@ -288,11 +373,7 @@ async function attemptCoherentGeneration(
 
 async function handleVerificationFailure(
   ctx: PlannerRoutingContext,
-  plannerResult: {
-    verifierDecision?: VerifierDecision
-    plan?: { steps: Array<{ stepType: string; executionContext: { targetArtifacts: string[] } }> }
-    answer?: string
-  },
+  plannerResult: PlannerResult,
   plannerCtx: PlannerContext,
 ): Promise<string | undefined> {
   const { messages, config } = ctx
@@ -306,7 +387,7 @@ async function handleVerificationFailure(
   const uniqueTargetArtifacts = new Set(
     (plannerResult.plan?.steps ?? [])
       .flatMap((step) => step.stepType === "subagent_task"
-        ? step.executionContext.targetArtifacts
+        ? (step as import("./planner/types.js").SubagentTaskStep).executionContext.targetArtifacts
         : [])
       .map((a) => a.replace(/^\.\//, "")),
   )

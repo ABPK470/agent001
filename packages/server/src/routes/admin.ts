@@ -1,15 +1,15 @@
 /**
  * Admin observability + login routes.
  *
- *   POST /api/admin/login   — { password } → sets agent001_admin cookie
+ *   POST /api/admin/login   — { password } → sets mia_admin cookie
  *   POST /api/admin/logout  — clears the cookie
  *   GET  /api/admin/sessions          — list of recent sessions (admin only)
  *   GET  /api/admin/active-runs       — currently executing runs (admin only)
  *
  * Admin gating:
- *   - UPN whitelist (AGENT001_ADMIN_UPNS) is the primary path; req.session.isAdmin
+ *   - UPN whitelist (MIA_ADMIN_UPNS) is the primary path; req.session.isAdmin
  *     reflects it. Set in identity.ts.
- *   - Password fallback uses AGENT001_ADMIN_PASSWORD; if unset, login is disabled.
+ *   - Password fallback uses MIA_ADMIN_PASSWORD; if unset, login is disabled.
  */
 
 import type { FastifyInstance } from "fastify"
@@ -20,7 +20,7 @@ import { listSessions, listUserHistory, listUsersWithStats } from "../db/session
 import type { AgentOrchestrator } from "../orchestrator.js"
 
 function getAdminPassword(): string | null {
-  const pw = process.env["AGENT001_ADMIN_PASSWORD"]
+  const pw = process.env["MIA_ADMIN_PASSWORD"]
   return pw && pw.length > 0 ? pw : null
 }
 
@@ -36,7 +36,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const expected = getAdminPassword()
     if (!expected) {
       reply.code(503)
-      return { error: "Admin password login is disabled (AGENT001_ADMIN_PASSWORD not set)" }
+      return { error: "Admin password login is disabled (MIA_ADMIN_PASSWORD not set)" }
     }
     const supplied = (req.body?.password ?? "").trim()
     if (!supplied || !constantTimeEq(supplied, expected)) {
@@ -146,8 +146,10 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
   app.get<{ Params: { identifier: string } }>("/api/admin/users/:identifier/runs", async (req, reply) => {
     if (!req.session.isAdmin) { reply.code(403); return { error: "admin only" } }
     const limit = Math.min(200, Math.max(1, Number((req.query as Record<string, string>)?.["limit"] ?? "25")))
+    const offset = Math.max(0, Number((req.query as Record<string, string>)?.["offset"] ?? "0"))
     // Identifier is URL-encoded UPN or `sid:<sid>`.
     const identifier = decodeURIComponent(req.params.identifier)
-    return { runs: listUserHistory(identifier, limit) }
+    const { runs, total } = listUserHistory(identifier, limit, offset)
+    return { runs, total, limit, offset }
   })
 }

@@ -22,7 +22,7 @@ services:
     environment:
       - PORT=3001
       - HOST=0.0.0.0
-      - AGENT001_DATA_DIR=/data
+      - MIA_DATA_DIR=/data
       - AGENT_WORKSPACE=/workspace
       # Production databases: override MSSQL_DATABASES in your .env with JSON
       # e.g. MSSQL_DATABASES=[{"name":"analytics","host":"sql.example.com","port":1433,...}]

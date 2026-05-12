@@ -55,9 +55,12 @@ function numericValue(val: string): number {
   return Number(stripped)
 }
 
+/** Returns true if the column header is a primary/foreign key — always a plain integer, never money. */
+function isPkHeader(h: string): boolean { return /^pk|^fk|[Ii][Dd]$|_id$/i.test(h) }
+
 /** Returns true if the column header looks like a monetary / large financial value. */
 const MONEY_KEYWORDS = /revenue|amount|balance|profit|cost|fee|income|value|zar|usd|eur|gbp|total|sum|price|salary/i
-function isMoneyHeader(h: string): boolean { return MONEY_KEYWORDS.test(h) }
+function isMoneyHeader(h: string): boolean { return !isPkHeader(h) && MONEY_KEYWORDS.test(h) }
 
 /** Format a raw numeric string that came from the database into a readable number.
  *  If the absolute value >= 1B, abbreviate (33.19B). Otherwise use comma-thousands + 2dp. */
@@ -69,20 +72,27 @@ function formatMoneyCell(raw: string): string {
   if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B`
   if (abs >= 1_000_000)     return `${sign}${(abs / 1_000_000).toFixed(2)}M`
   // For smaller values just add comma separators
-  return n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /** Format any large unformatted number string for display. */
-function formatNumericCell(raw: string, isMoney: boolean): string {
+function formatNumericCell(raw: string, isMoney: boolean, isPk: boolean): string {
   if (!raw || raw === "NULL") return raw
-  // If it already has commas or letters (already formatted / abbreviated) leave it
-  if (/[,KMBkmb]/.test(raw)) return raw
+  // PK/FK/ID columns: strip everything non-digit and return bare integer — no separators, no abbreviation
+  if (isPk) {
+    const n = numericValue(raw)
+    return isNaN(n) ? raw : Math.trunc(n).toString()
+  }
+  // If it already has letters (abbreviated) leave it; commas handled below via numericValue
+  if (/[KMBkmb]/.test(raw)) return raw
   if (!isNumericCell(raw)) return raw
   if (isMoney) return formatMoneyCell(raw)
   const n = numericValue(raw)
   if (isNaN(n)) return raw
-  // Large plain numbers: add thousands separator
-  if (Math.abs(n) >= 1000) return n.toLocaleString("en-ZA", { maximumFractionDigits: 4 })
+  // Integers: show as plain number, no separators (IDs, counts, etc.)
+  if (Number.isInteger(n)) return Math.trunc(n).toString()
+  // Large decimals: add thousands separator (en-US commas)
+  if (Math.abs(n) >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 4 })
   return raw
 }
 
@@ -95,6 +105,18 @@ function escapeCsvCell(v: string): string {
 
 function rowsToCsv(headers: string[], rows: string[][]): string {
   return [headers.map(escapeCsvCell).join(","), ...rows.map((r) => r.map(escapeCsvCell).join(","))].join("\n")
+}
+
+function measureCellWidthHint(value: string): number {
+  if (!value) return 0
+  const longestLine = value
+    .split(/\r?\n/)
+    .reduce((max, line) => Math.max(max, line.trim().length), 0)
+  return longestLine
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -123,15 +145,16 @@ export function DataTable({
     [headers, rows],
   )
 
-  // Detect money columns: numeric + header matches money keywords, or values are suspiciously large (>= 1M)
+  // pk*/fk*/Id columns are always bare integers — never money, never formatted.
+  const pkCols = useMemo(
+    () => headers.map((h) => isPkHeader(h)),
+    [headers],
+  )
+
+  // Detect money columns: numeric + header matches money keywords (pk cols excluded).
   const moneyCols = useMemo(
-    () => headers.map((h, ci) => {
-      if (!numericCols[ci]) return false
-      if (isMoneyHeader(h)) return true
-      // If any value >= 1M, treat as money
-      return rows.some((row) => row[ci] && Math.abs(numericValue(row[ci])) >= 1_000_000)
-    }),
-    [headers, numericCols, rows],
+    () => headers.map((h, ci) => !pkCols[ci] && numericCols[ci] && isMoneyHeader(h)),
+    [headers, pkCols, numericCols],
   )
 
   // Filter
@@ -173,6 +196,28 @@ export function DataTable({
   const end = showAll ? total : Math.min(total, start + effectivePageSize)
   const pageRows = useMemo(() => sorted.slice(start, end), [sorted, start, end])
 
+  const columnWidths = useMemo(() => {
+    if (headers.length === 0) return [] as string[]
+
+    const rawWeights = headers.map((header, ci) => {
+      const headerHint = measureCellWidthHint(header)
+      const cellHints = pageRows.map((row) => measureCellWidthHint(row[ci] ?? ""))
+      const longestValue = cellHints.length > 0 ? Math.max(...cellHints) : 0
+      const averageValue = cellHints.length > 0
+        ? cellHints.reduce((sum, hint) => sum + hint, 0) / cellHints.length
+        : 0
+
+      const baseHint = Math.max(headerHint * 1.15, averageValue * 0.9, longestValue * 0.75)
+
+      if (numericCols[ci] || pkCols[ci]) return clamp(baseHint, 6, 14)
+
+      return clamp(baseHint, 10, 42)
+    })
+
+    const totalWeight = rawWeights.reduce((sum, weight) => sum + weight, 0) || headers.length
+    return rawWeights.map((weight) => `${(weight / totalWeight) * 100}%`)
+  }, [headers, pageRows, numericCols, pkCols])
+
   function toggleSort(col: number) {
     setSort((prev) => {
       if (!prev || prev.col !== col) return { col, dir: "asc" }
@@ -201,7 +246,7 @@ export function DataTable({
         className="flex items-center gap-2 px-2 py-1.5 flex-wrap"
         style={{ background: C.elevated, borderBottom: `1px solid ${C.border}` }}
       >
-        <span className="text-[11px] font-mono shrink-0" style={{ color: C.dim }}>
+        <span className="text-sm font-mono shrink-0" style={{ color: C.dim }}>
           {filter
             ? `${total.toLocaleString()} of ${headerCount.toLocaleString()} row${headerCount !== 1 ? "s" : ""}`
             : `${headerCount.toLocaleString()} row${headerCount !== 1 ? "s" : ""}`}
@@ -218,7 +263,7 @@ export function DataTable({
             value={filter}
             onChange={(e) => { setFilter(e.target.value); setPage(0) }}
             placeholder="Filter…"
-            className="bg-transparent outline-none text-[11px] flex-1"
+            className="bg-transparent outline-none text-sm flex-1"
             style={{ color: C.text, minWidth: 0 }}
           />
           {filter && (
@@ -236,7 +281,7 @@ export function DataTable({
         <button
           type="button"
           onClick={copyCsv}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-white/5"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-sm cursor-pointer transition-colors hover:bg-overlay-2"
           style={{ color: copied ? C.success : C.dim }}
           aria-label="Copy as CSV"
         >
@@ -247,7 +292,12 @@ export function DataTable({
 
       {/* Table */}
       <div className="overflow-auto" style={{ maxHeight }}>
-        <table className="text-[12px] border-collapse" style={{ width: "max-content", minWidth: "100%" }}>
+        <table className="text-sm border-collapse" style={{ width: "100%", tableLayout: "fixed" }}>
+          <colgroup>
+            {columnWidths.map((width, ci) => (
+              <col key={ci} style={{ width }} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10">
             <tr style={{ background: C.elevated }}>
               {headers.map((h, ci) => {
@@ -257,21 +307,23 @@ export function DataTable({
                   <th
                     key={ci}
                     onClick={() => toggleSort(ci)}
-                    className="px-3 py-1.5 font-semibold whitespace-nowrap cursor-pointer select-none transition-colors hover:bg-white/5"
+                    className="px-3 py-1.5 font-semibold cursor-pointer select-none transition-colors hover:bg-overlay-2"
                     style={{
                       color: C.text,
-                      textAlign: numericCols[ci] ? "right" : "left",
+                      textAlign: "left",
                       borderBottom: `1px solid ${C.border}`,
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
                     }}
                   >
-                    <span className="inline-flex items-center gap-1" style={{ flexDirection: numericCols[ci] ? "row-reverse" : "row" }}>
-                      <span>{displayHeader(h, ci)}</span>
+                    <span className="inline-flex items-start gap-1 max-w-full">
+                      <span style={{ overflowWrap: "anywhere" }}>{displayHeader(h, ci)}</span>
                       {dir === "asc" ? (
-                        <ArrowUp size={10} style={{ color: C.accent }} />
+                        <ArrowUp size={14} style={{ color: C.accent }} />
                       ) : dir === "desc" ? (
-                        <ArrowDown size={10} style={{ color: C.accent }} />
+                        <ArrowDown size={14} style={{ color: C.accent }} />
                       ) : (
-                        <ArrowUpDown size={10} style={{ color: C.dim, opacity: 0.5 }} />
+                        <ArrowUpDown size={14} style={{ color: C.dim, opacity: 0.5 }} />
                       )}
                     </span>
                   </th>
@@ -299,24 +351,28 @@ export function DataTable({
                   {headers.map((_, ci) => {
                     const val = row[ci] ?? ""
                     const isNull = val === "NULL"
+                    const displayVal = formatNumericCell(val, moneyCols[ci], pkCols[ci])
                     return (
                       <td
                         key={ci}
-                        className="px-3 py-1"
+                        className="px-3 py-1 align-top"
                         style={{
                           color: isNull ? C.dim : numericCols[ci] ? C.peach : C.textSecondary,
-                          textAlign: numericCols[ci] ? "right" : "left",
+                          textAlign: "left",
                           fontFamily: numericCols[ci] ? "monospace" : undefined,
                           fontVariantNumeric: numericCols[ci] ? "tabular-nums" : undefined,
                           borderBottom: `1px solid rgba(255,255,255,0.04)`,
-                          whiteSpace: "nowrap",
-                          maxWidth: 480,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          whiteSpace: numericCols[ci] ? "nowrap" : "pre-wrap",
+                          overflowWrap: "anywhere",
+                          wordBreak: "break-word",
+                          verticalAlign: "top",
                         }}
-                        title={val.length > 60 ? val : undefined}
                       >
-                        {isNull ? <span style={{ opacity: 0.5 }}>NULL</span> : displayCell(formatNumericCell(val, moneyCols[ci]), ci)}
+                        {isNull ? (
+                          <span style={{ opacity: 0.5 }}>NULL</span>
+                        ) : (
+                          displayCell(displayVal, ci)
+                        )}
                       </td>
                     )
                   })}
@@ -334,11 +390,11 @@ export function DataTable({
           style={{ background: C.elevated, borderTop: `1px solid ${C.border}` }}
         >
           <div className="flex items-center gap-1">
-            <span className="text-[11px]" style={{ color: C.dim }}>Rows per page:</span>
+            <span className="text-sm" style={{ color: C.dim }}>Rows per page:</span>
             <select
               value={pageSize}
               onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0) }}
-              className="bg-transparent outline-none text-[11px] cursor-pointer rounded px-1 py-0.5"
+              className="bg-transparent outline-none text-sm cursor-pointer rounded px-1 py-0.5"
               style={{ color: C.textSecondary, border: `1px solid ${C.border}` }}
             >
               {PAGE_SIZE_OPTIONS.map((opt) => (
@@ -349,20 +405,20 @@ export function DataTable({
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono" style={{ color: C.dim }}>
+            <span className="text-sm font-mono" style={{ color: C.dim }}>
               {total === 0
                 ? "0 of 0"
                 : `${(start + 1).toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`}
             </span>
             {!showAll && pageCount > 1 && (
               <div className="flex items-center gap-0.5">
-                <PagerBtn disabled={page === 0} onClick={() => setPage(0)} aria="First page"><ChevronsLeft size={12} /></PagerBtn>
-                <PagerBtn disabled={page === 0} onClick={() => setPage(page - 1)} aria="Previous page"><ChevronLeft size={12} /></PagerBtn>
-                <span className="text-[11px] font-mono px-1" style={{ color: C.textSecondary }}>
+                <PagerBtn disabled={page === 0} onClick={() => setPage(0)} aria="First page"><ChevronsLeft size={16} /></PagerBtn>
+                <PagerBtn disabled={page === 0} onClick={() => setPage(page - 1)} aria="Previous page"><ChevronLeft size={16} /></PagerBtn>
+                <span className="text-sm font-mono px-1" style={{ color: C.textSecondary }}>
                   {page + 1} / {pageCount}
                 </span>
-                <PagerBtn disabled={page >= pageCount - 1} onClick={() => setPage(page + 1)} aria="Next page"><ChevronRight size={12} /></PagerBtn>
-                <PagerBtn disabled={page >= pageCount - 1} onClick={() => setPage(pageCount - 1)} aria="Last page"><ChevronsRight size={12} /></PagerBtn>
+                <PagerBtn disabled={page >= pageCount - 1} onClick={() => setPage(page + 1)} aria="Next page"><ChevronRight size={16} /></PagerBtn>
+                <PagerBtn disabled={page >= pageCount - 1} onClick={() => setPage(pageCount - 1)} aria="Last page"><ChevronsRight size={16} /></PagerBtn>
               </div>
             )}
           </div>

@@ -83,6 +83,14 @@ export interface AgentLoopState {
    * exact export_query_to_file call to make. Bounded to the last 4.
    */
   recentTruncatedQueries: Array<{ fingerprint: string; query: string }>
+
+  /**
+   * Cumulative read_file call count per file (by basename) across all rounds.
+   * Used to detect the "sandwich read" pattern where the same file is read
+   * repeatedly (via relative and absolute sandbox paths) across many rounds
+   * without any write in between.
+   */
+  cumulativeReadFileHistory: Map<string, number>
 }
 
 const INITIAL_FULL_COMPACTION_OFFSET = -8
@@ -124,5 +132,6 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     absoluteIterationCap: maxIterations + 10,
     coherentExecution: null,
     recentTruncatedQueries: [],
+    cumulativeReadFileHistory: new Map(),
   }
 }

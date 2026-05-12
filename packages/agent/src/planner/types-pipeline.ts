@@ -39,6 +39,11 @@ export type SubagentFailureClass =
   | "spawn_error"
   | "cancelled"
   | "transient_provider_error"
+  // Tool failed because a required platform integration (database, secret,
+  // env var, external service) is not configured on this server. No amount
+  // of agent action can repair this — only the operator can. Treated as
+  // unrecoverable: skip retry, skip repair loop, surface a clean message.
+  | "platform_unconfigured"
   | "unknown"
 
 export interface VerificationAttempt {

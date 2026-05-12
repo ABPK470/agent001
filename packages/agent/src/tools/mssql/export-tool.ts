@@ -110,11 +110,11 @@ export const exportQueryToFileTool: Tool = {
       },
       connection: {
         type: "string",
-        description: "Named database connection to use (configured at startup). Omit for default.",
+        description: "Named server/pool to connect to (e.g. 'prod', 'uat'). Omit to use the default. Do NOT pass environment names as 'database'.",
       },
       database: {
         type: "string",
-        description: "Optional: switch to a different database before running the query.",
+        description: "Optional: switch catalog database on the current server (generates USE [database]). Not for selecting environments.",
       },
     },
     required: ["query", "path"],

@@ -36,7 +36,7 @@ export function LineChart({ data }: { data: LineChartData }): React.ReactElement
   const categories = data.categories ?? []
   const series = (data.series ?? []).filter((s) => Array.isArray(s.values))
   if (categories.length === 0 || series.length === 0) {
-    return <ChartFrame title={data.title} badge={data.fill ? "area" : "line"}><Empty /></ChartFrame>
+    return null as unknown as React.ReactElement
   }
 
   const fmt: ValueFormat = data.valueFormat ?? "compact"
@@ -80,7 +80,7 @@ export function LineChart({ data }: { data: LineChartData }): React.ReactElement
         {/* Y-axis label */}
         {data.yLabel && (
           <text x={12} y={plotTop + PLOT_H / 2} textAnchor="middle"
-            fontSize={11} fill="#a1a1aa"
+            fontSize={11} fill="var(--color-text-muted)"
             transform={`rotate(-90 12 ${plotTop + PLOT_H / 2})`}>
             {data.yLabel}
           </text>
@@ -92,7 +92,7 @@ export function LineChart({ data }: { data: LineChartData }): React.ReactElement
           return (
             <g key={i}>
               <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="rgba(255,255,255,0.05)" />
-              <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="#a1a1aa">{formatTick(t)}</text>
+              <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="var(--color-text-muted)">{formatTick(t)}</text>
             </g>
           )
         })}
@@ -123,7 +123,7 @@ export function LineChart({ data }: { data: LineChartData }): React.ReactElement
         {categories.map((cat, i) => {
           if (i % labelStep !== 0) return null
           return (
-            <text key={i} x={xAt(i)} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="#d4d4d8">
+            <text key={i} x={xAt(i)} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="var(--color-text-secondary)">
               {truncate(cat, 12)}
             </text>
           )
@@ -135,7 +135,7 @@ export function LineChart({ data }: { data: LineChartData }): React.ReactElement
 
         {/* X-axis label */}
         {data.xLabel && (
-          <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="#a1a1aa">
+          <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">
             {data.xLabel}
           </text>
         )}

@@ -11,9 +11,14 @@
  *   - Plain paragraphs → whitespace-preserved text
  */
 
-import type React from "react";
+import { Check, Copy } from "lucide-react";
+import React from "react";
 import { DataTable } from "./DataTable";
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram";
+
+// Context that flips inline rendering (e.g. inline `code` chips) to a
+// lighter, less-decorated style. Used by the term-chat widget.
+const CompactContext = React.createContext(false)
 
 // ── Block types ────────────────────────────────────────────────
 
@@ -24,6 +29,8 @@ type Block =
   | { type: "code"; lang: string; text: string }
   | { type: "bullet-list"; items: string[] }
   | { type: "ordered-list"; items: { num: number; text: string }[] }
+  | { type: "command"; command: string; before: string; after: string }
+  | { type: "hr" }
 
 // ── Structured ordered-list → table heuristic ─────────────────
 // Detects "**Name**: detail, detail, detail" items and builds a multi-column
@@ -130,6 +137,28 @@ function extractColumn(segs: string[]): { header: string; values: string[] } {
   return { header: "Details", values: segs }
 }
 
+function parseCommandLikeItem(text: string): { name: string; detail: string } | null {
+  const trimmed = text.trim().replace(/^`|`$/g, "")
+  const match = trimmed.match(/^([a-z][a-z0-9_.-]{2,})(?:\s+(.+))?$/)
+  if (!match || !match[2]) return null
+  const detail = match[2].trim()
+  const looksStructured = /=|\bargs?\b|\btable\s*=|\bcolumn\s*=|\bbetween\s*=|\bquery\s*=|\[[^\]]+\]|"[^"]+"/.test(detail)
+  return looksStructured ? { name: match[1], detail } : null
+}
+
+function cleanupCommandBoundaryText(text: string, side: "before" | "after"): string {
+  let cleaned = text.trim()
+  if (!cleaned) return ""
+
+  if (side === "before") {
+    cleaned = cleaned.replace(/\s*(\*\*|__|`)+\s*$/g, "")
+  } else {
+    cleaned = cleaned.replace(/^\s*(\*\*|__|`)+\s*/g, "")
+  }
+
+  return cleaned.trim()
+}
+
 // ── Parser ─────────────────────────────────────────────────────
 
 function parseBlocks(text: string): Block[] {
@@ -142,6 +171,13 @@ function parseBlocks(text: string): Block[] {
 
     // Skip blank lines between blocks
     if (line.trim() === "") { i++; continue }
+
+    // Horizontal rule — `---`, `***`, `___` (markdown thematic break)
+    if (/^\s*(?:-\s*-\s*-[-\s]*|\*\s*\*\s*\*[*\s]*|_\s*_\s*_[_\s]*)$/.test(line)) {
+      blocks.push({ type: "hr" })
+      i++
+      continue
+    }
 
     // Code block
     if (line.startsWith("```")) {
@@ -221,15 +257,89 @@ function parseBlocks(text: string): Block[] {
       paraLines.push(lines[i])
       i++
     }
-    if (paraLines.length > 0) blocks.push({ type: "paragraph", lines: paraLines })
+    if (paraLines.length > 0) {
+      // Check if any paragraph line contains a command-like inline code: `tool_name key=val ...`
+      const joined = paraLines.join("\n")
+      const cmdMatch = joined.match(/`(\w+\s+\w+=\S[^`]*)`/)
+      if (cmdMatch) {
+        const idx = cmdMatch.index!
+        const before = cleanupCommandBoundaryText(joined.slice(0, idx), "before")
+        const after = cleanupCommandBoundaryText(joined.slice(idx + cmdMatch[0].length), "after")
+        blocks.push({ type: "command", command: cmdMatch[1], before, after })
+      } else {
+        const commandLineIndex = paraLines.findIndex((line) => parseCommandLikeItem(line) !== null)
+        if (commandLineIndex >= 0) {
+          const before = cleanupCommandBoundaryText(paraLines.slice(0, commandLineIndex).join("\n"), "before")
+          const command = paraLines[commandLineIndex].trim().replace(/^`|`$/g, "")
+          const after = cleanupCommandBoundaryText(paraLines.slice(commandLineIndex + 1).join("\n"), "after")
+          blocks.push({ type: "command", command, before, after })
+        } else {
+          blocks.push({ type: "paragraph", lines: paraLines })
+        }
+      }
+    }
   }
 
   return blocks
 }
 
+// ── Copyable command block ──────────────────────────────────────
+
+function CommandBlock({ text }: { text: string }): React.ReactElement {
+  const [copied, setCopied] = React.useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  // Split "tool_name key=val key=val" into name + key=value pairs
+  const spaceIdx = text.indexOf(" ")
+  const name = spaceIdx > 0 ? text.slice(0, spaceIdx) : text
+  const rawParams = spaceIdx > 0 ? text.slice(spaceIdx + 1) : ""
+  // Parse key=value pairs
+  const params = rawParams
+    ? rawParams.split(/\s+/).map((p, i) => {
+        const eqIdx = p.indexOf("=")
+        if (eqIdx > 0) {
+          return (
+            <span key={i} className="ml-2">
+              <span className="text-text-muted">{p.slice(0, eqIdx)}</span>
+              <span className="text-text-muted">=</span>
+              <span className="text-accent">{p.slice(eqIdx + 1)}</span>
+            </span>
+          )
+        }
+        return <span key={i} className="ml-2 text-text-secondary">{p}</span>
+      })
+    : null
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleCopy}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCopy() }}
+      className="my-2 rounded-lg overflow-hidden border border-border-subtle cursor-pointer hover:border-accent/30 transition-all group"
+      title="Click to copy command"
+    >
+      <div className="px-3 py-2 bg-canvas font-mono text-base flex items-center gap-2">
+        <span className="text-text-muted text-base">❯</span>
+        <span className="flex-1 min-w-0 truncate">
+          <span className="font-semibold text-text">{name}</span>
+          {params}
+        </span>
+        <span className="text-text-muted text-base opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {copied ? "✓ Copied" : "Copy"}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── Inline text renderer ────────────────────────────────────────
 
 function InlineText({ text }: { text: string }): React.ReactElement {
+  const compact = React.useContext(CompactContext)
   const parts: React.ReactNode[] = []
   let remaining = text
   let key = 0
@@ -243,7 +353,7 @@ function InlineText({ text }: { text: string }): React.ReactElement {
     const candidates: M[] = []
     if (boldMatch)   candidates.push({ idx: boldMatch.index!,   len: boldMatch[0].length,   node: <strong key={key++} className="font-semibold text-text">{boldMatch[1]}</strong> })
     if (italicMatch) candidates.push({ idx: italicMatch.index!, len: italicMatch[0].length, node: <em key={key++} className="italic">{italicMatch[1]}</em> })
-    if (codeMatch)   candidates.push({ idx: codeMatch.index!,   len: codeMatch[0].length,   node: <code key={key++} className="font-mono text-[11px] bg-white/[0.08] text-accent px-1 py-0.5 rounded">{codeMatch[1]}</code> })
+    if (codeMatch)   candidates.push({ idx: codeMatch.index!,   len: codeMatch[0].length,   node: <code key={key++} className={compact ? "font-mono text-[12px] text-text-muted bg-overlay-2 px-1.5 py-0.5 rounded" : "font-mono text-sm bg-accent-soft text-accent px-1.5 py-0.5 rounded border border-accent/25"}>{codeMatch[1]}</code> })
 
     if (candidates.length === 0) { parts.push(remaining); break }
 
@@ -258,20 +368,162 @@ function InlineText({ text }: { text: string }): React.ReactElement {
 
 // ── Component ──────────────────────────────────────────────────
 
-export function SmartAnswer({ text, streaming }: { text: string; streaming?: boolean }) {
+// Lightweight compact table — used in TermChat. A simple thin border
+// frames the whole table (header + body) so it reads as a distinct
+// element against the chat background. Header gets a subtle bottom
+// rule and a slightly tinted background; rows have a faint hover tint.
+// Intentionally minimal — no per-cell borders, no chrome bar, no
+// sort/filter UI (that's the heavier DataTable elsewhere).
+function CompactTable({
+  headers,
+  rows,
+}: {
+  headers: string[]
+  rows: string[][]
+}) {
+  return (
+    <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
+      <table className="w-full text-[12.5px] leading-6 border-collapse">
+        <thead>
+          <tr>
+            {headers.map((h, hi) => (
+              <th
+                key={hi}
+                className={[
+                  "text-left font-medium text-text-muted px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                  hi < headers.length - 1 ? "border-r border-border-subtle" : "",
+                ].join(" ")}
+              >
+                <InlineText text={h} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border-subtle">
+          {rows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  className={[
+                    "px-3 py-1.5 align-top text-text-secondary",
+                    ci < row.length - 1 ? "border-r border-border-subtle" : "",
+                  ].join(" ")}
+                >
+                  <InlineText text={cell} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Lightweight code block — soft tinted panel, no heavy borders or header
+// bar unless lang is meaningful. Reads as a distinct snippet against the
+// chat background while staying visually quiet. Hovering reveals a copy
+// button in the top-right corner.
+function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
+  const showLang = Boolean(lang) && lang.toLowerCase() !== "text"
+  // `copied` drives visibility (the button stays pinned visible during the
+  // success window). `showCheck` lags slightly so the Check icon remains
+  // displayed throughout the fade-out — without this, releasing hover at the
+  // moment the timer fires causes a one-frame flash of the Copy icon as it
+  // fades out.
+  const [copied, setCopied] = React.useState(false)
+  const [showCheck, setShowCheck] = React.useState(false)
+  const timersRef = React.useRef<number[]>([])
+  React.useEffect(() => () => {
+    timersRef.current.forEach((id) => window.clearTimeout(id))
+  }, [])
+  const handleCopy = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    void navigator.clipboard.writeText(text).then(() => {
+      timersRef.current.forEach((id) => window.clearTimeout(id))
+      timersRef.current = []
+      setCopied(true)
+      setShowCheck(true)
+      // Keep the Check pinned + visible for the success window.
+      timersRef.current.push(window.setTimeout(() => setCopied(false), 1400))
+      // Hold the Check icon a little longer than the opacity transition so
+      // the icon never swaps mid-fade.
+      timersRef.current.push(window.setTimeout(() => setShowCheck(false), 1400 + 250))
+    }).catch(() => { /* ignore */ })
+  }, [text])
+  return (
+    <div className="group relative rounded-md bg-overlay-2 ring-1 ring-border-subtle my-1.5 overflow-hidden">
+      {showLang && (
+        <div className="px-3 pt-1.5 text-[10.5px] font-mono uppercase tracking-[0.08em] text-text-muted">
+          {lang}
+        </div>
+      )}
+      <pre className="px-3 py-2 text-[13px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
+        {text}
+      </pre>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? "Copied" : "Copy code"}
+        aria-label={copied ? "Copied" : "Copy code"}
+        className={[
+          "absolute top-1.5 right-1.5 inline-flex items-center justify-center w-7 h-7 rounded-md",
+          "text-text-muted hover:text-text hover:bg-overlay-3",
+          "transition-opacity duration-150",
+          copied ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        ].join(" ")}
+      >
+        {showCheck
+          ? <Check size={14} className="text-success" />
+          : <Copy size={14} />}
+      </button>
+    </div>
+  )
+}
+
+export function SmartAnswer({
+  text,
+  streaming = false,
+  compact = false,
+}: {
+  text: string
+  streaming?: boolean
+  compact?: boolean
+}) {
   const blocks = parseBlocks(text)
 
   return (
-    <div className="text-text-secondary text-sm leading-relaxed space-y-2.5 w-full min-w-0">
+    <CompactContext.Provider value={compact}>
+    <div className={[
+      compact ? "text-text-secondary text-[13px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
+      streaming ? "space-y-2" : "space-y-3",
+    ].join(" ")}>
       {blocks.map((block, bi) => {
 
         if (block.type === "heading") {
-          const cls = [
-            "text-base font-bold text-text",
-            "text-sm font-semibold text-text border-b border-white/[0.06] pb-1",
-            "text-sm font-medium text-text-secondary",
-          ][block.level - 1] ?? "text-sm font-medium text-text-secondary"
-          return <p key={bi} className={cls}><InlineText text={block.text} /></p>
+          if (block.level === 1) {
+            return (
+              <div key={bi} className="flex items-center gap-3 pt-1 pb-0.5">
+                <span className="h-px flex-1 bg-gradient-to-r from-overlay-3 to-transparent" />
+                <p className="text-[13px] font-semibold tracking-[0.12em] uppercase text-text">
+                  <InlineText text={block.text} />
+                </p>
+                <span className="h-px flex-1 bg-gradient-to-l from-overlay-3 to-transparent" />
+              </div>
+            )
+          }
+          if (block.level === 2) {
+            return (
+              <div key={bi} className="flex items-center gap-2 pt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent/75 shrink-0" />
+                <p className="font-semibold text-text border-b border-border-subtle pb-1 flex-1">
+                  <InlineText text={block.text} />
+                </p>
+              </div>
+            )
+          }
+          return <p key={bi} className="font-medium text-text-secondary"><InlineText text={block.text} /></p>
         }
 
         if (block.type === "paragraph") {
@@ -282,13 +534,48 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
           )
         }
 
+        if (block.type === "hr") {
+          return (
+            <hr
+              key={bi}
+              className={compact ? "border-0 h-px bg-overlay-2 my-2" : "border-0 h-px bg-overlay-3 my-3"}
+            />
+          )
+        }
+
+        if (block.type === "command") {
+          return (
+            <div key={bi}>
+              {block.before && <p className="whitespace-pre-wrap mb-1"><InlineText text={block.before} /></p>}
+              <CommandBlock text={block.command} />
+              {block.after && <p className="whitespace-pre-wrap mt-1"><InlineText text={block.after} /></p>}
+            </div>
+          )
+        }
+
         if (block.type === "code") {
           if (isDiagramLang(block.lang)) {
+            // If the JSON block is incomplete, attempting to render broken JSON
+            // produces a DiagramError flash — show a loading pill instead.
+            {
+              let isComplete = false
+              try { JSON.parse(block.text); isComplete = true } catch { /* incomplete JSON */ }
+              if (!isComplete) {
+                return (
+                  <div key={bi} className="rounded-lg border border-border-subtle bg-overlay-1 px-3 py-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-pulse shrink-0" />
+                    <span className="text-base text-text-muted font-mono">{block.lang} chart rendering…</span>
+                  </div>
+                )
+              }
+            }
             return <InlineDiagram key={bi} kind={block.lang} source={block.text} />
           }
           // Defensive: the agent sometimes wraps a chart payload in a generic
           // ```json (or untagged) fence. If the JSON shape is recognisable as
           // a known chart kind, render it as a diagram instead of raw text.
+          // tryInferDiagramKind calls JSON.parse internally and returns null on
+          // failure, so this path is already safe during streaming.
           const lowerLang = (block.lang ?? "").toLowerCase()
           if (lowerLang === "" || lowerLang === "json" || lowerLang === "json5") {
             const inferred = tryInferDiagramKind(block.text)
@@ -297,27 +584,53 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
             }
           }
           return (
-            <div key={bi} className="rounded-lg overflow-hidden border border-white/[0.08]">
-              {block.lang && (
-                <div className="px-3 py-1 bg-white/[0.04] text-[11px] text-text-muted font-mono border-b border-white/[0.06] tracking-wide">
-                  {block.lang}
-                </div>
+            <div key={bi} className={compact ? "" : "rounded-lg overflow-hidden border border-border-subtle"}>
+              {compact ? (
+                <CompactCodeBlock lang={block.lang} text={block.text} />
+              ) : (
+                <>
+                  {block.lang && (
+                    <div className="px-3 py-1 bg-overlay-2 text-base text-text-muted font-mono border-b border-border-subtle tracking-wide">
+                      {block.lang}
+                    </div>
+                  )}
+                  <pre className="px-3 py-2.5 text-base font-mono text-text-secondary overflow-x-auto bg-canvas leading-relaxed">
+                    {block.text}
+                  </pre>
+                </>
               )}
-              <pre className="px-3 py-2.5 text-[12px] font-mono text-text-secondary overflow-x-auto bg-base leading-relaxed">
-                {block.text}
-              </pre>
             </div>
           )
         }
 
         if (block.type === "bullet-list") {
           return (
-            <ul key={bi} className="space-y-1.5 pl-1">
+            <ul key={bi} className="space-y-2">
               {block.items.map((item, ii) => (
-                <li key={ii} className="flex items-start gap-2.5">
-                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
-                  <span><InlineText text={item} /></span>
-                </li>
+                (() => {
+                  const commandItem = parseCommandLikeItem(item)
+                  if (commandItem) {
+                    return (
+                      <li key={ii} className="rounded-lg border border-border-subtle bg-overlay-1 overflow-hidden">
+                        <div className="flex items-start gap-3 px-3 py-2.5">
+                          <span className="mt-0.5 text-text-muted font-mono text-sm shrink-0">›</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="font-mono text-text text-[13px] font-semibold">{commandItem.name}</span>
+                              <span className="text-[12px] text-text-muted font-mono break-all">{commandItem.detail}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  }
+                  return (
+                    <li key={ii} className="flex items-start gap-2.5 rounded-md px-1 py-0.5">
+                      <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
+                      <span><InlineText text={item} /></span>
+                    </li>
+                  )
+                })()
               ))}
             </ul>
           )
@@ -326,7 +639,9 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
         if (block.type === "ordered-list") {
           const tableData = tryConvertOrderedListToTable(block.items)
           if (tableData) {
-            return (
+            return compact ? (
+              <CompactTable key={bi} headers={tableData.headers} rows={tableData.rows} />
+            ) : (
               <DataTable
                 key={bi}
                 headers={tableData.headers}
@@ -339,11 +654,11 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
           return (
             <ol key={bi} className="space-y-1.5">
               {block.items.map((item, ii) => (
-                <li key={ii} className="flex items-stretch gap-0 rounded-md overflow-hidden border border-white/[0.07] bg-white/[0.025]">
-                  <span className="shrink-0 flex items-center justify-center w-8 bg-accent/15 text-accent font-bold text-[11px] border-r border-white/[0.07]">
+                <li key={ii} className="flex items-stretch gap-0 rounded-md overflow-hidden border border-border-subtle bg-overlay-1">
+                  <span className="shrink-0 flex items-center justify-center w-8 bg-accent-soft text-accent font-bold text-base border-r border-border-subtle">
                     {item.num}
                   </span>
-                  <span className="px-3 py-2 text-text text-[13px] font-medium leading-snug">
+                  <span className="px-3 py-2 text-text text-base font-medium leading-snug">
                     <InlineText text={item.text} />
                   </span>
                 </li>
@@ -353,7 +668,9 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
         }
 
         if (block.type === "table") {
-          return (
+          return compact ? (
+            <CompactTable key={bi} headers={block.headers} rows={block.rows} />
+          ) : (
             <DataTable
               key={bi}
               headers={block.headers}
@@ -366,9 +683,7 @@ export function SmartAnswer({ text, streaming }: { text: string; streaming?: boo
 
         return null
       })}
-      {streaming && (
-        <span className="inline-block w-0.5 h-3.5 bg-accent ml-0.5 animate-pulse align-middle" />
-      )}
     </div>
+    </CompactContext.Provider>
   )
 }

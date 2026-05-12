@@ -12,6 +12,19 @@ export interface DatabaseEntry {
 
 const _databases = new Map<string, DatabaseEntry>()
 
+/** The explicit default connection name (set via MSSQL_DEFAULT_CONNECTION). */
+let _defaultConnection: string | null = null
+
+/** Override which named connection is used when connection='default' or is omitted. */
+export function setDefaultMssqlConnection(name: string): void {
+  _defaultConnection = name
+}
+
+/** Return the configured default connection name (null = fall back to first). */
+export function getDefaultMssqlConnectionName(): string | null {
+  return _defaultConnection
+}
+
 /**
  * Per-tool-call kill signal — when aborted, cancels any in-flight query.
  *
@@ -58,7 +71,13 @@ export function setMssqlConfig(config: sql.config, name = "default", knowledge: 
         trustServerCertificate: true,
         ...config.options,
       },
-      requestTimeout: config.requestTimeout ?? 60_000,
+      pool: {
+        min: 0,
+        max: 20,
+        idleTimeoutMillis: 30_000,
+        ...(config.pool ?? {}),
+      },
+      requestTimeout: config.requestTimeout ?? 120_000,
       connectionTimeout: config.connectionTimeout ?? 15_000,
     },
     pool: null,
@@ -84,7 +103,13 @@ export function setMssqlConfigs(
           trustServerCertificate: true,
           ...(rest as sql.config).options,
         },
-        requestTimeout: (rest as sql.config).requestTimeout ?? 60_000,
+        pool: {
+          min: 0,
+          max: 20,
+          idleTimeoutMillis: 30_000,
+          ...((rest as sql.config).pool ?? {}),
+        },
+        requestTimeout: (rest as sql.config).requestTimeout ?? 120_000,
         connectionTimeout: (rest as sql.config).connectionTimeout ?? 15_000,
       },
       pool: null,
@@ -113,7 +138,16 @@ export function getMssqlConfig(): Array<{ name: string; server: string; database
 
 /** Get or create the connection pool for a named connection. */
 export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
-  const entry = _databases.get(name)
+  // In multi-database mode the connections are named (e.g. "uat", "dev") and
+  // there is no "default" entry.  Fall back to:
+  //   1. The connection named by setDefaultMssqlConnection() / MSSQL_DEFAULT_CONNECTION
+  //   2. The first configured connection (legacy fallback)
+  const resolvedName = _databases.has(name)
+    ? name
+    : (name === "default" && _databases.size > 0)
+      ? (_defaultConnection && _databases.has(_defaultConnection) ? _defaultConnection : _databases.keys().next().value as string)
+      : name
+  const entry = _databases.get(resolvedName)
   if (!entry) {
     const available = Array.from(_databases.keys()).join(", ") || "none"
     throw new Error(

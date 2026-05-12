@@ -37,8 +37,6 @@ const DEFAULT_CHILD_ITERATIONS = 50
  */
 const MAX_CHILD_ITERATIONS = 180
 
-const COMPLEX_IMPLEMENTATION_RE = /\b(?:game|rules?|engine|validator|workflow|state machine|parser|compiler|algorithm|reconciliation|move validation|checkmate|castling|en passant|promotion|scheduling|constraint|domain logic|business logic)\b/i
-
 /**
  * Dedicated system prompt for child worker agents.
  *

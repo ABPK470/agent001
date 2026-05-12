@@ -13,7 +13,6 @@ import { widgetRegistry } from "../widgets"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
-  "agent-trace": "Agent Trace",
   "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
@@ -21,13 +20,12 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "step-timeline": "Step Timeline",
   "tool-stats": "Tool Stats",
   "run-history": "Run History",
-  "command-center": "Command Center",
-  "trajectory-replay": "Trajectory Replay",
-  "operator-env": "Operator Environment",
-  "debug-inspector": "Debug Inspector",
-  "platform-dev-log": "Platform Dev Log",
-  "universe-viz": "Sequence",
-  "code-seq-diagram": "Code Seq",
+  "operator-env": "IOE",
+  "debug-inspector": "Trace",
+  "mymi-db": "MyMI Database",
+  "active-users": "Active Users",
+  "env-sync": "Sync",
+  "operation-log": "Pipelines",
 }
 
 export function WidgetModal() {
@@ -53,15 +51,15 @@ export function WidgetModal() {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-scrim backdrop-blur-sm"
         onClick={closeModalWidget}
       />
 
       {/* Modal */}
-      <div className="relative w-[90vw] max-w-5xl h-[80vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full h-full max-w-5xl sm:max-h-[85vh] bg-surface border border-border rounded-xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
@@ -83,7 +81,7 @@ export function WidgetModal() {
               </button>
             )}
             <button
-              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-white rounded-lg hover:bg-white/[0.06] transition-colors"
+              className="flex items-center justify-center w-8 h-8 text-text-muted hover:text-text rounded-lg hover:bg-overlay-3 transition-colors"
               onClick={closeModalWidget}
             >
               <X size={16} />

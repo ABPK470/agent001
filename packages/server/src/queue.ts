@@ -17,7 +17,7 @@
  *   - Cancellation-aware: cancelled runs release their slot immediately
  */
 
-import { broadcast } from "./ws.js"
+import { broadcast } from "./event-broadcaster.js"
 
 // ── Types ────────────────────────────────────────────────────────
 

@@ -10,8 +10,10 @@ import { LayoutGrid, Plus } from "lucide-react"
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { Responsive } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
-import "react-resizable/css/styles.css"
-import { useStore } from "../store"
+// NOTE: react-resizable/css/styles.css is NOT imported — its default SVG
+// background-image bleeds through as grey dots on corners. All handle
+// styling is in index.css instead.
+import { useStore, WIDGET_DEFAULTS } from "../store"
 import type { LayoutItem } from "../types"
 import { widgetRegistry } from "../widgets"
 import { WidgetCatalog } from "./WidgetCatalog"
@@ -58,7 +60,17 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   if (!activeView) return null
 
   const { widgets, layouts } = activeView
-  const gridLayouts = layouts["lg"] ?? []
+  const rawLayouts = layouts["lg"] ?? []
+
+  // Enforce current WIDGET_DEFAULTS minW/minH on every layout item — overrides
+  // stale values persisted from older sessions.
+  const gridLayouts = rawLayouts.map((item) => {
+    const widget = widgets.find((w) => w.id === item.i)
+    if (!widget) return item
+    const defaults = WIDGET_DEFAULTS[widget.type]
+    if (!defaults) return item
+    return { ...item, minW: defaults.minW, minH: defaults.minH }
+  })
 
   // Dynamic row height: fill the entire container vertically
   const MARGIN = 8
@@ -74,13 +86,13 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
       {/* Empty state */}
       {widgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-5">
-          <LayoutGrid size={48} className="text-elevated" strokeWidth={1.5} />
+          <LayoutGrid size={48} className="text-text-faint" strokeWidth={1.5} />
           <div className="text-center">
             <p className="text-base text-text-secondary mb-1">Your canvas is empty</p>
             <p className="text-sm text-text-muted">Add widgets to build your dashboard</p>
           </div>
           <button
-            className="flex items-center gap-2 px-6 py-2.5 text-text-secondary hover:text-white text-sm border border-white/10 hover:border-white/25 rounded-xl transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 text-text-secondary hover:text-text text-sm border border-border hover:border-text-secondary/25 rounded-xl transition-colors"
             onClick={() => setCatalogOpen(true)}
           >
             <Plus size={16} />
@@ -99,6 +111,9 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
           dragConfig={{
             handle: ".widget-drag-handle",
             cancel: ".widget-controls,.widget-content",
+          }}
+          resizeConfig={{
+            handles: ["se", "sw", "ne", "nw", "e", "w", "s", "n"],
           }}
           margin={[8, 8]}
           containerPadding={[0, 0]}

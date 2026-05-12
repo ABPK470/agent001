@@ -45,21 +45,21 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-2xl w-full max-w-[720px] h-[85vh] max-sm:h-[92vh] mx-4 sm:mx-auto flex flex-col shadow-2xl max-sm:rounded-xl"
+        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-2.5">
             <Activity size={20} className="text-text-muted" />
             <h2 className="text-lg font-semibold text-text">Token Usage</h2>
           </div>
           <button
-            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors"
             onClick={onClose}
           >
             <X size={18} />
@@ -98,7 +98,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                   {data.runs.map((run) => (
                     <div
                       key={run.runId}
-                      className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.03] text-[13px]"
+                      className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-overlay-2 text-[13px]"
                     >
                       <span className="text-text-muted font-mono text-[12px] w-[6rem] shrink-0">
                         {new Date(run.createdAt).toLocaleString(undefined, {
@@ -125,7 +125,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
 function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
   return (
-    <div className={`rounded-xl px-4 py-3 flex flex-col gap-1.5 ${accent ? "bg-accent/10 border border-accent/15" : "bg-white/[0.03] border border-white/[0.04]"}`}>
+    <div className={`rounded-xl px-4 py-3 flex flex-col gap-1.5 ${accent ? "bg-accent/10 border border-accent/15" : "bg-overlay-2 border border-border-subtle"}`}>
       <div className={`flex items-center gap-1.5 text-[12px] font-medium ${accent ? "text-accent" : "text-text-muted"}`}>
         {icon}
         {label}

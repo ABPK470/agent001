@@ -6,24 +6,19 @@
  */
 
 import {
-    Activity,
-    BarChart3,
-    Bug,
-    Clock,
-    Database,
-    Eye,
-    Film,
-    GitBranch,
-    Globe,
-    History,
-    LayoutDashboard,
-    LayoutGrid,
-    ListTree,
-    MessageSquare,
-    ScrollText,
-    Shield,
-    Terminal,
-    X,
+  Activity,
+  BarChart3,
+  Bug,
+  Clock,
+  Database,
+  Eye,
+  History,
+  LayoutDashboard,
+  MessageSquare,
+  ScrollText,
+  Shield,
+  Ship,
+  X,
 } from "lucide-react"
 import type { ComponentType } from "react"
 import { useIsMobile } from "../hooks/useIsMobile"
@@ -37,24 +32,21 @@ interface Props {
 }
 
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
-  { type: "agent-chat",    label: "Agent Chat",    desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
-  { type: "agent-trace",   label: "Agent Trace",   desc: "Execution trace: iterations, tool calls, results", Icon: ListTree },
+  { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
+  { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: Ship },
+  { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: Database },
+  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: History },
+  { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: ScrollText },
+  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
+  { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: MessageSquare },
   { type: "agent-viz",     label: "Agent Viz",     desc: "Live network visualization of agent activity", Icon: Eye },
   { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: Activity },
-  { type: "live-logs",     label: "Event Stream",   desc: "Raw WebSocket event stream and system events", Icon: ScrollText },
   { type: "audit-trail",   label: "Audit Trail",   desc: "Immutable audit log of every action",         Icon: Shield },
-  { type: "step-timeline", label: "Step Timeline",  desc: "Visual timeline of tool calls and steps",    Icon: Clock },
+  { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps",     Icon: Clock },
   { type: "tool-stats",    label: "Tool Stats",    desc: "Performance metrics per tool",                Icon: BarChart3 },
-  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
-  { type: "command-center", label: "Command Center", desc: "Operational overview: status, tools, agents, tokens", Icon: LayoutGrid },
-  { type: "trajectory-replay", label: "Trajectory Replay", desc: "Step-through debugger for agent run trajectories", Icon: Film },
-  { type: "operator-env", label: "Operator Environment", desc: "IDE-style integrated dashboard — all data, resizable panels, full control", Icon: LayoutDashboard },
-  { type: "debug-inspector", label: "Debug Inspector", desc: "Deep-dive debugging: system prompts, tool resolution, LLM requests & responses", Icon: Bug },
-  { type: "platform-dev-log", label: "Platform Dev Log", desc: "Real-time firehose of every WebSocket event — every operation, every query", Icon: Terminal },
-  { type: "universe-viz", label: "Sequence Diagram", desc: "Real-time UML sequence diagram of all platform events with lifelines, arrows, and activation boxes", Icon: Globe },
-  { type: "code-seq-diagram", label: "Code Sequence", desc: "Source-code-level UML sequence diagram — every function call, file path, and module interaction", Icon: GitBranch },
-  { type: "mymi-db", label: "Mymi DB", desc: "Visual explorer for the mymi MSSQL database — browse schemas, tables, views, and preview data", Icon: Database },
-  { type: "active-users", label: "Active Users", desc: "Live admin view: who's online, what they're running, and which model they're using", Icon: Activity },
+  { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: LayoutDashboard },
+  { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: Bug },
+  { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
@@ -80,24 +72,24 @@ export function WidgetCatalog({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
       onClick={onClose}
     >
       <div
-        className={`bg-surface shadow-2xl ${
+        className={`bg-surface shadow-2xl rounded-xl sm:rounded-2xl flex flex-col ${
           isMobile
-            ? "w-full h-full rounded-none flex flex-col"
-            : "rounded-2xl w-[820px] max-h-[85vh] flex flex-col"
+            ? "w-full h-full"
+            : "w-[820px] max-w-full max-h-[85vh]"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-2.5">
-            <LayoutGrid size={20} className="text-text-muted" />
+            <LayoutDashboard size={20} className="text-text-muted" />
             <h2 className="text-lg font-semibold text-text">Widgets</h2>
           </div>
           <button
-            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors"
             onClick={onClose}
           >
             <X size={18} />
@@ -105,25 +97,33 @@ export function WidgetCatalog({ onClose }: Props) {
         </div>
 
         <div className={`grid gap-2.5 p-5 overflow-y-auto ${isMobile ? "grid-cols-1 flex-1" : "grid-cols-3"}`}>
-          {CATALOG.filter((item) => isAdmin || VISITOR_WIDGETS.has(item.type)).map((item) => {
+          {/* Show the full catalogue to everyone so visitors see what's
+              available. Cards for admin-only widgets render disabled
+              (greyed) for non-admins; admins see them fully active. */}
+          {CATALOG.map((item) => {
             const isActive = activeTypes.has(item.type)
+            const isAllowed = isAdmin || VISITOR_WIDGETS.has(item.type)
             return (
               <button
                 key={item.type}
-                className={`relative flex items-center gap-3.5 rounded-xl cursor-pointer text-left p-4 transition-colors border ${
-                  isActive
-                    ? "border-accent/25 bg-accent/[0.08]"
-                    : "border-white/[0.04] bg-white/[0.02] hover:bg-white/[0.05]"
+                disabled={!isAllowed}
+                title={isAllowed ? undefined : "Available to admins only"}
+                className={`relative flex items-center gap-3.5 rounded-xl text-left p-4 transition-colors border ${
+                  !isAllowed
+                    ? "border-border-subtle bg-overlay-1 opacity-45 cursor-not-allowed"
+                    : isActive
+                      ? "border-accent/25 bg-accent/[0.08] cursor-pointer"
+                      : "border-border-subtle bg-overlay-1 hover:bg-overlay-2 cursor-pointer"
                 }`}
-                onClick={() => handleToggle(item.type)}
+                onClick={() => { if (isAllowed) handleToggle(item.type) }}
               >
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                  isActive ? "bg-accent/15" : "bg-white/[0.05]"
+                  isActive && isAllowed ? "bg-accent/15" : "bg-overlay-2"
                 }`}>
-                  <item.Icon size={18} className={isActive ? "text-accent" : "text-text-muted"} />
+                  <item.Icon size={18} className={isActive && isAllowed ? "text-accent" : "text-text-muted"} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className={`text-sm font-medium block ${isActive ? "text-accent" : "text-text"}`}>
+                  <span className={`text-sm font-medium block ${isActive && isAllowed ? "text-accent" : "text-text"}`}>
                     {item.label}
                   </span>
                   <span className="text-[13px] text-text-muted leading-snug block mt-0.5">

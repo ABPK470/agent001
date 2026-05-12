@@ -4,6 +4,7 @@
  */
 
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
+import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import { SmartAnswer } from "../../components/SmartAnswer"
@@ -163,8 +164,8 @@ export function ChatPanel({
             {visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)}
             {isRunning && !hasPending && (
               streamingAnswer
-                ? <StreamingAnswerBubble text={streamingAnswer} />
-                : <ActivityBubble activity={currentActivity ?? "Thinking..."} />
+                ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
+                : <ActivityBubble activity={currentActivity ?? "Thinking"} />
             )}
           </>
         )}
@@ -180,8 +181,8 @@ export function ChatPanel({
                 key={tc.toolCallId}
                 className="flex items-center gap-1 px-2 py-1 rounded text-[12px] cursor-pointer transition-colors hover:brightness-125"
                 style={{
-                  background: "#ef444420",
-                  color: "#ef4444",
+                  background: "color-mix(in oklab, var(--color-error) 12%, transparent)",
+                  color: "var(--color-error)",
                   border: "1px solid #ef444440",
                 }}
                 onClick={() => onKillToolCall(tc)}
@@ -197,8 +198,8 @@ export function ChatPanel({
 
       {/* Kill message dialog */}
       {pendingKill && onSubmitKill && onKillToolCall && (
-        <div className="shrink-0 px-3 py-2" style={{ borderTop: `1px solid #ef444460`, background: "#ef444410" }}>
-          <div className="text-[12px] mb-1.5" style={{ color: "#ef4444" }}>
+        <div className="shrink-0 px-3 py-2" style={{ borderTop: `1px solid color-mix(in oklab, var(--color-error) 38%, transparent)`, background: "color-mix(in oklab, var(--color-error) 6%, transparent)" }}>
+          <div className="text-[12px] mb-1.5" style={{ color: "var(--color-error)" }}>
             Kill <span className="font-mono font-medium">{pendingKill.toolName}</span> — provide a steering message:
           </div>
           <div
@@ -208,7 +209,7 @@ export function ChatPanel({
             <input
               type="text"
               className="flex-1 bg-transparent outline-none text-[13px]"
-              style={{ color: C.text, caretColor: "#ef4444" }}
+              style={{ color: C.text, caretColor: "var(--color-error)" }}
               placeholder="e.g. Skip this, try a different approach..."
               value={killMessageInput}
               onChange={(e) => setKillMessageInput(e.target.value)}
@@ -220,14 +221,14 @@ export function ChatPanel({
             />
             <button
               className="px-2 py-1 rounded text-[12px] cursor-pointer transition-colors hover:brightness-125"
-              style={{ background: "#ef444420", color: "#ef4444", border: "1px solid #ef444440" }}
+              style={{ background: "color-mix(in oklab, var(--color-error) 12%, transparent)", color: "var(--color-error)", border: "1px solid #ef444440" }}
               onClick={() => { onKillToolCall(null); setKillMessageInput("") }}
             >
               Cancel
             </button>
             <button
-              className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
-              style={{ color: "#ef4444" }}
+              className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
+              style={{ color: "var(--color-error)" }}
               onClick={handleSubmitKillMsg}
             >
               <Send size={16} />
@@ -273,7 +274,7 @@ export function ChatPanel({
                 autoFocus
               />
               <button
-                className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+                className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                 style={{ color: responseInput.trim() ? C.accent : C.dim }}
                 onClick={handleRespond}
                 disabled={!responseInput.trim()}
@@ -335,7 +336,7 @@ export function ChatPanel({
               <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
               {onAttach && (
                 <button
-                  className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+                  className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                   style={{ color: C.dim }}
                   onClick={() => fileInputRef.current?.click()}
                   title="Attach file"
@@ -344,7 +345,7 @@ export function ChatPanel({
                 </button>
               )}
               <button
-                className="p-1 rounded transition-colors cursor-pointer hover:bg-white/10"
+                className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                 style={{ color: (goalInput.trim() || attachments.length > 0) ? C.accent : C.dim }}
                 onClick={onSubmit}
                 disabled={isRunning || submitting || (!goalInput.trim() && attachments.length === 0)}
@@ -447,10 +448,10 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
               <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={180} />
             ) : (
               <div
-                className="rounded px-2 py-1.5 text-[12px] font-mono"
+                className="rounded-lg px-3 py-2 text-[12px] font-mono whitespace-pre-wrap break-words"
                 style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
               >
-                {msg.argsFormatted ? truncate(msg.argsFormatted, 250) : truncate(msg.content, 250)}
+                {msg.argsFormatted ? truncate(msg.argsFormatted, 420) : truncate(msg.content, 420)}
               </div>
             )}
           </div>
@@ -465,7 +466,7 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
           className="flex-1 min-w-0 rounded px-2 py-1.5 text-[13px]"
           style={{ background: C.elevated, border: `1px solid ${C.border}` }}
         >
-          <SmartAnswer text={msg.content.length > 2000 ? msg.content.slice(0, 2000) + "\n…(truncated)" : msg.content} />
+          <SmartAnswer text={msg.content.length > 6000 ? msg.content.slice(0, 6000) + "\n…(truncated)" : msg.content} />
         </div>
       </div>
     )
@@ -473,55 +474,90 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
   // system
   return (
     <div className="flex items-start gap-2 pl-9">
-      <AlertCircle size={14} className="shrink-0 mt-1" style={{ color: C.coral }} />
-      <div className="text-[13px]" style={{ color: C.muted }}>
-        {msg.content}
+      <AlertCircle size={14} className="shrink-0 mt-1" style={{ color: systemTone(msg.content).icon }} />
+      <div
+        className="flex-1 min-w-0 rounded-lg px-3 py-2"
+        style={{
+          background: systemTone(msg.content).bg,
+          border: `1px solid ${systemTone(msg.content).border}`,
+        }}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <span
+            className="text-[10px] font-semibold uppercase tracking-[0.12em] px-1.5 py-0.5 rounded-full"
+            style={{ color: systemTone(msg.content).label, background: systemTone(msg.content).pill }}
+          >
+            {systemTone(msg.content).title}
+          </span>
+        </div>
+        <div className="text-[13px] whitespace-pre-wrap" style={{ color: C.textSecondary }}>
+          {msg.content}
+        </div>
       </div>
     </div>
   )
 }
 
-function StreamingAnswerBubble({ text }: { text: string }) {
+function systemTone(content: string) {
+  const text = content.toLowerCase()
+  if (text.startsWith("error") || text.includes("failed")) {
+    return { title: "Issue", icon: C.coral, label: C.coral, bg: `${C.coral}12`, border: `${C.coral}35`, pill: `${C.coral}18` }
+  }
+  if (text.startsWith("planner") || text.startsWith("plan generated") || text.startsWith("pipeline") || text.startsWith("verification")) {
+    return { title: "Planner", icon: C.accent, label: C.accentHover, bg: `${C.accent}12`, border: `${C.accent}30`, pill: `${C.accent}18` }
+  }
+  if (text.startsWith("delegat")) {
+    return { title: "Delegation", icon: C.warning, label: C.warning, bg: `${C.warning}12`, border: `${C.warning}30`, pill: `${C.warning}18` }
+  }
+  if (text.startsWith("workspace diff")) {
+    return { title: "Workspace", icon: C.success, label: C.success, bg: `${C.success}12`, border: `${C.success}30`, pill: `${C.success}18` }
+  }
+  return { title: "System", icon: C.dim, label: C.textSecondary, bg: C.elevated, border: C.borderSolid, pill: "rgba(255,255,255,0.06)" }
+}
+
+function StreamingAnswerBubble({ text, activity }: { text: string; activity?: string }) {
+  const label = (activity ?? "Writing response").charAt(0).toUpperCase() + (activity ?? "Writing response").slice(1).replace(/\.+$/, "")
   return (
     <div className="flex items-start gap-2">
       <div
         className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-        style={{ background: C.success + "30" }}
+        style={{ background: C.accent + "18" }}
       >
-        <MessageSquare size={14} style={{ color: C.success }} />
+        <Brain size={14} style={{ color: C.accent }} />
       </div>
       <div
-        className="flex-1 min-w-0 rounded-lg px-3 py-2"
+        className="flex-1 min-w-0 rounded-lg px-3 py-2 space-y-2"
         style={{ background: C.base, border: `1px solid ${C.border}` }}
       >
         <SmartAnswer text={text} streaming />
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.accent + "90" }} />
+          <span
+            className="activity-shimmer font-mono text-[11px]"
+            style={{ "--sa": "var(--color-text-secondary)", "--sd": "var(--color-text-muted)" } as React.CSSProperties}
+          >
+            {label}
+          </span>
+        </div>
       </div>
     </div>
   )
 }
 
 function ActivityBubble({ activity }: { activity: string }) {
+  const label = activity.charAt(0).toUpperCase() + activity.slice(1).replace(/\.+$/, "")
   return (
-    <div className="flex items-start gap-2">
-      <div
-        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center animate-pulse"
-        style={{ background: C.accent + "20" }}
+    <div className="flex items-center gap-2 py-0.5">
+      <span
+        className="shrink-0 w-1.5 h-1.5 rounded-full"
+        style={{ background: C.accent + "90" }}
+      />
+      <span
+        className="activity-shimmer font-mono text-[13px]"
+        style={{ "--sa": "var(--color-text-secondary)", "--sd": "var(--color-text-muted)" } as React.CSSProperties}
       >
-        <Wrench size={13} style={{ color: C.accent }} />
-      </div>
-      <div
-        className="flex-1 rounded-lg px-3 py-2 text-[13px]"
-        style={{ background: C.accent + "08", border: `1px solid ${C.accent}20`, color: C.muted }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-0.5 shrink-0">
-            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:0ms]" style={{ background: C.accent }} />
-            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:150ms]" style={{ background: C.accent }} />
-            <span className="w-1 h-1 rounded-full animate-bounce [animation-delay:300ms]" style={{ background: C.accent }} />
-          </span>
-          <span className="font-mono text-[13px] truncate">{activity}</span>
-        </div>
-      </div>
+        {label}
+      </span>
     </div>
   )
 }

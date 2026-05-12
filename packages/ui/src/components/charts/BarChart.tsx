@@ -48,7 +48,13 @@ export function BarChart({ data }: { data: BarChartData }): React.ReactElement {
   }
 
   if (categories.length === 0 || series.length === 0) {
-    return <ChartFrame title={data.title} badge="bar"><EmptyState /></ChartFrame>
+    return null as unknown as React.ReactElement
+  }
+
+  // All values are zero — nothing meaningful to show
+  const allZero = series.every((s) => s.values.every((v) => v === 0))
+  if (allZero) {
+    return null as unknown as React.ReactElement
   }
 
   const orientation = data.orientation ?? "vertical"
@@ -120,7 +126,7 @@ function VerticalBars(props: {
       {/* Y-axis label */}
       {yLabel && (
         <text x={12} y={plotTop + PLOT_H_VERT / 2} textAnchor="middle"
-          fontSize={11} fill="#a1a1aa"
+          fontSize={11} fill="var(--color-text-muted)"
           transform={`rotate(-90 12 ${plotTop + PLOT_H_VERT / 2})`}>
           {yLabel}
         </text>
@@ -132,7 +138,7 @@ function VerticalBars(props: {
         return (
           <g key={i}>
             <line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="rgba(255,255,255,0.05)" />
-            <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="#a1a1aa">{formatTick(t)}</text>
+            <text x={plotLeft - 6} y={y + 3} textAnchor="end" fontSize={10} fill="var(--color-text-muted)">{formatTick(t)}</text>
           </g>
         )
       })}
@@ -176,7 +182,7 @@ function VerticalBars(props: {
                   </rect>
                   {/* Value label above bar (only when there's room and ≤ 8 bars per category) */}
                   {series.length === 1 && categories.length <= 12 && (
-                    <text x={x + subBarW / 2} y={yTop - 3} textAnchor="middle" fontSize={9} fill="#d4d4d8">
+                    <text x={x + subBarW / 2} y={yTop - 3} textAnchor="middle" fontSize={9} fill="var(--color-text-secondary)">
                       {formatValue(v, fmt, precision)}
                     </text>
                   )}
@@ -184,7 +190,7 @@ function VerticalBars(props: {
               )
             })}
             {/* Category label */}
-            <text x={groupX + groupW / 2} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="#d4d4d8">
+            <text x={groupX + groupW / 2} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="var(--color-text-secondary)">
               {truncate(cat, Math.max(Math.floor(bandW / 7), 4))}
             </text>
           </g>
@@ -193,7 +199,7 @@ function VerticalBars(props: {
 
       {/* X-axis label */}
       {xLabel && (
-        <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="#a1a1aa">
+        <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">
           {xLabel}
         </text>
       )}
@@ -238,7 +244,7 @@ function HorizontalBars(props: {
         return (
           <g key={i}>
             <line x1={x} y1={plotTop} x2={x} y2={plotBottom} stroke="rgba(255,255,255,0.05)" />
-            <text x={x} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="#a1a1aa">{formatTick(t)}</text>
+            <text x={x} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="var(--color-text-muted)">{formatTick(t)}</text>
           </g>
         )
       })}
@@ -251,7 +257,7 @@ function HorizontalBars(props: {
         return (
           <g key={ci}>
             {/* Category label */}
-            <text x={plotLeft - 8} y={groupY + groupH / 2 + 3} textAnchor="end" fontSize={10} fill="#d4d4d8">
+            <text x={plotLeft - 8} y={groupY + groupH / 2 + 3} textAnchor="end" fontSize={10} fill="var(--color-text-secondary)">
               {truncate(cat, 22)}
             </text>
             {series.map((s, si) => {
@@ -281,7 +287,7 @@ function HorizontalBars(props: {
                   </rect>
                   {/* Inline value */}
                   {series.length === 1 && (
-                    <text x={xRight + 4} y={y + subBarH / 2 + 3} fontSize={9.5} fill="#d4d4d8">
+                    <text x={xRight + 4} y={y + subBarH / 2 + 3} fontSize={9.5} fill="var(--color-text-secondary)">
                       {formatValue(v, fmt, precision, unit)}
                     </text>
                   )}
@@ -303,13 +309,13 @@ function HorizontalBars(props: {
 
       {/* Axis labels */}
       {xLabel && (
-        <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="#a1a1aa">
+        <text x={(plotLeft + plotRight) / 2} y={H - 6} textAnchor="middle" fontSize={11} fill="var(--color-text-muted)">
           {xLabel}
         </text>
       )}
       {yLabel && (
         <text x={12} y={plotTop + plotH / 2} textAnchor="middle"
-          fontSize={11} fill="#a1a1aa"
+          fontSize={11} fill="var(--color-text-muted)"
           transform={`rotate(-90 12 ${plotTop + plotH / 2})`}>
           {yLabel}
         </text>

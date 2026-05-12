@@ -3,7 +3,7 @@ import { setBasePath, setBrowserCheckCwd, setSearchBasePath, setShellCwd } from 
 import { recordEffect, recordFileWrite } from "../effects.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { applyWorkspaceDiff, cleanupRunWorkspace, computeWorkspaceDiff } from "../run-workspace.js"
-import { broadcast } from "../ws.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
 
 // ── Workspace context serialization ───────────────────────────────

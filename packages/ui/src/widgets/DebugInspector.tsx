@@ -24,7 +24,7 @@ const ROLE_COLORS: Record<string, string> = {
   system: "text-accent",
   user: "text-success",
   assistant: "text-warning",
-  tool: "text-[#6CB4EE]",
+  tool: "text-info",
 }
 
 function copyText(text: string) {
@@ -88,7 +88,7 @@ function MessageBubble({ msg, index }: {
   const displayContent = expanded || !isLong ? msg.content : msg.content!.slice(0, 300) + "..."
 
   return (
-    <div className="border-l-2 pl-2 py-1" style={{ borderColor: msg.role === "system" ? "var(--accent)" : msg.role === "user" ? "var(--success, #4ade80)" : msg.role === "assistant" ? "var(--warning, #facc15)" : "var(--info, #6CB4EE)" }}>
+    <div className="border-l-2 pl-2 py-1" style={{ borderColor: msg.role === "system" ? "var(--color-accent)" : msg.role === "user" ? "var(--color-success)" : msg.role === "assistant" ? "var(--color-warning)" : "var(--color-info)" }}>
       <div className="flex items-center gap-2 mb-0.5">
         <span className={`text-[13px] font-mono font-bold uppercase ${ROLE_COLORS[msg.role] ?? "text-text-muted"}`}>
           {msg.role}
@@ -238,7 +238,7 @@ export function DebugInspector() {
           <span className="text-warning">tools</span> {stats.toolCount}
         </div>
         <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
-          <span className="text-[#6CB4EE]">llm</span> {stats.callCount} calls · {stats.avgDuration}ms avg
+          <span className="text-info">llm</span> {stats.callCount} calls · {stats.avgDuration}ms avg
         </div>
         <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
           <Clock size={12} /> {stats.totalDuration}ms total
@@ -360,7 +360,7 @@ function LlmCallEntry({ call, index }: {
         onClick={() => setOpen(!open)}
       >
         {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
-        <span className="text-[14px] font-semibold text-[#6CB4EE]">LLM Call #{index + 1}</span>
+        <span className="text-[14px] font-semibold text-info">LLM Call #{index + 1}</span>
         <span className="text-[13px] font-mono text-text-muted">
           iteration {req.iteration + 1}
         </span>

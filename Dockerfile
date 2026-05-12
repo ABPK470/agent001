@@ -64,7 +64,7 @@ RUN node -e "const p=require('./packages/agent/package.json');p.exports={'.':'./
 
 # Data directory (SQLite DB lives here)
 RUN mkdir -p /data
-ENV AGENT001_DATA_DIR=/data
+ENV MIA_DATA_DIR=/data
 
 # Default env
 ENV HOST=0.0.0.0

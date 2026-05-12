@@ -113,6 +113,12 @@ export interface VerifierStepAssessment {
   readonly issueDetails?: readonly VerifierIssue[]
   readonly evidence?: readonly VerificationEvidence[]
   readonly retryable: boolean
+  /**
+   * Definitive positive signals from deterministic probes (e.g. "browser_check: ✓",
+   * "syntax: node --check ✓"). When populated the LLM verifier must not raise
+   * "cannot verify completeness" or "truncated" blocking issues for these artifacts.
+   */
+  readonly positiveSignals?: readonly string[]
 }
 
 export interface VerifierDecision {

@@ -464,7 +464,7 @@ describe("Agent loop guards", () => {
     expect(answer.length).toBeGreaterThan(0)
   })
 
-  it("emits planner preflight before direct-loop fallback", async () => {
+  it("routes simple tasks directly without entering planner execution", async () => {
     const plannerTrace: Array<Record<string, unknown>> = []
     const llm = scriptedLLM([
       { content: "done", toolCalls: [] },
@@ -481,11 +481,15 @@ describe("Agent loop guards", () => {
 
     expect(answer).toBe("done")
     expect(plannerTrace.map((entry) => entry.kind)).toEqual([
-      "planning_preflight",
       "planner-decision",
       "direct_loop_fallback",
     ])
-    expect(plannerTrace[2]).toMatchObject({
+    expect(plannerTrace[0]).toMatchObject({
+      kind: "planner-decision",
+      shouldPlan: false,
+      route: "direct",
+    })
+    expect(plannerTrace[1]).toMatchObject({
       kind: "direct_loop_fallback",
       source: "planner_declined",
     })
@@ -644,8 +648,7 @@ describe("Agent loop guards", () => {
     ])
     expect(reads).toContain("app.js")
     const traceKinds = plannerTrace.map((entry) => entry.kind)
-    expect(traceKinds.slice(0, 6)).toEqual([
-      "planning_preflight",
+    expect(traceKinds.slice(0, 5)).toEqual([
       "planner-decision",
       "coherent-generation-start",
       "planner-architecture-state",

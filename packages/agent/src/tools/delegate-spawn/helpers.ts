@@ -30,9 +30,24 @@ export function buildChildExecutionResult(output: string, toolCalls: readonly { 
     .map((call) => typeof call.args.path === "string" ? call.args.path : "")
     .map((path) => path.replace(/^\.\//, "")))
 
-  const blockers = uniqueStrings(toolCalls
-    .filter((call) => call.isError || /^Error:/i.test(call.result))
-    .map((call) => `${call.name}: ${call.result.slice(0, 240)}`))
+  // A path-level error is resolved if a later successful write touched the same artifact.
+  const resolvedPaths = new Set(
+    toolCalls
+      .filter((call) => !call.isError && !/^Error:/i.test(call.result) &&
+        (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file"))
+      .map((call) => typeof call.args.path === "string" ? call.args.path.replace(/^\.\//,  "") : "")
+      .filter(Boolean)
+  )
+  const blockers = uniqueStrings(
+    toolCalls
+      .filter((call) => {
+        if (!call.isError && !/^Error:/i.test(call.result)) return false
+        const path = typeof call.args.path === "string" ? call.args.path.replace(/^\.\//,  "") : ""
+        if (path && resolvedPaths.has(path)) return false
+        return true
+      })
+      .map((call) => `${call.name}: ${call.result.slice(0, 240)}`)
+  )
 
   return {
     status: blockers.length > 0

@@ -11,8 +11,11 @@ import * as db from "../db.js";
  * (no UPN) visitors so each browser session gets its own layout. Anonymous
  * (pre-welcome) requests get a transient sid that won't persist anyway.
  */
-function dashboardIdFor(req: { session?: { upn?: string | null; sid?: string } }): string {
+function dashboardIdFor(req: { session?: { upn?: string | null; sid?: string; isAdmin?: boolean } }): string {
   const s = req.session
+  // Admin users authenticated via access code have upn=null (code is consumed, not stored).
+  // Use a stable "admin" key so their layout survives re-logins and server restarts.
+  if (s?.isAdmin && !s.upn) return "dashboard:admin"
   const key = (s?.upn ?? s?.sid ?? "anon").toLowerCase()
   return `dashboard:${key}`
 }

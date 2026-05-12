@@ -5,7 +5,7 @@
  * and reusable independently of the run lifecycle.
  */
 
-import { getCatalogPromptSummary, getMssqlConfig, type Tool } from "@agent001/agent"
+import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@agent001/agent"
 import { arch, homedir, platform } from "node:os"
 
 // ── Environment detection ────────────────────────────────────────
@@ -57,6 +57,19 @@ export function buildToolContext(tools: Tool[]): string {
           : `"${c.name}" (${c.server}/${c.database}, ${mode})`
       }).join("; ")
       sections.push(`Database: You have access to Microsoft SQL Server — ${dbList}.`)
+
+      // In multi-connection mode, tell the agent which connection is "home"
+      // so it never has to guess. The default is used for all DB queries unless
+      // the task explicitly requires a different environment (e.g. sync operations).
+      if (cfgs.length > 1) {
+        const defaultConnName = getDefaultMssqlConnectionName()
+          ?? cfgs[0].name  // mirrors getPool() fallback
+        sections.push(
+          `Default connection: "${defaultConnName}" — use this for all regular database queries.`,
+          `DO NOT pass environment names (${cfgs.map((c) => `"${c.name}"`).join(", ")}) as the "database" parameter — that runs USE [name] as SQL and will fail.`,
+          `To target a different server, pass connection='name' (not database='name').`,
+        )
+      }
     } else {
       sections.push(
         "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",

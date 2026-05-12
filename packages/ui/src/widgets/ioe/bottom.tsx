@@ -15,11 +15,11 @@ export function OutputPanel({ logs }: { logs: LogEntry[] }) {
   return (
     <div className="px-3 py-1">
       {logs.slice(-200).map((log, i) => {
-        const levelColor = log.level === "error" ? C.coral : log.level === "warn" ? C.warning : C.muted
+        const levelColor = log.error ? C.coral : C.muted
         return (
           <div key={i}>
             <span style={{ color: C.dim }}>[{ts(log.timestamp)}]</span>{" "}
-            <span style={{ color: levelColor, textTransform: "uppercase" }}>{log.level.slice(0, 3)}</span>{" "}
+            <span style={{ color: levelColor, textTransform: "uppercase" }}>{log.type.slice(0, 3)}</span>{" "}
             <span style={{ color: C.textSecondary }}>{log.message}</span>
           </div>
         )
@@ -70,11 +70,11 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
       {problems.map((p, i) => (
         <div
           key={i}
-          className="grid grid-cols-[14px_56px_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-md px-2 py-1.5"
+          className="grid grid-cols-[14px_88px_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 rounded-md px-2 py-1.5"
           style={{ background: `${C.coral}0f`, border: `1px solid ${C.coral}22` }}
         >
           <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: C.coral }} />
-          <span className="text-[11px] leading-5 shrink-0 uppercase tracking-wide" style={{ color: C.dim }}>{p.source}</span>
+          <span className="text-[11px] leading-5 uppercase tracking-wide truncate" style={{ color: C.dim }}>{p.source}</span>
           <span className="min-w-0 break-words leading-5" style={{ color: C.coral }}>{p.text}</span>
           {p.time && (
             <span className="shrink-0 text-[11px] leading-5 text-right" style={{ color: C.dim }}>{ts(p.time)}</span>

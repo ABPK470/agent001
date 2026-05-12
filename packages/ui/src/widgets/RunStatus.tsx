@@ -5,6 +5,7 @@
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
+import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
@@ -37,9 +38,14 @@ export function RunStatus() {
   const workspaceBusyRef = useRef(false)
   const autoLoadedKeyRef = useRef<string | null>(null)
   const upsertRun = useStore((s) => s.upsertRun)
+  const setActiveRun = useStore((s) => s.setActiveRun)
 
   const run = runs.find((r) => r.id === activeRunId)
   const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
+
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { width: rootWidth } = useContainerSize(rootRef)
+  const compact = rootWidth > 0 && rootWidth < 420
 
   const refreshWorkspaceDiff = useCallback(async (targetRunId?: string) => {
     const runId = targetRunId ?? run?.id
@@ -160,11 +166,15 @@ export function RunStatus() {
   }
 
   async function handleResume() {
-    if (run) await api.resumeRun(run.id).catch(() => {})
+    if (!run) return
+    try {
+      const { runId } = await api.resumeRun(run.id)
+      if (runId) setActiveRun(runId)
+    } catch { /* ignore */ }
   }
 
   return (
-    <div className="h-full overflow-y-auto flex flex-col gap-3">
+    <div ref={rootRef} className="h-full overflow-y-auto flex flex-col gap-3">
       {/* Status badge */}
       <div className="flex items-center gap-2.5">
         <div
@@ -186,7 +196,7 @@ export function RunStatus() {
       </div>
 
       {/* Metadata grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+      <div className={`grid ${compact ? "grid-cols-1" : "grid-cols-2"} gap-x-4 gap-y-2.5 text-sm`}>
         {agentName && (
           <div>
             <span className="text-text-muted text-[13px]">Agent</span>
@@ -239,7 +249,7 @@ export function RunStatus() {
       </div>
 
       {latestPlannerDecision && (
-        <div className="rounded-xl border border-[#22C55E]/20 bg-[#22C55E]/[0.06] p-3">
+        <div className="rounded-xl border border-success/20 bg-success/[0.06] p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[13px] text-text-muted uppercase tracking-wide">Execution Route</div>
@@ -247,7 +257,7 @@ export function RunStatus() {
                 {latestPlannerDecision.route ?? (latestPlannerDecision.shouldPlan ? "planner" : "direct")}
               </div>
             </div>
-            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.route === "bounded_coherent_generation" || latestPlannerDecision.route === "planner_with_coherent_bootstrap" ? "text-success bg-success/10" : "text-text-secondary bg-white/5"}`}>
+            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.route === "bounded_coherent_generation" || latestPlannerDecision.route === "planner_with_coherent_bootstrap" ? "text-success bg-success/10" : "text-text-secondary bg-overlay-2"}`}>
               {latestPlannerDecision.route === "bounded_coherent_generation"
                 ? "Coherent"
                 : latestPlannerDecision.route === "planner_with_coherent_bootstrap"
@@ -305,7 +315,7 @@ export function RunStatus() {
             </div>
           )}
           {latestCoherentRepair && (
-            <div className="mt-2 text-[13px] text-[#F97316]">
+            <div className="mt-2 text-[13px] text-warning">
               repair attempt {latestCoherentRepair.repairAttempt} · {latestCoherentRepair.issueCount} issues
             </div>
           )}
@@ -313,7 +323,7 @@ export function RunStatus() {
       )}
 
       {latestCompatibility && (
-        <div className="rounded-xl border border-[#F97316]/20 bg-[#F97316]/[0.06] p-3">
+        <div className="rounded-xl border border-warning/20 bg-warning/[0.06] p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[13px] text-text-muted uppercase tracking-wide">Planner Compatibility</div>
@@ -361,7 +371,7 @@ export function RunStatus() {
       )}
 
       {/* Actions */}
-      <div className="flex gap-2 mt-1">
+      <div className={`flex gap-2 mt-1 ${compact ? "flex-wrap" : ""}`}>
         {isActive && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-error bg-error/10 hover:bg-error/20 active:bg-error/25 rounded-lg transition-colors"

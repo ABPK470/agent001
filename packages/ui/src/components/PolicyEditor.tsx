@@ -255,20 +255,20 @@ export function PolicyEditor({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-2xl w-full max-w-[720px] h-[85vh] max-sm:h-[92vh] mx-4 sm:mx-auto flex flex-col shadow-2xl max-sm:rounded-xl"
+        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-2.5">
             <Shield size={20} className="text-text-muted" />
             <h2 className="text-lg font-semibold text-text">Governance & Security</h2>
           </div>
-          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" onClick={onClose}>
+          <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
@@ -280,8 +280,8 @@ export function PolicyEditor({ onClose }: Props) {
               key={t.id}
               className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${
                 tab === t.id
-                  ? "bg-white/10 text-text font-medium"
-                  : "text-text-muted hover:text-text-secondary hover:bg-white/[0.04]"
+                  ? "bg-overlay-3 text-text font-medium"
+                  : "text-text-muted hover:text-text-secondary hover:bg-overlay-2"
               }`}
               onClick={() => setTab(t.id)}
             >
@@ -315,8 +315,8 @@ export function PolicyEditor({ onClose }: Props) {
                 const effectStyle = currentEffect ? getEffectStyle(currentEffect) : null
 
                 return (
-                  <div key={tool.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-                    <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
+                  <div key={tool.name} className="flex items-center gap-4 px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+                    <div className="w-9 h-9 rounded-lg bg-overlay-2 flex items-center justify-center shrink-0">
                       <Icon size={16} className="text-text-secondary" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -334,7 +334,7 @@ export function PolicyEditor({ onClose }: Props) {
                       <div className="text-[13px] text-text-muted mt-0.5">{tool.description}</div>
                     </div>
                     <select
-                      className="bg-white/[0.06] text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-white/[0.06]"
+                      className="bg-overlay-3 text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-border-subtle"
                       value={currentEffect ?? "none"}
                       onChange={(e) => handleToolToggle(tool.name, e.target.value as Effect | "none")}
                     >
@@ -353,7 +353,7 @@ export function PolicyEditor({ onClose }: Props) {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-text-muted">Configure the LLM provider and model used by the agent.</p>
                 {llmActiveProvider && (
-                  <span className="flex items-center gap-1.5 text-[12px] text-text-muted bg-white/[0.04] border border-white/[0.06] rounded-full px-3 py-1">
+                  <span className="flex items-center gap-1.5 text-[12px] text-text-muted bg-overlay-2 border border-border-subtle rounded-full px-3 py-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
                     {llmActiveProvider} / {llmActiveModel}
                   </span>
@@ -361,7 +361,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Provider selector */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Cpu size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Provider</span>
@@ -382,7 +382,7 @@ export function PolicyEditor({ onClose }: Props) {
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
                         llmProvider === p
                           ? "bg-accent/20 text-accent border-accent/30"
-                          : "bg-white/[0.04] text-text-muted border-white/[0.06] hover:text-text hover:bg-white/[0.06]"
+                          : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text hover:bg-overlay-3"
                       }`}
                     >
                       {p === "copilot-chat" ? "Copilot Chat" : p === "copilot" ? "GitHub Models" : p === "databricks" ? "Databricks" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
@@ -392,7 +392,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Model + credentials combined card */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-3">
                   <Cpu size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Connection</span>
@@ -406,7 +406,7 @@ export function PolicyEditor({ onClose }: Props) {
                       value={llmModel}
                       onChange={(e) => setLlmModel(e.target.value)}
                       placeholder={llmDefaults[llmProvider]?.model ?? "model name"}
-                      className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                      className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
                     />
                   </div>
 
@@ -422,7 +422,7 @@ export function PolicyEditor({ onClose }: Props) {
                           value={llmApiKey}
                           onChange={(e) => setLlmApiKey(e.target.value)}
                           placeholder={llmDefaults[llmProvider]?.placeholder ?? "Leave blank to keep existing"}
-                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
                         />
                         <button
                           type="button"
@@ -445,7 +445,7 @@ export function PolicyEditor({ onClose }: Props) {
                         value={llmBaseUrl}
                         onChange={(e) => setLlmBaseUrl(e.target.value)}
                         placeholder={llmDefaults[llmProvider]?.baseUrl ?? "https://api.openai.com/v1"}
-                        className="w-full px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                        className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
                       />
                       {llmProvider === "local" && (
                         <p className="text-[12px] text-text-muted mt-1">Default: <code className="font-mono">http://localhost:11434/v1</code> for Ollama.</p>
@@ -476,7 +476,7 @@ export function PolicyEditor({ onClose }: Props) {
               </p>
 
               {/* Workspace */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-2">
                   <FolderOpen size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Workspace</span>
@@ -490,7 +490,7 @@ export function PolicyEditor({ onClose }: Props) {
                     value={wsPath}
                     onChange={(e) => setWsPath(e.target.value)}
                     placeholder="/path/to/workspace"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
                   />
                   <button
                     onClick={handleSaveWorkspace}
@@ -505,7 +505,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Shell blocklist */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setShellExpanded((v) => !v)}
@@ -530,7 +530,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* SSRF protection */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <button
                   className="flex items-center gap-2.5 w-full text-left"
                   onClick={() => setSsrfExpanded((v) => !v)}
@@ -560,7 +560,7 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Policy enforcement */}
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Shield size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Policy Enforcement</span>
@@ -573,9 +573,9 @@ export function PolicyEditor({ onClose }: Props) {
               </div>
 
               {/* Reset data */}
-              <div className="h-px bg-white/[0.06] my-1" />
+              <div className="h-px bg-overlay-3 my-1" />
 
-              <div className="px-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Restore Defaults</span>
@@ -595,7 +595,7 @@ export function PolicyEditor({ onClose }: Props) {
                   <div className="flex items-center gap-3">
                     <span className="text-[13px] text-error">Are you sure?</span>
                     <button
-                      className="px-4 py-2 text-[13px] bg-error text-white rounded-lg disabled:opacity-40"
+                      className="px-4 py-2 text-[13px] bg-error text-text rounded-lg disabled:opacity-40"
                       disabled={resetting}
                       onClick={async () => {
                         setResetting(true)
