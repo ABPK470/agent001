@@ -95,3 +95,59 @@ export function getSyncRun(planId: string): SyncRunRow | undefined {
     .prepare(`SELECT * FROM sync_runs WHERE plan_id = ?`)
     .get(planId) as SyncRunRow | undefined
 }
+
+/**
+ * Persist a SyncPlan body for later re-hydration (e.g. History → "View plan"
+ * after a server restart). Upserts a `sync_runs` row keyed by `planId`.
+ *
+ * - Called for *every* preview (UI- or agent-initiated) via the plan-store
+ *   sink, so the row exists even when execute is never run.
+ * - Status defaults to `"preview"` and is upgraded by `recordSyncRunStart` /
+ *   `recordSyncRunFinish` when the plan is later executed.
+ * - Stores a complete JSON snapshot of the plan in `plan_json`.
+ */
+export function recordSyncRunPreview(i: {
+  planId: string
+  entityType: string
+  entityId: string | number
+  entityDisplayName: string | null
+  source: string
+  target: string
+  actorUpn: string | null
+  previewTotals: unknown
+  planJson: string
+}): void {
+  // Don't clobber an in-progress / completed run with a "preview" status.
+  // Use INSERT … ON CONFLICT to only overwrite plan_json + preview metadata
+  // for already-existing rows, leaving status / timestamps intact.
+  getDb()
+    .prepare(
+      `INSERT INTO sync_runs
+         (plan_id, entity_type, entity_id, entity_display_name, source, target,
+          actor_upn, preview_totals_json, plan_json, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'preview', datetime('now'))
+       ON CONFLICT(plan_id) DO UPDATE SET
+         plan_json = excluded.plan_json,
+         preview_totals_json = excluded.preview_totals_json,
+         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
+    )
+    .run(
+      i.planId,
+      i.entityType,
+      String(i.entityId),
+      i.entityDisplayName,
+      i.source,
+      i.target,
+      i.actorUpn,
+      JSON.stringify(i.previewTotals),
+      i.planJson,
+    )
+}
+
+/** Re-hydrate the full plan body for a given planId, or null if absent. */
+export function getSyncRunPlanJson(planId: string): string | null {
+  const row = getDb()
+    .prepare(`SELECT plan_json FROM sync_runs WHERE plan_id = ?`)
+    .get(planId) as { plan_json: string | null } | undefined
+  return row?.plan_json ?? null
+}

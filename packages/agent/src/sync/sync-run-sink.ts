@@ -7,6 +7,7 @@
  */
 
 import { currentRuntime } from "../agent-runtime.js"
+import type { SyncPlan } from "./plan-store.js"
 
 export interface SyncRunStartInput {
   planId: string
@@ -31,6 +32,17 @@ export interface SyncRunFinishInput {
 export interface SyncRunSink {
   start(input: SyncRunStartInput): void
   finish(input: SyncRunFinishInput): void
+  /**
+   * Persist a plan body for later re-hydration (durable history).
+   * Optional — when absent, plans only survive in memory + disk JSON
+   * (subject to the in-process plan-store TTL).
+   */
+  savePlan?(plan: SyncPlan): void
+  /**
+   * Re-hydrate a plan body that's no longer in memory or on disk
+   * (e.g. after server restart). Optional fallback for `loadPlan`.
+   */
+  loadPlan?(planId: string): SyncPlan | null
 }
 
 /** Server installs this once at startup. */

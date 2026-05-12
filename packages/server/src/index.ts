@@ -51,8 +51,10 @@ import {
 import {
     clearTransactionalData,
     getDb, getDbStats, getLlmConfig,
+    getSyncRunPlanJson,
     migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    pruneOldData, recordSyncRunFinish, recordSyncRunStart, saveApiRequest,
+    pruneOldData,
+    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db.js"
 import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -103,6 +105,29 @@ async function main() {
     },
     finish: (i) => {
       try { recordSyncRunFinish(i) } catch (e) { console.warn("[sync] recordSyncRunFinish failed:", e) }
+    },
+    // Durable plan-body persistence — survives restarts so the History modal
+    // can re-hydrate the diff for any past sync run (UI- or agent-initiated).
+    savePlan: (plan) => {
+      try {
+        recordSyncRunPreview({
+          planId: plan.planId,
+          entityType: plan.recipeSnapshot.entityType,
+          entityId: plan.entity.id,
+          entityDisplayName: plan.entity.displayName,
+          source: plan.source,
+          target: plan.target,
+          actorUpn: null, // not known here; recordSyncRunStart sets it on execute
+          previewTotals: plan.totals,
+          planJson: JSON.stringify(plan),
+        })
+      } catch (e) { console.warn("[sync] recordSyncRunPreview failed:", e) }
+    },
+    loadPlan: (planId) => {
+      try {
+        const json = getSyncRunPlanJson(planId)
+        return json ? JSON.parse(json) : null
+      } catch (e) { console.warn("[sync] getSyncRunPlanJson failed:", e); return null }
     },
   })
 

@@ -86,10 +86,10 @@ export function InlineDiagram({ kind, source }: { kind: DiagramKind; source: str
 function DiagramError({ kind, source, message }: { kind: string; source: string; message: string }): React.ReactElement {
   return (
     <div className="rounded-lg overflow-hidden border border-border-subtle">
-      <div className="px-3 py-1 bg-overlay-2 text-[11px] text-error font-mono border-b border-border-subtle">
+      <div className="px-3 py-1 text-[11px] text-error font-mono border-b border-border-subtle">
         {kind} (parse error: {message})
       </div>
-      <pre className="px-3 py-2.5 text-[12px] font-mono text-text-secondary overflow-x-auto bg-base">{source}</pre>
+      <pre className="px-3 py-2.5 text-[12px] font-mono text-text-secondary overflow-x-auto">{source}</pre>
     </div>
   )
 }
@@ -179,7 +179,7 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
   })
 
   return (
-    <div className="rounded-lg overflow-hidden border border-border-subtle bg-base">
+    <div className="rounded-lg overflow-hidden border border-border-subtle">
       {(data.title || data.subtitle) && (
         <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
           {data.title && <div className="text-sm font-semibold text-text">{data.title}</div>}

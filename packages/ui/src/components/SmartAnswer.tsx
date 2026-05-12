@@ -11,10 +11,10 @@
  *   - Plain paragraphs → whitespace-preserved text
  */
 
-import { Check, Copy } from "lucide-react";
-import React from "react";
-import { DataTable } from "./DataTable";
-import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram";
+import { Check, Copy } from "lucide-react"
+import React from "react"
+import { DataTable } from "./DataTable"
+import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 
 // Context that flips inline rendering (e.g. inline `code` chips) to a
 // lighter, less-decorated style. Used by the term-chat widget.
@@ -384,13 +384,15 @@ function CompactTable({
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
       <table className="w-full text-[12.5px] leading-6 border-collapse">
+        {/* <thead className="bg-overlay-hover/40"> */}
         <thead>
           <tr>
             {headers.map((h, hi) => (
               <th
                 key={hi}
                 className={[
-                  "text-left font-medium text-text-muted px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                  "text-left font-bold text-text-secondary text-[14px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                  // "text-left font-bold text-text-muted tracking-wide text-[11px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
                   hi < headers.length - 1 ? "border-r border-border-subtle" : "",
                 ].join(" ")}
               >
@@ -639,16 +641,19 @@ export function SmartAnswer({
         if (block.type === "ordered-list") {
           const tableData = tryConvertOrderedListToTable(block.items)
           if (tableData) {
-            return compact ? (
-              <CompactTable key={bi} headers={tableData.headers} rows={tableData.rows} />
-            ) : (
-              <DataTable
-                key={bi}
-                headers={tableData.headers}
-                rows={tableData.rows}
-                renderCell={(v) => <InlineText text={v} />}
-                renderHeader={(v) => <InlineText text={v} />}
-              />
+            return (
+              <div key={bi} className="py-2">
+                {compact ? (
+                  <CompactTable headers={tableData.headers} rows={tableData.rows} />
+                ) : (
+                  <DataTable
+                    headers={tableData.headers}
+                    rows={tableData.rows}
+                    renderCell={(v) => <InlineText text={v} />}
+                    renderHeader={(v) => <InlineText text={v} />}
+                  />
+                )}
+              </div>
             )
           }
           return (
@@ -668,16 +673,19 @@ export function SmartAnswer({
         }
 
         if (block.type === "table") {
-          return compact ? (
-            <CompactTable key={bi} headers={block.headers} rows={block.rows} />
-          ) : (
-            <DataTable
-              key={bi}
-              headers={block.headers}
-              rows={block.rows}
-              renderCell={(v) => <InlineText text={v} />}
-              renderHeader={(v) => <InlineText text={v} />}
-            />
+          return (
+            <div key={bi} className="py-2">
+              {compact ? (
+                <CompactTable headers={block.headers} rows={block.rows} />
+              ) : (
+                <DataTable
+                  headers={block.headers}
+                  rows={block.rows}
+                  renderCell={(v) => <InlineText text={v} />}
+                  renderHeader={(v) => <InlineText text={v} />}
+                />
+              )}
+            </div>
           )
         }
 

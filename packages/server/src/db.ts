@@ -54,6 +54,6 @@ export {
 
 // Sync runs (ABI environment sync history)
 export {
-    getSyncRun, listSyncRuns, recordSyncRunFinish, recordSyncRunStart, type SyncRunRow
+    getSyncRun, getSyncRunPlanJson, listSyncRuns, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, type SyncRunRow
 } from "./db/sync-runs.js"
 

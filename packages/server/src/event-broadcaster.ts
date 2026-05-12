@@ -5,18 +5,6 @@
  * long-lived HTTP response held open by `GET /api/events/stream`. The browser's
  * native `EventSource` API handles connection, reconnect, and parsing.
  *
- * Why SSE and not WebSocket:
- *   - Every event is server → client. There is zero client → server traffic
- *     over the realtime channel (commands go through normal HTTP POST).
- *     SSE is the right tool for one-way push; WS adds a duplex channel we
- *     never use plus more proxy fragility (Upgrade frames get dropped by
- *     HTTP-only reverse proxies).
- *   - `EventSource` reconnect is built into the browser; WS reconnect is
- *     application code we'd have to maintain.
- *   - One transport = one client map, one fanout loop, one identity-attach
- *     code path. The previous implementation had both and the WS branch
- *     was effectively dead code.
- *
  * Every `broadcast()` call:
  *   1. Stamps a timestamp + serialises once.
  *   2. Resolves the originating run's owner (`runId` field on the event)

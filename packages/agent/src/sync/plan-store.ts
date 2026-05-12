@@ -149,32 +149,51 @@ export function allocPlanId(): string {
   return randomUUID()
 }
 
-/** Persist a plan (memory + disk). */
+/** Persist a plan (memory + disk + durable sink, if installed). */
 export function savePlan(plan: SyncPlan): void {
-  const plans = currentRuntime().sync.plans
+  const runtime = currentRuntime()
+  const plans = runtime.sync.plans
   plans.memCache.set(plan.planId, plan)
   if (plans.diskRoot) {
     const path = resolve(plans.diskRoot, `${plan.planId}.json`)
     writeFileSync(path, JSON.stringify(plan, null, 2))
   }
+  // Durable persistence (e.g. server's SQLite-backed sink). Survives restarts
+  // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
+  // older plans on demand.
+  try { runtime.sync.runSink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
 }
 
-/** Load a plan. Returns null if missing or expired. */
+/** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
 export function loadPlan(planId: string): SyncPlan | null {
-  const plans = currentRuntime().sync.plans
+  const runtime = currentRuntime()
+  const plans = runtime.sync.plans
   const cached = plans.memCache.get(planId)
-  if (cached) return isExpired(cached) ? null : cached
-  if (!plans.diskRoot) return null
-  const path = resolve(plans.diskRoot, `${planId}.json`)
-  if (!existsSync(path)) return null
-  try {
-    const plan = JSON.parse(readFileSync(path, "utf-8")) as SyncPlan
-    if (isExpired(plan)) { try { unlinkSync(path) } catch { /* ignore */ } ; return null }
-    plans.memCache.set(planId, plan)
-    return plan
-  } catch {
-    return null
+  if (cached && !isExpired(cached)) return cached
+  // Disk fast path (in-process, may be expired by 24h TTL).
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${planId}.json`)
+    if (existsSync(path)) {
+      try {
+        const plan = JSON.parse(readFileSync(path, "utf-8")) as SyncPlan
+        if (!isExpired(plan)) {
+          plans.memCache.set(planId, plan)
+          return plan
+        }
+        try { unlinkSync(path) } catch { /* ignore */ }
+      } catch { /* fall through to durable sink */ }
+    }
   }
+  // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
+  // after server restart.
+  try {
+    const fromSink = runtime.sync.runSink.loadPlan?.(planId) ?? null
+    if (fromSink) {
+      plans.memCache.set(planId, fromSink)
+      return fromSink
+    }
+  } catch { /* sink failure → treat as miss */ }
+  return null
 }
 
 /** True when the plan is too old to execute (1h cap). */
