@@ -23,7 +23,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks"
-import { currentRuntime } from "../agent-runtime.js";
+import { currentRuntime } from "../agent-runtime.js"
 
 export type SyncEvent = { type: string; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void

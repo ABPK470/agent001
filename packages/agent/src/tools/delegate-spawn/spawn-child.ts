@@ -1,5 +1,5 @@
-import { Agent } from "../../agent.js"
 import { AgentRuntime } from "../../agent-runtime.js"
+import { Agent } from "../../agent.js"
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
 import type { Tool } from "../../types.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate.js"

@@ -1,8 +1,8 @@
 import type { Tool } from "@agent001/agent"
 import { recordEffect, recordFileWrite } from "../effects.js"
+import { broadcast } from "../event-broadcaster.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { applyWorkspaceDiff, cleanupRunWorkspace, computeWorkspaceDiff } from "../run-workspace.js"
-import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
 
 // ── Effect-tracked tool wrappers ──────────────────────────────────

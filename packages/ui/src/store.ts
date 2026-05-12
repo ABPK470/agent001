@@ -15,12 +15,12 @@ import type {
     Notification,
     Run,
     RunDetail,
+    SseEvent,
     Step,
     TraceEntry,
     ViewConfig,
     Widget,
     WidgetType,
-    SseEvent as SseEvent,
 } from "./types"
 import { randomId } from "./util"
 
