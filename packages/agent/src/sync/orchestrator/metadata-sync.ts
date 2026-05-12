@@ -14,10 +14,10 @@
 import sqlMod from "mssql"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
-import type { ExecuteProgress } from "./types.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
 import { maybeArchive } from "./archive.js"
 import { qtable, trackedQuery } from "./db-helpers.js"
+import type { ExecuteProgress } from "./types.js"
 
 export interface RunMetadataSyncInput {
   plan: SyncPlan

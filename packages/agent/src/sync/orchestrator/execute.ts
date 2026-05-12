@@ -12,12 +12,12 @@
  */
 
 import sqlMod from "mssql"
+import { getPool } from "../../tools/mssql/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { getEnvironment } from "../environments.js"
 import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
 import { getSyncRunSink } from "../sync-run-sink.js"
-import { getPool } from "../../tools/mssql/index.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
 import { DRIFT_ABORT_PCT } from "./db-helpers.js"
