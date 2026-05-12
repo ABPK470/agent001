@@ -20,6 +20,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs"
+import { currentRuntime } from "../agent-runtime.js"
 import { resolve } from "node:path"
 import { getMssqlConfig, getPool } from "../tools/index.js"
 
@@ -58,24 +59,25 @@ interface SyncEnvironmentsConfigFile {
   environments: Array<Partial<SyncEnvironment> & { name: string }>
 }
 
-const _envs = new Map<string, SyncEnvironment>()
+// Environment registry lives on the active AgentRuntime
+// (`currentRuntime().sync.environments`).
 
 /** Configure all environments at once. Replaces any prior config. */
 export function setEnvironments(envs: SyncEnvironment[]): void {
-  _envs.clear()
-  for (const e of envs) _envs.set(e.name, e)
+  currentRuntime().sync.environments.clear()
+  for (const e of envs) currentRuntime().sync.environments.set(e.name, e)
 }
 
 /** Read the current environment registry. */
 export function getEnvironments(): SyncEnvironment[] {
-  return Array.from(_envs.values())
+  return Array.from(currentRuntime().sync.environments.values())
 }
 
 /** Get one environment by name; throws if missing. */
 export function getEnvironment(name: string): SyncEnvironment {
-  const e = _envs.get(name)
+  const e = currentRuntime().sync.environments.get(name)
   if (!e) {
-    const available = Array.from(_envs.keys()).join(", ") || "none"
+    const available = Array.from(currentRuntime().sync.environments.keys()).join(", ") || "none"
     throw new Error(`Unknown environment "${name}". Available: ${available}.`)
   }
   return e

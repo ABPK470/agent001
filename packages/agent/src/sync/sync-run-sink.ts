@@ -6,6 +6,8 @@
  * startup. Keeps the agent package free of server-side deps.
  */
 
+import { currentRuntime } from "../agent-runtime.js"
+
 export interface SyncRunStartInput {
   planId: string
   entityType: string
@@ -31,18 +33,11 @@ export interface SyncRunSink {
   finish(input: SyncRunFinishInput): void
 }
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: { sink: SyncRunSink } = { sink: {
-  start: () => {},
-  finish: () => {},
-} }
-
+/** Server installs this once at startup. */
 export function setSyncRunSink(sink: SyncRunSink): void {
-  _state.sink = sink
+  currentRuntime().sync.runSink = sink
 }
 
 export function getSyncRunSink(): SyncRunSink {
-  return _state.sink
+  return currentRuntime().sync.runSink
 }

@@ -15,21 +15,16 @@
  */
 
 import { execFile } from "node:child_process"
+import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
 
 /** Workspace directory — shell commands run here. */
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: {
-  shellCwd: string
-  executor: ShellExecutor | null
-  sandboxStrict: boolean
-  signal: AbortSignal | null
-} = { shellCwd: process.cwd(), executor: null, sandboxStrict: false, signal: null }
 
 export function setShellCwd(cwd: string): void {
-  _state.shellCwd = cwd
+  currentRuntime().shell.cwd = cwd
 }
 
 /** Result from a shell execution (matches sandbox interface). */
@@ -45,11 +40,11 @@ export interface ShellExecResult {
  * Optional executor injected by the server.
  * When set, commands route through Docker sandbox instead of host shell.
  */
-type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
+export type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
 
 /** Inject a sandbox executor (called once at server startup). */
 export function setShellExecutor(executor: ShellExecutor): void {
-  _state.executor = executor
+  currentRuntime().shell.executor = executor
 }
 
 /**
@@ -60,14 +55,14 @@ export function setShellExecutor(executor: ShellExecutor): void {
 
 /** Set by the server when sandbox mode is "all". */
 export function setShellSandboxStrict(strict: boolean): void {
-  _state.sandboxStrict = strict
+  currentRuntime().shell.sandboxStrict = strict
 }
 
 /** Abort signal — set per-run so child processes can be killed on cancel. */
 
 /** Inject the run's AbortSignal so child processes are killed on cancel. */
 export function setShellSignal(signal: AbortSignal | null): void {
-  _state.signal = signal
+  currentRuntime().shell.killSignal = signal
 }
 
 /** Safe environment variables — the ONLY keys forwarded to child processes. */
@@ -102,7 +97,7 @@ import { CONTAINER_RULES, HOST_ONLY_RULES } from "./shell/deny-rules.js"
 
 /**
  * Check if a command is blocked.
- * When _state.sandboxStrict is true (mode="all"), only CONTAINER_RULES apply.
+ * When currentRuntime().shell.sandboxStrict is true (mode="all"), only CONTAINER_RULES apply.
  * Otherwise, both CONTAINER_RULES and HOST_ONLY_RULES apply.
  */
 function isBlocked(command: string): string | null {
@@ -112,7 +107,7 @@ function isBlocked(command: string): string | null {
     }
   }
   // In strict sandbox mode, skip host-only rules — the container is the sandbox
-  if (_state.sandboxStrict) return null
+  if (currentRuntime().shell.sandboxStrict) return null
   for (const rule of HOST_ONLY_RULES) {
     if (rule.pattern.test(command)) {
       return rule.label
@@ -155,10 +150,12 @@ export const shellTool: Tool = {
       return `Error: Command blocked for safety (matched: "${blocked}"). This command is not allowed.`
     }
 
+    const shell = currentRuntime().shell
+
     // Route through sandbox executor if available
-    if (_state.executor) {
+    if (shell.executor) {
       try {
-        const result = await _state.executor(command, _state.shellCwd, _state.signal ?? undefined)
+        const result = await shell.executor(command, shell.cwd, shell.killSignal ?? undefined)
         return formatResult(result)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -173,9 +170,9 @@ export const shellTool: Tool = {
         {
           timeout: 30_000,
           maxBuffer: 1024 * 1024, // 1MB
-          cwd: _state.shellCwd,
+          cwd: shell.cwd,
           env: safeEnv(),
-          ...(_state.signal ? { signal: _state.signal } : {}),
+          ...(shell.killSignal ? { signal: shell.killSignal } : {}),
         },
         (error, stdout, stderr) => {
           const parts: string[] = []         

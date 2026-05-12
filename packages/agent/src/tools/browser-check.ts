@@ -15,18 +15,15 @@
  */
 
 import { stat } from "node:fs/promises"
+import { currentRuntime } from "../agent-runtime.js"
 import { join } from "node:path"
 import type { Tool } from "../types.js"
 import { startStaticServer } from "./browser-check/static-server.js"
 
 /** Workspace directory + optional sandbox executor — owned by a const state record. */
-const _state: { cwd: string; executor: BrowserCheckExecutor | null } = {
-  cwd: process.cwd(),
-  executor: null,
-}
 
 export function setBrowserCheckCwd(cwd: string): void {
-  _state.cwd = cwd
+  currentRuntime().browserCheck.cwd = cwd
 }
 
 /** Result from a sandboxed browser check. */
@@ -41,7 +38,7 @@ export interface BrowserCheckResult {
  * Optional executor injected by the server for Docker-sandboxed browser checks.
  * When set, the browser runs inside a container with Chromium + its own sandbox.
  */
-type BrowserCheckExecutor = (
+export type BrowserCheckExecutor = (
   htmlPath: string,
   clicks: string[],
   waitMs: number,
@@ -50,7 +47,7 @@ type BrowserCheckExecutor = (
 
 /** Inject a sandbox executor for browser checks (called once at server startup). */
 export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
-  _state.executor = executor
+  currentRuntime().browserCheck.executor = executor
 }
 
 export const browserCheckTool: Tool = {
@@ -94,7 +91,7 @@ export const browserCheckTool: Tool = {
     const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
 
     // Resolve paths
-    const fullPath = join(_state.cwd, relPath)
+    const fullPath = join(currentRuntime().browserCheck.cwd, relPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
     const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
 
@@ -106,9 +103,10 @@ export const browserCheckTool: Tool = {
     }
 
     // Route through Docker sandbox if executor is available
-    if (_state.executor) {
+    const browserCheck = currentRuntime().browserCheck
+    if (browserCheck.executor) {
       try {
-        const result = await _state.executor(relPath, clicks, waitMs, _state.cwd)
+        const result = await browserCheck.executor(relPath, clicks, waitMs, browserCheck.cwd)
         return result.report
       } catch (err) {
         return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`

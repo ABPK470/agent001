@@ -6,6 +6,8 @@
  * @module
  */
 
+import { currentRuntime } from "../../agent-runtime.js"
+
 export interface BrowserSession {
   browser: import("puppeteer").Browser
   page: import("puppeteer").Page
@@ -16,48 +18,47 @@ export interface BrowserSession {
 
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes. Owned by AgentRuntime in future.
-const _state: { sessionCounter: number; killSignal: AbortSignal | null; cleanup: NodeJS.Timeout | null } = {
-  sessionCounter: 0,
-  killSignal: null,
-  cleanup: null,
-}
 
-const sessions = new Map<string, BrowserSession>()
+// Browser sessions live on the active AgentRuntime
+// (`currentRuntime().browseWeb.sessions`).
 const SESSION_TIMEOUT = 5 * 60 * 1000
 
 /** Set by the orchestrator when a per-tool kill is registered/cleared. */
 export function setBrowseKillSignal(signal: AbortSignal | null): void {
-  _state.killSignal = signal
+  currentRuntime().browseWeb.killSignal = signal
 }
 
 export function getKillSignal(): AbortSignal | null {
-  return _state.killSignal
+  return currentRuntime().browseWeb.killSignal
 }
 
 /**
- * Start the periodic cleanup of idle browser sessions. Idempotent — calling
+ * Start the periodic cleanup of idle browser currentRuntime().browseWeb.sessions. Idempotent — calling
  * twice does nothing. Call once at startup; pair with `stopBrowseSessionCleanup()`
  * on shutdown so the timer doesn't keep the process alive.
  */
 export function startBrowseSessionCleanup(): void {
-  if (_state.cleanup) return
-  _state.cleanup = setInterval(() => {
+  const browseWeb = currentRuntime().browseWeb
+  if (browseWeb.cleanupTimer) return
+  const timer = setInterval(() => {
     const now = Date.now()
-    for (const [id, session] of sessions) {
+    for (const [id, session] of browseWeb.sessions) {
       if (now - session.lastUsed > SESSION_TIMEOUT) {
         session.browser.close().catch(() => {})
-        sessions.delete(id)
+        browseWeb.sessions.delete(id)
       }
     }
   }, 60_000)
-  _state.cleanup.unref()
+  timer.unref()
+  browseWeb.cleanupTimer = timer
 }
 
 /** Stop the periodic cleanup timer. Safe to call when not started. */
 export function stopBrowseSessionCleanup(): void {
-  if (_state.cleanup) {
-    clearInterval(_state.cleanup)
-    _state.cleanup = null
+  const browseWeb = currentRuntime().browseWeb
+  if (browseWeb.cleanupTimer) {
+    clearInterval(browseWeb.cleanupTimer)
+    browseWeb.cleanupTimer = null
   }
 }
 
@@ -70,10 +71,10 @@ startBrowseSessionCleanup()
  * the awaiting code so the agent can move on.
  */
 export function withKillGuard<T>(page: import("puppeteer").Page, fn: () => Promise<T>): Promise<T> {
-  if (!_state.killSignal) return fn()
-  if (_state.killSignal.aborted) return Promise.reject(new Error("Tool execution cancelled"))
+  const sig = currentRuntime().browseWeb.killSignal
+  if (!sig) return fn()
+  if (sig.aborted) return Promise.reject(new Error("Tool execution cancelled"))
   return new Promise<T>((resolve, reject) => {
-    const sig = _state.killSignal as AbortSignal
     const onAbort = (): void => {
       page.close().catch(() => {})
       reject(new Error("Tool execution cancelled"))
@@ -105,27 +106,27 @@ export async function launchSession(visible = false): Promise<{ session: Browser
   )
   await page.setViewport({ width: 1280, height: 800 })
 
-  const id = `s${++_state.sessionCounter}`
+  const id = `s${++currentRuntime().browseWeb.counter}`
   const session: BrowserSession = { browser, page, lastUsed: Date.now(), url: "", visible }
-  sessions.set(id, session)
+  currentRuntime().browseWeb.sessions.set(id, session)
   return { session, id }
 }
 
 export function getSession(sessionId: string): BrowserSession | string {
-  const session = sessions.get(sessionId)
+  const session = currentRuntime().browseWeb.sessions.get(sessionId)
   if (!session) return `Error: Session "${sessionId}" not found or expired`
   session.lastUsed = Date.now()
   return session
 }
 
 export function deleteSession(sessionId: string): void {
-  sessions.delete(sessionId)
+  currentRuntime().browseWeb.sessions.delete(sessionId)
 }
 
-/** Force-close all open browser sessions (for cleanup on server shutdown). */
+/** Force-close all open browser currentRuntime().browseWeb.sessions (for cleanup on server shutdown). */
 export function closeAllBrowserSessions(): void {
-  for (const [id, session] of sessions) {
+  for (const [id, session] of currentRuntime().browseWeb.sessions) {
     session.browser.close().catch(() => {})
-    sessions.delete(id)
+    currentRuntime().browseWeb.sessions.delete(id)
   }
 }

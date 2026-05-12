@@ -9,6 +9,7 @@
  * injected by the orchestrator at runtime. The tool itself is a thin shell.
  */
 
+import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
 
 /**
@@ -22,14 +23,13 @@ export type AskUserResolver = (
   sensitive?: boolean,
 ) => Promise<string>
 
-// State container — `const` reference to a mutable record means no
-// module-level `let` (lint clean) while preserving the singleton shape
-// existing call sites rely on.
-const _state: { resolver: AskUserResolver | null } = { resolver: null }
-
-/** Inject the resolver that connects this tool to the UI. */
+/**
+ * Inject the resolver that connects this tool to the UI.
+ * Stored on the active {@link AgentRuntime} so concurrent agents can have
+ * their own resolver (or share one via the root runtime).
+ */
 export function setAskUserResolver(resolver: AskUserResolver | null): void {
-  _state.resolver = resolver
+  currentRuntime().askUser.resolver = resolver
 }
 
 export const askUserTool: Tool = {
@@ -63,7 +63,8 @@ export const askUserTool: Tool = {
   },
 
   async execute(args) {
-    if (!_state.resolver) {
+    const { resolver } = currentRuntime().askUser
+    if (!resolver) {
       return "Error: User input is not available in this execution context."
     }
 
@@ -73,7 +74,7 @@ export const askUserTool: Tool = {
     const options = Array.isArray(args.options) ? args.options.map(String) : undefined
     const sensitive = Boolean(args.sensitive)
 
-    const response = await _state.resolver(question, options, sensitive)
+    const response = await resolver(question, options, sensitive)
     return response
   },
 }

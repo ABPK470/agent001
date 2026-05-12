@@ -1,17 +1,15 @@
 import { CatalogGraph } from "./graph.js"
+import { currentRuntime } from "../../agent-runtime.js"
 import type { CatalogBuildOptions, CatalogSnapshot, ViewLineage } from "./types.js"
 
 // ── Global catalog store (per connection, with disk cache) ───────
 
-const _catalogs = new Map<string, CatalogGraph>()
+// Catalog instances live on the active AgentRuntime
+// (`currentRuntime().catalog.instances`). They are populated lazily by
+// `buildCatalog()` and shared across calls in the same runtime.
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: {
-  defaultCachePath: string | undefined
-  /** Remembered so `refresh=true` can re-apply lineage. */
-  defaultLineagePath: string | undefined
-} = { defaultCachePath: undefined, defaultLineagePath: undefined }
 
 /**
  * Build or load the catalog.  If a cachePath is provided and a fresh-enough
@@ -23,9 +21,9 @@ const _state: {
 export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise<CatalogGraph> {
   const o: CatalogBuildOptions = typeof opts === "string" ? { connection: opts } : (opts ?? {})
   const conn = o.connection ?? "default"
-  const cachePath = o.cachePath ?? _state.defaultCachePath
+  const cachePath = o.cachePath ?? currentRuntime().catalog.defaultCachePath
   const maxAge = o.maxAgeMs ?? 7 * 24 * 3600_000  // 7 days default
-  if (o.cachePath) _state.defaultCachePath = o.cachePath  // remember for refresh calls
+  if (o.cachePath) currentRuntime().catalog.defaultCachePath = o.cachePath  // remember for refresh calls
 
   // Try loading from persistent cache (unless forceFresh)
   if (cachePath && !o.forceFresh) {
@@ -37,7 +35,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
         const snap: CatalogSnapshot = JSON.parse(raw)
         if (snap.version === 6) {
           const catalog = CatalogGraph.fromSnapshot(snap)
-          _catalogs.set(conn, catalog)
+          currentRuntime().catalog.instances.set(conn, catalog)
           return catalog
         }
       }
@@ -46,15 +44,16 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
 
   // Build from live database (expensive — 5 SQL queries)
   const catalog = await CatalogGraph.build(conn)
-  _catalogs.set(conn, catalog)
+  currentRuntime().catalog.instances.set(conn, catalog)
 
   // Re-apply lineage after a forced rebuild so the in-memory graph stays consistent
-  // (lineage is loaded after buildCatalog at startup, so _state.defaultLineagePath is set)
-  if (o.forceFresh && _state.defaultLineagePath) {
+  // (lineage is loaded after buildCatalog at startup, so the runtime's defaultLineagePath is set)
+  const lineagePath = currentRuntime().catalog.defaultLineagePath
+  if (o.forceFresh && lineagePath) {
     try {
       const fsNode = await import("node:fs/promises")
       const { resolve } = await import("node:path")
-      const raw = await fsNode.readFile(resolve(_state.defaultLineagePath), "utf-8")
+      const raw = await fsNode.readFile(resolve(lineagePath), "utf-8")
       const lineages: ViewLineage[] = JSON.parse(raw)
       catalog.mergeLineage(lineages)
     } catch { /* non-fatal: lineage file may have been deleted */ }
@@ -76,24 +75,24 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
 /** Get a previously built/loaded catalog. */
 export function getCatalog(connection = "default"): CatalogGraph | null {
   // Exact match first
-  const exact = _catalogs.get(connection)
+  const exact = currentRuntime().catalog.instances.get(connection)
   if (exact) return exact
   // In multi-database mode, connections are named (e.g. "uat", "dev") and
   // there is no "default" entry. Fall back to the first available catalog so
   // tools that don't pass an explicit connection= still work.
-  if (connection === "default" && _catalogs.size > 0) {
-    return _catalogs.values().next().value ?? null
+  if (connection === "default" && currentRuntime().catalog.instances.size > 0) {
+    return currentRuntime().catalog.instances.values().next().value ?? null
   }
   return null
 }
 
 /** Return the name of every loaded connection, in insertion order. */
 export function getCatalogConnectionNames(): string[] {
-  return Array.from(_catalogs.keys())
+  return Array.from(currentRuntime().catalog.instances.keys())
 }
 
 export function hasCatalog(): boolean {
-  return _catalogs.size > 0
+  return currentRuntime().catalog.instances.size > 0
 }
 
 export function getCatalogPromptSummary(connection = "default"): string {
@@ -108,8 +107,8 @@ export async function loadLineage(
   filePath: string,
   connection = "default",
 ): Promise<number> {
-  _state.defaultLineagePath = filePath  // remember for re-apply after refresh=true
-  const catalog = _catalogs.get(connection)
+  currentRuntime().catalog.defaultLineagePath = filePath  // remember for re-apply after refresh=true
+  const catalog = currentRuntime().catalog.instances.get(connection)
   if (!catalog) throw new Error("Catalog not built yet — call buildCatalog() first")
 
   const fs = await import("node:fs/promises")
@@ -120,7 +119,7 @@ export async function loadLineage(
   catalog.mergeLineage(lineages)
 
   // Re-persist the snapshot so lineage is cached with structural data
-  const cachePath = _state.defaultCachePath
+  const cachePath = currentRuntime().catalog.defaultCachePath
   if (cachePath) {
     try {
       const { dirname } = await import("node:path")

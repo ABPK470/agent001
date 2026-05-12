@@ -33,6 +33,7 @@ import { getKillSignal, getSession } from "./browse-web/session.js"
 
 // Re-export public helpers for backwards compatibility
 export { closeAllBrowserSessions, setBrowseKillSignal } from "./browse-web/session.js"
+export type { BrowserSession } from "./browse-web/session.js"
 
 export const browseWebTool: Tool = {
   name: "browse_web",

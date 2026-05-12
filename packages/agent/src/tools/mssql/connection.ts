@@ -1,4 +1,5 @@
 import sql from "mssql"
+import { currentRuntime } from "../../agent-runtime.js"
 import { AsyncLocalStorage } from "node:async_hooks"
 
 // ── Named connection registry ────────────────────────────────────
@@ -13,18 +14,18 @@ export interface DatabaseEntry {
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. Owned by AgentRuntime in future, but the API surface stays.
-const _state: { defaultConnection: string | null } = { defaultConnection: null }
 
-const _databases = new Map<string, DatabaseEntry>()
+// `currentRuntime().mssql.databases` is the connection registry (set up by
+// the server via `setMssqlConfig*`). Lives on the active AgentRuntime.
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(name: string): void {
-  _state.defaultConnection = name
+  currentRuntime().mssql.defaultConnection = name
 }
 
 /** Return the configured default connection name (null = fall back to first). */
 export function getDefaultMssqlConnectionName(): string | null {
-  return _state.defaultConnection
+  return currentRuntime().mssql.defaultConnection
 }
 
 /**
@@ -55,7 +56,7 @@ export function runWithMssqlKillSignal<T>(signal: AbortSignal, fn: () => T): T {
  *                Defaults to "default" for backwards compatibility.
  */
 export function setMssqlConfig(config: sql.config, name = "default", knowledge: string | null = null): void {
-  _databases.set(name, {
+  currentRuntime().mssql.databases.set(name, {
     config: {
       ...config,
       options: {
@@ -85,9 +86,9 @@ export function setMssqlConfig(config: sql.config, name = "default", knowledge: 
 export function setMssqlConfigs(
   configs: Array<{ name: string; writeEnabled?: boolean; knowledge?: string | null } & sql.config>,
 ): void {
-  _databases.clear()
+  currentRuntime().mssql.databases.clear()
   for (const { name, writeEnabled = false, knowledge = null, ...rest } of configs) {
-    _databases.set(name, {
+    currentRuntime().mssql.databases.set(name, {
       config: {
         ...rest,
         options: {
@@ -113,13 +114,13 @@ export function setMssqlConfigs(
 
 /** Enable/disable write operations for a named connection (default: "default"). */
 export function setMssqlWriteEnabled(enabled: boolean, name = "default"): void {
-  const entry = _databases.get(name)
+  const entry = currentRuntime().mssql.databases.get(name)
   if (entry) entry.writeEnabled = enabled
 }
 
 /** Return a safe summary of all configured connections (no credentials). */
 export function getMssqlConfig(): Array<{ name: string; server: string; database: string; writeEnabled: boolean; knowledge: string | null }> {
-  return Array.from(_databases.entries()).map(([name, entry]) => ({
+  return Array.from(currentRuntime().mssql.databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
     database: entry.config.database!,
@@ -134,14 +135,17 @@ export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionP
   // there is no "default" entry.  Fall back to:
   //   1. The connection named by setDefaultMssqlConnection() / MSSQL_DEFAULT_CONNECTION
   //   2. The first configured connection (legacy fallback)
-  const resolvedName = _databases.has(name)
+  const mssql = currentRuntime().mssql
+  const resolvedName = mssql.databases.has(name)
     ? name
-    : (name === "default" && _databases.size > 0)
-      ? (_state.defaultConnection && _databases.has(_state.defaultConnection) ? _state.defaultConnection : _databases.keys().next().value as string)
+    : (name === "default" && mssql.databases.size > 0)
+      ? (mssql.defaultConnection && mssql.databases.has(mssql.defaultConnection)
+          ? mssql.defaultConnection
+          : mssql.databases.keys().next().value as string)
       : name
-  const entry = _databases.get(resolvedName)
+  const entry = mssql.databases.get(resolvedName)
   if (!entry) {
-    const available = Array.from(_databases.keys()).join(", ") || "none"
+    const available = Array.from(mssql.databases.keys()).join(", ") || "none"
     throw new Error(
       `MSSQL connection "${name}" not configured. Available: ${available}. ` +
       `Call setMssqlConfig() or setMssqlConfigs() at startup.`,
@@ -158,7 +162,7 @@ export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionP
 
 /** Close all connection pools (called on shutdown). */
 export async function closeMssqlPool(): Promise<void> {
-  for (const entry of _databases.values()) {
+  for (const entry of currentRuntime().mssql.databases.values()) {
     if (entry.pool) {
       try { await entry.pool.close() } catch { /* ignore */ }
       entry.pool = null

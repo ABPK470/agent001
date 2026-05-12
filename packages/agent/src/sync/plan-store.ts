@@ -11,6 +11,7 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { currentRuntime } from "../agent-runtime.js"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { EntityType } from "./recipes.js"
@@ -124,11 +125,11 @@ export interface SyncPlan {
 
 // ── Store ────────────────────────────────────────────────────────
 
-const _memCache = new Map<string, SyncPlan>()
+// In-memory plan cache lives on the active AgentRuntime
+// (`currentRuntime().sync.plans.memCache`).
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: { diskRoot: string | null } = { diskRoot: null }
 
 const TTL_MS = 24 * 60 * 60 * 1000
 const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
@@ -138,7 +139,7 @@ const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
  * `packages/server/data/sync-plans`). Idempotent.
  */
 export function configurePlanStore(diskRoot: string): void {
-  _state.diskRoot = diskRoot
+  currentRuntime().sync.plans.diskRoot = diskRoot
   if (!existsSync(diskRoot)) mkdirSync(diskRoot, { recursive: true })
   pruneExpired()
 }
@@ -150,24 +151,26 @@ export function allocPlanId(): string {
 
 /** Persist a plan (memory + disk). */
 export function savePlan(plan: SyncPlan): void {
-  _memCache.set(plan.planId, plan)
-  if (_state.diskRoot) {
-    const path = resolve(_state.diskRoot, `${plan.planId}.json`)
+  const plans = currentRuntime().sync.plans
+  plans.memCache.set(plan.planId, plan)
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${plan.planId}.json`)
     writeFileSync(path, JSON.stringify(plan, null, 2))
   }
 }
 
 /** Load a plan. Returns null if missing or expired. */
 export function loadPlan(planId: string): SyncPlan | null {
-  const cached = _memCache.get(planId)
+  const plans = currentRuntime().sync.plans
+  const cached = plans.memCache.get(planId)
   if (cached) return isExpired(cached) ? null : cached
-  if (!_state.diskRoot) return null
-  const path = resolve(_state.diskRoot, `${planId}.json`)
+  if (!plans.diskRoot) return null
+  const path = resolve(plans.diskRoot, `${planId}.json`)
   if (!existsSync(path)) return null
   try {
     const plan = JSON.parse(readFileSync(path, "utf-8")) as SyncPlan
     if (isExpired(plan)) { try { unlinkSync(path) } catch { /* ignore */ } ; return null }
-    _memCache.set(planId, plan)
+    plans.memCache.set(planId, plan)
     return plan
   } catch {
     return null
@@ -181,9 +184,10 @@ export function planTooOldToExecute(plan: SyncPlan): boolean {
 
 /** Drop a plan from memory + disk (after successful execute). */
 export function deletePlan(planId: string): void {
-  _memCache.delete(planId)
-  if (_state.diskRoot) {
-    const path = resolve(_state.diskRoot, `${planId}.json`)
+  const plans = currentRuntime().sync.plans
+  plans.memCache.delete(planId)
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${planId}.json`)
     if (existsSync(path)) try { unlinkSync(path) } catch { /* ignore */ }
   }
 }
@@ -193,10 +197,11 @@ function isExpired(plan: SyncPlan): boolean {
 }
 
 function pruneExpired(): void {
-  if (!_state.diskRoot) return
-  for (const f of readdirSync(_state.diskRoot)) {
+  const diskRoot = currentRuntime().sync.plans.diskRoot
+  if (!diskRoot) return
+  for (const f of readdirSync(diskRoot)) {
     if (!f.endsWith(".json")) continue
-    const path = resolve(_state.diskRoot, f)
+    const path = resolve(diskRoot, f)
     try {
       const stats = statSync(path)
       if (Date.now() - stats.mtimeMs > TTL_MS) unlinkSync(path)

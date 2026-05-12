@@ -5,12 +5,13 @@
  * Supports exact text and regex patterns, optional path filtering,
  * and configurable result limits.
  *
- * Security: Uses the same `_state.basePath`-scoped path validation as
+ * Security: Uses the same `currentRuntime().searchFiles.basePath`-scoped path validation as
  * filesystem.ts — all search paths are resolved under the workspace root.
  * Output is capped to prevent memory issues on large codebases.
  */
 
 import { readdir, readFile, stat } from "node:fs/promises"
+import { currentRuntime } from "../agent-runtime.js"
 import { basename, extname, resolve } from "node:path"
 import type { Tool } from "../types.js"
 
@@ -48,29 +49,28 @@ const BINARY_EXTS = new Set([
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: { basePath: string; excludeDirs: Set<string> } = { basePath: process.cwd(), excludeDirs: new Set() }
 
 /**
- * Extra directories to exclude from search results (relative to _state.basePath).
+ * Extra directories to exclude from search results (relative to currentRuntime().searchFiles.basePath).
  * Set via `setSearchExcludeDirs()` — used to prevent the agent's own source
  * code from flooding search results when child agents search for patterns
  * like TODO/PLACEHOLDER.
  */
 
 export function setSearchBasePath(path: string): void {
-  _state.basePath = resolve(path)
+  currentRuntime().searchFiles.basePath = resolve(path)
   // Auto-detect agent source directories to exclude on workspace change
   autoDetectExcludeDirs()
 }
 
 /**
- * Set directories to exclude from search (relative to _state.basePath).
+ * Set directories to exclude from search (relative to currentRuntime().searchFiles.basePath).
  * Prevents agent source code from appearing in task-scoped searches.
  *
  * Example: setSearchExcludeDirs(["packages", "scripts", "deploy", "docs"])
  */
 export function setSearchExcludeDirs(dirs: string[]): void {
-  _state.excludeDirs = new Set(dirs)
+  currentRuntime().searchFiles.excludeDirs = new Set(dirs)
 }
 
 /**
@@ -84,19 +84,19 @@ export function autoDetectExcludeDirs(): void {
   const knownAgentDirs = ["packages", "deploy", "scripts", "bin", "docs"]
   for (const dir of knownAgentDirs) {
     try {
-      const stats = require("node:fs").statSync(resolve(_state.basePath, dir))
+      const stats = require("node:fs").statSync(resolve(currentRuntime().searchFiles.basePath, dir))
       if (stats.isDirectory()) {
         dirs.push(dir)
       }
     } catch { /* doesn't exist, skip */ }
   }
-  _state.excludeDirs = new Set(dirs)
+  currentRuntime().searchFiles.excludeDirs = new Set(dirs)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 interface Match {
-  file: string // relative to _state.basePath
+  file: string // relative to currentRuntime().searchFiles.basePath
   line: number
   text: string
   context: string[]
@@ -123,9 +123,9 @@ async function* walkFiles(
 
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      // Check dynamic exclude list (relative to _state.basePath)
+      // Check dynamic exclude list (relative to currentRuntime().searchFiles.basePath)
       if (excludeTopLevelDirs && excludeTopLevelDirs.size > 0) {
-        const relPath = full.slice(_state.basePath.length + 1)
+        const relPath = full.slice(currentRuntime().searchFiles.basePath.length + 1)
         // Only exclude at top level — "packages" excludes "/base/packages" but not "/base/tmp/packages"
         if (excludeTopLevelDirs.has(relPath)) continue
       }
@@ -193,15 +193,15 @@ export const searchFilesTool: Tool = {
       const isRegex = Boolean(args.regex)
       const include = args.include ? String(args.include) : undefined
       const hasExplicitPath = Boolean(args.path)
-      const searchDir = hasExplicitPath ? resolve(_state.basePath, String(args.path)) : _state.basePath
+      const searchDir = hasExplicitPath ? resolve(currentRuntime().searchFiles.basePath, String(args.path)) : currentRuntime().searchFiles.basePath
 
       // Only exclude agent-source directories when searching from workspace root
       // (no explicit path). When the user/agent explicitly scopes to a directory,
       // respect that scope fully.
-      const excludeDirs = hasExplicitPath ? undefined : _state.excludeDirs
+      const excludeDirs = hasExplicitPath ? undefined : currentRuntime().searchFiles.excludeDirs
 
       // Validate search dir is within workspace
-      if (!searchDir.startsWith(_state.basePath + "/") && searchDir !== _state.basePath) {
+      if (!searchDir.startsWith(currentRuntime().searchFiles.basePath + "/") && searchDir !== currentRuntime().searchFiles.basePath) {
         return `Error: search path escapes the workspace`
       }
 
@@ -240,7 +240,7 @@ export const searchFilesTool: Tool = {
 
         filesSearched++
         const lines = content.split("\n")
-        const rel = filePath.slice(_state.basePath.length + 1)
+        const rel = filePath.slice(currentRuntime().searchFiles.basePath.length + 1)
 
         for (let i = 0; i < lines.length; i++) {
           // Re-create regex to reset lastIndex for each line

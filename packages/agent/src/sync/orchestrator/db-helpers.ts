@@ -10,6 +10,7 @@
  */
 
 import type sql from "mssql"
+import { currentRuntime } from "../../agent-runtime.js"
 import { emitSyncSqlEvent } from "../sync-events.js"
 
 /**
@@ -29,16 +30,16 @@ export const DRIFT_ABORT_PCT = 0.05
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: { projectRoot: string | null } = { projectRoot: null }
 
 /** Configure the project root used to load sync-recipes.json. */
 export function configureSyncOrchestrator(projectRoot: string): void {
-  _state.projectRoot = projectRoot
+  currentRuntime().sync.dbProjectRoot = projectRoot
 }
 
 export function projectRoot(): string {
-  if (!_state.projectRoot) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(projectRoot)")
-  return _state.projectRoot
+  const root = currentRuntime().sync.dbProjectRoot
+  if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(projectRoot)")
+  return root
 }
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */

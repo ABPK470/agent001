@@ -1,1 +1,2 @@
-export * from "../verifier-blueprint/index.js"
+export * from "../verifier-blueprint/index.js";
+

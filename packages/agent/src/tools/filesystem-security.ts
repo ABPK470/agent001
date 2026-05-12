@@ -5,28 +5,24 @@
  *   Layer 1: Input validation — reject null bytes, URL-encoded separators
  *   Layer 2: Traversal detection — reject ".." BEFORE path resolution
  *   Layer 3: Symlink resolution — walk every component with realpath()
- *   Layer 4: Allowed root check — canonical path must be under _state.basePath
+ *   Layer 4: Allowed root check — canonical path must be under currentRuntime().filesystem.basePath
  *
  * @module
  */
 
 import { lstat, realpath } from "node:fs/promises"
 import { resolve, sep } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 import type { ToolResultEnvelope } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-const _state: { basePath: string } = { basePath: process.cwd() }
-
 export function setBasePath(path: string): void {
-  _state.basePath = resolve(path)
+  currentRuntime().filesystem.basePath = resolve(path)
 }
 
 /** Expose current base path for use by tool modules. */
 export function getBasePath(): string {
-  return _state.basePath
+  return currentRuntime().filesystem.basePath
 }
 
 export function buildToolOutcome(
@@ -90,8 +86,8 @@ function rejectTraversal(p: string): void {
 export function safePath(p: string): string {
   validateInput(p)
   rejectTraversal(p)
-  const resolved = resolve(_state.basePath, p)
-  if (!resolved.startsWith(_state.basePath + "/") && resolved !== _state.basePath) {
+  const resolved = resolve(currentRuntime().filesystem.basePath, p)
+  if (!resolved.startsWith(currentRuntime().filesystem.basePath + "/") && resolved !== currentRuntime().filesystem.basePath) {
     throw new Error(`Path "${p}" escapes the allowed directory`)
   }
   return resolved
@@ -100,21 +96,21 @@ export function safePath(p: string): string {
 /**
  * Full 4-layer validation: input → traversal → symlink walk → root check.
  *
- * Walks EVERY path component from _state.basePath downward:
+ * Walks EVERY path component from currentRuntime().filesystem.basePath downward:
  *   /workspace/a/b/c.txt → check /workspace/a, then /workspace/a/b
  *
  * If any component is a symlink, follow it with realpath() and verify
- * the real target stays inside _state.basePath.
+ * the real target stays inside currentRuntime().filesystem.basePath.
  */
 export async function safePathResolved(p: string): Promise<string> {
   const resolved = safePath(p) // Layers 1, 2, 4 (logical check)
 
   // Layer 3: walk each component for symlinks
-  const suffix = resolved.slice(_state.basePath.length + 1)
-  if (!suffix) return resolved // path IS _state.basePath
+  const suffix = resolved.slice(currentRuntime().filesystem.basePath.length + 1)
+  if (!suffix) return resolved // path IS currentRuntime().filesystem.basePath
 
   const segments = suffix.split("/")
-  let current = _state.basePath
+  let current = currentRuntime().filesystem.basePath
 
   for (const segment of segments) {
     current = resolve(current, segment)
@@ -124,8 +120,8 @@ export async function safePathResolved(p: string): Promise<string> {
       if (info.isSymbolicLink()) {
         const real = await realpath(current)
         // Layer 4 re-check on the real path
-        if (!real.startsWith(_state.basePath + "/") && real !== _state.basePath) {
-          throw new Error(`Symlink at "${current.slice(_state.basePath.length + 1)}" points outside the allowed directory`)
+        if (!real.startsWith(currentRuntime().filesystem.basePath + "/") && real !== currentRuntime().filesystem.basePath) {
+          throw new Error(`Symlink at "${current.slice(currentRuntime().filesystem.basePath.length + 1)}" points outside the allowed directory`)
         }
         // Continue walking from the resolved real path
         current = real

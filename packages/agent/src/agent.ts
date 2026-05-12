@@ -112,9 +112,22 @@ export class Agent {
   /**
    * Run the agent with a goal. Returns the final answer.
    *
-   * This is THE agentic loop. Everything else is plumbing.
+   * Wraps the agentic loop in `this.runtime.run(...)` so every tool call
+   * and helper that consults `currentRuntime()` resolves to this Agent's
+   * runtime via AsyncLocalStorage.
    */
-  async run(
+  run(
+    goal: string,
+    resume?: { messages: Message[], iteration: number },
+  ): Promise<string> {
+    return this.runtime.run(() => this.runInternal(goal, resume))
+  }
+
+  /**
+   * The actual agentic loop. Always invoked inside `this.runtime.run(...)`
+   * so `currentRuntime()` inside tool handlers resolves to `this.runtime`.
+   */
+  private async runInternal(
     goal: string,
     resume?: { messages: Message[], iteration: number },
   ): Promise<string> {
