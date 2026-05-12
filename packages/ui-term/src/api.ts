@@ -5,7 +5,7 @@
  * import the kitchen-sink (force-graphs, layouts, sync-recipes, …).
  */
 
-import type { Me, Run, RunDetail, WsEvent } from "./types"
+import type { Me, Run, RunDetail, SseEvent } from "./types"
 
 const BASE = ""
 
@@ -76,8 +76,8 @@ export const api = {
     if (opts?.limit)                 params.set("limit", String(opts.limit))
     if (opts?.after)                 params.set("after", opts.after)
     if (opts?.before)                params.set("before", opts.before)
-    return json<{ events: WsEvent[]; count: number }>(`/api/events/search?${params}`)
-      .catch(() => ({ events: [] as WsEvent[], count: 0 }))
+    return json<{ events: SseEvent[]; count: number }>(`/api/events/search?${params}`)
+      .catch(() => ({ events: [] as SseEvent[], count: 0 }))
   },
 }
 
@@ -88,7 +88,7 @@ export const api = {
  * Browser auto-reconnects; we only need to surface connected/disconnected.
  */
 export function createEventStream(
-  onEvent: (e: WsEvent) => void,
+  onEvent: (e: SseEvent) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
   const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
@@ -97,7 +97,7 @@ export function createEventStream(
   let es: EventSource | null = null
 
   const seen = new Set<string>()
-  function key(e: WsEvent): string {
+  function key(e: SseEvent): string {
     const seq = e.data["seq"] ?? ""
     const kind = e.type === "debug.trace"
       ? ((e.data["entry"] as Record<string, unknown> | undefined)?.["kind"] ?? "")
@@ -105,7 +105,7 @@ export function createEventStream(
     return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}:${kind}:${seq}`
   }
 
-  function dedupe(e: WsEvent): boolean {
+  function dedupe(e: SseEvent): boolean {
     const k = key(e)
     if (seen.has(k)) return false
     seen.add(k)
@@ -123,7 +123,7 @@ export function createEventStream(
     es.onopen = () => onStatus(true)
     es.onmessage = (ev) => {
       try {
-        const env = JSON.parse(ev.data as string) as WsEvent
+        const env = JSON.parse(ev.data as string) as SseEvent
         if (dedupe(env)) onEvent(env)
       } catch { /* ignore malformed */ }
     }

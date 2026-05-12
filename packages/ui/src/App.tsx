@@ -48,7 +48,7 @@ function getPopOutWidget(): { type: WidgetType; runId: string | null } | null {
 export function App() {
   const setConnected = useStore((s) => s.setConnected)
   const connected = useStore((s) => s.connected)
-  const handleWsEvent = useStore((s) => s.handleWsEvent)
+  const handleEvent = useStore((s) => s.handleEvent)
   const setRuns = useStore((s) => s.setRuns)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const setSteps = useStore((s) => s.setSteps)
@@ -134,10 +134,10 @@ export function App() {
   // identity changes so the server re-stamps the new client.
   useEffect(() => {
     const stream = popOut
-      ? createPopoutEventRelay(handleWsEvent, setConnected)
-      : createEventStream(handleWsEvent, setConnected)
+      ? createPopoutEventRelay(handleEvent, setConnected)
+      : createEventStream(handleEvent, setConnected)
     return () => stream.close()
-  }, [handleWsEvent, setConnected, popOut, me?.sessionId, me?.upn])
+  }, [handleEvent, setConnected, popOut, me?.sessionId, me?.upn])
 
   // Load initial runs + auto-select the most recent. Re-runs on identity
   // change so each user only sees runs the server scopes to them.

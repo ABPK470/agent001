@@ -2,25 +2,34 @@
  * AgentRuntime — the per-agent container for state that previously lived
  * as module-level globals in tool and sync files.
  *
+ * One pattern, used everywhere
+ * ----------------------------
+ * Every tool that used to keep configuration in a `let` or a `const _state`
+ * record now reads from `AgentRuntime.current()`. There is no other
+ * mechanism for tool state — no module globals, no singletons, no
+ * thread-locals.
+ *
  * Two tiers of state
  * ------------------
- * Some state is inherently process-wide (mssql connection pools, the Docker
- * shell executor, the catalog cache, the sync event sink the server installs
- * at boot). Other state is inherently per-agent / per-request (the workspace
- * cwd, the per-tool kill signal, the browse-web sessions a single agent
- * spawned, the ask-user resolver a single chat session set up).
+ * Now that multiple runtimes can be alive at once (one per HTTP request,
+ * plus one per delegated child agent), we need to say which slots are
+ * shared across runtimes and which are owned by a single runtime:
  *
- * `AgentRuntime` represents both. Construct one with no parent and you get
- * the **root**: blank slates everywhere. Construct one with a parent (the
- * default — newly created runtimes inherit from the process root) and you
- * get a runtime that:
+ *   - **Tier 1 — process-wide infrastructure**, shared by reference from
+ *     parent → child: mssql connection pools (expensive, multiplexable),
+ *     shell/browser-check executors (boot singletons), the catalog cache
+ *     (expensive to rebuild), the sync sinks the server installs at boot,
+ *     and the browse-web cleanup timer.
+ *   - **Tier 2 — per-runtime / per-request**, fresh in every runtime:
+ *     workspace cwd / basePath / signal, per-tool-call kill signals
+ *     (shell/fetch/browse-web), browse-web sessions (so each agent owns
+ *     its own browser tabs), and the ask-user resolver (each chat session
+ *     has its own UI socket).
  *
- *   - **shares** infrastructure references with its parent (mssql databases
- *     Map, executors, catalog instances, sync sinks, recipes, plans),
- *   - **starts fresh** for per-request slots (browse sessions, kill signals,
- *     ask-user resolver),
- *   - **copies** scalar workspace defaults from the parent so it works
- *     out of the box (cwd, basePath, defaultConnection).
+ * Construct an `AgentRuntime` with no parent (`isRoot: true`) and you get
+ * the **root**: blank slates everywhere, configured by the server at boot.
+ * Construct one with a parent — the default is the process root — and the
+ * tier-1 slots are shared by reference while tier-2 slots start fresh.
  *
  * Looking up the runtime from inside a tool
  * -----------------------------------------

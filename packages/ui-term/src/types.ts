@@ -67,7 +67,7 @@ export interface Me {
 }
 
 /** Raw SSE event envelope — what `/api/events/stream` emits. */
-export interface WsEvent {
+export interface SseEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string

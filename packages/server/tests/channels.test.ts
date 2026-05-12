@@ -266,8 +266,8 @@ describe("MessageQueue", () => {
   let queue: MessageQueue
 
   beforeEach(() => {
-    // Mock broadcast to prevent errors (it imports ws.ts which isn't available in tests)
-    vi.mock("../src/ws.js", () => ({
+    // Mock broadcast to prevent errors in isolated test env.
+    vi.mock("../src/event-broadcaster.js", () => ({
       broadcast: vi.fn(),
     }))
 
@@ -310,7 +310,7 @@ describe("MessageRouter", () => {
   let runId: string
 
   beforeEach(() => {
-    vi.mock("../src/ws.js", () => ({
+    vi.mock("../src/event-broadcaster.js", () => ({
       broadcast: vi.fn(),
     }))
 

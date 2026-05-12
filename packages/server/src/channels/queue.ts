@@ -11,7 +11,7 @@
  *   2. Serializes delivery per (channel, recipient) pair
  *   3. Retries failures with exponential backoff
  *   4. Persists state to SQLite for crash recovery
- *   5. Broadcasts delivery status via WebSocket
+ *   5. Broadcasts delivery status via SSE
  *
  * This is the same pattern OpenClaw uses for multi-platform delivery.
  */

@@ -91,7 +91,7 @@ async function main() {
   await setupEnvironments(_projectRoot)
   configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
   configureSyncOrchestrator(_projectRoot)
-  // Fan sync events out via broadcast(): WS+SSE for live UI, event_log table
+  // Fan sync events out via broadcast(): SSE for live UI, event_log table
   // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
   // for the full list of emitted event types.
   setSyncEventSink((ev) => broadcast({ type: ev.type, data: ev.data }))

@@ -41,7 +41,7 @@
 import { createHmac } from "node:crypto"
 import { getRun, listWebhookDrains, saveEvent } from "./db.js"
 
-export interface WsEvent {
+export interface SseEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string
@@ -66,7 +66,7 @@ export interface SseSink {
 export class EventBroadcaster {
   private readonly sseClients = new Map<symbol, { sink: SseSink; identity: WsClientIdentity }>()
   /** Internal subscribers — notified after every broadcast() call. */
-  private readonly subscribers = new Set<(event: WsEvent) => void>()
+  private readonly subscribers = new Set<(event: SseEvent) => void>()
   /** Tiny LRU of runId → owner. Cleared after this many entries. */
   private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
 
@@ -90,8 +90,8 @@ export class EventBroadcaster {
     return dispose
   }
 
-  broadcast(event: Omit<WsEvent, "timestamp">): void {
-    const msg: WsEvent = {
+  broadcast(event: Omit<SseEvent, "timestamp">): void {
+    const msg: SseEvent = {
       ...event,
       timestamp: new Date().toISOString(),
     }
@@ -144,7 +144,7 @@ export class EventBroadcaster {
    * Used by internal SSE endpoints (e.g. /api/operations/stream) that need
    * to react to events without being a real client.
    */
-  subscribe(fn: (event: WsEvent) => void): () => void {
+  subscribe(fn: (event: SseEvent) => void): () => void {
     this.subscribers.add(fn)
     return () => this.subscribers.delete(fn)
   }
@@ -165,7 +165,7 @@ export class EventBroadcaster {
     return this.sseClients.size
   }
 
-  private async pushToWebhooks(event: WsEvent, json: string): Promise<void> {
+  private async pushToWebhooks(event: SseEvent, json: string): Promise<void> {
     const drains = listWebhookDrains()
     if (drains.length === 0) return
 
@@ -204,7 +204,7 @@ export function addSseClient(sink: SseSink, identity: WsClientIdentity): () => v
   return _default.addSseClient(sink, identity)
 }
 
-export function broadcast(event: Omit<WsEvent, "timestamp">): void {
+export function broadcast(event: Omit<SseEvent, "timestamp">): void {
   _default.broadcast(event)
 }
 
@@ -212,6 +212,6 @@ export function clientCount(): number {
   return _default.clientCount()
 }
 
-export function subscribeToEvents(fn: (event: WsEvent) => void): () => void {
+export function subscribeToEvents(fn: (event: SseEvent) => void): () => void {
   return _default.subscribe(fn)
 }

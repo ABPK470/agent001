@@ -16,7 +16,7 @@
  *
  * Why both go through one sink: it lets the server wire a single
  * `setSyncEventSink(broadcast)` and have everything land in the same place
- * (WS/SSE clients, event_log table, webhook drains). No second pipe.
+ * (SSE clients, event_log table, webhook drains). No second pipe.
  *
  * The agent package can't import server-side `broadcast()` directly (that
  * would create a cycle), so the server injects the sink at startup.

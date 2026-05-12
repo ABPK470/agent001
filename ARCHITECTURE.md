@@ -49,7 +49,7 @@
 agent001 is three things in one:
 
 1. **An AI agent** (`packages/agent`) — an LLM (GPT-4o, Claude, GitHub Copilot, etc.) with tools (filesystem, shell, web fetch, browser testing, delegation) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
-2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), 3-tier persistent memory, effect tracking with atomic rollback, Docker sandbox execution, trajectory replay & validation, multi-platform messaging (WhatsApp, Messenger), real-time WebSocket updates, and a comprehensive REST API.
+2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), 3-tier persistent memory, effect tracking with atomic rollback, Docker sandbox execution, trajectory replay & validation, multi-platform messaging (WhatsApp, Messenger), real-time SSE updates, and a comprehensive REST API.
 3. **A real-time dashboard** (`packages/ui`) — a React 19 + Tailwind CSS web UI with 11 draggable widgets (chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, run status, command center, trajectory replay), notifications with action buttons, and a mobile-responsive layout.
 
 The key insight: **the agent runs _on_ a governance engine embedded within it.** Every time the LLM calls a tool, that call passes through the governance layer before the tool actually runs. This gives you:
@@ -57,7 +57,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 - An **immutable audit trail** of every action the AI took
 - **Policy enforcement** — block or require approval for dangerous operations
 - **Run tracking** — the entire agent session as a first-class AgentRun with Steps
-- **Domain events** — every state change emits an event for monitoring/WebSocket
+- **Domain events** — every state change emits an event for monitoring/SSE
 - **Execution metrics** — timing, success rates, failure counts per tool
 - **Tool retry + timeouts** — exponential backoff on transient failures, 60s timeout
 - **Effect tracking** — every file write/delete captured with pre-snapshots for atomic rollback
@@ -71,7 +71,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │              packages/server (Fastify + SQLite)               │
-│   orchestrator.ts  →  routes/*  →  db.ts  →  ws.ts          │
+│   orchestrator.ts  →  routes/*  →  db.ts  →  event-broadcaster.ts │
 │   Start/cancel/resume runs, persist, broadcast events        │
 └──────────────────────────┬──────────────────────────────────┘
                            │ imports @agent001/agent
@@ -101,7 +101,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 ┌──────────────────────────┴──────────────────────────────────┐
 │                   packages/ui (React 19 + Vite)              │
 │   11 widgets · notifications · graph viz · grid layout       │
-│   WebSocket subscription · Zustand state · Tailwind CSS      │
+│   SSE subscription · Zustand state · Tailwind CSS              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -168,7 +168,7 @@ agent001/                          ← npm workspaces monorepo root
 │   │   ├── orchestrator.ts        ← AgentOrchestrator — manages run lifecycle (start, track, resume, cancel, recover)
 │   │   ├── db.ts                  ← SQLite persistence (~12 core tables + channel tables + memory tables + effect tables)
 │   │   ├── tools.ts               ← tool registry — resolves tool names to agent tool implementations
-│   │   ├── ws.ts                  ← WebSocket broadcast — real-time event distribution to UI
+│   │   ├── event-broadcaster.ts ← SSE broadcast — real-time event distribution to UI
 │   │   ├── memory.ts              ← 3-tier persistent memory (working/episodic/semantic + procedural), FTS5 + vector search
 │   │   ├── effects.ts             ← effect tracking + compensation log — pre-snapshots, SHA-256 hashing, atomic rollback
 │   │   ├── sandbox.ts             ← Docker sandbox — isolated container execution with watchdog lifecycle
@@ -210,7 +210,7 @@ agent001/                          ← npm workspaces monorepo root
     └── src/
         ├── main.tsx               ← React entry point
         ├── App.tsx                ← root component — toolbar, canvas, modals
-        ├── api.ts                 ← HTTP client + WebSocket subscription to server
+        ├── api.ts                 ← HTTP client + SSE subscription to server
         ├── store.ts               ← Zustand store — views, runs, widgets, logs, audit, notifications
         ├── types.ts               ← Run, Step, AuditEntry, TraceEntry, WidgetType, Notification, RollbackResult/Preview
         ├── util.ts                ← randomId, timeAgo, truncate, formatMs, statusColor
@@ -249,8 +249,8 @@ agent001/                          ← npm workspaces monorepo root
 
 **Why three packages?** Separation of concerns:
 - **agent** — pure TypeScript, zero runtime dependencies. The LLM loop + governance engine + tools (8 built-in). Can run standalone via CLI or be imported as a library.
-- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + WebSocket layer. Imports `@agent001/agent`.
-- **ui** — the visual interface. 11 draggable widgets including a command center and trajectory debugger. Connects to the server via HTTP + WebSocket. No direct dependency on the agent package.
+- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + SSE event stream. Imports `@agent001/agent`.
+- **ui** — the visual interface. 11 draggable widgets including a command center and trajectory debugger. Connects to the server via HTTP + SSE. No direct dependency on the agent package.
 
 ---
 
@@ -266,7 +266,7 @@ npm run dev
 # → UI on http://localhost:5179
 ```
 
-Open the browser. You see a dashboard with draggable widgets — chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, command center, trajectory replay. Type a goal into the Agent Chat widget. The server starts an agent run, and results stream in real-time via WebSocket.
+Open the browser. You see a dashboard with draggable widgets — chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, command center, trajectory replay. Type a goal into the Agent Chat widget. The server starts an agent run, and results stream in real-time via SSE.
 
 ### What You See (Web Dashboard)
 
@@ -335,10 +335,10 @@ AGENT_MODE=raw OPENAI_API_KEY=sk-... npm start -w packages/agent
 
 1. User types goal in Agent Chat widget
 2. UI calls `POST /api/runs` with `{ goal, agentId? }`
-3. Server's `orchestrator.startRun()` creates run in SQLite, broadcasts `run.queued` via WebSocket
+3. Server's `orchestrator.startRun()` creates run in SQLite, broadcasts `run.queued` via SSE
 4. Orchestrator creates engine services, wraps tools with governance + effect tracking, builds memory-augmented system prompt, starts agent in background
 5. Each tool call: governance intercepts → policy check → audit → retry/timeout → execute → record effects → record metrics
-6. Trace events, step updates, and logs stream to UI via WebSocket
+6. Trace events, step updates, and logs stream to UI via SSE
 7. On completion: run saved, memories extracted (episodic + procedural), notification created, `run.completed` broadcast
 8. UI updates RunHistory, StepTimeline, AuditTrail, ToolStats, CommandCenter — all in real-time
 
@@ -741,7 +741,7 @@ Re-exports everything from the engine subdirectory: all models, enums, events, e
 
 The server package (`packages/server`) adds persistence, orchestration, messaging, and a REST API on top of the agent. It imports `@agent001/agent` as a workspace dependency.
 
-**Runtime dependencies**: Fastify v5, better-sqlite3, @fastify/cors, @fastify/static, @fastify/websocket, dotenv.
+**Runtime dependencies**: Fastify v5, better-sqlite3, @fastify/cors, @fastify/static, dotenv.
 
 <a id="server-core-files"></a>
 ### Core Server Files
@@ -754,11 +754,11 @@ Creates the Fastify instance, registers all route modules, runs database migrati
 
 `AgentOrchestrator` — the central coordinator for all agent runs:
 
-- **`startRun(goal, agentId?)`** — creates run in DB, resolves tools + LLM, wraps with governance + effect tracking, builds memory-augmented system prompt, starts agent in background. Broadcasts trace events via WebSocket.
+- **`startRun(goal, agentId?)`** — creates run in DB, resolves tools + LLM, wraps with governance + effect tracking, builds memory-augmented system prompt, starts agent in background. Broadcasts trace events via SSE.
 - **`cancelRun(runId)`** — aborts a running agent via AbortController signal.
 - **`resumeRun(runId)`** — resumes from checkpoint with idempotency guards (prevents duplicates).
 - **`recoverStaleRuns()`** — on startup, finds interrupted runs, marks as crashed, auto-resumes from checkpoints.
-- **`createNotification(opts)`** — saves to DB + broadcasts via WebSocket. Includes action buttons (Review, Resume, Rollback).
+- **`createNotification(opts)`** — saves to DB + broadcasts via SSE. Includes action buttons (Review, Resume, Rollback).
 - **`wrapWithEffects(tools)`** — intercepts `write_file` and `run_command` to capture file effects with pre-snapshots for rollback.
 
 Tracks active runs in a `Map<runId, { controller, services, ... }>`. Wires domain event subscriptions to broadcast step updates, trace entries, and notifications in real-time.
@@ -869,9 +869,9 @@ Maps tool names to agent tool implementations. Resolves which tools an agent run
 
 Eight built-in tools: `read_file`, `write_file`, `list_directory`, `run_command`, `fetch_url`, `browser_check`, `think`, plus `delegate`/`delegate_parallel` (added dynamically by orchestrator).
 
-#### `src/ws.ts` — WebSocket Broadcast
+#### `src/event-broadcaster.ts` — SSE Broadcast
 
-`broadcast(event)` — sends a JSON event to all connected WebSocket clients. Used by the orchestrator to stream trace entries, run status changes, step updates, and notifications in real-time.
+`broadcast(event)` — sends a JSON event to all connected SSE clients (`GET /api/events/stream`). Used by the orchestrator to stream trace entries, run status changes, step updates, and notifications in real-time.
 
 #### `src/memory.ts` — 3-Tier Persistent Memory
 
@@ -999,7 +999,7 @@ The `channels/` subdirectory implements inbound/outbound messaging for WhatsApp 
 <a id="the-ui-package"></a>
 ## The UI Package
 
-The UI package (`packages/ui`) is a React 19 + Tailwind CSS v4 web dashboard built with Vite 6. It connects to the server via HTTP + WebSocket for real-time updates.
+The UI package (`packages/ui`) is a React 19 + Tailwind CSS v4 web dashboard built with Vite 6. It connects to the server via HTTP + SSE for real-time updates.
 
 **Key dependencies**: React 19, Zustand 5 (state), react-grid-layout (draggable widgets), react-force-graph-2d (graph visualization), lucide-react (icons), Tailwind CSS v4.
 
@@ -1009,8 +1009,8 @@ The UI package (`packages/ui`) is a React 19 + Tailwind CSS v4 web dashboard bui
 | File | Purpose |
 |------|---------|
 | `App.tsx` | Root component — renders Toolbar, Canvas (desktop) or MobileNav (mobile), WidgetModal |
-| `store.ts` | Zustand global store — views, runs, widgets, logs, audit, notifications, modal state. Handles WebSocket events. |
-| `api.ts` | HTTP client (raw fetch) + `createWs()` WebSocket subscription factory + rollback/trajectory API functions |
+| `store.ts` | Zustand global store — views, runs, widgets, logs, audit, notifications, modal state. Handles SSE events. |
+| `api.ts` | HTTP client (raw fetch) + `createSse()` SSE subscription factory + rollback/trajectory API functions |
 | `types.ts` | TypeScript interfaces: `Run`, `Step`, `AuditEntry`, `TraceEntry`, `WidgetType`, `Notification`, `RollbackResult`, `RollbackPreview`, etc. |
 | `util.ts` | Helpers: `randomId()`, `timeAgo()`, `truncate()`, `formatMs()`, `statusColor()` |
 | `dashboardSync.ts` | Auto-saves dashboard layout to server (2s debounce), restores on startup |
@@ -1079,14 +1079,14 @@ packages/server/src/orchestrator.ts    ← The primary consumer
     │   - Record audit + metrics (AuditService, Learner)
     │
     ▼
-packages/ui/src/api.ts                 ← HTTP + WebSocket client
+packages/ui/src/api.ts                 ← HTTP + SSE client
     │
     │ connects to server at localhost:3001:
     │   - REST API: fetch runs, agents, layouts, policies, notifications
-    │   - WebSocket: real-time trace events, run status updates, notifications
+    │   - SSE: real-time trace events, run status updates, notifications
 ```
 
-**The agent package has zero runtime dependencies.** It exposes pure TypeScript — no framework, no database, no HTTP. The server adds infrastructure (Fastify, SQLite, WebSocket). The UI adds presentation (React, Tailwind).
+**The agent package has zero runtime dependencies.** It exposes pure TypeScript — no framework, no database, no HTTP. The server adds infrastructure (Fastify, SQLite, SSE). The UI adds presentation (React, Tailwind).
 
 ### The `governance.ts` Composition Layer
 
@@ -1118,22 +1118,22 @@ The server's `AgentOrchestrator` is the orchestration layer:
 - Creates `AgentRun` via engine functions (`createRun`, state transitions)
 - Persists to SQLite (runs, checkpoints, logs tables)
 - Wraps tools with governance + retry + timeout
-- Streams events to WebSocket clients
+- Streams events to SSE clients
 - Handles resume/cancel/crash-recovery lifecycle
 
 ```
 Server (orchestrator.ts)
   ├─ imports: createRun, governTool, runGovernedMode from @agent001/agent
-  ├─ adds: SQLite persistence, WebSocket broadcast, checkpoint/resume
+  ├─ adds: SQLite persistence, SSE broadcast, checkpoint/resume
   └─ exposes: REST API (/api/runs, /api/agents, etc.)
 ```
 
 ### UI → Server Integration
 
-The UI communicates exclusively through HTTP + WebSocket:
+The UI communicates exclusively through HTTP + SSE:
 - `api.ts` — fetch wrapper for all REST endpoints
-- `createWs()` — WebSocket connection with auto-reconnect
-- `store.ts` — Zustand store processes WebSocket events to update React state
+- `createEventStream()` — SSE connection (browser `EventSource`) with auto-reconnect
+- `store.ts` — Zustand store processes SSE events to update React state
 
 ```
 UI (store.ts)
@@ -1190,7 +1190,7 @@ orchestrator.startRun(goal, agentId):
   → governedTools = tools.map(t => governTool(t, services, state))
   → wrapWithEffects(governedTools)                 ← intercept writes for rollback
   → buildMemoryContext(goal)                       ← FTS5 search for relevant memories
-  → subscribe domain events → broadcast via WebSocket
+  → subscribe domain events → broadcast via SSE
   → agent = new Agent(llm, governedTools, config)
   → spawn async: agent.run(goal)                  ← runs in background
   → return { runId }                               ← immediate HTTP response
@@ -1210,7 +1210,7 @@ agent.run(goal):
     → checkpoint after each iteration              ← for crash recovery
 ```
 
-#### 4. Real-Time Updates via WebSocket
+#### 4. Real-Time Updates via SSE
 
 ```
 As the agent runs, the orchestrator broadcasts events:
@@ -1621,7 +1621,7 @@ Skipped   Blocked  Failed → Running (retry)
 
 **Where it's applied**:
 - Governance wrapper publishes `runStarted`, `stepCompleted`, `runFailed`, etc. for agent tool calls
-- Server orchestrator subscribes to events and broadcasts them via WebSocket
+- Server orchestrator subscribes to events and broadcasts them via SSE
 - `EventBus.subscribe("run.completed", handler)` — subscribers are decoupled from publishers
 
 **Why it matters**: Adding monitoring, webhooks, or analytics doesn't require changing the governance layer. Subscribe to events from outside.
@@ -1807,7 +1807,7 @@ The tool call is currently blocked (returns the policy deny message to the agent
 | POST | `/api/notifications/read-all` | Mark all notifications read |
 | POST | `/api/notifications/:id/action` | Execute a notification action (resume-run, cancel-run, view-run, rollback-run) |
 
-**Real-time delivery**: When a notification is created via `createNotification()`, it is both persisted to SQLite and broadcast over WebSocket as a `"notification"` event. The Zustand store (`handleWsEvent`) picks this up and adds it to `notifications[]` + increments `unreadCount`.
+**Real-time delivery**: When a notification is created via `createNotification()`, it is both persisted to SQLite and broadcast over SSE as a `"notification"` event. The Zustand store (`handleEvent`) picks this up and adds it to `notifications[]` + increments `unreadCount`.
 
 **Notification types**:
 | Type | When | Actions |
@@ -2192,7 +2192,7 @@ Combined with `echoTool()` (returns its input) and `failingTool()` (always throw
 |----------|-------|----------------|
 | CRUD | 4 | Save, list, mark-read, mark-all-read, unread-count |
 | Actions | 3 | Resume-run, cancel-run, view-run action execution |
-| WebSocket | 3 | Real-time broadcast, notification payload shape, type filtering |
+| SSE | 3 | Real-time broadcast, notification payload shape, type filtering |
 
 ### Running Tests
 
@@ -2214,7 +2214,7 @@ npm test -w packages/server
 
 ```
 packages/ui (React + Tailwind)
-    │  HTTP + WebSocket to
+    │  HTTP + SSE to
     ▼
 packages/server (Fastify + SQLite)
     │  imports @agent001/agent
@@ -2242,4 +2242,4 @@ Governed Tools                  Domain types, services, adapters
 Raw Tools (filesystem, shell, fetch, think)
 ```
 
-**The dependency rule**: inner layers never depend on outer layers. The engine subdirectory has zero imports from governance, agent, server, or UI. Governance depends on the engine. The agent depends on governance (through tool wrapping). The server depends on the agent package. The UI depends only on the server's HTTP/WebSocket API.
+**The dependency rule**: inner layers never depend on outer layers. The engine subdirectory has zero imports from governance, agent, server, or UI. Governance depends on the engine. The agent depends on governance (through tool wrapping). The server depends on the agent package. The UI depends only on the server's HTTP/SSE API.
