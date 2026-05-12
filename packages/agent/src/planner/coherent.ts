@@ -1,5 +1,5 @@
-import { canonicalizeRelative } from "../internal/paths.js"
-import type { ToolCallRecord } from "../recovery/recovery.js"
+import { canonicalizeRelative } from "../internal/index.js"
+import type { ToolCallRecord } from "../recovery/index.js"
 import type { Message } from "../types.js"
 import {
   asNonEmptyString,

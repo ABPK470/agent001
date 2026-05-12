@@ -6,7 +6,7 @@
  * @module
  */
 
-import { executeToolWithTimeout } from "../../tool-helpers/tool-utils.js";
+import { executeToolWithTimeout } from "../../tool-helpers/index.js";
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../types.js";
 
 export async function executeWithKillManager(

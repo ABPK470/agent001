@@ -9,7 +9,7 @@
  */
 
 import { type Transaction } from "mssql"
-import { getPool } from "../../tools/mssql/index.js"
+import { getPool } from "../../tools/index.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 

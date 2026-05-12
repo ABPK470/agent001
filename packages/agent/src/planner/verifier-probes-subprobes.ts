@@ -5,7 +5,7 @@
  * @module
  */
 
-import { detectPlaceholderPatterns } from "../governance/code-quality.js"
+import { detectPlaceholderPatterns } from "../governance/index.js"
 import type { Tool } from "../types.js"
 import type { SubagentTaskStep } from "./types.js"
 import {

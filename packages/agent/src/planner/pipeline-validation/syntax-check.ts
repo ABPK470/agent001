@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../recovery/recovery.js"
+import type { ToolCallRecord } from "../../recovery/index.js"
 import type { SubagentStepValidationContext } from "../pipeline-repair.js"
 import type { SubagentTaskStep } from "../types.js"
 

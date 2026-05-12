@@ -35,7 +35,7 @@
  * live UAT mymi DB). All earlier hash-column logic was based on a false assumption.
  */
 
-import { getPool } from "../tools/mssql/index.js"
+import { getPool } from "../tools/index.js"
 import { fetchPkHash, fetchTableColumns } from "./diff-engine/columns.js"
 import { detectScopeMisattribution } from "./diff-engine/conflicts.js"
 import { fetchSamples, fetchUpdateSamples } from "./diff-engine/samples.js"

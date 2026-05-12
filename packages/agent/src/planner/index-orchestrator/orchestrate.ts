@@ -6,7 +6,7 @@
  * @module
  */
 
-import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../../delegation/escalation.js"
+import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../../delegation/index.js"
 import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import type { DelegateFn } from "../pipeline.js"

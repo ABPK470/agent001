@@ -10,7 +10,7 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../recovery/recovery.js"
+import type { ToolCallRecord } from "../recovery/index.js"
 import type {
     DeterministicToolStep,
     PipelineStepResult,

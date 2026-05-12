@@ -7,7 +7,7 @@
  * @module
  */
 
-import { getPool } from "../../tools/mssql/index.js"
+import { getPool } from "../../tools/index.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { qtable } from "./db-helpers.js"

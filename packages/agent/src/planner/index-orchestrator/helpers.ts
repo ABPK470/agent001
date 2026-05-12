@@ -3,7 +3,7 @@
  * @module
  */
 
-import type { DelegationTrajectoryRecord } from "../../delegation/delegation-learning.js"
+import type { DelegationTrajectoryRecord } from "../../delegation/index.js"
 import { synthesizeAnswer } from "../index-synthesize.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { PipelineResult, Plan, PlannerRepairCompatibilityMode, VerifierDecision } from "../types.js"

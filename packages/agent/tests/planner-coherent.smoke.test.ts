@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { parseCoherentSolutionBundle } from "../src/planner/coherent.js"
+import { parseCoherentSolutionBundle } from "../src/planner/index.js"
 
 describe("parseCoherentSolutionBundle smoke", () => {
   it("returns null bundle with diagnostics on non-JSON input", () => {

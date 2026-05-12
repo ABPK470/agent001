@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { ExecutionEnvelope, SubagentTaskStep } from "../../planner/types.js"
+import type { ExecutionEnvelope, SubagentTaskStep } from "../../planner/index.js"
 
 export function buildPlanChildGoal(
   step: SubagentTaskStep,

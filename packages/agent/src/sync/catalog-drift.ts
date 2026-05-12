@@ -9,7 +9,7 @@
  * Restricted to schemas {core, coreArchive, gate, gateArchive, master}.
  */
 
-import { getPool } from "../tools/mssql/index.js"
+import { getPool } from "../tools/index.js"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean

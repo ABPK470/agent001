@@ -12,7 +12,7 @@ import {
     materializeCoherentSolutionBundle,
     parseCoherentSolutionBundle,
     summarizeCoherentVerifierDecision,
-} from "../planner/coherent.js"
+} from "../planner/index.js"
 import type { Message } from "../types.js"
 
 export async function attemptCoherentGeneration(

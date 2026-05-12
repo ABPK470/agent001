@@ -11,7 +11,7 @@
 import type { AgentLoopState } from "./agent-loop-state.js"
 import { checkCoherentVerification } from "./completion-guards/check-coherent.js"
 import type { PlannerContext } from "../planner/index.js"
-import type { VerifierDecision } from "../planner/types.js"
+import type { VerifierDecision } from "../planner/index.js"
 import type { AgentConfig, Message, Tool } from "../types.js"
 
 /** Result from a completion guard check. */

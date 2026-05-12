@@ -6,7 +6,7 @@
  * @module
  */
 
-import { asNonEmptyString as _asNonEmptyString, isRecord as _isRecord } from "../internal/json.js"
+import { asNonEmptyString as _asNonEmptyString, isRecord as _isRecord } from "../internal/index.js"
 import { isValidArtifactPath } from "./generate.js"
 import type {
     CoherentSharedContract,

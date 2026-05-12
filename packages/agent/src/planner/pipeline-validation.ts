@@ -7,15 +7,15 @@
  * @module
  */
 
-import { detectInconsistentBranches, detectPlaceholderPatterns } from "../governance/code-quality.js"
+import { detectInconsistentBranches, detectPlaceholderPatterns } from "../governance/index.js"
 import {
     buildContractSpec,
     getCorrectionGuidance,
     specRequiresFileMutationEvidence,
     specRequiresSuccessfulToolEvidence,
     validateDelegatedOutputContract,
-} from "../delegation/delegation-validation.js"
-import type { ToolCallRecord } from "../recovery/recovery.js"
+} from "../delegation/index.js"
+import type { ToolCallRecord } from "../recovery/index.js"
 import type { Tool } from "../types.js"
 import {
     type SubagentStepValidationContext,

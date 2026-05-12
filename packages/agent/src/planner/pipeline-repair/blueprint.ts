@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../recovery/recovery.js"
-import { normalizeToolExecutionOutput } from "../../tool-helpers/tool-utils.js"
+import type { ToolCallRecord } from "../../recovery/index.js"
+import { normalizeToolExecutionOutput } from "../../tool-helpers/index.js"
 import type { Tool } from "../../types.js"
 import {
     buildBlueprintSeedTemplate,

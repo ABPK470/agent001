@@ -9,9 +9,9 @@ import { truncateMessages } from "../context/index.js"
 import {
     buildCoherentVerificationPipelineResult,
     summarizeCoherentVerifierDecision,
-} from "../planner/coherent.js"
-import type { VerifierDecision } from "../planner/types.js"
-import { verify } from "../planner/verifier.js"
+} from "../planner/index.js"
+import type { VerifierDecision } from "../planner/index.js"
+import { verify } from "../planner/index.js"
 import type { ToolCallRecord } from "../tool-helpers/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 

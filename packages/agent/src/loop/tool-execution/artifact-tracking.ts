@@ -8,7 +8,7 @@
  */
 
 import type { AgentLoopState } from "../agent-loop-state.js"
-import { executeToolWithTimeout } from "../../tool-helpers/tool-utils.js"
+import { executeToolWithTimeout } from "../../tool-helpers/index.js"
 import { normalizeArtifactPath } from "./types.js"
 
 export function recordBlockedArtifactFailure(

@@ -9,7 +9,7 @@ import {
     buildCoherentPlannerEscalationGoal,
     buildCoherentRepairInstructions,
     summarizeCoherentVerifierDecision,
-} from "../../planner/coherent.js"
+} from "../../planner/index.js"
 import { executePlannerPath } from "../../planner/index.js"
 
 export async function checkCoherentVerification(

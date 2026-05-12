@@ -26,6 +26,7 @@
     "build": "node scripts/build.mjs",
     "eval:reliability": "node scripts/reliability-eval.mjs",
     "lint": "npm run lint --workspaces",
+    "lint:arch": "node scripts/lint-arch.mjs",
     "pack:test": "npm run build && npm pack"
   },
   "dependencies": {

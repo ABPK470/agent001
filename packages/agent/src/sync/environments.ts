@@ -21,7 +21,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { getMssqlConfig, getPool } from "../tools/mssql/index.js"
+import { getMssqlConfig, getPool } from "../tools/index.js"
 
 export type EnvRole = "source" | "target" | "both"
 

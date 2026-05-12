@@ -12,7 +12,7 @@
  */
 
 import sqlMod from "mssql"
-import { getPool } from "../../tools/mssql/index.js"
+import { getPool } from "../../tools/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { getEnvironment } from "../environments.js"
 import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"

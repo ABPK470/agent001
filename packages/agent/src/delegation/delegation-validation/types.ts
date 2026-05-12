@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../tool-helpers/tool-result.js"
+import type { ToolCallRecord } from "../../tool-helpers/index.js"
 
 export const DELEGATION_OUTPUT_VALIDATION_CODES = [
   "empty_output",
