@@ -7,21 +7,21 @@
  * @module
  */
 
-import type { LLMClient, Message, Tool } from "../types.js"
+import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
     PipelineResult,
     Plan,
     SubagentTaskStep,
     VerifierDecision,
     VerifierStepAssessment,
-} from "./types.js"
+} from "../types.js"
 import type { StepSpecEvidence } from "./verifier-blueprint.js"
-import { buildFallbackDecision, parseLLMVerification } from "./verifier-helpers.js"
+import { buildFallbackDecision, parseLLMVerification } from "../verifier-helpers.js"
 import {
     analyzeCodeStructure,
     wrapArtifactWithStructureAnalysis,
-} from "./verifier-llm/code-structure.js"
-export type { CodeStructureAnalysis } from "./verifier-llm/code-structure.js"
+} from "../verifier-llm/code-structure.js"
+export type { CodeStructureAnalysis } from "../verifier-llm/code-structure.js"
 export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
 
 // ============================================================================

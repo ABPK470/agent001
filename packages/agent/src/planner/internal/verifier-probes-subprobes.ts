@@ -5,9 +5,9 @@
  * @module
  */
 
-import { detectPlaceholderPatterns } from "../governance/index.js"
-import type { Tool } from "../types.js"
-import type { SubagentTaskStep } from "./types.js"
+import { detectPlaceholderPatterns } from "../../governance/index.js"
+import type { Tool } from "../../types.js"
+import type { SubagentTaskStep } from "../types.js"
 import {
     detectCodeCorruption,
     detectHtmlCorruption,
@@ -15,7 +15,7 @@ import {
     detectPotentialUseBeforeDeclaration,
     detectUnresolvedBareHelpers,
     detectUnresolvedMethods,
-} from "./verifier-helpers.js"
+} from "../verifier-helpers.js"
 import { executeToolForText, readArtifactContent } from "./verifier-io.js"
 
 // ============================================================================

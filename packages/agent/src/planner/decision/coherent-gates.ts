@@ -9,7 +9,7 @@ import {
     EXISTING_CODE_COUPLING_RE,
     EXTERNAL_SERVICE_RE,
     LARGE_GREENFIELD_BOOTSTRAP_RE,
-} from "../decision-patterns.js"
+} from "../internal/decision-patterns.js"
 import {
     type RequestSignals,
     type RoutingAxes,

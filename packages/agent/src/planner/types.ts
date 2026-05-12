@@ -22,7 +22,7 @@ export type {
     PlannerNeedLevel,
     PlannerRoute,
     RoutingConfidence
-} from "./types-decision.js"
+} from "./internal/types-decision.js"
 export type {
     ArtifactRelation,
     ChildRepairGoal,
@@ -33,14 +33,14 @@ export type {
     StepRole,
     VerificationMode,
     WorkflowStepContract
-} from "./types-execution.js"
+} from "./internal/types-execution.js"
 
 // ============================================================================
 // Plan steps
 // ============================================================================
 
-import type { PlannerCoherentBootstrap, PlannerRoute } from "./types-decision.js"
-import type { ArtifactRelation, ExecutionEnvelope, WorkflowStepContract } from "./types-execution.js"
+import type { PlannerCoherentBootstrap, PlannerRoute } from "./internal/types-decision.js"
+import type { ArtifactRelation, ExecutionEnvelope, WorkflowStepContract } from "./internal/types-execution.js"
 
 /**
  * A deterministic tool step — exact tool call with known arguments.
@@ -177,4 +177,4 @@ export interface PlanDiagnostic {
 }
 
 
-export * from "./types-pipeline.js"
+export * from "./internal/types-pipeline.js"

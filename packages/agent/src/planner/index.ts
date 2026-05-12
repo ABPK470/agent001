@@ -25,13 +25,13 @@ export type { ValidationResult } from "./validate.js"
 export { runDeterministicProbes, runLLMVerification, verify } from "./verifier.js"
 
 // Additional public symbols (previously imported directly by tests / other clusters).
-export * from "./coherent.js"
 export { parseBlueprintContractBlock } from "./blueprint-contract.js"
+export * from "./coherent.js"
+export { isValidArtifactPath } from "./generate-parse/helpers.js"
+export { isGibberishIssue } from "./pipeline-validation.js"
 export { compilePlannerRuntime } from "./runtime-model.js"
 export { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "./verification-model.js"
-export { isGibberishIssue } from "./pipeline-validation.js"
 export { isLLMGibberish } from "./verifier-helpers.js"
-export { isValidArtifactPath } from "./generate-parse/helpers.js"
 
 // Platform-error helpers and failure polishing (used by server + lib.ts barrel).
 export * from "./platform-errors.js"

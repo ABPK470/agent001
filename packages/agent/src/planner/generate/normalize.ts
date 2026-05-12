@@ -5,7 +5,7 @@
  * @module
  */
 
-import { parsePlanFromResponse } from "../generate-parse.js"
+import { parsePlanFromResponse } from "../internal/generate-parse.js"
 import type { Plan, PlanStep, SubagentTaskStep } from "../types.js"
 
 /**

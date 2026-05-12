@@ -204,4 +204,4 @@ export function mostFrequent(items: readonly string[]): string | undefined {
 }
 
 // Re-export remediation helpers for backwards compatibility
-export { inferOutputDir, remediateValidationErrors } from "./index-remediate.js"
+export { inferOutputDir, remediateValidationErrors } from "./internal/index-remediate.js"

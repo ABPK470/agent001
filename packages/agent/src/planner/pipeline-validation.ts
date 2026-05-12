@@ -21,7 +21,7 @@ import {
     type SubagentStepValidationContext,
     type SubagentValidationFailure,
     validateBlueprintStepCompletion
-} from "./pipeline-repair.js"
+} from "./internal/pipeline-repair.js"
 import type {
     SubagentTaskStep
 } from "./types.js"

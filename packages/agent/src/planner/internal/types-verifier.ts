@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { CoherentSharedContract, CoherentSystemInvariant } from "./types.js"
+import type { CoherentSharedContract, CoherentSystemInvariant } from "../types.js"
 
 // ============================================================================
 // Verifier

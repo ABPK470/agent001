@@ -226,4 +226,4 @@ export {
 } from "./verifier-helpers/method-references.js"
 
 
-export * from "./verifier-helpers-dom.js"
+export * from "./internal/verifier-helpers-dom.js"

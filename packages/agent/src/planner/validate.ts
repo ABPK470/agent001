@@ -20,7 +20,7 @@ import {
     validatePathConsistency,
     validateSharedDataContract,
     validateVisualCompleteness,
-} from "./validate-checks.js"
+} from "./internal/validate-checks.js"
 import {
     validateArtifactOwnership,
     validateStepContracts,

@@ -7,7 +7,7 @@
 
 import type { Tool } from "../../types.js"
 import type { SubagentTaskStep } from "../types.js"
-import { executeToolForText } from "../verifier-io.js"
+import { executeToolForText } from "../internal/verifier-io.js"
 
 export interface BrowserCheckOutcome {
   passed: boolean

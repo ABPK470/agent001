@@ -7,7 +7,7 @@
  * @module
  */
 
-import { compilePlannerRuntime } from "./runtime-model.js"
+import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
     Plan,
     SubagentTaskStep,
@@ -16,7 +16,7 @@ import type {
     VerifierIssueSeverity,
     VerifierOwnershipMode,
     VerifierRepairClass,
-} from "./types.js"
+} from "../types.js"
 
 export function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))]

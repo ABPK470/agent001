@@ -13,7 +13,7 @@ import {
     parseBootstrapEdges,
     parseBootstrapInvariants,
     parseJsonObject,
-} from "../generate-prompts.js"
+} from "../internal/generate-prompts.js"
 import type { PlanDiagnostic, PlannerCoherentBootstrap } from "../types.js"
 
 export interface CoherentBootstrapGenerationContext {

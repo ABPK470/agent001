@@ -6,7 +6,7 @@
  */
 
 import type { VerifierDecision, VerifierSystemCheck } from "../types.js"
-import { uniqueStrings } from "../verification-inference.js"
+import { uniqueStrings } from "../internal/verification-inference.js"
 
 export function buildSystemChecks(decision: VerifierDecision): VerifierSystemCheck[] {
   const checks: VerifierSystemCheck[] = []

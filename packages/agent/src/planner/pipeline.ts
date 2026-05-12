@@ -17,14 +17,14 @@
 
 import type { ToolCallRecord } from "../recovery/index.js"
 import type { Tool } from "../types.js"
-import { injectPriorContext } from "./pipeline-context.js"
+import { injectPriorContext } from "./internal/pipeline-context.js"
 import {
     applyPostExecutionReconciliation,
     collectAcceptedArtifacts,
     getRepairTaskForStep,
     getUnresolvedAcceptanceBlockers,
-} from "./pipeline-repair.js"
-import { executeStep } from "./pipeline-steps.js"
+} from "./internal/pipeline-repair.js"
+import { executeStep } from "./internal/pipeline-steps.js"
 import { buildGraph, buildResult, executeToolForText } from "./pipeline/graph.js"
 import { buildRepairStep } from "./pipeline/repair-step.js"
 import { compilePlannerRuntime } from "./runtime-model.js"

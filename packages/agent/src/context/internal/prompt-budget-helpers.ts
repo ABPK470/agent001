@@ -5,8 +5,8 @@
  * @module
  */
 
-import { SECTION_ORDER, type PromptBudgetCaps } from "./prompt-budget-types.js"
-import type { Message, PromptBudgetSection } from "../types.js"
+import { SECTION_ORDER, type PromptBudgetCaps } from "../prompt-budget-types.js"
+import type { Message, PromptBudgetSection } from "../../types.js"
 
 // ── Working entry ─────────────────────────────────────────────────
 

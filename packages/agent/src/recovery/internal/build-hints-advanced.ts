@@ -8,7 +8,7 @@
  * @module
  */
 
-import { SHELL_BUILTIN_COMMANDS } from "../constants.js"
+import { SHELL_BUILTIN_COMMANDS } from "../../constants.js"
 import {
     commandBasename,
     extractCompilerDiagnosticLocation,
@@ -30,8 +30,8 @@ import {
     tryTestRunnerHint,
     type AdvancedHintContext,
 } from "./build-advanced.js"
-import type { ToolCallRecord } from "../tool-helpers/index.js"
-import { extractToolFailureText, parseToolResultObject } from "../tool-helpers/index.js"
+import type { ToolCallRecord } from "../../tool-helpers/index.js"
+import { extractToolFailureText, parseToolResultObject } from "../../tool-helpers/index.js"
 
 export interface RecoveryHint {
   key: string

@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { PlanEdge } from "./types.js"
+import type { PlanEdge } from "../types.js"
 
 export type PlannerNeedLevel = "low" | "medium" | "high"
 

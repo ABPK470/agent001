@@ -7,15 +7,15 @@
  * @module
  */
 
-import type { Tool } from "../types.js"
+import type { Tool } from "../../types.js"
 import type {
     PipelineResult,
     Plan,
     SubagentTaskStep,
     VerifierStepAssessment,
-} from "./types.js"
+} from "../types.js"
 import { runIntegrationProbes } from "./verifier-integration.js"
-import { assessSubagentStep } from "./verifier-probes/subagent-assessment.js"
+import { assessSubagentStep } from "../verifier-probes/subagent-assessment.js"
 
 export async function runDeterministicProbes(
   plan: Plan,

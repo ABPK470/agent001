@@ -7,14 +7,14 @@
  * @module
  */
 
-import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "./blueprint-contract.js"
-import { inferOutputDir } from "./index-normalize.js"
+import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract.js"
+import { inferOutputDir } from "../index-normalize.js"
 import type {
     Plan,
     PlanEdge,
     PlanStep,
     SubagentTaskStep,
-} from "./types.js"
+} from "../types.js"
 
 // ============================================================================
 // Blueprint step injection

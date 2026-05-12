@@ -9,7 +9,7 @@
  * @module
  */
 
-import { executeDeterministicStep } from "./pipeline-steps/deterministic.js"
+import { executeDeterministicStep } from "../pipeline-steps/deterministic.js"
 import {
     isBlueprintLikeStep,
     type SubagentStepValidationContext,
@@ -17,15 +17,15 @@ import {
 import {
     runPostStepSyntaxValidation,
     validateSubagentCompletion,
-} from "./pipeline-validation.js"
-import { runSubagentMandatoryRetry } from "./pipeline-steps/subagent-retry.js"
-import type { DelegateFn, ToolExecFn } from "./pipeline.js"
-import { detectPlatformUnconfigured } from "./platform-errors.js"
+} from "../pipeline-validation.js"
+import { runSubagentMandatoryRetry } from "../pipeline-steps/subagent-retry.js"
+import type { DelegateFn, ToolExecFn } from "../pipeline.js"
+import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type {
     PipelineStepResult,
     PlanStep,
     SubagentTaskStep,
-} from "./types.js"
+} from "../types.js"
 
 // ============================================================================
 // Step dispatch

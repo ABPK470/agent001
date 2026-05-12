@@ -7,14 +7,14 @@
  * @module
  */
 
-import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "./index-normalize.js"
+import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../index-normalize.js"
 import type {
     Plan,
     PlanDiagnostic,
     PlanEdge,
     PlanStep,
     SubagentTaskStep,
-} from "./types.js"
+} from "../types.js"
 
 export function inferOutputDir(steps: readonly SubagentTaskStep[]): string | null {
   const dirs: string[] = []

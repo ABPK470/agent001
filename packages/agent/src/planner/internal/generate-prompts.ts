@@ -6,8 +6,8 @@
  * @module
  */
 
-import { asNonEmptyString as _asNonEmptyString, isRecord } from "../internal/index.js"
-import type { CoherentArchitectureArtifact, CoherentSharedContract, CoherentSystemInvariant, PlanEdge } from "./types.js"
+import { asNonEmptyString as _asNonEmptyString, isRecord } from "../../internal/index.js"
+import type { CoherentArchitectureArtifact, CoherentSharedContract, CoherentSystemInvariant, PlanEdge } from "../types.js"
 
 // Re-exported to preserve the public surface; canonical definition lives in internal/json.
 export const asNonEmptyString = _asNonEmptyString

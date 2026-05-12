@@ -9,7 +9,7 @@ import {
   parseInvariants,
   parseJsonObject,
   parseSharedContracts,
-} from "./coherent-parse.js"
+} from "./internal/coherent-parse.js"
 import type {
   ArtifactRelation,
   CoherentSolutionArtifact,

@@ -13,7 +13,7 @@ import type {
     SubagentTaskStep,
     VerifierStepAssessment,
 } from "../types.js"
-import { buildStepSpecEvidence } from "../verifier-blueprint.js"
+import { buildStepSpecEvidence } from "../internal/verifier-blueprint.js"
 import {
     computeGibberishScore,
     isBlockingCriteriaProofGap,
@@ -24,9 +24,9 @@ import {
     extractActualPaths,
     probeArtifact,
     readArtifactContent,
-} from "../verifier-io.js"
-import { detectVerificationModalityGaps } from "../verifier-llm.js"
-import { probeContentCompleteness, probeCriteriaProof } from "../verifier-probes-subprobes.js"
+} from "../internal/verifier-io.js"
+import { detectVerificationModalityGaps } from "../internal/verifier-llm.js"
+import { probeContentCompleteness, probeCriteriaProof } from "../internal/verifier-probes-subprobes.js"
 import { runBrowserCheckProbe, runTestsProbe } from "./runtime-probes.js"
 import { detectPathMismatchIssues, detectScopeViolationIssues } from "./scope-checks.js"
 

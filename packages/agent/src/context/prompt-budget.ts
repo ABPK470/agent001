@@ -14,7 +14,7 @@ import {
     resolveSections,
     truncateMessage,
     type WorkingEntry,
-} from "./prompt-budget-helpers.js"
+} from "./internal/prompt-budget-helpers.js"
 import {
     SECTION_BEHAVIOR,
     SECTION_ORDER,

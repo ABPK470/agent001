@@ -27,12 +27,12 @@ import type {
     VerifierStepAssessment,
 } from "./types.js"
 import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
-import type { StepSpecEvidence } from "./verifier-blueprint.js"
-import { buildStepSpecEvidence } from "./verifier-blueprint.js"
+import type { StepSpecEvidence } from "./internal/verifier-blueprint.js"
+import { buildStepSpecEvidence } from "./internal/verifier-blueprint.js"
 import { buildFallbackDecision } from "./verifier-helpers.js"
-import { extractActualPaths, probeArtifact, readArtifactContent } from "./verifier-io.js"
-import { runLLMVerification } from "./verifier-llm.js"
-import { runDeterministicProbes } from "./verifier-probes.js"
+import { extractActualPaths, probeArtifact, readArtifactContent } from "./internal/verifier-io.js"
+import { runLLMVerification } from "./internal/verifier-llm.js"
+import { runDeterministicProbes } from "./internal/verifier-probes.js"
 import { runContractValidation } from "./verifier/contract-check.js"
 import {
     collectFollowupEvidence,
@@ -45,8 +45,8 @@ import {
 // ============================================================================
 
 export { isLLMGibberish } from "./verifier-helpers.js"
-export { runLLMVerification } from "./verifier-llm.js"
-export { runDeterministicProbes } from "./verifier-probes.js"
+export { runLLMVerification } from "./internal/verifier-llm.js"
+export { runDeterministicProbes } from "./internal/verifier-probes.js"
 
 // ============================================================================
 // Follow-up verification helpers live in verifier/followup.ts

@@ -10,13 +10,13 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../recovery/index.js"
+import type { ToolCallRecord } from "../../recovery/index.js"
 import type {
     DeterministicToolStep,
     PipelineStepResult,
     Plan,
     SubagentTaskStep
-} from "./types.js"
+} from "../types.js"
 
 // ============================================================================
 // Path extraction helpers

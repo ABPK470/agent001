@@ -12,11 +12,11 @@ import {
     isWatchModeOutput,
 } from "./recovery-detectors.js"
 import { inferAdvancedRecoveryHint } from "./build-hints-advanced.js"
-import type { RecoveryHint } from "./recovery.js"
+import type { RecoveryHint } from "../recovery.js"
 import {
     extractToolFailureText,
     type ToolCallRecord,
-} from "../tool-helpers/index.js"
+} from "../../tool-helpers/index.js"
 
 export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result

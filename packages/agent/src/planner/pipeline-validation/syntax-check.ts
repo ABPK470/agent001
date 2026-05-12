@@ -7,7 +7,7 @@
  */
 
 import type { ToolCallRecord } from "../../recovery/index.js"
-import type { SubagentStepValidationContext } from "../pipeline-repair.js"
+import type { SubagentStepValidationContext } from "../internal/pipeline-repair.js"
 import type { SubagentTaskStep } from "../types.js"
 
 export async function runPostStepSyntaxValidation(

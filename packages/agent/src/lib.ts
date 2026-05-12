@@ -7,29 +7,11 @@
  */
 
 // ── Core ────────────────────────────────────────────────────────────
-export { Agent } from "./agent.js"
 export { AgentRuntime } from "./agent-runtime.js"
 export type { AgentRuntimeOptions } from "./agent-runtime.js"
+export { Agent } from "./agent.js"
 
 // ── Types & constants ───────────────────────────────────────────────
-export {
-    ChatBudgetExceededError, DROP_PRIORITY,
-    NEVER_DROP_SECTIONS,
-    SECTION_WEIGHTS
-} from "./types.js"
-export type {
-    AgentConfig,
-    ChatCallUsageRecord,
-    LLMClient,
-    LLMResponse,
-    Message,
-    PromptBudgetSection,
-    StopReason,
-    TokenUsage,
-    Tool,
-    ToolCall,
-    ToolKillManager
-} from "./types.js"
 export {
     DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE,
     DEFAULT_TOOL_FAILURE_BREAKER_COOLDOWN_MS,
@@ -50,18 +32,36 @@ export {
     SAFE_RETRY_TOOLS,
     VERIFICATION_TOOLS
 } from "./constants.js"
+export {
+    ChatBudgetExceededError, DROP_PRIORITY,
+    NEVER_DROP_SECTIONS,
+    SECTION_WEIGHTS
+} from "./types.js"
+export type {
+    AgentConfig,
+    ChatCallUsageRecord,
+    LLMClient,
+    LLMResponse,
+    Message,
+    PromptBudgetSection,
+    StopReason,
+    TokenUsage,
+    Tool,
+    ToolCall,
+    ToolKillManager
+} from "./types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
 export * from "./context/index.js"
-export * from "./recovery/index.js"
 export * from "./delegation/index.js"
-export * from "./governance/index.js"
-export * from "./tool-helpers/index.js"
-export * from "./loop/index.js"
 export * from "./engine/index.js"
+export * from "./governance/index.js"
 export * from "./llm/index.js"
-export * from "./tools/index.js"
+export * from "./loop/index.js"
+export * from "./recovery/index.js"
 export * from "./sync/index.js"
+export * from "./tool-helpers/index.js"
+export * from "./tools/index.js"
 
 // Renamed re-export preserved for back-compat with @agent001/server.
 export { getPool as getMssqlPool } from "./tools/index.js"

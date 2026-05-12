@@ -6,14 +6,14 @@
  * @module
  */
 
-import { asNonEmptyString as _asNonEmptyString, isRecord as _isRecord } from "../internal/index.js"
-import { isValidArtifactPath } from "./generate.js"
+import { asNonEmptyString as _asNonEmptyString, isRecord as _isRecord } from "../../internal/index.js"
+import { isValidArtifactPath } from "../generate.js"
 import type {
     CoherentSharedContract,
     CoherentSolutionArtifact,
     CoherentSystemInvariant,
     PlanEdge,
-} from "./types.js"
+} from "../types.js"
 
 // Re-exports preserve the existing public surface of this module.
 export const isRecord = _isRecord

@@ -57,7 +57,7 @@ import {
     SIMPLE_DIALOGUE_RE,
     SIMPLE_FUNCTION_WRITE_RE,
     SINGLE_ARTIFACT_BURST_RE
-} from "../decision-patterns.js"
+} from "../internal/decision-patterns.js"
 import type { PlannerDecision, PlannerRoute, RoutingConfidence } from "../types.js"
 import {
     isSanityOverrideBoundedBuild,

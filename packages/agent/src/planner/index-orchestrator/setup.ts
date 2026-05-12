@@ -7,7 +7,7 @@
 
 import { assessPlannerDecision } from "../decision.js"
 import { generateCoherentBootstrap, generatePlan } from "../generate.js"
-import { injectBlueprintStep, strengthenExistingBlueprintSteps } from "../index-blueprint.js"
+import { injectBlueprintStep, strengthenExistingBlueprintSteps } from "../internal/index-blueprint.js"
 import {
     applyWarningAutoFixes,
     inferForcedOutputDirectoryFromGoal,

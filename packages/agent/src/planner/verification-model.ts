@@ -25,7 +25,7 @@ import {
     isDependencyGateIssue,
     normalizePath,
     uniqueStrings,
-} from "./verification-inference.js"
+} from "./internal/verification-inference.js"
 
 export function collectVerificationEvidence(
   plan: Plan,

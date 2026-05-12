@@ -20,9 +20,9 @@ import {
     isVitestUnsupportedThreadsFlagFailure,
     isWatchModeTestRunnerFailure,
 } from "./recovery-detectors.js"
-import type { RecoveryHint } from "./recovery.js"
-import type { ToolCallRecord } from "../tool-helpers/index.js"
-import { parseToolResultObject } from "../tool-helpers/index.js"
+import type { RecoveryHint } from "../recovery.js"
+import type { ToolCallRecord } from "../../tool-helpers/index.js"
+import { parseToolResultObject } from "../../tool-helpers/index.js"
 
 export interface AdvancedHintContext {
   readonly call: ToolCallRecord

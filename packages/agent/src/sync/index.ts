@@ -7,10 +7,11 @@
  */
 
 export * from "./catalog-drift.js"
+export * from "./diff-engine.js"
 export * from "./environments.js"
 export * from "./orchestrator.js"
 export * from "./plan-store.js"
 export * from "./recipes.js"
 export * from "./sync-events.js"
 export * from "./sync-run-sink.js"
-export * from "./diff-engine.js"
+

@@ -10,7 +10,7 @@ import {
     buildBlueprintRetryGuidance,
     isBlueprintLikeStep,
     type SubagentStepValidationContext,
-} from "../pipeline-repair.js"
+} from "../internal/pipeline-repair.js"
 import { validateSubagentCompletion } from "../pipeline-validation.js"
 import type { DelegateFn } from "../pipeline.js"
 import type { PipelineStepResult, SubagentTaskStep } from "../types.js"

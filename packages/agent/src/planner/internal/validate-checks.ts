@@ -7,11 +7,11 @@
  * @module
  */
 
-import type { PlanDiagnostic, PlanStep, SubagentTaskStep } from "./types.js"
+import type { PlanDiagnostic, PlanStep, SubagentTaskStep } from "../types.js"
 
 const RUNTIME_CODE_ARTIFACT_RE = /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i
 
-export { validatePathConsistency } from "./validate/path-consistency.js"
+export { validatePathConsistency } from "../validate/path-consistency.js"
 
 // ============================================================================
 // Artifact dependency wiring validation

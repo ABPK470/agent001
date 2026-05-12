@@ -20,7 +20,7 @@ import type {
 import {
     getArchitectureRepairContext,
     uniqueStrings,
-} from "../verification-inference.js"
+} from "../internal/verification-inference.js"
 
 export function buildLegacyRetryPlan(
   plan: Plan,

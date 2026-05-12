@@ -12,7 +12,7 @@ import {
     buildBlueprintRetryGuidance,
     getUnresolvedAcceptanceBlockers,
     summarizeRepairTask,
-} from "../pipeline-repair.js"
+} from "../internal/pipeline-repair.js"
 import { isGibberishIssue } from "../pipeline-validation.js"
 import type { PipelineExecutorOptions } from "../pipeline.js"
 import type {
