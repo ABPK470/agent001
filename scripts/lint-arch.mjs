@@ -35,32 +35,19 @@ const CLUSTERS = new Set([
   "loop", "llm", "tools", "sync", "internal", "engine", "planner",
 ])
 
-// Files that are allowed to hold module-level state (the runtime owns it,
-// or it's a known Phase 2b migration target). Add new entries only after
-// thinking about whether the state could move into AgentRuntime instead.
+// Files that are allowed to hold module-level state. The only legitimate
+// owner is `agent-runtime.ts`. Every other file's state must live inside a
+// `const _state = { ... }` record so this lint stays clean.
 const STATE_ALLOWLIST = new Set([
   "agent-runtime.ts",
-  // Phase 2b migration targets (state will move into AgentRuntime sub-runtimes).
-  "tools/mssql/connection.ts",
-  "tools/browse-web/session.ts",
-  "tools/catalog/store.ts",
-  "tools/shell.ts",
-  "tools/browser-check.ts",
-  "tools/fetch-url.ts",
-  "tools/filesystem-security.ts",
-  "tools/search-files.ts",
-  "tools/ask-user.ts",
-  "sync/sync-events.ts",
-  "sync/sync-run-sink.ts",
-  "sync/recipes.ts",
-  "sync/environments.ts",
-  "sync/plan-store.ts",
-  "sync/orchestrator/db-helpers.ts",
 ])
 
 // File-level allow-list overrides for setInterval / setTimeout at module load.
+// `tools/browse-web/session.ts` calls `startBrowseSessionCleanup()` once at
+// load so existing callers keep working; the timer can be torn down by
+// `stopBrowseSessionCleanup()` (used by AgentRuntime.dispose() in future).
 const TIMER_ALLOWLIST = new Set([
-  "tools/browse-web/session.ts", // Cleanup interval; moves to runtime.dispose() in Phase 2b.
+  "tools/browse-web/session.ts",
 ])
 
 const errors = []

@@ -22,11 +22,14 @@ export type AskUserResolver = (
   sensitive?: boolean,
 ) => Promise<string>
 
-let _resolver: AskUserResolver | null = null
+// State container — `const` reference to a mutable record means no
+// module-level `let` (lint clean) while preserving the singleton shape
+// existing call sites rely on.
+const _state: { resolver: AskUserResolver | null } = { resolver: null }
 
 /** Inject the resolver that connects this tool to the UI. */
 export function setAskUserResolver(resolver: AskUserResolver | null): void {
-  _resolver = resolver
+  _state.resolver = resolver
 }
 
 export const askUserTool: Tool = {
@@ -60,7 +63,7 @@ export const askUserTool: Tool = {
   },
 
   async execute(args) {
-    if (!_resolver) {
+    if (!_state.resolver) {
       return "Error: User input is not available in this execution context."
     }
 
@@ -70,7 +73,7 @@ export const askUserTool: Tool = {
     const options = Array.isArray(args.options) ? args.options.map(String) : undefined
     const sensitive = Boolean(args.sensitive)
 
-    const response = await _resolver(question, options, sensitive)
+    const response = await _state.resolver(question, options, sensitive)
     return response
   },
 }

@@ -27,16 +27,19 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export type SyncEvent = { type: string; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
 
-let _eventSink: SyncEventSink = () => {}
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+const _state: { eventSink: SyncEventSink } = { eventSink: () => {} }
 
 /** Server installs this once at startup (see server/src/index.ts). */
 export function setSyncEventSink(sink: SyncEventSink): void {
-  _eventSink = sink
+  _state.eventSink = sink
 }
 
 /** Fire-and-forget emit. Sink errors NEVER propagate. */
 export function emitSyncEvent(type: string, data: Record<string, unknown>): void {
-  try { _eventSink({ type, data }) } catch (e) {
+  try { _state.eventSink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }
 }

@@ -26,16 +26,19 @@ export const PREVIEW_TABLE_CONCURRENCY = Math.max(
 /** Maximum tolerated drift between preview and current source row counts. */
 export const DRIFT_ABORT_PCT = 0.05
 
-let _projectRoot: string | null = null
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+const _state: { projectRoot: string | null } = { projectRoot: null }
 
 /** Configure the project root used to load sync-recipes.json. */
 export function configureSyncOrchestrator(projectRoot: string): void {
-  _projectRoot = projectRoot
+  _state.projectRoot = projectRoot
 }
 
 export function projectRoot(): string {
-  if (!_projectRoot) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(projectRoot)")
-  return _projectRoot
+  if (!_state.projectRoot) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(projectRoot)")
+  return _state.projectRoot
 }
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */

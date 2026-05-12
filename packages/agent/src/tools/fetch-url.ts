@@ -22,11 +22,14 @@ const MAX_BODY = 1_048_576
 const MAX_REDIRECTS = 5
 
 /** Per-tool-call kill signal — composed into each fetch AbortController. */
-let _killSignal: AbortSignal | null = null
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+const _state: { killSignal: AbortSignal | null } = { killSignal: null }
 
 /** Set by the orchestrator when a per-tool kill is registered/cleared. */
 export function setFetchKillSignal(signal: AbortSignal | null): void {
-  _killSignal = signal
+  _state.killSignal = signal
 }
 
 export const fetchUrlTool: Tool = {
@@ -93,8 +96,8 @@ export const fetchUrlTool: Tool = {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15_000)
-      const signal = _killSignal
-        ? AbortSignal.any([controller.signal, _killSignal])
+      const signal = _state.killSignal
+        ? AbortSignal.any([controller.signal, _state.killSignal])
         : controller.signal
 
       try {

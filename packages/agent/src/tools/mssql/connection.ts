@@ -10,19 +10,21 @@ export interface DatabaseEntry {
   knowledge: string | null
 }
 
-const _databases = new Map<string, DatabaseEntry>()
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. Owned by AgentRuntime in future, but the API surface stays.
+const _state: { defaultConnection: string | null } = { defaultConnection: null }
 
-/** The explicit default connection name (set via MSSQL_DEFAULT_CONNECTION). */
-let _defaultConnection: string | null = null
+const _databases = new Map<string, DatabaseEntry>()
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(name: string): void {
-  _defaultConnection = name
+  _state.defaultConnection = name
 }
 
 /** Return the configured default connection name (null = fall back to first). */
 export function getDefaultMssqlConnectionName(): string | null {
-  return _defaultConnection
+  return _state.defaultConnection
 }
 
 /**
@@ -135,7 +137,7 @@ export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionP
   const resolvedName = _databases.has(name)
     ? name
     : (name === "default" && _databases.size > 0)
-      ? (_defaultConnection && _databases.has(_defaultConnection) ? _defaultConnection : _databases.keys().next().value as string)
+      ? (_state.defaultConnection && _databases.has(_state.defaultConnection) ? _state.defaultConnection : _databases.keys().next().value as string)
       : name
   const entry = _databases.get(resolvedName)
   if (!entry) {

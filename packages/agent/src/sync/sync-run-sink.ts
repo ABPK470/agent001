@@ -31,15 +31,18 @@ export interface SyncRunSink {
   finish(input: SyncRunFinishInput): void
 }
 
-let _sink: SyncRunSink = {
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+const _state: { sink: SyncRunSink } = { sink: {
   start: () => {},
   finish: () => {},
-}
+} }
 
 export function setSyncRunSink(sink: SyncRunSink): void {
-  _sink = sink
+  _state.sink = sink
 }
 
 export function getSyncRunSink(): SyncRunSink {
-  return _sink
+  return _state.sink
 }

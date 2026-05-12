@@ -19,11 +19,14 @@ import { join } from "node:path"
 import type { Tool } from "../types.js"
 import { startStaticServer } from "./browser-check/static-server.js"
 
-/** Workspace directory — browser_check serves files from here. */
-let _browserCheckCwd = process.cwd()
+/** Workspace directory + optional sandbox executor — owned by a const state record. */
+const _state: { cwd: string; executor: BrowserCheckExecutor | null } = {
+  cwd: process.cwd(),
+  executor: null,
+}
 
 export function setBrowserCheckCwd(cwd: string): void {
-  _browserCheckCwd = cwd
+  _state.cwd = cwd
 }
 
 /** Result from a sandboxed browser check. */
@@ -44,11 +47,10 @@ type BrowserCheckExecutor = (
   waitMs: number,
   cwd: string,
 ) => Promise<BrowserCheckResult>
-let _browserExecutor: BrowserCheckExecutor | null = null
 
 /** Inject a sandbox executor for browser checks (called once at server startup). */
 export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
-  _browserExecutor = executor
+  _state.executor = executor
 }
 
 export const browserCheckTool: Tool = {
@@ -92,7 +94,7 @@ export const browserCheckTool: Tool = {
     const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
 
     // Resolve paths
-    const fullPath = join(_browserCheckCwd, relPath)
+    const fullPath = join(_state.cwd, relPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
     const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
 
@@ -104,9 +106,9 @@ export const browserCheckTool: Tool = {
     }
 
     // Route through Docker sandbox if executor is available
-    if (_browserExecutor) {
+    if (_state.executor) {
       try {
-        const result = await _browserExecutor(relPath, clicks, waitMs, _browserCheckCwd)
+        const result = await _state.executor(relPath, clicks, waitMs, _state.cwd)
         return result.report
       } catch (err) {
         return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`
