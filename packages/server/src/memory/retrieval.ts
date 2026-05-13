@@ -247,7 +247,11 @@ export async function searchEntries(
   })
 
   // ── Vector search: blend semantic matches when embeddings exist ──
-  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier)
+  // Push the tenant filter into the SQL JOIN (vectors.ts) so a chatty tenant
+  // cannot dominate the cosine top-K and starve other tenants of recall. The
+  // post-filter below remains as defence-in-depth in case a vector row's
+  // mirrored upn drifted from its memory_entries source of truth.
+  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier, opts.upn)
   if (vecResults.length > 0) {
     const ftsIds = new Set(ftsResults.map((r) => r.entry.id))
     for (const vr of vecResults) {

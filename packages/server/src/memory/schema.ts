@@ -54,8 +54,16 @@ export function migrateMemory(): void {
     CREATE TABLE IF NOT EXISTS memory_vectors (
       entry_id TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
       embedding BLOB NOT NULL,
-      dimension INTEGER NOT NULL
+      dimension INTEGER NOT NULL,
+      -- Tenant columns mirrored from memory_entries so vectorSearch can
+      -- push tenant isolation into the SQL JOIN instead of post-filtering
+      -- top-K. Without this, a tenant whose rows dominate the cosine
+      -- top-K can starve everyone else of vector recall.
+      upn TEXT,
+      shared INTEGER NOT NULL DEFAULT 0
     );
+    CREATE INDEX IF NOT EXISTS idx_mv_upn ON memory_vectors(upn);
+    CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
   `)
 
   // ── In-place migration for pre-existing DBs ────────────────────
@@ -74,6 +82,8 @@ export function migrateMemory(): void {
   addColumnIfMissing("procedural_memories", "upn", "upn TEXT")
   addColumnIfMissing("procedural_memories", "session_id", "session_id TEXT")
   addColumnIfMissing("procedural_memories", "shared", "shared INTEGER NOT NULL DEFAULT 0")
+  addColumnIfMissing("memory_vectors", "upn", "upn TEXT")
+  addColumnIfMissing("memory_vectors", "shared", "shared INTEGER NOT NULL DEFAULT 0")
 
   // Indexes (no-op if columns added above didn't exist before; idempotent)
   db.exec(`
@@ -82,6 +92,8 @@ export function migrateMemory(): void {
     CREATE INDEX IF NOT EXISTS idx_proc_upn ON procedural_memories(upn);
     CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
     CREATE INDEX IF NOT EXISTS idx_proc_shared ON procedural_memories(shared);
+    CREATE INDEX IF NOT EXISTS idx_mv_upn ON memory_vectors(upn);
+    CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
   `)
 
   // Backfill upn from runs.upn — only fills rows where memory.upn IS NULL
@@ -112,6 +124,22 @@ export function migrateMemory(): void {
       WHERE session_id IS NULL;
     `)
   } catch { /* runs table not present in this DB context */ }
+
+  // Backfill memory_vectors.upn / shared from the joined memory_entries row.
+  // Cheap idempotent NOOP once saturated; no dependency on the runs table.
+  try {
+    db.exec(`
+      UPDATE memory_vectors
+      SET upn = (SELECT upn FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id)
+      WHERE upn IS NULL
+        AND EXISTS (SELECT 1 FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id AND memory_entries.upn IS NOT NULL);
+    `)
+    db.exec(`
+      UPDATE memory_vectors
+      SET shared = COALESCE((SELECT shared FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id), 0)
+      WHERE shared = 0;
+    `)
+  } catch { /* memory_entries missing in this context */ }
 
   // FTS5 for memory_entries — create then integrity-check and rebuild if corrupt.
   try {

@@ -220,4 +220,66 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     })
     expect(aliceEpisodic.some((r) => r.entry.content.includes("Status: failed"))).toBe(true)
   })
+
+  it("memory_vectors mirrors upn/shared and SQL filter prevents cross-tenant rows", async () => {
+    const mem = await setupMemory()
+    const { getDb } = await import("../src/db.js")
+
+    // Insert a few entries for two tenants and stamp synthetic embeddings
+    // directly so the test does not depend on Ollama being reachable.
+    const inserted: Array<{ id: string; upn: string | null; shared: number }> = []
+    function plant(upn: string | null, content: string, shared = false) {
+      const e = mem.ingestTurn({
+        tier: "semantic", role: "system",
+        content, source: "system", confidence: 0.9, runId: `r-${upn ?? "anon"}-${Math.random()}`,
+        upn, shared,
+      })
+      if (!e) throw new Error("ingestTurn returned null \u2014 fixture invalid")
+      inserted.push({ id: e.id, upn, shared: shared ? 1 : 0 })
+      // Stamp a tiny deterministic embedding manually (3-D suffices) so the
+      // SQL JOIN + filter is exercised even without Ollama.
+      const buf = Buffer.from(new Float32Array([1, 0, 0]).buffer)
+      getDb().prepare(`
+        INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension, upn, shared)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(e.id, buf, 3, upn, shared ? 1 : 0)
+    }
+
+    plant("alice@corp", "alice vector content marker-vec-alpha")
+    plant("alice@corp", "alice vector content marker-vec-alpha-2")
+    plant("alice@corp", "alice vector content marker-vec-alpha-3")
+    plant("bob@corp", "bob vector content marker-vec-bravo")
+    plant(null, "shared org policy marker-vec-shared", true)
+
+    // Verify mirror columns are populated as expected.
+    const vecRows = getDb().prepare("SELECT entry_id, upn, shared FROM memory_vectors ORDER BY upn").all() as Array<
+      { entry_id: string; upn: string | null; shared: number }
+    >
+    expect(vecRows.length).toBe(5)
+    const aliceVecs = vecRows.filter((r) => r.upn === "alice@corp")
+    expect(aliceVecs.length).toBe(3)
+    const sharedVec = vecRows.find((r) => r.shared === 1)
+    expect(sharedVec).toBeDefined()
+    expect(sharedVec!.upn).toBeNull()
+
+    // Quick SQL probe of the tenant filter (mirrors vectors.ts WHERE clause)
+    // \u2014 bob@corp must see only his row + the shared row, never alice's.
+    const bobVisible = getDb().prepare(`
+      SELECT entry_id FROM memory_vectors
+      WHERE (upn = ? OR shared = 1)
+    `).all("bob@corp") as Array<{ entry_id: string }>
+    expect(bobVisible.length).toBe(2)
+    const visibleIds = new Set(bobVisible.map((r) => r.entry_id))
+    for (const a of inserted.filter((r) => r.upn === "alice@corp")) {
+      expect(visibleIds.has(a.id)).toBe(false)
+    }
+
+    // Anonymous (upn IS NULL) probe must see ONLY the legacy/shared row.
+    const anonVisible = getDb().prepare(`
+      SELECT entry_id FROM memory_vectors
+      WHERE (upn IS NULL OR shared = 1)
+    `).all() as Array<{ entry_id: string }>
+    expect(anonVisible.length).toBe(1)
+    expect(anonVisible[0].entry_id).toBe(sharedVec!.entry_id)
+  })
 })

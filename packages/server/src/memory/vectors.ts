@@ -38,10 +38,19 @@ export async function embedEntry(entry: MemoryEntry): Promise<void> {
   const embedding = await getEmbedding(entry.content)
   if (!embedding) return
 
+  // Mirror upn + shared from the entry so vectorSearch can apply the tenant
+  // filter inside SQL (defence-in-depth + correct recall when one tenant's
+  // rows would otherwise dominate the cosine top-K).
   getDb().prepare(`
-    INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension)
-    VALUES (?, ?, ?)
-  `).run(entry.id, Buffer.from(embedding.buffer), embedding.length)
+    INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension, upn, shared)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    entry.id,
+    Buffer.from(embedding.buffer),
+    embedding.length,
+    entry.upn ?? null,
+    entry.shared ? 1 : 0,
+  )
 }
 
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
@@ -59,6 +68,12 @@ export async function vectorSearch(
   query: string,
   limit = 10,
   tier?: MemoryTier,
+  /**
+   * Tenant scope. `undefined` = no filter (admin / migration code).
+   * `null` = legacy/unowned pool only. A string = that user's rows + shared=1.
+   * Pushed into SQL so a chatty tenant cannot starve other tenants of recall.
+   */
+  upn?: string | null,
 ): Promise<Array<{ entryId: string; similarity: number }>> {
   const queryVec = await getEmbedding(query)
   if (!queryVec) return []
@@ -68,11 +83,21 @@ export async function vectorSearch(
     FROM memory_vectors v
     JOIN memory_entries e ON e.id = v.entry_id
   `
+  const where: string[] = []
   const params: unknown[] = []
   if (tier) {
-    sql += " WHERE e.tier = ?"
+    where.push("e.tier = ?")
     params.push(tier)
   }
+  if (upn !== undefined) {
+    if (upn === null) {
+      where.push("(v.upn IS NULL OR v.shared = 1)")
+    } else {
+      where.push("(v.upn = ? OR v.shared = 1)")
+      params.push(upn)
+    }
+  }
+  if (where.length > 0) sql += " WHERE " + where.join(" AND ")
 
   const rows = getDb().prepare(sql).all(...params) as Array<{
     entry_id: string; embedding: Buffer; dimension: number; tier: string

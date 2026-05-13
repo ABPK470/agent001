@@ -1,10 +1,10 @@
 import {
-    createEngineServices,
-    PolicyEffect,
-    type LLMClient,
-    type Message,
-    type PolicyRole,
-    type Tool,
+  createEngineServices,
+  PolicyEffect,
+  type LLMClient,
+  type Message,
+  type PolicyRole,
+  type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
