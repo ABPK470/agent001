@@ -1742,13 +1742,21 @@ export function TermChat() {
 
   return (
     <div className="flex flex-col h-full bg-transparent text-text font-sans">
-
       {/* Message list */}
-      <div ref={scrollHostRef} onScroll={onTranscriptScroll} className="flex-1 overflow-y-auto px-5 py-5 space-y-10 min-h-0">
-        <div ref={transcriptInnerRef}>
+      <div
+        ref={scrollHostRef}
+        onScroll={onTranscriptScroll}
+        className="flex-1 overflow-y-auto px-6 py-5 space-y-10 min-h-0"
+      >
+        <div
+          ref={transcriptInnerRef}
+          className="w-[90%] max-w-[1400px] mx-auto"
+        >
           {displayRuns.length === 0 && (
             <div className="flex items-center justify-center h-full">
-              <p className="text-[15px] text-text-faint">What can I build for you?</p>
+              <p className="text-[15px] text-text-faint">
+                What can I build for you?
+              </p>
             </div>
           )}
 
@@ -1756,7 +1764,10 @@ export function TermChat() {
             <div key={run.id} className="space-y-6">
               {/* User goal */}
               <div className="flex justify-end py-8">
-                <div className="max-w-[82%] px-4 py-2.5 bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed" style={{ boxShadow: "var(--shadow-bubble)" }}>
+                <div
+                  className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                  style={{ boxShadow: "var(--shadow-bubble)" }}
+                >
                   {run.goal}
                 </div>
               </div>
@@ -1774,18 +1785,20 @@ export function TermChat() {
           ))}
 
           <div ref={bottomRef} />
-          </div>
+        </div>
       </div>
 
       {/* Input bar — no separator line */}
       <div className="shrink-0 px-5 pb-5">
-        <div className="flex items-center gap-2 bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors">
+        <div className="w-[90%] mx-auto flex items-center gap-2 bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
+            placeholder={
+              pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"
+            }
             rows={1}
             disabled={isRunning || !!pendingInput}
             className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
@@ -1811,8 +1824,6 @@ export function TermChat() {
             </button>
           )}
         </div>
-
-
       </div>
     </div>
   )
