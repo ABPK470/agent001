@@ -115,15 +115,33 @@ function resolveSandboxPath(sandboxRoot: string, relPath: string): string {
 export const serverAttachmentService: AttachmentService = {
   async list(filter) {
     const { runId } = currentRunContext()
-    // Default scope: attachments bound to the current run. Callers can
-    // widen with explicit scope/runId, but we still confine to this run
-    // by default so the agent never sees other runs' uploads.
-    const rows = listAttachments({
-      runId: filter?.runId ?? runId,
+    const ctx = getPolicyContext()
+    // Visibility model: the agent should see anything the user could
+    // reasonably have attached to this run — items explicitly bound to
+    // the active runId, items in the active session, and items owned by
+    // the actor. Union the three; the optional q/scope filters apply to
+    // every branch so results stay consistent regardless of how a row
+    // was originally bound.
+    const baseFilter: { scope?: AttachmentRow["scope"]; q?: string } = {
       ...(filter?.scope ? { scope: filter.scope } : {}),
-      ...(filter?.q ? { q: filter.q } : {}),
-    })
-    return rows.map(toMetadata)
+      ...(filter?.q     ? { q: filter.q }         : {}),
+    }
+    const explicitRunId = filter?.runId ?? runId
+    const branches: Parameters<typeof listAttachments>[0][] = [
+      { ...baseFilter, runId: explicitRunId },
+    ]
+    if (ctx?.sessionId) branches.push({ ...baseFilter, sessionId: ctx.sessionId })
+    if (ctx?.actorUpn)  branches.push({ ...baseFilter, ownerUpn:  ctx.actorUpn })
+    const seen = new Set<string>()
+    const merged: AttachmentRow[] = []
+    for (const b of branches) {
+      for (const r of listAttachments(b)) {
+        if (seen.has(r.id)) continue
+        seen.add(r.id)
+        merged.push(r)
+      }
+    }
+    return merged.map(toMetadata)
   },
 
   async get(id) {
