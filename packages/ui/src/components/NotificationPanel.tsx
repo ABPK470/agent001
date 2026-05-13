@@ -48,11 +48,6 @@ export function NotificationPanel() {
   const setActiveRun = useStore((s) => s.setActiveRun)
   const openModalWidget = useStore((s) => s.openModalWidget)
 
-  // Load notifications on mount
-  useEffect(() => {
-    api.listNotifications(50).then(setNotifications).catch(() => {})
-  }, [setNotifications])
-
   // Close on outside click
   useEffect(() => {
     if (!open) return

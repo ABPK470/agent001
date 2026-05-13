@@ -183,33 +183,6 @@ export function OperatorEnvironment() {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs.length])
-  // ── Load run data on selection ─────────────────────────────────────
-  //
-  // For LIVE runs (running/pending/planning), do nothing here — steps/logs/
-  // audit/trace all stream in via SSE and `store.logs` also accumulates
-  // platform-wide events (sync, system, etc) from any source. Overwriting
-  // with a DB snapshot would clobber those live events the moment this
-  // widget mounts (e.g. user switches to the IOE view mid-sync).
-  //
-  // For COMPLETED/historical runs, hydrate from the DB so the widget shows
-  // what was persisted for that run.
-  useEffect(() => {
-    if (!activeRunId) return
-    const run = useStore.getState().runs.find((r) => r.id === activeRunId)
-    const isLive = run?.status === "running" || run?.status === "pending" || run?.status === "planning"
-    if (isLive) return
-    api.getRun(activeRunId).then((detail) => {
-      if (detail.data?.steps) setSteps(detail.data.steps)
-      if (detail.audit) setAudit(detail.audit)
-      // Merge run-specific logs into the platform-wide log stream rather
-      // than replacing — preserves sync events, system events, and entries
-      // from other runs that LiveLogs is showing.
-      if (detail.logs?.length) useStore.getState().mergeLogs(detail.logs)
-    }).catch(() => {})
-    api.getRunTrace(activeRunId).then((entries) => {
-      if (Array.isArray(entries) && entries.length > 0) setTrace(entries as unknown as TraceEntry[])
-    }).catch(() => {})
-  }, [activeRunId, setSteps, setAudit, setTrace])
   // ── Derived data ──────────────────────────────────────────────
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = activeRun?.status === "running"

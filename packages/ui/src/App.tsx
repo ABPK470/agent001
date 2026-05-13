@@ -1,5 +1,5 @@
 import { Activity, MoreVertical, Shield, X } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { AdminLoginModal } from "./components/AdminLoginModal"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
@@ -69,6 +69,23 @@ export function App() {
   const { me, needsWelcome, refresh: refreshMe, setIdentity, switchUser } = useMe()
 
   const popOut = getPopOutWidget()
+  const currentView = useMemo(
+    () => views.find((view) => view.id === activeViewId) ?? views[0] ?? null,
+    [views, activeViewId],
+  )
+  const visibleWidgetTypes = useMemo(() => {
+    if (popOut) return new Set<WidgetType>([popOut.type])
+    return new Set<WidgetType>((currentView?.widgets ?? []).map((widget) => widget.type))
+  }, [currentView, popOut])
+  const shouldHydrateSelectedRun = visibleWidgetTypes.has("run-status")
+    || visibleWidgetTypes.has("operator-env")
+    || visibleWidgetTypes.has("run-history")
+    || visibleWidgetTypes.has("audit-trail")
+    || visibleWidgetTypes.has("step-timeline")
+    || visibleWidgetTypes.has("debug-inspector")
+    || visibleWidgetTypes.has("tool-stats")
+  const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
+  const shouldHydrateRecentEvents = visibleWidgetTypes.has("live-logs")
 
   // Phase state machine — single source of truth for all transitions.
   //   "loading" — initial fetch; blank screen
@@ -156,23 +173,12 @@ export function App() {
         setActiveRun(null)
         setSteps([]); setAudit([]); setTrace([])
       }
-      if (runs.length > 0 && !useStore.getState().activeRunId) {
+      if (shouldHydrateSelectedRun && runs.length > 0 && !useStore.getState().activeRunId) {
         const latest = runs[0]
         setActiveRun(latest.id)
-        try {
-          const [detail, trace] = await Promise.all([
-            api.getRun(latest.id),
-            api.getRunTrace(latest.id),
-          ])
-          setSteps(detail.data.steps ?? [])
-          // Merge — never replace — so backfilled platform events survive.
-          if (detail.logs?.length) useStore.getState().mergeLogs(detail.logs)
-          setAudit(detail.audit ?? [])
-          setTrace(trace as import("./types").TraceEntry[])
-        } catch { /* ignore */ }
       }
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace])
+  }, [me?.sessionId, me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace, shouldHydrateSelectedRun])
 
   // Reload notifications on identity change so each user only sees their own.
   useEffect(() => {
@@ -187,6 +193,7 @@ export function App() {
   // an in-progress preview the user was working on.
   useEffect(() => {
     if (!me) return
+    if (!shouldRestoreSyncState) return
     const current = useStore.getState().envSyncForm
     if (current.planId) return // already have a plan in flight — leave it alone
     api.syncRuns(1).then((rows) => {
@@ -202,7 +209,7 @@ export function App() {
         entityId: latest.entityId,
       })
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn])
+  }, [me?.sessionId, me?.upn, shouldRestoreSyncState])
 
   // Backfill the LiveLogs widget on cold start with recent persisted events
   // (sync runs, agent runs, audit, system) so the log isn't empty after a
@@ -211,10 +218,11 @@ export function App() {
   // entries already added to the live `logs` array.
   useEffect(() => {
     if (!me) return
+    if (!shouldHydrateRecentEvents) return
     api.recentEvents(500).then((res) => {
       useStore.getState().hydrateLogsFromEvents(res.events)
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn])
+  }, [me?.sessionId, me?.upn, shouldHydrateRecentEvents])
 
   // Restore dashboard layout from server + start auto-sync.
   // Re-runs when identity changes (welcome modal submit / switch user) so
@@ -302,8 +310,7 @@ export function App() {
   if (phase === "loading") {
     return <div className="h-screen" style={{ background: "var(--bg)" }} />
   }
-  const activeView = views.find((v) => v.id === activeViewId)
-  const widgets = activeView?.widgets ?? []
+  const widgets = currentView?.widgets ?? []
 
   // Clamp mobile index if widgets were removed
   const clampedIdx = Math.min(mobileWidgetIdx, Math.max(0, widgets.length - 1))

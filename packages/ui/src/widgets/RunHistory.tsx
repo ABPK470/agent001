@@ -16,10 +16,6 @@ export function RunHistory() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
-  const setSteps = useStore((s) => s.setSteps)
-  const setAudit = useStore((s) => s.setAudit)
-  const mergeLogs = useStore((s) => s.mergeLogs)
-  const setTrace = useStore((s) => s.setTrace)
   const setRuns = useStore((s) => s.setRuns)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
@@ -43,20 +39,6 @@ export function RunHistory() {
 
   async function handleSelect(runId: string) {
     setActiveRun(runId)
-
-    // Load run details + trace
-    try {
-      const [detail, trace] = await Promise.all([
-        api.getRun(runId),
-        api.getRunTrace(runId),
-      ])
-      setSteps(detail.data.steps ?? [])
-      setAudit(detail.audit)
-      if (detail.logs?.length) mergeLogs(detail.logs)
-      setTrace(trace as import("../types").TraceEntry[])
-    } catch {
-      // Run might still be in-memory only
-    }
   }
 
   if (runs.length === 0) {
