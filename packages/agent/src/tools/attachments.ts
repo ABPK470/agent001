@@ -63,12 +63,14 @@ export const readAttachmentTool: Tool = {
     "Read the text content of an attachment by id. " +
     "Best for text/* and application/json|csv|xml. Binary attachments are refused — " +
     "use import_attachment to copy them into the sandbox and process from there. " +
-    `Output is truncated at ${DEFAULT_READ_LIMIT_BYTES} bytes by default; pass maxBytes to override.`,
+    `Output is truncated at ${DEFAULT_READ_LIMIT_BYTES} bytes by default; pass maxBytes to override. ` +
+    "For large attachments, page through by passing the `nextOffset` from the previous call as `offset`.",
   parameters: {
     type: "object",
     properties: {
       id:       { type: "string", description: "Attachment id (from list_attachments)." },
       maxBytes: { type: "number", description: "Truncate at this many bytes. Defaults to 262144." },
+      offset:   { type: "number", description: "Byte offset to start reading from. Use the `nextOffset` returned by a previous call to page through large attachments." },
     },
     required: ["id"],
   },
@@ -76,13 +78,19 @@ export const readAttachmentTool: Tool = {
     const id = String(args["id"] ?? "")
     if (!id) throw new Error("id is required")
     const maxBytes = typeof args["maxBytes"] === "number" ? Math.max(1, args["maxBytes"] as number) : DEFAULT_READ_LIMIT_BYTES
-    const result = await getService().read(id, { maxBytes })
+    const offset   = typeof args["offset"]   === "number" ? Math.max(0, args["offset"]   as number) : 0
+    const result = await getService().read(id, { maxBytes, offset })
     if (result.kind === "binary") {
       return `Attachment ${id} is binary (${result.sizeBytes} bytes). Use import_attachment to copy it into the sandbox.`
     }
-    const header = result.truncated
-      ? `Attachment ${id} (${result.sizeBytes}B, truncated to ${maxBytes}B):`
-      : `Attachment ${id} (${result.sizeBytes}B):`
+    const sliceEnd = result.offset + (result.text?.length ?? 0)
+    const headerParts = [
+      `Attachment ${id} (${result.sizeBytes}B`,
+      `bytes ${result.offset}-${sliceEnd}`,
+    ]
+    if (result.nextOffset !== null) headerParts.push(`nextOffset=${result.nextOffset}`)
+    else                            headerParts.push(`EOF`)
+    const header = headerParts.join(", ") + "):"
     return [header, result.text ?? ""].join("\n")
   },
 }

@@ -70,6 +70,17 @@ export interface Message {
   toolCallId?: string
   /** Budget section tag — used for intelligent truncation. Not sent to LLM. */
   section?: PromptBudgetSection
+  /**
+   * Provider-cache hint for stable prompt prefixes.
+   * "ephemeral" → mark this message's content with Anthropic-style
+   * `cache_control: { type: "ephemeral" }` so providers that honour
+   * it (Anthropic native, Databricks Claude via OpenAI-compatible
+   * forwarder) can serve the prefix from the prompt cache. The
+   * caller is responsible for ensuring the marked prefix is
+   * byte-stable across calls in the same run; otherwise the cache
+   * is simply missed.
+   */
+  cacheHint?: "ephemeral"
 }
 
 // ── Tool calling ─────────────────────────────────────────────────

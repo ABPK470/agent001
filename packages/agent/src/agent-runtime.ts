@@ -187,8 +187,12 @@ export interface AttachmentService {
    * Read the attachment payload. For text-mode attachments returns the
    * decoded UTF-8 text; for binary-mode the raw bytes (caller decides
    * what to do). Implementations should bound the payload size.
+   *
+   * `offset` lets the agent page through large attachments without
+   * re-shipping the leading bytes; `nextOffset` in the result is the
+   * byte offset to pass on the next call (or null when EOF).
    */
-  read(id: string, opts?: { maxBytes?: number }): Promise<{ kind: "text" | "binary"; text?: string; bytes?: Uint8Array; truncated: boolean; sizeBytes: number }>
+  read(id: string, opts?: { maxBytes?: number; offset?: number }): Promise<{ kind: "text" | "binary"; text?: string; bytes?: Uint8Array; truncated: boolean; sizeBytes: number; offset: number; nextOffset: number | null }>
   /**
    * Copy the attachment bytes into the active sandbox at the given
    * relative path. Returns the absolute resolved path inside the sandbox.

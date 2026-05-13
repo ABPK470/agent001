@@ -21,9 +21,21 @@ function safeParseArgs(raw: string): Record<string, unknown> {
 
 interface OpenAIMessage {
   role: string
-  content: string | null
+  content: string | null | OpenAIContentBlock[]
   tool_calls?: OpenAIToolCall[]
   tool_call_id?: string
+}
+
+/**
+ * Anthropic-style content block (text + optional cache_control).
+ * Databricks Claude serving endpoints (and Anthropic native) honour
+ * `cache_control: { type: "ephemeral" }` on the last block of the
+ * cached prefix; vanilla OpenAI silently ignores it.
+ */
+interface OpenAIContentBlock {
+  type: "text"
+  text: string
+  cache_control?: { type: "ephemeral" }
 }
 
 interface OpenAIToolCall {
@@ -45,11 +57,13 @@ export class OpenAIClient implements LLMClient {
   private readonly apiKey: string
   private readonly model: string
   private readonly baseUrl: string
+  private readonly enablePromptCaching: boolean
 
-  constructor(opts: { apiKey: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey: string; model?: string; baseUrl?: string; enablePromptCaching?: boolean }) {
     this.apiKey = opts.apiKey
     this.model = opts.model ?? "gpt-4o"
     this.baseUrl = opts.baseUrl ?? "https://api.openai.com"
+    this.enablePromptCaching = opts.enablePromptCaching ?? false
   }
 
   async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
@@ -60,7 +74,7 @@ export class OpenAIClient implements LLMClient {
   private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
-      messages: messages.map(formatMessage),
+      messages: messages.map((m) => formatMessage(m, this.enablePromptCaching)),
       max_completion_tokens: opts?.maxTokens ?? 16384,
       stream: true,
       stream_options: { include_usage: true },
@@ -138,7 +152,7 @@ export class OpenAIClient implements LLMClient {
   private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
-      messages: messages.map(formatMessage),
+      messages: messages.map((m) => formatMessage(m, this.enablePromptCaching)),
       max_completion_tokens: opts?.maxTokens ?? 16384,
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
@@ -222,7 +236,7 @@ export class OpenAIClient implements LLMClient {
 
 // ── Format helpers ───────────────────────────────────────────────
 
-function formatMessage(msg: Message): OpenAIMessage {
+function formatMessage(msg: Message, enablePromptCaching = false): OpenAIMessage {
   if (msg.role === "assistant" && msg.toolCalls?.length) {
     return {
       role: "assistant",
@@ -243,6 +257,17 @@ function formatMessage(msg: Message): OpenAIMessage {
       role: "tool",
       content: msg.content,
       tool_call_id: msg.toolCallId,
+    }
+  }
+
+  // Mark cacheable system/user prefixes for providers that honour
+  // Anthropic-style cache_control (Databricks Claude, Anthropic native).
+  // Without this the request body is identical to a vanilla OpenAI
+  // request, so safe to keep gated behind enablePromptCaching.
+  if (enablePromptCaching && msg.cacheHint === "ephemeral" && typeof msg.content === "string" && msg.content.length > 0) {
+    return {
+      role: msg.role,
+      content: [{ type: "text", text: msg.content, cache_control: { type: "ephemeral" } }],
     }
   }
 

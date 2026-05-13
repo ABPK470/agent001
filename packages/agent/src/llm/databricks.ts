@@ -50,6 +50,12 @@ export class DatabricksClient implements LLMClient {
       apiKey: token,
       model: this.endpoint,
       baseUrl: `${this.host}/serving-endpoints/${this.endpoint}`,
+      // Databricks Claude serving endpoints honour Anthropic-style
+      // cache_control on system blocks. Marking the byte-stable system
+      // prefix saves ~80 % on input tokens for calls 2..N within a run
+      // (cache TTL is ~5 minutes for ephemeral). Vanilla OpenAI ignores
+      // the field, so this is safe even when an endpoint is mis-routed.
+      enablePromptCaching: true,
     })
     return client.chat(messages, tools, opts)
   }

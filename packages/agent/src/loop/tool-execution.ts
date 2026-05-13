@@ -39,6 +39,7 @@ import {
     enrichToolResultMetadata as enrichResult,
     trackToolCallFailureState,
 } from "../tool-helpers/index.js"
+import { compactAtWriteTime } from "../context/context-management/write-time-compact.js"
 
 // Re-export public types/helpers for backwards compatibility.
 export { normalizeArtifactPath } from "./tool-execution/types.js"
@@ -214,9 +215,10 @@ export async function executeToolRound(
       })
     } else {
       const enriched = enrichResult(execResult.result, {})
+      const compactedForHistory = compactAtWriteTime(call.name, enriched)
       const semanticFailure = execResult.outcome ? !execResult.outcome.ok : didToolCallFail(false, enriched)
       if (config.verbose) log.logToolResult(enriched)
-      messages.push({ role: "tool", toolCallId: call.id, content: enriched, section: "history" })
+      messages.push({ role: "tool", toolCallId: call.id, content: compactedForHistory, section: "history" })
       roundToolCalls.push({
         name: call.name, args: call.arguments, result: enriched,
         isError: semanticFailure, outcome: execResult.outcome,

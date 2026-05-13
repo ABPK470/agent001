@@ -188,6 +188,17 @@ export async function buildSystemMessages(opts: {
     })
   }
 
+  // Mark the final system message as the cache breakpoint. Providers
+  // that honour Anthropic-style cache_control (Databricks Claude,
+  // Anthropic native) will then cache EVERYTHING up to and including
+  // this block — saving ~80 % on input tokens for calls 2..N within a
+  // run, since the system stack is byte-stable across iterations of
+  // the same runId. Vanilla OpenAI ignores the hint silently and
+  // benefits from automatic prefix caching anyway.
+  if (systemMessages.length > 0) {
+    systemMessages[systemMessages.length - 1].cacheHint = "ephemeral"
+  }
+
   return systemMessages
 }
 

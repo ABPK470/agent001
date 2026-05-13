@@ -153,13 +153,17 @@ export const serverAttachmentService: AttachmentService = {
     const row = getAttachment(id)
     if (!row) throw new Error(`attachment not found: ${id}`)
     const bytes = await readAttachmentBlob(row.storage_uri)
-    const limit = opts?.maxBytes && opts.maxBytes > 0 ? opts.maxBytes : bytes.byteLength
-    const truncated = bytes.byteLength > limit
-    const slice = truncated ? bytes.subarray(0, limit) : bytes
+    const offset = Math.max(0, Math.min(opts?.offset ?? 0, bytes.byteLength))
+    const remaining = bytes.byteLength - offset
+    const limit = opts?.maxBytes && opts.maxBytes > 0 ? opts.maxBytes : remaining
+    const sliceLen = Math.min(remaining, limit)
+    const slice = bytes.subarray(offset, offset + sliceLen)
+    const nextOffset = offset + sliceLen < bytes.byteLength ? offset + sliceLen : null
+    const truncated = nextOffset !== null
     if (isTextMedia(row.media_type)) {
-      return { kind: "text", text: slice.toString("utf8"), truncated, sizeBytes: row.size_bytes }
+      return { kind: "text", text: slice.toString("utf8"), truncated, sizeBytes: row.size_bytes, offset, nextOffset }
     }
-    return { kind: "binary", bytes: new Uint8Array(slice), truncated, sizeBytes: row.size_bytes }
+    return { kind: "binary", bytes: new Uint8Array(slice), truncated, sizeBytes: row.size_bytes, offset, nextOffset }
   },
 
   async importToSandbox(id, sandboxRelPath) {
