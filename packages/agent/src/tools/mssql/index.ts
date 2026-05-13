@@ -8,7 +8,6 @@ export {
     setDefaultMssqlConnection,
     setMssqlConfig,
     setMssqlConfigs,
-    setMssqlKillSignal,
     setMssqlWriteEnabled
 } from "./connection.js"
 export { exportQueryToFileTool } from "./export-tool.js"

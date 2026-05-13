@@ -22,7 +22,7 @@
 import type { CSSProperties } from "react"
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { api } from "../api"
-import type { WsEvent } from "../types"
+import type { SseEvent } from "../types"
 import { PaneHeader } from "./StreamPane"
 
 export interface LogPaneHandle {
@@ -35,7 +35,7 @@ export interface LogPaneHandle {
 
 interface Props {
   active: boolean
-  events: WsEvent[]
+  events: SseEvent[]
   activeRunId: string | null
 }
 
@@ -60,7 +60,7 @@ const CAT_COLOR: Record<Category, string> = {
 // ---------------------------------------------------------------------------
 
 /** Pull entry.kind out of debug.trace so the row label is meaningful. */
-function effectiveType(e: WsEvent): string {
+function effectiveType(e: SseEvent): string {
   if (e.type === "debug.trace") {
     const entry = e.data["entry"] as { kind?: string } | undefined
     if (entry?.kind) return `agent.${entry.kind}`
@@ -68,7 +68,7 @@ function effectiveType(e: WsEvent): string {
   return e.type
 }
 
-function categoryFor(e: WsEvent): Category {
+function categoryFor(e: SseEvent): Category {
   const t = effectiveType(e)
   if (/error|failed|cancelled/i.test(t)) return "error"
   if (t.startsWith("run."))    return "run"
@@ -105,7 +105,7 @@ interface LlmResponseEntry {
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null
 }
 
-function summarize(e: WsEvent): string {
+function summarize(e: SseEvent): string {
   // debug.trace subtypes — these carry the real action.
   if (e.type === "debug.trace") {
     const entry = e.data["entry"] as Record<string, unknown> | undefined
@@ -260,7 +260,7 @@ function parseFilter(raw: string): ParsedFilter {
   return out
 }
 
-function clauseMatches(e: WsEvent, c: FilterClause): boolean {
+function clauseMatches(e: SseEvent, c: FilterClause): boolean {
   if (c.types && c.types.length) {
     // Match the raw wire type (e.type) — consistent with the DB `type` column.
     // Use e.type NOT effectiveType() so type:api.request and -type:events are
@@ -279,7 +279,7 @@ function clauseMatches(e: WsEvent, c: FilterClause): boolean {
   return true
 }
 
-function matches(e: WsEvent, f: ParsedFilter): boolean {
+function matches(e: SseEvent, f: ParsedFilter): boolean {
   // Excludes: if ANY exclude clause matches, drop the row.
   if (f.exclude.types?.length || f.exclude.kinds?.length || f.exclude.runs?.length) {
     if (clauseMatches(e, f.exclude)) return false
@@ -354,7 +354,7 @@ function MessageBlock({ m }: { m: LlmMessage }) {
   )
 }
 
-function ExpandedDetail({ e }: { e: WsEvent }) {
+function ExpandedDetail({ e }: { e: SseEvent }) {
   if (e.type === "debug.trace") {
     const entry = e.data["entry"] as Record<string, unknown> | undefined
     const kind = entry?.["kind"] as string | undefined
@@ -622,7 +622,7 @@ export const LogPane = forwardRef<LogPaneHandle, Props>(function LogPane(
   const [histPreset, setHistPreset] = useState<HistPresetOption>("24h")
   const [histCustomFrom, setHistCustomFrom] = useState("")
   const [histCustomTo, setHistCustomTo] = useState("")
-  const [histResults, setHistResults] = useState<WsEvent[]>([])
+  const [histResults, setHistResults] = useState<SseEvent[]>([])
   const [histSearching, setHistSearching] = useState(false)
   const histTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stick-to-bottom: starts on. Turns off the moment the user scrolls up,
@@ -652,7 +652,7 @@ export const LogPane = forwardRef<LogPaneHandle, Props>(function LogPane(
     // Filter the entire buffer, then sort by timestamp so the rendered order
     // is always chronological regardless of push order. The cap keeps the
     // most-recent 800 matched events (sort first, then slice the tail).
-    const out: WsEvent[] = []
+    const out: SseEvent[] = []
     for (let i = 0; i < events.length; i++) {
       const ev = events[i]!
       if (matches(ev, parsed)) out.push(ev)
@@ -773,8 +773,8 @@ export const LogPane = forwardRef<LogPaneHandle, Props>(function LogPane(
   }
 
   // Stable dedup key — type + timestamp + runId + seq is unique enough.
-  // WsEvent has no numeric id, so we cannot rely on it.
-  function evKey(e: WsEvent) {
+  // SseEvent has no numeric id, so we cannot rely on it.
+  function evKey(e: SseEvent) {
     return `${e.type}|${e.timestamp}|${String(e.data["runId"] ?? "")}|${String(e.data["seq"] ?? "")}`
   }
 

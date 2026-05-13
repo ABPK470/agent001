@@ -23,9 +23,9 @@ export function Dashboard({ data }: { data: DashboardData }): React.ReactElement
   const items = data.items ?? []
 
   return (
-    <div className="rounded-lg overflow-hidden border border-border bg-base">
+    <div className="rounded-lg overflow-hidden border border-border">
       {(data.title || data.subtitle) && (
-        <div className="px-3 py-2 border-b border-border-subtle flex items-baseline gap-2 flex-wrap bg-overlay-2">
+        <div className="px-3 py-2 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
           {data.title && <div className="text-sm font-bold text-text">{data.title}</div>}
           {data.subtitle && <div className="text-sm text-text-muted">{data.subtitle}</div>}
           <div className="ml-auto text-[10px] text-text-muted font-mono uppercase tracking-wide">dashboard</div>
@@ -57,7 +57,7 @@ function TextPanel({ spec }: { spec: unknown }): React.ReactElement {
     : ""
   const title = (spec as { title?: string })?.title
   return (
-    <div className="rounded-lg border border-border-subtle bg-base p-3 text-sm text-text-secondary leading-relaxed">
+    <div className="rounded-lg border border-border-subtle p-3 text-sm text-text-secondary leading-relaxed">
       {title && <div className="text-sm font-semibold text-text mb-1">{title}</div>}
       <div className="whitespace-pre-wrap">{text}</div>
     </div>

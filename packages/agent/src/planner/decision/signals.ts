@@ -19,7 +19,7 @@ import {
     TARGET_FILE_RE,
     TOOL_DIVERSITY_RE,
     VERIFICATION_RE,
-} from "../decision-patterns.js"
+} from "../internal/decision-patterns.js"
 import type { PlannerNeedLevel, RoutingConfidence } from "../types.js"
 
 // ============================================================================

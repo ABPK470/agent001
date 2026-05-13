@@ -5,7 +5,7 @@ Governed AI agent platform with multi-agent orchestration, intelligent task rout
 ```
 packages/
 ├── agent/   # LLM loop, tools, planner, governance engine, delegation
-├── server/  # Orchestrator, queue, SQLite, REST API, WebSocket
+├── server/  # Orchestrator, queue, SQLite, REST API, SSE
 └── ui/      # React dashboard: chat, trace, audit, policies, usage
 ```
 
@@ -32,7 +32,7 @@ Hot-swap provider at runtime via the UI (Policies → Model) — no restart need
 
 ## How it works
 
-The foundation is **LLM + Tools + Loop**: the LLM decides what to do, tools execute it, results feed back, repeat until a final answer. Every tool call passes through the governance layer (policy check → audit log → step tracking → domain events streamed live via WebSocket).
+The foundation is **LLM + Tools + Loop**: the LLM decides what to do, tools execute it, results feed back, repeat until a final answer. Every tool call passes through the governance layer (policy check → audit log → step tracking → domain events streamed live via SSE).
 
 **Routing — five execution lanes.** Before each run the system scores the goal and picks the right strategy:
 

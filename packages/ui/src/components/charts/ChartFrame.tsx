@@ -3,8 +3,8 @@
  * legend strip. Individual chart components handle the SVG body.
  */
 
-import type React from "react";
-import { pickColor } from "./helpers";
+import type React from "react"
+import { pickColor } from "./helpers"
 
 export interface LegendEntry { name: string; color: string }
 
@@ -20,7 +20,7 @@ export function ChartFrame({
   const showHeader = !!(title || subtitle || badge)
   const showLegend = legend && legend.length > 0
   return (
-    <div className="rounded-lg overflow-hidden border border-border-subtle bg-base">
+    <div className="rounded-lg overflow-hidden border border-border-subtle">
       {showHeader && (
         <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
           {title && <div className="text-sm font-semibold text-text">{title}</div>}

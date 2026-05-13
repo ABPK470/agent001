@@ -3,7 +3,7 @@ import { PolicyEffect } from "../src/engine/index.js"
 import {
     createEngineServices,
     runGoverned
-} from "../src/governance.js"
+} from "../src/governance/index.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────

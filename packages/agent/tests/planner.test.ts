@@ -3,21 +3,12 @@
  * pipeline execution, and circuit breaker behavior.
  */
 import { describe, expect, it, vi } from "vitest"
-import { ToolFailureCircuitBreaker } from "../src/circuit-breaker.js"
-import * as delegationDecision from "../src/delegation-decision.js"
-import { parseBlueprintContractBlock } from "../src/planner/blueprint-contract.js"
-import { parseCoherentSolutionBundle } from "../src/planner/coherent.js"
-import { assessPlannerDecision } from "../src/planner/decision.js"
-import { generatePlan, isValidArtifactPath } from "../src/planner/generate.js"
-import { executePlannerPath, inferForcedOutputDirectoryFromGoal, synthesizeAnswer } from "../src/planner/index.js"
-import { executePipeline, isGibberishIssue } from "../src/planner/pipeline.js"
-import { compilePlannerRuntime } from "../src/planner/runtime-model.js"
-import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/planner/types.js"
-import { validatePlan } from "../src/planner/validate.js"
-import { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "../src/planner/verification-model.js"
+import * as delegationDecision from "../src/delegation/decision.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/planner/index.js"
+import { assessPlannerDecision, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, compilePlannerRuntime, enrichVerifierAssessments, executePipeline, executePlannerPath, generatePlan, inferForcedOutputDirectoryFromGoal, isGibberishIssue, isLLMGibberish, isValidArtifactPath, parseBlueprintContractBlock, parseCoherentSolutionBundle, runDeterministicProbes, synthesizeAnswer, validatePlan } from "../src/planner/index.js"
 import * as plannerVerifier from "../src/planner/verifier.js"
-import { isLLMGibberish, runDeterministicProbes } from "../src/planner/verifier.js"
-import { CHILD_SYSTEM_PROMPT } from "../src/tools/delegate.js"
+import { ToolFailureCircuitBreaker } from "../src/recovery/index.js"
+import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
 import type { LLMClient, Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -752,9 +743,9 @@ describe("Planner path execution", () => {
     // full_planner_decomposition, explicitDelegationRequested must be set to true so
     // the decompositionBenefit term is counted and utility clears the 0.20 threshold.
     const capturedDelegationInputs: unknown[] = []
-    const realAssess = (await import("../src/delegation-decision.js")).assessDelegationDecision
+    const realAssess = (await import("../src/delegation/decision.js")).assessDelegationDecision
     const delegationSpy = vi.spyOn(
-      await import("../src/delegation-decision.js"),
+      await import("../src/delegation/decision.js"),
       "assessDelegationDecision",
     ).mockImplementation((input) => {
       capturedDelegationInputs.push(input)

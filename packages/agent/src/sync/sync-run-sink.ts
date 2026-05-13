@@ -6,6 +6,9 @@
  * startup. Keeps the agent package free of server-side deps.
  */
 
+import { currentRuntime } from "../agent-runtime.js"
+import type { SyncPlan } from "./plan-store.js"
+
 export interface SyncRunStartInput {
   planId: string
   entityType: string
@@ -29,17 +32,24 @@ export interface SyncRunFinishInput {
 export interface SyncRunSink {
   start(input: SyncRunStartInput): void
   finish(input: SyncRunFinishInput): void
+  /**
+   * Persist a plan body for later re-hydration (durable history).
+   * Optional — when absent, plans only survive in memory + disk JSON
+   * (subject to the in-process plan-store TTL).
+   */
+  savePlan?(plan: SyncPlan): void
+  /**
+   * Re-hydrate a plan body that's no longer in memory or on disk
+   * (e.g. after server restart). Optional fallback for `loadPlan`.
+   */
+  loadPlan?(planId: string): SyncPlan | null
 }
 
-let _sink: SyncRunSink = {
-  start: () => {},
-  finish: () => {},
-}
-
+/** Server installs this once at startup. */
 export function setSyncRunSink(sink: SyncRunSink): void {
-  _sink = sink
+  currentRuntime().sync.runSink = sink
 }
 
 export function getSyncRunSink(): SyncRunSink {
-  return _sink
+  return currentRuntime().sync.runSink
 }

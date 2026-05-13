@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 import type { EntityType } from "./recipes.js"
 
 export interface SyncPlanTableCounts {
@@ -124,8 +125,11 @@ export interface SyncPlan {
 
 // ── Store ────────────────────────────────────────────────────────
 
-const _memCache = new Map<string, SyncPlan>()
-let _diskRoot: string | null = null
+// In-memory plan cache lives on the active AgentRuntime
+// (`currentRuntime().sync.plans.memCache`).
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
 
 const TTL_MS = 24 * 60 * 60 * 1000
 const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
@@ -135,7 +139,7 @@ const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
  * `packages/server/data/sync-plans`). Idempotent.
  */
 export function configurePlanStore(diskRoot: string): void {
-  _diskRoot = diskRoot
+  currentRuntime().sync.plans.diskRoot = diskRoot
   if (!existsSync(diskRoot)) mkdirSync(diskRoot, { recursive: true })
   pruneExpired()
 }
@@ -145,30 +149,51 @@ export function allocPlanId(): string {
   return randomUUID()
 }
 
-/** Persist a plan (memory + disk). */
+/** Persist a plan (memory + disk + durable sink, if installed). */
 export function savePlan(plan: SyncPlan): void {
-  _memCache.set(plan.planId, plan)
-  if (_diskRoot) {
-    const path = resolve(_diskRoot, `${plan.planId}.json`)
+  const runtime = currentRuntime()
+  const plans = runtime.sync.plans
+  plans.memCache.set(plan.planId, plan)
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${plan.planId}.json`)
     writeFileSync(path, JSON.stringify(plan, null, 2))
   }
+  // Durable persistence (e.g. server's SQLite-backed sink). Survives restarts
+  // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
+  // older plans on demand.
+  try { runtime.sync.runSink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
 }
 
-/** Load a plan. Returns null if missing or expired. */
+/** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
 export function loadPlan(planId: string): SyncPlan | null {
-  const cached = _memCache.get(planId)
-  if (cached) return isExpired(cached) ? null : cached
-  if (!_diskRoot) return null
-  const path = resolve(_diskRoot, `${planId}.json`)
-  if (!existsSync(path)) return null
-  try {
-    const plan = JSON.parse(readFileSync(path, "utf-8")) as SyncPlan
-    if (isExpired(plan)) { try { unlinkSync(path) } catch { /* ignore */ } ; return null }
-    _memCache.set(planId, plan)
-    return plan
-  } catch {
-    return null
+  const runtime = currentRuntime()
+  const plans = runtime.sync.plans
+  const cached = plans.memCache.get(planId)
+  if (cached && !isExpired(cached)) return cached
+  // Disk fast path (in-process, may be expired by 24h TTL).
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${planId}.json`)
+    if (existsSync(path)) {
+      try {
+        const plan = JSON.parse(readFileSync(path, "utf-8")) as SyncPlan
+        if (!isExpired(plan)) {
+          plans.memCache.set(planId, plan)
+          return plan
+        }
+        try { unlinkSync(path) } catch { /* ignore */ }
+      } catch { /* fall through to durable sink */ }
+    }
   }
+  // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
+  // after server restart.
+  try {
+    const fromSink = runtime.sync.runSink.loadPlan?.(planId) ?? null
+    if (fromSink) {
+      plans.memCache.set(planId, fromSink)
+      return fromSink
+    }
+  } catch { /* sink failure → treat as miss */ }
+  return null
 }
 
 /** True when the plan is too old to execute (1h cap). */
@@ -178,9 +203,10 @@ export function planTooOldToExecute(plan: SyncPlan): boolean {
 
 /** Drop a plan from memory + disk (after successful execute). */
 export function deletePlan(planId: string): void {
-  _memCache.delete(planId)
-  if (_diskRoot) {
-    const path = resolve(_diskRoot, `${planId}.json`)
+  const plans = currentRuntime().sync.plans
+  plans.memCache.delete(planId)
+  if (plans.diskRoot) {
+    const path = resolve(plans.diskRoot, `${planId}.json`)
     if (existsSync(path)) try { unlinkSync(path) } catch { /* ignore */ }
   }
 }
@@ -190,10 +216,11 @@ function isExpired(plan: SyncPlan): boolean {
 }
 
 function pruneExpired(): void {
-  if (!_diskRoot) return
-  for (const f of readdirSync(_diskRoot)) {
+  const diskRoot = currentRuntime().sync.plans.diskRoot
+  if (!diskRoot) return
+  for (const f of readdirSync(diskRoot)) {
     if (!f.endsWith(".json")) continue
-    const path = resolve(_diskRoot, f)
+    const path = resolve(diskRoot, f)
     try {
       const stats = statSync(path)
       if (Date.now() - stats.mtimeMs > TTL_MS) unlinkSync(path)

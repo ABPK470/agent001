@@ -1,5 +1,6 @@
 import {
     Agent,
+    AgentRuntime,
     askUserTool,
     cancelRun,
     completeRun,
@@ -18,9 +19,6 @@ import {
     runFailed,
     runStarted,
     runWithMssqlKillSignal,
-    setBrowseKillSignal,
-    setFetchKillSignal,
-    setShellSignal,
     spawnChildForPlan,
     startPlanning,
     startRunning,
@@ -46,7 +44,7 @@ import { createNotification, persistAuditLog, persistRun, persistTokenUsage, sav
 import { handlePlannerTrace } from "./planner-events.js"
 import { buildSystemMessages } from "./system-messages.js"
 import type { OrchestratorRunCtx } from "./types.js"
-import { captureRunWorkspaceDiff, withToolWorkspaceContext, wrapWithEffects } from "./workspace-effects.js"
+import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
@@ -100,16 +98,24 @@ export async function executeRunImpl(
 
   const state: RunState = { run, actor, stepCounter: resume?.iteration ?? 0 }
 
-  // Build workspace context helper (captures queueRef + workspace)
-  const withCtx = <T>(workspaceRoot: string, fn: () => Promise<T>) =>
-    withToolWorkspaceContext(ctx.toolContextQueueRef, ctx.workspace, workspaceRoot, fn)
+  // Per-request AgentRuntime — owns this run's workspace cwd, kill signals,
+  // browse-web sessions, and ask-user resolver. Inherits shared infra (mssql
+  // pools, executors, catalog cache, sync sinks) from the process root.
+  const runtime = new AgentRuntime({
+    workspaceRoot: runWorkspace.executionRoot,
+    signal: controller.signal,
+  })
+  runtime.shell.cwd = runWorkspace.executionRoot
+  runtime.browserCheck.cwd = runWorkspace.executionRoot
+  runtime.filesystem.basePath = runWorkspace.executionRoot
+  runtime.searchFiles.basePath = runWorkspace.executionRoot
 
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
     ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
   })
 
-  const trackedTools = tools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot, withCtx))
+  const trackedTools = tools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot))
   const governedTools = trackedTools.map(governRuntimeTool)
 
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
@@ -323,11 +329,11 @@ export async function executeRunImpl(
         const perToolCtrl = new AbortController()
         const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
         callSignals.set(toolCallId, composed)
-        // Legacy globals — kept for browser/fetch/shell tools that haven't been
-        // migrated to ALS yet. mssql now uses ALS via wrap() below.
-        setShellSignal(composed)
-        setFetchKillSignal(composed)
-        setBrowseKillSignal(composed)
+        // Tool-call kill signals live on the per-request runtime. shell/fetch
+        // /browse-web tools read these via currentRuntime() inside agent.run().
+        runtime.shell.killSignal = composed
+        runtime.fetchUrl.killSignal = composed
+        runtime.browseWeb.killSignal = composed
         return new Promise<string>((resolve) => {
           const key = `${runId}:${toolCallId}`
           ctx.pendingKills.set(key, { resolve, perToolCtrl })
@@ -337,9 +343,9 @@ export async function executeRunImpl(
       unregister: (toolCallId: string) => {
         callSignals.delete(toolCallId)
         ctx.pendingKills.delete(`${runId}:${toolCallId}`)
-        setShellSignal(controller.signal)
-        setFetchKillSignal(null)
-        setBrowseKillSignal(null)
+        runtime.shell.killSignal = controller.signal
+        runtime.fetchUrl.killSignal = null
+        runtime.browseWeb.killSignal = null
         broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
       },
       wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
@@ -359,6 +365,7 @@ export async function executeRunImpl(
     toolKillManager: killManager,
     enablePlanner: true,
     workspaceRoot: runWorkspace.executionRoot,
+    runtime,
     onPlannerTrace: (entry) => handlePlannerTrace(entry, { runId, services, debugSeqRef, saveTrace: boundSaveTrace }),
     plannerDelegateFn: (step, envelope) => spawnChildForPlan(delegateCtx, step, envelope),
     onNudge: (data) => {
@@ -408,9 +415,9 @@ export async function executeRunImpl(
   })
 
   try {
-    setShellSignal(controller.signal)
-    setFetchKillSignal(null)
-    setBrowseKillSignal(null)
+    runtime.shell.killSignal = controller.signal
+    runtime.fetchUrl.killSignal = null
+    runtime.browseWeb.killSignal = null
     let answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
@@ -579,9 +586,7 @@ export async function executeRunImpl(
     const hasCheckpoint = !!db.getCheckpoint(runId)
     createNotification({ type: "run.failed", title: "Run failed", message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`, runId, actions: [{ label: "Review", action: "view-run", data: { runId } }, ...(hasCheckpoint ? [{ label: "Resume", action: "resume-run", data: { runId } }] : []), { label: "Rollback", action: "rollback-run", data: { runId } }] })
   } finally {
-    setShellSignal(null)
-    setFetchKillSignal(null)
-    setBrowseKillSignal(null)
+    await runtime.dispose()
     releaseSlot()
     bus.dispose()
     ctx.pendingInputs.delete(runId)

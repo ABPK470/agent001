@@ -16,28 +16,19 @@
  *   - agent-loop-state.ts — mutable state for the tool loop
  */
 
-import { createAgentLoopState } from "./agent-loop-state.js"
-import { runCompletionGuards } from "./completion-guards.js"
-import { applyFullCompaction, shouldApplyFullCompaction } from "./context-compaction.js"
-import { compactMessages, truncateMessages } from "./context-management.js"
+import { AgentRuntime, getDefaultAgentRuntime } from "./agent-runtime.js"
+import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent/agent-helpers.js"
+import { prepareIterationContext } from "./agent/iteration-prepare.js"
+import { executeToolCallsBranch } from "./agent/iteration-tool-round.js"
 import * as log from "./logger.js"
+import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "./loop/index.js"
 import { attemptPlannerRouting } from "./planner-routing.js"
-import {
-    buildCoherentVerificationPipelineResult,
-    summarizeCoherentVerifierDecision,
-} from "./planner/coherent.js"
-import type { PlannerContext } from "./planner/index.js"
-import type { VerifierDecision } from "./planner/types.js"
-import { verify } from "./planner/verifier.js"
-import { processPostRound } from "./post-round.js"
-import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
-import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "./tool-contract-guidance.js"
-import { executeToolRound } from "./tool-execution.js"
-import type { ToolCallRecord } from "./tool-result.js"
+import type { PlannerContext, VerifierDecision } from "./planner/index.js"
+import type { ToolCallRecord } from "./tool-helpers/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "./types.js"
 
 // Re-export compactMessages for tests (context-compaction.test.ts)
-export { compactMessages } from "./context-management.js"
+export { compactMessages } from "./context/index.js"
 
 export class Agent {
   private readonly llm: LLMClient
@@ -64,6 +55,13 @@ export class Agent {
     deferRecoveryHintsUntilCompletionAttempt: AgentConfig["deferRecoveryHintsUntilCompletionAttempt"]
   }
 
+  /**
+   * Per-agent runtime container. Owns state that previously lived in tool
+   * module-globals. Per-tool migrations land incrementally; today this is
+   * mostly a placeholder, but it's the canonical home for future state.
+   */
+  readonly runtime: AgentRuntime
+
   /** Cumulative token usage across all LLM calls in this agent's run. */
   readonly usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   /** Number of LLM API calls made. */
@@ -75,6 +73,9 @@ export class Agent {
     this.llm = llm
     this.tools = new Map(tools.map((t) => [t.name, t]))
     this.toolList = tools
+    this.runtime = config.runtime ?? getDefaultAgentRuntime()
+    if (config.workspaceRoot) this.runtime.workspaceRoot = config.workspaceRoot
+    if (config.signal) this.runtime.signal = config.signal
     this.config = {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
@@ -111,9 +112,22 @@ export class Agent {
   /**
    * Run the agent with a goal. Returns the final answer.
    *
-   * This is THE agentic loop. Everything else is plumbing.
+   * Wraps the agentic loop in `this.runtime.run(...)` so every tool call
+   * and helper that consults `currentRuntime()` resolves to this Agent's
+   * runtime via AsyncLocalStorage.
    */
-  async run(
+  run(
+    goal: string,
+    resume?: { messages: Message[], iteration: number },
+  ): Promise<string> {
+    return this.runtime.run(() => this.runInternal(goal, resume))
+  }
+
+  /**
+   * The actual agentic loop. Always invoked inside `this.runtime.run(...)`
+   * so `currentRuntime()` inside tool handlers resolves to `this.runtime`.
+   */
+  private async runInternal(
     goal: string,
     resume?: { messages: Message[], iteration: number },
   ): Promise<string> {
@@ -131,31 +145,13 @@ export class Agent {
 
     const state = createAgentLoopState(this.config.maxIterations)
 
-    const runCoherentVerification = async (force = false): Promise<VerifierDecision | null> => {
-      const ce = state.coherentExecution
-      if (!ce) return null
-      if (!force && ce.lastVerifierDecision && ce.lastVerifiedToolCallCount === this.allToolCalls.length) {
-        return ce.lastVerifierDecision
-      }
-      const decision = await verify(
-        this.llm, ce.verificationPlan,
-        buildCoherentVerificationPipelineResult(ce.bundle, this.allToolCalls),
-        this.toolList,
-        { signal: this.config.signal, onTrace: this.config.onPlannerTrace, skipContractValidation: true },
-      )
-      ce.lastVerifierDecision = decision
-      ce.lastVerifiedToolCallCount = this.allToolCalls.length
-      const summary = summarizeCoherentVerifierDecision(decision)
-      this.config.onPlannerTrace?.({
-        kind: "coherent-generation-verified",
-        overall: summary.overall,
-        confidence: summary.confidence,
-        issueCount: summary.issueCount,
-        systemCheckCount: summary.systemCheckCount,
-        affectedArtifacts: [...summary.affectedArtifacts],
-      })
-      return decision
-    }
+    const verifyCoherent = (force = false): Promise<VerifierDecision | null> =>
+      runCoherentVerification({
+        llm: this.llm, toolList: this.toolList, state,
+        allToolCalls: this.allToolCalls,
+        signal: this.config.signal,
+        onPlannerTrace: this.config.onPlannerTrace,
+      }, force)
 
     // ── Planner-first routing ──
     if (!resume) {
@@ -167,7 +163,7 @@ export class Agent {
         allToolCalls: this.allToolCalls,
         incrementLlmCalls: () => { this.llmCalls++ },
         createPlannerContext,
-        runCoherentVerification,
+        runCoherentVerification: verifyCoherent,
       })
       if (plannerResult.finalAnswer) {
         if (this.config.verbose) log.logFinalAnswer(plannerResult.finalAnswer)
@@ -194,71 +190,10 @@ export class Agent {
 
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
-      // ── Full history compaction ──
-      if (shouldApplyFullCompaction(messages, i, state.lastFullCompactionIteration)) {
-        const { compacted: fullyCompacted, state: compactionState } = applyFullCompaction(messages, i)
-        messages.splice(0, messages.length, ...fullyCompacted)
-        state.lastFullCompactionIteration = i
-        this.config.onNudge?.({
-          tag: "context-compaction",
-          message: `Session checkpoint at iteration ${i}: ${compactionState.writtenFiles.length} file records captured`,
-          iteration: i,
-        })
-      }
-
-      // ── Context management: compact then truncate ──
-      const compacted = compactMessages(messages)
-      const compactedCount = compacted.filter((m, idx) => m.content !== messages[idx]?.content).length
-      if (compactedCount > 0) {
-        const savedChars = messages.reduce((s, m) => s + (m.content?.length ?? 0), 0)
-          - compacted.reduce((s, m) => s + (m.content?.length ?? 0), 0)
-        this.config.onNudge?.({
-          tag: "context-compaction",
-          message: `Compacted ${compactedCount} stale tool results, saved ~${Math.round(savedChars / 4)} tokens`,
-          iteration: i,
-        })
-      }
-      const truncationResult = truncateMessages(compacted)
-      const chatMessages = truncationResult.messages
-
-      if (truncationResult.budgetDiagnostics) {
-        const diag = truncationResult.budgetDiagnostics
-        this.config.onNudge?.({
-          tag: "prompt-budget",
-          message: `Prompt budget applied: ${diag.totalBeforeChars} → ${diag.totalAfterChars} chars` +
-            (diag.droppedSections.length > 0 ? `, dropped: ${diag.droppedSections.join(", ")}` : "") +
-            (diag.constrained ? " [constrained]" : ""),
-          iteration: i,
-        })
-      }
-
-      // ── Tool contract guidance ──
-      const contractCtx: ToolContractContext = {
-        iteration: i,
-        availableToolNames: this.toolList.map(t => t.name),
-        lastRoundHadDelegation: state.lastRoundHadDelegation,
-        lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
-        inPostDelegationVerification: state.inPostDelegationVerification,
-        artifactsRequiringReadBeforeMutation: state.artifactsRequiringReadBeforeMutation,
-        wroteUnverifiedFiles: state.wroteUnverifiedFiles,
-        writtenButNotReread: state.writtenButNotReread,
-        lastRoundToolCalls: state.lastRoundToolCallsSnapshot,
-        isKeyBlocked: (key) => state.circuitBreaker.isKeyBlocked(key) !== null,
-      }
-      const contractGuidance = resolveToolContractGuidance(contractCtx)
-      let chatToolsForLLM = this.toolList
-      const contractMessages = [...chatMessages]
-      if (contractGuidance) {
-        const applied = applyToolContractGuidance(contractGuidance, this.toolList.map(t => t.name))
-        const nameSet = new Set(applied.filteredToolNames)
-        chatToolsForLLM = this.toolList.filter(t => nameSet.has(t.name))
-        if (applied.injectedInstruction && contractMessages.length > 0) {
-          contractMessages.push({ role: "system", content: applied.injectedInstruction, section: "history" })
-        }
-        if (this.config.verbose) {
-          log.logError(`[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`)
-        }
-      }
+      const { contractMessages, chatToolsForLLM } = prepareIterationContext({
+        messages, iteration: i, state, toolList: this.toolList,
+        config: { verbose: this.config.verbose, onNudge: this.config.onNudge },
+      })
 
       // ── LLM call ──
       // Stream tokens live to the UI via onToken. If this iteration turns out
@@ -307,7 +242,7 @@ export class Agent {
           response, messages, iteration: i, state,
           toolList: this.toolList,
           config: this.config,
-          runCoherentVerification,
+          runCoherentVerification: verifyCoherent,
           createPlannerContext,
           onPlannerTrace: this.config.onPlannerTrace,
         })
@@ -335,67 +270,17 @@ export class Agent {
       }
 
       // ── Execute tool calls ──
-      // This iteration was intermediate — discard the buffered tokens.
-      // The UI never saw them, so no visible flash of garbage reasoning text.
-      this.config.onStreamDiscard?.()
-      messages.push({
-        role: "assistant",
-        content: response.content,
-        toolCalls: response.toolCalls,
-        section: "history",
-      })
-
-      const roundResult = await executeToolRound(
-        response.toolCalls as Array<{ id: string; name: string; arguments: Record<string, unknown> & { __parseError?: boolean; __raw?: string } }>,
-        {
-          tools: this.tools,
-          toolList: this.toolList,
-          state, messages,
-          config: this.config,
-          iteration: i,
-          allToolCalls: this.allToolCalls,
-        },
-      )
-
-      // Handle forced aborts
-      if (roundResult.forcedAbortLoopMessage) {
-        this.allToolCalls.push(...roundResult.roundToolCalls)
-        messages.push({ role: "system", content: roundResult.forcedAbortLoopMessage, section: "history" })
-        this.config.onNudge?.({ tag: "fatal-tool-outcome", message: roundResult.forcedAbortLoopMessage, iteration: i })
-        if (this.config.verbose) log.logError(roundResult.forcedAbortLoopMessage)
-        return roundResult.forcedAbortLoopMessage
-      }
-
-      if (roundResult.forcedAbortRoundMessage) {
-        this.allToolCalls.push(...roundResult.roundToolCalls)
-        messages.push({ role: "system", content: roundResult.forcedAbortRoundMessage, section: "history" })
-        this.config.onNudge?.({ tag: "abort-round-tool-outcome", message: roundResult.forcedAbortRoundMessage, iteration: i })
-        if (this.config.verbose) log.logError(roundResult.forcedAbortRoundMessage)
-        this.config.onStep?.(messages, i)
-        continue
-      }
-
-      // ── Post-round processing ──
-      const postRound = processPostRound({
-        roundToolCalls: roundResult.roundToolCalls,
-        response,
-        messages, state,
-        iteration: i,
+      const branchResult = await executeToolCallsBranch({
+        response, messages, iteration: i, state,
+        tools: this.tools, toolList: this.toolList,
         config: this.config,
         allToolCalls: this.allToolCalls,
-        failuresThisRound: roundResult.failuresThisRound,
-        delegationThisRound: roundResult.delegationThisRound,
-        delegationThisRoundWasReadOnly: roundResult.delegationThisRoundWasReadOnly,
       })
-
-      if (postRound.finalAnswer) {
-        if (this.config.verbose) log.logFinalAnswer(postRound.finalAnswer)
-        return postRound.finalAnswer
+      if (branchResult.finalAnswer !== undefined) {
+        return branchResult.finalAnswer
       }
-
-      // Stuck detection asked for a synthesis call — do it with no tools so
-      // the model can only write text, not call more tools.
-      if (postRound.needsSynthesis) {
+      if (branchResult.shouldContinue) continue
+      if (branchResult.needsSynthesis) {
         const synthesisAnswer = await this.synthesizeFinalAnswer(messages)
         if (this.config.verbose) log.logFinalAnswer(synthesisAnswer)
         return synthesisAnswer
@@ -413,37 +298,14 @@ export class Agent {
     return maxIterAnswer
   }
 
-  /**
-   * Make one final no-tool LLM call to synthesize a proper answer from the
-   * conversation so far. Used by stuck detection and max-iterations fallback.
-   * Passes an empty tool list so the model cannot call any tools.
-   */
-  private async synthesizeFinalAnswer(messages: Message[]): Promise<string> {
-    try {
-      const truncationResult = truncateMessages(messages)
-      const response = await this.llm.chat(truncationResult.messages, [], { signal: this.config.signal })
-      this.llmCalls++
-      if (response.usage) {
-        this.usage.promptTokens += response.usage.promptTokens
-        this.usage.completionTokens += response.usage.completionTokens
-        this.usage.totalTokens += response.usage.totalTokens
-      }
-      return response.content ?? "(The agent was unable to produce a final answer.)"
-    } catch {
-      return "(The agent was unable to produce a final answer.)"
-    }
+  private synthesizeFinalAnswer(messages: Message[]): Promise<string> {
+    return synthesizeFinalAnswer({
+      llm: this.llm, signal: this.config.signal, usage: this.usage,
+      incrementLlmCalls: () => { this.llmCalls++ },
+    }, messages)
   }
 
   private buildInitialMessages(goal: string): Message[] {
-    if (this.config.systemMessages && this.config.systemMessages.length > 0) {
-      return [
-        ...this.config.systemMessages,
-        { role: "user", content: goal, section: "user" },
-      ]
-    }
-    return [
-      { role: "system", content: this.config.systemPrompt, section: "system_anchor" },
-      { role: "user", content: goal, section: "user" },
-    ]
+    return buildInitialMessages(goal, this.config)
   }
 }

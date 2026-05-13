@@ -311,9 +311,9 @@ export interface LayoutItem {
   minH?: number
 }
 
-// ── WebSocket events ─────────────────────────────────────────────
+// ── SSE events ────────────────────────────────────────────────────────
 
-export interface WsEvent {
+export interface SseEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string

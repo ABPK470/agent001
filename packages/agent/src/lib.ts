@@ -1,107 +1,17 @@
 /**
- * Agent package barrel export.
+ * Agent package barrel — the public face of `@agent001/agent`.
  *
- * Everything other packages need to run governed agents.
+ * Re-exports happen one cluster at a time. Outside this package, never
+ * import from `packages/agent/src/<cluster>/<file>.js` directly — always
+ * through here or through the cluster's `index.ts`.
  */
 
-// Core agent
+// ── Core ────────────────────────────────────────────────────────────
+export { AgentRuntime } from "./agent-runtime.js"
+export type { AgentRuntimeOptions } from "./agent-runtime.js"
 export { Agent } from "./agent.js"
 
-// Types
-export {
-    DROP_PRIORITY,
-    NEVER_DROP_SECTIONS,
-    SECTION_WEIGHTS
-} from "./types.js"
-export type {
-    AgentConfig,
-    LLMClient,
-    LLMResponse,
-    Message,
-    PromptBudgetSection,
-    TokenUsage,
-    Tool,
-    ToolCall
-} from "./types.js"
-
-// Governance
-export {
-    createEngineServices, createToolStep, governTool, printGovernanceReport,
-    runGoverned
-} from "./governance.js"
-export type { EngineServices, GovernedResult, GovernToolOptions, RunState } from "./governance.js"
-
-// Retry
-export { isRetryableError, TOOL_RETRY_POLICY, withToolRetry } from "./retry.js"
-export type { ToolRetryPolicy, ToolRetryResult } from "./retry.js"
-
-// Recovery & resilience (ported from agenc-core)
-export { ToolFailureCircuitBreaker } from "./circuit-breaker.js"
-export type { CircuitBreakerConfig } from "./circuit-breaker.js"
-export { applyPromptBudget, derivePromptBudgetPlan } from "./prompt-budget.js"
-export type { PromptBudgetAllocationResult, PromptBudgetConfig, PromptBudgetDiagnostics } from "./prompt-budget.js"
-export { buildRecoveryHints, buildSemanticToolCallKey, computeQualityProxy, didToolCallFail, extractToolFailureText } from "./recovery.js"
-export type { QualityProxyInput, RecoveryHint, ToolCallRecord } from "./recovery.js"
-
-// Tool contract guidance (agenc-core enhancement)
-export { applyToolContractGuidance, resolveToolContractGuidance } from "./tool-contract-guidance.js"
-export type { AppliedToolContractGuidance, ToolContractContext, ToolContractEnforcement, ToolContractGuidance, ToolContractLifetime } from "./tool-contract-guidance.js"
-
-// Context compaction (ArtifactCompactionState + LLMStatefulResumeAnchor)
-export {
-    applyFullCompaction,
-    buildResumeAnchorMessage,
-    extractCompactionState,
-    shouldApplyFullCompaction
-} from "./context-compaction.js"
-export type { ArtifactCompactionState, CompactedFileRecord } from "./context-compaction.js"
-
-// Context management (message compaction & truncation)
-export { compactMessages, estimateTokens, truncateMessages } from "./context-management.js"
-export type { TruncationResult } from "./context-management.js"
-
-// System prompt
-export { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "./system-prompt.js"
-
-// Delegation bandit learning (agenc-core enhancement)
-export {
-    DelegationBanditTuner,
-    getGlobalDelegationBanditTuner,
-    setGlobalDelegationBanditTuner
-} from "./delegation-learning.js"
-export type { BanditArm, BanditArmId, DelegationTrajectoryRecord } from "./delegation-learning.js"
-
-// Tool utils (ported from agenc-core tool-loop + tool-utils)
-export {
-    checkToolLoopStuckDetection,
-    enrichToolResultMetadata,
-    evaluateToolRoundBudgetExtension,
-    executeToolWithTimeout,
-    summarizeToolRoundProgress
-} from "./tool-utils.js"
-export type {
-    RoundStuckState,
-    StuckDetectionResult,
-    ToolCallPermissionResult,
-    ToolExecutionConfig,
-    ToolExecutionResult,
-    ToolLoopState,
-    ToolRoundBudgetExtensionResult,
-    ToolRoundProgressSummary
-} from "./tool-utils.js"
-
-// Delegation decision (ported from agenc-core delegation-decision.ts)
-export { assessDelegationDecision, resolveDelegationDecisionConfig } from "./delegation-decision.js"
-export type {
-    DelegationDecision,
-    DelegationDecisionConfig,
-    DelegationDecisionInput,
-    DelegationDecisionReason,
-    DelegationHardBlockedTaskClass,
-    DelegationSubagentStepProfile
-} from "./delegation-decision.js"
-
-// Constants (ported from agenc-core chat-executor-constants.ts)
+// ── Types & constants ───────────────────────────────────────────────
 export {
     DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE,
     DEFAULT_TOOL_FAILURE_BREAKER_COOLDOWN_MS,
@@ -122,93 +32,41 @@ export {
     SAFE_RETRY_TOOLS,
     VERIFICATION_TOOLS
 } from "./constants.js"
-
-// Additional types
-export { ChatBudgetExceededError } from "./types.js"
-export type { ChatCallUsageRecord, StopReason, ToolKillManager } from "./types.js"
-
-// Engine (re-export governance infrastructure for server)
 export {
-    approvalRequired, AuditService, cancelRun,
-    completeRun,
-    completeStep,
-    createRun,
-    failRun,
-    failStep, Learner,
-    MemoryAuditRepository,
-    MemoryEventBus,
-    MemoryExecutionRecordRepository,
-    MemoryRunRepository,
-    PolicyEffect,
-    PolicyViolationError,
-    RulePolicyEvaluator, runCompleted,
-    runFailed,
-    runStarted, RunStatus, startPlanning,
-    startRunning,
-    startStep,
-    stepCompleted,
-    stepFailed,
-    stepStarted, StepStatus
-} from "./engine/index.js"
+    ChatBudgetExceededError, DROP_PRIORITY,
+    NEVER_DROP_SECTIONS,
+    SECTION_WEIGHTS
+} from "./types.js"
 export type {
-    AgentRun,
-    ApprovalRequired,
-    AuditEntry,
-    DomainEvent,
-    ExecutionRecord,
-    PolicyRule,
-    Step
-} from "./engine/index.js"
+    AgentConfig,
+    ChatCallUsageRecord,
+    LLMClient,
+    LLMResponse,
+    Message,
+    PromptBudgetSection,
+    StopReason,
+    TokenUsage,
+    Tool,
+    ToolCall,
+    ToolKillManager
+} from "./types.js"
 
-// LLM clients
-export { DatabricksClient } from "./llm/databricks.js"
-export { OpenAIClient } from "./llm/openai.js"
+// ── Clusters (one barrel per cluster) ───────────────────────────────
+export * from "./context/index.js"
+export * from "./delegation/index.js"
+export * from "./engine/index.js"
+export * from "./governance/index.js"
+export * from "./llm/index.js"
+export * from "./loop/index.js"
+export * from "./recovery/index.js"
+export * from "./sync/index.js"
+export * from "./tool-helpers/index.js"
+export * from "./tools/index.js"
 
-// Built-in tools
-export { askUserTool, setAskUserResolver } from "./tools/ask-user.js"
-export type { AskUserResolver } from "./tools/ask-user.js"
-export { browseWebTool, closeAllBrowserSessions, setBrowseKillSignal } from "./tools/browse-web.js"
-export { browserCheckTool, setBrowserCheckCwd, setBrowserCheckExecutor } from "./tools/browser-check.js"
-export type { BrowserCheckResult } from "./tools/browser-check.js"
-export { searchCatalogTool } from "./tools/catalog-search.js"
-export { buildCatalog, getCatalog, getCatalogPromptSummary, hasCatalog, loadLineage } from "./tools/catalog.js"
-export type { CatalogBuildOptions, CatalogGraph, CatalogStats, CatalogTable, ConceptNode, ConceptPathEdge, ConceptPathResult, ConceptPathStep, ImplicitEdge, ViewLineage } from "./tools/catalog.js"
-export { createDelegateTool, createDelegateTools, spawnChildForPlan } from "./tools/delegate.js"
-export type { DelegateContext, ResolvedAgent } from "./tools/delegate.js"
-export { fetchUrlTool, setFetchKillSignal } from "./tools/fetch-url.js"
-export {
-    appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, setBasePath, writeFileTool
-} from "./tools/filesystem.js"
-export { inspectDefinitionTool } from "./tools/mssql-inspector.js"
-export { profileDataTool } from "./tools/mssql-profiler.js"
-export { discoverRelationshipsTool } from "./tools/mssql-relationships.js"
-export {
-    closeMssqlPool, exportQueryToFileTool, getDefaultMssqlConnectionName, getMssqlConfig, getPool as getMssqlPool, mssqlSchemaTool, mssqlTool, runWithMssqlKillSignal, setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlKillSignal, setMssqlWriteEnabled
-} from "./tools/mssql.js"
-export { searchFilesTool, setSearchBasePath } from "./tools/search-files.js"
-export { setShellCwd, setShellExecutor, setShellSandboxStrict, setShellSignal, shellTool } from "./tools/shell.js"
-export type { ShellExecResult } from "./tools/shell.js"
-export { compareCatalogsTool, listEnvironmentsTool, syncExecuteTool, syncPreviewTool } from "./tools/sync-tools.js"
-export { thinkTool } from "./tools/think.js"
+// Renamed re-export preserved for back-compat with @agent001/server.
+export { getPool as getMssqlPool } from "./tools/index.js"
 
-// ── Sync subsystem (environments, recipes, plans, orchestration) ─
-export { detectCatalogDrift, tableHasTriggers, type CatalogDriftResult } from "./sync/catalog-drift.js"
-export { getEnvironment, getEnvironments, setEnvironments, setupEnvironments, type EnvRole, type SyncEnvironment } from "./sync/environments.js"
-export {
-    configureSyncOrchestrator, executeSync, previewSync, searchEntities, setSyncEventSink, setSyncRunSink,
-    type EntitySearchResult, type ExecuteOptions, type ExecuteProgress, type PreviewInput, type SyncEvent, type SyncEventSink, type SyncRunFinishInput, type SyncRunSink, type SyncRunStartInput
-} from "./sync/orchestrator.js"
-export {
-    allocPlanId, configurePlanStore, deletePlan, loadPlan, planTooOldToExecute, savePlan,
-    type SyncPlan, type SyncPlanConflict, type SyncPlanGraph, type SyncPlanGraphNode, type SyncPlanRowSample, type SyncPlanTable, type SyncPlanTableCounts, type SyncPlanTotals
-} from "./sync/plan-store.js"
-export {
-    clearSyncRecipesCache, getRecipe, instantiatePredicate, loadSyncRecipes,
-    type DiscoverySource, type EntityType, type SyncRecipe, type SyncRecipeBundle, type SyncRecipeDiscrepancy, type SyncRecipeTable
-} from "./sync/recipes.js"
-
-// ── Planner platform-error helpers (server-side enrichment of opaque user
-//    answers with run reference + operator-only logging) ─
+// ── Planner public surface (curated subset; planner has its own index) ─
 export {
     detectInternalFailure,
     detectPlatformUnconfigured,
@@ -218,17 +76,13 @@ export {
     isPlatformUnconfiguredAnswer,
     isPolishedFailureAnswer,
     isUserSafeFailureAnswer,
+    mapFailureKindForPolish,
     markPolishedFailure,
     PLATFORM_UNCONFIGURED_PREFIX,
     POLISHED_FAILURE_MARKER,
+    polishFailureForUser,
     synthesizeGenericFailureAnswer,
     type InternalFailureHit,
-    type PlatformUnconfiguredHit
-} from "./planner/platform-errors.js"
-
-export {
-    mapFailureKindForPolish,
-    polishFailureForUser,
+    type PlatformUnconfiguredHit,
     type PolishFailureInput
-} from "./planner/polish-failure.js"
-
+} from "./planner/index.js"

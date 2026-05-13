@@ -13,7 +13,7 @@ import {
     hasWhereClause,
     isUnsafeScan,
     referencedLargeObjects,
-} from "../src/tools/mssql.js"
+} from "../src/tools/index.js"
 
 // ── referencedLargeObjects ────────────────────────────────────────
 

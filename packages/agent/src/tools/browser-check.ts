@@ -14,16 +14,16 @@
  * and everything is torn down cleanly.
  */
 
-import { readFile, stat } from "node:fs/promises"
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
-import { extname, join } from "node:path"
+import { stat } from "node:fs/promises"
+import { join } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
+import { startStaticServer } from "./browser-check/static-server.js"
 
-/** Workspace directory — browser_check serves files from here. */
-let _browserCheckCwd = process.cwd()
+/** Workspace directory + optional sandbox executor — owned by a const state record. */
 
 export function setBrowserCheckCwd(cwd: string): void {
-  _browserCheckCwd = cwd
+  currentRuntime().browserCheck.cwd = cwd
 }
 
 /** Result from a sandboxed browser check. */
@@ -38,77 +38,16 @@ export interface BrowserCheckResult {
  * Optional executor injected by the server for Docker-sandboxed browser checks.
  * When set, the browser runs inside a container with Chromium + its own sandbox.
  */
-type BrowserCheckExecutor = (
+export type BrowserCheckExecutor = (
   htmlPath: string,
   clicks: string[],
   waitMs: number,
   cwd: string,
 ) => Promise<BrowserCheckResult>
-let _browserExecutor: BrowserCheckExecutor | null = null
 
 /** Inject a sandbox executor for browser checks (called once at server startup). */
 export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
-  _browserExecutor = executor
-}
-
-/** MIME types for common web files. */
-const MIME: Record<string, string> = {
-  ".html": "text/html",
-  ".htm": "text/html",
-  ".js": "application/javascript",
-  ".mjs": "application/javascript",
-  ".css": "text/css",
-  ".json": "application/json",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-}
-
-/**
- * Spin up a minimal static file server rooted at `dir`.
- * Returns the server + the URL it's listening on.
- */
-function startStaticServer(dir: string): Promise<{ server: ReturnType<typeof createServer>; url: string }> {
-  return new Promise((resolve, reject) => {
-    const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-      const urlPath = decodeURIComponent(req.url?.split("?")[0] ?? "/")
-      const relPath = (urlPath === "/" ? "index.html" : urlPath.replace(/^\/+/, "")) || "index.html"
-      const filePath = join(dir, relPath)
-
-      // Prevent path traversal
-      if (!filePath.startsWith(dir)) {
-        res.writeHead(403)
-        res.end("Forbidden")
-        return
-      }
-
-      try {
-        const content = await readFile(filePath)
-        const ext = extname(filePath).toLowerCase()
-        res.writeHead(200, { "Content-Type": MIME[ext] ?? "application/octet-stream" })
-        res.end(content)
-      } catch {
-        res.writeHead(404)
-        res.end("Not found")
-      }
-    })
-
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address()
-      if (addr && typeof addr === "object") {
-        resolve({ server, url: `http://127.0.0.1:${addr.port}` })
-      } else {
-        reject(new Error("Failed to start static server"))
-      }
-    })
-    server.on("error", reject)
-  })
+  currentRuntime().browserCheck.executor = executor
 }
 
 export const browserCheckTool: Tool = {
@@ -152,7 +91,7 @@ export const browserCheckTool: Tool = {
     const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
 
     // Resolve paths
-    const fullPath = join(_browserCheckCwd, relPath)
+    const fullPath = join(currentRuntime().browserCheck.cwd, relPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
     const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
 
@@ -164,9 +103,10 @@ export const browserCheckTool: Tool = {
     }
 
     // Route through Docker sandbox if executor is available
-    if (_browserExecutor) {
+    const browserCheck = currentRuntime().browserCheck
+    if (browserCheck.executor) {
       try {
-        const result = await _browserExecutor(relPath, clicks, waitMs, _browserCheckCwd)
+        const result = await browserCheck.executor(relPath, clicks, waitMs, browserCheck.cwd)
         return result.report
       } catch (err) {
         return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`

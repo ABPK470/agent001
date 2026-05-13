@@ -6,7 +6,7 @@ import { broadcast } from "../event-broadcaster.js"
 
 /**
  * Handle a single onPlannerTrace entry from the agent engine.
- * Routes each planner event kind to its WebSocket broadcast + audit log.
+ * Routes each planner event kind to its SSE broadcast + audit log.
  */
 export function handlePlannerTrace(
   entry: unknown,

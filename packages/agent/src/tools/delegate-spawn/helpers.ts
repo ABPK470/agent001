@@ -1,4 +1,4 @@
-import type { VerificationAttempt } from "../../planner/types.js"
+import type { VerificationAttempt } from "../../planner/index.js"
 import { uniqueStrings } from "../delegate-paths.js"
 
 export interface ChildSpec {

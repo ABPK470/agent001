@@ -15,9 +15,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { Agent } from "../src/agent.js"
-import { detectPlaceholderPatterns } from "../src/code-quality.js"
-import { normalizeToolExecutionOutput } from "../src/tool-utils.js"
-import { listDirectoryTool, readFileTool, setBasePath, writeFileTool } from "../src/tools/filesystem.js"
+import { detectPlaceholderPatterns } from "../src/governance/index.js"
+import { normalizeToolExecutionOutput } from "../src/tool-helpers/index.js"
+import { listDirectoryTool, readFileTool, setBasePath, writeFileTool } from "../src/tools/index.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────

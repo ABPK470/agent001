@@ -1,5 +1,6 @@
 import sql from "mssql"
 import { AsyncLocalStorage } from "node:async_hooks"
+import { currentRuntime } from "../../agent-runtime.js"
 
 // ── Named connection registry ────────────────────────────────────
 
@@ -10,45 +11,37 @@ export interface DatabaseEntry {
   knowledge: string | null
 }
 
-const _databases = new Map<string, DatabaseEntry>()
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. Owned by AgentRuntime in future, but the API surface stays.
 
-/** The explicit default connection name (set via MSSQL_DEFAULT_CONNECTION). */
-let _defaultConnection: string | null = null
+// `currentRuntime().mssql.databases` is the connection registry (set up by
+// the server via `setMssqlConfig*`). Lives on the active AgentRuntime.
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(name: string): void {
-  _defaultConnection = name
+  currentRuntime().mssql.defaultConnection = name
 }
 
 /** Return the configured default connection name (null = fall back to first). */
 export function getDefaultMssqlConnectionName(): string | null {
-  return _defaultConnection
+  return currentRuntime().mssql.defaultConnection
 }
 
 /**
  * Per-tool-call kill signal — when aborted, cancels any in-flight query.
  *
- * Two storage layers (concurrency-safe):
- *   1. AsyncLocalStorage scoped per tool execution (preferred). The
- *      orchestrator wraps each tool call in `runWithMssqlKillSignal()` so
- *      concurrent runs see their own signal even when interleaved.
- *   2. A module-level fallback for callers that don't enter the ALS scope
- *      (single-user CLI mode, legacy tests). Setting null clears it.
- *
- * The fallback was the *only* path before multi-user — it's a real
- * concurrency bug under multi-user load (last writer wins). ALS fixes it.
+ * Stored in `AsyncLocalStorage` scoped per tool execution. The orchestrator
+ * wraps each tool call in `runWithMssqlKillSignal()` so concurrent runs see
+ * their own signal even when interleaved. There is no module-level fallback:
+ * the legacy `setMssqlKillSignal` was a known concurrency bug (last writer
+ * wins under multi-user load) and was deleted in Phase 2.
  */
 const killSignalAls = new AsyncLocalStorage<AbortSignal>()
-let _fallbackKillSignal: AbortSignal | null = null
 
-/** Set the fallback (non-ALS) kill signal. Prefer runWithMssqlKillSignal. */
-export function setMssqlKillSignal(signal: AbortSignal | null): void {
-  _fallbackKillSignal = signal
-}
-
-/** Get the active kill signal (ALS-scoped > fallback). */
+/** Get the active kill signal (ALS-scoped). */
 export function getMssqlKillSignal(): AbortSignal | null {
-  return killSignalAls.getStore() ?? _fallbackKillSignal
+  return killSignalAls.getStore() ?? null
 }
 
 /** Run `fn` with `signal` as the active mssql kill signal for its async context. */
@@ -63,7 +56,7 @@ export function runWithMssqlKillSignal<T>(signal: AbortSignal, fn: () => T): T {
  *                Defaults to "default" for backwards compatibility.
  */
 export function setMssqlConfig(config: sql.config, name = "default", knowledge: string | null = null): void {
-  _databases.set(name, {
+  currentRuntime().mssql.databases.set(name, {
     config: {
       ...config,
       options: {
@@ -93,9 +86,9 @@ export function setMssqlConfig(config: sql.config, name = "default", knowledge: 
 export function setMssqlConfigs(
   configs: Array<{ name: string; writeEnabled?: boolean; knowledge?: string | null } & sql.config>,
 ): void {
-  _databases.clear()
+  currentRuntime().mssql.databases.clear()
   for (const { name, writeEnabled = false, knowledge = null, ...rest } of configs) {
-    _databases.set(name, {
+    currentRuntime().mssql.databases.set(name, {
       config: {
         ...rest,
         options: {
@@ -121,13 +114,13 @@ export function setMssqlConfigs(
 
 /** Enable/disable write operations for a named connection (default: "default"). */
 export function setMssqlWriteEnabled(enabled: boolean, name = "default"): void {
-  const entry = _databases.get(name)
+  const entry = currentRuntime().mssql.databases.get(name)
   if (entry) entry.writeEnabled = enabled
 }
 
 /** Return a safe summary of all configured connections (no credentials). */
 export function getMssqlConfig(): Array<{ name: string; server: string; database: string; writeEnabled: boolean; knowledge: string | null }> {
-  return Array.from(_databases.entries()).map(([name, entry]) => ({
+  return Array.from(currentRuntime().mssql.databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
     database: entry.config.database!,
@@ -142,14 +135,17 @@ export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionP
   // there is no "default" entry.  Fall back to:
   //   1. The connection named by setDefaultMssqlConnection() / MSSQL_DEFAULT_CONNECTION
   //   2. The first configured connection (legacy fallback)
-  const resolvedName = _databases.has(name)
+  const mssql = currentRuntime().mssql
+  const resolvedName = mssql.databases.has(name)
     ? name
-    : (name === "default" && _databases.size > 0)
-      ? (_defaultConnection && _databases.has(_defaultConnection) ? _defaultConnection : _databases.keys().next().value as string)
+    : (name === "default" && mssql.databases.size > 0)
+      ? (mssql.defaultConnection && mssql.databases.has(mssql.defaultConnection)
+          ? mssql.defaultConnection
+          : mssql.databases.keys().next().value as string)
       : name
-  const entry = _databases.get(resolvedName)
+  const entry = mssql.databases.get(resolvedName)
   if (!entry) {
-    const available = Array.from(_databases.keys()).join(", ") || "none"
+    const available = Array.from(mssql.databases.keys()).join(", ") || "none"
     throw new Error(
       `MSSQL connection "${name}" not configured. Available: ${available}. ` +
       `Call setMssqlConfig() or setMssqlConfigs() at startup.`,
@@ -166,7 +162,7 @@ export async function getPool(name = "default"): Promise<{ pool: sql.ConnectionP
 
 /** Close all connection pools (called on shutdown). */
 export async function closeMssqlPool(): Promise<void> {
-  for (const entry of _databases.values()) {
+  for (const entry of currentRuntime().mssql.databases.values()) {
     if (entry.pool) {
       try { await entry.pool.close() } catch { /* ignore */ }
       entry.pool = null

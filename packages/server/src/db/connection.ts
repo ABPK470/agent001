@@ -206,6 +206,9 @@ export function _migrate(db: Database.Database): void {
   addColumnIfMissing("ALTER TABLE runs ADD COLUMN display_name TEXT")
   addColumnIfMissing("ALTER TABLE audit_log ADD COLUMN session_id TEXT")
   addColumnIfMissing("ALTER TABLE audit_log ADD COLUMN upn TEXT")
+  // Plan body persistence — lets the History modal re-hydrate the diff
+  // after a server restart (no longer dependent on the 24h disk-JSON TTL).
+  addColumnIfMissing("ALTER TABLE sync_runs ADD COLUMN plan_json TEXT")
 
   // Seed default agent
   db.prepare(`

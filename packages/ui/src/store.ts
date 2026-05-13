@@ -15,12 +15,12 @@ import type {
     Notification,
     Run,
     RunDetail,
+    SseEvent,
     Step,
     TraceEntry,
     ViewConfig,
     Widget,
     WidgetType,
-    WsEvent,
 } from "./types"
 import { randomId } from "./util"
 
@@ -139,9 +139,9 @@ interface AppState {
   pendingKill: { runId: string; toolCallId: string; toolName: string } | null
   setPendingKill: (info: { runId: string; toolCallId: string; toolName: string } | null) => void
 
-  // Raw WebSocket event log (platform dev)
-  wsEventLog: WsEvent[]
-  clearWsEventLog: () => void
+  // Raw SSE event log (platform dev)
+  sseEventLog: SseEvent[]
+  clearSseEventLog: () => void
 
   // Live streaming answer (chunks from LLM before run.completed)
   streamingAnswer: string
@@ -166,8 +166,8 @@ interface AppState {
   /** planId of an in-progress agent-triggered execute. Set on execute.started, cleared on execute.completed/failed. */
   agentSyncExecStarted: string | null
 
-  // WebSocket event handler
-  handleWsEvent: (event: WsEvent) => void
+  // SSE event handler
+  handleEvent: (event: SseEvent) => void
 }
 
 /** Persisted IOE panel layout. */
@@ -891,8 +891,8 @@ export const useStore = create<AppState>()(
       setPendingKill: (info) => set({ pendingKill: info }),
 
       // Raw WS event log
-      wsEventLog: [],
-      clearWsEventLog: () => set({ wsEventLog: [] }),
+      sseEventLog: [],
+      clearSseEventLog: () => set({ sseEventLog: [] }),
 
       streamingAnswer: "",
       appendStreamingChunk: (chunk) => set((s) => ({ streamingAnswer: s.streamingAnswer + chunk })),
@@ -912,13 +912,13 @@ export const useStore = create<AppState>()(
       clearAgentSyncExec: () => set({ agentSyncExec: null }),
       agentSyncExecStarted: null,
 
-      // WebSocket event handler
-      handleWsEvent: (event) => {
+      // SSE event handler
+      handleEvent: (event) => {
         const { type, data, timestamp } = event
         const store = get()
 
         // Record raw event for PlatformDevLog
-        set({ wsEventLog: [...store.wsEventLog, event].slice(-2000) })
+        set({ sseEventLog: [...store.sseEventLog, event].slice(-2000) })
 
         // ── Build a properly-levelled + categorised log entry ──
         const logEntry = formatLogEntry(type, data, timestamp)

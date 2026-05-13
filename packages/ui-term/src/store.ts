@@ -13,7 +13,7 @@
  */
 
 import { create } from "zustand"
-import type { Run, WsEvent } from "./types"
+import type { Run, SseEvent } from "./types"
 
 const MAX_EVENTS = 5000
 
@@ -48,16 +48,16 @@ interface State {
   setActiveRun: (id: string | null) => void
   upsertRun: (r: Partial<Run> & { id: string }) => void
 
-  events: WsEvent[]
+  events: SseEvent[]
   _eventSeen: Set<string>  // dedup guard — not for rendering
   transcript: TranscriptRow[]
   streamingAnswer: string
 
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
 
-  pushEvent: (e: WsEvent) => void
+  pushEvent: (e: SseEvent) => void
   /** Replay historical events into the transcript only — does NOT touch the ops events buffer. */
-  hydrateTranscript: (events: WsEvent[], runId: string) => void
+  hydrateTranscript: (events: SseEvent[], runId: string) => void
   clearStream: () => void
   resetTranscript: (runId: string | null) => void
   clearPendingInput: () => void
@@ -305,7 +305,7 @@ function emptyRun(id: string, goal = "", status = "pending", createdAt = new Dat
   }
 }
 
-function toTranscriptRow(e: WsEvent, state?: State): TranscriptRow | null {
+function toTranscriptRow(e: SseEvent, state?: State): TranscriptRow | null {
   const runId = String(e.data["runId"] ?? "")
   if (!runId) return null
   const id = `${e.type}:${e.timestamp}:${e.data["seq"] ?? Math.random()}`

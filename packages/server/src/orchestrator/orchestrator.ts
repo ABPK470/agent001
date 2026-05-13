@@ -1,9 +1,9 @@
 import {
-    createEngineServices,
-    PolicyEffect,
-    type LLMClient,
-    type Message,
-    type Tool,
+  createEngineServices,
+  PolicyEffect,
+  type LLMClient,
+  type Message,
+  type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
@@ -35,7 +35,6 @@ export class AgentOrchestrator {
   private workspace: string | null = null
   private readonly completedRunWorkspaces = new Map<string, RunWorkspaceContext>()
   private readonly completedRunDiffs = new Map<string, WorkspaceDiff>()
-  private readonly toolContextQueueRef = { current: Promise.resolve() }
 
   constructor(config: OrchestratorConfig) {
     this.llm = config.llm
@@ -221,7 +220,6 @@ export class AgentOrchestrator {
       completedRunWorkspaces: this.completedRunWorkspaces,
       completedRunDiffs: this.completedRunDiffs,
       messageRouter: this.messageRouter,
-      toolContextQueueRef: this.toolContextQueueRef,
     }
   }
 

@@ -51,8 +51,10 @@ import {
 import {
     clearTransactionalData,
     getDb, getDbStats, getLlmConfig,
+    getSyncRunPlanJson,
     migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    pruneOldData, recordSyncRunFinish, recordSyncRunStart, saveApiRequest,
+    pruneOldData,
+    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db.js"
 import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -91,7 +93,7 @@ async function main() {
   await setupEnvironments(_projectRoot)
   configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
   configureSyncOrchestrator(_projectRoot)
-  // Fan sync events out via broadcast(): WS+SSE for live UI, event_log table
+  // Fan sync events out via broadcast(): SSE for live UI, event_log table
   // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
   // for the full list of emitted event types.
   setSyncEventSink((ev) => broadcast({ type: ev.type, data: ev.data }))
@@ -103,6 +105,29 @@ async function main() {
     },
     finish: (i) => {
       try { recordSyncRunFinish(i) } catch (e) { console.warn("[sync] recordSyncRunFinish failed:", e) }
+    },
+    // Durable plan-body persistence — survives restarts so the History modal
+    // can re-hydrate the diff for any past sync run (UI- or agent-initiated).
+    savePlan: (plan) => {
+      try {
+        recordSyncRunPreview({
+          planId: plan.planId,
+          entityType: plan.recipeSnapshot.entityType,
+          entityId: plan.entity.id,
+          entityDisplayName: plan.entity.displayName,
+          source: plan.source,
+          target: plan.target,
+          actorUpn: null, // not known here; recordSyncRunStart sets it on execute
+          previewTotals: plan.totals,
+          planJson: JSON.stringify(plan),
+        })
+      } catch (e) { console.warn("[sync] recordSyncRunPreview failed:", e) }
+    },
+    loadPlan: (planId) => {
+      try {
+        const json = getSyncRunPlanJson(planId)
+        return json ? JSON.parse(json) : null
+      } catch (e) { console.warn("[sync] getSyncRunPlanJson failed:", e); return null }
     },
   })
 

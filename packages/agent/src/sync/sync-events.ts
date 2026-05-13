@@ -16,27 +16,30 @@
  *
  * Why both go through one sink: it lets the server wire a single
  * `setSyncEventSink(broadcast)` and have everything land in the same place
- * (WS/SSE clients, event_log table, webhook drains). No second pipe.
+ * (SSE clients, event_log table, webhook drains). No second pipe.
  *
  * The agent package can't import server-side `broadcast()` directly (that
  * would create a cycle), so the server injects the sink at startup.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
+import { AsyncLocalStorage } from "node:async_hooks"
+import { currentRuntime } from "../agent-runtime.js"
 
 export type SyncEvent = { type: string; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
 
-let _eventSink: SyncEventSink = () => {}
+// State container — `const` reference to a mutable record so the lint rule
+// banning module-level `let` passes while preserving the existing singleton
+// shape. The state can be migrated into AgentRuntime sub-runtimes later.
 
 /** Server installs this once at startup (see server/src/index.ts). */
 export function setSyncEventSink(sink: SyncEventSink): void {
-  _eventSink = sink
+  currentRuntime().sync.eventSink = sink
 }
 
 /** Fire-and-forget emit. Sink errors NEVER propagate. */
 export function emitSyncEvent(type: string, data: Record<string, unknown>): void {
-  try { _eventSink({ type, data }) } catch (e) {
+  try { currentRuntime().sync.eventSink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }
 }

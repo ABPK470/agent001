@@ -17,7 +17,7 @@ type RunLike = {
 // ── Event wiring ──────────────────────────────────────────────────
 
 /**
- * Subscribe engineServices events to WebSocket broadcasting and trace recording.
+ * Subscribe engineServices events to SSE broadcasting and trace recording.
  * Only subscribes to step events — run.completed / run.failed are broadcast
  * explicitly (with full data) after the agent finishes.
  */

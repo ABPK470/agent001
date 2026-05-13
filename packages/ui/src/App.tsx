@@ -48,7 +48,7 @@ function getPopOutWidget(): { type: WidgetType; runId: string | null } | null {
 export function App() {
   const setConnected = useStore((s) => s.setConnected)
   const connected = useStore((s) => s.connected)
-  const handleWsEvent = useStore((s) => s.handleWsEvent)
+  const handleEvent = useStore((s) => s.handleEvent)
   const setRuns = useStore((s) => s.setRuns)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const setSteps = useStore((s) => s.setSteps)
@@ -134,10 +134,10 @@ export function App() {
   // identity changes so the server re-stamps the new client.
   useEffect(() => {
     const stream = popOut
-      ? createPopoutEventRelay(handleWsEvent, setConnected)
-      : createEventStream(handleWsEvent, setConnected)
+      ? createPopoutEventRelay(handleEvent, setConnected)
+      : createEventStream(handleEvent, setConnected)
     return () => stream.close()
-  }, [handleWsEvent, setConnected, popOut, me?.sessionId, me?.upn])
+  }, [handleEvent, setConnected, popOut, me?.sessionId, me?.upn])
 
   // Load initial runs + auto-select the most recent. Re-runs on identity
   // change so each user only sees runs the server scopes to them.
@@ -316,16 +316,20 @@ export function App() {
       <>
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
-        <header className="flex items-center justify-between px-4 h-12 bg-surface shrink-0 select-none">
-          <span className="text-sm font-semibold text-text tracking-wide">
-            AGENT<span className="text-accent">001</span>
-          </span>
-          {currentWidget && (
-            <span className="text-xs text-text-muted uppercase tracking-wider">
-              {WIDGET_LABELS[currentWidget.type]}
+        <header className="flex items-center gap-3 px-4 h-12 bg-surface shrink-0 select-none">
+          <div className="shrink-0 min-w-0">
+            <span className="text-sm font-semibold text-text tracking-wide">
+              MI<span className="text-accent">:A</span>
             </span>
-          )}
-          <div className="flex items-center gap-3">
+          </div>
+          <div className="flex-1 min-w-0 flex justify-center px-2">
+            {currentWidget && (
+              <span className="block max-w-full truncate text-xs text-text-muted uppercase tracking-wider whitespace-nowrap">
+                {WIDGET_LABELS[currentWidget.type]}
+              </span>
+            )}
+          </div>
+          <div className="shrink-0 flex items-center gap-3">
             <div
               className={`w-2 h-2 rounded-full shrink-0 ${connected ? "bg-success" : "bg-error"}`}
             />

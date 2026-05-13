@@ -180,70 +180,74 @@ export function OperationLog() {
 
       {/* ── Toolbar ─────────────────────────────────────── */}
       <div className="rounded-lg border border-border-subtle bg-overlay-1 shrink-0">
-        <div className="flex items-center gap-1.5 px-3 py-2">
+        <div className={`px-3 py-2 ${compact ? "space-y-2.5" : "flex items-center gap-1.5"}`}>
 
-          {/* Kind: all | agent | synchronization */}
-          {(["all", "agent", "sync"] as const).map(v => {
-            const active = v === kindView
-            const label  = v === "sync" ? "synchronization" : v
-            return (
-              <button key={v} onClick={() => setKindView(v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                  active ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                }`}
-              >{label}</button>
-            )
-          })}
+          <div className={`min-w-0 ${compact ? "flex flex-wrap items-center gap-1.5" : "flex items-center gap-1.5 flex-1 min-w-0"}`}>
+            {/* Kind: all | agent | synchronization */}
+            {(["all", "agent", "sync"] as const).map(v => {
+              const active = v === kindView
+              const label  = v === "sync" ? "synchronization" : v
+              return (
+                <button key={v} onClick={() => setKindView(v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
+                    active ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
+                  }`}
+                >{label}</button>
+              )
+            })}
 
-          <div className="h-4 w-px bg-overlay-3 mx-1 shrink-0" />
+            <div className={`bg-overlay-3 shrink-0 ${compact ? "hidden" : "h-4 w-px mx-1"}`} />
 
-          {/* Status chips */}
-          {ALL_STATUSES.map(s => {
-            const on = statuses.has(s)
-            const m  = STATUS_META[s]
-            return (
-              <button key={s} onClick={() => toggleStatus(s)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                  on ? `${m.tone} font-medium` : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                }`}
-              >{s}</button>
-            )
-          })}
+            {/* Status chips */}
+            {ALL_STATUSES.map(s => {
+              const on = statuses.has(s)
+              const m  = STATUS_META[s]
+              return (
+                <button key={s} onClick={() => toggleStatus(s)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
+                    on ? `${m.tone} font-medium` : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
+                  }`}
+                >{s}</button>
+              )
+            })}
 
-          {statuses.size > 0 && (
-            <button onClick={() => setStatuses(new Set())}
-              className="p-1.5 rounded-md transition-colors text-text-muted/60 hover:text-text hover:bg-elevated/40 shrink-0"
-              title="Clear status filters"
-            ><X size={14} /></button>
-          )}
-
-          <div className="flex-1 min-w-0" />
-
-          {/* Search — big, fills remaining space */}
-          <div className="relative flex items-center flex-1 min-w-0 max-w-md shrink-0">
-            <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filter operations…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
-              className="pl-8 pr-7 py-1.5 h-[32px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
-            />
-            {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
-            {search && !histLoading && (
-              <button className="absolute right-2 text-text-muted hover:text-text"
-                onClick={() => { setSearch(""); setHistResults(null) }}>
-                <X size={13} />
-              </button>
+            {statuses.size > 0 && (
+              <button onClick={() => setStatuses(new Set())}
+                className="p-1.5 rounded-md transition-colors text-text-muted/60 hover:text-text hover:bg-elevated/40 shrink-0"
+                title="Clear status filters"
+              ><X size={14} /></button>
             )}
           </div>
 
-          {/* Count: filtered / total-non-system */}
-          <span className="text-[12px] text-text-muted tabular-nums shrink-0 px-1.5">
-            {filtered.length !== nonSystem.length
-              ? <>{filtered.length}<span className="text-text-muted/40">/{nonSystem.length}</span></>
-              : nonSystem.length}
-          </span>
+          <div className={`min-w-0 ${compact ? "flex items-center gap-2" : "flex items-center gap-1.5 shrink-0"}`}>
+            {!compact && <div className="flex-1 min-w-0" />}
+
+            {/* Search — big, fills remaining space */}
+            <div className={`relative flex items-center min-w-0 ${compact ? "flex-1" : "flex-1 max-w-md shrink-0"}`}>
+              <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filter operations…"
+                value={search}
+                onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
+                className="pl-8 pr-7 py-1.5 h-[32px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
+              />
+              {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
+              {search && !histLoading && (
+                <button className="absolute right-2 text-text-muted hover:text-text"
+                  onClick={() => { setSearch(""); setHistResults(null) }}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Count: filtered / total-non-system */}
+            <span className="text-[12px] text-text-muted tabular-nums shrink-0 px-1.5">
+              {filtered.length !== nonSystem.length
+                ? <>{filtered.length}<span className="text-text-muted/40">/{nonSystem.length}</span></>
+                : nonSystem.length}
+            </span>
+          </div>
 
         </div>
       </div>

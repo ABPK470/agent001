@@ -16,11 +16,6 @@
  * @module
  */
 
-import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    validateDelegatedOutputContract,
-} from "../delegation-validation.js"
 import type { LLMClient, Tool } from "../types.js"
 import { uniqueStrings } from "./blueprint-contract.js"
 import type {
@@ -32,107 +27,30 @@ import type {
     VerifierStepAssessment,
 } from "./types.js"
 import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "./verification-model.js"
-import type { StepSpecEvidence } from "./verifier-blueprint.js"
-import { buildStepSpecEvidence } from "./verifier-blueprint.js"
+import type { StepSpecEvidence } from "./internal/verifier-blueprint.js"
+import { buildStepSpecEvidence } from "./internal/verifier-blueprint.js"
 import { buildFallbackDecision } from "./verifier-helpers.js"
-import { extractActualPaths, probeArtifact, readArtifactContent } from "./verifier-io.js"
-import { runLLMVerification } from "./verifier-llm.js"
-import { runDeterministicProbes } from "./verifier-probes.js"
+import { extractActualPaths, probeArtifact, readArtifactContent } from "./internal/verifier-io.js"
+import { runLLMVerification } from "./internal/verifier-llm.js"
+import { runDeterministicProbes } from "./internal/verifier-probes.js"
+import { runContractValidation } from "./verifier/contract-check.js"
+import {
+    collectFollowupEvidence,
+    mergeFollowupIntoAssessments,
+    needsFollowupVerification,
+} from "./verifier/followup.js"
 
 // ============================================================================
 // Re-exports — public API surface
 // ============================================================================
 
 export { isLLMGibberish } from "./verifier-helpers.js"
-export { runLLMVerification } from "./verifier-llm.js"
-export { runDeterministicProbes } from "./verifier-probes.js"
+export { runLLMVerification } from "./internal/verifier-llm.js"
+export { runDeterministicProbes } from "./internal/verifier-probes.js"
 
 // ============================================================================
-// Follow-up verification helpers (used only by verify)
+// Follow-up verification helpers live in verifier/followup.ts
 // ============================================================================
-
-function needsFollowupVerification(assessments: readonly VerifierStepAssessment[]): VerifierStepAssessment[] {
-  return assessments.filter((assessment) => {
-    if (assessment.confidence < 0.7) return true
-    return (assessment.issueDetails ?? []).some((issue) => issue.confidence < 0.7 || issue.ownershipMode !== "deterministic_owner")
-  })
-}
-
-function collectFollowupEvidence(
-  plan: Plan,
-  pipelineResult: PipelineResult,
-  assessments: readonly VerifierStepAssessment[],
-): Map<string, VerificationEvidence[]> {
-  const followup = new Map<string, VerificationEvidence[]>()
-
-  for (const assessment of assessments) {
-    const step = plan.steps.find((candidate) => candidate.name === assessment.stepName)
-    if (step?.stepType !== "subagent_task") continue
-    const stepResult = pipelineResult.stepResults.get(assessment.stepName)
-    const evidence: VerificationEvidence[] = []
-    const reconciliation = stepResult?.reconciliation
-    if (reconciliation) {
-      reconciliation.findings.forEach((finding, index) => {
-        evidence.push({
-          id: `${assessment.stepName}:followup:reconciliation:${index + 1}`,
-          stepName: assessment.stepName,
-          source: "deterministic",
-          kind: finding.code,
-          message: finding.message,
-          artifactPaths: [...finding.artifactPaths],
-          details: { severity: finding.severity, phase: "reconciliation" },
-        })
-      })
-    }
-    const verificationAttempts = stepResult?.verificationAttempts ?? []
-    if (verificationAttempts.length > 0) {
-      verificationAttempts.forEach((attempt, index) => {
-        if (attempt.success) return
-        evidence.push({
-          id: `${assessment.stepName}:followup:verification:${index + 1}`,
-          stepName: assessment.stepName,
-          source: "deterministic",
-          kind: "verification_attempt_failure",
-          message: `${attempt.toolName}${attempt.target ? `:${attempt.target}` : ""} failed: ${attempt.summary}`,
-          artifactPaths: attempt.target ? [attempt.target] : [],
-          details: { phase: "followup_verification" },
-        })
-      })
-    }
-    if (evidence.length > 0) followup.set(assessment.stepName, evidence)
-  }
-
-  return followup
-}
-
-function mergeFollowupIntoAssessments(
-  plan: Plan,
-  assessments: readonly VerifierStepAssessment[],
-  followupEvidenceByStep: ReadonlyMap<string, readonly VerificationEvidence[]>,
-): VerifierStepAssessment[] {
-  const followupSeedAssessments = assessments.map((assessment) => ({
-    stepName: assessment.stepName,
-    outcome: assessment.outcome,
-    confidence: assessment.confidence,
-    issues: [...(followupEvidenceByStep.get(assessment.stepName) ?? []).map((evidence) => evidence.message)],
-    retryable: assessment.retryable,
-  }))
-  const followupIssuesByStep = deriveIssuesFromEvidence(plan, followupSeedAssessments, followupEvidenceByStep)
-
-  return assessments.map((assessment) => {
-    const followupEvidence = followupEvidenceByStep.get(assessment.stepName) ?? []
-    const followupIssues = followupIssuesByStep.get(assessment.stepName) ?? []
-    if (followupEvidence.length === 0 && followupIssues.length === 0) return assessment
-    return {
-      ...assessment,
-      confidence: Math.max(assessment.confidence, followupEvidence.length > 0 ? 0.72 : assessment.confidence),
-      issues: uniqueStrings([...assessment.issues, ...followupEvidence.map((evidence) => evidence.message)]),
-      evidence: uniqueStrings([...(assessment.evidence ?? []).map((evidence) => evidence.id), ...followupEvidence.map((evidence) => evidence.id)])
-        .map((id) => ([...(assessment.evidence ?? []), ...followupEvidence].find((evidence) => evidence.id === id)!)),
-      issueDetails: [...(assessment.issueDetails ?? []), ...followupIssues],
-    }
-  })
-}
 
 // ============================================================================
 // Main verify orchestrator
@@ -163,63 +81,9 @@ export async function verify(
     .flatMap((s) => s.executionContext.targetArtifacts)
 
   // Phase 0: Delegation output contract validation
-  const contractFailures: VerifierStepAssessment[] = []
-  if (!opts?.skipContractValidation) {
-    for (const step of plan.steps) {
-      if (step.stepType !== "subagent_task") continue
-      const sa = step as SubagentTaskStep
-      const stepResult = pipelineResult.stepResults.get(step.name)
-      if (!stepResult || stepResult.status === "skipped") continue
-
-      const contractSpec = buildContractSpec(
-        sa,
-        sa.executionContext,
-        undefined,
-        knownProjectArtifacts,
-      )
-      const contractResult = validateDelegatedOutputContract({
-        spec: contractSpec,
-        output: stepResult.output ?? stepResult.error ?? "",
-        toolCalls: stepResult.toolCalls,
-      })
-
-      if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
-        contractFailures.push({
-          stepName: step.name,
-          outcome: "retry",
-          confidence: 0.97,
-          issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
-          retryable: true,
-        })
-        opts?.onTrace?.({
-          kind: "verifier-reconciliation-check",
-          stepName: step.name,
-          findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
-        })
-        continue
-      }
-
-      if (!contractResult.ok && contractResult.code) {
-        const guidance = getCorrectionGuidance(contractResult.code)
-        contractFailures.push({
-          stepName: step.name,
-          outcome: "retry",
-          confidence: 0.95,
-          issues: [
-            `[contract:${contractResult.code}] ${contractResult.message}`,
-            `[correction] ${guidance}`,
-          ],
-          retryable: true,
-        })
-        opts?.onTrace?.({
-          kind: "verifier-contract-check",
-          stepName: step.name,
-          code: contractResult.code,
-          message: contractResult.message,
-        })
-      }
-    }
-  }
+  const contractFailures = opts?.skipContractValidation
+    ? []
+    : runContractValidation(plan, pipelineResult, { knownProjectArtifacts, onTrace: opts?.onTrace })
 
   // If contract validation caught issues, return immediately (no LLM needed)
   if (contractFailures.length > 0) {

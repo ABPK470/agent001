@@ -10,27 +10,27 @@
  */
 
 import {
-  AlertTriangle,
-  ArrowRight,
-  BookOpen,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Database,
-  Eye,
-  History,
-  Key,
-  Loader2,
-  MoreHorizontal,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Ship,
-  View,
-  X,
-  XCircle
+    AlertTriangle,
+    ArrowRight,
+    BookOpen,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    Clock,
+    Database,
+    Eye,
+    History,
+    Key,
+    Loader2,
+    MoreHorizontal,
+    RefreshCw,
+    Search,
+    ShieldAlert,
+    ShieldCheck,
+    Ship,
+    View,
+    X,
+    XCircle
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
@@ -39,13 +39,13 @@ import { Listbox, type ListboxOption } from "../components/Listbox"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type {
-  SyncEntityType,
-  SyncEnvironment,
-  SyncExecuteProgress,
-  SyncPlan,
-  SyncPlanTable,
-  SyncRecipe,
-  SyncRecipeBundle,
+    SyncEntityType,
+    SyncEnvironment,
+    SyncExecuteProgress,
+    SyncPlan,
+    SyncPlanTable,
+    SyncRecipe,
+    SyncRecipeBundle,
 } from "../types"
 import { timeAgo } from "../util"
 
@@ -303,7 +303,7 @@ export function EnvSync() {
     loadedPlanIdRef.current = newPlanId
     api.syncPlan(newPlanId).then((p) => {
       if (p.error) {
-        setPreviewErr(`Plan expired or not found — preview data is no longer available (plans have a 1h TTL).`)
+        setPreviewErr(`Plan ${newPlanId} not found — it may have been pruned from history.`)
         setForm({ planId: null }); loadedPlanIdRef.current = null; return
       }
       setPlan(p); setPreviewErr(null); setExpanded(new Set())
@@ -322,7 +322,17 @@ export function EnvSync() {
       planSigRef.current = `${p.source}|${p.target}|${p.recipeSnapshot?.entityType ?? form.entityType}|${entityIdStr}|false|id|${[...normalizeOptionalTableSelection(recipes?.recipes[p.recipeSnapshot?.entityType ?? form.entityType] ?? null, p.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
       // Mark history as having new data (skip on the very first mount hydration)
       if (!isFirstMountRef.current) setHasNewAgentSync(true)
-    }).catch(() => { setForm({ planId: null }); loadedPlanIdRef.current = null })
+    }).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      // 404 from /api/sync/plan/:id is the common case — the plan was pruned
+      // (24h disk TTL, or memory-only after a server restart). Surface the
+      // same message used by the inline { error } branch so the user gets
+      // visible feedback instead of a silently-closed modal.
+      setPreviewErr(/not found|expired/i.test(msg)
+        ? `Plan not found — it may have been pruned from history.`
+        : `Failed to load plan: ${msg}`)
+      setForm({ planId: null }); loadedPlanIdRef.current = null
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.planId])
 

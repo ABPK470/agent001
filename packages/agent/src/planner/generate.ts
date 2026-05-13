@@ -10,20 +10,15 @@
  */
 
 import type { LLMClient, Message, Tool } from "../types.js"
-import { parsePlanFromResponse } from "./generate-parse.js"
+import { parsePlanFromResponse } from "./internal/generate-parse.js"
 import {
-    asNonEmptyString,
-    COHERENT_BOOTSTRAP_SYSTEM_PROMPT,
-    parseBootstrapArtifacts,
-    parseBootstrapContracts,
-    parseBootstrapEdges,
-    parseBootstrapInvariants,
-    parseJsonObject,
-    PLANNER_SYSTEM_PROMPT,
-} from "./generate-prompts.js"
-import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute, PlanStep, SubagentTaskStep } from "./types.js"
+  PLANNER_SYSTEM_PROMPT,
+} from "./internal/generate-prompts.js"
+import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "./types.js"
 
-export { isValidArtifactPath } from "./generate-parse.js"
+export { isValidArtifactPath } from "./internal/generate-parse.js"
+export { generateCoherentBootstrap } from "./generate/bootstrap.js"
+export type { CoherentBootstrapGenerationResult } from "./generate/bootstrap.js"
 
 // ============================================================================
 // Plan generation
@@ -44,12 +39,6 @@ export interface PlanGenerationContext {
   readonly coherentBootstrap?: PlannerCoherentBootstrap
 }
 
-export interface CoherentBootstrapGenerationResult {
-  readonly bootstrap: PlannerCoherentBootstrap | null
-  readonly diagnostics: readonly PlanDiagnostic[]
-  readonly rawResponse: string | null
-}
-
 export interface PlanGenerationResult {
   readonly plan: Plan | null
   readonly diagnostics: readonly PlanDiagnostic[]
@@ -57,93 +46,7 @@ export interface PlanGenerationResult {
   readonly rawResponse: string | null
 }
 
-export async function generateCoherentBootstrap(
-  llm: LLMClient,
-  ctx: Pick<PlanGenerationContext, "goal" | "workspaceRoot" | "history">,
-  opts?: { signal?: AbortSignal },
-): Promise<CoherentBootstrapGenerationResult> {
-  const messages: Message[] = [
-    { role: "system", content: COHERENT_BOOTSTRAP_SYSTEM_PROMPT },
-    {
-      role: "system",
-      content: `Workspace root: ${ctx.workspaceRoot}\nFreeze architecture, contracts, and invariants before decomposition.`,
-    },
-    {
-      role: "user",
-      content: `Goal: ${ctx.goal}\n\nReturn the frozen architecture bootstrap JSON.`,
-    },
-  ]
-
-  const recentHistory = ctx.history.slice(-10).filter((m) => m.role === "user" || m.role === "assistant")
-  if (recentHistory.length > 0) {
-    messages.splice(2, 0, {
-      role: "system",
-      content: `Recent conversation context:\n${recentHistory.map((m) => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`,
-    })
-  }
-
-  let rawResponse: string | null = null
-  try {
-    const response = await llm.chat(messages, [], { signal: opts?.signal, temperature: 0 })
-    rawResponse = response.content
-    if (!rawResponse) {
-      return {
-        bootstrap: null,
-        rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "empty_bootstrap_response", message: "Planner bootstrap returned empty response" }],
-      }
-    }
-
-    const parsed = parseJsonObject(rawResponse)
-    if (!parsed) {
-      return {
-        bootstrap: null,
-        rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_json", message: "Planner bootstrap response is not valid JSON" }],
-      }
-    }
-
-    const summary = asNonEmptyString(parsed.summary)
-    const architecture = asNonEmptyString(parsed.architecture)
-    const artifacts = parseBootstrapArtifacts(parsed.artifacts)
-    const decompositionStrategy = parsed.decompositionStrategy === "decompose_by_ownership"
-      ? "decompose_by_ownership"
-      : "preserve_coherence"
-    const decompositionReasons = Array.isArray(parsed.decompositionReasons)
-      ? parsed.decompositionReasons.map((value) => asNonEmptyString(value)).filter((value): value is string => value != null)
-      : []
-
-    if (!summary || !architecture || artifacts.length === 0) {
-      return {
-        bootstrap: null,
-        rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_shape", message: "Planner bootstrap must include summary, architecture, and at least one artifact" }],
-      }
-    }
-
-    return {
-      bootstrap: {
-        summary,
-        architecture,
-        artifacts,
-        dependencyEdges: parseBootstrapEdges(parsed.dependencyEdges),
-        sharedContracts: parseBootstrapContracts(parsed.sharedContracts),
-        invariants: parseBootstrapInvariants(parsed.invariants),
-        decompositionStrategy,
-        decompositionReasons,
-      },
-      rawResponse,
-      diagnostics: [],
-    }
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err)
-    return {
-      bootstrap: null,
-      rawResponse,
-      diagnostics: [{ category: "parse", severity: "error", code: "bootstrap_llm_error", message: `Planner bootstrap failed: ${errMsg}` }],
-    }
-  }
-}
+// generateCoherentBootstrap moved to ./generate/bootstrap.ts
 
 /**
  * Ask the LLM to generate a structured execution plan for a complex task.
@@ -294,100 +197,11 @@ export async function generatePlan(
 }
 
 // ============================================================================
-// Workspace root normalization
+// Workspace root normalization + plan salvage moved to ./generate/normalize.ts
 // ============================================================================
 
-/**
- * Override LLM-generated workspaceRoot values in all execution contexts
- * with the actual workspace root. The LLM often gets paths wrong (uses ".",
- * relative paths, or host paths that don't match the container).
- */
-function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
-  const normalizedSteps: PlanStep[] = plan.steps.map(step => {
-    if (step.stepType !== "subagent_task") return step
-
-    const sa = step as SubagentTaskStep
-    // Strip trailing slashes to prevent double-prefixing (e.g. "tmp/" + "/" + "tmp/file" → "tmp//tmp/file")
-    const originalRoot = sa.executionContext.workspaceRoot.replace(/\/+$/, "")
-
-    // If the LLM generated a relative workspaceRoot (e.g. "tmp", "game/src"),
-    // targetArtifacts and other paths are relative to THAT subdirectory.
-    // When we replace workspaceRoot with the actual root, we must prefix those
-    // paths so they remain correct.
-    const needsPrefix = originalRoot
-      && originalRoot !== "."
-      && originalRoot !== ""
-      && !originalRoot.startsWith("/")
-      && originalRoot !== actualRoot
-
-    const prefixPath = (p: string): string => {
-      if (!needsPrefix) return p
-      // Don't double-prefix if already starts with the original root
-      if (p.startsWith(originalRoot + "/") || p === originalRoot) return p
-      // Don't prefix absolute paths
-      if (p.startsWith("/")) return p
-      return `${originalRoot}/${p}`
-    }
-
-    return {
-      ...sa,
-      executionContext: {
-        ...sa.executionContext,
-        workspaceRoot: actualRoot,
-        allowedReadRoots: sa.executionContext.allowedReadRoots.map(r =>
-          r === "." || r === "./" ? actualRoot : r,
-        ),
-        allowedWriteRoots: sa.executionContext.allowedWriteRoots.map(r =>
-          r === "." || r === "./" ? actualRoot : r,
-        ),
-        targetArtifacts: sa.executionContext.targetArtifacts.map(prefixPath),
-        requiredSourceArtifacts: sa.executionContext.requiredSourceArtifacts.map(prefixPath),
-        artifactRelations: sa.executionContext.artifactRelations.map(rel => ({
-          ...rel,
-          artifactPath: prefixPath(rel.artifactPath),
-        })),
-      },
-      // Also fix workflowStep artifact relations if present
-      ...(sa.workflowStep ? {
-        workflowStep: {
-          ...sa.workflowStep,
-          artifactRelations: sa.workflowStep.artifactRelations.map(rel => ({
-            ...rel,
-            artifactPath: prefixPath(rel.artifactPath),
-          })),
-        },
-      } : {}),
-    }
-  })
-
-  return { ...plan, steps: normalizedSteps }
-}
-
-// ============================================================================
-// Plan salvage from malformed responses (agenc-core pattern)
-// ============================================================================
-
-/**
- * When the planner returns something that can't parse as a full plan,
- * try to extract any usable file-write or tool-call info and salvage it
- * into a minimal single-step plan. This prevents total failure when the
- * planner's JSON is slightly malformed or wrapped in prose.
- */
-function salvagePlanFromMalformedResponse(raw: string, _workspaceRoot: string): Plan | null {
-  // Try harder: find any JSON object buried in the response
-  const jsonMatches = raw.match(/\{[\s\S]*?"steps"\s*:\s*\[[\s\S]*?\]\s*[\s\S]*?\}/g)
-  if (jsonMatches) {
-    for (const candidate of jsonMatches) {
-      try {
-        const obj = JSON.parse(candidate) as Record<string, unknown>
-        if (Array.isArray(obj.steps) && obj.steps.length > 0) {
-          const inner = parsePlanFromResponse(candidate)
-          if (inner.plan) return inner.plan
-        }
-      } catch { /* skip */ }
-    }
-  }
-
-  return null
-}
+import {
+  normalizeWorkspaceRoots,
+  salvagePlanFromMalformedResponse,
+} from "./generate/normalize.js"
 

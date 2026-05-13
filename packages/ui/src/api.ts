@@ -1,5 +1,5 @@
 /**
- * API client — HTTP + WebSocket communication with the server.
+ * API client — HTTP + SSE communication with the server.
  */
 
 import type {
@@ -405,7 +405,7 @@ export function syncExecuteStream(
 // ── Live event stream + cross-tab relay via BroadcastChannel ─────
 //
 // Transport: Server-Sent Events (HTTP streaming). Works through any HTTP
-// reverse proxy without WebSocket upgrade support — including the corp
+// reverse proxy without HTTP upgrade support — including the corp
 // proxy-https on the Windows host. Auto-reconnects via the browser's
 // EventSource implementation.
 

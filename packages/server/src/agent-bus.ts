@@ -12,7 +12,7 @@
  *   - Typed (topic string)
  *   - Attributed (fromRunId, fromAgentName)
  *   - Buffered (subscribers see messages sent before they subscribed)
- *   - Broadcast to WebSocket for UI visibility
+ *   - Broadcast to SSE for UI visibility
  *
  * Design choices:
  *   - In-memory only (messages die with the run — they're ephemeral coordination)

@@ -5,18 +5,6 @@
  * long-lived HTTP response held open by `GET /api/events/stream`. The browser's
  * native `EventSource` API handles connection, reconnect, and parsing.
  *
- * Why SSE and not WebSocket:
- *   - Every event is server → client. There is zero client → server traffic
- *     over the realtime channel (commands go through normal HTTP POST).
- *     SSE is the right tool for one-way push; WS adds a duplex channel we
- *     never use plus more proxy fragility (Upgrade frames get dropped by
- *     HTTP-only reverse proxies).
- *   - `EventSource` reconnect is built into the browser; WS reconnect is
- *     application code we'd have to maintain.
- *   - One transport = one client map, one fanout loop, one identity-attach
- *     code path. The previous implementation had both and the WS branch
- *     was effectively dead code.
- *
  * Every `broadcast()` call:
  *   1. Stamps a timestamp + serialises once.
  *   2. Resolves the originating run's owner (`runId` field on the event)
@@ -41,7 +29,7 @@
 import { createHmac } from "node:crypto"
 import { getRun, listWebhookDrains, saveEvent } from "./db.js"
 
-export interface WsEvent {
+export interface SseEvent {
   type: string
   data: Record<string, unknown>
   timestamp: string
@@ -66,7 +54,7 @@ export interface SseSink {
 export class EventBroadcaster {
   private readonly sseClients = new Map<symbol, { sink: SseSink; identity: WsClientIdentity }>()
   /** Internal subscribers — notified after every broadcast() call. */
-  private readonly subscribers = new Set<(event: WsEvent) => void>()
+  private readonly subscribers = new Set<(event: SseEvent) => void>()
   /** Tiny LRU of runId → owner. Cleared after this many entries. */
   private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
 
@@ -90,8 +78,8 @@ export class EventBroadcaster {
     return dispose
   }
 
-  broadcast(event: Omit<WsEvent, "timestamp">): void {
-    const msg: WsEvent = {
+  broadcast(event: Omit<SseEvent, "timestamp">): void {
+    const msg: SseEvent = {
       ...event,
       timestamp: new Date().toISOString(),
     }
@@ -144,7 +132,7 @@ export class EventBroadcaster {
    * Used by internal SSE endpoints (e.g. /api/operations/stream) that need
    * to react to events without being a real client.
    */
-  subscribe(fn: (event: WsEvent) => void): () => void {
+  subscribe(fn: (event: SseEvent) => void): () => void {
     this.subscribers.add(fn)
     return () => this.subscribers.delete(fn)
   }
@@ -165,7 +153,7 @@ export class EventBroadcaster {
     return this.sseClients.size
   }
 
-  private async pushToWebhooks(event: WsEvent, json: string): Promise<void> {
+  private async pushToWebhooks(event: SseEvent, json: string): Promise<void> {
     const drains = listWebhookDrains()
     if (drains.length === 0) return
 
@@ -204,7 +192,7 @@ export function addSseClient(sink: SseSink, identity: WsClientIdentity): () => v
   return _default.addSseClient(sink, identity)
 }
 
-export function broadcast(event: Omit<WsEvent, "timestamp">): void {
+export function broadcast(event: Omit<SseEvent, "timestamp">): void {
   _default.broadcast(event)
 }
 
@@ -212,6 +200,6 @@ export function clientCount(): number {
   return _default.clientCount()
 }
 
-export function subscribeToEvents(fn: (event: WsEvent) => void): () => void {
+export function subscribeToEvents(fn: (event: SseEvent) => void): () => void {
   return _default.subscribe(fn)
 }

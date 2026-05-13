@@ -9,7 +9,7 @@ import {
     TOOL_RETRY_POLICY,
     withToolRetry,
     type ToolRetryPolicy,
-} from "../src/retry.js"
+} from "../src/recovery/index.js"
 
 // ── computeDelay ─────────────────────────────────────────────────
 
