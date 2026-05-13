@@ -20,11 +20,12 @@ import {
     ScrollText,
     Shield,
     Users,
-} from "lucide-react";
-import type { ComponentType } from "react";
-import type { Widget, WidgetType } from "../types";
+} from "lucide-react"
+import type { ComponentType } from "react"
+import type { Widget, WidgetType } from "../types"
 
 const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?: string }>> = {
+  "term-chat": MessageSquare,
   "agent-chat": MessageSquare,
   "agent-viz": GitBranch,
   "run-status": Activity,
@@ -42,6 +43,7 @@ const WIDGET_ICONS: Record<WidgetType, ComponentType<{ size?: number; className?
 }
 
 const WIDGET_SHORT_LABELS: Record<WidgetType, string> = {
+  "term-chat": "MI:A",
   "agent-chat": "Chat",
   "agent-viz": "Graph",
   "run-status": "Status",
@@ -69,7 +71,8 @@ export function MobileNav({ widgets, activeIndex, onChange, onAdd }: Props) {
   return (
     <nav className="flex items-stretch bg-surface border-t border-border shrink-0 safe-area-bottom">
       {widgets.map((widget, i) => {
-        const Icon = WIDGET_ICONS[widget.type]
+        const Icon = WIDGET_ICONS[widget.type] ?? LayoutDashboard
+        const label = WIDGET_SHORT_LABELS[widget.type] ?? "Widget"
         const isActive = i === activeIndex
         return (
           <button
@@ -83,7 +86,7 @@ export function MobileNav({ widgets, activeIndex, onChange, onAdd }: Props) {
           >
             <Icon size={20} />
             <span className="text-[10px] leading-tight">
-              {WIDGET_SHORT_LABELS[widget.type]}
+              {label}
             </span>
           </button>
         )

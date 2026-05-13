@@ -1601,6 +1601,67 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
   )
 })
 
+const FORCE_EMPTY_STATE_PREVIEW = false
+
+function TermChatInputBar({
+  input,
+  isRunning,
+  pendingInput,
+  sending,
+  textareaRef,
+  onChange,
+  onKeyDown,
+  onCancel,
+  onSend,
+  className = "w-[90%]",
+}: {
+  input: string
+  isRunning: boolean
+  pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
+  sending: boolean
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  onChange: (value: string) => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onCancel: () => void
+  onSend: () => void
+  className?: string
+}) {
+  return (
+    <div className={`${className} mx-auto flex items-center gap-2 bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}>
+      <textarea
+        ref={textareaRef}
+        value={input}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
+        rows={1}
+        disabled={isRunning || !!pendingInput}
+        className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
+      />
+      {isRunning ? (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
+          title="Cancel"
+        >
+          <Square size={16} fill="currentColor" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={!input.trim() || sending}
+          className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
+          title="Send"
+        >
+          <Send size={16} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Main widget ───────────────────────────────────────────────────
 
 export function TermChat() {
@@ -1740,6 +1801,8 @@ export function TermChat() {
     return completed
   }, [runs, activeRunId, activeRun])
 
+  const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
+
   return (
     <div className="flex flex-col h-full bg-transparent text-text font-sans">
       {/* Message list */}
@@ -1750,17 +1813,39 @@ export function TermChat() {
       >
         <div
           ref={transcriptInnerRef}
-          className="w-[90%] max-w-[1400px] mx-auto"
+          className={showEmptyState
+            ? "w-[90%] max-w-[1400px] min-h-full mx-auto flex flex-col justify-center"
+            : "w-[90%] max-w-[1400px] mx-auto"
+          }
         >
-          {displayRuns.length === 0 && (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-[15px] text-text-faint">
-                What can I build for you?
-              </p>
+          {showEmptyState && (
+            <div className="flex flex-col items-center justify-center min-h-[58vh] px-6 text-center">
+              <div className="w-full max-w-[860px] space-y-10">
+                <div className="space-y-1.5">
+                  <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
+                    What can I help you with today?
+                  </p>
+                  <p className="text-[13px] leading-5 text-text-faint max-w-[620px] mx-auto">
+                    Ask for business data, metadata analysis, reports, or synchronization between our environments.
+                  </p>
+                </div>
+                <TermChatInputBar
+                  input={input}
+                  isRunning={isRunning}
+                  pendingInput={pendingInput}
+                  sending={sending}
+                  textareaRef={textareaRef}
+                  onChange={setInput}
+                  onKeyDown={onKey}
+                  onCancel={cancel}
+                  onSend={send}
+                  className="w-full max-w-[860px]"
+                />
+              </div>
             </div>
           )}
 
-          {displayRuns.map((run) => (
+          {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className="space-y-6">
               {/* User goal */}
               <div className="flex justify-end py-8">
@@ -1789,42 +1874,21 @@ export function TermChat() {
       </div>
 
       {/* Input bar — no separator line */}
-      <div className="shrink-0 px-5 pb-5">
-        <div className="w-[90%] mx-auto flex items-center gap-2 bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+      {!showEmptyState && (
+        <div className="shrink-0 px-5 pb-5">
+          <TermChatInputBar
+            input={input}
+            isRunning={isRunning}
+            pendingInput={pendingInput}
+            sending={sending}
+            textareaRef={textareaRef}
+            onChange={setInput}
             onKeyDown={onKey}
-            placeholder={
-              pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"
-            }
-            rows={1}
-            disabled={isRunning || !!pendingInput}
-            className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
+            onCancel={cancel}
+            onSend={send}
           />
-          {isRunning ? (
-            <button
-              type="button"
-              onClick={cancel}
-              className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
-              title="Cancel"
-            >
-              <Square size={16} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={send}
-              disabled={!input.trim() || sending}
-              className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-              title="Send"
-            >
-              <Send size={16} />
-            </button>
-          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
