@@ -19,7 +19,6 @@
  * topology stays version-controlled.
  */
 
-import type { FastifyInstance, FastifyRequest } from "fastify"
 import {
     getEnvironments,
     setEnvironments,
@@ -28,6 +27,7 @@ import {
     type EnvOperation,
     type SyncEnvironment,
 } from "@agent001/agent"
+import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db.js"
 import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"
 

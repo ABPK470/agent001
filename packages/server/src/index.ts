@@ -63,6 +63,7 @@ import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
+import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
 import {
   registerAdminRoutes,
   registerAgentRoutes,
@@ -77,15 +78,14 @@ import {
   registerPolicyRoutes,
   registerProfileRoutes,
   registerRunRoutes,
-  registerSyncRoutes,
   registerSyncEnvironmentRoutes,
+  registerSyncRoutes,
   registerUsageRoutes,
   registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox.js"
 import { setupMssql } from "./setup-mssql.js"
-import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"

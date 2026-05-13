@@ -8,6 +8,7 @@
 import {
     AlertTriangle,
     Brain,
+    Check,
     ChevronDown,
     ChevronRight,
     Cpu,
@@ -349,7 +350,7 @@ export function PolicyEditor({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
+        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[960px] h-full sm:h-[85vh] sm:max-h-[820px] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -364,20 +365,31 @@ export function PolicyEditor({ onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-4 pb-3 shrink-0">
+        <div className="flex gap-1 px-6 pt-4 pb-3 shrink-0 border-b border-border-subtle overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`px-4 py-1.5 text-sm rounded-lg transition-colors ${
+              className={`px-3.5 py-1.5 text-[13px] rounded-lg transition-colors whitespace-nowrap ${
                 tab === t.id
-                  ? "bg-overlay-3 text-text font-medium"
-                  : "text-text-muted hover:text-text-secondary hover:bg-overlay-2"
+                  ? "bg-accent/15 text-accent font-medium"
+                  : "text-text-muted hover:text-text hover:bg-overlay-2"
               }`}
               onClick={() => setTab(t.id)}
             >
               {t.label}
             </button>
           ))}
+        </div>
+
+        {/* Tab subtitle / context — explains what THIS tab governs vs the others. */}
+        <div className="px-6 pt-3.5 pb-2 shrink-0">
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
+            {tab === "tools"    && <><strong className="text-text">Tool Permissions</strong> — coarse-grained on/off for every tool, regardless of arguments. Sets simple <code className="font-mono">action:&lt;tool&gt;</code> rules. For nuanced control (per-environment, per-command, per-path) use <em>Selector Rules</em>.</>}
+            {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on selectors (tool, path, command regex, dbEnvironment, scope, etc.) and resolves by priority. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
+            {tab === "envs"     && <><strong className="text-text">Sync Environments</strong> — per-environment MSSQL access mode. Edits here become DB overrides on top of <code className="font-mono">deploy/mssql/sync-environments.json</code> and re-derive the env-scoped selector rules. Applies to the next run start (no restart).</>}
+            {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
+            {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
+          </p>
         </div>
 
         {/* Error banner */}
@@ -394,10 +406,10 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "tools" ? (
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
-              <p className="text-sm text-text-muted mb-4">
-                Each tool is <span className="text-success font-medium">allowed</span> by default.
-                Set a policy to restrict or gate any tool.
-              </p>
+              <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-[12.5px] text-text-muted">
+                Each tool is <span className="text-success font-medium">allowed by default</span>.
+                Selecting a state here writes an <code className="font-mono">action:&lt;tool&gt;</code> rule into Selector Rules.
+              </div>
               {tools.map((tool) => {
                 const rule = toolRuleMap.get(tool.name)
                 const currentEffect = rule ? (rule.effect as Effect) : null
@@ -421,18 +433,12 @@ export function PolicyEditor({ onClose }: Props) {
                           </span>
                         )}
                       </div>
-                      <div className="text-[13px] text-text-muted mt-0.5">{tool.description}</div>
+                      <div className="text-[13px] text-text-muted mt-0.5 line-clamp-2">{tool.description}</div>
                     </div>
-                    <select
-                      className="bg-overlay-3 text-text text-[13px] rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-accent appearance-none cursor-pointer shrink-0 border border-border-subtle"
-                      value={currentEffect ?? "none"}
-                      onChange={(e) => handleToolToggle(tool.name, e.target.value as Effect | "none")}
-                    >
-                      <option value="none">No policy</option>
-                      <option value="allow">Allow</option>
-                      <option value="deny">Deny</option>
-                      <option value="require_approval">Require Approval</option>
-                    </select>
+                    <EffectSegmented
+                      value={currentEffect}
+                      onChange={(v) => handleToolToggle(tool.name, v)}
+                    />
                   </div>
                 )
               })}
@@ -440,63 +446,73 @@ export function PolicyEditor({ onClose }: Props) {
           ) : tab === "rules" ? (
             /* ── Selector Rules tab ───────────────────────── */
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <p className="text-sm text-text-muted flex-1 min-w-0">
-                  Every active policy rule with provenance. Operator edits override seeded defaults.
-                  <span className="text-warning"> Deleting a hosted-default or env-derived rule will be re-seeded on next server boot — edit the effect instead.</span>
-                </p>
-                <select
-                  className="bg-overlay-3 text-text text-[13px] rounded-lg px-3 py-1.5 outline-none border border-border-subtle"
-                  value={ruleFilter}
-                  onChange={(e) => setRuleFilter(e.target.value as typeof ruleFilter)}
-                >
-                  <option value="all">All sources</option>
-                  <option value="db">Operator only</option>
-                  <option value="hosted_default">Hosted default</option>
-                  <option value="env_derived">Env-derived</option>
-                </select>
+              <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-border-subtle">
+                <div className="flex items-center gap-1 rounded-lg bg-overlay-2 border border-border-subtle p-1">
+                  {([
+                    { v: "all",            label: "All",      n: rules.length },
+                    { v: "db",             label: "Operator", n: rules.filter((r) => (r.source ?? "db") === "db").length },
+                    { v: "hosted_default", label: "Default",  n: rules.filter((r) => r.source === "hosted_default").length },
+                    { v: "env_derived",    label: "Env",      n: rules.filter((r) => r.source === "env_derived").length },
+                  ] as const).map((f) => (
+                    <button
+                      key={f.v}
+                      onClick={() => setRuleFilter(f.v)}
+                      className={`px-2.5 py-1 text-[12px] rounded-md transition-colors ${
+                        ruleFilter === f.v
+                          ? "bg-surface text-text shadow-sm"
+                          : "text-text-muted hover:text-text"
+                      }`}
+                    >{f.label} <span className="opacity-60">{f.n}</span></button>
+                  ))}
+                </div>
                 <button
-                  className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30"
+                  className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 flex items-center gap-1.5"
                   onClick={() => startEditRule(null)}
-                >+ New rule</button>
+                ><FilePlus size={13} /> New rule</button>
               </div>
 
               {editingRule && (
                 <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-accent/30 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-text">{ruleForm.name && rules.find((r) => r.name === ruleForm.name) ? "Edit rule" : "New rule"}</span>
-                    <button onClick={() => setEditingRule(null)} className="text-text-muted hover:text-text"><X size={14} /></button>
+                    <button onClick={() => setEditingRule(null)} className="text-text-muted hover:text-text p-1 rounded hover:bg-overlay-3"><X size={14} /></button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1.4fr] gap-2 items-stretch">
                     <input
-                      placeholder="rule name"
+                      placeholder="rule name (e.g. allow_dev_query)"
                       value={ruleForm.name}
                       onChange={(e) => setRuleForm((s) => ({ ...s, name: e.target.value }))}
-                      className="px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-[13px] font-mono"
+                      className="px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
                     />
-                    <select
-                      value={ruleForm.effect}
-                      onChange={(e) => setRuleForm((s) => ({ ...s, effect: e.target.value as Effect }))}
-                      className="px-3 py-1.5 rounded-lg bg-overlay-3 border border-border-subtle text-[13px]"
-                    >
-                      <option value="allow">allow</option>
-                      <option value="deny">deny</option>
-                      <option value="require_approval">require_approval</option>
-                    </select>
+                    <div className="flex rounded-lg bg-surface border border-border-subtle overflow-hidden">
+                      {(["allow","require_approval","deny"] as const).map((eff) => {
+                        const style = getEffectStyle(eff)
+                        const active = ruleForm.effect === eff
+                        return (
+                          <button
+                            key={eff}
+                            type="button"
+                            onClick={() => setRuleForm((s) => ({ ...s, effect: eff }))}
+                            title={style.label}
+                            className={`px-2.5 py-1.5 text-[12px] transition-colors ${active ? `${style.color} bg-overlay-3 font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"}`}
+                          >{style.label}</button>
+                        )
+                      })}
+                    </div>
                     <input
                       placeholder='condition (e.g. "selectors" or "action:run_command")'
                       value={ruleForm.condition}
                       onChange={(e) => setRuleForm((s) => ({ ...s, condition: e.target.value }))}
-                      className="px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-[13px] font-mono"
+                      className="px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                   </div>
                   <div>
-                    <label className="text-[12px] text-text-muted block mb-1">Parameters (JSON — supports <code>selectors</code>, <code>priority</code>, <code>reason</code>)</label>
+                    <label className="text-[12px] text-text-muted block mb-1">Parameters (JSON — supports <code className="font-mono">selectors</code>, <code className="font-mono">priority</code>, <code className="font-mono">reason</code>)</label>
                     <textarea
                       value={ruleForm.parameters}
                       onChange={(e) => setRuleForm((s) => ({ ...s, parameters: e.target.value }))}
                       rows={6}
-                      className="w-full px-3 py-2 rounded-lg bg-overlay-2 border border-border-subtle text-[12px] font-mono"
+                      className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-[12px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                   </div>
                   {ruleError && <p className="text-[12px] text-error">{ruleError}</p>}
@@ -691,10 +707,15 @@ export function PolicyEditor({ onClose }: Props) {
               <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
                 <div className="flex items-center gap-2.5 mb-2">
                   <FolderOpen size={15} className="text-text-muted" />
-                  <span className="text-sm font-semibold text-text">Workspace</span>
+                  <span className="text-sm font-semibold text-text">Workspace (developer mode)</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
-                  File and shell operations are scoped to this directory. The agent cannot access files outside.
+                <p className="text-[13px] text-text-muted leading-relaxed mb-2">
+                  Root for <code className="font-mono text-text">read_file</code>, <code className="font-mono text-text">write_file</code>,
+                  <code className="font-mono text-text"> run_command</code> and friends when the server is running in
+                  <strong className="text-text"> developer mode</strong> (<code className="font-mono">AGENT_HOSTED_MODE</code> unset). Every run shares this directory.
+                </p>
+                <p className="text-[12px] text-warning/90 leading-relaxed mb-3">
+                  ⚠ In <strong>hosted mode</strong> this field is ignored — each run gets its own isolated sandbox under <code className="font-mono">runWorkspaceRoot</code>, and the agent cannot reach this path.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -868,83 +889,76 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
   }
 
   const lockedDown = mode === "read_only"
+  const ROLE_TINT: Record<SyncEnvironmentAdmin["role"], string> = {
+    source: "text-info bg-info/10",
+    target: "text-warning bg-warning/10",
+    both:   "text-text-muted bg-overlay-3",
+  }
 
   return (
-    <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle space-y-3">
+    <div className="px-4 py-4 rounded-xl bg-overlay-2 border border-border-subtle space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <span className="text-sm font-semibold text-text font-mono">{env.name}</span>
-          <span className="text-[11px] uppercase tracking-wider text-text-muted">{env.role}</span>
+          <span className="text-[15px] font-semibold text-text font-mono tracking-tight">{env.name}</span>
+          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${ROLE_TINT[env.role]}`}>{env.role}</span>
+          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${lockedDown ? "bg-error/10 text-error" : "bg-success/10 text-success"}`}>
+            {lockedDown ? "read-only" : "read-write"}
+          </span>
           {env.override && (
             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/10 text-warning">
-              overridden by {env.override.updatedBy ?? "?"}
+              override by {env.override.updatedBy ?? "?"}
             </span>
           )}
         </div>
         {env.override && (
           <button onClick={onReset} disabled={busy}
-            className="text-[12px] text-text-muted hover:text-text underline">Reset to JSON default</button>
+            className="text-[12px] text-text-muted hover:text-text disabled:opacity-40">↺ Reset to JSON default</button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-[12px] text-text-muted block mb-1">Default access mode</label>
-          <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}
-            className="w-full px-3 py-1.5 rounded-lg bg-overlay-3 border border-border-subtle text-[13px]">
-            <option value="read_only">read_only</option>
-            <option value="read_write">read_write</option>
-          </select>
-        </div>
-        <div className="flex items-end gap-4">
-          <label className="flex items-center gap-2 text-[13px] text-text">
-            <input type="checkbox" checked={denyDml} onChange={(e) => setDenyDml(e.target.checked)} />
-            denyDml
-          </label>
-          <label className="flex items-center gap-2 text-[13px] text-text">
-            <input type="checkbox" checked={denyDdl} onChange={(e) => setDenyDdl(e.target.checked)} />
-            denyDdl
-          </label>
+      <div>
+        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Default access mode</label>
+        <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5">
+          {(["read_only","read_write"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`px-3 py-1 text-[12.5px] rounded-md transition-colors ${
+                mode === m
+                  ? m === "read_only" ? "bg-error/15 text-error font-medium" : "bg-success/15 text-success font-medium"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >{m === "read_only" ? "Read only" : "Read / write"}</button>
+          ))}
         </div>
       </div>
 
-      <div>
-        <label className="text-[12px] text-text-muted block mb-1.5">Allowed operations</label>
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_OPS.map((op) => {
-            const on = allowed.includes(op)
-            return (
-              <button key={op} onClick={() => toggleOp(allowed, setAllowed, op)}
-                className={`text-[12px] px-2 py-0.5 rounded-full border ${on ? "bg-success/10 text-success border-success/30" : "bg-overlay-3 text-text-muted border-border-subtle"}`}>
-                {op}
-              </button>
-            )
-          })}
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <CheckPill label="Block DML (INSERT / UPDATE / DELETE)" checked={denyDml} onChange={setDenyDml} tone="error" />
+        <CheckPill label="Block DDL (CREATE / ALTER / DROP)"   checked={denyDdl} onChange={setDenyDdl} tone="error" />
       </div>
 
-      <div>
-        <label className="text-[12px] text-text-muted block mb-1.5">Operations requiring approval</label>
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_OPS.map((op) => {
-            const on = approval.includes(op)
-            return (
-              <button key={op} onClick={() => toggleOp(approval, setApproval, op)}
-                className={`text-[12px] px-2 py-0.5 rounded-full border ${on ? "bg-warning/10 text-warning border-warning/30" : "bg-overlay-3 text-text-muted border-border-subtle"}`}>
-                {op}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <OpsChipGroup
+        label="Allowed operations"
+        ops={allowed}
+        onToggle={(op) => toggleOp(allowed, setAllowed, op)}
+        tone="success"
+      />
+      <OpsChipGroup
+        label="Operations requiring approval"
+        ops={approval}
+        onToggle={(op) => toggleOp(approval, setApproval, op)}
+        tone="warning"
+      />
 
       {lockedDown && (
-        <p className="text-[12px] text-text-muted">
-          Read-only mode: write tools are denied unless explicitly listed under Allowed operations above.
+        <p className="text-[12px] text-text-muted border-l-2 border-error/40 pl-3">
+          Read-only mode: every write tool is denied unless explicitly listed under <strong className="text-text">Allowed operations</strong>.
         </p>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 pt-1 border-t border-border-subtle">
         <button
           disabled={!dirty || busy}
           onClick={() => onSave({
@@ -954,10 +968,87 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
             allowedOperations:          allowed,
             approvalRequiredOperations: approval,
           })}
-          className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-3.5 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
         >{busy ? "Saving…" : dirty ? "Save changes" : "Saved"}</button>
-        {dirty && <span className="text-[12px] text-text-muted">unsaved changes</span>}
+        {dirty && <span className="text-[12px] text-warning">● unsaved changes</span>}
       </div>
+    </div>
+  )
+}
+
+// ── Reusable bits ────────────────────────────────────────────────
+
+function CheckPill({ label, checked, onChange, tone = "accent" }: {
+  label: string; checked: boolean; onChange: (v: boolean) => void; tone?: "accent" | "error" | "warning" | "success"
+}) {
+  const toneCls = checked
+    ? tone === "error"   ? "bg-error/10 text-error border-error/30"
+    : tone === "warning" ? "bg-warning/10 text-warning border-warning/30"
+    : tone === "success" ? "bg-success/10 text-success border-success/30"
+    :                      "bg-accent/10 text-accent border-accent/30"
+    : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text"
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[12.5px] transition-colors ${toneCls}`}
+    >
+      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${checked ? "bg-current border-current" : "border-current/50"}`}>
+        {checked && <Check size={10} className="text-surface" strokeWidth={3} />}
+      </span>
+      {label}
+    </button>
+  )
+}
+
+function OpsChipGroup({ label, ops, onToggle, tone }: {
+  label: string; ops: EnvOperation[]; onToggle: (op: EnvOperation) => void; tone: "success" | "warning"
+}) {
+  return (
+    <div>
+      <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">{label}</label>
+      <div className="flex flex-wrap gap-1.5">
+        {ALL_OPS.map((op) => {
+          const on = ops.includes(op)
+          const cls = on
+            ? tone === "success"
+              ? "bg-success/10 text-success border-success/30"
+              : "bg-warning/10 text-warning border-warning/30"
+            : "bg-surface text-text-muted border-border-subtle hover:text-text hover:border-border"
+          return (
+            <button key={op} type="button" onClick={() => onToggle(op)}
+              className={`text-[12px] px-2.5 py-1 rounded-full border font-mono transition-colors ${cls}`}>
+              {on && <Check size={10} className="inline -mt-0.5 mr-1" strokeWidth={3} />}
+              {op}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Effect segmented control for the Tools tab ───────────────────
+
+function EffectSegmented({ value, onChange }: { value: Effect | null; onChange: (v: Effect | "none") => void }) {
+  const OPTIONS: { v: Effect | "none"; label: string; cls: string }[] = [
+    { v: "none",             label: "Allowed",  cls: "text-success" },
+    { v: "require_approval", label: "Approval", cls: "text-warning" },
+    { v: "deny",             label: "Denied",   cls: "text-error" },
+  ]
+  const current = value ?? "none"
+  return (
+    <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5 shrink-0">
+      {OPTIONS.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={`px-3 py-1 text-[12px] rounded-md transition-colors ${
+            current === o.v ? `${o.cls} bg-overlay-3 font-medium` : "text-text-muted hover:text-text"
+          }`}
+        >{o.label}</button>
+      ))}
     </div>
   )
 }
