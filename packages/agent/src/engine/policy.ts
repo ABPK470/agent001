@@ -1,14 +1,32 @@
 /**
  * Policy engine — evaluates governance rules against tool steps.
  *
- * Rules are data-driven. Add/remove rules at runtime.
- * Conditions match against step action names or input properties.
+ * Two coexisting rule modes (back-compat by design):
+ *
+ *   1. Legacy "action:<tool-name>" condition.
+ *      Matches when `step.action === <tool-name>`. Existing rules and
+ *      tests use this exclusively.
+ *
+ *   2. Selector mode (condition === "selectors").
+ *      Rule's `parameters.selectors` describes a conjunction over actor
+ *      role, runMode, tool, path, command, network, scope, and MSSQL
+ *      environment/operation. Resolution picks the highest-priority
+ *      matching rule, with deny > require_approval > allow on ties.
+ *      See {@link policy-selectors.ts} for the matcher.
+ *
+ * Hosted default-deny:
+ *   When the active {@link HostedPolicyContext.runMode} is "hosted" and
+ *   no rule (legacy or selector) matched the step, the engine throws a
+ *   {@link PolicyViolationError}. Developer mode preserves the legacy
+ *   "no match → allow" behavior so existing flows are not affected.
  */
 
 import { PolicyEffect } from "./enums.js"
 import { PolicyViolationError } from "./errors.js"
 import type { PolicyEvaluator } from "./interfaces.js"
 import type { AgentRun, PolicyRule, Step } from "./models.js"
+import { getPolicyContext } from "./policy-context.js"
+import { extractToolFacts, resolveSelectorRules } from "./policy-selectors.js"
 
 export class RulePolicyEvaluator implements PolicyEvaluator {
   private rules: PolicyRule[] = []
@@ -18,30 +36,53 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
   listRules(): PolicyRule[] { return [...this.rules] }
 
   async evaluatePreStep(_run: AgentRun, step: Step): Promise<string | null> {
+    const ctx = getPolicyContext()
+
+    // 1. Legacy action: rules — preserve original first-match semantics.
     for (const rule of this.rules) {
-      if (this.matches(rule, step)) {
-        if (rule.effect === PolicyEffect.Deny) {
-          throw new PolicyViolationError(rule.name, rule.condition)
-        }
-        if (rule.effect === PolicyEffect.RequireApproval) {
-          return `Policy '${rule.name}': ${rule.condition}`
-        }
+      if (rule.condition === "selectors") continue
+      if (!matchesLegacy(rule, step)) continue
+      if (rule.effect === PolicyEffect.Deny) {
+        throw new PolicyViolationError(rule.name, rule.condition)
       }
+      if (rule.effect === PolicyEffect.RequireApproval) {
+        return `Policy '${rule.name}': ${rule.condition}`
+      }
+      // Allow → fall through; explicit allow does not short-circuit
+      // a deny that selector rules might still raise.
     }
+
+    // 2. Selector rules — collect matches and resolve by priority/rank.
+    const facts = extractToolFacts(step, ctx)
+    const resolution = resolveSelectorRules(this.rules, facts, ctx)
+    if (resolution) {
+      const params = resolution.rule.parameters as { reason?: string }
+      const reason = params?.reason ?? `selector match: ${resolution.rule.name}`
+      if (resolution.effect === PolicyEffect.Deny) {
+        throw new PolicyViolationError(resolution.rule.name, reason)
+      }
+      if (resolution.effect === PolicyEffect.RequireApproval) {
+        return `Policy '${resolution.rule.name}': ${reason}`
+      }
+      return null  // Allow
+    }
+
+    // 3. Hosted default-deny — only when explicitly in hosted mode.
+    if (ctx?.runMode === "hosted") {
+      throw new PolicyViolationError(
+        "hosted_default_deny",
+        `no policy rule allows tool "${step.action}" in hosted mode`,
+      )
+    }
+
     return null
   }
+}
 
-  /**
-   * Supported conditions:
-   *   "action:<name>"  — step uses a specific tool
-   */
-  private matches(rule: PolicyRule, step: Step): boolean {
-    const condition = rule.condition
-
-    if (condition.startsWith("action:")) {
-      return step.action === condition.split(":")[1]
-    }
-
-    return false
+function matchesLegacy(rule: PolicyRule, step: Step): boolean {
+  const condition = rule.condition
+  if (condition.startsWith("action:")) {
+    return step.action === condition.split(":")[1]
   }
+  return false
 }

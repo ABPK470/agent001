@@ -62,6 +62,25 @@ export type {
 export { AuditService } from "./audit.js"
 export { Learner, type OperationStats } from "./learner.js"
 export { RulePolicyEvaluator } from "./policy.js"
+export {
+    getPolicyContext,
+    runWithPolicyContext,
+    type HostedPolicyContext,
+    type PolicyRole,
+    type PolicyRunMode,
+} from "./policy-context.js"
+export {
+    extractToolFacts,
+    matchesSelectorRule,
+    resolveSelectorRules,
+    type PolicyDbEnvironment,
+    type PolicyDbOperation,
+    type PolicyScope,
+    type PolicySelectors,
+    type SelectorResolution,
+    type SelectorRuleParameters,
+    type ToolFacts,
+} from "./policy-selectors.js"
 
 // In-memory adapters
 export {
