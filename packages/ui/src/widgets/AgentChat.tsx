@@ -6,7 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -135,94 +135,6 @@ function getToolDetail(tool: string, input: Record<string, unknown>): string | n
       }
       return null
   }
-}
-
-// Running tool call card — shows label, detail, elapsed timer, and expandable input
-function ToolCallCard({
-  tool,
-  input,
-  startedAt,
-  onCancel,
-}: {
-  tool: string
-  input: Record<string, unknown>
-  startedAt: string | null
-  onCancel?: () => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const t0 = startedAt ? new Date(startedAt).getTime() : Date.now()
-    const tick = () => setElapsed(Math.floor((Date.now() - t0) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [startedAt])
-
-  const label = TOOL_LABELS[tool] ?? tool
-  const detail = getToolDetail(tool, input)
-  const hasInput = Object.keys(input).length > 0
-
-  return (
-    <div className="rounded-lg border border-border-subtle bg-elevated/40 overflow-hidden text-base">
-      {/* Header row */}
-      <div className="flex items-center gap-2 px-3 py-2">
-        {/* Animated spinner dot */}
-        <span className="relative flex shrink-0 h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-60" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-success/80" />
-        </span>
-
-        <span className="font-medium text-text flex-1 min-w-0 truncate">{label}</span>
-
-        <span className="flex items-center gap-1 text-text-muted font-mono shrink-0">
-          <Clock size={10} />
-          {elapsed}s
-        </span>
-
-        {onCancel && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCancel() }}
-            className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
-            title="Stop this tool call"
-          >
-            <Square size={9} fill="currentColor" />
-          </button>
-        )}
-
-        {hasInput && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="shrink-0 text-text-muted hover:text-text transition-colors"
-          >
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </button>
-        )}
-      </div>
-
-      {/* Detail line — SQL / path / query preview */}
-      {detail && !expanded && (
-        <div className="px-3 pb-2 font-mono text-base text-text-muted leading-snug border-t border-border-subtle pt-1.5 select-all cursor-text truncate">
-          {detail}
-        </div>
-      )}
-
-      {/* Expanded input */}
-      {expanded && (
-        <div className="border-t border-border-subtle px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
-          {Object.entries(input).map(([k, v]) => (
-            <div key={k} className="flex gap-2 min-w-0">
-              <span className="text-text-muted shrink-0 w-20 truncate">{k}</span>
-              <span className="font-mono text-text-secondary break-all leading-snug whitespace-pre-wrap">
-                {typeof v === "string" ? v : JSON.stringify(v)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Workspace changes card ─────────────────────────────────────────
@@ -387,20 +299,6 @@ export function AgentChat() {
   const runningStep = useMemo(() => {
     return [...steps].reverse().find((s) => s.status === "running") ?? null
   }, [steps])
-
-  // Recent tool trail — last tool calls grouped by consecutive same tool (loop detection)
-  const recentToolTrail = useMemo(() => {
-    type ToolCallEntry = Extract<TraceEntry, { kind: "tool-call" }>
-    const toolEntries = trace.filter((e): e is ToolCallEntry => e.kind === "tool-call")
-    const last = toolEntries.slice(-12)
-    const grouped: { tool: string; label: string; count: number }[] = []
-    for (const e of last) {
-      const prev = grouped[grouped.length - 1]
-      if (prev?.tool === e.tool) { prev.count++ }
-      else grouped.push({ tool: e.tool, label: TOOL_LABELS[e.tool] ?? e.tool, count: 1 })
-    }
-    return grouped.slice(-5)
-  }, [trace])
 
   // Latest iteration from trace
   const latestIteration = useMemo(() => {
