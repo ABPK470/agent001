@@ -6,16 +6,21 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { Check, ChevronDown, ChevronRight, FolderOpen, Send, Square } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, FolderOpen, Paperclip, Send, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
+import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
+
+// Local cap mirrors the Fastify route limit. Larger files get a friendly
+// inline error instead of round-tripping for a 413.
+const ATTACH_MAX_BYTES = 32 * 1024 * 1024
 
 // ── Trace → Timeline model ────────────────────────────────────────
 
@@ -1609,10 +1614,13 @@ function TermChatInputBar({
   pendingInput,
   sending,
   textareaRef,
+  attachments,
   onChange,
   onKeyDown,
   onCancel,
   onSend,
+  onAttach,
+  onRemoveAttachment,
   className = "w-[90%]",
 }: {
   input: string
@@ -1620,44 +1628,61 @@ function TermChatInputBar({
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   sending: boolean
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  attachments: PendingAttachment[]
   onChange: (value: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onCancel: () => void
   onSend: () => void
+  onAttach: () => void
+  onRemoveAttachment: (id: string) => void
   className?: string
 }) {
+  const attachDisabled = isRunning || !!pendingInput
   return (
-    <div className={`${className} mx-auto flex items-center gap-2 bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}>
-      <textarea
-        ref={textareaRef}
-        value={input}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
-        rows={1}
-        disabled={isRunning || !!pendingInput}
-        className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
-      />
-      {isRunning ? (
+    <div className={`${className} mx-auto bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}>
+      <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={onCancel}
-          className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
-          title="Cancel"
+          onClick={onAttach}
+          disabled={attachDisabled}
+          title="Attach file"
+          aria-label="Attach file"
+          className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
         >
-          <Square size={16} fill="currentColor" />
+          <Paperclip size={16} />
         </button>
-      ) : (
-        <button
-          type="button"
-          onClick={onSend}
-          disabled={!input.trim() || sending}
-          className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-          title="Send"
-        >
-          <Send size={16} />
-        </button>
-      )}
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
+          rows={1}
+          disabled={isRunning || !!pendingInput}
+          className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
+        />
+        {isRunning ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
+            title="Cancel"
+          >
+            <Square size={16} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={(!input.trim() && attachments.length === 0) || sending}
+            className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
+            title="Send"
+          >
+            <Send size={16} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -1668,6 +1693,9 @@ export function TermChat() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
 
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
@@ -1683,6 +1711,7 @@ export function TermChat() {
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const transcriptInnerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const shouldStickToBottomRef = useRef(true)
   const previousActiveRunIdRef = useRef<string | null>(null)
 
@@ -1733,23 +1762,63 @@ export function TermChat() {
 
   const send = useCallback(async () => {
     const goal = input.trim()
-    if (!goal || sending || isRunning) return
+    // Allow attachments-only sends (e.g. "summarise this file"). The
+    // server requires a non-empty goal string, so synthesise a minimal
+    // one in that case rather than refusing.
+    if (!goal && pendingAttachments.length === 0) return
+    if (sending || isRunning) return
+    const effectiveGoal = goal || `Review the attached file${pendingAttachments.length === 1 ? "" : "s"}.`
+    const attachmentIds = pendingAttachments.map((a) => a.id)
     setInput("")
     setSending(true)
     try {
-      const { runId } = await api.startRun(goal, selectedAgent?.id)
+      const { runId } = await api.startRun(effectiveGoal, selectedAgent?.id, attachmentIds.length > 0 ? attachmentIds : undefined)
       setActiveRun(runId)
+      // Only clear chips after a successful start so the user doesn't
+      // lose context if the request failed mid-flight.
+      setPendingAttachments([])
+      setAttachError(null)
     } catch {
       // handled by global error state
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun])
+  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments])
 
   const cancel = useCallback(async () => {
     if (!activeRunId) return
     try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
   }, [activeRunId])
+
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return
+    setAttachError(null)
+    for (const file of files) {
+      if (file.size > ATTACH_MAX_BYTES) {
+        setAttachError(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — max ${ATTACH_MAX_BYTES / 1024 / 1024} MB per attachment`)
+        continue
+      }
+      try {
+        const meta = await api.uploadAttachment(file)
+        setPendingAttachments((prev) => [
+          ...prev,
+          { id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes, mediaType: meta.mediaType },
+        ])
+      } catch (e) {
+        setAttachError(`Upload failed for ${file.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+  }, [])
+
+  const removeAttachment = useCallback((id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+    // Best-effort soft-delete; UI removal is the user's source of truth.
+    void api.deleteAttachment(id).catch(() => { /* ignore */ })
+  }, [])
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
 
   const handleRespond = useCallback(async (response: string) => {
     if (!pendingInput) return
@@ -1804,7 +1873,57 @@ export function TermChat() {
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
 
   return (
-    <div className="flex flex-col h-full bg-transparent text-text font-sans">
+    <div
+      className="relative flex flex-col h-full bg-transparent text-text font-sans"
+      onDragEnter={(e) => {
+        if (e.dataTransfer?.types.includes("Files")) {
+          e.preventDefault()
+          setDragOver(true)
+        }
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types.includes("Files")) {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = "copy"
+        }
+      }}
+      onDragLeave={(e) => {
+        // Only clear when the drag actually leaves the shell — child
+        // boundaries fire dragleave too and would otherwise flicker.
+        if (e.currentTarget === e.target) setDragOver(false)
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.types.includes("Files")) return
+        e.preventDefault()
+        setDragOver(false)
+        const files = Array.from(e.dataTransfer.files)
+        if (files.length > 0) void uploadFiles(files)
+      }}
+    >
+      {/* Hidden picker — opened by the paperclip button in the input bar. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          if (files.length > 0) void uploadFiles(files)
+          // Reset so re-selecting the same file still fires onChange.
+          e.target.value = ""
+        }}
+      />
+
+      {dragOver && (
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none rounded-md border-2 border-dashed border-accent bg-accent/10 backdrop-blur-[1px]"
+        >
+          <div className="px-4 py-2 rounded-lg bg-panel-2 border border-border text-text text-[14px] font-medium shadow-lg">
+            Drop to attach
+          </div>
+        </div>
+      )}
+
       {/* Message list */}
       <div
         ref={scrollHostRef}
@@ -1835,12 +1954,18 @@ export function TermChat() {
                   pendingInput={pendingInput}
                   sending={sending}
                   textareaRef={textareaRef}
+                  attachments={pendingAttachments}
                   onChange={setInput}
                   onKeyDown={onKey}
                   onCancel={cancel}
                   onSend={send}
+                  onAttach={openFilePicker}
+                  onRemoveAttachment={removeAttachment}
                   className="w-full max-w-[860px]"
                 />
+                {attachError && (
+                  <p className="-mt-6 text-[12px] text-error text-center">{attachError}</p>
+                )}
               </div>
             </div>
           )}
@@ -1882,11 +2007,17 @@ export function TermChat() {
             pendingInput={pendingInput}
             sending={sending}
             textareaRef={textareaRef}
+            attachments={pendingAttachments}
             onChange={setInput}
             onKeyDown={onKey}
             onCancel={cancel}
             onSend={send}
+            onAttach={openFilePicker}
+            onRemoveAttachment={removeAttachment}
           />
+          {attachError && (
+            <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>
+          )}
         </div>
       )}
     </div>

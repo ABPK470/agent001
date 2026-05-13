@@ -39,7 +39,7 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import Fastify from "fastify"
-import { serverAttachmentService, pruneExpiredAttachments } from "./attachments/index.js"
+import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
 import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {

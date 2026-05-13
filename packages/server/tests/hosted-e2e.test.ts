@@ -13,7 +13,7 @@
  *      and that the audit event log captured every step in order
  */
 
-import { listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, importAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@agent001/agent"
+import { importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@agent001/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
