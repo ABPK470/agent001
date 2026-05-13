@@ -15,9 +15,14 @@
  */
 
 import { READ_ONLY_TOOL_NAMES } from "../constants.js"
+import { compactAtWriteTime } from "../context/context-management/write-time-compact.js"
 import * as log from "../logger.js"
-import { extractWritePayload } from "./tool-execution/anti-paste-guard.js"
-import { recordTruncatedQuery } from "./tool-execution/anti-paste-guard.js"
+import type { ToolCallRecord } from "../tool-helpers/index.js"
+import {
+    buildSemanticToolCallKey, didToolCallFail, enrichToolResultMetadata as enrichResult,
+    trackToolCallFailureState
+} from "../tool-helpers/index.js"
+import { extractWritePayload, recordTruncatedQuery } from "./tool-execution/anti-paste-guard.js"
 import {
     collectChildToolNames,
     handleReplaceInFileMiss,
@@ -33,13 +38,6 @@ import {
     type ToolExecContext,
     type ToolRoundResult,
 } from "./tool-execution/types.js"
-import type { ToolCallRecord } from "../tool-helpers/index.js"
-import { buildSemanticToolCallKey, didToolCallFail } from "../tool-helpers/index.js"
-import {
-    enrichToolResultMetadata as enrichResult,
-    trackToolCallFailureState,
-} from "../tool-helpers/index.js"
-import { compactAtWriteTime } from "../context/context-management/write-time-compact.js"
 
 // Re-export public types/helpers for backwards compatibility.
 export { normalizeArtifactPath } from "./tool-execution/types.js"

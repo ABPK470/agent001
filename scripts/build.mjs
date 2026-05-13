@@ -70,6 +70,17 @@ async function main() {
     // ── 3. Copy static assets ────────────────────────────────
     console.log("3/3  Copying assets")
 
+    // Agent prompts (default-system.md, chart-catalogue.md, abi-sync.md).
+    // The agent loads these at module init via readFileSync; in the
+    // bundled build `import.meta.url` resolves to dist/server.js, so the
+    // loader looks for them under dist/prompts/. See system-prompt.ts.
+    const promptsSrc = resolve(ROOT, "packages/agent/prompts")
+    if (existsSync(promptsSrc)) {
+        mkdirSync(resolve(DIST, "prompts"), { recursive: true })
+        cpSync(promptsSrc, resolve(DIST, "prompts"), { recursive: true })
+        console.log("   ✓ dist/prompts/")
+    }
+
     // Copy the seed SQL for MSSQL setup
     if (existsSync(resolve(ROOT, "deploy/mssql"))) {
         mkdirSync(resolve(DIST, "deploy/mssql"), { recursive: true })
