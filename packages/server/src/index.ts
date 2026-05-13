@@ -31,7 +31,8 @@ import {
     setShellSandboxStrict,
     setSyncEventSink,
     setSyncRunSink,
-    setupEnvironments
+    setupEnvironments,
+    setAttachmentService
 } from "@agent001/agent"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
@@ -78,6 +79,7 @@ import {
     registerWebhookRoutes,
 } from "./routes/index.js"
 import { initSandbox } from "./sandbox.js"
+import { serverAttachmentService } from "./attachments/index.js"
 import { setupMssql } from "./setup-mssql.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
@@ -89,6 +91,13 @@ async function main() {
   let currentWorkspace = resolveWorkspace()
   const sandbox = await configureSandbox(() => currentWorkspace)
   const mssqlSummary = setupMssql(_projectRoot)
+
+  // Bridge agent-side attachment tools to the server's repo + sandbox.
+  // Installed once on the root runtime; per-run runtimes inherit it by
+  // reference. The service resolves the active runId / sandboxRoot from
+  // HostedPolicyContext at call time, so a single instance is safe for
+  // every concurrent run.
+  setAttachmentService(serverAttachmentService)
 
   // ── ABI sync subsystem ──
   await setupEnvironments(_projectRoot)

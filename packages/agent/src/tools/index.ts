@@ -10,6 +10,7 @@
  */
 
 export * from "./ask-user.js"
+export * from "./attachments.js"
 export * from "./browse-web.js"
 export * from "./browser-check.js"
 export * from "./catalog-search.js"

@@ -16,12 +16,15 @@ import {
     discoverRelationshipsTool,
     exportQueryToFileTool,
     fetchUrlTool,
+    importAttachmentTool,
     inspectDefinitionTool,
+    listAttachmentsTool,
     listDirectoryTool,
     listEnvironmentsTool,
     mssqlSchemaTool,
     mssqlTool,
     profileDataTool,
+    readAttachmentTool,
     readFileTool,
     replaceInFileTool,
     searchCatalogTool,
@@ -67,6 +70,10 @@ const ALL_TOOLS: Tool[] = [
   syncPreviewTool,
   syncExecuteTool,
   listEnvironmentsTool,
+  // ── Attachments (hosted-MIA Phase 4) ──
+  listAttachmentsTool,
+  readAttachmentTool,
+  importAttachmentTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
@@ -199,6 +206,10 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "sync_preview",
   "sync_execute",
   "compare_catalogs",
+  // Attachments (hosted-MIA Phase 4)
+  "list_attachments",
+  "read_attachment",
+  "import_attachment",
 ])
 
 /** Filter a tool list down to the visitor allowlist. */

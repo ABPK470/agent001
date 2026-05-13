@@ -8,7 +8,7 @@
 
 // ── Core ────────────────────────────────────────────────────────────
 export { AgentRuntime } from "./agent-runtime.js"
-export type { AgentRuntimeOptions } from "./agent-runtime.js"
+export type { AgentRuntimeOptions, AttachmentMetadata, AttachmentService, AttachmentsState } from "./agent-runtime.js"
 export { Agent } from "./agent.js"
 
 // ── Types & constants ───────────────────────────────────────────────

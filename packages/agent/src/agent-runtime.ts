@@ -154,6 +154,53 @@ export interface SyncState {
   dbProjectRoot: string | null
 }
 
+// ── Attachments ──────────────────────────────────────────────────
+
+/**
+ * Metadata returned by the attachment service to the agent. Mirrors the
+ * server-side public projection but stays decoupled — the agent never
+ * imports server types.
+ */
+export interface AttachmentMetadata {
+  id:             string
+  scope:          "run" | "session" | "workspace_asset"
+  originalName:   string
+  normalizedName: string
+  mediaType:      string
+  sizeBytes:      number
+  contentHash:    string
+  ingestionMode:  "text_inline" | "text_retrieval" | "binary_reference" | "provider_file_api"
+  uploadedAt:     string
+  purposeTag:     string | null
+}
+
+/**
+ * Service the agent calls to interact with user-uploaded attachments.
+ * The server installs a concrete implementation at boot via
+ * {@link setAttachmentService}. When no service is installed (CLI / tests)
+ * tools surface a friendly "attachments are not configured" error.
+ */
+export interface AttachmentService {
+  list(filter?: { runId?: string; scope?: AttachmentMetadata["scope"]; q?: string }): Promise<AttachmentMetadata[]>
+  get(id: string): Promise<AttachmentMetadata | null>
+  /**
+   * Read the attachment payload. For text-mode attachments returns the
+   * decoded UTF-8 text; for binary-mode the raw bytes (caller decides
+   * what to do). Implementations should bound the payload size.
+   */
+  read(id: string, opts?: { maxBytes?: number }): Promise<{ kind: "text" | "binary"; text?: string; bytes?: Uint8Array; truncated: boolean; sizeBytes: number }>
+  /**
+   * Copy the attachment bytes into the active sandbox at the given
+   * relative path. Returns the absolute resolved path inside the sandbox.
+   * Implementations MUST refuse paths that escape the sandbox.
+   */
+  importToSandbox(id: string, sandboxRelPath: string): Promise<{ sandboxPath: string; sizeBytes: number }>
+}
+
+export interface AttachmentsState {
+  service: AttachmentService | null
+}
+
 // ── Defaults ──────────────────────────────────────────────────────
 
 const NOOP_RUN_SINK: SyncRunSink = {
@@ -189,6 +236,8 @@ export class AgentRuntime {
   readonly catalog: CatalogState
   /** Shared with parent (server installs sinks once at boot). */
   readonly sync: SyncState
+  /** Shared with parent (server installs the attachment backend once at boot). */
+  readonly attachments: AttachmentsState
 
   /** True only for the process root runtime. Affects dispose() semantics. */
   readonly #isRoot: boolean
@@ -241,6 +290,7 @@ export class AgentRuntime {
       // server-installed sinks that are inherently process-wide.
       this.catalog = parent.catalog
       this.sync = parent.sync
+      this.attachments = parent.attachments
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null }
@@ -260,6 +310,7 @@ export class AgentRuntime {
         plans: { diskRoot: null, memCache: new Map() },
         dbProjectRoot: null,
       }
+      this.attachments = { service: null }
     }
   }
 
