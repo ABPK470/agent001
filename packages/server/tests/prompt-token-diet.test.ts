@@ -42,13 +42,22 @@ describe("decideSections", () => {
     expect(d.includeMemoryGuidance).toBe(false)
   })
 
-  it("turns ON DB gates for an obvious DB goal", () => {
+  it("turns ON DB gates for an obvious DB goal — but NOT the chart catalogue", () => {
+    // DB-shaped goal without explicit visual intent must NOT ship the
+    // chart catalogue. The model can fetch it via `get_chart_specs` if
+    // it decides a visualisation is warranted.
     const d = decideSections({ goal: "select the top 10 clients from publish.Revenue", memory: emptyTier() })
     expect(d.includeMssqlGuidance ).toBe(true)
     expect(d.includeMssqlKnowledge).toBe(true)
     expect(d.includeMssqlCatalog  ).toBe(true)
-    expect(d.includeChartCatalogue).toBe(true)   // analytics is likely visual
+    expect(d.includeChartCatalogue).toBe(false)
     expect(d.includeAbiSync       ).toBe(false)
+  })
+
+  it("DB goal WITH an explicit chart word still ships the catalogue", () => {
+    const d = decideSections({ goal: "chart the top 10 clients from publish.Revenue", memory: emptyTier() })
+    expect(d.includeMssqlGuidance ).toBe(true)
+    expect(d.includeChartCatalogue).toBe(true)
   })
 
   it("turns ON ABI sync for explicit sync intent", () => {
@@ -128,9 +137,37 @@ describe("buildSystemMessages cache hint + section budget", () => {
   })
 
   it("a casual goal produces a SHORTER prompt than a DB goal (gates are active)", async () => {
-    const casual = await buildSystemMessages({ goal: "what can you tell me about these logs?", systemPrompt: undefined, allTools: [], runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-    const db     = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",      systemPrompt: undefined, allTools: [], runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-    const len = (ms: typeof casual) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
-    expect(len(casual)).toBeLessThan(len(db))
+    // MSSQL configs must be set so the DB-gate has something material to
+    // include (knowledge body + catalogue scaffolding). Without them the
+    // gates only differ by the now-removed chart catalogue, and casual
+    // vs DB would be byte-identical.
+    setMssqlConfigs([
+      { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+    ])
+    try {
+      const tools = [{ name: "query_mssql" } as Tool]
+      const casual = await buildSystemMessages({ goal: "what can you tell me about these logs?", systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const db     = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",      systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const len = (ms: typeof casual) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
+      expect(len(casual)).toBeLessThan(len(db))
+    } finally {
+      setMssqlConfigs([])
+    }
+  })
+
+  it("a DB goal WITHOUT explicit chart intent ships a SHORTER prompt than the same goal WITH 'chart' (catalogue gate is strict)", async () => {
+    setMssqlConfigs([
+      { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+    ])
+    try {
+      const tools = [{ name: "query_mssql" } as Tool]
+      const dbOnly  = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",       systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const dbChart = await buildSystemMessages({ goal: "chart the top 10 from publish.Revenue",    systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const len = (ms: typeof dbOnly) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
+      expect(len(dbOnly)).toBeLessThan(len(dbChart))
+    } finally {
+      setMssqlConfigs([])
+    }
   })
 })

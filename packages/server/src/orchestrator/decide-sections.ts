@@ -26,7 +26,14 @@ export interface SectionDecision {
   includeMssqlKnowledge: boolean
   /** Include the live schema-catalog summary. */
   includeMssqlCatalog:   boolean
-  /** Include the chart-kinds reference. False = the model can fetch via tool. */
+  /**
+   * Include the chart-kinds reference. True ONLY when the goal explicitly
+   * mentions a chart / graph / plot / dashboard / etc.; otherwise the model
+   * fetches the catalogue on demand via the `get_chart_specs` tool. We used
+   * to also imply `isVisual` from `isDbLike` (analytics → likely visual),
+   * but that shipped ~5 KB per call on every DB goal where the user never
+   * actually asked for a chart. Tool-on-demand is cheaper.
+   */
   includeChartCatalogue: boolean
   /** Append the memory-XML-tag guidance trailer. Only useful when a tier is present. */
   includeMemoryGuidance: boolean
@@ -49,7 +56,10 @@ export function decideSections(opts: {
   const goal       = opts.goal ?? ""
   const isSync     = SYNC_RE.test(goal)
   const isDbLike   = DB_RE.test(goal) || isSync
-  const isVisual   = CHART_RE.test(goal) || isDbLike      // analytics → likely visual
+  // Chart catalogue requires EXPLICIT visual intent. DB-shaped goals no
+  // longer auto-include it — the model can call `get_chart_specs` if it
+  // decides a visualisation is warranted.
+  const isVisual   = CHART_RE.test(goal)
   const hasMemory  = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
 
   return {
