@@ -30,8 +30,6 @@ export function migrateMemory(): void {
     CREATE INDEX IF NOT EXISTS idx_me_session ON memory_entries(session_id);
     CREATE INDEX IF NOT EXISTS idx_me_run ON memory_entries(run_id);
     CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);
-    CREATE INDEX IF NOT EXISTS idx_me_upn ON memory_entries(upn);
-    CREATE INDEX IF NOT EXISTS idx_me_shared ON memory_entries(shared);
 
     CREATE TABLE IF NOT EXISTS procedural_memories (
       id TEXT PRIMARY KEY,
@@ -47,10 +45,6 @@ export function migrateMemory(): void {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_proc_upn ON procedural_memories(upn);
-    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
-    CREATE INDEX IF NOT EXISTS idx_proc_shared ON procedural_memories(shared);
-
     CREATE TABLE IF NOT EXISTS memory_vectors (
       entry_id TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
       embedding BLOB NOT NULL,
@@ -62,8 +56,6 @@ export function migrateMemory(): void {
       upn TEXT,
       shared INTEGER NOT NULL DEFAULT 0
     );
-    CREATE INDEX IF NOT EXISTS idx_mv_upn ON memory_vectors(upn);
-    CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
   `)
 
   // ── In-place migration for pre-existing DBs ────────────────────

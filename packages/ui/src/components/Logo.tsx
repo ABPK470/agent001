@@ -14,9 +14,9 @@ interface Props {
   className?: string
 }
 
-const EYE_ONLINE  = "var(--color-success)"
-const EYE_OFFLINE = "var(--color-error)"
-const BODY        = "var(--color-accent)"
+const EYE_ONLINE  = "var(--logo-eye-online)"
+const EYE_OFFLINE = "var(--logo-eye-offline)"
+const BODY        = "var(--logo-body)"
 
 export function Logo({ size = 32, online = true, className }: Props) {
   const eye = online ? EYE_ONLINE : EYE_OFFLINE
@@ -35,15 +35,20 @@ export function Logo({ size = 32, online = true, className }: Props) {
     >
       {/* Body with eye holes punched out */}
       <path
+        className={online ? "logo-body-online" : undefined}
         fill={BODY}
         fillRule="evenodd"
         d="M3 0 H17 V3 H20 V11 H17 V14 H3 V11 H0 V3 H3 Z
            M3 5 H7 V9 H3 Z
            M13 5 H17 V9 H13 Z"
       />
-      {/* Eyes — slow blink when online, invisible when offline */}
-      <rect x="3"  y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
-      <rect x="13" y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
+      {/* Eyes — dark theme uses the original opacity blink; light theme
+          keeps full eyes and blinks by swapping their fill from text-black
+          to warm canvas. */}
+      <g>
+        <rect x="3"  y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
+        <rect x="13" y="5" width="4" height="4" fill={eye} className={online ? "eye-online" : "eye-offline"} />
+      </g>
     </svg>
   )
 }
