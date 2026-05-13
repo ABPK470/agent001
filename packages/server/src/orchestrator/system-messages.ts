@@ -1,20 +1,9 @@
 import type { Message, Tool } from "@agent001/agent"
-import { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import { ABI_SYNC_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
-import { buildEnvironmentContext, buildHostedRuntimeContext, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
+import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
-
-// ── Sync goal detection ───────────────────────────────────────────
-
-/**
- * Returns true when the goal is related to ABI environment sync / data sync
- * operations. Only in these cases is the full ABI_SYNC_SECTION injected into
- * the system prompt. For all other goals the section is omitted entirely —
- * it's 3-5K tokens of context that is irrelevant for coding, analysis, etc.
- */
-function isSyncRelatedGoal(goal: string): boolean {
-  return /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\buspSync|\bmymi\b|\bpipelineActivity\b|\bgateMetadata\b|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i.test(goal)
-}
+import { decideSections } from "./decide-sections.js"
 
 // ── System message construction ───────────────────────────────────
 
@@ -34,6 +23,8 @@ export async function buildSystemMessages(opts: {
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
 
+  const decision = decideSections({ goal, memory: perTier })
+
   const systemMessages: Message[] = []
 
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
@@ -48,7 +39,7 @@ export async function buildSystemMessages(opts: {
   // Section 1b: ABI sync SME — injected ONLY when the goal is sync-related.
   // Keeping this out of the default system prompt saves 3-5K tokens per call
   // on all non-sync tasks (coding, data analysis, etc.).
-  if (isSyncRelatedGoal(goal)) {
+  if (decision.includeAbiSync) {
     systemMessages.push({
       role: "system",
       content: ABI_SYNC_SECTION,
@@ -56,8 +47,27 @@ export async function buildSystemMessages(opts: {
     })
   }
 
-  // Section 2: system_runtime — tool capabilities (droppable)
-  const toolCtx = buildToolContext(allTools)
+  // Section 1c: chart catalogue — large reference of every supported chart
+  // kind. Only injected when the goal looks like it might benefit from a
+  // visualisation; otherwise the (much smaller) policy line in the default
+  // system prompt is enough and the model can call get_chart_specs to
+  // fetch the catalogue on demand.
+  if (decision.includeChartCatalogue) {
+    systemMessages.push({
+      role: "system",
+      content: CHART_CATALOGUE_SECTION,
+      section: "system_runtime",
+    })
+  }
+
+  // Section 2: system_runtime — tool capabilities (droppable). The tool
+  // context is goal-aware: heavy MSSQL knowledge / catalog / orchestration
+  // prose is gated behind the same DB-intent heuristic as the chart block.
+  const toolCtx = buildToolContext(allTools, {
+    includeMssqlKnowledge: decision.includeMssqlKnowledge,
+    includeMssqlCatalog:   decision.includeMssqlCatalog,
+    includeMssqlGuidance:  decision.includeMssqlGuidance,
+  })
   if (toolCtx) {
     systemMessages.push({
       role: "system",
@@ -164,6 +174,16 @@ export async function buildSystemMessages(opts: {
     systemMessages.push({
       role: "system",
       content: `<semantic_memory>\n${perTier.semantic}\n</semantic_memory>`,
+      section: "memory_semantic",
+    })
+  }
+
+  // Memory-XML usage guide — only emitted when at least one tier is present,
+  // otherwise it is ~30 lines of guidance for content that does not exist.
+  if (decision.includeMemoryGuidance) {
+    systemMessages.push({
+      role:    "system",
+      content: buildMemoryGuidance(),
       section: "memory_semantic",
     })
   }

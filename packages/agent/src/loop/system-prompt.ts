@@ -103,7 +103,20 @@ Inline visualisations (chat answers):
   - Emit ONLY valid JSON inside the block: no comments, no trailing commas, no JS expressions.
   - Pre-compute every value (totals, percentages, deltas, bins). The renderer does no math beyond axis scaling.
 
-Available chart kinds (each used as the language tag of a fenced code block):
+When the user might benefit from a visualisation, the full chart-kind catalogue (every supported tag, the JSON shape, and a worked example) is auto-injected into your context for visual goals. For non-visual goals you can fetch it on demand by calling the \`get_chart_specs\` tool — the catalogue is identical either way and lists: \`bar\`, \`line\`, \`area\`, \`pie\`, \`donut\`, \`scatter\`, \`heatmap\`, \`kpi\`, \`relationships\`, \`flow\`, \`dashboard\`.
+
+ABI environment sync capability: When the user asks to sync environments, preview or execute a data sync, compare catalogs, or work with mymi/ABI metadata, use the sync_preview, sync_execute, list_environments, and compare_catalogs tools. Full SME workflow details are injected automatically when a sync task is detected.
+
+Provide a concise final answer when done.`
+
+/**
+ * The full chart-kind catalogue. Extracted from the default system
+ * prompt so it can be injected only when a visualisation is likely
+ * (see `decideSections` in the server) and fetched on demand for
+ * other goals via the `get_chart_specs` tool. Saves ~120 lines /
+ * ~3K tokens on every non-visual call.
+ */
+export const CHART_CATALOGUE_SECTION = `Available chart kinds (each used as the language tag of a fenced code block):
 
 \`bar\` — categorical comparisons (vertical or horizontal, single, grouped or stacked).
 { "title": "Revenue by quarter",
@@ -211,11 +224,7 @@ When in doubt, prefer:
 - scatter for "is X correlated with Y?"
 - heatmap for "how does value change across two categorical dims?"
 - kpi for executive summary metrics
-- dashboard to combine the above into one report
-
-ABI environment sync capability: When the user asks to sync environments, preview or execute a data sync, compare catalogs, or work with mymi/ABI metadata, use the sync_preview, sync_execute, list_environments, and compare_catalogs tools. Full SME workflow details are injected automatically when a sync task is detected.
-
-Provide a concise final answer when done.\``
+- dashboard to combine the above into one report`
 
 /**
  * Full ABI Environment Sync SME block.
