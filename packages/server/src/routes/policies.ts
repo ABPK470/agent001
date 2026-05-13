@@ -6,8 +6,9 @@ import type { FastifyInstance } from "fastify"
 import * as db from "../db.js"
 
 export function registerPolicyRoutes(app: FastifyInstance): void {
-  // List all policy rules
-  app.get("/api/policies", async () => {
+  // List all policy rules (admin only — policies govern hosted-agent capability).
+  app.get("/api/policies", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
     const rules = db.listPolicyRules()
     return rules.map((r) => ({
       name: r.name,
@@ -18,10 +19,11 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
     }))
   })
 
-  // Create or update a policy rule
+  // Create or update a policy rule (admin only).
   app.post<{
     Body: { name: string; effect: string; condition: string; parameters?: Record<string, unknown> }
   }>("/api/policies", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
     const { name, effect, condition, parameters } = req.body
     if (!name || !effect || !condition) {
       reply.code(400)
@@ -44,10 +46,11 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
     return { ok: true }
   })
 
-  // Delete a policy rule
+  // Delete a policy rule (admin only).
   app.delete<{ Params: { name: string } }>(
     "/api/policies/:name",
-    async (req) => {
+    async (req, reply) => {
+      if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
       db.deletePolicyRule(req.params.name)
       return { ok: true }
     },

@@ -476,6 +476,7 @@ async function buildApp(opts: AppOpts) {
   app.get("/api/workspace", async () => ({ path: getWorkspace() }))
 
   app.put<{ Body: { path: string } }>("/api/workspace", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
     const { path: newPath } = req.body
     if (!newPath || typeof newPath !== "string") {
       reply.code(400)
@@ -491,13 +492,23 @@ async function buildApp(opts: AppOpts) {
     return { ok: true, path: resolved }
   })
 
-  app.delete("/api/data", async () => { clearTransactionalData(); return { ok: true } })
+  app.delete("/api/data", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    clearTransactionalData()
+    return { ok: true }
+  })
 
-  app.get("/api/db/stats", async () => getDbStats())
+  app.get("/api/db/stats", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    return getDbStats()
+  })
 
   app.post<{ Body: { keepRuns?: number; keepApiRequests?: number; keepNotifications?: number } }>(
     "/api/db/prune",
-    async (req) => ({ ok: true, ...pruneOldData(req.body ?? {}) }),
+    async (req, reply) => {
+      if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+      return { ok: true, ...pruneOldData(req.body ?? {}) }
+    },
   )
 
   return app
