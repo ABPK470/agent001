@@ -91,8 +91,9 @@ export interface UserStatsRow {
 }
 
 /**
- * Aggregates sessions + runs + token_usage grouped by UPN (or by sid for
- * anonymous visitors who never set a UPN). One row per real-world user.
+ * Aggregates sessions + runs + token_usage grouped by UPN, or by sid for
+ * every no-UPN session. One row per login/session when no stable identity
+ * exists, which keeps two anonymous "John" users separate in the admin UI.
  *
  * @param sinceSeconds — window for "session counted as recent" (default 7d)
  * @param activityWindowSeconds — window for "runs24h / tokens24h" (default 24h)
@@ -107,14 +108,10 @@ export function listUsersWithStats(opts?: {
     WITH grouped_sessions AS (
       SELECT
         -- For UPN-identified users: group by UPN.
-        -- For anon users who share a display_name (same person, different sids):
-        --   group by display_name so ghost sessions from repeated modal
-        --   submissions collapse into one row.
-        -- For truly anonymous (no UPN, no display_name): group by sid.
+        -- For every no-UPN session: group by sid. Display name is metadata,
+        -- not identity; two anonymous users named "John" must remain distinct.
         CASE
           WHEN upn IS NOT NULL THEN upn
-          WHEN display_name IS NOT NULL AND display_name != '' AND display_name != 'Anonymous'
-            THEN 'name:' || LOWER(display_name)
           ELSE 'sid:' || sid
         END                          AS identifier,
         MAX(upn)                     AS upn,
@@ -123,13 +120,9 @@ export function listUsersWithStats(opts?: {
         (SELECT display_name FROM sessions s2
            WHERE CASE
              WHEN s2.upn IS NOT NULL THEN s2.upn
-             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(s2.display_name)
              ELSE 'sid:' || s2.sid
            END = CASE
              WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(sessions.display_name)
              ELSE 'sid:' || sessions.sid
            END
            ORDER BY s2.last_seen_at DESC LIMIT 1) AS display_name,
@@ -139,26 +132,18 @@ export function listUsersWithStats(opts?: {
         (SELECT ip         FROM sessions s2
            WHERE CASE
              WHEN s2.upn IS NOT NULL THEN s2.upn
-             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(s2.display_name)
              ELSE 'sid:' || s2.sid
            END = CASE
              WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(sessions.display_name)
              ELSE 'sid:' || sessions.sid
            END
            ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
         (SELECT user_agent FROM sessions s2
            WHERE CASE
              WHEN s2.upn IS NOT NULL THEN s2.upn
-             WHEN s2.display_name IS NOT NULL AND s2.display_name != '' AND s2.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(s2.display_name)
              ELSE 'sid:' || s2.sid
            END = CASE
              WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             WHEN sessions.display_name IS NOT NULL AND sessions.display_name != '' AND sessions.display_name != 'Anonymous'
-               THEN 'name:' || LOWER(sessions.display_name)
              ELSE 'sid:' || sessions.sid
            END
            ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
@@ -168,12 +153,10 @@ export function listUsersWithStats(opts?: {
     ),
     run_totals AS (
       -- Resolve each run to the same identifier space used by grouped_sessions:
-      -- UPN → upn, named-anon → 'name:'||lower(display_name), else 'sid:'||sid.
+      -- UPN → upn, no-UPN → 'sid:'||session_id.
       SELECT
         CASE
           WHEN r.upn IS NOT NULL THEN r.upn
-          WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
-            THEN 'name:' || LOWER(s.display_name)
           ELSE 'sid:' || r.session_id
         END AS identifier,
         COUNT(*) AS total_runs,
@@ -189,8 +172,6 @@ export function listUsersWithStats(opts?: {
       SELECT
         CASE
           WHEN r.upn IS NOT NULL THEN r.upn
-          WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
-            THEN 'name:' || LOWER(s.display_name)
           ELSE 'sid:' || r.session_id
         END AS identifier,
         SUM(t.total_tokens) AS total_tokens_24h,
@@ -208,16 +189,12 @@ export function listUsersWithStats(opts?: {
         SELECT
           CASE
             WHEN r.upn IS NOT NULL THEN r.upn
-            WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
-              THEN 'name:' || LOWER(s.display_name)
             ELSE 'sid:' || r.session_id
           END AS identifier,
           t.model,
           ROW_NUMBER() OVER (PARTITION BY
             CASE
               WHEN r.upn IS NOT NULL THEN r.upn
-              WHEN s.display_name IS NOT NULL AND s.display_name != '' AND s.display_name != 'Anonymous'
-                THEN 'name:' || LOWER(s.display_name)
               ELSE 'sid:' || r.session_id
             END
           ORDER BY t.created_at DESC) AS rn
@@ -299,24 +276,20 @@ export interface UserHistoryRunRow {
 
 /**
  * Recent runs for a single user (looked up by UPN, or by `sid:<sid>` for
- * anonymous visitors). Joined with token_usage so the widget can render
+ * no-UPN sessions). Joined with token_usage so the widget can render
  * tokens / model in one round-trip.
  */
 export function listUserHistory(identifier: string, limit = 25, offset = 0): { runs: UserHistoryRunRow[]; total: number } {
   const isSid  = identifier.startsWith("sid:")
-  const isName = identifier.startsWith("name:")
-  const key = isSid ? identifier.slice(4) : isName ? identifier.slice(5) : identifier
+  const key = isSid ? identifier.slice(4) : identifier
 
-  // Three identifier spaces match the CTE in listUsersWithStats:
+  // Two identifier spaces match listUsersWithStats:
   //   upn       → runs.upn = ?
   //   sid:<sid> → runs.session_id = ? AND runs.upn IS NULL
-  //   name:<dn> → join sessions on session_id, match display_name (case-insensitive), upn IS NULL
-  const joinClause  = isName ? `LEFT JOIN sessions s ON s.sid = r.session_id` : ``
+  const joinClause  = ``
   const whereClause = isSid
     ? `WHERE r.session_id = ? AND r.upn IS NULL`
-    : isName
-      ? `WHERE r.upn IS NULL AND LOWER(s.display_name) = LOWER(?)`
-      : `WHERE r.upn = ?`
+    : `WHERE r.upn = ?`
   const countSql = `SELECT COUNT(*) AS cnt FROM runs r ${joinClause} ${whereClause}`
   const total = (getDb().prepare(countSql).get(key) as { cnt: number }).cnt
   const rows = getDb().prepare(`

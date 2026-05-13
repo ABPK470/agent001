@@ -334,14 +334,7 @@ export function ActiveUsers(): ReactNode {
                     </td>
                     {/* Name */}
                     <td className="py-2 px-3 text-text whitespace-nowrap">
-                      {u.displayName
-                        ? (() => {
-                            const m = u.displayName.match(/^(.+?)( #[a-f0-9]+)$/i)
-                            return m
-                              ? <>{m[1]}<span className="text-text-muted/30 text-[11px] font-mono">{m[2]}</span></>
-                              : u.displayName
-                          })()
-                        : <span className="text-text-muted/60">—</span>}
+                      {u.displayName ?? <span className="text-text-muted/60">—</span>}
                       {u.runsFailed24h > 0 && (
                         <span className="ml-2 text-xs text-error">{u.runsFailed24h} fail</span>
                       )}

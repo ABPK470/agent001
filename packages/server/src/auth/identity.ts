@@ -19,7 +19,6 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { randomBytes } from "node:crypto"
 import { touchSession } from "../db/sessions.js"
 import { sessionAls, type CurrentSession } from "./context.js"
 import { ADMIN_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS, newSid, signSession, verifyAdminCookie, verifySession, type SessionPayload } from "./session.js"
@@ -165,13 +164,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
       reply.code(400)
       return { error: "upn must not contain whitespace" }
     }
-    // For anonymous users (no UPN) without an existing suffix, append #xxxx so
-    // "john" becomes "john #ab12". This makes every login session visibly distinct
-    // in the admin panel without requiring a UPN. The suffix is generated here on
-    // the BE so the identity is stable for this session (FE just sends the raw name).
-    const displayName = (!upn && !/#[a-f0-9]{4}$/i.test(rawName))
-      ? `${rawName} #${randomBytes(2).toString("hex")}`
-      : rawName
+    const displayName = rawName
     // Reuse existing stable sid if the browser already has one — avoids
     // creating a fresh orphan session row every time the modal is submitted
     // from the same browser (e.g. new tab, page reload before cookie expires).
