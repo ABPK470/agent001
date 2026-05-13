@@ -75,11 +75,13 @@ import {
   registerNotificationRoutes,
   registerOperationRoutes,
   registerPolicyRoutes,
+  registerProfileRoutes,
   registerRunRoutes,
   registerSyncRoutes,
   registerUsageRoutes,
   registerWebhookRoutes,
 } from "./routes/index.js"
+import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox.js"
 import { setupMssql } from "./setup-mssql.js"
 
@@ -462,6 +464,7 @@ async function buildApp(opts: AppOpts) {
   registerAgentRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
+  registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)
   registerMymiRoutes(app)
@@ -542,6 +545,11 @@ function printBanner({ mssqlSummary, channelConfigs, uiDist }: {
   console.log(`  Dashboard: ${uiExists ? `http://localhost:${PORT}` : "http://localhost:5179 (dev)"}`)
   console.log(`  Channels:  ${channelConfigs.length > 0 ? channelConfigs.map(c => c.type).join(", ") : "none (configure via POST /api/channels)"}`)
   console.log(`  MSSQL:     ${mssqlSummary}`)
+  // Profile is the single rollout switch (AGENT_HOSTED_MODE). Surfacing it
+  // on the banner makes it impossible to operate a deployment in the wrong
+  // mode by accident.
+  const profile = getRunProfile()
+  console.log(`  Profile:   ${profile === "hosted" ? "HOSTED (sandbox-only, attachments mandatory)" : "developer (legacy local mode)"}`)
   console.log(`${"═".repeat(50)}\n`)
 }
 
