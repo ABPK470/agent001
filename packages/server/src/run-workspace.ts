@@ -5,12 +5,26 @@ import { dirname, join, relative, resolve } from "node:path"
 
 export type RunTaskType = "code_generation" | "analysis_or_chat"
 
+/**
+ * Run profile selects the safety/isolation model.
+ *
+ *  - "developer": legacy mode. Code-generation runs get an isolated copy of
+ *    the source tree; analysis/chat runs execute against the shared source
+ *    root. Suitable for trusted local developer use.
+ *  - "hosted": every run executes inside an empty sandbox directory
+ *    completely outside the application source tree. The agent has no
+ *    visibility into the host workspace. This is the default for hosted
+ *    deployments (Phase 1 of the hosted-MIA plan).
+ */
+export type RunProfile = "developer" | "hosted"
+
 export interface RunWorkspaceContext {
   readonly runId: string
   readonly sourceRoot: string
   readonly executionRoot: string
   readonly taskType: RunTaskType
   readonly isolated: boolean
+  readonly profile: RunProfile
 }
 
 export interface WorkspaceDiff {
@@ -53,9 +67,20 @@ export function classifyRunTaskType(goal: string): RunTaskType {
   return CODEGEN_RE.test(goal) ? "code_generation" : "analysis_or_chat"
 }
 
+/**
+ * Resolve the active run profile from environment.
+ * `AGENT_HOSTED_MODE=true` opts a deployment into hosted profile semantics
+ * (always isolated, no source-tree copy, no shared-root execution).
+ */
+export function getRunProfile(): RunProfile {
+  const flag = (process.env["AGENT_HOSTED_MODE"] ?? "").toLowerCase()
+  return flag === "true" || flag === "1" || flag === "yes" ? "hosted" : "developer"
+}
+
 export function shouldUseIsolatedWorkspace(goal: string, resume: boolean): boolean {
   const isolationEnabled = process.env["AGENT_ISOLATED_WORKSPACE"] !== "false"
   if (!isolationEnabled || resume) return false
+  if (getRunProfile() === "hosted") return true
   return classifyRunTaskType(goal) === "code_generation"
 }
 
@@ -64,17 +89,35 @@ export async function prepareRunWorkspace(params: {
   sourceRoot: string
   goal: string
   resume: boolean
+  profile?: RunProfile
 }): Promise<RunWorkspaceContext> {
   const sourceRoot = resolve(params.sourceRoot)
   const taskType = classifyRunTaskType(params.goal)
+  const profile = params.profile ?? getRunProfile()
+
+  // Hosted profile is non-negotiable: every run lives in an empty sandbox
+  // outside the source tree, even on resume. We never copy source bytes in.
+  if (profile === "hosted") {
+    const sandboxRoot = resolve(getRunWorkspaceRoot(), `${params.runId}-${randomUUID().slice(0, 8)}`)
+    await mkdir(sandboxRoot, { recursive: true })
+    return {
+      runId:         params.runId,
+      sourceRoot,
+      executionRoot: sandboxRoot,
+      taskType,
+      isolated:      true,
+      profile,
+    }
+  }
 
   if (!shouldUseIsolatedWorkspace(params.goal, params.resume)) {
     return {
-      runId: params.runId,
+      runId:         params.runId,
       sourceRoot,
       executionRoot: sourceRoot,
       taskType,
-      isolated: false,
+      isolated:      false,
+      profile,
     }
   }
 
@@ -83,8 +126,8 @@ export async function prepareRunWorkspace(params: {
 
   await cp(sourceRoot, sandboxRoot, {
     recursive: true,
-    force: true,
-    filter: (src) => {
+    force:     true,
+    filter:    (src) => {
       const rel = relative(sourceRoot, src)
       if (!rel) return true
       return !shouldIgnorePath(rel.replace(/\\/g, "/"))
@@ -92,11 +135,12 @@ export async function prepareRunWorkspace(params: {
   })
 
   return {
-    runId: params.runId,
+    runId:         params.runId,
     sourceRoot,
     executionRoot: sandboxRoot,
     taskType,
-    isolated: true,
+    isolated:      true,
+    profile,
   }
 }
 

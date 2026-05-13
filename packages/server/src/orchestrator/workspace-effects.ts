@@ -60,6 +60,15 @@ export async function captureRunWorkspaceDiff(
 ): Promise<void> {
   const run = activeRuns.get(runId)
   if (!run?.workspace?.isolated) return
+  // Hosted profile uses an empty sandbox completely outside the source tree.
+  // Diffing against the real source root would mark every source file as
+  // "deleted" and every sandbox artifact as "added", which is meaningless and
+  // dangerous to auto-apply. Output promotion for hosted runs is handled by
+  // the dedicated promotion flow (Phase 5), not by source-tree diffing.
+  if (run.workspace.profile === "hosted") {
+    await cleanupRunWorkspace(run.workspace)
+    return
+  }
 
   const diff = await computeWorkspaceDiff(run.workspace.sourceRoot, run.workspace.executionRoot)
   completedRunWorkspaces.set(runId, run.workspace)

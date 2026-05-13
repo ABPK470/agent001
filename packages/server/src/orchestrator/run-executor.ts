@@ -92,7 +92,7 @@ export async function executeRunImpl(
 
   await services.runRepo.save(run)
   await services.eventBus.publish(runStarted(run.id, "agent-session"))
-  await services.auditService.log({ actor, action: "agent.started", resourceType: "AgentRun", resourceId: run.id, detail: { goal, tools: tools.map((t) => t.name), agentId, workspaceMode: runWorkspace.isolated ? "isolated" : "shared", workspaceRoot: runWorkspace.executionRoot } })
+  await services.auditService.log({ actor, action: "agent.started", resourceType: "AgentRun", resourceId: run.id, detail: { goal, tools: tools.map((t) => t.name), agentId, profile: runWorkspace.profile, workspaceMode: runWorkspace.isolated ? "isolated" : "shared", workspaceRoot: runWorkspace.executionRoot } })
 
   persistRun(run, goal, agentId, resume?.parentRunId)
 
