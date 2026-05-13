@@ -5,6 +5,7 @@
  */
 
 import { basename, extname } from "node:path"
+import { assertOwnerQuota, computeRetentionUntil } from "./lifecycle.js"
 import {
     addAttachmentTag,
     insertAttachment,
@@ -68,6 +69,9 @@ export function normalizeName(originalName: string): string {
 }
 
 export async function uploadAttachment(input: UploadAttachmentInput): Promise<AttachmentRow> {
+  // Quota check first so we don't write the blob just to reject the row.
+  // Owner-less uploads (legacy / service runs) are exempt.
+  assertOwnerQuota(input.ownerUpn ?? null, input.bytes.byteLength)
   const blob = await writeAttachmentBlob(input.bytes)
   const ingestionMode = input.ingestionMode ?? inferIngestionMode(input.mediaType)
   const row = insertAttachment({
@@ -85,6 +89,9 @@ export async function uploadAttachment(input: UploadAttachmentInput): Promise<At
     source:         input.source,
     purposeTag:     input.purposeTag,
     goalSnapshot:   input.goalSnapshot,
+    // Apply scope-aware retention so a long-running deployment does not
+    // accumulate stale rows. Operators tune via env (see lifecycle.ts).
+    retentionUntil: computeRetentionUntil(input.scope),
   })
   for (const tag of input.tags ?? []) addAttachmentTag(row.id, tag.key, tag.value)
   return row

@@ -24,6 +24,7 @@ import {
     getAttachment,
     listAttachments,
     listAttachmentTags,
+    QuotaExceededError,
     readAttachmentBlob,
     softDeleteAttachment,
     uploadAttachment,
@@ -122,20 +123,33 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
         reply.code(400)
         return { error: "runId is required when scope === 'run'" }
       }
-      const row = await uploadAttachment({
-        bytes,
-        originalName:  body.name,
-        mediaType:     body.mediaType || "application/octet-stream",
-        scope,
-        runId:         body.runId ?? null,
-        sessionId:     req.session!.sid,
-        ownerUpn:      req.session!.upn ?? null,
-        purposeTag:    body.purposeTag ?? null,
-        goalSnapshot:  body.goalSnapshot ?? null,
-        tags:          body.tags,
-      })
-      reply.code(201)
-      return publicView(row)
+      try {
+        const row = await uploadAttachment({
+          bytes,
+          originalName:  body.name,
+          mediaType:     body.mediaType || "application/octet-stream",
+          scope,
+          runId:         body.runId ?? null,
+          sessionId:     req.session!.sid,
+          ownerUpn:      req.session!.upn ?? null,
+          purposeTag:    body.purposeTag ?? null,
+          goalSnapshot:  body.goalSnapshot ?? null,
+          tags:          body.tags,
+        })
+        reply.code(201)
+        return publicView(row)
+      } catch (err) {
+        if (err instanceof QuotaExceededError) {
+          reply.code(413)
+          return {
+            error: "attachment quota exceeded",
+            bytesUsed:    err.bytesUsed,
+            bytesQuota:   err.bytesQuota,
+            attemptBytes: err.attemptBytes,
+          }
+        }
+        throw err
+      }
     },
   )
 

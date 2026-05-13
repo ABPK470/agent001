@@ -9,6 +9,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { getOwnerUsage, getRetentionPolicy } from "../attachments/index.js"
 import { getRunProfile } from "../run-workspace.js"
 
 export function registerProfileRoutes(app: FastifyInstance): void {
@@ -18,6 +19,24 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       profile,
       // Stable booleans the UI can branch on without string-matching.
       hosted: profile === "hosted",
+    }
+  })
+
+  // Per-session attachment quota visibility. Anonymous callers get a
+  // synthetic "no owner" view (zero used, full quota) so the UI can still
+  // render meaningful defaults before sign-in.
+  app.get("/api/runtime/attachment-usage", async (req) => {
+    const ownerUpn = req.session?.upn ?? null
+    const usage = getOwnerUsage(ownerUpn)
+    const retention = getRetentionPolicy()
+    return {
+      ownerUpn,
+      ...usage,
+      retention: {
+        runDays:            retention.runDays,
+        sessionDays:        retention.sessionDays,
+        workspaceAssetDays: retention.workspaceAssetDays,
+      },
     }
   })
 }

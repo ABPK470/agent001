@@ -39,7 +39,7 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import Fastify from "fastify"
-import { serverAttachmentService } from "./attachments/index.js"
+import { serverAttachmentService, pruneExpiredAttachments } from "./attachments/index.js"
 import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {
@@ -212,6 +212,11 @@ function initDatabase(): void {
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
     console.log(`Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
+  }
+
+  const attachmentPrune = pruneExpiredAttachments()
+  if (attachmentPrune.prunedAttachments > 0) {
+    console.log(`Pruned ${attachmentPrune.prunedAttachments} expired attachments (retention TTL)`)
   }
 
   const memPrune = pruneMemory()
