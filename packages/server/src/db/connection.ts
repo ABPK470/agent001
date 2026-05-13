@@ -189,6 +189,56 @@ export function _migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_sync_runs_started ON sync_runs(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sync_runs_target  ON sync_runs(target);
     CREATE INDEX IF NOT EXISTS idx_sync_runs_actor   ON sync_runs(actor_upn);
+
+    -- ── Attachments (Phase 4 of hosted-MIA plan) ─────────────────
+    -- Durable user-uploaded assets. Bytes live on disk under the data
+    -- directory; this table holds metadata only. Sandbox imports are
+    -- recorded in attachment_imports so we can audit which run pulled
+    -- which attachment in.
+    CREATE TABLE IF NOT EXISTS attachments (
+      id              TEXT PRIMARY KEY,
+      scope           TEXT NOT NULL,             -- 'run' | 'session' | 'workspace_asset'
+      run_id          TEXT,
+      session_id      TEXT,
+      owner_upn       TEXT,
+      original_name   TEXT NOT NULL,
+      normalized_name TEXT NOT NULL,
+      media_type      TEXT NOT NULL,
+      size_bytes      INTEGER NOT NULL,
+      content_hash    TEXT NOT NULL,
+      storage_uri     TEXT NOT NULL,             -- relative path under attachment store
+      text_extract_uri TEXT,
+      ingestion_mode  TEXT NOT NULL,             -- text_inline | text_retrieval | binary_reference | provider_file_api
+      status          TEXT NOT NULL DEFAULT 'uploaded',
+      source          TEXT NOT NULL DEFAULT 'user_upload',
+      purpose_tag     TEXT,
+      goal_snapshot   TEXT,
+      uploaded_at     TEXT NOT NULL,
+      processed_at    TEXT,
+      retention_until TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachments_run     ON attachments(run_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_session ON attachments(session_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_owner   ON attachments(owner_upn);
+    CREATE INDEX IF NOT EXISTS idx_attachments_hash    ON attachments(content_hash);
+
+    CREATE TABLE IF NOT EXISTS attachment_tags (
+      attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+      tag_key       TEXT NOT NULL,
+      tag_value     TEXT NOT NULL,
+      PRIMARY KEY (attachment_id, tag_key, tag_value)
+    );
+
+    CREATE TABLE IF NOT EXISTS attachment_imports (
+      id                    TEXT PRIMARY KEY,
+      attachment_id         TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+      run_id                TEXT NOT NULL,
+      sandbox_path          TEXT NOT NULL,
+      import_mode           TEXT NOT NULL,        -- copy | reference
+      imported_at           TEXT NOT NULL,
+      imported_by_tool_call TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachment_imports_run ON attachment_imports(run_id);
   `)
 
   // Column migrations
