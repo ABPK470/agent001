@@ -8,13 +8,12 @@
  */
 
 import {
-    PolicyEffect,
     PolicyViolationError,
     RulePolicyEvaluator,
     runWithPolicyContext,
     type AgentRun,
     type HostedPolicyContext,
-    type Step,
+    type Step
 } from "@agent001/agent"
 import { describe, expect, it } from "vitest"
 import { hostedDefaultPolicyRules } from "../src/policy/hosted-defaults.js"

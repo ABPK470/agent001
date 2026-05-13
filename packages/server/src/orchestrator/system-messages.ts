@@ -1,6 +1,6 @@
 import type { Message, Tool } from "@agent001/agent"
 import { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
-import { buildEnvironmentContext, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
+import { buildEnvironmentContext, buildHostedRuntimeContext, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
 
 // ── Sync goal detection ───────────────────────────────────────────
@@ -64,8 +64,17 @@ export async function buildSystemMessages(opts: {
     })
   }
 
-  // Section 3: system_runtime — workspace context (droppable)
-  if (runWorkspace.executionRoot) {
+  // Section 3: system_runtime — workspace / sandbox context (droppable).
+  // Hosted runs get a sandbox-only summary that never leaks the real
+  // application source tree. Developer runs keep the existing shallow
+  // workspace tree dump for tool-call grounding.
+  if (runWorkspace.profile === "hosted") {
+    systemMessages.push({
+      role:    "system",
+      content: buildHostedRuntimeContext({ sandboxRoot: runWorkspace.executionRoot }),
+      section: "system_runtime",
+    })
+  } else if (runWorkspace.executionRoot) {
     const wsContext = await getWorkspaceContext(runWorkspace.executionRoot)
     systemMessages.push({
       role: "system",

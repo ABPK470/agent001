@@ -215,3 +215,37 @@ export async function getWorkspaceContext(workspace: string): Promise<string> {
     return ""
   }
 }
+
+/**
+ * Hosted-profile runtime context. Replaces the developer-mode workspace tree
+ * dump for hosted runs: the agent is told it has a private sandbox directory,
+ * the OS family of the host, the shell available inside the sandbox, and the
+ * MSSQL environment defaults — but never the real application source layout.
+ *
+ * The exact sandbox path basename is included so log lines and tool errors
+ * are correlatable, but the absolute parent path is not exposed.
+ */
+export function buildHostedRuntimeContext(opts: {
+  sandboxRoot:           string
+  defaultDbEnvironment?: "dev" | "uat" | "prod"
+}): string {
+  const os = OS_LABELS[platform()] ?? platform()
+  const shell = platform() === "win32" ? "cmd.exe" : "/bin/sh"
+  const sandboxName = opts.sandboxRoot.split(/[/\\]/).pop() ?? "sandbox"
+  const lines = [
+    "Hosted runtime:",
+    `  Host OS:       ${os} (${arch()})`,
+    `  Sandbox shell: ${shell}`,
+    `  Sandbox root:  sandbox://${sandboxName}/   (private; outside the app source tree)`,
+    "  Filesystem:    file tools see only the sandbox; references to a real app workspace are not available.",
+    "  Network:       outbound HTTP requires explicit approval; MSSQL access is via dedicated tools.",
+  ]
+  if (opts.defaultDbEnvironment) {
+    lines.push(`  DB default:    ${opts.defaultDbEnvironment.toUpperCase()} environment.`)
+  }
+  lines.push(
+    "  DB defaults:   UAT and PROD are read-only; DML/DDL is blocked unless explicitly configured.",
+    "  Output:        files written inside the sandbox can be promoted to the user via the dedicated promotion flow.",
+  )
+  return lines.join("\n")
+}
