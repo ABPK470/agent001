@@ -253,14 +253,12 @@ export function OperatorEnvironment() {
     if (submitting) return
     setSubmitting(true)
     try {
-      const parts: string[] = []
-      if (goal) parts.push(goal)
-      for (const att of goalAttachments) {
-        parts.push(`\n---\n**Attached: ${att.name}**\n\`\`\`\n${att.content}\n\`\`\``)
-      }
-      const fullGoal = parts.join("\n")
+      // Goal text is sent verbatim. Attachments travel as durable
+      // attachmentIds; the agent calls list_attachments / read_attachment /
+      // import_attachment to inspect or pull them into the sandbox.
+      const attachmentIds = goalAttachments.map((a) => a.id)
       const agentId = selectedAgentId ?? agents[0]?.id
-      const { runId } = await api.startRun(fullGoal, agentId || undefined)
+      const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds)
       setActiveRun(runId)
       setGoalInput("")
       setGoalAttachments([])

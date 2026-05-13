@@ -43,10 +43,14 @@ export const api = {
   // Runs
   listRuns: () => json<Run[]>("/api/runs"),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string, agentId?: string) =>
-    json<{ runId: string }>("/api/runs", {
+  startRun: (goal: string, agentId?: string, attachmentIds?: string[]) =>
+    json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
-      body: JSON.stringify({ goal, ...(agentId ? { agentId } : {}) }),
+      body: JSON.stringify({
+        goal,
+        ...(agentId ? { agentId } : {}),
+        ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
+      }),
     }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {
     method: "POST",
@@ -340,6 +344,82 @@ export const api = {
     const qs = params.toString()
     return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`)
   },
+
+  // ── Attachments ────────────────────────────────────────────────
+  /**
+   * Upload a single file as an attachment. Returns the persisted metadata
+   * including the new attachment id; pass that id to startRun() via
+   * attachmentIds to bind it to the run.
+   *
+   * The body is JSON+base64 because the server uses the matching JSON
+   * route (no multipart plugin). The `FileReader` calls are isolated
+   * here so callers never touch raw bytes.
+   */
+  uploadAttachment: async (file: File, opts?: {
+    scope?: "session" | "run" | "workspace_asset"
+    runId?: string
+    purposeTag?: string
+  }): Promise<UploadedAttachment> => {
+    const contentBase64 = await fileToBase64(file)
+    return json<UploadedAttachment>("/api/attachments", {
+      method: "POST",
+      body: JSON.stringify({
+        name:          file.name,
+        mediaType:     file.type || "application/octet-stream",
+        contentBase64,
+        scope:         opts?.scope ?? "session",
+        ...(opts?.runId      ? { runId:      opts.runId }      : {}),
+        ...(opts?.purposeTag ? { purposeTag: opts.purposeTag } : {}),
+      }),
+    })
+  },
+
+  listAttachments: (filter?: { scope?: string; runId?: string; q?: string }) => {
+    const params = new URLSearchParams()
+    if (filter?.scope) params.set("scope", filter.scope)
+    if (filter?.runId) params.set("runId", filter.runId)
+    if (filter?.q)     params.set("q",     filter.q)
+    const qs = params.toString()
+    return json<UploadedAttachment[]>(`/api/attachments${qs ? `?${qs}` : ""}`)
+  },
+
+  deleteAttachment: (id: string) =>
+    json<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" }),
+}
+
+export interface UploadedAttachment {
+  id:             string
+  scope:          "run" | "session" | "workspace_asset"
+  originalName:   string
+  normalizedName: string
+  mediaType:      string
+  sizeBytes:      number
+  contentHash:    string
+  ingestionMode:  "text_inline" | "text_retrieval" | "binary_reference" | "provider_file_api"
+  uploadedAt:     string
+  purposeTag:     string | null
+}
+
+/**
+ * Read a browser File into a base64 string. Strips the data: URL prefix
+ * the FileReader emits so the result matches what the server expects in
+ * `contentBase64`.
+ */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error("file read failed"))
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== "string") {
+        reject(new Error("unexpected reader result"))
+        return
+      }
+      const comma = result.indexOf(",")
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 export type OperationKind = "agent-run" | "sync-preview" | "sync-execute" | "system"

@@ -352,7 +352,7 @@ export function AgentChat() {
   const [listening, setListening] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [attachments, setAttachments] = useState<{ name: string; content: string }[]>([])
+  const [attachments, setAttachments] = useState<{ id: string; name: string; sizeBytes: number }[]>([])
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
@@ -541,13 +541,10 @@ export function AgentChat() {
     if (!goal && attachments.length === 0) return
     if (sending) return
 
-    // Build the full goal: user text + any attached file contents
-    const parts: string[] = []
-    if (goal) parts.push(goal)
-    for (const att of attachments) {
-      parts.push(`\n---\n**Attached: ${att.name}**\n\`\`\`\n${att.content}\n\`\`\``)
-    }
-    const fullGoal = parts.join("\n")
+    // Goal text is sent verbatim. Attachments travel as durable
+    // attachmentIds; the agent uses list_attachments / read_attachment /
+    // import_attachment to inspect or pull them into the sandbox.
+    const attachmentIds = attachments.map((a) => a.id)
 
     setSending(true)
     setInput("")
@@ -555,7 +552,7 @@ export function AgentChat() {
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
       const agentId = selectedAgent?.id
-      const { runId } = await api.startRun(fullGoal, agentId)
+      const { runId } = await api.startRun(goal, agentId, attachmentIds)
       setActiveRun(runId)
     } catch (err) {
       console.error("Failed to start run:", err)
@@ -564,22 +561,23 @@ export function AgentChat() {
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    // Reset so the same file can be re-attached after removal
+    // Reset so the same file can be re-attached after removal.
     e.target.value = ""
     for (const file of files) {
-      // Warn and skip files over 500 KB to avoid flooding the context
-      if (file.size > 500 * 1024) {
-        console.warn(`File "${file.name}" is too large (${Math.round(file.size / 1024)} KB); max 500 KB`)
+      // The server caps uploads at 32 MiB; warn early so the user knows
+      // before the round-trip if they pick something obviously too big.
+      if (file.size > 32 * 1024 * 1024) {
+        console.warn(`File "${file.name}" is too large (${Math.round(file.size / 1024)} KB); max 32768 KB`)
         continue
       }
-      const reader = new FileReader()
-      reader.onload = () => {
-        const content = typeof reader.result === "string" ? reader.result : ""
-        setAttachments((prev) => [...prev, { name: file.name, content }])
+      try {
+        const meta = await api.uploadAttachment(file, { scope: "session" })
+        setAttachments((prev) => [...prev, { id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes }])
+      } catch (err) {
+        console.error(`Upload failed for "${file.name}":`, err)
       }
-      reader.readAsText(file)
     }
   }
 

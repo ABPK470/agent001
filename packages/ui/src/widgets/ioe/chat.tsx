@@ -6,6 +6,7 @@
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
+import { api } from "../../api"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import { SmartAnswer } from "../../components/SmartAnswer"
 import { truncate } from "../../util"
@@ -19,7 +20,16 @@ interface ToolCallKillInfo {
   toolName: string
 }
 
-export interface FileAttachment { name: string; content: string }
+/**
+ * Metadata for a single user-uploaded attachment bound to the goal
+ * input. Bytes live on the server; we keep only what the chip UI and
+ * the run-start call need.
+ */
+export interface FileAttachment {
+  id:        string
+  name:      string
+  sizeBytes: number
+}
 
 export function ChatPanel({
   messages,
@@ -65,22 +75,26 @@ export function ChatPanel({
   const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("simple")
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     e.target.value = ""
-    if (!onAttach) return
+    if (!onAttach || files.length === 0) return
     const results: FileAttachment[] = []
-    let pending = files.length
-    if (pending === 0) return
     for (const file of files) {
-      if (file.size > 500 * 1024) { pending--; continue }
-      const reader = new FileReader()
-      reader.onload = () => {
-        results.push({ name: file.name, content: typeof reader.result === "string" ? reader.result : "" })
-        if (--pending === 0) onAttach(results)
+      // The server caps uploads at 32 MiB; warn early so the user knows
+      // before the round-trip if they pick something obviously too big.
+      if (file.size > 32 * 1024 * 1024) {
+        console.warn(`File "${file.name}" is too large (${Math.round(file.size / 1024)} KB); max 32768 KB`)
+        continue
       }
-      reader.readAsText(file)
+      try {
+        const meta = await api.uploadAttachment(file, { scope: "session" })
+        results.push({ id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes })
+      } catch (err) {
+        console.error(`Upload failed for "${file.name}":`, err)
+      }
     }
+    if (results.length > 0) onAttach(results)
   }
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
