@@ -1,6 +1,5 @@
 import {
     createEngineServices,
-    getEnvironments,
     PolicyEffect,
     type LLMClient,
     type Message,
@@ -15,7 +14,6 @@ import * as db from "../db.js"
 import { migrateEffects } from "../effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import { migrateMemory } from "../memory.js"
-import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "../policy/hosted-defaults.js"
 import { RunQueue, type RunPriority } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces, getRunProfile } from "../run-workspace.js"
@@ -81,18 +79,9 @@ export class AgentOrchestrator {
     for (const r of dbRules) {
       services.policyEvaluator.addRule({ name: r.name, effect: r.effect as PolicyEffect, condition: r.condition, parameters: JSON.parse(r.parameters) })
     }
-    // Seed hosted-profile defaults only when the deployment is in hosted
-    // mode. Operator DB rules are loaded first so any rule with higher
-    // priority overrides these defaults via the selector resolver.
-    if (getRunProfile() === "hosted") {
-      for (const r of hostedDefaultPolicyRules()) services.policyEvaluator.addRule(r)
-      // Per-environment derived rules: an operator's
-      // `deploy/mssql/sync-environments.json` (e.g. `denyDml: true` on a
-      // 'dev' env that would otherwise be writable) folds in here. These
-      // run at higher priority than the cross-env defaults so an explicit
-      // per-env decision always wins.
-      for (const r of policyRulesFromEnvironments(getEnvironments())) services.policyEvaluator.addRule(r)
-    }
+    // Hosted-default and per-env-derived rules live in the DB now (seeded
+    // at server boot via policy-seeder.ts). Operators edit/delete them
+    // through the admin UI; this loop already loaded them above.
 
     this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [], ownerUpn: session?.upn ?? null, sessionId: session?.sid ?? null })
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
@@ -150,10 +139,9 @@ export class AgentOrchestrator {
     for (const r of dbRules) {
       services.policyEvaluator.addRule({ name: r.name, effect: r.effect as PolicyEffect, condition: r.condition, parameters: JSON.parse(r.parameters) })
     }
-    if (getRunProfile() === "hosted") {
-      for (const r of hostedDefaultPolicyRules()) services.policyEvaluator.addRule(r)
-      for (const r of policyRulesFromEnvironments(getEnvironments())) services.policyEvaluator.addRule(r)
-    }
+    // (See startRun: hosted defaults + env-derived rules now seeded into
+    // policy_rules at server boot via policy-seeder.ts, so loading dbRules
+    // above already covers them.)
 
     const resumeSession = getCurrentSession()
     const resumeRole: PolicyRole = !resumeSession ? "admin" : resumeSession.isAdmin ? "admin" : "hosted_user"

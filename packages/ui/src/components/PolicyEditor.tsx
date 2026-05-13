@@ -32,7 +32,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
-import type { PolicyRule, ToolInfo } from "../types"
+import type { EnvOperation, PolicyRule, SyncEnvironmentAdmin, ToolInfo } from "../types"
 
 interface Props {
   onClose: () => void
@@ -87,7 +87,17 @@ const SSRF_BLOCKED = [
   "*.local", "*.internal",
 ]
 
-type Tab = "tools" | "model" | "security"
+type Tab = "tools" | "rules" | "envs" | "model" | "security"
+
+const ALL_OPS: EnvOperation[] = [
+  "query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml",
+]
+
+const SOURCE_BADGE: Record<NonNullable<PolicyRule["source"]>, { label: string; cls: string }> = {
+  db:             { label: "operator",      cls: "text-accent bg-accent/10" },
+  hosted_default: { label: "hosted default", cls: "text-text-muted bg-overlay-3" },
+  env_derived:    { label: "env-derived",    cls: "text-warning bg-warning/10" },
+}
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
@@ -124,6 +134,20 @@ export function PolicyEditor({ onClose }: Props) {
   const [llmActiveProvider, setLlmActiveProvider] = useState("")
   const [llmActiveModel, setLlmActiveModel] = useState("")
 
+  // Selector rules tab state
+  const [ruleFilter, setRuleFilter] = useState<"all" | "db" | "hosted_default" | "env_derived">("all")
+  const [editingRule, setEditingRule] = useState<PolicyRule | null>(null)
+  const [ruleForm, setRuleForm] = useState<{ name: string; effect: Effect; condition: string; parameters: string }>({
+    name: "", effect: "allow", condition: "selectors", parameters: "{}",
+  })
+  const [ruleSaving, setRuleSaving] = useState(false)
+  const [ruleError, setRuleError] = useState<string | null>(null)
+
+  // Environments tab state
+  const [envs, setEnvs] = useState<SyncEnvironmentAdmin[]>([])
+  const [envSavingName, setEnvSavingName] = useState<string | null>(null)
+  const [envError, setEnvError] = useState<string | null>(null)
+
   const loadRules = useCallback(async () => {
     try {
       const [data, toolList] = await Promise.all([api.listPolicies(), api.listTools()])
@@ -137,6 +161,66 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
+
+  const loadEnvs = useCallback(async () => {
+    try { setEnvs(await api.listSyncEnvironments()) } catch { setEnvError("Failed to load environments") }
+  }, [])
+  useEffect(() => { loadEnvs() }, [loadEnvs])
+
+  function startEditRule(r: PolicyRule | null): void {
+    setRuleError(null)
+    if (r) {
+      setEditingRule(r)
+      setRuleForm({
+        name:       r.name,
+        effect:     r.effect,
+        condition:  r.condition,
+        parameters: JSON.stringify(r.parameters ?? {}, null, 2),
+      })
+    } else {
+      setEditingRule({} as PolicyRule)
+      setRuleForm({ name: "", effect: "allow", condition: "selectors", parameters: '{\n  "selectors": {},\n  "priority": 50,\n  "reason": ""\n}' })
+    }
+  }
+  async function saveRule(): Promise<void> {
+    setRuleSaving(true); setRuleError(null)
+    try {
+      let parsed: Record<string, unknown> = {}
+      if (ruleForm.parameters.trim()) {
+        try { parsed = JSON.parse(ruleForm.parameters) as Record<string, unknown> }
+        catch (e) { setRuleError(`Invalid JSON: ${e instanceof Error ? e.message : e}`); setRuleSaving(false); return }
+      }
+      await api.createPolicy({ name: ruleForm.name.trim(), effect: ruleForm.effect, condition: ruleForm.condition.trim(), parameters: parsed })
+      await loadRules()
+      setEditingRule(null)
+    } catch {
+      setRuleError("Save failed")
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+  async function saveEnv(name: string, fields: Record<string, unknown>): Promise<void> {
+    setEnvSavingName(name); setEnvError(null)
+    try {
+      await api.updateSyncEnvironment(name, fields)
+      await loadEnvs()
+    } catch {
+      setEnvError(`Failed to update ${name}`)
+    } finally {
+      setEnvSavingName(null)
+    }
+  }
+  async function resetEnv(name: string): Promise<void> {
+    setEnvSavingName(name); setEnvError(null)
+    try {
+      await api.resetSyncEnvironment(name)
+      await loadEnvs()
+    } catch {
+      setEnvError(`Failed to reset ${name}`)
+    } finally {
+      setEnvSavingName(null)
+    }
+  }
 
   // Load workspace path
   useEffect(() => {
@@ -249,9 +333,15 @@ export function PolicyEditor({ onClose }: Props) {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "tools", label: "Tool Permissions" },
+    { id: "rules", label: `Selector Rules (${rules.length})` },
+    { id: "envs", label: `Environments (${envs.length})` },
     { id: "model", label: "Model" },
     { id: "security", label: "Security" },
   ]
+
+  const filteredRules = ruleFilter === "all"
+    ? rules
+    : rules.filter((r) => (r.source ?? "db") === ruleFilter)
 
   return (
     <div
@@ -346,6 +436,128 @@ export function PolicyEditor({ onClose }: Props) {
                   </div>
                 )
               })}
+            </div>
+          ) : tab === "rules" ? (
+            /* ── Selector Rules tab ───────────────────────── */
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm text-text-muted flex-1 min-w-0">
+                  Every active policy rule with provenance. Operator edits override seeded defaults.
+                  <span className="text-warning"> Deleting a hosted-default or env-derived rule will be re-seeded on next server boot — edit the effect instead.</span>
+                </p>
+                <select
+                  className="bg-overlay-3 text-text text-[13px] rounded-lg px-3 py-1.5 outline-none border border-border-subtle"
+                  value={ruleFilter}
+                  onChange={(e) => setRuleFilter(e.target.value as typeof ruleFilter)}
+                >
+                  <option value="all">All sources</option>
+                  <option value="db">Operator only</option>
+                  <option value="hosted_default">Hosted default</option>
+                  <option value="env_derived">Env-derived</option>
+                </select>
+                <button
+                  className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30"
+                  onClick={() => startEditRule(null)}
+                >+ New rule</button>
+              </div>
+
+              {editingRule && (
+                <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-accent/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-text">{ruleForm.name && rules.find((r) => r.name === ruleForm.name) ? "Edit rule" : "New rule"}</span>
+                    <button onClick={() => setEditingRule(null)} className="text-text-muted hover:text-text"><X size={14} /></button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      placeholder="rule name"
+                      value={ruleForm.name}
+                      onChange={(e) => setRuleForm((s) => ({ ...s, name: e.target.value }))}
+                      className="px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-[13px] font-mono"
+                    />
+                    <select
+                      value={ruleForm.effect}
+                      onChange={(e) => setRuleForm((s) => ({ ...s, effect: e.target.value as Effect }))}
+                      className="px-3 py-1.5 rounded-lg bg-overlay-3 border border-border-subtle text-[13px]"
+                    >
+                      <option value="allow">allow</option>
+                      <option value="deny">deny</option>
+                      <option value="require_approval">require_approval</option>
+                    </select>
+                    <input
+                      placeholder='condition (e.g. "selectors" or "action:run_command")'
+                      value={ruleForm.condition}
+                      onChange={(e) => setRuleForm((s) => ({ ...s, condition: e.target.value }))}
+                      className="px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-[13px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] text-text-muted block mb-1">Parameters (JSON — supports <code>selectors</code>, <code>priority</code>, <code>reason</code>)</label>
+                    <textarea
+                      value={ruleForm.parameters}
+                      onChange={(e) => setRuleForm((s) => ({ ...s, parameters: e.target.value }))}
+                      rows={6}
+                      className="w-full px-3 py-2 rounded-lg bg-overlay-2 border border-border-subtle text-[12px] font-mono"
+                    />
+                  </div>
+                  {ruleError && <p className="text-[12px] text-error">{ruleError}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={saveRule} disabled={ruleSaving || !ruleForm.name.trim()}
+                      className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40">
+                      {ruleSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button onClick={() => setEditingRule(null)} className="px-3 py-1.5 text-[13px] text-text-muted">Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                {filteredRules.map((r) => {
+                  const src = (r.source ?? "db") as NonNullable<PolicyRule["source"]>
+                  const badge = SOURCE_BADGE[src]
+                  const eff = getEffectStyle(r.effect)
+                  const EffIcon = eff.icon
+                  return (
+                    <div key={r.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-overlay-2 border border-border-subtle">
+                      <EffIcon size={14} className={eff.color} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[13px] font-mono text-text truncate">{r.name}</span>
+                          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
+                          {r.updatedAt && <span className="text-[10px] text-text-muted">edited by {r.updatedBy ?? "?"}</span>}
+                        </div>
+                        <div className="text-[12px] text-text-muted truncate">{r.condition} · prio {String((r.parameters as { priority?: number } | undefined)?.priority ?? "—")}</div>
+                      </div>
+                      <button onClick={() => startEditRule(r)} className="text-text-muted hover:text-text text-[12px] px-2">Edit</button>
+                      <button onClick={() => handleDelete(r.name)} className="text-error/70 hover:text-error p-1"><Trash2 size={13} /></button>
+                    </div>
+                  )
+                })}
+                {filteredRules.length === 0 && (
+                  <div className="text-text-muted text-[13px] text-center py-6">No rules match this filter.</div>
+                )}
+              </div>
+            </div>
+          ) : tab === "envs" ? (
+            /* ── Environments tab ─────────────────────────── */
+            <div className="space-y-3">
+              <p className="text-sm text-text-muted">
+                Per-environment access control for hosted MSSQL operations. The JSON config in
+                <code className="font-mono text-text"> deploy/mssql/sync-environments.json</code> is the bootstrap;
+                edits here are stored as overrides that win at merge time. <span className="text-warning">Changes apply to the next run start (no restart needed).</span>
+              </p>
+              {envError && <div className="px-3 py-2 bg-error/10 text-error text-[13px] rounded-lg">{envError}</div>}
+              {envs.map((e) => (
+                <EnvCard
+                  key={e.name}
+                  env={e}
+                  busy={envSavingName === e.name}
+                  onSave={(fields) => saveEnv(e.name, fields)}
+                  onReset={() => resetEnv(e.name)}
+                />
+              ))}
+              {envs.length === 0 && (
+                <div className="text-text-muted text-[13px] text-center py-6">No sync environments configured.</div>
+              )}
             </div>
           ) : tab === "model" ? (
             /* ── Model tab ────────────────────────────────── */
@@ -623,6 +835,128 @@ export function PolicyEditor({ onClose }: Props) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Env permission card ──────────────────────────────────────────
+
+interface EnvCardProps {
+  env:    SyncEnvironmentAdmin
+  busy:   boolean
+  onSave: (fields: Record<string, unknown>) => void
+  onReset: () => void
+}
+
+function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
+  const [mode, setMode]       = useState(env.defaultAccessMode)
+  const [denyDml, setDenyDml] = useState(env.denyDml)
+  const [denyDdl, setDenyDdl] = useState(env.denyDdl)
+  const [allowed, setAllowed] = useState<EnvOperation[]>(env.allowedOperations)
+  const [approval, setApproval] = useState<EnvOperation[]>(env.approvalRequiredOperations)
+
+  const dirty =
+    mode !== env.defaultAccessMode ||
+    denyDml !== env.denyDml ||
+    denyDdl !== env.denyDdl ||
+    JSON.stringify(allowed.slice().sort())  !== JSON.stringify(env.allowedOperations.slice().sort()) ||
+    JSON.stringify(approval.slice().sort()) !== JSON.stringify(env.approvalRequiredOperations.slice().sort())
+
+  function toggleOp(list: EnvOperation[], setList: (v: EnvOperation[]) => void, op: EnvOperation): void {
+    setList(list.includes(op) ? list.filter((o) => o !== op) : [...list, op])
+  }
+
+  const lockedDown = mode === "read_only"
+
+  return (
+    <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm font-semibold text-text font-mono">{env.name}</span>
+          <span className="text-[11px] uppercase tracking-wider text-text-muted">{env.role}</span>
+          {env.override && (
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/10 text-warning">
+              overridden by {env.override.updatedBy ?? "?"}
+            </span>
+          )}
+        </div>
+        {env.override && (
+          <button onClick={onReset} disabled={busy}
+            className="text-[12px] text-text-muted hover:text-text underline">Reset to JSON default</button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[12px] text-text-muted block mb-1">Default access mode</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}
+            className="w-full px-3 py-1.5 rounded-lg bg-overlay-3 border border-border-subtle text-[13px]">
+            <option value="read_only">read_only</option>
+            <option value="read_write">read_write</option>
+          </select>
+        </div>
+        <div className="flex items-end gap-4">
+          <label className="flex items-center gap-2 text-[13px] text-text">
+            <input type="checkbox" checked={denyDml} onChange={(e) => setDenyDml(e.target.checked)} />
+            denyDml
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-text">
+            <input type="checkbox" checked={denyDdl} onChange={(e) => setDenyDdl(e.target.checked)} />
+            denyDdl
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-[12px] text-text-muted block mb-1.5">Allowed operations</label>
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_OPS.map((op) => {
+            const on = allowed.includes(op)
+            return (
+              <button key={op} onClick={() => toggleOp(allowed, setAllowed, op)}
+                className={`text-[12px] px-2 py-0.5 rounded-full border ${on ? "bg-success/10 text-success border-success/30" : "bg-overlay-3 text-text-muted border-border-subtle"}`}>
+                {op}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-[12px] text-text-muted block mb-1.5">Operations requiring approval</label>
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_OPS.map((op) => {
+            const on = approval.includes(op)
+            return (
+              <button key={op} onClick={() => toggleOp(approval, setApproval, op)}
+                className={`text-[12px] px-2 py-0.5 rounded-full border ${on ? "bg-warning/10 text-warning border-warning/30" : "bg-overlay-3 text-text-muted border-border-subtle"}`}>
+                {op}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {lockedDown && (
+        <p className="text-[12px] text-text-muted">
+          Read-only mode: write tools are denied unless explicitly listed under Allowed operations above.
+        </p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          disabled={!dirty || busy}
+          onClick={() => onSave({
+            defaultAccessMode:          mode,
+            denyDml,
+            denyDdl,
+            allowedOperations:          allowed,
+            approvalRequiredOperations: approval,
+          })}
+          className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        >{busy ? "Saving…" : dirty ? "Save changes" : "Saved"}</button>
+        {dirty && <span className="text-[12px] text-text-muted">unsaved changes</span>}
       </div>
     </div>
   )

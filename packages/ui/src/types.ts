@@ -471,12 +471,37 @@ export interface ToolInfo {
 
 // ── Policy ───────────────────────────────────────────────────────
 
+export type PolicySource = "db" | "hosted_default" | "env_derived"
+
 export interface PolicyRule {
   name: string
   effect: "allow" | "require_approval" | "deny"
   condition: string
   parameters: Record<string, unknown>
+  source?: PolicySource
   createdAt: string
+  updatedAt?: string | null
+  updatedBy?: string | null
+}
+
+// ── Sync environments (admin) ────────────────────────────────────
+
+export type EnvAccessMode = "read_only" | "read_write"
+export type EnvOperation =
+  | "query_read" | "schema_introspect" | "sync_preview"
+  | "sync_execute" | "ddl" | "dml"
+
+export interface SyncEnvironmentAdmin {
+  name: string
+  displayName: string
+  role: "source" | "target" | "both"
+  defaultAccessMode: EnvAccessMode
+  allowedOperations: EnvOperation[]
+  denyDml: boolean
+  denyDdl: boolean
+  approvalRequiredOperations: EnvOperation[]
+  syncAllowlist: string[]
+  override: { fields: Record<string, unknown>; updatedAt: string; updatedBy: string | null } | null
 }
 
 // ── Notifications ────────────────────────────────────────────────

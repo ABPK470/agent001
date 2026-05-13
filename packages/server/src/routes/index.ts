@@ -12,6 +12,7 @@ export { registerPolicyRoutes } from "./policies.js"
 export { registerProfileRoutes } from "./profile.js"
 export { registerRunRoutes } from "./runs.js"
 export { registerSyncRoutes } from "./sync.js"
+export { registerSyncEnvironmentRoutes } from "./sync-environments.js"
 export { registerUsageRoutes } from "./usage.js"
 export { registerWebhookRoutes } from "./webhooks.js"
 

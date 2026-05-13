@@ -124,6 +124,18 @@ export const api = {
       method: "DELETE",
     }),
 
+  // Sync-environment overrides (admin)
+  listSyncEnvironments: () => json<import("./types").SyncEnvironmentAdmin[]>("/api/sync-environments"),
+  updateSyncEnvironment: (name: string, fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(fields),
+    }),
+  resetSyncEnvironment: (name: string) =>
+    json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+
   // Data management
   resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),
 

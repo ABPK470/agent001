@@ -21,7 +21,9 @@ export {
 
 // Layouts & policies
 export {
-    deleteLayout, deletePolicyRule, getLayout, getLayouts, listPolicyRules, saveLayout, savePolicyRule, type DbLayout, type DbPolicyRule
+    deleteLayout, deletePolicyRule, deleteSyncEnvOverride, getLayout, getLayouts, getSyncEnvOverride, listPolicyRules,
+    listSyncEnvOverrides, saveLayout, savePolicyRule, saveSyncEnvOverride, seedPolicyRuleIfMissing,
+    type DbLayout, type DbPolicyRule, type DbSyncEnvOverride, type PolicySource
 } from "./db/config.js"
 
 // LLM config & agent definitions

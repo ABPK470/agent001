@@ -78,12 +78,14 @@ import {
   registerProfileRoutes,
   registerRunRoutes,
   registerSyncRoutes,
+  registerSyncEnvironmentRoutes,
   registerUsageRoutes,
   registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox.js"
 import { setupMssql } from "./setup-mssql.js"
+import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -104,6 +106,12 @@ async function main() {
 
   // ── ABI sync subsystem ──
   await setupEnvironments(_projectRoot)
+  // Operator overrides on top of JSON config + seed hosted-default and
+  // env-derived policy rules into the DB so the admin UI can show the
+  // full active ruleset (and let admins edit it). Done AFTER
+  // setupEnvironments so derived rules reflect the merged env config.
+  applyEnvOverrides()
+  seedDefaultPoliciesIfMissing()
   configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
   configureSyncOrchestrator(_projectRoot)
   // Fan sync events out via broadcast(): SSE for live UI, event_log table
@@ -469,6 +477,7 @@ async function buildApp(opts: AppOpts) {
   registerAgentRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
+  registerSyncEnvironmentRoutes(app)
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)

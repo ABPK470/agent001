@@ -259,6 +259,26 @@ export function _migrate(db: Database.Database): void {
   // Plan body persistence — lets the History modal re-hydrate the diff
   // after a server restart (no longer dependent on the 24h disk-JSON TTL).
   addColumnIfMissing("ALTER TABLE sync_runs ADD COLUMN plan_json TEXT")
+  // Policy provenance — `source` distinguishes operator-authored ('db'),
+  // hosted-default-seeded ('hosted_default'), and per-env-derived
+  // ('env_derived') rules so the admin UI can render them correctly and
+  // the seeder can refresh derived rules without trampling operator edits.
+  addColumnIfMissing("ALTER TABLE policy_rules ADD COLUMN source TEXT NOT NULL DEFAULT 'db'")
+  addColumnIfMissing("ALTER TABLE policy_rules ADD COLUMN updated_at TEXT")
+  addColumnIfMissing("ALTER TABLE policy_rules ADD COLUMN updated_by TEXT")
+
+  // ── Sync-environment overrides (admin-editable on top of JSON config) ──
+  // The JSON file (deploy/mssql/sync-environments.json) is the bootstrap;
+  // anything in this table wins at merge time. `overrides_json` is a
+  // partial SyncEnvironment shape — only fields present override.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sync_environment_overrides (
+      name           TEXT PRIMARY KEY,
+      overrides_json TEXT NOT NULL DEFAULT '{}',
+      updated_at     TEXT NOT NULL,
+      updated_by     TEXT
+    );
+  `)
 
   // Seed default agent
   db.prepare(`

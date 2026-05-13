@@ -1,25 +1,55 @@
 /**
- * Policy rules API routes — manage governance policies.
+ * Policy rules API routes — manage governance policies (admin only).
+ *
+ * Every rule the engine actually evaluates lives in `policy_rules`,
+ * tagged with provenance via `source`:
+ *   - `db`             — operator-authored.
+ *   - `hosted_default` — seeded from `hostedDefaultPolicyRules()`.
+ *   - `env_derived`    — derived from per-env config.
+ *
+ * Operators can edit/delete any rule. The seeder only re-creates a rule
+ * if its `name` is missing, so deletes are persistent and edits survive
+ * server restart.
  */
 
-import type { FastifyInstance } from "fastify"
+import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db.js"
 
+function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
+  // Admin governance changes have no run context — log them under the
+  // `__admin__` sentinel run-id so existing audit_log queries still work
+  // (they're keyed on run_id) but they're cleanly separable.
+  try {
+    db.saveAudit({
+      run_id:    "__admin__",
+      actor:     req.session?.upn ?? "unknown",
+      action,
+      detail:    JSON.stringify(detail),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn("[policies] audit_log write failed:", e instanceof Error ? e.message : e)
+  }
+}
+
 export function registerPolicyRoutes(app: FastifyInstance): void {
-  // List all policy rules (admin only — policies govern hosted-agent capability).
+  // List every active policy rule with provenance (admin only).
   app.get("/api/policies", async (req, reply) => {
     if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
-    const rules = db.listPolicyRules()
-    return rules.map((r) => ({
-      name: r.name,
-      effect: r.effect,
-      condition: r.condition,
+    return db.listPolicyRules().map((r) => ({
+      name:       r.name,
+      effect:     r.effect,
+      condition:  r.condition,
       parameters: JSON.parse(r.parameters),
-      createdAt: r.created_at,
+      source:     r.source ?? "db",
+      createdAt:  r.created_at,
+      updatedAt:  r.updated_at ?? null,
+      updatedBy:  r.updated_by ?? null,
     }))
   })
 
-  // Create or update a policy rule (admin only).
+  // Create or update a policy rule (admin only). Editing a seeded rule
+  // preserves its source tag so the UI can show "you've edited a default".
   app.post<{
     Body: { name: string; effect: string; condition: string; parameters?: Record<string, unknown> }
   }>("/api/policies", async (req, reply) => {
@@ -34,24 +64,34 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       return { error: "effect must be allow, require_approval, or deny" }
     }
 
+    const existing = db.listPolicyRules().find((r) => r.name === name)
+    const now = new Date().toISOString()
     db.savePolicyRule({
       name,
       effect,
       condition,
       parameters: JSON.stringify(parameters ?? {}),
-      created_at: new Date().toISOString(),
+      created_at: existing?.created_at ?? now,
+      source:     existing?.source ?? "db",
+      updated_at: now,
+      updated_by: req.session.upn ?? null,
     })
 
-    reply.code(201)
+    audit(req, existing ? "policy.update" : "policy.create", { name, effect, condition })
+    reply.code(existing ? 200 : 201)
     return { ok: true }
   })
 
-  // Delete a policy rule (admin only).
+  // Delete a policy rule (admin only). Caveat: the seeder will recreate
+  // hosted_default / env_derived rules on next boot. To suppress a
+  // default permanently, edit its `effect` instead of deleting it.
   app.delete<{ Params: { name: string } }>(
     "/api/policies/:name",
     async (req, reply) => {
       if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+      const before = db.listPolicyRules().find((r) => r.name === req.params.name)
       db.deletePolicyRule(req.params.name)
+      audit(req, "policy.delete", { name: req.params.name, source: before?.source ?? null })
       return { ok: true }
     },
   )
