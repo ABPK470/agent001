@@ -19,6 +19,7 @@ import {
     uploadAttachment,
     type AttachmentRow,
 } from "../attachments/index.js"
+import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 
 const TEXT_MEDIA_PREFIXES = ["text/"]
 const TEXT_MEDIA_TYPES = new Set([
@@ -160,6 +161,7 @@ export const serverAttachmentService: AttachmentService = {
       sandboxPath:  dest,
       importMode:   "copy",
     })
+    auditAttachmentImported(row, dest)
     return { sandboxPath: dest, sizeBytes: bytes.byteLength }
   },
 
@@ -189,6 +191,7 @@ export const serverAttachmentService: AttachmentService = {
       source:       "generated",
       ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {}),
     })
+    auditAttachmentPromoted(row)
     return toMetadata(row)
   },
 }

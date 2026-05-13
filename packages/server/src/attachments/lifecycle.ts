@@ -17,6 +17,7 @@
  */
 
 import { getDb } from "../db/connection.js"
+import { auditAttachmentsPruned } from "./audit.js"
 import type { AttachmentScope } from "./repo.js"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -135,5 +136,7 @@ export function pruneExpiredAttachments(now: Date = new Date()): PruneResult {
       AND retention_until IS NOT NULL
       AND retention_until <= ?
   `).run(cutoff)
-  return { prunedAttachments: result.changes }
+  const pruned = { prunedAttachments: result.changes }
+  auditAttachmentsPruned(pruned.prunedAttachments)
+  return pruned
 }

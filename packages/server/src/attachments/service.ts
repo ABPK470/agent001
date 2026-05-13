@@ -5,6 +5,7 @@
  */
 
 import { basename, extname } from "node:path"
+import { auditAttachmentUploaded } from "./audit.js"
 import { assertOwnerQuota, computeRetentionUntil } from "./lifecycle.js"
 import {
     addAttachmentTag,
@@ -94,5 +95,6 @@ export async function uploadAttachment(input: UploadAttachmentInput): Promise<At
     retentionUntil: computeRetentionUntil(input.scope),
   })
   for (const tag of input.tags ?? []) addAttachmentTag(row.id, tag.key, tag.value)
+  auditAttachmentUploaded(row)
   return row
 }

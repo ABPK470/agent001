@@ -21,6 +21,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { Buffer } from "node:buffer"
 import {
+    auditAttachmentDeleted,
     getAttachment,
     listAttachments,
     listAttachmentTags,
@@ -196,6 +197,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
     if (!row) { reply.code(404); return { error: "attachment not found" } }
     if (!canViewAttachment(req, row)) { reply.code(403); return { error: "forbidden" } }
     softDeleteAttachment(row.id)
+    auditAttachmentDeleted({ id: row.id, ownerUpn: row.owner_upn, reason: "user" })
     return { ok: true }
   })
 }
