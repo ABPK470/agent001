@@ -13,6 +13,7 @@ export { registerProfileRoutes } from "./profile.js"
 export { registerRunRoutes } from "./runs.js"
 export { registerSyncEnvironmentRoutes } from "./sync-environments.js"
 export { registerSyncRoutes } from "./sync.js"
+export { registerToolCacheRoutes } from "./tool-cache.js"
 export { registerUsageRoutes } from "./usage.js"
 export { registerWebhookRoutes } from "./webhooks.js"
 

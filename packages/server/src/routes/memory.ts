@@ -37,6 +37,17 @@ export function registerMemoryRoutes(
 ): void {
   // ── Memory ───────────────────────────────────────────────────
 
+  /**
+   * Per-tenant scope helper. Admins see everything; non-admins see only
+   * their own rows plus shared=true. Returns `undefined` to skip filtering
+   * (admin), or the upn string / null to filter on it.
+   */
+  const tenantScope = (req: { session?: { isAdmin?: boolean; upn?: string | null } }): string | null | undefined => {
+    const s = req.session
+    if (!s || s.isAdmin) return undefined
+    return s.upn ?? null
+  }
+
   /** Search memories (FTS5). */
   app.post<{ Body: { query: string; tier?: MemoryTier; maxItems?: number } }>(
     "/api/memory/search",
@@ -50,6 +61,7 @@ export function registerMemoryRoutes(
       const results = await searchEntries(query, {
         tier,
         budget: { maxTokens: 8000, maxItems: limit },
+        upn: tenantScope(req),
       })
       return results.map((r) => ({
         id: r.entry.id,
@@ -72,7 +84,7 @@ export function registerMemoryRoutes(
     async (req) => {
       const tier = req.query.tier
       const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50
-      const memories = listMemories(tier, limit)
+      const memories = listMemories(tier, limit, { upn: tenantScope(req) })
       return memories.map((m) => ({
         id: m.id,
         tier: m.tier,
@@ -87,8 +99,8 @@ export function registerMemoryRoutes(
   )
 
   /** Memory statistics. */
-  app.get("/api/memory/stats", async () => {
-    return getMemoryStats()
+  app.get("/api/memory/stats", async (req) => {
+    return getMemoryStats({ upn: tenantScope(req) })
   })
 
   /** Preview memory context for a goal (what would be injected). */
@@ -100,7 +112,7 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const { context, results } = await retrieveContext(goal)
+      const { context, results } = await retrieveContext(goal, { upn: tenantScope(req) })
       return {
         context,
         resultCount: results.length,
@@ -126,7 +138,7 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const procedures = searchProcedures(goal, limit ?? 5)
+      const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req))
       return procedures.map((p) => ({
         id: p.id,
         trigger: p.trigger,
@@ -138,18 +150,21 @@ export function registerMemoryRoutes(
     },
   )
 
-  /** Consolidate episodic → semantic. */
-  app.post("/api/memory/consolidate", async () => {
+  /** Consolidate episodic → semantic. Admin-only — cross-tenant maintenance. */
+  app.post("/api/memory/consolidate", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
     return consolidate()
   })
 
-  /** Prune expired / low-confidence memories. */
-  app.post("/api/memory/prune", async () => {
+  /** Prune expired / low-confidence memories. Admin-only. */
+  app.post("/api/memory/prune", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
     return prune()
   })
 
-  /** Clear all memories. */
-  app.delete("/api/memory", async () => {
+  /** Clear all memories. Admin-only — destructive cross-tenant op. */
+  app.delete("/api/memory", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
     clearAllMemories()
     return { ok: true }
   })

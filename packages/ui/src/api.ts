@@ -41,7 +41,8 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   // Runs
-  listRuns: () => json<Run[]>("/api/runs"),
+  listRuns: (opts?: { scope?: "session" | "all" }) =>
+    json<Run[]>(`/api/runs${opts?.scope ? `?scope=${opts.scope}` : ""}`),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
   startRun: (goal: string, agentId?: string, attachmentIds?: string[]) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {

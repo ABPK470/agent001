@@ -16,11 +16,14 @@ export function registerRunRoutes(
 ): void {
 
   // List all runs (with token usage). Non-admin visitors see only their own.
-  app.get("/api/runs", async (req) => {
+  // `?scope=session` narrows to runs from the current cookie sid (one chat
+  // thread); default `scope=all` shows every run owned by this UPN.
+  app.get<{ Querystring: { scope?: "session" | "all" } }>("/api/runs", async (req) => {
     const s = req.session
+    const sessionOnly = req.query.scope === "session"
     const runs = s?.isAdmin
       ? db.listRunsWithUsage()
-      : db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null })
+      : db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
     return runs.map((r) => ({
       pendingWorkspaceChanges: (() => {
         const diff = orchestrator.getRunWorkspaceDiff(r.id)

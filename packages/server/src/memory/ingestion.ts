@@ -22,6 +22,10 @@ export function ingestTurn(opts: {
   sessionId?: string | null
   runId?: string | null
   parentId?: string | null
+  /** Owner UPN — required for tenant isolation; null for service/anonymous. */
+  upn?: string | null
+  /** Cross-user shared row (admin-curated). Defaults to false. */
+  shared?: boolean
 }): MemoryEntry | null {
   const salience = computeSalience(opts.content, opts.role)
 
@@ -40,12 +44,15 @@ export function ingestTurn(opts: {
     return null
   }
 
-  // Dedup: check against recent entries (same session/run)
+  // Dedup: check against recent entries (same session/run AND same tenant).
+  // Without the upn predicate user A's entry could mask a near-identical
+  // legitimate entry from user B.
   const recentRows = getDb().prepare(`
     SELECT content FROM memory_entries
     WHERE (session_id = ? OR run_id = ?)
+      AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
     ORDER BY created_at DESC LIMIT 20
-  `).all(opts.sessionId ?? "", opts.runId ?? "") as Array<{ content: string }>
+  `).all(opts.sessionId ?? "", opts.runId ?? "", opts.upn ?? null, opts.upn ?? null) as Array<{ content: string }>
 
   if (isDuplicate(opts.content, recentRows.map((r) => r.content))) {
     broadcast({
@@ -74,13 +81,15 @@ export function ingestTurn(opts: {
     sessionId: opts.sessionId ?? null,
     runId: opts.runId ?? null,
     parentId: opts.parentId ?? null,
+    upn: opts.upn ?? null,
+    shared: opts.shared ?? false,
     createdAt: now,
     updatedAt: now,
   }
 
   getDb().prepare(`
-    INSERT INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, created_at, updated_at)
-    VALUES (@id, @tier, @role, @content, @metadata, @source, @confidence, @salience, @access_count, @session_id, @run_id, @parent_id, @created_at, @updated_at)
+    INSERT INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, upn, shared, created_at, updated_at)
+    VALUES (@id, @tier, @role, @content, @metadata, @source, @confidence, @salience, @access_count, @session_id, @run_id, @parent_id, @upn, @shared, @created_at, @updated_at)
   `).run({
     id: entry.id,
     tier: entry.tier,
@@ -94,6 +103,8 @@ export function ingestTurn(opts: {
     session_id: entry.sessionId,
     run_id: entry.runId,
     parent_id: entry.parentId,
+    upn: entry.upn,
+    shared: entry.shared ? 1 : 0,
     created_at: entry.createdAt,
     updated_at: entry.updatedAt,
   })
@@ -130,8 +141,11 @@ export function ingestRunTurns(run: {
   stepCount: number
   error?: string | null
   trace: Array<{ kind: string; tool?: string; text?: string; argsSummary?: string; argsFormatted?: string }>
+  /** Owner UPN — used to scope this run's memories to the originating user. */
+  upn?: string | null
 }): void {
   const sessionId = run.agentId ?? "default"
+  const upn = run.upn ?? null
 
   // 1. (goal text intentionally NOT stored in working memory — it is INPUT,
   //    not working state, and is already captured in episodic memory at step 4.
@@ -150,6 +164,7 @@ export function ingestRunTurns(run: {
         confidence: 0.6,
         sessionId,
         runId: run.id,
+        upn,
       })
     } else if (t.kind === "tool-result" && t.text) {
       ingestTurn({
@@ -161,6 +176,7 @@ export function ingestRunTurns(run: {
         confidence: 0.6,
         sessionId,
         runId: run.id,
+        upn,
       })
     }
   }
@@ -180,6 +196,7 @@ export function ingestRunTurns(run: {
       confidence: 0.8,
       sessionId,
       runId: run.id,
+      upn,
     })
   }
 
@@ -217,22 +234,25 @@ export function ingestRunTurns(run: {
   // Lower confidence when tool errors were detected — the approach was flawed.
   const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === "completed" ? 0.7 : 0.3
 
-  // Check for an existing summary for the same goal across ALL sessions.
+  // Check for an existing summary for the same goal scoped to this user
+  // (or to the unowned/global pool if no upn). Tenant isolation: a different
+  // user asking the same question must NOT collide with this row.
   // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
   const goalPrefix = `Goal: ${run.goal}\n`
   const existingEpisodic = getDb().prepare(`
     SELECT id FROM memory_entries
     WHERE tier = 'episodic' AND role = 'summary'
       AND substr(content, 1, ?) = ?
+      AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
     ORDER BY updated_at DESC LIMIT 1
-  `).get(goalPrefix.length, goalPrefix) as { id: string } | undefined
+  `).get(goalPrefix.length, goalPrefix, upn, upn) as { id: string } | undefined
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
     const now = new Date().toISOString()
     getDb().prepare(`
       UPDATE memory_entries
-      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, updated_at = ?
+      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, upn = COALESCE(upn, ?), updated_at = ?
       WHERE id = ?
     `).run(
       episodicContent,
@@ -240,6 +260,7 @@ export function ingestRunTurns(run: {
       episodicConfidence,
       computeSalience(episodicContent, "summary"),
       run.id,
+      upn,
       now,
       existingEpisodic.id,
     )
@@ -253,6 +274,7 @@ export function ingestRunTurns(run: {
       confidence: episodicConfidence,
       sessionId,
       runId: run.id,
+      upn,
     })
   }
 }

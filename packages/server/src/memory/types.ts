@@ -17,6 +17,20 @@ export interface MemoryEntry {
   sessionId: string | null
   runId: string | null
   parentId: string | null
+  /**
+   * UPN of the user who owned the run that produced this entry. Null for
+   * legacy / pre-tenancy rows and for service-internal ingests. Retrieval
+   * paths filter by upn so user A's distilled knowledge cannot leak into
+   * user B's prompt context. Use `shared=true` to opt a row into the
+   * cross-user pool (admin-curated knowledge).
+   */
+  upn: string | null
+  /**
+   * When true the entry is visible to all users (admin-curated shared
+   * knowledge). False by default. There is no UI/tool to set this yet —
+   * leave dormant to avoid recreating the leak we just closed.
+   */
+  shared: boolean
   createdAt: string
   updatedAt: string
 }
@@ -28,6 +42,9 @@ export interface ProceduralMemory {
   successCount: number
   failureCount: number
   runId: string
+  upn: string | null
+  sessionId: string | null
+  shared: boolean
   createdAt: string
   updatedAt: string
 }

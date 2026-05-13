@@ -80,6 +80,7 @@ import {
   registerRunRoutes,
   registerSyncEnvironmentRoutes,
   registerSyncRoutes,
+  registerToolCacheRoutes,
   registerUsageRoutes,
   registerWebhookRoutes,
 } from "./routes/index.js"
@@ -483,6 +484,7 @@ async function buildApp(opts: AppOpts) {
   registerUsageRoutes(app)
   registerMymiRoutes(app)
   registerSyncRoutes(app, _projectRoot)
+  registerToolCacheRoutes(app)
   registerEventRoutes(app)
   registerOperationRoutes(app)
   registerWebhookRoutes(app, messageRouter, messageQueue)

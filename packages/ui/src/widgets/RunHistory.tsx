@@ -20,12 +20,21 @@ export function RunHistory() {
   const setAudit = useStore((s) => s.setAudit)
   const mergeLogs = useStore((s) => s.mergeLogs)
   const setTrace = useStore((s) => s.setTrace)
+  const setRuns = useStore((s) => s.setRuns)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
+  // "session" — just this chat (current cookie sid). "all" — every run owned
+  // by this UPN across every browser/device. Sessions are still grouped per
+  // login: a UPN can have many sids if they signed in from multiple places.
+  const [scope, setScope] = useState<"session" | "all">("all")
   // Load agents
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    api.listRuns({ scope }).then(setRuns).catch(() => {})
+  }, [scope, setRuns])
 
   const agentName = (id: string | null) => {
     if (!id) return null
@@ -52,14 +61,19 @@ export function RunHistory() {
 
   if (runs.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        No runs yet
+      <div className="flex flex-col h-full">
+        <ScopeToggle scope={scope} onChange={setScope} />
+        <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
+          {scope === "session" ? "No runs in this chat yet" : "No runs yet"}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-0.5">
+    <div className="flex flex-col h-full">
+      <ScopeToggle scope={scope} onChange={setScope} />
+      <div className="flex-1 overflow-y-auto space-y-0.5">
       {runs.map((run) => {
         const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
 
@@ -178,6 +192,26 @@ export function RunHistory() {
         </div>
         )
       })}
+      </div>
+    </div>
+  )
+}
+
+function ScopeToggle({ scope, onChange }: { scope: "session" | "all"; onChange: (s: "session" | "all") => void }) {
+  return (
+    <div className="flex items-center gap-0.5 mb-2 p-0.5 rounded-md ring-1 ring-border bg-elevated/40 self-start">
+      {(["session", "all"] as const).map((s) => (
+        <button
+          key={s}
+          onClick={() => onChange(s)}
+          className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+            scope === s ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text"
+          }`}
+          title={s === "session" ? "Runs from this chat thread (current login)" : "Every run you own across all sessions"}
+        >
+          {s === "session" ? "This chat" : "All my runs"}
+        </button>
+      ))}
     </div>
   )
 }

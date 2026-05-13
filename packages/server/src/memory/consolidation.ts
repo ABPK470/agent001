@@ -19,39 +19,96 @@ import { DEDUP_JACCARD_THRESHOLD, jaccardSimilarity, tokenize, truncateAtBoundar
 export function consolidate(opts?: {
   minAgeHours?: number
   maxBatchSize?: number
+  /**
+   * Restrict consolidation to one tenant. When omitted, every distinct upn
+   * (plus the legacy NULL-upn pool) is processed independently \u2014 candidates
+   * from different tenants are NEVER clustered together, so a promoted
+   * semantic fact always belongs to exactly one user.
+   */
+  upn?: string | null
 }): { promoted: number; pruned: number } {
   const minAgeHours = opts?.minAgeHours ?? 24
   const maxBatchSize = opts?.maxBatchSize ?? 200
   const cutoff = new Date(Date.now() - minAgeHours * 60 * 60 * 1000).toISOString()
 
   // Fetch candidates: episodic entries older than cutoff + old working entries.
-  // Exclude role='summary' — these are canonical per-goal answer records (from ingestRunTurns).
+  // Exclude role='summary' \u2014 these are canonical per-goal answer records (from ingestRunTurns).
   // They must NOT be clustered into semantic because:
   //   1. The content includes specific query results (client names, revenue figures)
-  //      that change over time — merging two such entries produces a contradictory
+  //      that change over time \u2014 merging two such entries produces a contradictory
   //      semantic "fact" with wrong answers from multiple different time periods.
-  //   2. They are already deduplicated by the episodic upsert (one per goal) — there
+  //   2. They are already deduplicated by the episodic upsert (one per goal) \u2014 there
   //      is no value in further consolidation.
   // Only working-tier tool-call/result turns (raw patterns) should be clustered.
+  const tenantClause = opts?.upn === undefined
+    ? ""
+    : opts.upn === null
+      ? " AND upn IS NULL"
+      : " AND upn = ?"
+  const tenantParams: unknown[] = opts?.upn === undefined || opts.upn === null ? [] : [opts.upn]
+
   const candidates = getDb().prepare(`
     SELECT * FROM memory_entries
     WHERE (tier = 'episodic' OR (tier = 'working' AND created_at < ?))
       AND role != 'summary'
-      AND created_at < ?
+      AND created_at < ?${tenantClause}
     ORDER BY created_at ASC
     LIMIT ?
-  `).all(cutoff, cutoff, maxBatchSize) as Array<Record<string, unknown>>
+  `).all(cutoff, cutoff, ...tenantParams, maxBatchSize) as Array<Record<string, unknown>>
 
   if (candidates.length < 3) return { promoted: 0, pruned: 0 }
 
-  // Load existing semantic entries for cross-tier dedup
-  const existingSemantic = getDb().prepare(`
-    SELECT content FROM memory_entries WHERE tier = 'semantic'
-    ORDER BY created_at DESC LIMIT 100
-  `).all() as Array<{ content: string }>
+  // Partition by upn so clustering only happens within a tenant. A null upn
+  // is its own partition (legacy/global) and never clusters with named users.
+  const byTenant = new Map<string | null, Array<Record<string, unknown>>>()
+  for (const row of candidates) {
+    const key = (row.upn as string | null) ?? null
+    const bucket = byTenant.get(key) ?? []
+    bucket.push(row)
+    byTenant.set(key, bucket)
+  }
+
+  let totalPromoted = 0
+  let totalPruned = 0
+  for (const [tenantUpn, tenantRows] of byTenant) {
+    const r = consolidateTenant(tenantUpn, tenantRows)
+    totalPromoted += r.promoted
+    totalPruned += r.pruned
+  }
+
+  // Prune very low confidence entries (cross-tenant; threshold-only)
+  const deleted = getDb().prepare(
+    "DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'"
+  ).run()
+  totalPruned += deleted.changes ?? 0
+
+  if (totalPromoted > 0 || totalPruned > 0) {
+    broadcast({
+      type: "memory.consolidated",
+      data: { promoted: totalPromoted, pruned: totalPruned },
+    })
+  }
+
+  return { promoted: totalPromoted, pruned: totalPruned }
+}
+
+function consolidateTenant(
+  tenantUpn: string | null,
+  candidates: Array<Record<string, unknown>>,
+): { promoted: number; pruned: number } {
+  if (candidates.length < 2) return { promoted: 0, pruned: 0 }
+
+  // Load existing semantic entries for THIS tenant only \u2014 cross-tier dedup
+  // must not consult another user's semantic memory.
+  const semanticSql = tenantUpn === null
+    ? "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn IS NULL ORDER BY created_at DESC LIMIT 100"
+    : "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn = ? ORDER BY created_at DESC LIMIT 100"
+  const existingSemantic = (tenantUpn === null
+    ? getDb().prepare(semanticSql).all()
+    : getDb().prepare(semanticSql).all(tenantUpn)) as Array<{ content: string }>
   const semanticTokenSets = existingSemantic.map((s) => tokenize(s.content))
 
-  // Agglomerative clustering by Jaccard ≥ 0.4
+  // Agglomerative clustering by Jaccard \u2265 0.4
   const entries = candidates.map((r) => ({
     row: r,
     tokens: tokenize(r.content as string),
@@ -113,6 +170,7 @@ export function consolidate(opts?: {
       },
       source: "system",
       confidence,
+      upn: tenantUpn,
     })
     promoted++
 
@@ -124,19 +182,6 @@ export function consolidate(opts?: {
       `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
     ).run(new Date().toISOString(), ...ids)
     pruned += ids.length
-  }
-
-  // Prune very low confidence entries
-  const deleted = getDb().prepare(
-    "DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'"
-  ).run()
-  pruned += deleted.changes ?? 0
-
-  if (promoted > 0 || pruned > 0) {
-    broadcast({
-      type: "memory.consolidated",
-      data: { promoted, pruned },
-    })
   }
 
   return { promoted, pruned }

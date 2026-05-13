@@ -17,6 +17,7 @@ import { migrateMemory } from "../memory.js"
 import { RunQueue, type RunPriority } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
+import { cleanupExpiredCache } from "../tool-cache.js"
 import { filterToolsForVisitor, getAllTools } from "../tools.js"
 import { createNotification, saveTrace } from "./persistence.js"
 import { recoverStaleRunsImpl } from "./recovery.js"
@@ -48,6 +49,10 @@ export class AgentOrchestrator {
     if (Number.isFinite(ttlMs) && ttlMs >= 0) {
       void cleanupStaleRunWorkspaces(ttlMs)
     }
+    // Tool-cache TTL is per-entry (encoded in each cache file). The boot
+    // sweep here drops anything that already expired so the disk does not
+    // accumulate orphans across restarts.
+    void cleanupExpiredCache().catch(() => {})
   }
 
   // ── Configuration ─────────────────────────────────────────────

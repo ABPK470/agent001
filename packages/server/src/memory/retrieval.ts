@@ -31,6 +31,12 @@ export async function retrieveContext(
     sessionId?: string
     runId?: string
     budget?: MemoryBudget
+    /**
+     * Owner UPN — scopes ALL tiers (working/episodic/semantic) to this user
+     * plus any rows explicitly marked shared=true. Pass null/undefined for
+     * unauthenticated callers; those see only legacy/global rows.
+     */
+    upn?: string | null
   },
 ): Promise<{
   context: string
@@ -53,12 +59,13 @@ export async function retrieveContext(
       budget: tierBudget,
       sessionId: tier === "working" ? opts?.sessionId : undefined,
       excludeRunId: opts?.runId,
+      upn: opts?.upn ?? null,
     })
     allResults.push(...results)
   }
 
   // Also search procedural memories (kept for activation tracking, not injected into prompt)
-  const procedures = searchProcedures(goal, 3)
+  const procedures = searchProcedures(goal, 3, opts?.upn ?? null)
 
   // Sort all results by combined score descending
   allResults.sort((a, b) => b.combined - a.combined)
@@ -149,6 +156,12 @@ export async function searchEntries(
     budget: MemoryBudget
     sessionId?: string
     excludeRunId?: string
+    /**
+     * Owner UPN. Filters ALL tiers (not just working) so user A's distilled
+     * knowledge cannot be injected into user B's prompt. Pass null to query
+     * the legacy/unowned pool only. Rows with shared=1 are always visible.
+     */
+    upn?: string | null
   },
 ): Promise<UnifiedSearchResult[]> {
   const now = new Date()
@@ -156,7 +169,7 @@ export async function searchEntries(
   const ftsQuery = sanitizeFtsQuery(query)
   if (!ftsQuery) {
     if (opts.tier === "working") {
-      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.sessionId)
+      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.sessionId, opts.upn)
     }
     return []
   }
@@ -181,6 +194,17 @@ export async function searchEntries(
     sql += " AND e.session_id = ?"
     params.push(opts.sessionId)
   }
+  // Tenant isolation: every tier must be scoped to the calling user, with
+  // shared=1 rows visible to everyone (admin-curated knowledge). The legacy
+  // pool (upn IS NULL on both sides) stays self-contained for back-compat.
+  if (opts.upn !== undefined) {
+    if (opts.upn === null) {
+      sql += " AND (e.upn IS NULL OR e.shared = 1)"
+    } else {
+      sql += " AND (e.upn = ? OR e.shared = 1)"
+      params.push(opts.upn)
+    }
+  }
   if (opts.tier === "working") {
     // Hard cutoff: working memory only surfaces entries from the active session window.
     // This prevents stale answers from previous sessions bleeding into a fresh run.
@@ -201,7 +225,7 @@ export async function searchEntries(
   // For working tier, also get recent entries that may not match FTS
   let recentEntries: UnifiedSearchResult[] = []
   if (opts.tier === "working") {
-    recentEntries = getRecentEntries("working", 12, opts.sessionId)
+    recentEntries = getRecentEntries("working", 12, opts.sessionId, opts.upn)
   }
 
   const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
@@ -234,6 +258,17 @@ export async function searchEntries(
       if (!row) continue
       if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
       if (opts.sessionId && opts.tier === "working" && row.session_id !== opts.sessionId) continue
+      // Tenant guard — vector hits must obey the same upn filter as FTS hits.
+      // The vector index does not store upn (defence-in-depth: rely on the
+      // memory_entries join as the single source of truth).
+      if (opts.upn !== undefined) {
+        const rowUpn = (row.upn as string | null) ?? null
+        const rowShared = (row.shared as number | null) === 1
+        if (!rowShared) {
+          if (opts.upn === null && rowUpn !== null) continue
+          if (opts.upn !== null && rowUpn !== opts.upn) continue
+        }
+      }
 
       const entry = rowToEntry(row)
       const rec = recencyScore(entry.createdAt, now)
@@ -275,6 +310,7 @@ function getRecentEntries(
   tier: MemoryTier,
   limit: number,
   sessionId?: string,
+  upn?: string | null,
 ): UnifiedSearchResult[] {
   const now = new Date()
   let sql = "SELECT * FROM memory_entries WHERE tier = ?"
@@ -283,6 +319,14 @@ function getRecentEntries(
   if (sessionId) {
     sql += " AND session_id = ?"
     params.push(sessionId)
+  }
+  if (upn !== undefined) {
+    if (upn === null) {
+      sql += " AND (upn IS NULL OR shared = 1)"
+    } else {
+      sql += " AND (upn = ? OR shared = 1)"
+      params.push(upn)
+    }
   }
   if (tier === "working") {
     const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()

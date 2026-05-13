@@ -74,7 +74,7 @@ export function prune(): { deleted: number } {
   }
 }
 
-export function getMemoryStats(): {
+export function getMemoryStats(opts?: { upn?: string | null }): {
   working: number
   episodic: number
   semantic: number
@@ -84,21 +84,32 @@ export function getMemoryStats(): {
   oldestMemory: string | null
 } {
   const db = getDb()
+  // Tenant scope: undefined → all tenants (admin); null → only legacy/global
+  // pool; string → only that user's rows plus shared=1.
+  const tenantClause = opts?.upn === undefined
+    ? ""
+    : opts.upn === null
+      ? " WHERE (upn IS NULL OR shared = 1)"
+      : " WHERE (upn = ? OR shared = 1)"
+  const tenantParams: unknown[] = opts?.upn === undefined || opts.upn === null ? [] : [opts.upn]
+
   const counts = db.prepare(
-    "SELECT tier, COUNT(*) as count FROM memory_entries GROUP BY tier"
-  ).all() as Array<{ tier: string; count: number }>
+    `SELECT tier, COUNT(*) as count FROM memory_entries${tenantClause} GROUP BY tier`
+  ).all(...tenantParams) as Array<{ tier: string; count: number }>
 
   const procCount = db.prepare(
-    "SELECT COUNT(*) as count FROM procedural_memories"
-  ).get() as { count: number }
+    `SELECT COUNT(*) as count FROM procedural_memories${tenantClause}`
+  ).get(...tenantParams) as { count: number }
 
   const vecCount = db.prepare(
-    "SELECT COUNT(*) as count FROM memory_vectors"
-  ).get() as { count: number }
+    `SELECT COUNT(*) as count FROM memory_vectors${
+      opts?.upn === undefined ? "" : " WHERE entry_id IN (SELECT id FROM memory_entries" + tenantClause + ")"
+    }`
+  ).get(...tenantParams) as { count: number }
 
   const oldest = db.prepare(
-    "SELECT MIN(created_at) as oldest FROM memory_entries"
-  ).get() as { oldest: string | null }
+    `SELECT MIN(created_at) as oldest FROM memory_entries${tenantClause}`
+  ).get(...tenantParams) as { oldest: string | null }
 
   const byTier: Record<string, number> = {}
   for (const { tier, count } of counts) byTier[tier] = count
@@ -121,11 +132,17 @@ export function getMemory(id: string): Memory | null {
   return row ? entryToLegacy(rowToEntry(row)) : null
 }
 
-export function listMemories(tier?: MemoryTier, limit = 50): Memory[] {
-  const sql = tier
-    ? "SELECT * FROM memory_entries WHERE tier = ? ORDER BY updated_at DESC LIMIT ?"
-    : "SELECT * FROM memory_entries ORDER BY updated_at DESC LIMIT ?"
-  const params = tier ? [tier, limit] : [limit]
+export function listMemories(tier?: MemoryTier, limit = 50, opts?: { upn?: string | null }): Memory[] {
+  const where: string[] = []
+  const params: unknown[] = []
+  if (tier) { where.push("tier = ?"); params.push(tier) }
+  if (opts?.upn !== undefined) {
+    if (opts.upn === null) where.push("(upn IS NULL OR shared = 1)")
+    else { where.push("(upn = ? OR shared = 1)"); params.push(opts.upn) }
+  }
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""
+  const sql = `SELECT * FROM memory_entries ${whereSql} ORDER BY updated_at DESC LIMIT ?`
+  params.push(limit)
   const rows = getDb().prepare(sql).all(...params) as Array<Record<string, unknown>>
   return rows.map((r) => entryToLegacy(rowToEntry(r)))
 }

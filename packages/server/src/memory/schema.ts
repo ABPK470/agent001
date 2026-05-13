@@ -20,6 +20,8 @@ export function migrateMemory(): void {
       session_id TEXT,
       run_id TEXT,
       parent_id TEXT,
+      upn TEXT,
+      shared INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -28,6 +30,8 @@ export function migrateMemory(): void {
     CREATE INDEX IF NOT EXISTS idx_me_session ON memory_entries(session_id);
     CREATE INDEX IF NOT EXISTS idx_me_run ON memory_entries(run_id);
     CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);
+    CREATE INDEX IF NOT EXISTS idx_me_upn ON memory_entries(upn);
+    CREATE INDEX IF NOT EXISTS idx_me_shared ON memory_entries(shared);
 
     CREATE TABLE IF NOT EXISTS procedural_memories (
       id TEXT PRIMARY KEY,
@@ -36,9 +40,16 @@ export function migrateMemory(): void {
       success_count INTEGER NOT NULL DEFAULT 1,
       failure_count INTEGER NOT NULL DEFAULT 0,
       run_id TEXT NOT NULL,
+      upn TEXT,
+      session_id TEXT,
+      shared INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_proc_upn ON procedural_memories(upn);
+    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_proc_shared ON procedural_memories(shared);
 
     CREATE TABLE IF NOT EXISTS memory_vectors (
       entry_id TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
@@ -46,6 +57,61 @@ export function migrateMemory(): void {
       dimension INTEGER NOT NULL
     );
   `)
+
+  // ── In-place migration for pre-existing DBs ────────────────────
+  // Add the upn / shared columns and indexes if they don't exist yet, then
+  // backfill upn from the runs table by joining on run_id. Rows whose run_id
+  // is NULL or whose run no longer exists are left with upn=NULL — those are
+  // legacy/global entries; queries scoped by upn won't surface them.
+  const addColumnIfMissing = (table: string, col: string, ddl: string): void => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+    if (!cols.some((c) => c.name === col)) {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`) } catch { /* race / already added */ }
+    }
+  }
+  addColumnIfMissing("memory_entries", "upn", "upn TEXT")
+  addColumnIfMissing("memory_entries", "shared", "shared INTEGER NOT NULL DEFAULT 0")
+  addColumnIfMissing("procedural_memories", "upn", "upn TEXT")
+  addColumnIfMissing("procedural_memories", "session_id", "session_id TEXT")
+  addColumnIfMissing("procedural_memories", "shared", "shared INTEGER NOT NULL DEFAULT 0")
+
+  // Indexes (no-op if columns added above didn't exist before; idempotent)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_me_upn ON memory_entries(upn);
+    CREATE INDEX IF NOT EXISTS idx_me_shared ON memory_entries(shared);
+    CREATE INDEX IF NOT EXISTS idx_proc_upn ON procedural_memories(upn);
+    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_proc_shared ON procedural_memories(shared);
+  `)
+
+  // Backfill upn from runs.upn — only fills rows where memory.upn IS NULL
+  // and runs.upn IS NOT NULL. Safe to re-run on every boot (cheap NOOP once
+  // saturated). Wrapped in try/catch because the runs table may not exist
+  // in standalone test fixtures that exercise memory in isolation.
+  try {
+    db.exec(`
+      UPDATE memory_entries
+      SET upn = (SELECT upn FROM runs WHERE runs.id = memory_entries.run_id)
+      WHERE upn IS NULL AND run_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM runs WHERE runs.id = memory_entries.run_id AND runs.upn IS NOT NULL);
+    `)
+    db.exec(`
+      UPDATE procedural_memories
+      SET upn = (SELECT upn FROM runs WHERE runs.id = procedural_memories.run_id)
+      WHERE upn IS NULL
+        AND EXISTS (SELECT 1 FROM runs WHERE runs.id = procedural_memories.run_id AND runs.upn IS NOT NULL);
+    `)
+    db.exec(`
+      UPDATE memory_entries
+      SET session_id = COALESCE(session_id, (SELECT session_id FROM runs WHERE runs.id = memory_entries.run_id))
+      WHERE session_id IS NULL AND run_id IS NOT NULL;
+    `)
+    db.exec(`
+      UPDATE procedural_memories
+      SET session_id = COALESCE(session_id, (SELECT session_id FROM runs WHERE runs.id = procedural_memories.run_id))
+      WHERE session_id IS NULL;
+    `)
+  } catch { /* runs table not present in this DB context */ }
 
   // FTS5 for memory_entries — create then integrity-check and rebuild if corrupt.
   try {
@@ -185,6 +251,8 @@ export function rowToEntry(row: Record<string, unknown>): MemoryEntry {
     sessionId: (row.session_id as string) ?? null,
     runId: (row.run_id as string) ?? null,
     parentId: (row.parent_id as string) ?? null,
+    upn: (row.upn as string) ?? null,
+    shared: (row.shared as number) === 1,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   }

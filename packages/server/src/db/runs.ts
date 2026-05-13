@@ -77,12 +77,27 @@ export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
  * started in this browser session).
  */
 export function listRunsWithUsageForUser(
-  opts: { upn?: string | null; sid?: string | null },
+  opts: { upn?: string | null; sid?: string | null; sessionOnly?: boolean },
   limit = 100,
   offset = 0,
 ): DbRunWithUsage[] {
-  const { upn, sid } = opts
+  const { upn, sid, sessionOnly } = opts
   if (!upn && !sid) return []
+  // sessionOnly=true narrows to "this chat thread" \u2014 the runs that share the
+  // current cookie sid. Default behaviour (sessionOnly=false) shows every run
+  // for this UPN across all login sessions, with the sid fallback for users
+  // without a stable identity.
+  if (sessionOnly && sid) {
+    return getDb()
+      .prepare(`
+        SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
+        FROM runs r
+        LEFT JOIN token_usage t ON t.run_id = r.id
+        WHERE r.session_id = @sid
+        ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
+      `)
+      .all({ sid, limit, offset }) as DbRunWithUsage[]
+  }
   return getDb()
     .prepare(`
       SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
