@@ -87,7 +87,7 @@ export class AgentOrchestrator {
       for (const r of hostedDefaultPolicyRules()) services.policyEvaluator.addRule(r)
     }
 
-    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [] })
+    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [], ownerUpn: session?.upn ?? null, sessionId: session?.sid ?? null })
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     saveTrace(this.activeRuns, runId, { kind: "goal", text: goal })
 
@@ -149,7 +149,7 @@ export class AgentOrchestrator {
 
     const resumeSession = getCurrentSession()
     const resumeRole: PolicyRole = !resumeSession ? "admin" : resumeSession.isAdmin ? "admin" : "hosted_user"
-    this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [] })
+    this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [], ownerUpn: resumeSession?.upn ?? null, sessionId: resumeSession?.sid ?? null })
     broadcast({ type: "run.queued", data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
     saveTrace(this.activeRuns, newRunId, { kind: "goal", text: originalRun.goal })
 

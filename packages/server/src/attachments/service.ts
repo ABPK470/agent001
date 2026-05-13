@@ -11,6 +11,7 @@ import {
     type AttachmentIngestionMode,
     type AttachmentRow,
     type AttachmentScope,
+    type AttachmentSource,
 } from "./repo.js"
 import { writeAttachmentBlob } from "./storage.js"
 
@@ -24,6 +25,7 @@ export interface UploadAttachmentInput {
   ownerUpn?:     string | null
   purposeTag?:   string | null
   goalSnapshot?: string | null
+  source?:       AttachmentSource
   tags?:         Array<{ key: string; value: string }>
   /**
    * Override default ingestion mode. Defaults are inferred from media type:
@@ -80,6 +82,7 @@ export async function uploadAttachment(input: UploadAttachmentInput): Promise<At
     contentHash:    blob.hash,
     storageUri:     blob.storageUri,
     ingestionMode,
+    source:         input.source,
     purposeTag:     input.purposeTag,
     goalSnapshot:   input.goalSnapshot,
   })

@@ -24,6 +24,7 @@ import {
     mssqlSchemaTool,
     mssqlTool,
     profileDataTool,
+    promoteAttachmentTool,
     readAttachmentTool,
     readFileTool,
     replaceInFileTool,
@@ -74,6 +75,7 @@ const ALL_TOOLS: Tool[] = [
   listAttachmentsTool,
   readAttachmentTool,
   importAttachmentTool,
+  promoteAttachmentTool,
 ]
 
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
@@ -210,6 +212,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_attachments",
   "read_attachment",
   "import_attachment",
+  "promote_attachment",
 ])
 
 /** Filter a tool list down to the visitor allowlist. */

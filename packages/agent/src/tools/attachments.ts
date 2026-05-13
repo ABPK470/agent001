@@ -110,3 +110,33 @@ export const importAttachmentTool: Tool = {
     return `Imported ${id} → ${result.sandboxPath} (${result.sizeBytes} bytes).`
   },
 }
+
+export const promoteAttachmentTool: Tool = {
+  name: "promote_attachment",
+  description:
+    "Promote a file the agent produced inside the sandbox into the durable " +
+    "attachment store. Use this when a generated artifact (report, CSV, " +
+    "rendered image, etc.) should outlive the sandbox so the user can " +
+    "download it later. The result is tagged source=generated and bound " +
+    "to this run. Returns the new attachment id.",
+  parameters: {
+    type: "object",
+    properties: {
+      sandboxPath: { type: "string", description: "Sandbox-relative path of the produced file." },
+      mediaType:   { type: "string", description: "Optional MIME type override; inferred from extension if omitted." },
+      purposeTag:  { type: "string", description: "Optional short label for the promotion (e.g. 'final-report')." },
+    },
+    required: ["sandboxPath"],
+  },
+  async execute(args) {
+    const sandboxPath = String(args["sandboxPath"] ?? "")
+    if (!sandboxPath) throw new Error("sandboxPath is required")
+    const mediaType  = typeof args["mediaType"]  === "string" ? (args["mediaType"]  as string) : undefined
+    const purposeTag = typeof args["purposeTag"] === "string" ? (args["purposeTag"] as string) : undefined
+    const meta = await getService().promoteFromSandbox(sandboxPath, {
+      ...(mediaType  !== undefined ? { mediaType } : {}),
+      ...(purposeTag !== undefined ? { purposeTag } : {}),
+    })
+    return `Promoted ${sandboxPath} → attachment id=${meta.id} (${meta.normalizedName}, ${meta.sizeBytes}B, ${meta.mediaType}).`
+  },
+}

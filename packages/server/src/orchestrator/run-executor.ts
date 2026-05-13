@@ -434,6 +434,8 @@ export async function executeRunImpl(
       runMode:     runWorkspace.profile === "hosted" ? "hosted" : "developer",
       role:        activeRun?.role ?? "admin",
       sandboxRoot: runWorkspace.executionRoot,
+      actorUpn:    activeRun?.ownerUpn ?? null,
+      sessionId:   activeRun?.sessionId ?? null,
     }
 
     let answer = await runWithPolicyContext(policyCtx, () =>

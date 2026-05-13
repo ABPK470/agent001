@@ -195,6 +195,14 @@ export interface AttachmentService {
    * Implementations MUST refuse paths that escape the sandbox.
    */
   importToSandbox(id: string, sandboxRelPath: string): Promise<{ sandboxPath: string; sizeBytes: number }>
+  /**
+   * Promote a file the agent produced inside the active sandbox into the
+   * durable attachment store. Returns the new attachment metadata. The
+   * implementation tags the resulting attachment with `source="generated"`
+   * so it is distinguishable from user uploads, and binds it to the run
+   * that produced it.
+   */
+  promoteFromSandbox(sandboxRelPath: string, opts?: { mediaType?: string; purposeTag?: string | null }): Promise<AttachmentMetadata>
 }
 
 export interface AttachmentsState {

@@ -33,6 +33,14 @@ export interface HostedPolicyContext {
   readonly sandboxRoot:  string | null
   /** Default MSSQL environment if a tool call does not specify one. */
   readonly defaultDbEnvironment?: "dev" | "uat" | "prod"
+  /**
+   * UPN of the user who initiated the run. Used by host-side bridges
+   * (notably the attachment service) to bind ownership of artifacts the
+   * agent produces. Null when the run is service-internal.
+   */
+  readonly actorUpn?:    string | null
+  /** Originating session id, mirrored from cookie sid. */
+  readonly sessionId?:   string | null
 }
 
 const _als = new AsyncLocalStorage<HostedPolicyContext>()

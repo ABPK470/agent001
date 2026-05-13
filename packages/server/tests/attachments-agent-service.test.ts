@@ -43,6 +43,8 @@ function makeCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
     runMode:     over.runMode     ?? "hosted",
     role:        over.role        ?? "hosted_user",
     sandboxRoot: over.sandboxRoot ?? sandboxRoot,
+    actorUpn:    over.actorUpn    ?? null,
+    sessionId:   over.sessionId   ?? null,
   }
 }
 
@@ -142,5 +144,46 @@ describe("server attachment service", () => {
     _migrate(testDb)
 
     await expect(serverAttachmentService.list()).rejects.toThrow(/active run context/)
+  })
+
+  it("promoteFromSandbox stores generated files with source=generated bound to the run", async () => {
+    const { _setDb, _migrate } = await import("../src/db.js")
+    const { serverAttachmentService, getAttachment } = await import("../src/attachments/index.js")
+    const { writeFileSync, mkdirSync } = await import("node:fs")
+    _setDb(testDb)
+    _migrate(testDb)
+
+    // Simulate the agent producing a report inside the sandbox.
+    mkdirSync(join(sandboxRoot, "out"), { recursive: true })
+    writeFileSync(join(sandboxRoot, "out/report.csv"), "a,b\n1,2\n")
+
+    const meta = await runWithPolicyContext(
+      makeCtx({ runId: "run-promote", actorUpn: "owner@example.com", sessionId: "sid-x" }),
+      () => serverAttachmentService.promoteFromSandbox("out/report.csv"),
+    )
+
+    expect(meta.normalizedName).toBe("report.csv")
+    expect(meta.mediaType).toBe("text/csv")
+    expect(meta.sizeBytes).toBe(8)
+
+    const row = getAttachment(meta.id)
+    expect(row).toBeTruthy()
+    expect(row?.source).toBe("generated")
+    expect(row?.scope).toBe("workspace_asset")
+    expect(row?.run_id).toBe("run-promote")
+    expect(row?.owner_upn).toBe("owner@example.com")
+    expect(row?.session_id).toBe("sid-x")
+  })
+
+  it("promoteFromSandbox refuses paths that escape the sandbox", async () => {
+    const { _setDb, _migrate } = await import("../src/db.js")
+    const { serverAttachmentService } = await import("../src/attachments/index.js")
+    _setDb(testDb)
+    _migrate(testDb)
+
+    await runWithPolicyContext(makeCtx(), async () => {
+      await expect(serverAttachmentService.promoteFromSandbox("../escape.txt")).rejects.toThrow(/escapes/)
+      await expect(serverAttachmentService.promoteFromSandbox("/abs/path.txt")).rejects.toThrow(/sandbox-relative/)
+    })
   })
 })

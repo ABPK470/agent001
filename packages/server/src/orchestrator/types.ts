@@ -24,6 +24,15 @@ export interface ActiveRun {
   role: PolicyRole
   /** Attachment IDs supplied at run-start time. Empty array when none. */
   attachmentIds: string[]
+  /**
+   * UPN of the user who started the run, captured at startRun/resumeRun.
+   * Null for unauthenticated/admin invocations. Used by the agent-side
+   * attachment service to bind ownership of promoted artifacts so the
+   * originating user can later see them.
+   */
+  ownerUpn: string | null
+  /** Originating session id (cookie sid). Null for service-internal runs. */
+  sessionId: string | null
 }
 
 // ── Public API types ──────────────────────────────────────────────

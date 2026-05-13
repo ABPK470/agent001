@@ -10,12 +10,13 @@
 
 import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@agent001/agent"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { dirname, isAbsolute, normalize, resolve, sep } from "node:path"
+import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
 import {
     getAttachment,
     listAttachments,
     readAttachmentBlob,
     recordAttachmentImport,
+    uploadAttachment,
     type AttachmentRow,
 } from "../attachments/index.js"
 
@@ -29,6 +30,37 @@ const TEXT_MEDIA_TYPES = new Set([
 
 function isTextMedia(mediaType: string): boolean {
   return TEXT_MEDIA_PREFIXES.some((p) => mediaType.startsWith(p)) || TEXT_MEDIA_TYPES.has(mediaType)
+}
+
+/**
+ * Best-effort MIME guess from a filename extension. Conservative: anything
+ * we don't recognise is reported as application/octet-stream so the
+ * attachment store treats it as a binary reference, never inlining it.
+ * The agent / operator can override the type explicitly via the tool.
+ */
+const EXT_MIME: Readonly<Record<string, string>> = {
+  ".txt": "text/plain",
+  ".md":  "text/markdown",
+  ".csv": "text/csv",
+  ".tsv": "text/tab-separated-values",
+  ".json": "application/json",
+  ".xml": "application/xml",
+  ".yaml": "application/x-yaml",
+  ".yml": "application/x-yaml",
+  ".html": "text/html",
+  ".log": "text/plain",
+  ".sql": "text/plain",
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".zip": "application/zip",
+}
+
+function guessMediaType(ext: string): string {
+  return EXT_MIME[ext.toLowerCase()] ?? "application/octet-stream"
 }
 
 function toMetadata(row: AttachmentRow): AttachmentMetadata {
@@ -129,6 +161,35 @@ export const serverAttachmentService: AttachmentService = {
       importMode:   "copy",
     })
     return { sandboxPath: dest, sizeBytes: bytes.byteLength }
+  },
+
+  async promoteFromSandbox(sandboxRelPath, opts) {
+    const { runId, sandboxRoot } = currentRunContext()
+    if (!sandboxRoot) {
+      throw new Error("promote_attachment requires an active sandbox; this run has none.")
+    }
+    // Same containment rules as importToSandbox: agents must not exfiltrate
+    // arbitrary host files by promoting paths outside the sandbox.
+    const absPath = resolveSandboxPath(sandboxRoot, sandboxRelPath)
+    const bytes = await readFile(absPath)
+    const ctx = getPolicyContext()
+    const ownerUpn = ctx?.actorUpn ?? null
+    const sessionId = ctx?.sessionId ?? null
+    const row = await uploadAttachment({
+      bytes,
+      originalName: basename(absPath),
+      mediaType:    opts?.mediaType ?? guessMediaType(extname(absPath)),
+      // Bind to the run that produced it, but keep the bytes around as a
+      // workspace asset so the user can still access them after the run
+      // finishes.
+      scope:        "workspace_asset",
+      runId,
+      sessionId,
+      ownerUpn,
+      source:       "generated",
+      ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {}),
+    })
+    return toMetadata(row)
   },
 }
 
