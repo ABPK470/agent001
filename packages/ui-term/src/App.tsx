@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, createEventStream } from "./api"
 import { buildCommands, matchSlash, slashSuggestions, type Command } from "./commands"
 import { AdminLogin } from "./components/AdminLogin"
+import { AttachmentBar, type PendingAttachment } from "./components/AttachmentBar"
 import { CommandPalette } from "./components/CommandPalette"
 import { GoalInput, type GoalInputHandle } from "./components/GoalInput"
 import { LogPane, type LogPaneHandle } from "./components/LogPane"
@@ -51,6 +52,13 @@ export function App() {
   const [phase, setPhase] = useState<Phase>("loading")
   const [focused, setFocused] = useState<Pane>("stream")
   const [viewMode, setViewMode] = useState<ViewMode>("tui")
+  // Pending attachments staged for the next /api/runs call. Bytes already
+  // live on the server; this list is just the chip strip + the id list we
+  // hand to api.startRun. Cleared after each successful submit.
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  // Hidden file input the /attach slash command and chip-bar "+" trigger.
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const toggleView = useCallback(() => setViewMode((v) => v === "tui" ? "visual" : "tui"), [])
 
   // After initial load, decide starting phase.
@@ -185,12 +193,25 @@ export function App() {
     }
 
     try {
-      const { runId } = await api.startRun(text)
+      const attachmentIds = pendingAttachments.map((a) => a.id)
+      const { runId } = await api.startRun(text, undefined, attachmentIds)
       resetTranscript(runId); setActiveRun(runId)
+      // Bind-once semantics: attachments are consumed by the run that
+      // started, the chip strip clears so the next prompt is "fresh".
+      // Bytes survive on the server and can be re-attached by id later
+      // if needed.
+      if (pendingAttachments.length > 0) {
+        pushEvent({
+          type: "ui.notice",
+          timestamp: new Date().toISOString(),
+          data: { runId, message: `attached ${pendingAttachments.length} file${pendingAttachments.length === 1 ? "" : "s"} to this run` },
+        })
+        setPendingAttachments([])
+      }
     } catch (e) {
       pushEvent({ type: "ui.error", timestamp: new Date().toISOString(), data: { message: e instanceof Error ? e.message : String(e) } })
     }
-  }, [pendingInput, clearPending, resetTranscript, setActiveRun, pushEvent, activeRunId, busy])
+  }, [pendingInput, clearPending, resetTranscript, setActiveRun, pushEvent, activeRunId, busy, pendingAttachments])
 
   // ── Open a specific run (used by RunPicker) ──
   const openRun = useCallback((id: string) => {
@@ -321,6 +342,50 @@ export function App() {
     }
   }, [activeRunId, pushEvent])
 
+  // ── Attachments ──
+  // 32 MiB matches the server-side route cap. We warn and skip larger
+  // files locally so the user gets immediate feedback instead of a 413.
+  const ATTACH_MAX_BYTES = 32 * 1024 * 1024
+  const uploadFiles = useCallback(async (files: File[]) => {
+    for (const file of files) {
+      if (file.size > ATTACH_MAX_BYTES) {
+        pushEvent({
+          type: "ui.error",
+          timestamp: new Date().toISOString(),
+          data: { message: `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB \u2014 max 32 MB per attachment` },
+        })
+        continue
+      }
+      try {
+        const meta = await api.uploadAttachment(file)
+        setPendingAttachments((prev) => [
+          ...prev,
+          { id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes },
+        ])
+        pushEvent({
+          type: "ui.notice",
+          timestamp: new Date().toISOString(),
+          data: { message: `attached ${meta.normalizedName} (${meta.sizeBytes} bytes)` },
+        })
+      } catch (e) {
+        pushEvent({
+          type: "ui.error",
+          timestamp: new Date().toISOString(),
+          data: { message: `upload failed for ${file.name}: ${e instanceof Error ? e.message : String(e)}` },
+        })
+      }
+    }
+  }, [pushEvent])
+
+  const removeAttachment = useCallback((id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+    void api.deleteAttachment(id)
+  }, [])
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
   // ── Command registry ── single source of truth for keybinds, slash, palette.
   const commands: Command[] = useMemo(() => buildCommands({
     ctx: { busy, activeRunId, hasPendingInput: !!pendingInput },
@@ -342,7 +407,8 @@ export function App() {
     switchUser: handleSwitchUser,
     switchUi:       handleSwitchUi,
     toggleView,
-  }), [busy, activeRunId, pendingInput, focused, abortActive, rerunActive, rollbackActive, exportTrace, flagAnswer, handleSwitchUser, handleSwitchUi, toggleView])
+    openAttach:     openFilePicker,
+  }), [busy, activeRunId, pendingInput, focused, abortActive, rerunActive, rollbackActive, exportTrace, flagAnswer, handleSwitchUser, handleSwitchUi, toggleView, openFilePicker])
   commandsRef.current = commands
 
   // ── Keybinds ── a thin glue layer; everything dispatches through commands.
@@ -400,7 +466,42 @@ export function App() {
   // WelcomeFlow overlays on top via createPortal.
   return (
     <>
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+      <div
+        style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)", position: "relative" }}
+        onDragEnter={(e) => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); setDragOver(true) } }}
+        onDragOver={(e) => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy" } }}
+        onDragLeave={(e) => {
+          // Only clear when the drag truly leaves the shell (not when crossing into a child).
+          if (e.currentTarget === e.target) setDragOver(false)
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer?.files || e.dataTransfer.files.length === 0) return
+          e.preventDefault()
+          setDragOver(false)
+          void uploadFiles(Array.from(e.dataTransfer.files))
+        }}
+      >
+          {dragOver ? (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 100,
+                pointerEvents: "none",
+                border: "2px dashed var(--accent)",
+                background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--accent)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--fs-base)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              drop to attach &mdash; max 32 MB per file
+            </div>
+          ) : null}
           <StatusBar
             me={me}
             run={activeRun}
@@ -470,6 +571,8 @@ export function App() {
             </div>
           ) : null}
 
+          <AttachmentBar items={pendingAttachments} onRemove={removeAttachment} />
+
           <GoalInput
             ref={goalRef}
             busy={busy}
@@ -479,6 +582,24 @@ export function App() {
           />
 
           <HelpBar busy={busy} />
+
+          {/* Hidden file input — driven by the /attach slash command and any
+              future "+" affordance. Multiple selection is allowed; each file
+              is uploaded sequentially through api.uploadAttachment. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const list = e.target.files
+              if (!list || list.length === 0) return
+              const files = Array.from(list)
+              // Reset so re-picking the same file fires onChange.
+              e.target.value = ""
+              void uploadFiles(files)
+            }}
+          />
 
           {paletteOpen ? (
             <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />

@@ -33,10 +33,14 @@ export const api = {
   // runs
   listRuns:     () => json<Run[]>("/api/runs"),
   getRun:       (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun:     (goal: string, agentId?: string) =>
-    json<{ runId: string }>("/api/runs", {
+  startRun:     (goal: string, agentId?: string, attachmentIds?: string[]) =>
+    json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
-      body: JSON.stringify({ goal, ...(agentId ? { agentId } : {}) }),
+      body: JSON.stringify({
+        goal,
+        ...(agentId ? { agentId } : {}),
+        ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
+      }),
     }),
   cancelRun:    (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, { method: "POST" }),
   rerunRun:     (id: string) => json<{ runId: string }>(`/api/runs/${id}/rerun`, { method: "POST" }),
@@ -79,6 +83,59 @@ export const api = {
     return json<{ events: SseEvent[]; count: number }>(`/api/events/search?${params}`)
       .catch(() => ({ events: [] as SseEvent[], count: 0 }))
   },
+
+  // ── attachments ────────────────────────────────────────────────
+  // Durable user-uploaded assets. Bytes live on the server; the term UI
+  // only ever holds the returned id and small bits of metadata for the
+  // chip strip above the prompt. The agent reads / imports content via
+  // the list_attachments / read_attachment / import_attachment tools.
+  uploadAttachment: async (file: File): Promise<UploadedAttachment> => {
+    const contentBase64 = await fileToBase64(file)
+    return json<UploadedAttachment>("/api/attachments", {
+      method: "POST",
+      body: JSON.stringify({
+        name:          file.name,
+        mediaType:     file.type || "application/octet-stream",
+        contentBase64,
+        scope:         "session",
+      }),
+    })
+  },
+  deleteAttachment: (id: string) =>
+    json<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" })
+      .catch(() => ({ ok: false })),
+}
+
+export interface UploadedAttachment {
+  id:             string
+  scope:          "run" | "session" | "workspace_asset"
+  originalName:   string
+  normalizedName: string
+  mediaType:      string
+  sizeBytes:      number
+  contentHash:    string
+  ingestionMode:  "text_inline" | "text_retrieval" | "binary_reference" | "provider_file_api"
+  uploadedAt:     string
+  purposeTag:     string | null
+}
+
+/**
+ * Read a browser File into a base64 string. Strips the data: URL prefix
+ * the FileReader emits so the result matches what the server expects in
+ * `contentBase64`. Kept private here so widgets never touch raw bytes.
+ */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error("file read failed"))
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== "string") { reject(new Error("unexpected reader result")); return }
+      const comma = result.indexOf(",")
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 // ── SSE event stream ────────────────────────────────────────────

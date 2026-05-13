@@ -67,9 +67,10 @@ export function buildCommands(deps: {
   switchUser: () => void
   switchUi: () => void
   toggleView: () => void
+  openAttach: () => void
 }): Command[] {
   const { ctx } = deps
-  return [
+  const all: Command[] = [
     // ── NAVIGATE ──────────────────────────────────────────────
     {
       id: "focus.stream",
@@ -187,6 +188,14 @@ export function buildCommands(deps: {
 
     // ── SHELL ─────────────────────────────────────────────────
     {
+      id: "shell.attach",
+      label: "Attach a file to the next run",
+      hint: "upload to the durable attachment store",
+      group: "shell",
+      slash: "attach", slashAliases: ["upload", "file"],
+      run: deps.openAttach,
+    },
+    {
       id: "shell.admin",
       label: "Sign in as admin",
       group: "shell",
@@ -225,7 +234,8 @@ export function buildCommands(deps: {
       pinned: true,
       run: deps.openPalette,
     },
-  ].filter((cmd) => !cmd.when || cmd.when(ctx))
+  ]
+  return all.filter((cmd) => !cmd.when || cmd.when(ctx))
 }
 
 /**

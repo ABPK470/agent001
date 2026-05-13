@@ -66,18 +66,18 @@ import { AsyncLocalStorage } from "node:async_hooks"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRecipeBundle,
-    SyncRunSink,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRecipeBundle,
+  SyncRunSink,
 } from "./sync/index.js"
 import type {
-    AskUserResolver,
-    BrowserCheckExecutor,
-    BrowserSession,
-    CatalogGraph,
-    ShellExecutor,
+  AskUserResolver,
+  BrowserCheckExecutor,
+  BrowserSession,
+  CatalogGraph,
+  ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────

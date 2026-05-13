@@ -22,64 +22,65 @@ config({
 })
 
 import {
-    buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage, setBasePath,
-    setBrowserCheckCwd,
-    setBrowserCheckExecutor,
-    setSearchBasePath,
-    setShellCwd,
-    setShellExecutor,
-    setShellSandboxStrict,
-    setSyncEventSink,
-    setSyncRunSink,
-    setupEnvironments,
-    setAttachmentService
+  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
+  setAttachmentService,
+  setBasePath,
+  setBrowserCheckCwd,
+  setBrowserCheckExecutor,
+  setSearchBasePath,
+  setShellCwd,
+  setShellExecutor,
+  setShellSandboxStrict,
+  setSyncEventSink,
+  setSyncRunSink,
+  setupEnvironments
 } from "@agent001/agent"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import Fastify from "fastify"
+import { serverAttachmentService } from "./attachments/index.js"
 import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {
-    MessageQueue,
-    MessageRouter,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    TeamsChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  TeamsChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./channels/index.js"
 import {
-    clearTransactionalData,
-    getDb, getDbStats, getLlmConfig,
-    getSyncRunPlanJson,
-    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    pruneOldData,
-    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
+  clearTransactionalData,
+  getDb, getDbStats, getLlmConfig,
+  getSyncRunPlanJson,
+  migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
+  pruneOldData,
+  recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db.js"
 import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import {
-    registerAdminRoutes,
-    registerAgentRoutes,
-    registerAttachmentRoutes,
-    registerEventRoutes,
-    registerLayoutRoutes,
-    registerLlmRoutes,
-    registerMemoryRoutes,
-    registerMymiRoutes,
-    registerNotificationRoutes,
-    registerOperationRoutes,
-    registerPolicyRoutes,
-    registerRunRoutes,
-    registerSyncRoutes,
-    registerUsageRoutes,
-    registerWebhookRoutes,
+  registerAdminRoutes,
+  registerAgentRoutes,
+  registerAttachmentRoutes,
+  registerEventRoutes,
+  registerLayoutRoutes,
+  registerLlmRoutes,
+  registerMemoryRoutes,
+  registerMymiRoutes,
+  registerNotificationRoutes,
+  registerOperationRoutes,
+  registerPolicyRoutes,
+  registerRunRoutes,
+  registerSyncRoutes,
+  registerUsageRoutes,
+  registerWebhookRoutes,
 } from "./routes/index.js"
 import { initSandbox } from "./sandbox.js"
-import { serverAttachmentService } from "./attachments/index.js"
 import { setupMssql } from "./setup-mssql.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
