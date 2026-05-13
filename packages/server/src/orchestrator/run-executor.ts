@@ -302,7 +302,10 @@ export async function executeRunImpl(
     }
   }
 
-  const systemMessages = await buildSystemMessages({ goal, systemPrompt, allTools, runWorkspace, perTier, runId })
+  const systemMessages = await buildSystemMessages({
+    goal, systemPrompt, allTools, runWorkspace, perTier, runId,
+    attachmentIds: activeRun?.attachmentIds ?? [],
+  })
   const effectivePrompt = systemMessages.map((m) => m.content).join("\n\n")
 
   // Pass the fully-resolved system prompt (includes DB knowledge, schema context, tool rules,

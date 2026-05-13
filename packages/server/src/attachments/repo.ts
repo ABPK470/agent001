@@ -142,7 +142,7 @@ export function listAttachments(filter: ListAttachmentsFilter = {}): AttachmentR
     where.push("(original_name LIKE @q OR normalized_name LIKE @q OR COALESCE(purpose_tag, '') LIKE @q)")
     params["q"] = `%${filter.q}%`
   }
-  const sql = `SELECT * FROM attachments WHERE ${where.join(" AND ")} ORDER BY uploaded_at DESC`
+  const sql = `SELECT * FROM attachments WHERE ${where.join(" AND ")} ORDER BY uploaded_at DESC, rowid DESC`
   return db().prepare(sql).all(params) as AttachmentRow[]
 }
 

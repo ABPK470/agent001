@@ -22,6 +22,8 @@ export interface ActiveRun {
    * the queued executor runs the session ALS may already be empty.
    */
   role: PolicyRole
+  /** Attachment IDs supplied at run-start time. Empty array when none. */
+  attachmentIds: string[]
 }
 
 // ── Public API types ──────────────────────────────────────────────
@@ -31,6 +33,12 @@ export interface AgentRunConfig {
   agentId?: string
   tools?: import("@agent001/agent").Tool[]
   systemPrompt?: string
+  /**
+   * Attachments selected by the user when this run was started.
+   * Captured at startRun and surfaced in the system prompt so the agent
+   * knows what it can pull into the sandbox via the attachment tools.
+   */
+  attachmentIds?: string[]
 }
 
 export interface OrchestratorConfig {

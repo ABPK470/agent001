@@ -3,6 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { canAccessRun } from "../auth/access.js"
 import * as db from "../db.js"
 import { flagRunMemory } from "../memory.js"
@@ -122,11 +123,34 @@ export function registerRunRoutes(
   })
 
   // Start a new run (optionally scoped to an agent definition)
-  app.post<{ Body: { goal: string; agentId?: string } }>("/api/runs", async (req, reply) => {
-    const { goal, agentId } = req.body
+  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[] } }>("/api/runs", async (req, reply) => {
+    const { goal, agentId, attachmentIds } = req.body
     if (!goal || typeof goal !== "string") {
       reply.code(400)
       return { error: "goal is required" }
+    }
+
+    // Validate caller-supplied attachment IDs: each must exist and be
+    // visible to the session (owner OR admin OR same session). The
+    // attachment store is durable across runs, so we re-check here rather
+    // than trusting the client.
+    let resolvedAttachmentIds: string[] = []
+    if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+      const session = req.session
+      const seen = new Set<string>()
+      for (const id of attachmentIds) {
+        if (typeof id !== "string" || seen.has(id)) continue
+        seen.add(id)
+        const row: AttachmentRow | undefined = getAttachment(id)
+        if (!row) { reply.code(400); return { error: `attachment not found: ${id}` } }
+        const allowed =
+          !session ||
+          session.isAdmin ||
+          (row.owner_upn && row.owner_upn === session.upn) ||
+          (row.session_id && row.session_id === session.sid)
+        if (!allowed) { reply.code(403); return { error: `attachment not accessible: ${id}` } }
+        resolvedAttachmentIds.push(id)
+      }
     }
 
     // If agentId provided, resolve that agent's config
@@ -140,15 +164,16 @@ export function registerRunRoutes(
         agentId: agent.id,
         tools: getAllTools(),
         systemPrompt: agent.system_prompt,
+        attachmentIds: resolvedAttachmentIds,
       })
       reply.code(201)
-      return { runId, agentId: agent.id }
+      return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
     }
 
     // No agentId — use all tools + default prompt
-    const runId = orchestrator.startRun(goal)
+    const runId = orchestrator.startRun(goal, { attachmentIds: resolvedAttachmentIds })
     reply.code(201)
-    return { runId }
+    return { runId, attachmentIds: resolvedAttachmentIds }
   })
 
   // Cancel a run

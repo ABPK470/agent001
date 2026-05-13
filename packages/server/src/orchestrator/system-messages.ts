@@ -1,5 +1,6 @@
 import type { Message, Tool } from "@agent001/agent"
 import { ABI_SYNC_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
 
@@ -29,8 +30,9 @@ export async function buildSystemMessages(opts: {
   runWorkspace: RunWorkspaceContext
   perTier: { working: string; episodic: string; semantic: string }
   runId: string
+  attachmentIds?: string[]
 }): Promise<Message[]> {
-  const { goal, systemPrompt, allTools, runWorkspace, perTier } = opts
+  const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
 
   const systemMessages: Message[] = []
 
@@ -79,6 +81,19 @@ export async function buildSystemMessages(opts: {
     systemMessages.push({
       role: "system",
       content: [`Workspace: ${runWorkspace.executionRoot}`, wsContext, ""].join("\n"),
+      section: "system_runtime",
+    })
+  }
+
+  // Section 3b: attachments — list of user-supplied assets bound to this run.
+  // The agent uses the attachment tools (list_attachments / read_attachment /
+  // import_attachment) to inspect or pull these into the sandbox; only
+  // metadata is included here so prompt size stays bounded.
+  const attachmentBlock = buildAttachmentManifest(attachmentIds ?? [])
+  if (attachmentBlock) {
+    systemMessages.push({
+      role: "system",
+      content: attachmentBlock,
       section: "system_runtime",
     })
   }
@@ -154,4 +169,32 @@ export async function buildSystemMessages(opts: {
   }
 
   return systemMessages
+}
+
+// ── Attachments manifest ──────────────────────────────────────────
+
+/**
+ * Render the per-run attachment manifest as a compact, deterministic
+ * block. One line per attachment with stable fields. Returns the empty
+ * string when there are no resolvable attachments (so the caller can
+ * skip pushing an empty system message).
+ *
+ * Important: only metadata is rendered here. Bytes and text extracts
+ * stay out of the system prompt so context budgets are not consumed by
+ * incidentally-large uploads. The agent pulls content via the
+ * attachment tools (Phase 4 milestone 4) when it actually needs it.
+ */
+function buildAttachmentManifest(ids: string[]): string {
+  if (ids.length === 0) return ""
+  const rows: AttachmentRow[] = []
+  for (const id of ids) {
+    const row = getAttachment(id)
+    if (row) rows.push(row)
+  }
+  if (rows.length === 0) return ""
+  const header = "Attached files for this run (use attachment tools to inspect or import):"
+  const lines = rows.map((r) =>
+    `  - id=${r.id}  name=${r.normalized_name}  type=${r.media_type}  size=${r.size_bytes}B  mode=${r.ingestion_mode}`,
+  )
+  return [header, ...lines].join("\n")
 }
