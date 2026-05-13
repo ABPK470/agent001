@@ -63,6 +63,7 @@ import { AgentOrchestrator } from "./orchestrator.js"
 import {
     registerAdminRoutes,
     registerAgentRoutes,
+    registerAttachmentRoutes,
     registerEventRoutes,
     registerLayoutRoutes,
     registerLlmRoutes,
@@ -451,6 +452,7 @@ async function buildApp(opts: AppOpts) {
   registerAgentRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
+  registerAttachmentRoutes(app)
   registerUsageRoutes(app)
   registerMymiRoutes(app)
   registerSyncRoutes(app, _projectRoot)

@@ -1,5 +1,6 @@
 export { registerAdminRoutes } from "./admin.js"
 export { registerAgentRoutes } from "./agents.js"
+export { registerAttachmentRoutes } from "./attachments.js"
 export { registerEventRoutes } from "./events.js"
 export { registerLayoutRoutes } from "./layouts.js"
 export { registerLlmRoutes } from "./llm.js"
