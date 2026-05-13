@@ -221,6 +221,63 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     expect(aliceEpisodic.some((r) => r.entry.content.includes("Status: failed"))).toBe(true)
   })
 
+  it("anonymous episodic memory is scoped by sid instead of the shared null-UPN pool", async () => {
+    const mem = await setupMemory()
+    const { getDb } = await import("../src/db.js")
+
+    mem.ingestRunTurns({
+      id: "anon-a", goal: "draft deployment checklist", answer: "Session A answer",
+      status: "completed", agentId: null, sessionId: "sid-a", tools: ["fs"], stepCount: 2,
+      trace: [], upn: null,
+    })
+    mem.ingestRunTurns({
+      id: "anon-b", goal: "draft deployment checklist", answer: "Session B answer",
+      status: "completed", agentId: null, sessionId: "sid-b", tools: ["fs"], stepCount: 2,
+      trace: [], upn: null,
+    })
+
+    const aHits = await mem.searchEntries("draft deployment checklist", {
+      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: null, sessionId: "sid-a",
+    })
+    const bHits = await mem.searchEntries("draft deployment checklist", {
+      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: null, sessionId: "sid-b",
+    })
+
+    expect(aHits.length).toBe(1)
+    expect(aHits[0]!.entry.content).toContain("Session A answer")
+    expect(bHits.length).toBe(1)
+    expect(bHits[0]!.entry.content).toContain("Session B answer")
+
+    const stored = getDb().prepare(`
+      SELECT session_id FROM memory_entries
+      WHERE tier = 'episodic' AND role = 'summary' AND substr(content, 1, ?) = ?
+      ORDER BY session_id ASC
+    `).all("Goal: draft deployment checklist\n".length, "Goal: draft deployment checklist\n") as Array<{ session_id: string | null }>
+    expect(stored.map((row) => row.session_id)).toEqual(["sid-a", "sid-b"])
+  })
+
+  it("anonymous procedural memory is scoped by sid instead of shared across null-UPN sessions", async () => {
+    const mem = await setupMemory()
+
+    mem.storeProcedural({
+      trigger: "export weekly release notes anon-proc-keyword",
+      toolSequence: [{ tool: "read_file", argsPattern: { path: "a.md" } }, { tool: "write_file", argsPattern: {} }],
+      runId: "ra", upn: null, sessionId: "sid-a",
+    })
+    mem.storeProcedural({
+      trigger: "export weekly release notes anon-proc-keyword",
+      toolSequence: [{ tool: "read_file", argsPattern: { path: "b.md" } }, { tool: "write_file", argsPattern: {} }],
+      runId: "rb", upn: null, sessionId: "sid-b",
+    })
+
+    expect(mem.searchProcedures("anon-proc-keyword", 5, null, "sid-a").length).toBe(1)
+    expect(mem.searchProcedures("anon-proc-keyword", 5, null, "sid-b").length).toBe(1)
+    const aFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-a")[0]!.toolSequence[0]!.argsPattern
+    const bFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-b")[0]!.toolSequence[0]!.argsPattern
+    expect(aFirstTool).toEqual({ path: "a.md" })
+    expect(bFirstTool).toEqual({ path: "b.md" })
+  })
+
   it("memory_vectors mirrors upn/shared and SQL filter prevents cross-tenant rows", async () => {
     const mem = await setupMemory()
     const { getDb } = await import("../src/db.js")

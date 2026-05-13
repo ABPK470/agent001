@@ -61,6 +61,7 @@ export function registerMemoryRoutes(
       const results = await searchEntries(query, {
         tier,
         budget: { maxTokens: 8000, maxItems: limit },
+        sessionId: req.session?.sid,
         upn: tenantScope(req),
       })
       return results.map((r) => ({
@@ -112,7 +113,7 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const { context, results } = await retrieveContext(goal, { upn: tenantScope(req) })
+      const { context, results } = await retrieveContext(goal, { upn: tenantScope(req), sessionId: req.session?.sid })
       return {
         context,
         resultCount: results.length,
@@ -138,7 +139,7 @@ export function registerMemoryRoutes(
         reply.code(400)
         return { error: "goal is required" }
       }
-      const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req))
+      const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req), req.session?.sid)
       return procedures.map((p) => ({
         id: p.id,
         trigger: p.trigger,

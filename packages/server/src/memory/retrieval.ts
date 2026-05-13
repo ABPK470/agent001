@@ -65,7 +65,7 @@ export async function retrieveContext(
   }
 
   // Also search procedural memories (kept for activation tracking, not injected into prompt)
-  const procedures = searchProcedures(goal, 3, opts?.upn ?? null)
+  const procedures = searchProcedures(goal, 3, opts?.upn ?? null, opts?.sessionId)
 
   // Sort all results by combined score descending
   allResults.sort((a, b) => b.combined - a.combined)
@@ -200,6 +200,23 @@ export async function searchEntries(
   if (opts.upn !== undefined) {
     if (opts.upn === null) {
       sql += " AND (e.upn IS NULL OR e.shared = 1)"
+      // Temporary anonymous isolation: episodic memory is private per sid
+      // until the proxy rollout guarantees a real UPN for every session.
+      if (opts.tier === "episodic") {
+        if (opts.sessionId) {
+          sql += " AND (e.shared = 1 OR e.session_id = ?)"
+          params.push(opts.sessionId)
+        } else {
+          sql += " AND e.shared = 1"
+        }
+      } else if (!opts.tier) {
+        if (opts.sessionId) {
+          sql += " AND (e.tier != 'episodic' OR e.shared = 1 OR e.session_id = ?)"
+          params.push(opts.sessionId)
+        } else {
+          sql += " AND (e.tier != 'episodic' OR e.shared = 1)"
+        }
+      }
     } else {
       sql += " AND (e.upn = ? OR e.shared = 1)"
       params.push(opts.upn)
@@ -251,7 +268,7 @@ export async function searchEntries(
   // cannot dominate the cosine top-K and starve other tenants of recall. The
   // post-filter below remains as defence-in-depth in case a vector row's
   // mirrored upn drifted from its memory_entries source of truth.
-  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier, opts.upn)
+  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier, opts.upn, opts.sessionId)
   if (vecResults.length > 0) {
     const ftsIds = new Set(ftsResults.map((r) => r.entry.id))
     for (const vr of vecResults) {
@@ -272,6 +289,10 @@ export async function searchEntries(
           if (opts.upn === null && rowUpn !== null) continue
           if (opts.upn !== null && rowUpn !== opts.upn) continue
         }
+      }
+      if (opts.upn === null && ((row.tier as string | null) === "episodic")) {
+        if (!opts.sessionId && (row.shared as number | null) !== 1) continue
+        if (opts.sessionId && (row.shared as number | null) !== 1 && row.session_id !== opts.sessionId) continue
       }
 
       const entry = rowToEntry(row)

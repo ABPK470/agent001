@@ -137,6 +137,7 @@ export function ingestRunTurns(run: {
   answer: string | null
   status: string
   agentId: string | null
+  sessionId?: string | null
   tools: string[]
   stepCount: number
   error?: string | null
@@ -144,7 +145,7 @@ export function ingestRunTurns(run: {
   /** Owner UPN — used to scope this run's memories to the originating user. */
   upn?: string | null
 }): void {
-  const sessionId = run.agentId ?? "default"
+  const sessionId = run.sessionId ?? run.agentId ?? "default"
   const upn = run.upn ?? null
 
   // 1. (goal text intentionally NOT stored in working memory — it is INPUT,
@@ -239,20 +240,38 @@ export function ingestRunTurns(run: {
   // user asking the same question must NOT collide with this row.
   // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
   const goalPrefix = `Goal: ${run.goal}\n`
-  const existingEpisodic = getDb().prepare(`
-    SELECT id FROM memory_entries
-    WHERE tier = 'episodic' AND role = 'summary'
-      AND substr(content, 1, ?) = ?
-      AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
-    ORDER BY updated_at DESC LIMIT 1
-  `).get(goalPrefix.length, goalPrefix, upn, upn) as { id: string } | undefined
+  const existingEpisodic = upn === null
+    ? (sessionId
+      ? getDb().prepare(`
+          SELECT id FROM memory_entries
+          WHERE tier = 'episodic' AND role = 'summary'
+            AND substr(content, 1, ?) = ?
+            AND upn IS NULL
+            AND session_id = ?
+          ORDER BY updated_at DESC LIMIT 1
+        `).get(goalPrefix.length, goalPrefix, sessionId)
+      : getDb().prepare(`
+          SELECT id FROM memory_entries
+          WHERE tier = 'episodic' AND role = 'summary'
+            AND substr(content, 1, ?) = ?
+            AND upn IS NULL
+            AND session_id IS NULL
+          ORDER BY updated_at DESC LIMIT 1
+        `).get(goalPrefix.length, goalPrefix)) as { id: string } | undefined
+    : getDb().prepare(`
+        SELECT id FROM memory_entries
+        WHERE tier = 'episodic' AND role = 'summary'
+          AND substr(content, 1, ?) = ?
+          AND upn = ?
+        ORDER BY updated_at DESC LIMIT 1
+      `).get(goalPrefix.length, goalPrefix, upn) as { id: string } | undefined
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
     const now = new Date().toISOString()
     getDb().prepare(`
       UPDATE memory_entries
-      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, upn = COALESCE(upn, ?), updated_at = ?
+      SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, upn = COALESCE(upn, ?), session_id = COALESCE(session_id, ?), updated_at = ?
       WHERE id = ?
     `).run(
       episodicContent,
@@ -261,6 +280,7 @@ export function ingestRunTurns(run: {
       computeSalience(episodicContent, "summary"),
       run.id,
       upn,
+      sessionId,
       now,
       existingEpisodic.id,
     )

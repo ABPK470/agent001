@@ -561,7 +561,7 @@ export async function executeRunImpl(
       answer.startsWith("Task FAILED")
       || answer.startsWith("Task verification FAILED")
       || isUserSafeFailureAnswer(answer)
-    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
+    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
     extractProcedural({ id: runId, goal, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null, sessionId: activeRun?.sessionId ?? null })
     consolidate({ minAgeHours: 24, upn: activeRun?.ownerUpn ?? null })
 
@@ -605,7 +605,7 @@ export async function executeRunImpl(
     boundSaveTrace(runId, { kind: "error", text: errMsg })
     await captureRunWorkspaceDiff(runId, ctx.activeRuns, ctx.completedRunWorkspaces, ctx.completedRunDiffs, boundSaveTrace, createNotification)
 
-    ingestRunTurns({ id: runId, goal, answer: null, status: "failed", agentId, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
+    ingestRunTurns({ id: runId, goal, answer: null, status: "failed", agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
 
     broadcast({ type: "run.failed", data: { runId, error: errMsg, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
     db.saveLog({ run_id: runId, level: "run:error", message: `Failed — ${errMsg.slice(0, 200)}`, timestamp: new Date().toISOString() })

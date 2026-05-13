@@ -53,13 +53,28 @@ export function storeProcedural(opts: {
   // Per-tenant dedup: two users may legitimately have the same tool sequence
   // for the same trigger; we don't want a recipe written by user A to mask
   // user B's identical-but-tenant-private execution. Lookup is therefore
-  // scoped by upn AND sequence-hash prefix.
+  // scoped by upn AND sequence-hash prefix. For temporary null-UPN sessions,
+  // scope by sid so anonymous browsers do not share procedural recipes.
   const upn = opts.upn ?? null
-  const existing = getDb().prepare(`
-    SELECT id, success_count FROM procedural_memories
-    WHERE id LIKE ? || '%'
-      AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
-  `).get(seqHash.slice(0, 12), upn, upn) as { id: string; success_count: number } | undefined
+  const existing = upn === null
+    ? (opts.sessionId
+      ? getDb().prepare(`
+          SELECT id, success_count FROM procedural_memories
+          WHERE id LIKE ? || '%'
+            AND upn IS NULL
+            AND session_id = ?
+        `).get(seqHash.slice(0, 12), opts.sessionId)
+      : getDb().prepare(`
+          SELECT id, success_count FROM procedural_memories
+          WHERE id LIKE ? || '%'
+            AND upn IS NULL
+            AND session_id IS NULL
+        `).get(seqHash.slice(0, 12))) as { id: string; success_count: number } | undefined
+    : getDb().prepare(`
+        SELECT id, success_count FROM procedural_memories
+        WHERE id LIKE ? || '%'
+          AND upn = ?
+      `).get(seqHash.slice(0, 12), upn) as { id: string; success_count: number } | undefined
 
   if (existing) {
     getDb().prepare(`
@@ -151,18 +166,23 @@ export function extractProcedural(run: {
   })
 }
 
-export function searchProcedures(goal: string, limit = 5, upn?: string | null): ProceduralMemory[] {
+export function searchProcedures(goal: string, limit = 5, upn?: string | null, sessionId?: string | null): ProceduralMemory[] {
   const ftsQuery = sanitizeFtsQuery(goal)
   if (!ftsQuery) return []
 
   // Tenant scope mirrors searchEntries: rows owned by the caller plus shared
-  // recipes (admin-curated) plus the legacy unowned pool when called with
-  // upn=undefined. Pass upn=null explicitly to query only legacy/global.
+  // recipes (admin-curated). For the temporary null-UPN path, sid scopes
+  // private procedural memory so anonymous browsers do not share recipes.
   let tenantClause = ""
   const tenantParams: unknown[] = []
   if (upn !== undefined) {
     if (upn === null) {
-      tenantClause = " AND (p.upn IS NULL OR p.shared = 1)"
+      if (sessionId) {
+        tenantClause = " AND ((p.upn IS NULL AND p.session_id = ?) OR p.shared = 1)"
+        tenantParams.push(sessionId)
+      } else {
+        tenantClause = " AND p.shared = 1"
+      }
     } else {
       tenantClause = " AND (p.upn = ? OR p.shared = 1)"
       tenantParams.push(upn)

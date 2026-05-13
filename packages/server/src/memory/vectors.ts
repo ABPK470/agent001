@@ -74,6 +74,7 @@ export async function vectorSearch(
    * Pushed into SQL so a chatty tenant cannot starve other tenants of recall.
    */
   upn?: string | null,
+  sessionId?: string | null,
 ): Promise<Array<{ entryId: string; similarity: number }>> {
   const queryVec = await getEmbedding(query)
   if (!queryVec) return []
@@ -92,6 +93,23 @@ export async function vectorSearch(
   if (upn !== undefined) {
     if (upn === null) {
       where.push("(v.upn IS NULL OR v.shared = 1)")
+      // Temporary anonymous isolation: only the current sid can see its
+      // private episodic vector rows. Shared rows remain global.
+      if (tier === "episodic") {
+        if (sessionId) {
+          where.push("(v.shared = 1 OR e.session_id = ?)")
+          params.push(sessionId)
+        } else {
+          where.push("v.shared = 1")
+        }
+      } else if (!tier) {
+        if (sessionId) {
+          where.push("(e.tier != 'episodic' OR v.shared = 1 OR e.session_id = ?)")
+          params.push(sessionId)
+        } else {
+          where.push("(e.tier != 'episodic' OR v.shared = 1)")
+        }
+      }
     } else {
       where.push("(v.upn = ? OR v.shared = 1)")
       params.push(upn)
