@@ -19,12 +19,14 @@ import {
     runFailed,
     runStarted,
     runWithMssqlKillSignal,
+    runWithPolicyContext,
     spawnChildForPlan,
     startPlanning,
     startRunning,
     synthesizeGenericFailureAnswer,
     type DelegateContext,
     type EngineServices,
+    type HostedPolicyContext,
     type Message,
     type ResolvedAgent,
     type RunState,
@@ -418,7 +420,22 @@ export async function executeRunImpl(
     runtime.shell.killSignal = controller.signal
     runtime.fetchUrl.killSignal = null
     runtime.browseWeb.killSignal = null
-    let answer = await agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined)
+
+    // Hosted policy context — read by the selector-based policy engine
+    // through AsyncLocalStorage. Concurrent runs see independent contexts.
+    // The role is captured at startRun/resumeRun (see orchestrator.ts) and
+    // stashed on ActiveRun because the originating session ALS is no longer
+    // in scope by the time queued work resumes.
+    const policyCtx: HostedPolicyContext = {
+      runId,
+      runMode:     runWorkspace.profile === "hosted" ? "hosted" : "developer",
+      role:        activeRun?.role ?? "admin",
+      sandboxRoot: runWorkspace.executionRoot,
+    }
+
+    let answer = await runWithPolicyContext(policyCtx, () =>
+      agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
+    )
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
     // so the user has a concrete reference to forward to the platform admin.

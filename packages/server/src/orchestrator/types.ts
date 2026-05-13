@@ -1,4 +1,4 @@
-import type { EngineServices, LLMClient } from "@agent001/agent"
+import type { EngineServices, LLMClient, PolicyRole } from "@agent001/agent"
 import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
@@ -16,6 +16,12 @@ export interface ActiveRun {
   traceSeq: number
   bus: AgentBus
   workspace: RunWorkspaceContext | null
+  /**
+   * Role used by the policy engine for selector evaluation. Captured at
+   * startRun/resumeRun from the originating session because by the time
+   * the queued executor runs the session ALS may already be empty.
+   */
+  role: PolicyRole
 }
 
 // ── Public API types ──────────────────────────────────────────────

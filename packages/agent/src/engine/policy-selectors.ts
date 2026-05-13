@@ -45,7 +45,7 @@
 
 import { isAbsolute, resolve, sep } from "node:path"
 import { PolicyEffect } from "./enums.js"
-import type { Step, PolicyRule } from "./models.js"
+import type { PolicyRule, Step } from "./models.js"
 import type { HostedPolicyContext } from "./policy-context.js"
 
 // ── Selector schema ──────────────────────────────────────────────

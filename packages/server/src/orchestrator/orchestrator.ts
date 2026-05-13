@@ -1,9 +1,10 @@
 import {
-  createEngineServices,
-  PolicyEffect,
-  type LLMClient,
-  type Message,
-  type Tool,
+    createEngineServices,
+    PolicyEffect,
+    type LLMClient,
+    type Message,
+    type PolicyRole,
+    type Tool,
 } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
@@ -68,6 +69,7 @@ export class AgentOrchestrator {
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
     const session = getCurrentSession()
+    const role: PolicyRole = !session ? "admin" : session.isAdmin ? "admin" : "hosted_user"
     if (session && !session.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
@@ -78,7 +80,7 @@ export class AgentOrchestrator {
       services.policyEvaluator.addRule({ name: r.name, effect: r.effect as PolicyEffect, condition: r.condition, parameters: JSON.parse(r.parameters) })
     }
 
-    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null })
+    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role })
     broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     saveTrace(this.activeRuns, runId, { kind: "goal", text: goal })
 
@@ -126,7 +128,9 @@ export class AgentOrchestrator {
     const services = createEngineServices()
     const bus = new AgentBus(newRunId)
 
-    this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null })
+    const resumeSession = getCurrentSession()
+    const resumeRole: PolicyRole = !resumeSession ? "admin" : resumeSession.isAdmin ? "admin" : "hosted_user"
+    this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole })
     broadcast({ type: "run.queued", data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
     saveTrace(this.activeRuns, newRunId, { kind: "goal", text: originalRun.goal })
 
@@ -140,8 +144,7 @@ export class AgentOrchestrator {
     }
     // Visitor allowlist on resume too — safety net even if agentDef requests
     // tools the visitor isn't allowed to use.
-    const session = getCurrentSession()
-    if (session && !session.isAdmin) {
+    if (resumeSession && !resumeSession.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
 
