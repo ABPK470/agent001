@@ -243,3 +243,134 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
     },
   ]
 }
+
+// ── Per-environment derived rules ──────────────────────────────────
+
+/**
+ * Derive selector rules from the per-environment permission config so
+ * operators can widen or tighten the per-environment defaults from
+ * `deploy/mssql/sync-environments.json` without forking this file.
+ *
+ * For each environment we emit:
+ *   - one DENY rule per `denyDml` / `denyDdl` flag (priority above defaults
+ *     so a deployment that opts in to read-only beats the loose `mssql_*`
+ *     allow rules already in {@link hostedDefaultPolicyRules}),
+ *   - one REQUIRE_APPROVAL rule per entry in `approvalRequiredOperations`,
+ *   - one ALLOW rule per non-trivial entry in `allowedOperations` (so a
+ *     DEV opt-in for `dml` actually fires under the conjunctive matcher).
+ *
+ * Rules are evaluated in tie-breaking priority order: deny > approval >
+ * allow at equal priority. We give per-env DENY rules a higher base
+ * priority than the `hostedDefaultPolicyRules()` defaults so a
+ * deployment that explicitly says "PROD allows DML" can still be
+ * overridden by a per-deployment `denyDml: true` flag.
+ */
+const PER_ENV_DENY_PRIORITY     = DEFAULT_PRIORITY + 75
+const PER_ENV_APPROVAL_PRIORITY = DEFAULT_PRIORITY + 50
+const PER_ENV_ALLOW_PRIORITY    = DEFAULT_PRIORITY + 25
+
+interface EnvLike {
+  name: string
+  denyDml: boolean
+  denyDdl: boolean
+  allowedOperations: ReadonlyArray<string>
+  approvalRequiredOperations: ReadonlyArray<string>
+}
+
+export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): PolicyRule[] {
+  const rules: PolicyRule[] = []
+  for (const e of envs) {
+    const envKey = e.name as "dev" | "uat" | "prod"
+    if (envKey !== "dev" && envKey !== "uat" && envKey !== "prod") {
+      // The selector engine only knows three environment keys today.
+      // Custom env names are still policed by the catch-all default-deny
+      // when running under hosted profile.
+      continue
+    }
+
+    if (e.denyDml) {
+      rules.push({
+        name:       `env_${envKey}_deny_dml`,
+        effect:     PolicyEffect.Deny,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_DENY_PRIORITY,
+          reason:   `${envKey}.denyDml: hosted env config blocks DML`,
+          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: "dml" },
+        },
+      })
+      rules.push({
+        name:       `env_${envKey}_deny_dml_query_mssql`,
+        effect:     PolicyEffect.Deny,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_DENY_PRIORITY,
+          reason:   `${envKey}.denyDml: hosted env config blocks DML`,
+          selectors: { tool: "query_mssql", dbEnvironment: envKey, dbOperation: "dml" },
+        },
+      })
+    }
+    if (e.denyDdl) {
+      rules.push({
+        name:       `env_${envKey}_deny_ddl`,
+        effect:     PolicyEffect.Deny,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_DENY_PRIORITY,
+          reason:   `${envKey}.denyDdl: hosted env config blocks DDL`,
+          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: "ddl" },
+        },
+      })
+      rules.push({
+        name:       `env_${envKey}_deny_ddl_query_mssql`,
+        effect:     PolicyEffect.Deny,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_DENY_PRIORITY,
+          reason:   `${envKey}.denyDdl: hosted env config blocks DDL`,
+          selectors: { tool: "query_mssql", dbEnvironment: envKey, dbOperation: "ddl" },
+        },
+      })
+    }
+
+    for (const op of e.approvalRequiredOperations) {
+      if (!isPolicyDbOperation(op)) continue
+      rules.push({
+        name:       `env_${envKey}_approval_${op}`,
+        effect:     PolicyEffect.RequireApproval,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_APPROVAL_PRIORITY,
+          reason:   `${envKey}.approvalRequiredOperations: ${op} requires confirmation`,
+          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
+        },
+      })
+    }
+
+    // Explicit per-env allow for DEV widenings (e.g. `allowedOperations: ["dml"]`).
+    // We do NOT emit allow rules for `query_read` / `schema_introspect` /
+    // `sync_preview` — those are already covered by the cross-env defaults
+    // in {@link hostedDefaultPolicyRules}.
+    for (const op of e.allowedOperations) {
+      if (op !== "dml" && op !== "ddl" && op !== "sync_execute") continue
+      // Don't emit an allow that contradicts an explicit deny on the same env.
+      if (op === "dml" && e.denyDml) continue
+      if (op === "ddl" && e.denyDdl) continue
+      rules.push({
+        name:       `env_${envKey}_allow_${op}`,
+        effect:     PolicyEffect.Allow,
+        condition:  "selectors",
+        parameters: {
+          priority: PER_ENV_ALLOW_PRIORITY,
+          reason:   `${envKey}.allowedOperations: ${op} explicitly permitted`,
+          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
+        },
+      })
+    }
+  }
+  return rules
+}
+
+function isPolicyDbOperation(op: string): op is "query_read" | "sync_preview" | "sync_execute" | "ddl" | "dml" {
+  return op === "query_read" || op === "sync_preview" || op === "sync_execute" || op === "ddl" || op === "dml"
+}

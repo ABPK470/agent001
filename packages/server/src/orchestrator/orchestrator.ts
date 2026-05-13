@@ -1,5 +1,6 @@
 import {
     createEngineServices,
+    getEnvironments,
     PolicyEffect,
     type LLMClient,
     type Message,
@@ -14,7 +15,7 @@ import * as db from "../db.js"
 import { migrateEffects } from "../effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import { migrateMemory } from "../memory.js"
-import { hostedDefaultPolicyRules } from "../policy/hosted-defaults.js"
+import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "../policy/hosted-defaults.js"
 import { RunQueue, type RunPriority } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces, getRunProfile } from "../run-workspace.js"
@@ -85,6 +86,12 @@ export class AgentOrchestrator {
     // priority overrides these defaults via the selector resolver.
     if (getRunProfile() === "hosted") {
       for (const r of hostedDefaultPolicyRules()) services.policyEvaluator.addRule(r)
+      // Per-environment derived rules: an operator's
+      // `deploy/mssql/sync-environments.json` (e.g. `denyDml: true` on a
+      // 'dev' env that would otherwise be writable) folds in here. These
+      // run at higher priority than the cross-env defaults so an explicit
+      // per-env decision always wins.
+      for (const r of policyRulesFromEnvironments(getEnvironments())) services.policyEvaluator.addRule(r)
     }
 
     this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [], ownerUpn: session?.upn ?? null, sessionId: session?.sid ?? null })
@@ -145,6 +152,7 @@ export class AgentOrchestrator {
     }
     if (getRunProfile() === "hosted") {
       for (const r of hostedDefaultPolicyRules()) services.policyEvaluator.addRule(r)
+      for (const r of policyRulesFromEnvironments(getEnvironments())) services.policyEvaluator.addRule(r)
     }
 
     const resumeSession = getCurrentSession()

@@ -106,19 +106,37 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
     }
   }
 
-  // Shell tools — command is the contained input.
+  // Shell tools — command is the contained input. Normalize before
+  // matching so trivial whitespace differences don't sneak past
+  // command-regex selectors. We do NOT strip leading `sudo`/`time`/`env`
+  // here on purpose: the privileged-command rules want to MATCH those
+  // verbs, not see through them.
   if (step.action === "run_command" || step.action === "shell") {
     const cmd = (input["command"] ?? input["cmd"] ?? "") as unknown
     if (typeof cmd === "string" && cmd.length > 0) {
-      facts.command = cmd
+      facts.command = cmd.replace(/\s+/g, " ").trim()
     }
   }
 
   // MSSQL tools — environment + operation classification.
-  if (step.action.startsWith("mssql_") || step.action === "query_mssql" || step.action === "explore_mssql_schema") {
-    const env = (input["environment"] ?? input["dbEnvironment"] ?? input["env"]) as unknown
-    if (env === "dev" || env === "uat" || env === "prod") {
-      facts.dbEnvironment = env
+  if (step.action.startsWith("mssql_") || step.action === "query_mssql" || step.action === "explore_mssql_schema" || step.action === "export_query_to_file") {
+    // Accept several aliases. `connection` is the existing tool param
+    // name today (e.g. `query_mssql({ connection: "prod", ... })`); we
+    // treat it as a synonym for `environment` when its value happens to
+    // be one of the well-known environment keys, so per-env policy
+    // selectors fire without requiring the model to learn a new arg.
+    const candidates = [
+      input["environment"],
+      input["dbEnvironment"],
+      input["env"],
+      input["connection"],
+    ]
+    let extracted: PolicyDbEnvironment | undefined
+    for (const raw of candidates) {
+      if (raw === "dev" || raw === "uat" || raw === "prod") { extracted = raw; break }
+    }
+    if (extracted) {
+      facts.dbEnvironment = extracted
     } else if (ctx?.defaultDbEnvironment) {
       facts.dbEnvironment = ctx.defaultDbEnvironment
     }

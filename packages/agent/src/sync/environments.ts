@@ -26,6 +26,28 @@ import { getMssqlConfig, getPool } from "../tools/index.js"
 
 export type EnvRole = "source" | "target" | "both"
 
+/**
+ * Per-environment access mode. UAT and PROD default to `read_only` so a
+ * fresh deployment cannot mutate either accidentally; explicit operator
+ * config in `deploy/mssql/sync-environments.json` is the only way to
+ * widen the default.
+ */
+export type EnvAccessMode = "read_only" | "read_write"
+
+/**
+ * Operation classes the policy engine knows about. Mirror of
+ * {@link PolicyDbOperation} in `packages/agent/src/engine/policy-selectors.ts` —
+ * kept as a string-literal alias here so this module doesn't pull in the
+ * agent engine just for the type.
+ */
+export type EnvOperation =
+  | "query_read"
+  | "schema_introspect"
+  | "sync_preview"
+  | "sync_execute"
+  | "ddl"
+  | "dml"
+
 export interface SyncEnvironment {
   /** Connection name (matches an MSSQL connection registered at startup). */
   name: string
@@ -52,6 +74,31 @@ export interface SyncEnvironment {
    * can resolve src/dest server+db pairs by reading that linked-service row.
    */
   linkedServiceName?: string | null
+
+  // ── Hosted-mode access control ────────────────────────────────
+  /**
+   * Default access mode for this environment. UAT and PROD default to
+   * `read_only`; DEV defaults to `read_write`. The hosted policy engine
+   * derives concrete deny rules from this field via
+   * {@link policyRulesFromEnvironments}.
+   */
+  defaultAccessMode: EnvAccessMode
+  /**
+   * Operations explicitly allowed on this environment. When set, anything
+   * NOT in this list AND not allowed elsewhere is denied. Empty/undefined
+   * means "use the defaults derived from `defaultAccessMode` + the
+   * `denyDml` / `denyDdl` flags".
+   */
+  allowedOperations: EnvOperation[]
+  /** Convenience: deny DML (insert/update/delete/merge/truncate). */
+  denyDml: boolean
+  /** Convenience: deny DDL (create/alter/drop/grant/revoke). */
+  denyDdl: boolean
+  /**
+   * Operations that, when reached, must surface an approval prompt. Default
+   * `["sync_execute"]` for read-only envs.
+   */
+  approvalRequiredOperations: EnvOperation[]
 }
 
 interface SyncEnvironmentsConfigFile {
@@ -83,6 +130,50 @@ export function getEnvironment(name: string): SyncEnvironment {
   return e
 }
 
+// ── Permission defaults ──────────────────────────────────────────
+
+/**
+ * Apply hosted-mode safety defaults to a partial environment record.
+ * UAT/PROD are read-only with DML+DDL denied; DEV is read-write. These
+ * defaults are intentionally conservative — operators widen them by
+ * explicitly setting the corresponding fields in
+ * `deploy/mssql/sync-environments.json`.
+ */
+export function withPermissionDefaults(
+  e: Partial<SyncEnvironment> & Pick<SyncEnvironment, "name">,
+): SyncEnvironment {
+  // Treat anything containing "prod" or "uat" (case-insensitive) as
+  // read-only by default. Everything else is treated as dev-shaped.
+  const isProdLike = /\bprod\b/i.test(e.name)
+  const isUatLike  = /\buat\b|\bstag(e|ing)?\b/i.test(e.name)
+  const lockedDown = isProdLike || isUatLike
+  const defaultAccessMode: EnvAccessMode = e.defaultAccessMode ?? (lockedDown ? "read_only" : "read_write")
+  const denyDml = e.denyDml ?? (defaultAccessMode === "read_only")
+  const denyDdl = e.denyDdl ?? (defaultAccessMode === "read_only")
+  const allowedOperations = e.allowedOperations ?? (
+    lockedDown
+      ? ["query_read", "schema_introspect", "sync_preview"] as EnvOperation[]
+      : ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] as EnvOperation[]
+  )
+  const approvalRequiredOperations = e.approvalRequiredOperations ?? (["sync_execute"] as EnvOperation[])
+
+  return {
+    name:               e.name,
+    displayName:        e.displayName ?? e.name,
+    color:              e.color ?? "slate",
+    role:               (e.role ?? "both") as EnvRole,
+    linkedServerName:   e.linkedServerName ?? null,
+    ringOrder:          typeof e.ringOrder === "number" ? e.ringOrder : 0,
+    syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+    linkedServiceName:  e.linkedServiceName ?? null,
+    defaultAccessMode,
+    allowedOperations,
+    denyDml,
+    denyDdl,
+    approvalRequiredOperations,
+  }
+}
+
 const DEFAULT_CONFIG_PATH = "deploy/mssql/sync-environments.json"
 
 /**
@@ -99,7 +190,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
       const raw = readFileSync(configPath, "utf-8")
       const parsed = JSON.parse(raw) as SyncEnvironmentsConfigFile
       if (parsed.version !== 1) throw new Error(`Unsupported version: ${parsed.version}`)
-      envs = parsed.environments.map((e) => ({
+      envs = parsed.environments.map((e) => withPermissionDefaults({
         name: e.name,
         displayName: e.displayName ?? e.name,
         color: e.color ?? "slate",
@@ -108,9 +199,14 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
         ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
         syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
         linkedServiceName: e.linkedServiceName ?? null,
+        defaultAccessMode: e.defaultAccessMode,
+        allowedOperations: e.allowedOperations,
+        denyDml: e.denyDml,
+        denyDdl: e.denyDdl,
+        approvalRequiredOperations: e.approvalRequiredOperations,
       }))
       setEnvironments(envs)
-      const summary = envs.map((e) => `${e.name}[${e.role}]`).join(", ")
+      const summary = envs.map((e) => `${e.name}[${e.role}/${e.defaultAccessMode}]`).join(", ")
       console.log(`ABI environments (from ${relPath}): ${summary}`)
     } catch (e) {
       console.error(`Invalid ${relPath}:`, e instanceof Error ? e.message : e)
@@ -120,7 +216,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
     // Fallback — one env per configured MSSQL connection, role=both.
     const FALLBACK_PALETTE = ["blue", "teal", "indigo", "pink", "slate", "cyan"]
     const conns = getMssqlConfig()
-    envs = conns.map((c: { name: string }, i: number) => ({
+    envs = conns.map((c: { name: string }, i: number) => withPermissionDefaults({
       name: c.name,
       displayName: c.name,
       color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
@@ -132,7 +228,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
     }))
     setEnvironments(envs)
     if (envs.length) {
-      console.log(`ABI environments (auto from MSSQL_DATABASES): ${envs.map((e) => e.name).join(", ")}`)
+      console.log(`ABI environments (auto from MSSQL_DATABASES): ${envs.map((e) => `${e.name}[${e.defaultAccessMode}]`).join(", ")}`)
     }
   }
 
