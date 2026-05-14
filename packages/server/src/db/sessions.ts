@@ -46,6 +46,46 @@ export function touchSession(s: {
   })
 }
 
+/**
+ * Reuse an existing anonymous session for the same browser fingerprint.
+ *
+ * Why: when a brand-new tab opens an SSE stream as its first request, our
+ * onRequest hook can fail to set the sticky `mia_sid` cookie (best-effort,
+ * see auth/identity.ts). The next request from the same tab then arrives
+ * with no cookie and `resolveSession` would mint a fresh `anon:<hex>` sid,
+ * fragmenting the sessions table into N orphan rows per real browser.
+ *
+ * Collapsing on (ip, user_agent) within a recency window lets those orphan
+ * requests rejoin the existing session row and keeps run / notification /
+ * memory FK chains intact.
+ *
+ * Caveats:
+ *  - Two anonymous users on the same machine + browser look identical here.
+ *    Acceptable: they're "Anonymous" until one of them submits the welcome
+ *    modal, which mints a new sid (see /api/me handler).
+ *  - Window is intentionally short to avoid resurrecting stale identities
+ *    after a long idle period.
+ */
+export function findRecentAnonSidByFingerprint(
+  ip: string,
+  userAgent: string,
+  windowSeconds = 86_400,
+): string | undefined {
+  const row = getDb()
+    .prepare(`
+      SELECT sid FROM sessions
+      WHERE upn IS NULL
+        AND sid LIKE 'anon:%'
+        AND ip = ?
+        AND user_agent = ?
+        AND last_seen_at >= datetime('now', ?)
+      ORDER BY last_seen_at DESC
+      LIMIT 1
+    `)
+    .get(ip, userAgent, `-${windowSeconds} seconds`) as { sid: string } | undefined
+  return row?.sid
+}
+
 export function listSessions(opts?: { sinceSeconds?: number }): DbSession[] {
   const since = opts?.sinceSeconds
   if (since !== undefined) {

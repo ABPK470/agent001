@@ -19,7 +19,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { touchSession } from "../db/sessions.js"
+import { findRecentAnonSidByFingerprint, touchSession } from "../db/sessions.js"
 import { sessionAls, type CurrentSession } from "./context.js"
 import { ADMIN_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS, newSid, signSession, verifyAdminCookie, verifySession, type SessionPayload } from "./session.js"
 
@@ -91,15 +91,20 @@ function resolveSession(req: FastifyRequest): CurrentSession {
     }
   }
 
-  // 3. Anonymous fallback — transient sid (not persisted to cookie until
-  // the welcome modal posts /api/me). Client should pop the modal.
+  // 3. Anonymous fallback — no cookie present. Before minting a fresh sid,
+  // try to reuse a recent anon sid for the same (ip, user_agent) so that
+  // SSE-first tabs (where onRequest's setCookie may fail to flush) don't
+  // multiply orphan rows in the sessions table. See db/sessions.ts.
+  const ip = req.ip
+  const userAgent = String(req.headers["user-agent"] ?? "")
+  const reusedSid = findRecentAnonSidByFingerprint(ip, userAgent)
   return {
-    sid: `anon:${newSid()}`,
+    sid: reusedSid ?? `anon:${newSid()}`,
     displayName: "Anonymous",
     upn: null,
     isAdmin: verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
-    ip: req.ip,
-    userAgent: String(req.headers["user-agent"] ?? ""),
+    ip,
+    userAgent,
   }
 }
 
@@ -132,7 +137,13 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
           path:     "/",
           maxAge:   SESSION_TTL_SECONDS,
         })
-      } catch { /* SSE responses already streamed headers — best-effort */ }
+      } catch (err) {
+        // SSE / streaming responses may have already flushed headers by the
+        // time onRequest tries to set the cookie. Log so we can spot it; the
+        // (ip, user_agent) anon-collapse in resolveSession keeps the same
+        // sid stable across these requests anyway.
+        req.log.warn({ err, sid: session.sid }, "setCookie(mia_sid) failed in onRequest")
+      }
     }
     // enterWith persists the ALS store for the rest of this async chain
     // (handlers, db calls, tool calls) so getCurrentSession() works downstream.

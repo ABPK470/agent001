@@ -66,13 +66,27 @@ export function _migrate(db: Database.Database): void {
   const currentSeedVersion = Number(getMetaValue("seed_version") ?? "0")
   if (currentSeedVersion < HARD_RESET_THRESHOLD) {
     db.pragma("foreign_keys = OFF")
-    const userTables = db.prepare(
+    // FTS5 shadow tables (memory_entries_fts_data, _idx, _docsize, _config,
+    // _content) cannot be dropped directly — SQLite errors with "table X
+    // may not be dropped". They're auto-managed by the parent virtual
+    // table, so we drop virtual tables first and SQLite cascades the
+    // shadow drops, then drop the remaining regular tables/views.
+    const virtualTables = db.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table'
+         AND sql LIKE 'CREATE VIRTUAL TABLE%'
+         AND name NOT IN ('llm_config','schema_meta')`,
+    ).all() as { name: string }[]
+    for (const { name } of virtualTables) {
+      db.exec(`DROP TABLE IF EXISTS "${name}"`)
+    }
+    const remainingTables = db.prepare(
       `SELECT name FROM sqlite_master
        WHERE type IN ('table','view')
          AND name NOT LIKE 'sqlite_%'
          AND name NOT IN ('llm_config','schema_meta')`,
     ).all() as { name: string }[]
-    for (const { name } of userTables) {
+    for (const { name } of remainingTables) {
       db.exec(`DROP TABLE IF EXISTS "${name}"`)
     }
     db.pragma("foreign_keys = ON")
