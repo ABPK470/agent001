@@ -28,7 +28,7 @@ import {
     setEnvironments,
     withPermissionDefaults,
     type SyncEnvironment,
-} from "@agent001/agent"
+} from "@mia/agent"
 import * as db from "../db.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 

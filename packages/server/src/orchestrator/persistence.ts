@@ -1,4 +1,4 @@
-import type { Agent, EngineServices } from "@agent001/agent"
+import type { Agent, EngineServices } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { getCurrentSession } from "../auth/context.js"
 import * as db from "../db.js"

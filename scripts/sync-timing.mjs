@@ -11,7 +11,7 @@ import Database from "better-sqlite3"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const DB_PATH = process.env.AGENT001_DB ?? join(homedir(), ".agent001", "agent001.db")
+const DB_PATH = process.env.MIA_DB ?? join(homedir(), ".mia", "mia.db")
 
 const planId = process.argv[2]
 if (!planId) {

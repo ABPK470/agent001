@@ -5,7 +5,7 @@
  * and reusable independently of the run lifecycle.
  */
 
-import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@agent001/agent"
+import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
 
 // ── Environment detection ────────────────────────────────────────

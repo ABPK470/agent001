@@ -6,7 +6,7 @@
  *                  returns the new client (triggers hot-swap in server)
  */
 
-import type { LLMClient } from "@agent001/agent"
+import type { LLMClient } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
 import { getLlmConfig, saveLlmConfig, type LlmProvider } from "../db.js"
 import { buildLlmClient, PROVIDER_DEFAULTS } from "../llm/registry.js"

@@ -14,7 +14,7 @@ import {
     type AgentRun,
     type HostedPolicyContext,
     type Step
-} from "@agent001/agent"
+} from "@mia/agent"
 import { describe, expect, it } from "vitest"
 import { hostedDefaultPolicyRules } from "../src/policy/hosted-defaults.js"
 

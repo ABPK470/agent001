@@ -19,7 +19,7 @@ import {
     searchEntities,
     type EntityType,
     type ExecuteProgress,
-} from "@agent001/agent"
+} from "@mia/agent"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../db.js"
 

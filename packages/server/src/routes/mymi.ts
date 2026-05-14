@@ -12,7 +12,7 @@
  * return an empty result set rather than erroring.
  */
 
-import { getCatalog, getMssqlConfig, getMssqlPool } from "@agent001/agent"
+import { getCatalog, getMssqlConfig, getMssqlPool } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
 
 // ── Helpers ──────────────────────────────────────────────────────

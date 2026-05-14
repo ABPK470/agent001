@@ -1,5 +1,5 @@
 /**
- * Agent package barrel — the public face of `@agent001/agent`.
+ * Agent package barrel — the public face of `@mia/agent`.
  *
  * Re-exports happen one cluster at a time. Outside this package, never
  * import from `packages/agent/src/<cluster>/<file>.js` directly — always
@@ -63,7 +63,7 @@ export * from "./sync/index.js"
 export * from "./tool-helpers/index.js"
 export * from "./tools/index.js"
 
-// Renamed re-export preserved for back-compat with @agent001/server.
+// Renamed re-export preserved for back-compat with @mia/server.
 export { getPool as getMssqlPool } from "./tools/index.js"
 
 // ── Planner public surface (curated subset; planner has its own index) ─

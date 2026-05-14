@@ -6,7 +6,7 @@
  * downstream, `getCurrentSession()` returns the session or null.
  *
  * Also hosts the per-run AbortController map; tools register a per-run
- * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@agent001/agent`)
+ * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@mia/agent`)
  * picks it up via AsyncLocalStorage. The legacy module-global
  * `setMssqlKillSignal()` was deleted in agent Phase 2 — this is the only
  * supported path now.

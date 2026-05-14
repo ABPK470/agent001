@@ -161,10 +161,10 @@ export function buildEscalationInput(params: {
     verdict: params.verifierOverall,
     attempt: params.attempt,
     maxAttempts: params.maxAttempts,
-    disagreements: 0, // agent001 doesn't yet track multi-candidate disagreement
+    disagreements: 0, // mia doesn't yet track multi-candidate disagreement
     maxDisagreements: 3, // default threshold
     revisionAvailable: params.hasRetryableSteps,
-    reexecuteOnNeedsRevision: true, // agent001 always re-executes (no targeted revision yet)
+    reexecuteOnNeedsRevision: true, // mia always re-executes (no targeted revision yet)
     timedOut: params.timedOut,
     budgetExhausted: params.budgetExhausted,
     allStepsStuck: params.allStepsRepeatedFailure,

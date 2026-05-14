@@ -38,7 +38,7 @@ import {
     writeFileTool,
     type LLMClient,
     type Tool,
-} from "@agent001/agent"
+} from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 
 export { thinkTool }

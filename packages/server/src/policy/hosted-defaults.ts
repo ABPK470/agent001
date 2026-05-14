@@ -19,7 +19,7 @@
  *   - Outbound network tools require explicit approval.
  */
 
-import { PolicyEffect, type PolicyRule } from "@agent001/agent"
+import { PolicyEffect, type PolicyRule } from "@mia/agent"
 
 const DEFAULT_PRIORITY = 10
 const PRIVILEGED_COMMAND_RE = String.raw`/\b(sudo|ssh|scp|git\s+push|winget|powershell\s+Set-|icacls|reg\s+add|net\s+user|chmod\s+\+s)\b/i`

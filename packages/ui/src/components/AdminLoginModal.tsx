@@ -5,7 +5,7 @@
  * isn't available (e.g. running locally without the welcome modal, or
  * in case someone spoofed your UPN in their welcome modal). Posts to
  * /api/admin/login which sets a signed admin cookie. 503 means
- * AGENT001_ADMIN_PASSWORD isn't set on the server.
+ * MIA_ADMIN_PASSWORD isn't set on the server.
  */
 
 import { useState } from "react"

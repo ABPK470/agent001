@@ -169,10 +169,10 @@ export class EventBroadcaster {
       const headers: Record<string, string> = { "Content-Type": "application/json" }
       if (drain.secret) {
         const sig = createHmac("sha256", drain.secret).update(json).digest("hex")
-        headers["X-Agent001-Signature"] = `sha256=${sig}`
+        headers["X-Mia-Signature"] = `sha256=${sig}`
       }
-      headers["X-Agent001-Event"] = event.type
-      headers["X-Agent001-Drain-Id"] = drain.id
+      headers["X-Mia-Event"] = event.type
+      headers["X-Mia-Drain-Id"] = drain.id
 
       fetch(drain.url, {
         method: "POST",

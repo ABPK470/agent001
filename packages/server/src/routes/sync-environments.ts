@@ -26,7 +26,7 @@ import {
     type EnvAccessMode,
     type EnvOperation,
     type SyncEnvironment,
-} from "@agent001/agent"
+} from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db.js"
 import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"

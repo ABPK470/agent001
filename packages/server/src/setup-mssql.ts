@@ -1,4 +1,4 @@
-import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled } from "@agent001/agent"
+import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled } from "@mia/agent"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 

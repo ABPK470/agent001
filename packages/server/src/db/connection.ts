@@ -2,24 +2,31 @@
  * Database connection — singleton SQLite instance.
  *
  * All domain-specific persistence modules import getDb() from here.
- * Data lives in ~/.agent001/agent001.db — survives server restarts.
- * Env override: MIA_DATA_DIR (AGENT001_DATA_DIR accepted for backwards compat).
+ * Data lives in ~/.mia/mia.db — survives server restarts.
+ * Env override: MIA_DATA_DIR.
  */
 
-import { DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import { DEFAULT_SYSTEM_PROMPT } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const DATA_DIR = process.env["MIA_DATA_DIR"] || process.env["AGENT001_DATA_DIR"] || join(homedir(), ".agent001")
+const DATA_DIR = process.env["MIA_DATA_DIR"] || join(homedir(), ".mia")
 mkdirSync(DATA_DIR, { recursive: true })
+
+const DB_PATH = join(DATA_DIR, "mia.db")
+
+/** Absolute path to the on-disk SQLite file (for logging / diagnostics). */
+export function getDbPath(): string {
+  return DB_PATH
+}
 
 let _db: Database.Database | null = null
 
 export function getDb(): Database.Database {
   if (!_db) {
-    _db = new Database(join(DATA_DIR, "agent001.db"))
+    _db = new Database(DB_PATH)
     _db.pragma("journal_mode = WAL")
     _db.pragma("foreign_keys = ON")
     _migrate(_db)

@@ -32,7 +32,7 @@ import {
   type RunState,
   type Tool,
   type ToolKillManager
-} from "@agent001/agent"
+} from "@mia/agent"
 import { AgentBus, createBusTools } from "../agent-bus.js"
 import * as db from "../db.js"
 import { resetEffectSeq } from "../effects.js"

@@ -1,5 +1,5 @@
-import type { Message, Tool } from "@agent001/agent"
-import { ABI_SYNC_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import type { Message, Tool } from "@mia/agent"
+import { ABI_SYNC_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"

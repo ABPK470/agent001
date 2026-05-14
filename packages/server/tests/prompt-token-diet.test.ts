@@ -12,8 +12,8 @@
  *      the prefix from cache on calls 2..N.
  */
 
-import type { Tool } from "@agent001/agent"
-import { setMssqlConfigs } from "@agent001/agent"
+import type { Tool } from "@mia/agent"
+import { setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { decideSections } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"

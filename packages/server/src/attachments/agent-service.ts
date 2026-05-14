@@ -8,7 +8,7 @@
  * (no module-global state).
  */
 
-import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@agent001/agent"
+import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@mia/agent"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
 import {

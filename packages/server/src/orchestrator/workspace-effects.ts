@@ -1,4 +1,4 @@
-import type { Tool } from "@agent001/agent"
+import type { Tool } from "@mia/agent"
 import { recordEffect, recordFileWrite } from "../effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"

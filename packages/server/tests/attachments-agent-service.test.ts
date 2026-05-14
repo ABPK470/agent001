@@ -8,7 +8,7 @@
  *   - list() defaults to the active run (resolved via HostedPolicyContext)
  */
 
-import { runWithPolicyContext, type HostedPolicyContext } from "@agent001/agent"
+import { runWithPolicyContext, type HostedPolicyContext } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"

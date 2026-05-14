@@ -145,7 +145,7 @@ export class DockerSandbox {
     const timeout = options?.timeout ?? this.config.timeout
     const containerCwd = options?.cwd ? `/workspace/${options.cwd}` : "/workspace"
     const allowNetwork = options?.network ?? this.config.network
-    const containerId = `agent001-sandbox-${randomBytes(6).toString("hex")}`
+    const containerId = `mia-sandbox-${randomBytes(6).toString("hex")}`
     const mountArgs = this.buildWorkspaceMount(workspacePath)
 
     const args: string[] = [
@@ -303,7 +303,7 @@ export class DockerSandbox {
     }
 
     const timeout = options?.timeout ?? 30_000
-    const containerId = `agent001-browser-${randomBytes(6).toString("hex")}`
+    const containerId = `mia-browser-${randomBytes(6).toString("hex")}`
 
     const args: string[] = [
       "run", "--rm", "--name", containerId,

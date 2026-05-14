@@ -8,7 +8,7 @@
  *   local        — Local model via OpenAI-compatible API (Ollama, LM Studio, etc.)
  */
 
-import { DatabricksClient, OpenAIClient, type LLMClient } from "@agent001/agent";
+import { DatabricksClient, OpenAIClient, type LLMClient } from "@mia/agent";
 import type { DbLlmConfig } from "../db.js";
 import { CopilotChatClient } from "./copilot-chat.js";
 import { CopilotClient } from "./copilot.js";

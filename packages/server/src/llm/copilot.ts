@@ -8,7 +8,7 @@
  * If not set, tries to get it from the GitHub CLI (`gh auth token`).
  */
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@agent001/agent"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@mia/agent"
 import { execSync } from "node:child_process"
 
 function safeParseArgs(raw: string): Record<string, unknown> {

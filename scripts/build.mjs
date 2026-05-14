@@ -43,9 +43,9 @@ async function main() {
         // Keep ALL npm packages external — they'll be npm-installed at the target.
         // We only inline the workspace TypeScript (server + agent source code).
         packages: "external",
-        // Resolve workspace package @agent001/agent as part of the bundle
+        // Resolve workspace package @mia/agent as part of the bundle
         alias: {
-            "@agent001/agent": resolve(ROOT, "packages/agent/src/lib.ts"),
+            "@mia/agent": resolve(ROOT, "packages/agent/src/lib.ts"),
         },
         sourcemap: true,
         minify: false,         // Keep readable for debugging

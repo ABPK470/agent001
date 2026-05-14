@@ -22,19 +22,19 @@ config({
 })
 
 import {
-  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
-  setAttachmentService,
-  setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setSearchBasePath,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
-  setSyncEventSink,
-  setSyncRunSink,
-  setupEnvironments
-} from "@agent001/agent"
+    buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
+    setAttachmentService,
+    setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setSearchBasePath,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict,
+    setSyncEventSink,
+    setSyncRunSink,
+    setupEnvironments
+} from "@mia/agent"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
@@ -43,21 +43,21 @@ import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/
 import { registerIdentity } from "./auth/identity.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import {
-  clearTransactionalData,
-  getDb, getDbStats, getLlmConfig,
-  getSyncRunPlanJson,
-  migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-  pruneOldData,
-  recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
+    clearTransactionalData,
+    getDb, getDbPath, getDbStats, getLlmConfig,
+    getSyncRunPlanJson,
+    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
+    pruneOldData,
+    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db.js"
 import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
@@ -65,24 +65,24 @@ import { migrateMemory, prune as pruneMemory } from "./memory.js"
 import { AgentOrchestrator } from "./orchestrator.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
 import {
-  registerAdminRoutes,
-  registerAgentRoutes,
-  registerAttachmentRoutes,
-  registerEventRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMymiRoutes,
-  registerNotificationRoutes,
-  registerOperationRoutes,
-  registerPolicyRoutes,
-  registerProfileRoutes,
-  registerRunRoutes,
-  registerSyncEnvironmentRoutes,
-  registerSyncRoutes,
-  registerToolCacheRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes,
+    registerAdminRoutes,
+    registerAgentRoutes,
+    registerAttachmentRoutes,
+    registerEventRoutes,
+    registerLayoutRoutes,
+    registerLlmRoutes,
+    registerMemoryRoutes,
+    registerMymiRoutes,
+    registerNotificationRoutes,
+    registerOperationRoutes,
+    registerPolicyRoutes,
+    registerProfileRoutes,
+    registerRunRoutes,
+    registerSyncEnvironmentRoutes,
+    registerSyncRoutes,
+    registerToolCacheRoutes,
+    registerUsageRoutes,
+    registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox.js"
@@ -216,7 +216,7 @@ function initDatabase(): void {
   migrateEventLog()
   migrateWebhookDrains()
   migrateMemory()
-  console.log("Database initialized (~/.mia/mia.db)")
+  console.log(`Database initialized (${getDbPath()})`)
 
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {

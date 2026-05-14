@@ -6,7 +6,7 @@
  * developer-mode behavior unchanged.
  */
 
-import type { Tool } from "@agent001/agent"
+import type { Tool } from "@mia/agent"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"

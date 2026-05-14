@@ -1,4 +1,4 @@
-import type { EngineServices } from "@agent001/agent"
+import type { EngineServices } from "@mia/agent"
 import * as db from "../db.js"
 import { broadcast } from "../event-broadcaster.js"
 

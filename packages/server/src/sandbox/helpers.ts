@@ -3,7 +3,7 @@ import { resolve } from "node:path"
 // ── Constants ────────────────────────────────────────────────────
 
 export const DEFAULT_IMAGE = "node:20-slim"
-export const BROWSER_IMAGE = "agent001-browser:latest"
+export const BROWSER_IMAGE = "mia-browser:latest"
 export const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../../docker/Dockerfile.browser")
 export const DEFAULT_MAX_MEMORY = "4g"
 export const DEFAULT_MAX_CPU = "2.0"

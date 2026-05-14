@@ -46,7 +46,7 @@
 
 ## What This Platform Is
 
-agent001 is three things in one:
+MI:A is three things in one:
 
 1. **An AI agent** (`packages/agent`) — an LLM (GPT-4o, Claude, GitHub Copilot, etc.) with tools (filesystem, shell, web fetch, browser testing, delegation) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
 2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), 3-tier persistent memory, effect tracking with atomic rollback, Docker sandbox execution, trajectory replay & validation, multi-platform messaging (WhatsApp, Messenger), real-time SSE updates, and a comprehensive REST API.
@@ -74,7 +74,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 │   orchestrator.ts  →  routes/*  →  db.ts  →  event-broadcaster.ts │
 │   Start/cancel/resume runs, persist, broadcast events        │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ imports @agent001/agent
+                           │ imports @mia/agent
 ┌──────────────────────────▼──────────────────────────────────┐
 │                   packages/agent                             │
 │                                                              │
@@ -123,7 +123,7 @@ agent001/                          ← npm workspaces monorepo root
 ├── .env                           ← API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
 │
 ├── packages/agent/                ← THE AGENT — LLM + tools + governance engine (embedded)
-│   ├── package.json               ← @agent001/agent, zero runtime deps, exports: { ".": "./src/lib.ts" }
+│   ├── package.json               ← @mia/agent, zero runtime deps, exports: { ".": "./src/lib.ts" }
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   ├── src/
@@ -133,7 +133,7 @@ agent001/                          ← npm workspaces monorepo root
 │   │   ├── retry.ts               ← tool retry with exponential backoff + jitter
 │   │   ├── cli.ts                 ← standalone entry point — governed/raw modes, REPL + one-shot
 │   │   ├── logger.ts              ← colored console output for CLI mode
-│   │   ├── lib.ts                 ← barrel export — public API for @agent001/agent
+│   │   ├── lib.ts                 ← barrel export — public API for @mia/agent
 │   │   ├── engine/                ← governance infrastructure (10 files, flat)
 │   │   │   ├── index.ts           ← barrel re-export for engine/
 │   │   │   ├── models.ts          ← AgentRun, Step, PolicyRule, AuditEntry — state machines
@@ -160,7 +160,7 @@ agent001/                          ← npm workspaces monorepo root
 │       └── retry.test.ts          ← 13 tests (exponential backoff, retryable error detection)
 │
 ├── packages/server/               ← THE SERVER — persistence, orchestration, messaging, REST API
-│   ├── package.json               ← @agent001/server, depends on @agent001/agent + fastify + better-sqlite3
+│   ├── package.json               ← @mia/server, depends on @mia/agent + fastify + better-sqlite3
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   ├── src/
@@ -203,7 +203,7 @@ agent001/                          ← npm workspaces monorepo root
 │       └── notifications.test.ts  ← 10 tests (CRUD, unread counts, stale-run detection)
 │
 └── packages/ui/                   ← THE DASHBOARD — React 19 + Tailwind CSS + Zustand
-    ├── package.json               ← @agent001/ui, react@19, zustand@5, react-grid-layout, react-force-graph-2d
+    ├── package.json               ← @mia/ui, react@19, zustand@5, react-grid-layout, react-force-graph-2d
     ├── tsconfig.json
     ├── vite.config.ts             ← Vite 6 + React plugin + Tailwind CSS v4
     ├── index.html
@@ -249,7 +249,7 @@ agent001/                          ← npm workspaces monorepo root
 
 **Why three packages?** Separation of concerns:
 - **agent** — pure TypeScript, zero runtime dependencies. The LLM loop + governance engine + tools (8 built-in). Can run standalone via CLI or be imported as a library.
-- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + SSE event stream. Imports `@agent001/agent`.
+- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + SSE event stream. Imports `@mia/agent`.
 - **ui** — the visual interface. 11 draggable widgets including a command center and trajectory debugger. Connects to the server via HTTP + SSE. No direct dependency on the agent package.
 
 ---
@@ -505,7 +505,7 @@ Opens URLs in headless Chrome (Puppeteer) to verify rendered output:
 - Loads a URL, waits for network idle
 - Captures console errors, network failures, and page content
 - Supports optional click interactions before capture
-- Runs in a Docker container when sandbox mode is enabled (`agent001-browser:latest` image)
+- Runs in a Docker container when sandbox mode is enabled (`mia-browser:latest` image)
 - Lazy-loads Puppeteer (not bundled) — gracefully degrades if unavailable
 
 ### `src/tools/delegate.ts` — Sub-Agent Spawning
@@ -600,7 +600,7 @@ Non-transient errors (validation, permission, logic) fail immediately with no re
 
 ### `src/lib.ts` — Barrel Export
 
-The public API for `@agent001/agent`. This is what the server package imports. Re-exports everything consumers need:
+The public API for `@mia/agent`. This is what the server package imports. Re-exports everything consumers need:
 
 - **Core**: `Agent`, `Message`, `Tool`, `LLMClient`, `ToolCall`, `AgentConfig`
 - **Governance**: `createEngineServices()`, `governTool()`, `runGoverned()`, `printGovernanceReport()`, `GovernToolOptions`, `GovernedResult`
@@ -739,7 +739,7 @@ Re-exports everything from the engine subdirectory: all models, enums, events, e
 <a id="the-server-package"></a>
 ## The Server Package
 
-The server package (`packages/server`) adds persistence, orchestration, messaging, and a REST API on top of the agent. It imports `@agent001/agent` as a workspace dependency.
+The server package (`packages/server`) adds persistence, orchestration, messaging, and a REST API on top of the agent. It imports `@mia/agent` as a workspace dependency.
 
 **Runtime dependencies**: Fastify v5, better-sqlite3, @fastify/cors, @fastify/static, dotenv.
 
@@ -767,7 +767,7 @@ Tracks active runs in a `Map<runId, { controller, services, ... }>`. Wires domai
 
 #### `src/db.ts` — SQLite Persistence
 
-Single-file database layer using better-sqlite3. Data lives in `~/.agent001/agent001.db`.
+Single-file database layer using better-sqlite3. Data lives in `~/.mia/mia.db`.
 
 **Tables** (~22 total across modules):
 
@@ -1071,7 +1071,7 @@ packages/agent/src/lib.ts              ← The barrel export (the agent's public
     ▼
 packages/server/src/orchestrator.ts    ← The primary consumer
     │
-    │ imports @agent001/agent to:
+    │ imports @mia/agent to:
     │   - Create governed agent runs (governance.ts functions)
     │   - Track state via AgentRun/Step entities
     │   - Emit domain events (runStarted, stepCompleted, etc.)
@@ -1123,7 +1123,7 @@ The server's `AgentOrchestrator` is the orchestration layer:
 
 ```
 Server (orchestrator.ts)
-  ├─ imports: createRun, governTool, runGovernedMode from @agent001/agent
+  ├─ imports: createRun, governTool, runGovernedMode from @mia/agent
   ├─ adds: SQLite persistence, SSE broadcast, checkpoint/resume
   └─ exposes: REST API (/api/runs, /api/agents, etc.)
 ```
@@ -2012,7 +2012,7 @@ The `DockerSandbox` class manages container lifecycle:
 
 ### Browser Container
 
-For `browser_check` tool calls, a specialized Docker image (`agent001-browser:latest`) is built on demand:
+For `browser_check` tool calls, a specialized Docker image (`mia-browser:latest`) is built on demand:
 - Base: `node:20-slim` + Chromium + Puppeteer
 - Built via `ensureBrowserImage()` (lazy, once per session)
 - Workspace mounted read-only
@@ -2217,7 +2217,7 @@ packages/ui (React + Tailwind)
     │  HTTP + SSE to
     ▼
 packages/server (Fastify + SQLite)
-    │  imports @agent001/agent
+    │  imports @mia/agent
     ▼
 packages/agent (zero runtime deps)
     ├─ src/agent.ts        (LLM loop)

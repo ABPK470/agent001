@@ -6,7 +6,7 @@
  */
 
 // Connection (singleton + testing hook)
-export { _setDb, getDb } from "./db/connection.js"
+export { _setDb, getDb, getDbPath } from "./db/connection.js"
 
 // Internal migration export for testing
 export { _migrate } from "./db/connection.js"

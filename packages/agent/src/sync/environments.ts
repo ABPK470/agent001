@@ -66,7 +66,7 @@ export interface SyncEnvironment {
   ringOrder: number
   /**
    * UPN allowlist for sync_execute on this environment. Empty = open to all
-   * authenticated users. Cross-checked against `agent001_sid` cookie identity.
+   * authenticated users. Cross-checked against `mia_sid` cookie identity.
    */
   syncAllowlist: string[]
   /**

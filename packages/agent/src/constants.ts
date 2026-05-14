@@ -1,7 +1,7 @@
 /**
  * Constants for the agent execution engine.
  *
- * Ported from agenc-core chat-executor-constants.ts, adapted for agent001 tool names.
+ * Ported from agenc-core chat-executor-constants.ts, adapted for mia tool names.
  *
  * @module
  */
@@ -123,7 +123,7 @@ export const DEFAULT_TOOL_FAILURE_BREAKER_WINDOW_MS = 300_000
 export const DEFAULT_TOOL_FAILURE_BREAKER_COOLDOWN_MS = 120_000
 
 // ============================================================================
-// Tool classification sets (agent001 tool names)
+// Tool classification sets (mia tool names)
 // ============================================================================
 
 /** High-risk side-effect tools — must not be auto-retried. */

@@ -1,5 +1,5 @@
 /**
- * ActiveUsers — admin observability: who's using agent001 and what happened.
+ * ActiveUsers — admin observability: who's using mia and what happened.
  *
  * Features:
  *   - Summary stat strip (online / users / runs / tokens)

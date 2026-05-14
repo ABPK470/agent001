@@ -1,4 +1,4 @@
-# agent001
+# MI:A
 
 Governed AI agent platform with multi-agent orchestration, intelligent task routing, and real-time observability.
 

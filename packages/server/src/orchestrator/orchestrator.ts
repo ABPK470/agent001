@@ -5,7 +5,7 @@ import {
   type Message,
   type PolicyRole,
   type Tool,
-} from "@agent001/agent"
+} from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
 import { getCurrentSession } from "../auth/context.js"

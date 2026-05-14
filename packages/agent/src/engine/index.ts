@@ -1,7 +1,7 @@
 /**
  * Engine barrel — governance infrastructure for the agent.
  *
- * This replaces the old @agent001/engine package. Only the parts
+ * This replaces the old @mia/engine package. Only the parts
  * actually used by the agent and server are kept:
  *   - Run/step state machines with guarded transitions
  *   - Domain events for real-time broadcasting
