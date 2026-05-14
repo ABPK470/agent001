@@ -40,6 +40,8 @@ describe("attachment lifecycle", () => {
     const { uploadAttachment, getAttachment } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
     const before = Date.now()
     const a = await uploadAttachment({
@@ -60,6 +62,8 @@ describe("attachment lifecycle", () => {
       = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
     const a = await uploadAttachment({
       scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "x.txt",

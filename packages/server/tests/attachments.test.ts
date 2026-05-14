@@ -84,6 +84,8 @@ describe("attachments DB layer", () => {
       = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRuns } = await import("./_fk-helpers.js")
+    seedRuns(testDb, ["run-1", "run-2"])
 
     const bytes = new TextEncoder().encode("payload")
     const r1 = await uploadAttachment({ scope: "run", runId: "run-1", originalName: "x.txt", mediaType: "text/plain", bytes })

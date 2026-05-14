@@ -32,7 +32,13 @@ async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
 
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
-    if (opts.session) (req as unknown as { session: CurrentSession }).session = opts.session
+    if (opts.session) {
+      (req as unknown as { session: CurrentSession }).session = opts.session
+      // FK on attachments.session_id requires a sessions row to exist.
+      testDb.prepare(
+        "INSERT OR IGNORE INTO sessions (sid, upn, display_name, created_at, last_seen_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
+      ).run(opts.session.sid, opts.session.upn ?? null, opts.session.displayName ?? null)
+    }
   })
   registerAttachmentRoutes(app)
   await app.ready()

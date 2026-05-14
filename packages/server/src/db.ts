@@ -59,3 +59,8 @@ export {
     getSyncRun, getSyncRunPlanJson, listSyncRuns, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, type SyncRunRow
 } from "./db/sync-runs.js"
 
+// Sync audit (sync-scoped audit trail; replaces the audit_log 'sync:<planId>' hack)
+export {
+    listRecentSyncAudit, listSyncAuditForPlan, recordSyncAudit, type SyncAuditRow
+} from "./db/sync-audit.js"
+

@@ -21,7 +21,9 @@ beforeEach(() => {
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
-  testDb.pragma("foreign_keys = ON")
+  // FK enforcement is verified by dedicated cascade tests; this suite uses
+  // synthetic runIds that don't exist in the runs table.
+  testDb.pragma("foreign_keys = OFF")
 })
 
 afterEach(() => {
@@ -35,6 +37,10 @@ async function setupMemory() {
   const { _setDb, _migrate } = await import("../src/db.js")
   _setDb(testDb)
   _migrate(testDb)
+  // _migrate re-enables foreign_keys after the hard-reset; turn it off
+  // again so this suite can use synthetic runIds without seeding parents.
+  // Cascade behaviour is verified by dedicated FK tests.
+  testDb.pragma("foreign_keys = OFF")
   const { migrateMemory } = await import("../src/memory.js")
   migrateMemory()
   return await import("../src/memory.js")

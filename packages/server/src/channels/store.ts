@@ -18,13 +18,13 @@ import type { ChannelConfig, ChannelType, Conversation, DeliveryStatus, Outbound
 export function migrateChannels(): void {
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS conversations (
-      id TEXT PRIMARY KEY,
-      channel_type TEXT NOT NULL,
-      sender_id TEXT NOT NULL,
-      sender_name TEXT,
-      active_run_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
+      id            TEXT PRIMARY KEY,
+      channel_type  TEXT NOT NULL,
+      sender_id     TEXT NOT NULL,
+      sender_name   TEXT,
+      active_run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL,
       UNIQUE(channel_type, sender_id)
     );
 
@@ -35,18 +35,17 @@ export function migrateChannels(): void {
       ON conversations(active_run_id);
 
     CREATE TABLE IF NOT EXISTS outbound_messages (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      channel_type TEXT NOT NULL,
-      recipient_id TEXT NOT NULL,
-      text TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'queued',
-      attempts INTEGER NOT NULL DEFAULT 0,
-      next_retry_at TEXT,
-      last_error TEXT,
-      created_at TEXT NOT NULL,
-      delivered_at TEXT,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+      id              TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      channel_type    TEXT NOT NULL,
+      recipient_id    TEXT NOT NULL,
+      text            TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'queued',
+      attempts        INTEGER NOT NULL DEFAULT 0,
+      next_retry_at   TEXT,
+      last_error      TEXT,
+      created_at      TEXT NOT NULL,
+      delivered_at    TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_outbound_status
@@ -56,27 +55,26 @@ export function migrateChannels(): void {
       ON outbound_messages(conversation_id);
 
     CREATE TABLE IF NOT EXISTS delivery_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      message_id TEXT NOT NULL,
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id     TEXT NOT NULL REFERENCES outbound_messages(id) ON DELETE CASCADE,
       attempt_number INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      error TEXT,
-      duration_ms INTEGER NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (message_id) REFERENCES outbound_messages(id)
+      status         TEXT NOT NULL,
+      error          TEXT,
+      duration_ms    INTEGER NOT NULL,
+      created_at     TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_delivery_msg
       ON delivery_attempts(message_id);
 
     CREATE TABLE IF NOT EXISTS channel_configs (
-      type TEXT PRIMARY KEY,
+      type         TEXT PRIMARY KEY,
       access_token TEXT NOT NULL,
       verify_token TEXT NOT NULL,
-      app_secret TEXT NOT NULL,
-      platform_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      app_secret   TEXT NOT NULL,
+      platform_id  TEXT NOT NULL,
+      created_at   TEXT NOT NULL,
+      updated_at   TEXT NOT NULL
     );
   `)
 }

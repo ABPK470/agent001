@@ -67,6 +67,10 @@ describe("hosted-mode end-to-end happy path", () => {
     _migrate(testDb)
 
     setAttachmentService(serverAttachmentService)
+    // Seed FK parents required by the attachments table.
+    const { seedSession, seedRun } = await import("./_fk-helpers.js")
+    seedSession(testDb, "sid-alice", "alice@example.com")
+    seedRun(testDb, "run-e2e", { sessionSid: "sid-alice" })
 
     // 1. user upload (mimics POST /api/attachments)
     const uploaded = await uploadAttachment({

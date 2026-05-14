@@ -24,10 +24,10 @@ export function touchSession(s: {
   ip: string
   userAgent: string
 }): void {
-  // Skip transient anonymous sessions — they spawn a new sid each request and
-  // would flood the table. Welcome-modal sessions get persisted on POST /api/me
-  // (their sid is stable across requests via the cookie).
-  if (s.sid.startsWith("anon:")) return
+  // Persist every session including anonymous ('anon:<hex>') and
+  // header-derived ('header:<upn>') sids. The cookie keeps the anon sid
+  // stable across requests, so this row also stays stable. Required for
+  // the runs.session_id foreign key to resolve.
   getDb().prepare(`
     INSERT INTO sessions (sid, upn, display_name, ip, user_agent, created_at, last_seen_at)
     VALUES (@sid, @upn, @display_name, @ip, @user_agent, datetime('now'), datetime('now'))

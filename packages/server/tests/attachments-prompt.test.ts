@@ -40,6 +40,8 @@ describe("attachments in system prompt", () => {
     const { buildSystemMessages } = await import("../src/orchestrator/system-messages.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
     const a = await uploadAttachment({ scope: "run", runId: "r1", originalName: "spec.csv", mediaType: "text/csv", bytes: new TextEncoder().encode("a,b\n1,2\n") })
     const b = await uploadAttachment({ scope: "run", runId: "r1", originalName: "image.png", mediaType: "image/png", bytes: new Uint8Array([0, 1, 2, 3]) })

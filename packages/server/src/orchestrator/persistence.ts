@@ -1,9 +1,9 @@
 import type { Agent, EngineServices } from "@agent001/agent"
 import { randomUUID } from "node:crypto"
+import { getCurrentSession } from "../auth/context.js"
 import * as db from "../db.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
-
 // ── Trace ─────────────────────────────────────────────────────────
 
 export function saveTrace(
@@ -40,7 +40,6 @@ export function persistRun(
     error: error ?? null,
     parent_run_id: parentRunId ?? null,
     agent_id: agentId,
-    data: JSON.stringify(run),
     created_at: run.createdAt.toISOString(),
     completed_at: run.completedAt?.toISOString() ?? null,
   })
@@ -76,6 +75,27 @@ export function persistTokenUsage(runId: string, agent: Agent): void {
 // ── Notifications ─────────────────────────────────────────────────
 
 export function createNotification(opts: NotificationOpts): void {
+  // Stamp tenancy onto the notification so list queries can scope by
+  // owner without joining back to runs. If we have a run_id, prefer the
+  // run's persisted owner (consistent with how the run was launched);
+  // otherwise fall back to the current request's session context.
+  let ownerUpn: string | null = null
+  let sessionId: string | null = null
+  if (opts.runId) {
+    const r = db.getRun(opts.runId)
+    if (r) {
+      ownerUpn  = r.upn          ?? null
+      sessionId = r.session_id   ?? null
+    }
+  }
+  if (!ownerUpn || !sessionId) {
+    const ctx = getCurrentSession()
+    if (ctx) {
+      ownerUpn  = ownerUpn  ?? ctx.upn ?? null
+      sessionId = sessionId ?? ctx.sid
+    }
+  }
+
   const notification: db.DbNotification = {
     id: randomUUID(),
     type: opts.type,
@@ -83,6 +103,8 @@ export function createNotification(opts: NotificationOpts): void {
     message: opts.message,
     run_id: opts.runId ?? null,
     step_id: opts.stepId ?? null,
+    owner_upn: ownerUpn,
+    session_id: sessionId,
     actions: JSON.stringify(opts.actions ?? []),
     read: 0,
     created_at: new Date().toISOString(),

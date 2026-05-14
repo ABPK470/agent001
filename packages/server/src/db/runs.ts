@@ -16,7 +16,6 @@ export interface DbRun {
   error: string | null
   parent_run_id: string | null
   agent_id: string | null
-  data: string
   created_at: string
   completed_at: string | null
   session_id?: string | null
@@ -25,8 +24,8 @@ export interface DbRun {
 }
 
 const upsertRun = () => getDb().prepare(`
-  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, data, created_at, completed_at, session_id, upn, display_name)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @data, @created_at, @completed_at, @session_id, @upn, @display_name)
+  INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @session_id, @upn, @display_name)
 `)
 
 export function saveRun(run: DbRun): void {

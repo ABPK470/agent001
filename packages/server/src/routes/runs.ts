@@ -77,7 +77,6 @@ export function registerRunRoutes(
       error: run.error,
       parentRunId: run.parent_run_id,
       agentId: run.agent_id ?? null,
-      data: JSON.parse(run.data),
       createdAt: run.created_at,
       completedAt: run.completed_at,
       totalTokens: usage?.total_tokens ?? 0,

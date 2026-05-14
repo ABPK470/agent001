@@ -37,8 +37,11 @@ afterEach(() => {
 
 function insertRun(id: string, status: string, goal = "test goal") {
   testDb.prepare(
-    "INSERT INTO runs (id, goal, status, created_at) VALUES (?, ?, ?, datetime('now'))"
-  ).run(id, goal, status)
+    "INSERT OR IGNORE INTO sessions (sid, created_at, last_seen_at) VALUES (?, datetime('now'), datetime('now'))"
+  ).run("test-session")
+  testDb.prepare(
+    "INSERT INTO runs (id, goal, status, session_id, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run(id, goal, status, "test-session")
 }
 
 function makeNotification(overrides: Partial<DbNotification> = {}): DbNotification {
@@ -52,6 +55,8 @@ function makeNotification(overrides: Partial<DbNotification> = {}): DbNotificati
     actions: "[]",
     read: 0,
     created_at: new Date().toISOString(),
+    owner_upn: null,
+    session_id: null,
     ...overrides,
   }
 }

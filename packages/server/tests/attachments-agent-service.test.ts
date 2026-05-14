@@ -54,6 +54,8 @@ describe("server attachment service", () => {
     const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "run-1")
 
     const a = await uploadAttachment({
       scope: "run", runId: "run-1", originalName: "x.txt", mediaType: "text/plain",
@@ -74,6 +76,8 @@ describe("server attachment service", () => {
       = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "run-1")
 
     const a = await uploadAttachment({
       scope: "run", runId: "run-1", originalName: "data.csv", mediaType: "text/csv",
@@ -97,6 +101,8 @@ describe("server attachment service", () => {
     const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "run-1")
 
     const text = await uploadAttachment({
       scope: "run", runId: "run-1", originalName: "n.txt", mediaType: "text/plain",
@@ -126,6 +132,8 @@ describe("server attachment service", () => {
     const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRuns } = await import("./_fk-helpers.js")
+    seedRuns(testDb, ["run-1", "run-other"])
 
     await uploadAttachment({ scope: "run", runId: "run-1", originalName: "a.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("x") })
     await uploadAttachment({ scope: "run", runId: "run-other", originalName: "b.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("y") })
@@ -152,6 +160,9 @@ describe("server attachment service", () => {
     const { writeFileSync, mkdirSync } = await import("node:fs")
     _setDb(testDb)
     _migrate(testDb)
+    const { seedRun, seedSession } = await import("./_fk-helpers.js")
+    seedSession(testDb, "sid-x")
+    seedRun(testDb, "run-promote", { sessionSid: "sid-x" })
 
     // Simulate the agent producing a report inside the sandbox.
     mkdirSync(join(sandboxRoot, "out"), { recursive: true })

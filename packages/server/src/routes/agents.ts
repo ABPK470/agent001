@@ -13,7 +13,7 @@ import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../db.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
-import { listAvailableTools, resolveTools } from "../tools.js"
+import { getAllTools, listAvailableTools } from "../tools.js"
 
 export function registerAgentRoutes(
   app: FastifyInstance,
@@ -46,10 +46,9 @@ export function registerAgentRoutes(
       name: string
       description?: string
       systemPrompt: string
-      tools: string[]
     }
   }>("/api/agents", async (req, reply) => {
-    const { name, description, systemPrompt, tools } = req.body
+    const { name, description, systemPrompt } = req.body
 
     if (!name || typeof name !== "string" || !name.trim()) {
       reply.code(400)
@@ -58,18 +57,6 @@ export function registerAgentRoutes(
     if (!systemPrompt || typeof systemPrompt !== "string" || !systemPrompt.trim()) {
       reply.code(400)
       return { error: "systemPrompt is required" }
-    }
-    if (!Array.isArray(tools) || tools.length === 0) {
-      reply.code(400)
-      return { error: "tools must be a non-empty array of tool names" }
-    }
-
-    // Validate all tool names exist
-    const available = new Set(listAvailableTools().map((t) => t.name))
-    const unknown = tools.filter((t) => !available.has(t))
-    if (unknown.length > 0) {
-      reply.code(400)
-      return { error: `Unknown tools: ${unknown.join(", ")}` }
     }
 
     const id = randomUUID()
@@ -80,7 +67,6 @@ export function registerAgentRoutes(
       name: name.trim(),
       description: (description ?? "").trim(),
       system_prompt: systemPrompt.trim(),
-      tools: JSON.stringify(tools),
       created_at: now,
       updated_at: now,
     })
@@ -95,7 +81,6 @@ export function registerAgentRoutes(
       name?: string
       description?: string
       systemPrompt?: string
-      tools?: string[]
     }
   }>("/api/agents/:id", async (req, reply) => {
     const existing = db.getAgentDefinition(req.params.id)
@@ -104,27 +89,13 @@ export function registerAgentRoutes(
       return { error: "Agent not found" }
     }
 
-    const { name, description, systemPrompt, tools } = req.body
-
-    if (tools !== undefined) {
-      if (!Array.isArray(tools) || tools.length === 0) {
-        reply.code(400)
-        return { error: "tools must be a non-empty array of tool names" }
-      }
-      const available = new Set(listAvailableTools().map((t) => t.name))
-      const unknown = tools.filter((t) => !available.has(t))
-      if (unknown.length > 0) {
-        reply.code(400)
-        return { error: `Unknown tools: ${unknown.join(", ")}` }
-      }
-    }
+    const { name, description, systemPrompt } = req.body
 
     db.saveAgentDefinition({
       ...existing,
       name: name?.trim() ?? existing.name,
       description: description !== undefined ? description.trim() : existing.description,
       system_prompt: systemPrompt?.trim() ?? existing.system_prompt,
-      tools: tools ? JSON.stringify(tools) : existing.tools,
     })
 
     return formatAgent(db.getAgentDefinition(req.params.id)!)
@@ -164,12 +135,11 @@ export function registerAgentRoutes(
       return { error: "goal is required" }
     }
 
-    const toolNames = JSON.parse(agent.tools) as string[]
-    const tools = resolveTools(toolNames)
-
+    // Tool whitelisting per agent has been removed; agents always get the
+    // full registry. The system prompt steers tool usage.
     const runId = orchestrator.startRun(goal, {
       agentId: agent.id,
-      tools,
+      tools: getAllTools(),
       systemPrompt: agent.system_prompt,
     })
 
@@ -186,7 +156,6 @@ function formatAgent(a: db.DbAgentDefinition) {
     name: a.name,
     description: a.description,
     systemPrompt: a.system_prompt,
-    tools: JSON.parse(a.tools) as string[],
     createdAt: a.created_at,
     updatedAt: a.updated_at,
   }
