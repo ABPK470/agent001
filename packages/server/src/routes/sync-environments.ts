@@ -20,21 +20,21 @@
  */
 
 import {
+    ENV_ACCESS_MODES,
     getEnvironments,
+    isEnvAccessMode,
     setEnvironments,
     withPermissionDefaults,
-    type EnvAccessMode,
     type EnvOperation,
     type SyncEnvironment,
-} from "@agent001/agent"
+} from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db.js"
+import * as db from "../db/index.js"
 import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"
 
 const VALID_OPS: EnvOperation[] = [
   "query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml",
 ]
-const VALID_MODES: EnvAccessMode[] = ["read_only", "read_write"]
 
 type Editable = Pick<SyncEnvironment,
   | "defaultAccessMode"
@@ -52,10 +52,10 @@ type Editable = Pick<SyncEnvironment,
 function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
   const out: Partial<Editable> = {}
   if (body["defaultAccessMode"] !== undefined) {
-    if (!VALID_MODES.includes(body["defaultAccessMode"] as EnvAccessMode)) {
-      return `defaultAccessMode must be one of ${VALID_MODES.join("|")}`
+    if (!isEnvAccessMode(body["defaultAccessMode"])) {
+      return `defaultAccessMode must be one of ${ENV_ACCESS_MODES.join("|")}`
     }
-    out.defaultAccessMode = body["defaultAccessMode"] as EnvAccessMode
+    out.defaultAccessMode = body["defaultAccessMode"]
   }
   if (body["allowedOperations"] !== undefined) {
     if (!Array.isArray(body["allowedOperations"])) return "allowedOperations must be an array"
@@ -90,7 +90,7 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
   try {
     db.saveAudit({
       run_id:    "__admin__",
-      actor:     req.session?.upn ?? "unknown",
+      actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),
       timestamp: new Date().toISOString(),
@@ -171,7 +171,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance): void {
         name:           req.params.name,
         overrides_json: JSON.stringify(merged),
         updated_at:     new Date().toISOString(),
-        updated_by:     req.session.upn ?? null,
+        updated_by:     req.session.upn,
       })
       refreshRegistryFor(req.params.name)
       // Re-derive env_derived policy rules from the merged config so the

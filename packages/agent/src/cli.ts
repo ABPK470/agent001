@@ -11,43 +11,37 @@
  *   # Raw mode (no governance, no audit — bare agent loop)
  *   AGENT_MODE=raw npm start -w packages/agent
  *
- * Environment variables:
- *   OPENAI_API_KEY — use OpenAI (gpt-4o by default)
- *   MODEL          — override the model name
+ * Environment variables (point at any OpenAI-compatible endpoint):
+ *   LLM_BASE_URL   — base URL (e.g. http://localhost:11434/v1 for Ollama)
+ *   LLM_API_KEY    — API key (most local servers ignore it; defaults to "local")
+ *   MODEL          — model name (default: llama3 — set to whatever your local server serves)
  *   AGENT_MODE     — "governed" (default) or "raw"
+ *
+ * Production deployments should use the server (`packages/server`) instead of
+ * this CLI — the server handles Copilot Chat / Databricks auth, multi-tenancy,
+ * and the full REST/SSE surface.
  */
 
 import { createInterface } from "node:readline"
-import { Agent } from "./agent.js"
+import { Agent } from "./agent/index.js"
 import {
-  createEngineServices,
-  printGovernanceReport,
-  runGoverned,
-  type EngineServices,
+    createEngineServices,
+    printGovernanceReport,
+    runGoverned,
+    type EngineServices,
 } from "./governance/index.js"
-import { OpenAIClient } from "./llm/index.js"
-import { fetchUrlTool } from "./tools/index.js"
-import { appendFileTool, listDirectoryTool, readFileTool, replaceInFileTool, writeFileTool } from "./tools/index.js"
-import { shellTool } from "./tools/index.js"
-import { thinkTool } from "./tools/index.js"
+import { OpenAICompatibleClient } from "./llm/index.js"
+import { appendFileTool, fetchUrlTool, listDirectoryTool, readFileTool, replaceInFileTool, shellTool, thinkTool, writeFileTool } from "./tools/index.js"
 import type { LLMClient, Tool } from "./types.js"
 
 // ── Create LLM client from env ──────────────────────────────────
 
 function createLLMClient(): LLMClient {
-  const model = process.env["MODEL"]
-
-  const openaiKey = process.env["OPENAI_API_KEY"]
-  if (openaiKey) {
-    console.log(`🧠 Using OpenAI (${model ?? "gpt-4o"})`)
-    return new OpenAIClient({ apiKey: openaiKey, model })
-  }
-
-  console.error(
-    "❌ No API key found.\n\n" +
-      "Set OPENAI_API_KEY=sk-... to use the OpenAI API.\n",
-  )
-  process.exit(1)
+  const baseUrl = process.env["LLM_BASE_URL"] ?? "http://localhost:11434/v1"
+  const apiKey  = process.env["LLM_API_KEY"]  ?? "local"
+  const model   = process.env["MODEL"]        ?? "llama3"
+  console.log(`🧠 Using OpenAI-compatible endpoint at ${baseUrl} (model=${model})`)
+  return new OpenAICompatibleClient({ apiKey, model, baseUrl })
 }
 
 // ── All available tools ──────────────────────────────────────────

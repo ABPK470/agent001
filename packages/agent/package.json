@@ -1,10 +1,10 @@
 {
-    "name": "@agent001/agent",
+    "name": "@mia/agent",
     "version": "0.1.0",
     "description": "A real AI agent with tools — LLM decides what to do, calls tools, observes results, repeats until done.",
     "type": "module",
     "exports": {
-        ".": "./src/lib.ts"
+        ".": "./src/lib/index.ts"
     },
     "engines": {
         "node": ">=20"
@@ -17,8 +17,11 @@
         "lint": "tsc --noEmit"
     },
     "dependencies": {
+        "@mia/shared-enums": "*",
         "mssql": "^12.2.1",
-        "puppeteer": "^24.40.0"
+        "playwright": "^1.49.0",
+        "playwright-extra": "^4.3.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2"
     },
     "devDependencies": {
         "@types/mssql": "^9.1.11",

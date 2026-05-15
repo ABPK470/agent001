@@ -64,16 +64,23 @@ function hashKey(tool: string, input: unknown): string {
   return createHash("sha256").update(`${tool}\u0000${canonicalize(input)}`).digest("hex")
 }
 
-function safeSessionDir(sessionId: string | null | undefined): string {
-  // Reject path-traversal characters; fall back to "anonymous". The cache
-  // partition is a trust boundary \u2014 a malicious sessionId of the form
-  // "../another-user" must not escape this user's directory.
-  const raw = sessionId ?? "anonymous"
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(raw)) return "invalid"
-  return raw
+function safeSessionDir(sessionId: string): string {
+  // Reject path-traversal characters — the cache partition is a trust boundary
+  // and a malicious sessionId of the form "../another-user" must not escape
+  // this user's directory. Empty / non-conforming ids fail loudly: identity.ts
+  // guarantees every request carries a non-empty sid, so callers receiving
+  // null/empty here are buggy and we surface that instead of silently sharing
+  // an "anonymous" partition across all anon callers (the bug class fixed in
+  // wiring-contracts.test.ts B-AUDIT).
+  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(sessionId)) {
+    throw new Error(
+      `tool-cache: invalid sessionId ${JSON.stringify(sessionId)} — callers must supply a non-empty per-session identifier (e.g. req.session.sid)`,
+    )
+  }
+  return sessionId
 }
 
-function entryPath(sessionId: string | null | undefined, key: string): string {
+function entryPath(sessionId: string, key: string): string {
   return resolve(getToolCacheRoot(), safeSessionDir(sessionId), `${key}.json`)
 }
 
@@ -84,7 +91,7 @@ function entryPath(sessionId: string | null | undefined, key: string): string {
 export async function readCache<T>(opts: {
   tool: string
   input: unknown
-  sessionId: string | null
+  sessionId: string
 }): Promise<T | null> {
   const key = hashKey(opts.tool, opts.input)
   const path = entryPath(opts.sessionId, key)
@@ -108,7 +115,7 @@ export async function readCache<T>(opts: {
 export async function writeCache<T>(opts: {
   tool: string
   input: unknown
-  sessionId: string | null
+  sessionId: string
   value: T
   ttlMs?: number
 }): Promise<void> {
@@ -135,7 +142,7 @@ export async function writeCache<T>(opts: {
 export async function getOrCompute<T>(opts: {
   tool: string
   input: unknown
-  sessionId: string | null
+  sessionId: string
   ttlMs?: number
   compute: () => Promise<T>
 }): Promise<{ value: T; cached: boolean }> {
@@ -195,7 +202,7 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
  * Clear the entire cache for a single session. Used by the admin "clear
  * cache" endpoint and by tests.
  */
-export async function clearSessionCache(sessionId: string | null): Promise<{ removed: number }> {
+export async function clearSessionCache(sessionId: string): Promise<{ removed: number }> {
   const dir = resolve(getToolCacheRoot(), safeSessionDir(sessionId))
   let entries: string[]
   try { entries = await readdir(dir) } catch { return { removed: 0 } }

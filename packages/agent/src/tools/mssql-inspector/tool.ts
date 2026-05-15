@@ -1,6 +1,6 @@
 import type sql from "mssql"
 import type { Tool } from "../../types.js"
-import { getPool } from "../mssql.js"
+import { getPool } from "../mssql/index.js"
 import { runDependsOn, runSearch } from "./handlers/dependency.js"
 import { runObjectInspection } from "./handlers/definition.js"
 import { runIndexUsage, runMissingIndexes, runSlowQueries } from "./handlers/observability.js"

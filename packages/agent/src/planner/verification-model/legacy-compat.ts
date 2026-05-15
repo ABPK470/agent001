@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Legacy retry plan + repair-plan compatibility comparison.
  *
@@ -32,7 +33,7 @@ export function buildLegacyRetryPlan(
   const tasks: RepairTask[] = []
 
   for (const assessment of decision.steps) {
-    if (assessment.outcome === "pass") continue
+    if (assessment.outcome === VerifierOutcome.Pass) continue
     const stepResult = pipelineResult.stepResults.get(assessment.stepName)
     const isBlocked = assessment.retryable === false
       || (stepResult?.failureClass != null && nonRetryableFailureClasses.has(stepResult.failureClass))
@@ -58,7 +59,7 @@ export function buildLegacyRetryPlan(
   return {
     tasks,
     rerunOrder,
-    skippedVerifiedSteps: decision.steps.filter((step) => step.outcome === "pass").map((step) => step.stepName),
+    skippedVerifiedSteps: decision.steps.filter((step) => step.outcome === VerifierOutcome.Pass).map((step) => step.stepName),
   }
 }
 

@@ -12,6 +12,8 @@
  */
 
 import sqlMod, { type ConnectionPool } from "mssql"
+import { EventType } from "../../domain/enums/event.js"
+import { SyncProgressKind } from "../../domain/enums/sync.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { trackedExecute } from "./db-helpers.js"
@@ -54,16 +56,16 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
       const errMsg = e instanceof Error ? e.message : String(e)
       console.warn(`[sync.execute] ${stepName} (${sprocName}) failed:`, e)
       stepWarnings.push({ step: stepName, sproc: sprocName, error: errMsg })
-      onProgress({ type: "step", step: stepName, message: `${stepName} (${sprocName}) failed`, error: errMsg })
-      emit("sync.execute.step.failed", { planId, step: stepName, sproc: sprocName, error: errMsg })
+      onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} (${sprocName}) failed`, error: errMsg })
+      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: sprocName, error: errMsg })
       return false
     }
   }
 
   // Helper: emit a step progress event
   function step(name: string, message?: string) {
-    onProgress({ type: "step", step: name, message: message ?? name })
-    emit("sync.execute.step", { planId, step: name })
+    onProgress({ type: SyncProgressKind.Step, step: name, message: message ?? name })
+    emit(EventType.SyncExecuteStep, { planId, step: name })
   }
 
   // ── Step 6: Get pipelineId for contract — contract only ──
@@ -182,8 +184,8 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     const errMsg = e instanceof Error ? e.message : String(e)
     console.warn(`[sync.execute] syncDate update failed:`, e)
     stepWarnings.push({ step: "set-sync-date", sproc: "core.uspAuditRunCheck", error: errMsg })
-    onProgress({ type: "step", step: "set-sync-date", message: "set-sync-date (core.uspAuditRunCheck) failed", error: errMsg })
-    emit("sync.execute.step.failed", { planId, step: "set-sync-date", sproc: "core.uspAuditRunCheck", error: errMsg })
+    onProgress({ type: SyncProgressKind.Step, step: "set-sync-date", message: "set-sync-date (core.uspAuditRunCheck) failed", error: errMsg })
+    emit(EventType.SyncExecuteStepFailed, { planId, step: "set-sync-date", sproc: "core.uspAuditRunCheck", error: errMsg })
   }
 
   // ── Step 24: Update deployment date on target ──

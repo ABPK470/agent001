@@ -1,4 +1,6 @@
-import { getDb } from "../db.js"
+import { EventType } from "@mia/agent"
+import { getDb } from "../db/index.js"
+import { MemoryRole, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { searchProcedures } from "./procedural.js"
 import { rowToEntry } from "./schema.js"
@@ -11,7 +13,7 @@ import {
     RELEVANCE_THRESHOLD, sanitizeFtsQuery,
     SOURCE_WEIGHT, TIER_BUDGET, tokenize, WORKING_SESSION_WINDOW_H,
 } from "./scoring.js"
-import type { MemoryBudget, MemoryEntry, MemoryTier, ProceduralMemory, UnifiedSearchResult } from "./types.js"
+import type { MemoryBudget, MemoryEntry, ProceduralMemory, UnifiedSearchResult } from "./types.js"
 import { vectorSearch } from "./vectors.js"
 
 // ── Unified Retrieval Pipeline ───────────────────────────────────
@@ -48,7 +50,7 @@ export async function retrieveContext(
   const allResults: UnifiedSearchResult[] = []
 
   // Search each tier with its budget weight
-  for (const tier of ["working", "episodic", "semantic"] as MemoryTier[]) {
+  for (const tier of [MemoryTier.Working, "episodic", "semantic"] as MemoryTier[]) {
     const tierBudget: MemoryBudget = {
       maxTokens: Math.floor(budget.maxTokens * TIER_BUDGET[tier]),
       maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier]),
@@ -57,7 +59,7 @@ export async function retrieveContext(
     const results = await searchEntries(goal, {
       tier,
       budget: tierBudget,
-      sessionId: tier === "working" ? opts?.sessionId : undefined,
+      sessionId: tier === MemoryTier.Working ? opts?.sessionId : undefined,
       excludeRunId: opts?.runId,
       upn: opts?.upn ?? null,
     })
@@ -113,7 +115,7 @@ export async function retrieveContext(
 
   const context = formatMemoryContext(packed, procedures)
 
-  const workingItems = packed.filter((r) => r.entry.tier === "working")
+  const workingItems = packed.filter((r) => r.entry.tier === MemoryTier.Working)
   const episodicItems = packed.filter((r) => r.entry.tier === "episodic")
   const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
 
@@ -130,7 +132,7 @@ export async function retrieveContext(
   }
 
   broadcast({
-    type: "memory.retrieved",
+    type: EventType.MemoryRetrieved,
     data: {
       total: packed.length,
       working: workingItems.length,
@@ -168,8 +170,8 @@ export async function searchEntries(
 
   const ftsQuery = sanitizeFtsQuery(query)
   if (!ftsQuery) {
-    if (opts.tier === "working") {
-      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.sessionId, opts.upn)
+    if (opts.tier === MemoryTier.Working) {
+      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.sessionId, opts.upn, opts.excludeRunId)
     }
     return []
   }
@@ -190,7 +192,7 @@ export async function searchEntries(
     sql += " AND (e.run_id IS NULL OR e.run_id != ?)"
     params.push(opts.excludeRunId)
   }
-  if (opts.sessionId && opts.tier === "working") {
+  if (opts.sessionId && opts.tier === MemoryTier.Working) {
     sql += " AND e.session_id = ?"
     params.push(opts.sessionId)
   }
@@ -218,11 +220,24 @@ export async function searchEntries(
         }
       }
     } else {
-      sql += " AND (e.upn = ? OR e.shared = 1)"
-      params.push(opts.upn)
+      // Sid-scope bridge for the welcome-modal promotion flow: when an anon
+      // browser submits the welcome modal, identity.ts:223 reuses the SAME sid
+      // and only upgrades upn (null → "alice@corp"). Without this clause the
+      // pre-modal turns (ingested as upn=null) become invisible the moment a
+      // real upn is supplied — silently amnesia-bombing the conversation.
+      // Treat sid as the conversation-continuity boundary (matching the
+      // identity.ts contract), while keeping cross-sid isolation intact.
+      // See Layer C — C4 finding (orchestrator-invariants.test.ts).
+      if (opts.sessionId) {
+        sql += " AND (e.upn = ? OR e.shared = 1 OR (e.upn IS NULL AND e.session_id = ?))"
+        params.push(opts.upn, opts.sessionId)
+      } else {
+        sql += " AND (e.upn = ? OR e.shared = 1)"
+        params.push(opts.upn)
+      }
     }
   }
-  if (opts.tier === "working") {
+  if (opts.tier === MemoryTier.Working) {
     // Hard cutoff: working memory only surfaces entries from the active session window.
     // This prevents stale answers from previous sessions bleeding into a fresh run.
     // The RECENCY_HALF_LIFE decay alone is not sufficient — entries with accessCount > 0
@@ -241,8 +256,8 @@ export async function searchEntries(
 
   // For working tier, also get recent entries that may not match FTS
   let recentEntries: UnifiedSearchResult[] = []
-  if (opts.tier === "working") {
-    recentEntries = getRecentEntries("working", 12, opts.sessionId, opts.upn)
+  if (opts.tier === MemoryTier.Working) {
+    recentEntries = getRecentEntries(MemoryTier.Working, 12, opts.sessionId, opts.upn, opts.excludeRunId)
   }
 
   const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
@@ -251,7 +266,7 @@ export async function searchEntries(
     // Down-weight failed/incomplete entries so they don't poison future runs.
     const isFailedEntry =
       entry.confidence < 0.5 &&
-      (entry.tier === "episodic" || (entry.tier === "working" && entry.role === "assistant"))
+      (entry.tier === "episodic" || (entry.tier === MemoryTier.Working && entry.role === MemoryRole.Assistant))
     const statusPenalty = isFailedEntry ? 0.4 : 1.0
     const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence * statusPenalty)
     const rec = recencyScore(entry.createdAt, now)
@@ -278,16 +293,23 @@ export async function searchEntries(
       const row = getDb().prepare("SELECT * FROM memory_entries WHERE id = ?").get(vr.entryId) as Record<string, unknown> | undefined
       if (!row) continue
       if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
-      if (opts.sessionId && opts.tier === "working" && row.session_id !== opts.sessionId) continue
+      if (opts.sessionId && opts.tier === MemoryTier.Working && row.session_id !== opts.sessionId) continue
       // Tenant guard — vector hits must obey the same upn filter as FTS hits.
       // The vector index does not store upn (defence-in-depth: rely on the
-      // memory_entries join as the single source of truth).
+      // memory_entries join as the single source of truth). The sid-scope
+      // bridge below mirrors the SQL clause in searchEntries() so the
+      // welcome-modal promotion flow stays consistent across FTS + vector.
       if (opts.upn !== undefined) {
         const rowUpn = (row.upn as string | null) ?? null
         const rowShared = (row.shared as number | null) === 1
+        const rowSid = (row.session_id as string | null) ?? null
         if (!rowShared) {
           if (opts.upn === null && rowUpn !== null) continue
-          if (opts.upn !== null && rowUpn !== opts.upn) continue
+          if (opts.upn !== null && rowUpn !== opts.upn) {
+            // Bridge: allow legacy anon rows on the SAME sid through.
+            const sidBridge = rowUpn === null && opts.sessionId !== undefined && rowSid === opts.sessionId
+            if (!sidBridge) continue
+          }
         }
       }
       if (opts.upn === null && ((row.tier as string | null) === "episodic")) {
@@ -336,6 +358,7 @@ function getRecentEntries(
   limit: number,
   sessionId?: string,
   upn?: string | null,
+  excludeRunId?: string,
 ): UnifiedSearchResult[] {
   const now = new Date()
   let sql = "SELECT * FROM memory_entries WHERE tier = ?"
@@ -345,15 +368,32 @@ function getRecentEntries(
     sql += " AND session_id = ?"
     params.push(sessionId)
   }
+  // Exclude the in-flight run's own rows so an agent cannot echo its own
+  // mid-run state back at itself. Mirrors the FTS path predicate at
+  // searchEntries() so excludeRunId is honoured uniformly across both
+  // retrieval paths (FTS hit OR recency fallback / working-tier merge).
+  // Without this, retrieval.ts:247 (working merge) and the empty-FTS
+  // fallback at retrieval.ts:174 silently re-injected current-run rows
+  // even when the caller asked them to be excluded — see Layer A A5b.
+  if (excludeRunId) {
+    sql += " AND (run_id IS NULL OR run_id != ?)"
+    params.push(excludeRunId)
+  }
   if (upn !== undefined) {
     if (upn === null) {
       sql += " AND (upn IS NULL OR shared = 1)"
+    } else if (sessionId) {
+      // Sid-scope bridge — same rationale as searchEntries() above. Without
+      // this, getRecentEntries (used by the recency fallback + working-tier
+      // merge) would drop pre-welcome-modal anon rows for a named caller.
+      sql += " AND (upn = ? OR shared = 1 OR (upn IS NULL AND session_id = ?))"
+      params.push(upn, sessionId)
     } else {
       sql += " AND (upn = ? OR shared = 1)"
       params.push(upn)
     }
   }
-  if (tier === "working") {
+  if (tier === MemoryTier.Working) {
     const windowCutoff = new Date(Date.now() - WORKING_SESSION_WINDOW_H * 60 * 60 * 1000).toISOString()
     sql += " AND created_at > ?"
     params.push(windowCutoff)
@@ -384,11 +424,27 @@ function formatMemoryContext(
 ): string {
   if (results.length === 0) return ""
 
+  // Dedup identical or near-identical entry content across tiers (Gap 4).
+  // The same run can be promoted into multiple tiers (working ← episodic ← semantic),
+  // duplicating ~1-3KB of identical prose for every retrieval. Hash the
+  // first 256 chars of normalized content as a cheap fingerprint.
+  const seen = new Set<string>()
+  const dedup = (rs: UnifiedSearchResult[]): UnifiedSearchResult[] => {
+    const out: UnifiedSearchResult[] = []
+    for (const r of rs) {
+      const fp = (r.entry.content ?? "").trim().replace(/\s+/g, " ").slice(0, 256)
+      if (fp.length === 0 || seen.has(fp)) continue
+      seen.add(fp)
+      out.push(r)
+    }
+    return out
+  }
+
   const blocks: string[] = []
 
-  const working = results.filter((r) => r.entry.tier === "working")
-  const episodic = results.filter((r) => r.entry.tier === "episodic")
-  const semantic = results.filter((r) => r.entry.tier === "semantic")
+  const working = dedup(results.filter((r) => r.entry.tier === MemoryTier.Working))
+  const episodic = dedup(results.filter((r) => r.entry.tier === "episodic"))
+  const semantic = dedup(results.filter((r) => r.entry.tier === "semantic"))
 
   if (working.length > 0) {
     blocks.push("<working_memory>")

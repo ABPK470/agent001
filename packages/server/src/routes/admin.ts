@@ -1,65 +1,22 @@
 /**
- * Admin observability + login routes.
+ * Admin observability routes (v19, accounts-based).
  *
- *   POST /api/admin/login   — { password } → sets mia_admin cookie
- *   POST /api/admin/logout  — clears the cookie
- *   GET  /api/admin/sessions          — list of recent sessions (admin only)
- *   GET  /api/admin/active-runs       — currently executing runs (admin only)
+ *   GET  /api/admin/sessions       — list of recent sessions (admin only)
+ *   GET  /api/admin/active-runs    — currently executing runs (admin only)
+ *   GET  /api/admin/users          — per-user activity aggregates (admin only)
+ *   GET  /api/admin/users/:id/runs — a user's recent runs (admin only)
  *
- * Admin gating:
- *   - UPN whitelist (MIA_ADMIN_UPNS) is the primary path; req.session.isAdmin
- *     reflects it. Set in identity.ts.
- *   - Password fallback uses MIA_ADMIN_PASSWORD; if unset, login is disabled.
+ * Admin gating: req.session.isAdmin (sourced from users.is_admin column).
+ * The legacy admin password login + ADMIN_COOKIE machinery were removed
+ * in v19 — admin status is a property of the account.
  */
 
 import type { FastifyInstance } from "fastify"
-import { timingSafeEqual } from "node:crypto"
-import { ADMIN_COOKIE, signAdminCookie } from "../auth/session.js"
 import { getDb } from "../db/connection.js"
 import { listSessions, listUserHistory, listUsersWithStats } from "../db/sessions.js"
-import type { AgentOrchestrator } from "../orchestrator.js"
-
-function getAdminPassword(): string | null {
-  const pw = process.env["MIA_ADMIN_PASSWORD"]
-  return pw && pw.length > 0 ? pw : null
-}
-
-function constantTimeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  if (ab.length !== bb.length) return false
-  return timingSafeEqual(ab, bb)
-}
+import type { AgentOrchestrator } from "../orchestrator/index.js"
 
 export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.post<{ Body: { password?: string } }>("/api/admin/login", async (req, reply) => {
-    const expected = getAdminPassword()
-    if (!expected) {
-      reply.code(503)
-      return { error: "Admin password login is disabled (MIA_ADMIN_PASSWORD not set)" }
-    }
-    const supplied = (req.body?.password ?? "").trim()
-    if (!supplied || !constantTimeEq(supplied, expected)) {
-      reply.code(401)
-      return { error: "Invalid password" }
-    }
-    reply.setCookie(ADMIN_COOKIE, signAdminCookie(), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure:   process.env["NODE_ENV"] === "production",
-      path:     "/",
-      maxAge:   60 * 60 * 24 * 30,
-    })
-    return { ok: true, isAdmin: true }
-  })
-
-  app.post("/api/admin/logout", async (_req, reply) => {
-    reply.clearCookie(ADMIN_COOKIE, { path: "/" })
-    return { ok: true }
-  })
-
-  // ── Observability (admin-only) ──────────────────────────────
-
   app.get("/api/admin/sessions", async (req, reply) => {
     if (!req.session.isAdmin) { reply.code(403); return { error: "admin only" } }
     const since = Number(((req.query as Record<string, string>)?.["sinceSeconds"]) ?? "604800") // default 7 days
@@ -70,6 +27,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
         sid:         s.sid,
         upn:         s.upn,
         displayName: s.display_name,
+        isAdmin:     s.is_admin === 1,
         ip:          s.ip,
         userAgent:   s.user_agent,
         createdAt:   s.created_at,
@@ -93,7 +51,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       `)
       .all(...activeIds) as Array<{
         id: string; goal: string; status: string; step_count: number; created_at: string
-        session_id: string | null; upn: string | null; display_name: string | null
+        session_id: string; upn: string; display_name: string
       }>
     return {
       runs: rows.map((r) => ({
@@ -109,8 +67,6 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     }
   })
 
-  // ── Per-user aggregates + history ────────────────────────────
-
   app.get("/api/admin/users", async (req, reply) => {
     if (!req.session.isAdmin) { reply.code(403); return { error: "admin only" } }
     const q = req.query as Record<string, string | undefined>
@@ -120,19 +76,19 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
 
     // Mark users with currently-executing runs.
     const activeIds = orchestrator.getActiveRunIds()
-    let activeByIdentifier = new Map<string, number>()
+    let activeByUpn = new Map<string, number>()
     if (activeIds.length > 0) {
       const placeholders = activeIds.map(() => "?").join(",")
       const rows = getDb().prepare(`
-        SELECT COALESCE(upn, 'sid:' || session_id) AS identifier, COUNT(*) AS n
+        SELECT upn, COUNT(*) AS n
         FROM runs WHERE id IN (${placeholders})
-        GROUP BY identifier
-      `).all(...activeIds) as Array<{ identifier: string; n: number }>
-      activeByIdentifier = new Map(rows.map((r) => [r.identifier, r.n]))
+        GROUP BY upn
+      `).all(...activeIds) as Array<{ upn: string; n: number }>
+      activeByUpn = new Map(rows.map((r) => [r.upn, r.n]))
     }
 
     return {
-      users: users.map((u) => ({ ...u, activeRuns: activeByIdentifier.get(u.identifier) ?? 0 })),
+      users: users.map((u) => ({ ...u, activeRuns: activeByUpn.get(u.upn) ?? 0 })),
       summary: {
         users:        users.length,
         online:       users.filter((u) => u.online).length,
@@ -147,7 +103,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     if (!req.session.isAdmin) { reply.code(403); return { error: "admin only" } }
     const limit = Math.min(200, Math.max(1, Number((req.query as Record<string, string>)?.["limit"] ?? "25")))
     const offset = Math.max(0, Number((req.query as Record<string, string>)?.["offset"] ?? "0"))
-    // Identifier is URL-encoded UPN or `sid:<sid>`.
+    // Identifier is URL-encoded UPN (legacy "sid:" prefix tolerated by listUserHistory).
     const identifier = decodeURIComponent(req.params.identifier)
     const { runs, total } = listUserHistory(identifier, limit, offset)
     return { runs, total, limit, offset }

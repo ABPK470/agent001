@@ -1,3 +1,4 @@
+import { PipelineStatus } from "@mia/agent"
 /**
  * Pipeline graph helpers — adjacency/in-degree DAG construction and
  * result summarisation extracted from pipeline.ts.
@@ -5,13 +6,13 @@
  * @module
  */
 
-import { normalizeToolExecutionOutput } from "../../tool-helpers/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/_helpers/index.js"
 import type { Tool } from "../../types.js"
 import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    PlanStep,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  PlanStep,
 } from "../types.js"
 
 export interface Graph {
@@ -42,10 +43,10 @@ export function buildGraph(plan: Plan): Graph {
 export function buildResult(
   stepResults: Map<string, PipelineStepResult>,
   totalSteps: number,
-  status: "running" | "completed" | "failed",
+  status: PipelineStatus,
   error?: string,
 ): PipelineResult {
-  const completedSteps = [...stepResults.values()].filter(r => r.status === "completed").length
+  const completedSteps = [...stepResults.values()].filter(r => r.status === PipelineStatus.Completed).length
   return {
     status,
     stepResults,

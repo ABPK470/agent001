@@ -2,7 +2,7 @@
  * Browser sandbox helpers.
  *
  * Builds the self-contained Node.js script that runs inside the Docker browser
- * container (puppeteer + Chromium), and formats the JSON output into a readable report.
+ * container (Playwright + Chromium), and formats the JSON output into a readable report.
  */
 
 // ── Script builder ────────────────────────────────────────────────
@@ -11,7 +11,7 @@
  * Build a self-contained Node.js script that runs inside the browser container.
  * The script:
  *   1. Starts a static file server on a random port inside the container
- *   2. Launches Chromium via Puppeteer (container-installed)
+ *   2. Launches Chromium via Playwright (container-installed)
  *   3. Navigates to the HTML file
  *   4. Collects errors for the specified wait time
  *   5. Performs any requested clicks
@@ -23,14 +23,18 @@ export function buildBrowserScript(htmlPath: string, clicks: string[], waitMs: n
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-let puppeteer;
+let playwright;
 try {
-  puppeteer = require("puppeteer");
+  playwright = require("playwright");
 } catch {
   try {
-    puppeteer = require("/usr/local/lib/node_modules/puppeteer");
+    playwright = require("/ms-playwright-agent/node_modules/playwright");
   } catch {
-    puppeteer = require("/usr/lib/node_modules/puppeteer");
+    try {
+      playwright = require("/usr/local/lib/node_modules/playwright");
+    } catch {
+      playwright = require("/usr/lib/node_modules/playwright");
+    }
   }
 }
 
@@ -78,34 +82,35 @@ async function main() {
 
   let browser;
   try {
-    browser = await puppeteer.launch({
+    browser = await playwright.chromium.launch({
       headless: true,
-      executablePath: "/usr/bin/chromium",
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
     });
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
 
     page.on("console", (msg) => {
       const type = msg.type();
       const text = msg.text();
       if (type === "error") {
         const loc = msg.location();
-        const errUrl = loc?.url || "";
+        const errUrl = (loc && loc.url) || "";
         if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
           // skip non-critical
         } else if (text.includes("Failed to load resource") && errUrl) {
-          consoleErrors.push(text + " — URL: " + errUrl);
+          consoleErrors.push(text + " \u2014 URL: " + errUrl);
         } else {
           consoleErrors.push(text);
         }
       }
-      else if (type === "warn") consoleWarnings.push(text);
+      else if (type === "warning") consoleWarnings.push(text);
     });
     page.on("pageerror", (err) => uncaughtErrors.push(String(err)));
     page.on("requestfailed", (req) => {
       const reqUrl = req.url();
       if (/favicon|apple-touch-icon/i.test(reqUrl)) return;
-      networkErrors.push((req.failure()?.errorText || "failed") + ": " + reqUrl);
+      const f = req.failure();
+      networkErrors.push(((f && f.errorText) || "failed") + ": " + reqUrl);
     });
 
     await page.goto("http://127.0.0.1:" + port + "/" + fileName, {

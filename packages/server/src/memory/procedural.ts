@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto"
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
 import { sanitizeFtsQuery } from "./scoring.js"
 import type { ProceduralMemory } from "./types.js"
+import { EventType } from "@mia/agent"
 
 // ── Procedural memory ────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ export function storeProcedural(opts: {
   })
 
   broadcast({
-    type: "procedural.stored",
+    type: EventType.ProceduralStored,
     data: {
       id: proc.id,
       trigger: proc.trigger,
@@ -136,7 +137,7 @@ export function markProceduralFailed(id: string): void {
   `).run(new Date().toISOString(), id)
 
   broadcast({
-    type: "procedural.failed",
+    type: EventType.ProceduralFailed,
     data: { id },
   })
 }

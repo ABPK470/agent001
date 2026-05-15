@@ -3,9 +3,9 @@
  */
 
 import type {
-    Run,
-    Step,
-    TraceEntry,
+  Run,
+  Step,
+  TraceEntry,
 } from "../../types"
 
 // ── Design tokens ────────────────────────────────────────────────
@@ -38,11 +38,17 @@ export const C = {
 } as const
 
 // ── Layout types ─────────────────────────────────────────────────
+//
+// These were originally bare string-union aliases. They now re-export
+// the canonical `as const` discriminators in `../enums/ioe-tabs.ts` so
+// every section / tab / panel-side identifier lives in exactly one
+// place. Both the type *and* the runtime value are re-exported (the
+// `as const` shape gives one name for both) so existing
+//   `import type { SidebarSection } from "./constants"`
+// stays compiling, while new code can use `SidebarSection.Runs` to
+// drive switch arms and defaults.
 
-export type SidebarSection = "runs" | "compare" | "details"
-export type EditorTab = "tool-timeline" | "llm-calls" | "map"
-export type BottomTab = "output" | "audit" | "problems"
-export type PanelSide = "left" | "right"
+export { BottomTab, EditorTab, PanelSide, SidebarSection } from "../../enums"
 
 // ── API data types ───────────────────────────────────────────────
 

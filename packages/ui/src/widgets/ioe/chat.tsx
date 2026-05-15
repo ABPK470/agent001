@@ -9,10 +9,10 @@ import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import { SmartAnswer } from "../../components/SmartAnswer"
-import { truncate } from "../../util"
+import { ChatMode } from "../../enums"
 import { C, type ChatMessage } from "./constants"
 
-export type ChatMode = "simple" | "detailed"
+export { ChatMode } from "../../enums"
 
 interface ToolCallKillInfo {
   runId: string
@@ -73,7 +73,7 @@ export function ChatPanel({
   const goalTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [responseInput, setResponseInput] = useState("")
   const [killMessageInput, setKillMessageInput] = useState("")
-  const [chatMode, setChatMode] = useState<ChatMode>("simple")
+  const [chatMode, setChatMode] = useState<ChatMode>(ChatMode.Simple)
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -122,7 +122,7 @@ export function ChatPanel({
   const hasExecutingTools = executingToolCalls && executingToolCalls.size > 0 && !pendingKill
 
   // In simple mode, show only user goals and final assistant answers
-  const visibleMessages = chatMode === "simple"
+  const visibleMessages = chatMode === ChatMode.Simple
     ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
     : messages
 
@@ -139,11 +139,11 @@ export function ChatPanel({
           <button
             className="px-2 py-0.5 rounded text-[13px] font-medium cursor-pointer transition-colors"
             style={{
-              background: chatMode === "simple" ? C.accent + "35" : C.accent + "18",
+              background: chatMode === ChatMode.Simple ? C.accent + "35" : C.accent + "18",
               color: C.accent,
               border: `1px solid ${C.accent}30`,
             }}
-            onClick={() => setChatMode("simple")}
+            onClick={() => setChatMode(ChatMode.Simple)}
             title="Show only goals and answers"
           >
             Simple
@@ -151,11 +151,11 @@ export function ChatPanel({
           <button
             className="px-2 py-0.5 rounded text-[13px] font-medium cursor-pointer transition-colors"
             style={{
-              background: chatMode === "detailed" ? C.accent + "35" : C.accent + "18",
+              background: chatMode === ChatMode.Detailed ? C.accent + "35" : C.accent + "18",
               color: C.accent,
               border: `1px solid ${C.accent}30`,
             }}
-            onClick={() => setChatMode("detailed")}
+            onClick={() => setChatMode(ChatMode.Detailed)}
             title="Show full trace inline"
           >
             Detailed
@@ -461,12 +461,17 @@ function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) 
             {extracted ? (
               <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={180} />
             ) : (
-              <div
-                className="rounded-lg px-3 py-2 text-[12px] font-mono whitespace-pre-wrap break-words"
-                style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+              // Render the FULL argsFormatted JSON inside a scroll-capped
+              // pre block instead of truncating at 420 chars. Truncation
+              // hid the actual command/query the agent dispatched (e.g.
+              // long SQL, multi-line `command` strings) — defeating the
+              // whole point of the tool-call card.
+              <pre
+                className="rounded-lg px-3 py-2 text-[12px] font-mono whitespace-pre-wrap break-words overflow-auto"
+                style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}`, maxHeight: 180 }}
               >
-                {msg.argsFormatted ? truncate(msg.argsFormatted, 420) : truncate(msg.content, 420)}
-              </div>
+                {msg.argsFormatted ?? msg.content}
+              </pre>
             )}
           </div>
         </div>

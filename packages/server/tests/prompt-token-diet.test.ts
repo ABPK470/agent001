@@ -12,8 +12,8 @@
  *      the prefix from cache on calls 2..N.
  */
 
-import type { Tool } from "@agent001/agent"
-import { setMssqlConfigs } from "@agent001/agent"
+import type { Tool } from "@mia/agent"
+import { setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { decideSections } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
@@ -40,6 +40,36 @@ describe("decideSections", () => {
     expect(d.includeChartCatalogue).toBe(false)
     expect(d.includeAbiSync       ).toBe(false)
     expect(d.includeMemoryGuidance).toBe(false)
+  })
+
+  it("does NOT trigger DB gates for unqualified 'table' references (markdown / ASCII tables)", () => {
+    // Regression: bare "table"/"tables" used to be in DB_RE and would ship
+    // the entire ~30K MSSQL knowledge body for any follow-up that referred
+    // to a previously-rendered markdown table.
+    for (const goal of [
+      "exclude node_modules and re-create the table you just did",
+      "render the table again, sorted by lines of code",
+      "make the table prettier",
+      "show me a table of the top files by size",
+      "paste that table into the README",
+    ]) {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(false)
+    }
+  })
+
+  it("DOES trigger DB gates when 'table' is qualified by a DB hint", () => {
+    for (const goal of [
+      "list every table in the database",
+      "describe table publish.Revenue",
+      "which tables join to dim.Client?",
+      "rows in the dim.Client table",
+    ]) {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(true)
+    }
   })
 
   it("turns ON DB gates for an obvious DB goal — but NOT the chart catalogue", () => {
@@ -74,6 +104,75 @@ describe("decideSections", () => {
   it("includes memory guidance only when at least one tier is present", () => {
     expect(decideSections({ goal: "hi", memory: emptyTier()                                }).includeMemoryGuidance).toBe(false)
     expect(decideSections({ goal: "hi", memory: { working: "x", episodic: "", semantic: "" } }).includeMemoryGuidance).toBe(true)
+  })
+})
+
+describe("DB gating with rendering language (must trigger DB blocks)", () => {
+  // The user's chief concern: DWH visualisation questions phrased in
+  // natural language with rendering verbs (chart / plot / visualize /
+  // dashboard / render / animated) MUST still inject MSSQL knowledge +
+  // catalog + guidance. Rendering verbs are orthogonal to data source.
+  for (const goal of [
+    "Visualize revenue by client as a bar chart by country",
+    "Plot AfricaFlex daily balances over the last year",
+    "Render a chart of clients by RWA bucket",
+    "Show me a dashboard of top 10 merchants this quarter",
+    "Animated revenue dashboard with monthly trend",
+    "Pie chart of country exposures",
+  ]) {
+    it(`fires DB gate for: ${goal}`, () => {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(true)
+      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(true)
+      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(true)
+      expect(d.includeChartCatalogue, `goal: ${goal}`).toBe(true)
+    })
+  }
+})
+
+describe("DB gating false-positives (must NOT trigger DB blocks)", () => {
+  // Pure non-warehouse task types: Monte Carlo, mockups, finance math.
+  for (const goal of [
+    "Create a Monte Carlo portfolio simulation with risk and volatility",
+    "Build an animated finance simulation HTML page",
+    "Show me a markets trading screen mockup with order history",
+    "Compute a Sharpe ratio over these returns",
+    "Wireframe for a banking dashboard",
+  ]) {
+    it(`does NOT fire DB gate for: ${goal}`, () => {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(false)
+    })
+  }
+
+  it("operational signal cancels NON_DB cue", () => {
+    // A literal SQL query that happens to mention a simulation column
+    // must still fire — operational beats the NON_DB down-score.
+    const d = decideSections({
+      goal: "select top 1 from fact.X where simulation_id = 7",
+      memory: emptyTier(),
+    })
+    expect(d.includeMssqlKnowledge).toBe(true)
+    expect(d.includeMssqlGuidance ).toBe(true)
+  })
+})
+
+describe("scoreDbLikelihood telemetry", () => {
+  it("exposes dbScore and triggers on the decision object", () => {
+    const d = decideSections({ goal: "select top 10 from publish.Revenue grouped by pkClient", memory: emptyTier() })
+    expect(d.dbScore).toBeGreaterThanOrEqual(2)
+    expect(d.triggers?.operational).toBe(true)
+    expect(d.triggers?.domain     ).toBe(true)
+    expect(d.triggers?.nonDb      ).toBe(false)
+  })
+
+  it("flags nonDb on a Monte Carlo goal", () => {
+    const d = decideSections({ goal: "Monte Carlo portfolio simulation with risk", memory: emptyTier() })
+    expect(d.triggers?.nonDb).toBe(true)
+    expect(d.triggers?.operational).toBe(false)
+    expect(d.dbScore).toBeLessThan(2)
   })
 })
 

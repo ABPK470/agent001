@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto"
 import { broadcast } from "../event-broadcaster.js"
 import type { MessageQueue } from "./queue.js"
 import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
+import { EventType } from "@mia/agent"
 
 // ── Persistence interface ────────────────────────────────────────
 
@@ -110,7 +111,7 @@ export class MessageRouter {
     this.store.updateActiveRun(conv.id, runId)
 
     broadcast({
-      type: "conversation.message",
+      type: EventType.ConversationMessage,
       data: {
         conversationId: conv.id,
         channelType: message.channelType,
@@ -149,7 +150,7 @@ export class MessageRouter {
     await this.queue.enqueue(conv.channelType, conv.senderId, text, conv.id)
 
     broadcast({
-      type: "conversation.message",
+      type: EventType.ConversationMessage,
       data: {
         conversationId: conv.id,
         channelType: conv.channelType,

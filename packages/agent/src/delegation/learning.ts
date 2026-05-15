@@ -1,3 +1,4 @@
+import { BanditArmId } from "../domain/enums/delegation.js"
 /**
  * Delegation bandit tuner — online UCB1 arm selection for delegation scoring.
  *
@@ -30,7 +31,7 @@
 // Arm definitions
 // ============================================================================
 
-export type BanditArmId = "conservative" | "balanced" | "aggressive"
+export type { BanditArmId }
 
 export interface BanditArm {
   readonly id: BanditArmId
@@ -99,9 +100,9 @@ export class DelegationBanditTuner {
   constructor(explorationFactor = 1.5) {
     this.explorationFactor = explorationFactor
     this.arms = new Map([
-      ["conservative", { id: "conservative", thresholdDelta: 0.10, meanReward: 0, sampleCount: 0 }],
-      ["balanced",     { id: "balanced",     thresholdDelta: 0.00, meanReward: 0, sampleCount: 0 }],
-      ["aggressive",   { id: "aggressive",   thresholdDelta: -0.08, meanReward: 0, sampleCount: 0 }],
+      [BanditArmId.Conservative, { id: BanditArmId.Conservative, thresholdDelta: 0.10, meanReward: 0, sampleCount: 0 }],
+      [BanditArmId.Balanced,     { id: BanditArmId.Balanced,     thresholdDelta: 0.00, meanReward: 0, sampleCount: 0 }],
+      [BanditArmId.Aggressive,   { id: BanditArmId.Aggressive,   thresholdDelta: -0.08, meanReward: 0, sampleCount: 0 }],
     ])
   }
 
@@ -110,7 +111,7 @@ export class DelegationBanditTuner {
    * Arms with no samples get infinite UCB score (initial exploration phase).
    */
   selectArm(): BanditArmId {
-    let bestArm: BanditArmId = "balanced"
+    let bestArm: BanditArmId = BanditArmId.Balanced
     let bestScore = -Infinity
     const logTotal = this.totalPulls > 0 ? Math.log(this.totalPulls) : 0
 

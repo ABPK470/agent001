@@ -1,4 +1,4 @@
-import type { EngineServices, LLMClient, PolicyRole } from "@agent001/agent"
+import type { EngineServices, LLMClient, PolicyRole } from "@mia/agent"
 import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
@@ -40,7 +40,7 @@ export interface ActiveRun {
 /** Per-run agent configuration — which tools and prompt to use. */
 export interface AgentRunConfig {
   agentId?: string
-  tools?: import("@agent001/agent").Tool[]
+  tools?: import("@mia/agent").Tool[]
   systemPrompt?: string
   /**
    * Attachments selected by the user when this run was started.

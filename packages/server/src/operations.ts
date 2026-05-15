@@ -25,15 +25,16 @@
  * by supplying `before` (ISO timestamp).
  */
 
-import * as db from "./db.js"
+import { EventType, isCancellationEvent, isCompletionEvent, isEventType, isFailureEvent, isSubStepFailureEvent, RunStatus, SyncRunStatus } from "@mia/agent"
+import * as db from "./db/index.js"
+import { OperationKind, OperationStatus } from "./enums/operations.js"
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type OperationKind = "agent-run" | "sync-preview" | "sync-execute" | "system"
-export type OperationStatus = "running" | "success" | "failed" | "cancelled" | "unknown"
+export { OperationKind, OperationStatus }
 
 export interface OperationEvent {
-  type: string
+  type: EventType
   timestamp: string
   data: Record<string, unknown>
 }
@@ -86,12 +87,13 @@ export function listOperations(opts: ListOperationsOpts = {}): {
     return { operations: [], scannedEvents: 0, oldestTimestamp: null }
   }
 
-  // events come back newest-first → reverse to chronological for grouping
-  const chrono = [...events].reverse().map((e) => ({
-    type: e.type,
-    timestamp: e.created_at,
-    data: safeParse(e.data),
-  }))
+  // events come back newest-first → reverse to chronological for grouping.
+  // Validate type at the storage boundary: any row whose `type` is not a
+  // known EventType is dropped (stale data from removed event names).
+  const chrono = [...events].reverse().flatMap<OperationEvent>((e) => {
+    if (!isEventType(e.type)) return []
+    return [{ type: e.type, timestamp: e.created_at, data: safeParse(e.data) }]
+  })
 
   // ── Pass 1: split into per-correlation buckets ─────────────────
   // Key is `runId` if present, otherwise `planId`, otherwise a per-minute
@@ -106,13 +108,13 @@ export function listOperations(opts: ListOperationsOpts = {}): {
     let kind: OperationKind
     let key: string
     if (runId) {
-      kind = "agent-run"
+      kind = OperationKind.AgentRun
       key = `run:${runId}`
     } else if (planId) {
-      kind = ev.type.startsWith("sync.execute") ? "sync-execute" : "sync-preview"
+      kind = ev.type.startsWith("sync.execute") ? OperationKind.SyncExecute : OperationKind.SyncPreview
       key = `plan:${planId}`
     } else {
-      kind = "system"
+      kind = OperationKind.System
       // bucket per minute
       key = `system:${ev.timestamp.slice(0, 16)}`
     }
@@ -125,10 +127,10 @@ export function listOperations(opts: ListOperationsOpts = {}): {
   // ── Pass 2: enrich each bucket with run/sync_runs metadata ─────
   const operations: OperationPipeline[] = []
   for (const b of buckets.values()) {
-    if (b.kind === "agent-run") {
+    if (b.kind === OperationKind.AgentRun) {
       const runId = b.key.slice(4)
       operations.push(buildAgentRunPipeline(runId, b.events))
-    } else if (b.kind === "sync-preview" || b.kind === "sync-execute") {
+    } else if (b.kind === OperationKind.SyncPreview || b.kind === OperationKind.SyncExecute) {
       const planId = b.key.slice(5)
       operations.push(buildSyncPipeline(planId, b.kind, b.events))
     } else {
@@ -192,17 +194,16 @@ function durationOf(start: string, end: string | null): number | null {
 function inferPipelineStatus(events: OperationEvent[]): OperationStatus {
   // Sub-step failures (e.g. sync.execute.step.failed) are emitted BEFORE
   // sync.execute.completed, so a naive backwards scan finds .completed first
-  // and incorrectly returns "success". Pre-scan for these so they poison the result.
-  const hasSubStepFailure = events.some(
-    (e) => e.type === "sync.execute.step.failed" || e.type === "sync.preview.table.failed",
-  )
+  // and incorrectly returns OperationStatus.Success. Pre-scan for these so
+  // they poison a downstream completion.
+  const hasSubStepFailure = events.some((e) => isSubStepFailureEvent(e.type))
   for (let i = events.length - 1; i >= 0; i--) {
     const t = events[i].type
-    if (t.endsWith(".completed") || t === "run.completed") return hasSubStepFailure ? "failed" : "success"
-    if (t.endsWith(".failed") || t === "run.failed") return "failed"
-    if (t === "run.cancelled") return "cancelled"
+    if (isCompletionEvent(t)) return hasSubStepFailure ? OperationStatus.Failed : OperationStatus.Success
+    if (isFailureEvent(t)) return OperationStatus.Failed
+    if (isCancellationEvent(t)) return OperationStatus.Cancelled
   }
-  return hasSubStepFailure ? "failed" : "running"
+  return hasSubStepFailure ? OperationStatus.Failed : OperationStatus.Running
 }
 
 // ── Pipeline builders ────────────────────────────────────────────
@@ -211,20 +212,20 @@ function buildAgentRunPipeline(runId: string, events: OperationEvent[]): Operati
   const run = db.getRun(runId)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
-  const status: OperationStatus = run?.status === "completed" ? "success"
-    : run?.status === "failed" ? "failed"
-    : run?.status === "cancelled" ? "cancelled"
-    : run?.status === "running" || run?.status === "planning" || run?.status === "pending" ? "running"
+  const status: OperationStatus = run?.status === RunStatus.Completed ? OperationStatus.Success
+    : run?.status === RunStatus.Failed ? OperationStatus.Failed
+    : run?.status === RunStatus.Cancelled ? OperationStatus.Cancelled
+    : run?.status === RunStatus.Running || run?.status === RunStatus.Planning || run?.status === RunStatus.Pending ? OperationStatus.Running
     : inferPipelineStatus(events)
   const endedAt = run?.completed_at
-    ?? (status !== "running" ? lastEv.timestamp : null)
+    ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
   const goal = run?.goal ?? strField(lastEv.data, "goal") ?? `run ${runId.slice(0, 8)}`
 
   const activities = groupAgentRunActivities(events)
 
   return {
     id: runId,
-    kind: "agent-run",
+    kind: OperationKind.AgentRun,
     title: goal.length > 100 ? goal.slice(0, 97) + "…" : goal,
     subtitle: run ? `${run.step_count} steps · ${run.agent_id ?? "agent"}` : undefined,
     status,
@@ -259,13 +260,13 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
   for (const ev of events) {
     const t = ev.type
 
-    if (t === "run.queued" || t === "run.started" || t === "run.completed" || t === "run.failed" || t === "run.cancelled") {
+    if (t === EventType.RunQueued || t === EventType.RunStarted || t === EventType.RunCompleted || t === EventType.RunFailed || t === EventType.RunCancelled) {
       lifecycleEvents.push(ev)
       continue
     }
 
     if (t.startsWith("sync.")) {
-      const planId = strField(ev.data, "planId") ?? "unknown"
+      const planId = strField(ev.data, "planId") ?? OperationStatus.Unknown
       const kind: "preview" | "execute" = t.startsWith("sync.execute") ? "execute" : "preview"
       let bucket = syncPlans.get(planId)
       if (!bucket) { bucket = { kind, events: [] }; syncPlans.set(planId, bucket) }
@@ -273,12 +274,12 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
       continue
     }
 
-    if (t === "step.started") {
+    if (t === EventType.StepStarted) {
       const toolName = strField(ev.data, "tool") ?? strField(ev.data, "name") ?? "step"
       const act: OperationActivity = {
         id: `step:${activities.length}`,
         name: toolName,
-        status: "running",
+        status: OperationStatus.Running,
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
@@ -288,14 +289,14 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
       openSteps.push({ idx: activities.length - 1, act })
       continue
     }
-    if (t === "step.completed" || t === "step.failed") {
+    if (t === EventType.StepCompleted || t === EventType.StepFailed) {
       const open = openSteps.pop()
       if (open) {
         open.act.events.push(ev)
         open.act.endedAt = ev.timestamp
         open.act.durationMs = durationOf(open.act.startedAt, ev.timestamp)
-        open.act.status = t === "step.completed" ? "success" : "failed"
-        if (t === "step.failed") open.act.error = strField(ev.data, "error") ?? "step failed"
+        open.act.status = t === EventType.StepCompleted ? OperationStatus.Success : OperationStatus.Failed
+        if (t === EventType.StepFailed) open.act.error = strField(ev.data, "error") ?? "step failed"
         const dur = ev.data["durationMs"]
         if (typeof dur === "number" && !open.act.summary) {
           open.act.summary = `${(dur / 1000).toFixed(1)}s`
@@ -318,7 +319,7 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
     const start = bucket.events[0].timestamp
     const last = bucket.events[bucket.events.length - 1]
     const status = inferPipelineStatus(bucket.events)
-    const endedAt = status !== "running" ? last.timestamp : null
+    const endedAt = status !== OperationStatus.Running ? last.timestamp : null
     const summary = summariseSyncEvents(bucket.kind, bucket.events)
     activities.push({
       id: `sync:${planId}`,
@@ -356,7 +357,7 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
     activities.push({
       id: "misc",
       name: "other events",
-      status: "success",
+      status: OperationStatus.Success,
       startedAt: start,
       endedAt: end,
       durationMs: durationOf(start, end),
@@ -367,19 +368,19 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
   return activities
 }
 
-function buildSyncPipeline(planId: string, kind: "sync-preview" | "sync-execute", events: OperationEvent[]): OperationPipeline {
+function buildSyncPipeline(planId: string, kind: OperationKind.SyncPreview | OperationKind.SyncExecute, events: OperationEvent[]): OperationPipeline {
   const meta = db.getSyncRun?.(planId)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
-  const status: OperationStatus = meta?.status === "success" ? "success"
-    : meta?.status === "failed" ? "failed"
+  const status: OperationStatus = meta?.status === SyncRunStatus.Success ? OperationStatus.Success
+    : meta?.status === SyncRunStatus.Failed ? OperationStatus.Failed
     : inferPipelineStatus(events)
-  const endedAt = meta?.finished_at ?? (status !== "running" ? lastEv.timestamp : null)
+  const endedAt = meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
   const entityName = meta?.entity_display_name ?? `${meta?.entity_type ?? "?"}#${meta?.entity_id ?? "?"}`
   const route = meta ? `${meta.source} → ${meta.target}` : ""
 
   let activities: OperationActivity[]
-  if (kind === "sync-preview") {
+  if (kind === OperationKind.SyncPreview) {
     activities = groupSyncPreviewActivities(events)
   } else {
     activities = groupSyncExecuteActivities(events)
@@ -388,7 +389,7 @@ function buildSyncPipeline(planId: string, kind: "sync-preview" | "sync-execute"
   return {
     id: planId,
     kind,
-    title: `${kind === "sync-execute" ? "Execute" : "Preview"} — ${entityName}`,
+    title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} — ${entityName}`,
     subtitle: route || planId.slice(0, 8),
     status,
     startedAt,
@@ -411,11 +412,11 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
   for (const ev of events) {
     const t = ev.type
     const table = strField(ev.data, "table")
-    if (t === "sync.preview.table.start" && table) {
+    if (t === EventType.SyncPreviewTableStart && table) {
       const act: OperationActivity = {
         id: `tbl:${table}:${activities.length}`,
         name: table,
-        status: "running",
+        status: OperationStatus.Running,
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
@@ -425,14 +426,14 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       openTables.set(table, act)
       continue
     }
-    if ((t === "sync.preview.table.done" || t === "sync.preview.table.failed") && table) {
+    if ((t === EventType.SyncPreviewTableDone || t === EventType.SyncPreviewTableFailed) && table) {
       const open = openTables.get(table)
       if (open) {
         open.events.push(ev)
         open.endedAt = ev.timestamp
         open.durationMs = durationOf(open.startedAt, ev.timestamp)
-        open.status = t === "sync.preview.table.done" ? "success" : "failed"
-        if (t === "sync.preview.table.failed") open.error = strField(ev.data, "error") ?? "scan failed"
+        open.status = t === EventType.SyncPreviewTableDone ? OperationStatus.Success : OperationStatus.Failed
+        if (t === EventType.SyncPreviewTableFailed) open.error = strField(ev.data, "error") ?? "scan failed"
         const ins = numField(ev.data, "insert"), upd = numField(ev.data, "update"), del = numField(ev.data, "delete")
         if (ins != null && upd != null && del != null) {
           open.summary = `${ins} ins · ${upd} upd · ${del} del`
@@ -483,20 +484,20 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     if (currentStep) {
       currentStep.endedAt = endTs
       currentStep.durationMs = durationOf(currentStep.startedAt, endTs)
-      if (currentStep.status === "running") currentStep.status = "success"
+      if (currentStep.status === OperationStatus.Running) currentStep.status = OperationStatus.Success
       currentStep = null
     }
   }
 
   for (const ev of events) {
     const t = ev.type
-    if (t === "sync.execute.step") {
+    if (t === EventType.SyncExecuteStep) {
       closeStep(ev.timestamp)
       const stepName = strField(ev.data, "step") ?? "step"
       currentStep = {
         id: `estep:${activities.length}`,
         name: stepName,
-        status: "running",
+        status: OperationStatus.Running,
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
@@ -505,14 +506,14 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       activities.push(currentStep)
       continue
     }
-    if (t === "sync.execute.step.failed") {
+    if (t === EventType.SyncExecuteStepFailed) {
       const stepName = strField(ev.data, "step") ?? "step"
-      const errMsg = strField(ev.data, "error") ?? "failed"
+      const errMsg = strField(ev.data, "error") ?? OperationStatus.Failed
       // Try to attach to currently-open step matching the name; otherwise new
       // failed activity.
       if (currentStep && currentStep.name === stepName) {
         currentStep.events.push(ev)
-        currentStep.status = "failed"
+        currentStep.status = OperationStatus.Failed
         currentStep.error = errMsg
         currentStep.endedAt = ev.timestamp
         currentStep.durationMs = durationOf(currentStep.startedAt, ev.timestamp)
@@ -521,7 +522,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
         activities.push({
           id: `estep:${activities.length}`,
           name: stepName,
-          status: "failed",
+          status: OperationStatus.Failed,
           startedAt: ev.timestamp,
           endedAt: ev.timestamp,
           durationMs: 0,
@@ -531,7 +532,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       }
       continue
     }
-    if (t === "sync.execute.table.start") {
+    if (t === EventType.SyncExecuteTableStart) {
       closeStep(ev.timestamp)
       const tableName = strField(ev.data, "table") ?? "table"
       const op = strField(ev.data, "op") ?? "apply"
@@ -539,7 +540,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       const act: OperationActivity = {
         id: `etbl:${activities.length}`,
         name: `${tableName} (${op}${rows != null ? ` ${rows} rows` : ""})`,
-        status: "running",
+        status: OperationStatus.Running,
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
@@ -549,11 +550,11 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       currentTable = { name: tableName, act }
       continue
     }
-    if (t === "sync.execute.table.done" && currentTable) {
+    if (t === EventType.SyncExecuteTableDone && currentTable) {
       currentTable.act.events.push(ev)
       currentTable.act.endedAt = ev.timestamp
       currentTable.act.durationMs = durationOf(currentTable.act.startedAt, ev.timestamp)
-      currentTable.act.status = "success"
+      currentTable.act.status = OperationStatus.Success
       const applied = numField(ev.data, "rowsApplied")
       if (applied != null) currentTable.act.summary = `${applied} rows applied`
       currentTable = null
@@ -601,9 +602,9 @@ function buildSystemPipeline(key: string, events: OperationEvent[]): OperationPi
   const minute = key.slice(7) // strip "system:"
   return {
     id: key,
-    kind: "system",
+    kind: OperationKind.System,
     title: `System events — ${minute.replace("T", " ")}`,
-    status: "success",
+    status: OperationStatus.Success,
     startedAt,
     endedAt,
     durationMs: durationOf(startedAt, endedAt),
@@ -612,7 +613,7 @@ function buildSystemPipeline(key: string, events: OperationEvent[]): OperationPi
     activities: [{
       id: "events",
       name: "events",
-      status: "success",
+      status: OperationStatus.Success,
       startedAt,
       endedAt,
       durationMs: durationOf(startedAt, endedAt),
@@ -624,11 +625,11 @@ function buildSystemPipeline(key: string, events: OperationEvent[]): OperationPi
 function summariseSyncEvents(kind: "preview" | "execute", events: OperationEvent[]): string | undefined {
   // Find the .completed event and extract a brief summary
   for (const ev of events) {
-    if (kind === "preview" && ev.type === "sync.preview.completed") {
+    if (kind === "preview" && ev.type === EventType.SyncPreviewCompleted) {
       const totals = ev.data["totals"] as Record<string, unknown> | undefined
       if (totals) return `${totals["insert"] ?? 0} ins · ${totals["update"] ?? 0} upd · ${totals["delete"] ?? 0} del`
     }
-    if (kind === "execute" && ev.type === "sync.execute.completed") {
+    if (kind === "execute" && ev.type === EventType.SyncExecuteCompleted) {
       const applied = ev.data["applied"] as Record<string, unknown> | undefined
       if (applied) return `${applied["insert"] ?? 0} ins · ${applied["update"] ?? 0} upd · ${applied["delete"] ?? 0} del`
     }

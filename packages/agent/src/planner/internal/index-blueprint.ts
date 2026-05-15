@@ -1,3 +1,4 @@
+import { EffectClass, StepRole, VerificationMode } from "@mia/agent"
 /**
  * Blueprint step injection — auto-inject contract-first blueprint steps
  * for multi-file code generation plans.
@@ -7,13 +8,13 @@
  * @module
  */
 
-import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract.js"
-import { inferOutputDir } from "../normalize.js"
+import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract/index.js"
+import { inferOutputDir } from "../normalize/index.js"
 import type {
-    Plan,
-    PlanEdge,
-    PlanStep,
-    SubagentTaskStep,
+  Plan,
+  PlanEdge,
+  PlanStep,
+  SubagentTaskStep,
 } from "../types.js"
 
 // ============================================================================
@@ -126,15 +127,15 @@ export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOut
       allowedTools: ["write_file", "read_file", "think"],
       requiredSourceArtifacts: [],
       targetArtifacts: [blueprintPath],
-      effectClass: "filesystem_write",
-      verificationMode: "none",
+      effectClass: EffectClass.FilesystemWrite,
+      verificationMode: VerificationMode.None,
       artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
-      role: "writer",
+      role: StepRole.Writer,
     },
     maxBudgetHint: "10 iterations",
     canRunParallel: false,
     workflowStep: {
-      role: "grounding",
+      role: StepRole.Grounding,
       artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
     },
   }
@@ -214,7 +215,7 @@ export function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: stri
     if (!step.requiredToolCapabilities.includes("read_file")) {
       ;(step as unknown as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [...step.requiredToolCapabilities, "read_file"]
     }
-    ;(step.executionContext as unknown as { verificationMode: "none" | "basic" | "strict" }).verificationMode = "none"
+    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
   }
 
   for (const step of plan.steps) {

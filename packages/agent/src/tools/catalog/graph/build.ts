@@ -13,7 +13,7 @@
  * @module
  */
 
-import { getPool } from "../../mssql.js"
+import { getPool } from "../../mssql/index.js"
 import { buildAutoLineage, type ViewDepRow } from "../auto-lineage.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"

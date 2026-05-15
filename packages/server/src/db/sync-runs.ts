@@ -6,6 +6,7 @@
  * what to where" audit queries.
  */
 
+import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/agent"
 import { getDb } from "./connection.js"
 
 export interface SyncRunRow {
@@ -15,15 +16,35 @@ export interface SyncRunRow {
   entity_display_name: string | null
   source: string
   target: string
-  actor_upn: string | null
+  actor_upn: string
+  preview_inserts: number
+  preview_updates: number
+  preview_deletes: number
+  executed_inserts: number | null
+  executed_updates: number | null
+  executed_deletes: number | null
   preview_totals_json: string
   execute_totals_json: string | null
-  status: "started" | "success" | "failed"
+  status: SyncRunStatus
   error: string | null
   drift_detected_pct: number | null
   started_at: string
   finished_at: string | null
   duration_ms: number | null
+}
+
+interface CountTriple { insert?: number; update?: number; delete?: number }
+
+function asCounts(totals: unknown): CountTriple {
+  if (totals && typeof totals === "object") {
+    const t = totals as Record<string, unknown>
+    return {
+      insert: typeof t["insert"] === "number" ? (t["insert"] as number) : 0,
+      update: typeof t["update"] === "number" ? (t["update"] as number) : 0,
+      delete: typeof t["delete"] === "number" ? (t["delete"] as number) : 0,
+    }
+  }
+  return { insert: 0, update: 0, delete: 0 }
 }
 
 export interface RecordSyncRunStartInput {
@@ -38,12 +59,14 @@ export interface RecordSyncRunStartInput {
 }
 
 export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
+  const c = asCounts(i.previewTotals)
   getDb()
     .prepare(
       `INSERT OR REPLACE INTO sync_runs
        (plan_id, entity_type, entity_id, entity_display_name, source, target,
-        actor_upn, preview_totals_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'started', datetime('now'))`,
+        actor_upn, preview_inserts, preview_updates, preview_deletes,
+        preview_totals_json, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     )
     .run(
       i.planId,
@@ -52,14 +75,18 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       i.entityDisplayName,
       i.source,
       i.target,
-      i.actorUpn,
+      i.actorUpn ?? "anonymous",
+      c.insert ?? 0,
+      c.update ?? 0,
+      c.delete ?? 0,
       JSON.stringify(i.previewTotals),
+      SyncRunStatus.Started,
     )
 }
 
 export interface RecordSyncRunFinishInput {
   planId: string
-  status: "success" | "failed"
+  status: SyncRunStatus.Success | SyncRunStatus.Failed
   error?: string | null
   executeTotals?: unknown
   driftDetectedPct?: number | null
@@ -67,17 +94,27 @@ export interface RecordSyncRunFinishInput {
 }
 
 export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
+  if (!isSyncRunStatus(i.status) || (i.status !== SyncRunStatus.Success && i.status !== SyncRunStatus.Failed)) {
+    throw new Error(
+      `recordSyncRunFinish.status must be 'success' or 'failed' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`,
+    )
+  }
+  const c = i.executeTotals ? asCounts(i.executeTotals) : null
   getDb()
     .prepare(
       `UPDATE sync_runs
-       SET status = ?, error = ?, execute_totals_json = ?, drift_detected_pct = ?,
-           finished_at = datetime('now'), duration_ms = ?
+       SET status = ?, error = ?, execute_totals_json = ?,
+           executed_inserts = ?, executed_updates = ?, executed_deletes = ?,
+           drift_detected_pct = ?, finished_at = datetime('now'), duration_ms = ?
        WHERE plan_id = ?`,
     )
     .run(
       i.status,
       i.error ?? null,
       i.executeTotals ? JSON.stringify(i.executeTotals) : null,
+      c?.insert ?? null,
+      c?.update ?? null,
+      c?.delete ?? null,
       i.driftDetectedPct ?? null,
       i.durationMs,
       i.planId,
@@ -117,6 +154,7 @@ export function recordSyncRunPreview(i: {
   previewTotals: unknown
   planJson: string
 }): void {
+  const c = asCounts(i.previewTotals)
   // Don't clobber an in-progress / completed run with a "preview" status.
   // Use INSERT … ON CONFLICT to only overwrite plan_json + preview metadata
   // for already-existing rows, leaving status / timestamps intact.
@@ -124,11 +162,15 @@ export function recordSyncRunPreview(i: {
     .prepare(
       `INSERT INTO sync_runs
          (plan_id, entity_type, entity_id, entity_display_name, source, target,
-          actor_upn, preview_totals_json, plan_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'preview', datetime('now'))
+          actor_upn, preview_inserts, preview_updates, preview_deletes,
+          preview_totals_json, plan_json, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(plan_id) DO UPDATE SET
          plan_json = excluded.plan_json,
          preview_totals_json = excluded.preview_totals_json,
+         preview_inserts = excluded.preview_inserts,
+         preview_updates = excluded.preview_updates,
+         preview_deletes = excluded.preview_deletes,
          entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
     )
     .run(
@@ -138,9 +180,13 @@ export function recordSyncRunPreview(i: {
       i.entityDisplayName,
       i.source,
       i.target,
-      i.actorUpn,
+      i.actorUpn ?? "anonymous",
+      c.insert ?? 0,
+      c.update ?? 0,
+      c.delete ?? 0,
       JSON.stringify(i.previewTotals),
       i.planJson,
+      SyncRunStatus.Preview,
     )
 }
 

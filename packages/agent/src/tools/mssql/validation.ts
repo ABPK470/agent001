@@ -1,15 +1,76 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
+
 const READ_ONLY_PATTERN = /^\s*(SELECT|WITH|EXPLAIN|SET\s+SHOWPLAN|SP_HELP|SP_COLUMNS|SP_TABLES)\b/i
 
+// Allowed openers when every DDL/DML target is a local temp table (#name).
+// Local #temp tables are session-scoped (auto-drop on connection close, isolated per
+// SPID) so the agent can stage micro-ETL slices safely without ever touching real
+// objects. Global ##temp tables are NOT allowed — they leak across sessions.
+const TMP_TABLE_OPENER = /^\s*(CREATE|INSERT|UPDATE|DELETE|DROP|TRUNCATE|MERGE|SET\s+IDENTITY_INSERT)\b/i
+
 const DANGEROUS_PATTERNS = [
-  /;\s*(DROP|ALTER|TRUNCATE|EXEC|EXECUTE|XP_|SP_EXECUTESQL|OPENROWSET|OPENQUERY|OPENDATASOURCE)\b/i,
-  /INTO\s+\w+\s*\(/i,                                    // SELECT INTO
+  // EXEC / dynamic-SQL / external-data routes — never legitimate from the agent.
+  // Note: DROP / ALTER / TRUNCATE are deliberately NOT here anymore. Those are
+  // permitted *only* when their target is a local #temp table — that constraint
+  // is enforced by findNonTmpMutations() below, not by a blunt prefix block.
+  /\b(EXEC|EXECUTE|XP_|SP_EXECUTESQL|OPENROWSET|OPENQUERY|OPENDATASOURCE)\b/i,
   /BULK\s+INSERT/i,
   /DBCC\b/i,
   /SHUTDOWN\b/i,
   /RECONFIGURE\b/i,
 ]
+
+// Statements that mutate a non-temp object. Used to scan multi-statement batches —
+// any one of these targeting a real table/view/index must reject the whole batch.
+// Notes on each form:
+//   • CREATE / DROP / TRUNCATE / ALTER on TABLE | VIEW | INDEX | PROCEDURE | FUNCTION | TRIGGER
+//   • INSERT INTO <target>     — target must be #name
+//   • UPDATE <target>          — target must be #name (UPDATE has no INTO keyword)
+//   • DELETE FROM <target>     — target must be #name
+//   • SELECT … INTO <target>   — target must be #name
+//   • MERGE INTO <target>      — target must be #name
+//
+// For each pattern the captured group is the object name; the post-check enforces
+// it starts with a single '#' (and not '##').
+const MUTATION_PATTERNS: { re: RegExp; label: string }[] = [
+  // CREATE/DROP INDEX: the index name comes first, the *target* table/view name
+  // follows ON — that is what the temp-only constraint must apply to.
+  { re: /\bCREATE\s+(?:UNIQUE\s+)?(?:CLUSTERED\s+|NONCLUSTERED\s+)?INDEX\s+\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi, label: "CREATE INDEX" },
+  { re: /\bDROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi,                                label: "DROP INDEX" },
+  // CREATE/DROP/ALTER on objects whose name follows the keyword directly.
+  { re: /\bCREATE\s+(?:OR\s+ALTER\s+)?(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi, label: "CREATE" },
+  { re: /\bDROP\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(?:IF\s+EXISTS\s+)?(\[?[#\w.]+\]?)/gi,   label: "DROP" },
+  { re: /\bTRUNCATE\s+TABLE\s+(\[?[#\w.]+\]?)/gi,                                                                              label: "TRUNCATE" },
+  { re: /\bALTER\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi,                       label: "ALTER" },
+  { re: /\bINSERT\s+INTO\s+(\[?[#\w.]+\]?)/gi,                                                                                  label: "INSERT" },
+  { re: /\bUPDATE\s+(\[?[#\w.]+\]?)/gi,                                                                                         label: "UPDATE" },
+  { re: /\bDELETE\s+FROM\s+(\[?[#\w.]+\]?)/gi,                                                                                  label: "DELETE" },
+  { re: /\bSELECT\b[\s\S]*?\bINTO\s+(\[?[#\w.]+\]?)\s+FROM\b/gi,                                                                label: "SELECT INTO" },
+  { re: /\bMERGE\s+(?:INTO\s+)?(\[?[#\w.]+\]?)/gi,                                                                              label: "MERGE" },
+]
+
+/** Returns {name, label} for any mutation statement whose target is NOT a local #temp table. */
+export function findNonTmpMutations(query: string): { target: string; label: string }[] {
+  const stripped = query
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/'[^']*'/g, "''")
+
+  const offenders: { target: string; label: string }[] = []
+  for (const { re, label } of MUTATION_PATTERNS) {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(stripped)) !== null) {
+      const raw = m[1].replace(/\[|\]/g, "")
+      // Allow only single-# local temp tables (no schema prefix permitted).
+      const isLocalTmp = /^#[A-Za-z_][\w]*$/.test(raw)
+      if (!isLocalTmp) offenders.push({ target: raw, label })
+    }
+  }
+  return offenders
+}
 
 // ── Scan-guard: tables/views known to be large ──────────────────
 //
@@ -131,17 +192,63 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
 }
 
 export function validateQuery(query: string, writeEnabled: boolean): string | null {
-  if (!writeEnabled) {
-    if (!READ_ONLY_PATTERN.test(query)) {
-      return "Write operations are disabled. Only SELECT/WITH queries are allowed. " +
-             "Contact your administrator to enable write mode."
+  // Always block dangerous operations regardless of write mode — must run BEFORE
+  // the write-mode gate so that EXEC / OPENROWSET / DBCC produce the dangerous
+  // error message instead of the generic "write disabled" one.
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(query)) {
+      return "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.)."
     }
   }
 
-  // Always block dangerous operations regardless of write mode
-  for (const pattern of DANGEROUS_PATTERNS) {
-    if (pattern.test(query)) {
-      return "Query blocked: contains potentially dangerous operation (DROP, ALTER, EXEC, xp_, BULK INSERT, DBCC, SHUTDOWN, etc.)."
+  // ── Aggregate-semantic guard (block-level only) ─────────────
+  // Catches the most dangerous correctness bug we've seen in the wild:
+  // `SUM(<col>) AS Avg…` — the aggregate function and the output alias
+  // semantically disagree, so the result is N× the real average and the
+  // controller has no way of knowing the number is wrong. See
+  // findAggregateSemanticIssues() for the full taxonomy and rationale.
+  for (const issue of findAggregateSemanticIssues(query)) {
+    if (issue.severity !== AggregateSeverity.Block) continue
+    return [
+      `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
+      ``,
+      `    ${issue.snippet}`,
+      ``,
+      issue.message,
+      ``,
+      `Fix: change the aggregate function to match the alias (or vice-versa). The function name `,
+      `is the implementation; the output alias is the contract with the reader. They MUST agree.`,
+    ].join("\n")
+  }
+
+  if (!writeEnabled) {
+    // Two valid shapes when write is disabled:
+    //   1. Pure read query (SELECT/WITH/EXPLAIN/...)
+    //   2. Micro-ETL batch where every mutation targets a local #temp table.
+    //      The agent is encouraged to stage small slices into #tmp tables and
+    //      join those against the big warehouse views — see default-system.md
+    //      "Big-table query discipline".
+    const isPureRead = READ_ONLY_PATTERN.test(query)
+    const opensWithMutation = TMP_TABLE_OPENER.test(query)
+    if (!isPureRead && !opensWithMutation) {
+      return "Write operations are disabled. Only SELECT/WITH queries are allowed " +
+             "(or DDL/DML targeting local #temp tables only)."
+    }
+    if (opensWithMutation) {
+      const offenders = findNonTmpMutations(query)
+      if (offenders.length > 0) {
+        const list = offenders.map((o) => `${o.label} ${o.target}`).join(", ")
+        return [
+          `Query blocked: write operation against non-temp object(s): ${list}.`,
+          ``,
+          `You may only CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / MERGE / SELECT INTO `,
+          `against LOCAL #temp tables (names starting with a single '#'). Existing schema-qualified `,
+          `tables, views, indexes and global ##temp tables are READ-ONLY.`,
+          ``,
+          `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
+          `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
+        ].join("\n")
+      }
     }
   }
 
@@ -170,3 +277,219 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
 
   return null // valid
 }
+
+// ── Aggregate-semantic guard ─────────────────────────────────
+//
+// Why this exists (the bug it prevents):
+//   The agent has been observed writing queries like
+//       OUTER APPLY (
+//         SELECT SUM(b.AverageCreditBalanceZARMTD) AS AvgCreditBalZAR …
+//       )
+//   The output column name says "Avg" but the aggregate is SUM. Summing
+//   12 monthly averages returns 12× the real average — and the user has
+//   no way to detect it from the result alone (the number is plausible).
+//   The SQL engine cannot catch this; only a semantic-aware guard can.
+//
+// Two-tier defence:
+//   • "block"  — the function family and the alias family DISAGREE
+//                (SUM(...) AS Avg…, AVG(...) AS Total…, MIN(...) AS Max…,
+//                COUNT(...) AS Avg…). Near-zero false positives — it is
+//                always either a function bug or an alias lie. We refuse.
+//   • "warn"   — the function is SUM-like and the source-column name
+//                contains a "pre-aggregated" token (Average/Mean/Median/
+//                Spot/EOM/Eod/Latest/Snapshot/EndOf*/StartOf*). The alias
+//                may be honest ("SumOfMonthlyAvgs"); the engine can't
+//                know the user's intent. We surface the warning in the
+//                result text so the agent re-considers without blocking
+//                the legitimate edge case.
+//
+// Implementation: regex-driven, balanced-paren-aware over a stripped copy
+// (comments + string literals removed). Handles single-level nesting like
+// SUM(ISNULL(col, 0)), SUM(CAST(col AS int)), AVG(a + b) — sufficient for
+// the typical bug shape. Multi-level nested aggregates (e.g. SUM(AVG(x)))
+// are valid SQL only inside windowed/grouped contexts and rare; we focus
+// on the high-impact single-level case.
+
+export type AggregateSemanticIssue = {
+  severity: AggregateSeverity
+  line:     number   // 1-based
+  snippet:  string   // the offending substring (≤80 chars)
+  message:  string   // actionable, agent-facing fix hint
+}
+
+const AGG_FUNCTION_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
+  { re: /^(SUM|TOTAL)$/i,                     family: AggregateFamily.Sum   },
+  { re: /^(AVG|AVERAGE|MEAN)$/i,              family: AggregateFamily.Avg   },
+  { re: /^(MIN|MINIMUM)$/i,                   family: AggregateFamily.Min   },
+  { re: /^(MAX|MAXIMUM)$/i,                   family: AggregateFamily.Max   },
+  { re: /^(COUNT|COUNT_BIG)$/i,               family: AggregateFamily.Count },
+]
+
+// Alias-prefix → semantic family. Order matters: more-specific first.
+// We check the alias's word-prefix only — `AvgCreditBal_2025` is Avg-family,
+// `TotalRevenueZAR` is Sum-family, etc.
+const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
+  { re: /^(avg|average|mean|median|mid|middle)/i,                                                    family: AggregateFamily.Avg   },
+  { re: /^(sum|total|aggregate|gross|net|grand)/i,                                                   family: AggregateFamily.Sum   },
+  { re: /^(min|minimum|earliest|oldest|low|lowest|first)/i,                                          family: AggregateFamily.Min   },
+  { re: /^(max|maximum|latest|newest|peak|high|highest|last|spot|eom|eod|snapshot|endof|asof)/i,     family: AggregateFamily.Max   },
+  { re: /^(count|cnt|num|number|distinct|n_|nbr)/i,                                                  family: AggregateFamily.Count },
+]
+
+// Source-column-name tokens that indicate the column IS ALREADY pre-aggregated.
+// Used by the soft-warn rule: SUM-ing one of these almost always returns the
+// wrong number (N× the true value).
+//
+// Camelcase-aware: matches either at a word boundary (`\bAverageCredit…`,
+// `EOMBalance`) OR right after a lowercase letter (`MonthlyAvg`, `dailySpot`).
+// We DO NOT require a trailing word boundary — `AverageCreditBalanceZARMTD`
+// must trigger on `Average`, even though `Average` is followed by `C`
+// (camelcase, no `\b` between them).
+const PREAGGREGATED_COL_RE = /(?:\b|(?<=[a-z]))(Average|Avg|Mean|Median|Spot|EOM|Eod|Latest|Snapshot|EndOf|AsOf|StartOf|MTD|YTD|QTD|WTD)/i
+
+/** Strip comments + string literals while preserving newline positions for line counts. */
+function stripForScan(query: string): string {
+  return query
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/'[^']*'/g, (m) => `'${" ".repeat(Math.max(0, m.length - 2))}'`)
+}
+
+/** Return the line number (1-based) for a character offset in `text`. */
+function lineOf(text: string, offset: number): number {
+  let n = 1
+  for (let i = 0; i < offset && i < text.length; i++) if (text.charCodeAt(i) === 10) n++
+  return n
+}
+
+/** Walk a balanced-paren block starting at `start` (the index of '('). Returns the index AFTER the matching ')', or -1. */
+function findMatchingParen(text: string, start: number): number {
+  if (text.charCodeAt(start) !== 40 /* ( */) return -1
+  let depth = 0
+  for (let i = start; i < text.length; i++) {
+    const ch = text.charCodeAt(i)
+    if (ch === 40) depth++
+    else if (ch === 41) {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
+}
+
+function aliasFamily(alias: string): AggregateFamily | null {
+  for (const { re, family } of ALIAS_PREFIX_FAMILIES) if (re.test(alias)) return family
+  return null
+}
+
+function functionFamily(fnName: string): AggregateFamily | null {
+  for (const { re, family } of AGG_FUNCTION_FAMILIES) if (re.test(fnName)) return family
+  return null
+}
+
+/**
+ * Scan a query for aggregate / output-alias / source-column semantic mismatches.
+ * Returns an empty array for clean queries.
+ *
+ * Caller contract:
+ *   - "block" issues MUST prevent execution (validateQuery already does this).
+ *   - "warn" issues are surfaced in the result text the LLM reads (see
+ *     getQueryWarnings) so the agent re-examines its output without losing
+ *     the data for legitimate edge cases (e.g. `SUM(AverageCount) AS TotalAvgCount`).
+ */
+export function findAggregateSemanticIssues(query: string): AggregateSemanticIssue[] {
+  const stripped = stripForScan(query)
+  const issues: AggregateSemanticIssue[] = []
+
+  // Find every <FN>( occurrence.
+  const fnRe = /\b([A-Z_][A-Z0-9_]*)\s*\(/gi
+  let m: RegExpExecArray | null
+  while ((m = fnRe.exec(stripped)) !== null) {
+    const fnFamily = functionFamily(m[1])
+    if (!fnFamily) continue
+
+    const openIdx  = m.index + m[0].length - 1   // index of '('
+    const closeIdx = findMatchingParen(stripped, openIdx)
+    if (closeIdx < 0) continue
+
+    const argText = stripped.slice(openIdx + 1, closeIdx - 1)
+
+    // After the closing paren, look for an optional alias:
+    //   ) AS aliasName , …
+    //   ) aliasName , …
+    //   ) aliasName\n
+    const tail = stripped.slice(closeIdx, Math.min(closeIdx + 80, stripped.length))
+    const aliasMatch = /^\s*(?:AS\s+)?\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*(?=,|\n|$|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|JOIN\b|ON\b|\)|UNION\b)/i.exec(tail)
+    const alias = aliasMatch?.[1]
+
+    // ── BLOCK rule: function family vs alias family disagree ──
+    if (alias) {
+      const aFamily = aliasFamily(alias)
+      if (aFamily && aFamily !== fnFamily) {
+        // Special case: COUNT(...) AS Total… is a common, legitimate phrasing
+        // ("TotalRows", "TotalCount") — don't block COUNT→sum mismatch.
+        const isBenignCountTotal = fnFamily === AggregateFamily.Count && aFamily === AggregateFamily.Sum
+        if (!isBenignCountTotal) {
+          const snippet = stripped.slice(m.index, Math.min(closeIdx + (aliasMatch?.[0].length ?? 0), m.index + 80))
+          issues.push({
+            severity: AggregateSeverity.Block,
+            line:     lineOf(stripped, m.index),
+            snippet:  snippet.replace(/\s+/g, " ").trim(),
+            message:  `Function \`${m[1].toUpperCase()}\` (family: ${fnFamily}) is aliased as \`${alias}\` (family: ${aFamily}). One of them is wrong — they describe different operations.`,
+          })
+          continue   // don't also warn on the same call
+        }
+      }
+    }
+
+    // ── WARN rule: SUM-like applied to a pre-aggregated column name ──
+    if (fnFamily === AggregateFamily.Sum) {
+      const colMatch = PREAGGREGATED_COL_RE.exec(argText)
+      if (colMatch) {
+        // Suppress the warning if the alias EXPLICITLY acknowledges that this is
+        // a sum of pre-aggregated values — e.g. `SumOfMonthlyAverages`,
+        // `TotalAvgCount`, `GrossAvgFooSummed`. The alias-family check already
+        // confirmed function and alias are both sum-like (otherwise we'd have
+        // hit the BLOCK rule above), so an alias whose family is Sum means
+        // the agent has consciously chosen to sum a pre-aggregated value.
+        const aliasIsExplicitSum = alias && aliasFamily(alias) === AggregateFamily.Sum
+        if (aliasIsExplicitSum) continue
+        const snippet = stripped.slice(m.index, Math.min(closeIdx, m.index + 80))
+        issues.push({
+          severity: AggregateSeverity.Warn,
+          line:     lineOf(stripped, m.index),
+          snippet:  snippet.replace(/\s+/g, " ").trim(),
+          message:  `\`${m[1].toUpperCase()}\` is being applied to a column whose name suggests it is already pre-aggregated (token: \`${colMatch[0]}\`). Summing N pre-averaged or point-in-time values usually returns N× the real value. Did you mean \`AVG(...)\` (for averages) or the \`MAX(pkMonth)\` row's value (for "latest spot")? If the SUM is intentional, alias the output explicitly with a sum-prefixed name (e.g. \`SumOfMonthlyAverages\`, \`TotalAvgFoo\`) and the warning will be suppressed.`,
+        })
+      }
+    }
+  }
+  return issues
+}
+
+/**
+ * Format the warn-level issues from findAggregateSemanticIssues as a banner
+ * to be prepended to the query result text the LLM reads. Returns null if
+ * there are no warnings (don't pollute clean output).
+ *
+ * The banner is intentionally loud — the agent has been observed skipping
+ * subtle hints. Bug-equivalence with a controller spotting it on review is
+ * the bar.
+ */
+export function getQueryWarnings(query: string): string | null {
+  const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
+  if (warns.length === 0) return null
+  const lines = [
+    `⚠ SQL CORRECTNESS WARNING — review BEFORE trusting the numbers below:`,
+    ``,
+  ]
+  for (const w of warns) {
+    lines.push(`  • line ${w.line}: ${w.snippet}`)
+    lines.push(`    ${w.message}`)
+    lines.push(``)
+  }
+  lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+  lines.push(`---`)
+  return lines.join("\n")
+}
+

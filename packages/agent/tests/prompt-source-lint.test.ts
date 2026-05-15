@@ -13,12 +13,12 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { ABI_SYNC_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "../src/loop/system-prompt.js"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "../src/loop/system-prompt.js"
 
 const KB = 1024
 
 describe("prompt source-of-truth — byte ceilings", () => {
-  it("DEFAULT_SYSTEM_PROMPT stays under 13 KB (current ~11 KB)", () => {
+  it("DEFAULT_SYSTEM_PROMPT stays under 13 KB (current ~12 KB; ETL playbook lives in BIG_TABLE_ETL_SECTION)", () => {
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThan(13 * KB)
   })
 
@@ -28,6 +28,26 @@ describe("prompt source-of-truth — byte ceilings", () => {
 
   it("ABI_SYNC_SECTION stays under 8 KB", () => {
     expect(ABI_SYNC_SECTION.length).toBeLessThan(8 * KB)
+  })
+
+  it("BIG_TABLE_ETL_SECTION stays under 7 KB (canonical 2-stage pattern + anti-patterns + checklist)", () => {
+    expect(BIG_TABLE_ETL_SECTION.length).toBeGreaterThan(2 * KB)
+    expect(BIG_TABLE_ETL_SECTION.length).toBeLessThan(7 * KB)
+  })
+
+  it("BIG_TABLE_ETL_SECTION teaches the must-have rules", () => {
+    // Two-stage pattern (narrow keys → fetch detail rows for those keys).
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/STAGE\s*1/i)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/STAGE\s*2/i)
+    // Hard performance budget.
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/2\s*minutes?|120\s*s/i)
+    // Unique 8-hex suffix on every #temp (collision-proof on pooled SPIDs).
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/8[-\s]?hex/i)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/#\w+_a3f91c08/)  // example suffix appears in canonical SQL
+    // Correctness traps the agent must internalise.
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i)            // warns about SUM(Average…)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i)                   // names the per-row anti-pattern
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i)      // TOP n needs a tiebreaker
   })
 })
 
@@ -54,5 +74,14 @@ describe("prompt source-of-truth — no duplication across blocks", () => {
     // Injected only on sync-shaped goals via decideSections.
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("uspSyncContract")
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("preview-first workflow")
+  })
+
+  it("the BIG_TABLE_ETL canonical example is NOT inlined in DEFAULT_SYSTEM_PROMPT", () => {
+    // Only injected on data-shaped goals via decideSections.
+    // A one-line reality reminder is allowed; the canonical SQL + anti-pattern list is not.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("INTO #topClients")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("ix_revLines")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(/Anti-patterns?\s*(to avoid|—)/i)
+    expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(/STAGE\s*1.*narrow the keys/i)
   })
 })

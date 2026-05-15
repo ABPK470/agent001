@@ -18,6 +18,14 @@ export interface PromptBudgetConfig {
   readonly charPerToken?: number
   readonly safetyMarginTokens?: number
   readonly hardMaxPromptChars?: number
+  /** Optional model hint — picks a per-family chars-per-token factor. */
+  readonly model?: string
+  /**
+   * Optional callback fired once after allocation completes, with a
+   * `section -> tokens` breakdown. Used by the agent loop to emit
+   * `prompt-section-sizes` debug.trace entries for live inspection.
+   */
+  readonly onSectionSizes?: (breakdown: Record<string, number>) => void
 }
 
 export interface PromptBudgetModelProfile {
@@ -88,8 +96,8 @@ export const MAX_PROMPT_CHAR_BUDGET = 1_500_000
 // Section specs & behavior
 // ============================================================================
 
-export type BaseSectionKey = "system" | "memory" | "history" | "user" | "other"
-export const BASE_SECTION_KEYS: readonly BaseSectionKey[] = ["system", "memory", "history", "user", "other"]
+import { BaseSectionKey } from "../domain/enums/context.js"
+export { BaseSectionKey }
 
 export interface SectionSpec {
   readonly key: BaseSectionKey
@@ -99,11 +107,11 @@ export interface SectionSpec {
 }
 
 export const BASE_SECTION_SPECS: readonly SectionSpec[] = [
-  { key: "system", weight: 0.25, minChars: 2_048, maxChars: 40_000 },
-  { key: "memory", weight: 0.20, minChars: 1_536, maxChars: 30_000 },
-  { key: "history", weight: 0.35, minChars: 2_048, maxChars: 50_000 },
-  { key: "user", weight: 0.12, minChars: 1_536, maxChars: 16_000 },
-  { key: "other", weight: 0.08, minChars: 512, maxChars: 12_000 },
+  { key: BaseSectionKey.System, weight: 0.25, minChars: 2_048, maxChars: 40_000 },
+  { key: BaseSectionKey.Memory, weight: 0.20, minChars: 1_536, maxChars: 30_000 },
+  { key: BaseSectionKey.History, weight: 0.35, minChars: 2_048, maxChars: 50_000 },
+  { key: BaseSectionKey.User, weight: 0.12, minChars: 1_536, maxChars: 16_000 },
+  { key: BaseSectionKey.Other, weight: 0.08, minChars: 512, maxChars: 12_000 },
 ]
 
 export const SECTION_ORDER: readonly PromptBudgetSection[] = [

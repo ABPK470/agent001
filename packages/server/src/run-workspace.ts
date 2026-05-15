@@ -1,22 +1,24 @@
 import { createHash, randomUUID } from "node:crypto"
+import { RunProfile } from "./enums/run-workspace.js"
+import { RunTaskType } from "./enums/run-workspace.js"
 import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
 
-export type RunTaskType = "code_generation" | "analysis_or_chat"
+export { RunTaskType }
 
 /**
  * Run profile selects the safety/isolation model.
  *
- *  - "developer": legacy mode. Code-generation runs get an isolated copy of
+ *  - RunProfile.Developer: legacy mode. Code-generation runs get an isolated copy of
  *    the source tree; analysis/chat runs execute against the shared source
  *    root. Suitable for trusted local developer use.
- *  - "hosted": every run executes inside an empty sandbox directory
+ *  - RunProfile.Hosted: every run executes inside an empty sandbox directory
  *    completely outside the application source tree. The agent has no
  *    visibility into the host workspace. This is the default for hosted
  *    deployments (Phase 1 of the hosted-MIA plan).
  */
-export type RunProfile = "developer" | "hosted"
+export { RunProfile }
 
 export interface RunWorkspaceContext {
   readonly runId: string
@@ -64,7 +66,7 @@ function shouldIgnorePath(path: string): boolean {
 }
 
 export function classifyRunTaskType(goal: string): RunTaskType {
-  return CODEGEN_RE.test(goal) ? "code_generation" : "analysis_or_chat"
+  return CODEGEN_RE.test(goal) ? RunTaskType.CodeGeneration : RunTaskType.AnalysisOrChat
 }
 
 /**
@@ -74,14 +76,14 @@ export function classifyRunTaskType(goal: string): RunTaskType {
  */
 export function getRunProfile(): RunProfile {
   const flag = (process.env["AGENT_HOSTED_MODE"] ?? "").toLowerCase()
-  return flag === "true" || flag === "1" || flag === "yes" ? "hosted" : "developer"
+  return flag === "true" || flag === "1" || flag === "yes" ? RunProfile.Hosted : RunProfile.Developer
 }
 
 export function shouldUseIsolatedWorkspace(goal: string, resume: boolean): boolean {
   const isolationEnabled = process.env["AGENT_ISOLATED_WORKSPACE"] !== "false"
   if (!isolationEnabled || resume) return false
-  if (getRunProfile() === "hosted") return true
-  return classifyRunTaskType(goal) === "code_generation"
+  if (getRunProfile() === RunProfile.Hosted) return true
+  return classifyRunTaskType(goal) === RunTaskType.CodeGeneration
 }
 
 export async function prepareRunWorkspace(params: {
@@ -97,7 +99,7 @@ export async function prepareRunWorkspace(params: {
 
   // Hosted profile is non-negotiable: every run lives in an empty sandbox
   // outside the source tree, even on resume. We never copy source bytes in.
-  if (profile === "hosted") {
+  if (profile === RunProfile.Hosted) {
     const sandboxRoot = resolve(getRunWorkspaceRoot(), `${params.runId}-${randomUUID().slice(0, 8)}`)
     await mkdir(sandboxRoot, { recursive: true })
     return {

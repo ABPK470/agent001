@@ -1,5 +1,5 @@
 /**
- * Helpers for fetch-url: SSRF guards + Puppeteer fallback. Extracted from fetch-url.ts.
+ * Helpers for fetch-url: SSRF guards + Playwright fallback. Extracted from fetch-url.ts.
  *
  * @module
  */
@@ -60,21 +60,21 @@ export function checkResolvedIp(ip: string): string | null {
 }
 
 /**
- * Fallback: use headless Chromium via Puppeteer to fetch a page that blocks plain HTTP.
- * Lazy-imports puppeteer so it's only loaded when actually needed.
+ * Fallback: use headless Chromium via Playwright to fetch a page that blocks plain HTTP.
+ * Lazy-imports playwright so it's only loaded when actually needed.
  */
 export async function fetchWithBrowser(url: string, maxLength: number): Promise<string | null> {
-  let launch: (options?: Record<string, unknown>) => Promise<import("puppeteer").Browser>
+  let chromium: typeof import("playwright").chromium
   try {
-    const mod = await import("puppeteer")
-    launch = mod.default?.launch ?? mod.launch
+    const mod = await import("playwright")
+    chromium = mod.chromium
   } catch {
-    return null // puppeteer not available
+    return null // playwright not available
   }
 
-  let browser: import("puppeteer").Browser | null = null
+  let browser: import("playwright").Browser | null = null
   try {
-    browser = await launch({
+    browser = await chromium.launch({
       headless: true,
       args: [
         "--no-sandbox",
@@ -85,10 +85,11 @@ export async function fetchWithBrowser(url: string, maxLength: number): Promise<
       ],
     })
 
-    const page = await browser.newPage()
-    await page.setUserAgent(
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    )
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    })
+    const page = await context.newPage()
 
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 })
 

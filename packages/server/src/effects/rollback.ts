@@ -1,6 +1,8 @@
+import { EventType } from "@mia/agent"
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
+import { RollbackActionType } from "../enums/effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import { getRunEffects } from "./queries.js"
 import { hashContent } from "./snapshots.js"
@@ -29,7 +31,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   const preview = await previewRollback(runId)
   if (preview.wouldFail.length > 0) {
     broadcast({
-      type: "rollback.blocked",
+      type: EventType.RollbackBlocked,
       data: { runId, failCount: preview.wouldFail.length, targets: preview.wouldFail.map(f => f.target) },
     })
     return {
@@ -44,7 +46,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     }
   }
 
-  broadcast({ type: "rollback.started", data: { runId, effectCount: getRunEffects(runId).length } })
+  broadcast({ type: EventType.RollbackStarted, data: { runId, effectCount: getRunEffects(runId).length } })
 
   const effects = getRunEffects(runId)
   const result: RollbackResult = {
@@ -78,7 +80,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
           markCompensated(effect.id)
           result.compensated++
           compensatedTargets.push(effect.target)
-          broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "deleted" } })
+          broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Deleted } })
         } else if (currentHash === null) {
           result.skipped++
         }
@@ -96,7 +98,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
         markCompensated(effect.id)
         result.compensated++
         compensatedTargets.push(effect.target)
-        broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "restored" } })
+        broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Restored } })
       } else if (effect.kind === "delete") {
         if (snapshot) {
           const snapshotContent = snapshot.content as string | null
@@ -110,7 +112,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             markCompensated(effect.id)
             result.compensated++
             compensatedTargets.push(effect.target)
-            broadcast({ type: "rollback.effect", data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: "recreated" } })
+            broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Recreated } })
           } else {
             result.skipped++
           }
@@ -130,7 +132,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   result.skipped += effects.filter((e) => e.kind === "command" || e.kind === "network").length
 
   broadcast({
-    type: "rollback.completed",
+    type: EventType.RollbackCompleted,
     data: {
       runId,
       total: result.total,

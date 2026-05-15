@@ -7,8 +7,10 @@
  * @module
  */
 
+import { SyncProgressKind } from "../../domain/enums/sync.js"
+
 export interface ExecuteProgress {
-  type: "started" | "step" | "table-started" | "table-progress" | "table-done" | "completed" | "failed"
+  type: SyncProgressKind
   table?: string
   step?: string
   rowsApplied?: number

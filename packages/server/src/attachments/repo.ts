@@ -10,12 +10,9 @@
 import type Database from "better-sqlite3"
 import { randomUUID } from "node:crypto"
 import { getDb } from "../db/connection.js"
+import { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus } from "../enums/attachments.js"
 
-export type AttachmentScope         = "run" | "session" | "workspace_asset"
-export type AttachmentIngestionMode = "text_inline" | "text_retrieval" | "binary_reference" | "provider_file_api"
-export type AttachmentStatus        = "uploaded" | "processed" | "rejected" | "deleted"
-export type AttachmentSource        = "user_upload" | "generated" | "promoted"
-export type AttachmentImportMode    = "copy" | "reference"
+export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }
 
 export interface AttachmentRow {
   id:               string
@@ -108,7 +105,7 @@ export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
     storageUri:      input.storageUri,
     textExtractUri:  input.textExtractUri  ?? null,
     ingestionMode:   input.ingestionMode,
-    source:          input.source          ?? "user_upload",
+    source:          input.source          ?? AttachmentSource.UserUpload,
     purposeTag:      input.purposeTag      ?? null,
     goalSnapshot:    input.goalSnapshot    ?? null,
     uploadedAt,

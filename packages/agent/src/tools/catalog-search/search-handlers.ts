@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { CatalogGraph, ViewLineage } from "../catalog.js"
+import type { CatalogGraph, ViewLineage } from "../catalog/index.js"
 import { fmtSysEntry, fmtTable } from "./formatters.js"
 
 export function handleSearch(catalog: CatalogGraph, query: string, schemaFilter?: string): string {

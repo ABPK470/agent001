@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../../api"
+import { RunStatus } from "../../enums"
 import { useStore } from "../../store"
 import type {
     AgentDefinition,
@@ -100,8 +101,8 @@ export function DetailsPanel({
             <Tip text={a.description}>
               <div className="truncate" style={{ color: C.dim }}>{a.description}</div>
             </Tip>
-            <Tip text={`tools: ${a.tools.join(", ")}`}>
-              <div className="truncate" style={{ color: C.muted }}>tools: {a.tools.join(", ")}</div>
+            <Tip text={`tools: ${(a.tools ?? []).join(", ")}`}>
+              <div className="truncate" style={{ color: C.muted }}>tools: {(a.tools ?? []).join(", ")}</div>
             </Tip>
           </div>
         ))}
@@ -262,7 +263,7 @@ export function ComparePanel({
   const [runA, setRunA] = useState<string>("")
   const [runB, setRunB] = useState<string>("")
 
-  const completedRuns = runs.filter((r) => r.status === "completed" || r.status === "failed")
+  const completedRuns = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed)
 
   return (
     <div className="text-[13px] px-3 py-2 space-y-3">

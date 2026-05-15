@@ -7,10 +7,11 @@
  * @module
  */
 
-import { estimateTokens, extractFilePath, MAX_CONTEXT_TOKENS } from "./context-management.js"
-import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget.js"
+import { MessageRole } from "../domain/enums/message.js"
 import type { Message, PromptBudgetSection } from "../types.js"
 import { DROP_PRIORITY } from "../types.js"
+import { estimateTokens, extractFilePath, MAX_CONTEXT_TOKENS } from "./context-management/index.js"
+import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget/index.js"
 
 // ============================================================================
 // Truncation
@@ -21,16 +22,16 @@ export interface TruncationResult {
   readonly budgetDiagnostics?: PromptBudgetDiagnostics
 }
 
-export function truncateMessages(messages: Message[]): TruncationResult {
+export function truncateMessages(messages: Message[], modelHint?: string): TruncationResult {
   const MAX_RESULT_LEN = 8000
   const trimmed = messages.map((m) => {
-    if (m.role === "tool" && m.content && m.content.length > MAX_RESULT_LEN) {
+    if (m.role === MessageRole.Tool && m.content && m.content.length > MAX_RESULT_LEN) {
       return { ...m, content: m.content.slice(0, MAX_RESULT_LEN) + "\n... (output truncated)" }
     }
     return m
   })
 
-  if (estimateTokens(trimmed) <= MAX_CONTEXT_TOKENS) return { messages: trimmed }
+  if (estimateTokens(trimmed, modelHint) <= MAX_CONTEXT_TOKENS) return { messages: trimmed }
   if (trimmed.length <= 4) return { messages: trimmed }
 
   const hasStructuredPrompt = trimmed.some((m) => m.section != null)
@@ -41,14 +42,49 @@ export function truncateMessages(messages: Message[]): TruncationResult {
       maxOutputTokens: 4096,
       charPerToken: 4,
       hardMaxPromptChars: MAX_CONTEXT_TOKENS * 4,
+      model: modelHint,
     })
     if (budgetResult.messages.length > 0) {
-      return { messages: budgetResult.messages, budgetDiagnostics: budgetResult.diagnostics }
+      // Second pass — distribute the *history* section budget across
+      // tool-result messages so no single result can starve the others.
+      // Without this the static MAX_RESULT_LEN cap above is the only
+      // defence, and it doesn't adapt to how many tool results landed
+      // in this iteration.
+      const finalMessages = enforcePerToolResultCap(
+        budgetResult.messages,
+        budgetResult.diagnostics.caps.historyChars,
+      )
+      return { messages: finalMessages, budgetDiagnostics: budgetResult.diagnostics }
     }
     return { messages: truncateBySection(trimmed) }
   }
 
   return { messages: truncateLegacy(trimmed) }
+}
+
+/**
+ * Distribute a section budget across all tool-result messages so the
+ * largest result can't crowd out the rest. Each result is capped at
+ * `floor(historyBudget / toolMessageCount)` clamped to [1024, 16384]
+ * chars. Pure post-process — operates on the already-allocated message
+ * array so it cannot grow the prompt.
+ */
+function enforcePerToolResultCap(messages: Message[], historyBudgetChars: number): Message[] {
+  const PER_RESULT_MIN = 1024
+  const PER_RESULT_MAX = 16384
+  const toolMsgCount = messages.reduce((n, m) => n + (m.role === MessageRole.Tool ? 1 : 0), 0)
+  if (toolMsgCount === 0) return messages
+  const perResultCap = Math.min(
+    PER_RESULT_MAX,
+    Math.max(PER_RESULT_MIN, Math.floor(historyBudgetChars / toolMsgCount)),
+  )
+  let mutated = false
+  const out = messages.map((m) => {
+    if (m.role !== MessageRole.Tool || !m.content || m.content.length <= perResultCap) return m
+    mutated = true
+    return { ...m, content: m.content.slice(0, perResultCap) + "\n... (output truncated by section budget)" }
+  })
+  return mutated ? out : messages
 }
 
 function truncateBySection(messages: Message[]): Message[] {
@@ -78,7 +114,7 @@ function dropOldestHistory(messages: Message[]): Message[] {
   )
   if (systemEnd < 0) return messages
 
-  const userIdx = messages.findIndex((m) => m.section === "user" || (m.role === "user" && !m.section))
+  const userIdx = messages.findIndex((m) => m.section === "user" || (m.role === MessageRole.User && !m.section))
   const historyStart = Math.max(systemEnd, userIdx + 1)
 
   const head = messages.slice(0, historyStart)
@@ -94,7 +130,7 @@ function dropOldestHistory(messages: Message[]): Message[] {
 
   return [
     ...head,
-    { role: "system" as const, content: summary, section: "history" as PromptBudgetSection },
+    { role: MessageRole.System, content: summary, section: "history" as PromptBudgetSection },
     ...keptTail,
   ]
 }
@@ -208,7 +244,7 @@ function truncateLegacy(messages: Message[]): Message[] {
   while (tailSize < messages.length - 2) {
     const dropped = messages.slice(2, messages.length - tailSize)
     const summary = buildDroppedHistorySummary(dropped)
-    const candidate = [...head, { role: "system" as const, content: summary }, ...messages.slice(-tailSize)]
+    const candidate = [...head, { role: MessageRole.System, content: summary }, ...messages.slice(-tailSize)]
     if (estimateTokens(candidate) > MAX_CONTEXT_TOKENS) {
       tailSize = Math.max(4, tailSize - 2)
       break
@@ -219,7 +255,7 @@ function truncateLegacy(messages: Message[]): Message[] {
   const summary = buildDroppedHistorySummary(dropped)
   return [
     ...head,
-    { role: "system" as const, content: summary },
+    { role: MessageRole.System, content: summary },
     ...messages.slice(-tailSize),
   ]
 }

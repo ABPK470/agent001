@@ -1,3 +1,4 @@
+import { TrajectoryEventKind } from "../enums/trajectory.js"
 import type { GoalEvent } from "./types.js"
 import { replay } from "./validator.js"
 
@@ -55,8 +56,8 @@ export function compareTrajectories(runIdA: string, runIdB: string): TrajectoryC
   const a = replay(runIdA)
   const b = replay(runIdB)
 
-  const goalA = a.trajectory.events.find((e) => e.event.kind === "goal")
-  const goalB = b.trajectory.events.find((e) => e.event.kind === "goal")
+  const goalA = a.trajectory.events.find((e) => e.event.kind === TrajectoryEventKind.Goal)
+  const goalB = b.trajectory.events.find((e) => e.event.kind === TrajectoryEventKind.Goal)
   const goalTextA = goalA ? (goalA.event as GoalEvent).text : ""
   const goalTextB = goalB ? (goalB.event as GoalEvent).text : ""
   const normA = goalTextA.trim().toLowerCase().replace(/\s+/g, " ")

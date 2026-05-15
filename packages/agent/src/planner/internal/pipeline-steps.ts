@@ -1,3 +1,4 @@
+import { DelegationOutputValidationCode, PipelineStatus } from "@mia/agent"
 /**
  * Pipeline step execution — deterministic tool calls and subagent delegation
  * with validation, retry, and post-step syntax checking.
@@ -10,22 +11,22 @@
  */
 
 import { executeDeterministicStep } from "../pipeline-steps/deterministic.js"
-import {
-    isBlueprintLikeStep,
-    type SubagentStepValidationContext,
-} from "./pipeline-repair.js"
+import { runSubagentMandatoryRetry } from "../pipeline-steps/subagent-retry.js"
 import {
     runPostStepSyntaxValidation,
     validateSubagentCompletion,
-} from "../pipeline-validation.js"
-import { runSubagentMandatoryRetry } from "../pipeline-steps/subagent-retry.js"
-import type { DelegateFn, ToolExecFn } from "../pipeline.js"
+} from "../pipeline-validation/index.js"
+import type { DelegateFn, ToolExecFn } from "../pipeline/index.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type {
     PipelineStepResult,
     PlanStep,
     SubagentTaskStep,
 } from "../types.js"
+import {
+    isBlueprintLikeStep,
+    type SubagentStepValidationContext,
+} from "./pipeline-repair.js"
 
 // ============================================================================
 // Step dispatch
@@ -58,7 +59,7 @@ async function executeSubagentStep(
   validationCtx?: SubagentStepValidationContext,
 ): Promise<PipelineStepResult> {
   if (signal?.aborted) {
-    return { name: step.name, status: "failed", error: "Aborted", failureClass: "cancelled", durationMs: Date.now() - t0 }
+    return { name: step.name, status: PipelineStatus.Failed, error: "Aborted", failureClass: "cancelled", durationMs: Date.now() - t0 }
   }
 
   try {
@@ -102,7 +103,7 @@ async function executeSubagentStep(
       // Trigger a single mandatory-retry path when the step required file
       // mutations (or BLUEPRINT contract) but produced none.
       const eligibleForRetry =
-        (strictFailure.code === "missing_file_mutation_evidence"
+        (strictFailure.code === DelegationOutputValidationCode.MissingFileMutationEvidence
           || (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message)))
         && step.executionContext.targetArtifacts.length > 0
       if (eligibleForRetry) {
@@ -117,7 +118,7 @@ async function executeSubagentStep(
 
       return {
         name: step.name,
-        status: "failed",
+        status: PipelineStatus.Failed,
         executionState: "failed",
         acceptanceState: "repair_required",
         error: strictFailure.message,
@@ -141,7 +142,7 @@ async function executeSubagentStep(
     if (syntaxErrors.length > 0) {
       return {
         name: step.name,
-        status: "failed",
+        status: PipelineStatus.Failed,
         executionState: "failed",
         acceptanceState: "repair_required",
         error: `Syntax validation failed after step completion:\n${syntaxErrors.join("\n")}`,
@@ -157,7 +158,7 @@ async function executeSubagentStep(
 
     return {
       name: step.name,
-      status: "completed",
+      status: PipelineStatus.Completed,
       executionState: "executed",
       acceptanceState: "pending_verification",
       output,
@@ -173,7 +174,7 @@ async function executeSubagentStep(
     const isTransient = /ECONNRESET|ETIMEDOUT|rate.?limit|429|503|overloaded/i.test(errMsg)
     return {
       name: step.name,
-      status: "failed",
+      status: PipelineStatus.Failed,
       executionState: "failed",
       acceptanceState: "rejected",
       error: errMsg,
@@ -194,7 +195,7 @@ function failed(
 ): PipelineStepResult {
   return {
     name: step.name,
-    status: "failed",
+    status: PipelineStatus.Failed,
     executionState: "failed",
     acceptanceState,
     error,

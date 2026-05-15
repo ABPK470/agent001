@@ -16,9 +16,12 @@ import {
     migrateNotifications,
     saveNotification,
     type DbNotification,
-} from "../src/db.js"
+} from "../src/db/index.js"
+import { seedSession, seedUser } from "./_fk-helpers.js"
 
 // ── Helper: in-memory DB ─────────────────────────────────────────
+
+const TEST_UPN = "test-user@local"
 
 let testDb: Database.Database
 
@@ -29,6 +32,7 @@ beforeEach(() => {
   _setDb(testDb)
   _migrate(testDb)
   migrateNotifications()
+  seedUser(testDb, TEST_UPN)
 })
 
 afterEach(() => {
@@ -36,9 +40,10 @@ afterEach(() => {
 })
 
 function insertRun(id: string, status: string, goal = "test goal") {
+  seedSession(testDb, "test-session", TEST_UPN)
   testDb.prepare(
-    "INSERT INTO runs (id, goal, status, created_at) VALUES (?, ?, ?, datetime('now'))"
-  ).run(id, goal, status)
+    "INSERT INTO runs (id, goal, status, session_id, upn, display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
+  ).run(id, goal, status, "test-session", TEST_UPN, TEST_UPN)
 }
 
 function makeNotification(overrides: Partial<DbNotification> = {}): DbNotification {
@@ -52,6 +57,8 @@ function makeNotification(overrides: Partial<DbNotification> = {}): DbNotificati
     actions: "[]",
     read: 0,
     created_at: new Date().toISOString(),
+    owner_upn: TEST_UPN,
+    session_id: null,
     ...overrides,
   }
 }

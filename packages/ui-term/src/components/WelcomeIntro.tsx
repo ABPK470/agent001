@@ -300,7 +300,7 @@ export function WelcomeIntro({ onDone, durationMs = 3600, mode = "intro" }: Prop
             : `a001-term-in  500ms ease-out 400ms forwards, a001-term-out 320ms ease-in ${COMPOSE_OUT}ms forwards`,
         }}
       >
-        <span className="a001-word" aria-label="agent001">
+        <span className="a001-word" aria-label="mia">
           {cells.map((cell, i) => (
             <span
               key={i}

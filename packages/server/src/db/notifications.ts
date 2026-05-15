@@ -11,6 +11,10 @@ export interface DbNotification {
   message: string
   run_id: string | null
   step_id: string | null
+  /** Owner UPN — always set; FK to users(upn). */
+  owner_upn: string
+  /** Originating session — nullable for cross-session notifications. */
+  session_id: string | null
   actions: string     // JSON array of { label, action, data }
   read: number        // 0 or 1
   created_at: string
@@ -19,24 +23,29 @@ export interface DbNotification {
 export function migrateNotifications(): void {
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      run_id TEXT,
-      step_id TEXT,
-      actions TEXT NOT NULL DEFAULT '[]',
-      read INTEGER NOT NULL DEFAULT 0,
+      id         TEXT PRIMARY KEY,
+      type       TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      run_id     TEXT REFERENCES runs(id)     ON DELETE CASCADE,
+      step_id    TEXT,
+      owner_upn  TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(sid) ON DELETE CASCADE,
+      actions    TEXT NOT NULL DEFAULT '[]',
+      read       INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_read     ON notifications(read, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_owner    ON notifications(owner_upn, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_session  ON notifications(session_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);
   `)
 }
 
 export function saveNotification(n: DbNotification): void {
   getDb().prepare(`
-    INSERT OR REPLACE INTO notifications (id, type, title, message, run_id, step_id, actions, read, created_at)
-    VALUES (@id, @type, @title, @message, @run_id, @step_id, @actions, @read, @created_at)
+    INSERT OR REPLACE INTO notifications (id, type, title, message, run_id, step_id, owner_upn, session_id, actions, read, created_at)
+    VALUES (@id, @type, @title, @message, @run_id, @step_id, @owner_upn, @session_id, @actions, @read, @created_at)
   `).run(n)
 }
 
@@ -52,8 +61,8 @@ export function listNotifications(limit = 50): DbNotification[] {
 
 /**
  * Notifications visible to a non-admin user. Includes:
- *   - notifications with no run_id (system-wide), and
- *   - notifications whose run is owned by this user (matched by upn or sid).
+ *   - notifications with no owner (system-wide), and
+ *   - notifications owned by this user (matched by upn or session id).
  */
 export function listNotificationsForUser(
   opts: { upn?: string | null; sid?: string | null },
@@ -63,12 +72,11 @@ export function listNotificationsForUser(
   const sid = opts.sid ?? null
   return getDb()
     .prepare(`
-      SELECT n.* FROM notifications n
-      LEFT JOIN runs r ON r.id = n.run_id
-      WHERE n.run_id IS NULL
-         OR (@upn IS NOT NULL AND r.upn = @upn)
-         OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
-      ORDER BY n.created_at DESC LIMIT @limit
+      SELECT * FROM notifications
+      WHERE (owner_upn IS NULL AND session_id IS NULL)
+         OR (@upn IS NOT NULL AND owner_upn = @upn)
+         OR (@upn IS NULL AND @sid IS NOT NULL AND session_id = @sid)
+      ORDER BY created_at DESC LIMIT @limit
     `)
     .all({ upn, sid, limit }) as DbNotification[]
 }
@@ -91,12 +99,11 @@ export function getUnreadNotificationCountForUser(opts: { upn?: string | null; s
   const sid = opts.sid ?? null
   const row = getDb()
     .prepare(`
-      SELECT COUNT(*) as count FROM notifications n
-      LEFT JOIN runs r ON r.id = n.run_id
-      WHERE n.read = 0 AND (
-        n.run_id IS NULL
-        OR (@upn IS NOT NULL AND r.upn = @upn)
-        OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
+      SELECT COUNT(*) as count FROM notifications
+      WHERE read = 0 AND (
+        (owner_upn IS NULL AND session_id IS NULL)
+        OR (@upn IS NOT NULL AND owner_upn = @upn)
+        OR (@upn IS NULL AND @sid IS NOT NULL AND session_id = @sid)
       )
     `).get({ upn, sid }) as { count: number }
   return row.count

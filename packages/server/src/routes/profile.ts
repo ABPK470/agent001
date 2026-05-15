@@ -26,7 +26,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   // synthetic "no owner" view (zero used, full quota) so the UI can still
   // render meaningful defaults before sign-in.
   app.get("/api/runtime/attachment-usage", async (req) => {
-    const ownerUpn = req.session?.upn ?? null
+    const ownerUpn = req.session.upn
     const usage = getOwnerUsage(ownerUpn)
     const retention = getRetentionPolicy()
     return {

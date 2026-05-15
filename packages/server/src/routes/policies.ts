@@ -12,8 +12,9 @@
  * server restart.
  */
 
+import { isPolicyEffect, PolicyEffect } from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db.js"
+import * as db from "../db/index.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   // Admin governance changes have no run context — log them under the
@@ -22,7 +23,7 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
   try {
     db.saveAudit({
       run_id:    "__admin__",
-      actor:     req.session?.upn ?? "unknown",
+      actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),
       timestamp: new Date().toISOString(),
@@ -41,7 +42,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       effect:     r.effect,
       condition:  r.condition,
       parameters: JSON.parse(r.parameters),
-      source:     r.source ?? "db",
+      source:     r.source ?? db.PolicySource.Db,
       createdAt:  r.created_at,
       updatedAt:  r.updated_at ?? null,
       updatedBy:  r.updated_by ?? null,
@@ -59,7 +60,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
       reply.code(400)
       return { error: "name, effect, and condition are required" }
     }
-    if (!["allow", "require_approval", "deny"].includes(effect)) {
+    if (!isPolicyEffect(effect)) {
       reply.code(400)
       return { error: "effect must be allow, require_approval, or deny" }
     }
@@ -68,13 +69,13 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
     const now = new Date().toISOString()
     db.savePolicyRule({
       name,
-      effect,
+      effect:     effect satisfies PolicyEffect,
       condition,
       parameters: JSON.stringify(parameters ?? {}),
       created_at: existing?.created_at ?? now,
-      source:     existing?.source ?? "db",
+      source:     existing?.source ?? db.PolicySource.Db,
       updated_at: now,
-      updated_by: req.session.upn ?? null,
+      updated_by: req.session.upn,
     })
 
     audit(req, existing ? "policy.update" : "policy.create", { name, effect, condition })

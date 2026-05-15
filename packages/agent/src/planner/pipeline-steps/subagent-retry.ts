@@ -11,8 +11,8 @@ import {
     isBlueprintLikeStep,
     type SubagentStepValidationContext,
 } from "../internal/pipeline-repair.js"
-import { validateSubagentCompletion } from "../pipeline-validation.js"
-import type { DelegateFn } from "../pipeline.js"
+import { validateSubagentCompletion } from "../pipeline-validation/index.js"
+import type { DelegateFn } from "../pipeline/index.js"
 import type { PipelineStepResult, SubagentTaskStep } from "../types.js"
 
 export interface MandatoryRetryInput {

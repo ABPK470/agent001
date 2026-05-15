@@ -5,13 +5,13 @@
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOutput } from "../../components/CodeBlock"
+import { EditorTab, RunStatus } from "../../enums"
 import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
-  C,
-  fmtK,
-  statusDot,
-  type EditorTab,
+    C,
+    fmtK,
+    statusDot,
 } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
@@ -226,7 +226,7 @@ function fmtPipeline(p: PipelineGroup, lines: string[]): void {
 }
 
 function fmtStep(s: StepGroup, idx: number, lines: string[]): void {
-  const status = s.end?.status ?? "running"
+  const status = s.end?.status ?? RunStatus.Running
   const dur = s.end?.durationMs
   lines.push(`${INDENT}STEP ${idx} · ${s.start.stepName}  ${s.start.stepType}  ${status}${dur != null ? `  ${dur}ms` : ""}`)
   if (s.childStart) {
@@ -264,9 +264,9 @@ export function EditorTabs({
   }, [trace])
 
   const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
-    { id: "llm-calls", label: "Trace", count: llmCallCount },
-    { id: "tool-timeline", label: "Tool Timeline", count: stepCount },
-    { id: "map", label: "Map" },
+    { id: EditorTab.LlmCalls, label: "Trace", count: llmCallCount },
+    { id: EditorTab.ToolTimeline, label: "Tool Timeline", count: stepCount },
+    { id: EditorTab.Map, label: "Map" },
   ]
 
   return (
@@ -336,7 +336,7 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
       {steps.map((step, i) => {
         const key = stepKey(step, i)
         const isLast = i === steps.length - 1
-        const isRunning = step.status === "running"
+        const isRunning = step.status === RunStatus.Running
         const isExpanded = expanded === key
         const duration = step.startedAt && step.completedAt
           ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
@@ -344,17 +344,17 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
 
         const StatusIcon = isRunning
           ? Loader2
-          : step.status === "completed"
+          : step.status === RunStatus.Completed
           ? CheckCircle2
-          : step.status === "failed"
+          : step.status === RunStatus.Failed
           ? XCircle
           : Circle
 
         const iconColor = isRunning
           ? C.accent
-          : step.status === "completed"
+          : step.status === RunStatus.Completed
           ? C.success
-          : step.status === "failed"
+          : step.status === RunStatus.Failed
           ? C.error
           : C.dim
 

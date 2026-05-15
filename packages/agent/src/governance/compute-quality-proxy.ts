@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Quality proxy computation — numeric estimate of execution quality.
  *
@@ -29,7 +30,7 @@ export function computeQualityProxy(input: QualityProxyInput): number {
     : input.completionState === "partial" ? 0.45
     : 0.25
   const verifierBonus = input.verifierPerformed
-    ? (input.verifierOverall === "pass" ? 0.1 : input.verifierOverall === "retry" ? 0 : -0.15)
+    ? (input.verifierOverall === VerifierOutcome.Pass ? 0.1 : input.verifierOverall === VerifierOutcome.Retry ? 0 : -0.15)
     : 0
   const failurePenalty = Math.min(0.25, input.failedToolCalls * 0.05)
   return Math.max(0, Math.min(1, base + verifierBonus - failurePenalty))

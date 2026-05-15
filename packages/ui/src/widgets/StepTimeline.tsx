@@ -9,6 +9,7 @@
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolStepOutput } from "../components/CodeBlock"
+import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import { formatMs } from "../util"
 
@@ -27,7 +28,7 @@ export function StepTimeline() {
   }, [steps.length])
 
   // Keep the running step in view even when the user hasn't scrolled away.
-  const hasRunning = steps.some((s) => s.status === "running")
+  const hasRunning = steps.some((s) => s.status === RunStatus.Running)
   useEffect(() => {
     if (!hasRunning) return
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
@@ -45,16 +46,16 @@ export function StepTimeline() {
     <div ref={scrollRef} className="h-full overflow-y-auto space-y-0">
       {steps.map((step, i) => {
         const isLast = i === steps.length - 1
-        const isRunning = step.status === "running"
+        const isRunning = step.status === RunStatus.Running
         const duration = step.startedAt && step.completedAt
           ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
           : null
 
         const StatusIcon = isRunning
           ? Loader2
-          : step.status === "completed"
+          : step.status === RunStatus.Completed
           ? CheckCircle2
-          : step.status === "failed"
+          : step.status === RunStatus.Failed
           ? XCircle
           : Circle
 
@@ -67,9 +68,9 @@ export function StepTimeline() {
                 className={`mt-0.5 ${
                   isRunning
                     ? "text-accent animate-spin"
-                    : step.status === "completed"
+                    : step.status === RunStatus.Completed
                     ? "text-success"
-                    : step.status === "failed"
+                    : step.status === RunStatus.Failed
                     ? "text-error"
                     : "text-text-muted"
                 }`}

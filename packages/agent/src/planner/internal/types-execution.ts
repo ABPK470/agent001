@@ -1,3 +1,6 @@
+import { EffectClass } from "../../domain/enums/delegation.js"
+import { StepRole, VerificationMode } from "../../domain/enums/planner.js"
+export { EffectClass, StepRole, VerificationMode }
 /**
  * Execution envelope, role, repair payload, and shared state contract types.
  * Extracted from planner/types.ts.
@@ -7,20 +10,6 @@
 
 import type { CoherentSharedContract, CoherentSystemInvariant } from "./types-decision.js"
 import type { VerifierIssueSeverity, VerifierOwnershipMode, VerifierRepairClass } from "./types-verifier.js"
-
-export type EffectClass =
-  | "readonly"
-  | "filesystem_write"
-  | "filesystem_scaffold"
-  | "shell"
-  | "mixed"
-
-export type VerificationMode =
-  | "none"
-  | "browser_check"
-  | "run_tests"
-  | "mutation_required"
-  | "deterministic_followup"
 
 export interface ArtifactRelation {
   readonly relationType: "read_dependency" | "write_owner"
@@ -60,8 +49,6 @@ export interface ChildRepairPayload {
   readonly sharedContracts?: readonly CoherentSharedContract[]
   readonly invariants?: readonly CoherentSystemInvariant[]
 }
-
-export type StepRole = "writer" | "reviewer" | "validator" | "grounding"
 
 export interface WorkflowStepContract {
   readonly role: StepRole

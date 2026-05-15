@@ -1,3 +1,5 @@
+import { DiagnosticCategory, DiagnosticSeverity } from "../domain/enums/planner.js"
+export { DiagnosticCategory, DiagnosticSeverity }
 /**
  * Planner types — structured task decomposition (agenc-core pattern).
  *
@@ -158,15 +160,11 @@ export interface PlannerRuntimeModel {
 // Plan validation
 // ============================================================================
 
-export type DiagnosticCategory = "parse" | "graph" | "contract" | "ownership" | "verification" | "policy"
-
 /**
  * Severity controls whether a diagnostic blocks the pipeline:
  * - "error"   → structurally broken plan, pipeline cannot run (cycles, unknown tools)
  * - "warning" → advisory issue, pipeline proceeds but warning is injected into step objectives
  */
-export type DiagnosticSeverity = "error" | "warning"
-
 export interface PlanDiagnostic {
   readonly category: DiagnosticCategory
   readonly severity: DiagnosticSeverity

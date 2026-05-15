@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Repair-instruction and escalation-goal builders for the coherent bundle
  * pipeline. Extracted from coherent.ts.
@@ -18,7 +19,7 @@ function uniqueStrings(values: readonly string[]): string[] {
 export function collectDecisionIssues(decision: VerifierDecision): string[] {
   return uniqueStrings([
     ...decision.steps
-      .filter((step) => step.outcome !== "pass")
+      .filter((step) => step.outcome !== VerifierOutcome.Pass)
       .flatMap((step) => step.issues),
     ...decision.unresolvedItems,
     ...decision.systemChecks?.map((check) => check.summary) ?? [],

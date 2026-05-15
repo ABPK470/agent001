@@ -7,7 +7,7 @@
  *   bin/agent001.js   — CLI entry point (thin wrapper)
  *
  * Native/binary modules are kept external (installed via npm at the target):
- *   better-sqlite3, mssql, puppeteer, dotenv
+ *   better-sqlite3, mssql, playwright, dotenv
  */
 
 import * as esbuild from "esbuild"
@@ -43,9 +43,11 @@ async function main() {
         // Keep ALL npm packages external — they'll be npm-installed at the target.
         // We only inline the workspace TypeScript (server + agent source code).
         packages: "external",
-        // Resolve workspace package @agent001/agent as part of the bundle
+        // Resolve workspace packages as part of the bundle
         alias: {
-            "@agent001/agent": resolve(ROOT, "packages/agent/src/lib.ts"),
+            "@mia/agent": resolve(ROOT, "packages/agent/src/lib/index.ts"),
+            "@mia/shared-enums": resolve(ROOT, "packages/shared-enums/src/index.ts"),
+            "@mia/shared-types": resolve(ROOT, "packages/shared-types/src/index.ts"),
         },
         sourcemap: true,
         minify: false,         // Keep readable for debugging

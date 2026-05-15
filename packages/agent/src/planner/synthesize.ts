@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Answer synthesis — build a human-readable summary from planner results.
  * @module
@@ -56,13 +57,13 @@ export function synthesizeAnswer(
     return synthesizePlatformUnconfiguredAnswer()
   }
 
-  if (verifierDecision.overall === "pass") {
+  if (verifierDecision.overall === VerifierOutcome.Pass) {
     return synthesizeSuccessfulAnswer(plan, pipelineResult)
   }
 
   const parts: string[] = []
 
-  if (verifierDecision.overall === "retry") {
+  if (verifierDecision.overall === VerifierOutcome.Retry) {
     parts.push("Task verification FAILED — the following issues remain unresolved after all retry attempts:")
   } else {
     parts.push("Task FAILED — critical errors prevented completion:")
@@ -78,9 +79,9 @@ export function synthesizeAnswer(
     const stepVerification = verifierDecision.steps.find(s => s.stepName === step.name)
     const acceptanceState = result?.acceptanceState
     const effectiveAcceptance = acceptanceState
-      ?? (stepVerification?.outcome === "pass"
+      ?? (stepVerification?.outcome === VerifierOutcome.Pass
         ? "accepted"
-        : stepVerification?.outcome === "retry" || stepVerification?.outcome === "fail"
+        : stepVerification?.outcome === VerifierOutcome.Retry || stepVerification?.outcome === VerifierOutcome.Fail
           ? "repair_required"
           : undefined)
     const status = effectiveAcceptance === "accepted"

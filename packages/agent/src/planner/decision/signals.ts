@@ -1,3 +1,4 @@
+import { PlannerNeedLevel } from "@mia/agent"
 /**
  * Signal collection and routing confidence scoring for the planner decision system.
  *
@@ -20,7 +21,8 @@ import {
     TOOL_DIVERSITY_RE,
     VERIFICATION_RE,
 } from "../internal/decision-patterns.js"
-import type { PlannerNeedLevel, RoutingConfidence } from "../types.js"
+import type { RoutingConfidence } from "../types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 // ============================================================================
 // Structured signal collection
@@ -53,7 +55,7 @@ export function collectSignals(messageText: string, history: readonly Message[])
   const bulletCount = (normalized.match(/^[\s]*[-*•]\s/gm) ?? []).length
     + (normalized.match(/^\s*\d+[.)]\s/gm) ?? []).length
 
-  const priorToolMessages = history.filter(m => m.role === "tool").length
+  const priorToolMessages = history.filter(m => m.role === MessageRole.Tool).length
   const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//, "")))]
   // Exclude system messages: the episodic memory in the system prompt often contains
   // "stuck" from a prior run in the session, which would poison routing for all
@@ -92,9 +94,9 @@ export function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): bo
 }
 
 export function toNeedLevel(score: number): PlannerNeedLevel {
-  if (score >= 5) return "high"
-  if (score >= 3) return "medium"
-  return "low"
+  if (score >= 5) return PlannerNeedLevel.High
+  if (score >= 3) return PlannerNeedLevel.Medium
+  return PlannerNeedLevel.Low
 }
 
 export function hasRealOwnershipSeparation(signals: RequestSignals): boolean {
@@ -160,10 +162,10 @@ export function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
  *   decisive_coherent — low coordination + strong coherence markers
  */
 export function computeRoutingConfidence(signals: RequestSignals, axes: RoutingAxes): RoutingConfidence {
-  if (axes.coordinationNeed === "high") return "decisive_planner"
+  if (axes.coordinationNeed === PlannerNeedLevel.High) return "decisive_planner"
   if (signals.hasMultiStepCue && (signals.hasDelegationCue || signals.structuredBulletCount > 0)) return "decisive_planner"
 
-  if (axes.coordinationNeed === "medium") {
+  if (axes.coordinationNeed === PlannerNeedLevel.Medium) {
     // At least one hard non-delegation coordination signal → lean planner
     if (signals.hasMultiStepCue) return "lean_planner"
     if (signals.structuredBulletCount > 0) return "lean_planner"

@@ -5,12 +5,12 @@
  */
 
 import { basename, extname } from "node:path"
+import { AttachmentIngestionMode } from "../enums/attachments.js"
 import { auditAttachmentUploaded } from "./audit.js"
 import { assertOwnerQuota, computeRetentionUntil } from "./lifecycle.js"
 import {
     addAttachmentTag,
     insertAttachment,
-    type AttachmentIngestionMode,
     type AttachmentRow,
     type AttachmentScope,
     type AttachmentSource,
@@ -47,9 +47,9 @@ const TEXT_LIKE_TYPES = new Set([
 
 export function inferIngestionMode(mediaType: string): AttachmentIngestionMode {
   if (TEXT_LIKE_PREFIXES.some((p) => mediaType.startsWith(p)) || TEXT_LIKE_TYPES.has(mediaType)) {
-    return "text_retrieval"
+    return AttachmentIngestionMode.TextRetrieval
   }
-  return "binary_reference"
+  return AttachmentIngestionMode.BinaryReference
 }
 
 /**

@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { Effect, FileSnapshot } from "./types.js"
+import { EventType } from "@mia/agent"
 
 // ── Hashing utility (also used by tracker and rollback) ──────────
 
@@ -56,7 +57,7 @@ export async function captureSnapshot(
   })
 
   broadcast({
-    type: "snapshot.captured",
+    type: EventType.SnapshotCaptured,
     data: {
       id: snapshot.id,
       effectId: snapshot.effectId,

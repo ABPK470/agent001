@@ -1,15 +1,17 @@
 import sql from "mssql"
 import type { Tool } from "../../types.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
+import { decorateMssqlError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
-import { validateQuery } from "./validation.js"
+import { getQueryWarnings, validateQuery } from "./validation.js"
 
 // ── The tool ─────────────────────────────────────────────────────
 
 export const mssqlTool: Tool = {
   name: "query_mssql",
   description:
-    "Execute a T-SQL query against Microsoft SQL Server. Read-only by default (SELECT/WITH only). " +
+    "Execute a T-SQL query against Microsoft SQL Server (T-SQL only — no QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC; use TOP / OFFSET-FETCH / LIKE / CAST / DATEADD). " +
+    "Read-only on existing tables/views/indexes. You ARE allowed to CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / SELECT INTO / CREATE INDEX on local #temp tables (single-#, never ##) — use them to stage micro-ETL slices for billion-row joins. " +
     "Use this for INSPECTION and ANALYSIS — counting rows, computing aggregates, looking at a sample. " +
     "DO NOT use this when the user wants to EXPORT or SAVE many rows to a file: " +
     "the result is truncated at 1000 rows / 50KB, and copying that truncated text into write_file " +
@@ -96,13 +98,15 @@ export const mssqlTool: Tool = {
 
       try {
         const result = await request.query(fullQuery)
-        return formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+        const body = formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+        const warn = getQueryWarnings(query)
+        return warn ? `${warn}\n${body}` : body
       } finally {
         killSignal?.removeEventListener("abort", onKill)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return `SQL Error: ${msg}`
+      return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },
 }
@@ -265,7 +269,7 @@ export const mssqlSchemaTool: Tool = {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return `SQL Error: ${msg}`
+      return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },
 }

@@ -1,8 +1,11 @@
+import { MemoryTier } from "../enums/memory.js"
+import { MemoryRole } from "../enums/memory.js"
+import { MemorySource } from "../enums/memory.js"
 // ── Types ────────────────────────────────────────────────────────
 
-export type MemoryTier = "working" | "episodic" | "semantic"
-export type MemorySource = "system" | "tool" | "user" | "agent" | "external"
-export type MemoryRole = "user" | "assistant" | "tool" | "system" | "summary"
+export { MemoryTier }
+export { MemorySource }
+export { MemoryRole }
 
 export interface MemoryEntry {
   id: string

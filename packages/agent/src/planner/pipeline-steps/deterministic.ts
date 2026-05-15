@@ -1,3 +1,4 @@
+import { PipelineStatus } from "@mia/agent"
 /**
  * Deterministic-tool step execution — direct tool invocation with retry,
  * mkdir-on-EISDIR recovery, and platform-unconfigured short-circuiting.
@@ -5,7 +6,7 @@
  * @module
  */
 
-import type { ToolExecFn } from "../pipeline.js"
+import type { ToolExecFn } from "../pipeline/index.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import type { DeterministicToolStep, PipelineStepResult } from "../types.js"
 
@@ -22,7 +23,7 @@ export async function executeDeterministicStep(
     if (signal?.aborted) {
       return {
         name: step.name,
-        status: "failed",
+        status: PipelineStatus.Failed,
         executionState: "failed",
         acceptanceState: "rejected",
         error: "Aborted",
@@ -63,7 +64,7 @@ export async function executeDeterministicStep(
       if (platformInOutput) {
         return {
           name: step.name,
-          status: "failed",
+          status: PipelineStatus.Failed,
           executionState: "failed",
           acceptanceState: "rejected",
           error: output,
@@ -79,7 +80,7 @@ export async function executeDeterministicStep(
 
       return {
         name: step.name,
-        status: "completed",
+        status: PipelineStatus.Completed,
         executionState: "executed",
         acceptanceState: "accepted",
         output,
@@ -93,7 +94,7 @@ export async function executeDeterministicStep(
       if (platform) {
         return {
           name: step.name,
-          status: "failed",
+          status: PipelineStatus.Failed,
           executionState: "failed",
           acceptanceState: "rejected",
           error: msg,
@@ -107,7 +108,7 @@ export async function executeDeterministicStep(
 
   return {
     name: step.name,
-    status: "failed",
+    status: PipelineStatus.Failed,
     executionState: "failed",
     acceptanceState: "rejected",
     error: lastError ?? "Unknown error",

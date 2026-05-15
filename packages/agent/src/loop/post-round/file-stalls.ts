@@ -5,8 +5,9 @@
  * @module
  */
 
+import { MessageRole } from "../../domain/enums/message.js"
 import * as log from "../../logger.js"
-import type { PostRoundContext } from "../post-round.js"
+import type { PostRoundContext } from "../post-round/index.js"
 
 const COHERENT_READ_ONLY_ROUND_LIMIT = 1
 
@@ -38,7 +39,7 @@ export function processCoherentRepairStall(ctx: PostRoundContext): void {
     `REQUIRED NEXT ACTION: call write_file (or replace_in_file) to apply the fix. ` +
     `If the write guard is blocking you because a function is missing, include ALL existing functions PLUS the fix in your write. ` +
     `If the issue requires restructuring (e.g. removing an ES module import), restructure now — rewrite the entire affected file.`
-  messages.push({ role: "system", content: spinMsg, section: "history" })
+  messages.push({ role: MessageRole.System, content: spinMsg, section: "history", hint: true })
   config.onNudge?.({ tag: "coherent-repair-stall", message: spinMsg, iteration })
   if (config.verbose) log.logError(`Coherent repair stall at iteration ${iteration}`)
 }
@@ -95,7 +96,7 @@ export function processExcessiveReadFiles(ctx: PostRoundContext): void {
       `. Stop re-reading files — you already have the content you need. ` +
       `Do NOT read absolute sandbox/temp paths; use relative project paths only. ` +
       `Proceed to write your next change.`
-    messages.push({ role: "system", content: msg, section: "history" })
+    messages.push({ role: MessageRole.System, content: msg, section: "history" })
     config.onNudge?.({ tag: "excessive-reads", message: msg, iteration })
     if (config.verbose) log.logError(`Excessive reads: ${reads.length} read_file calls at iteration ${iteration}`)
     return
@@ -113,7 +114,7 @@ export function processExcessiveReadFiles(ctx: PostRoundContext): void {
       `Reading the same file repeatedly via different paths (relative vs absolute /var/folders/...) ` +
       `gives you the same truncated view every time. ` +
       `You already have all the file content available. Stop reading and write your fix now.`
-    messages.push({ role: "system", content: msg, section: "history" })
+    messages.push({ role: MessageRole.System, content: msg, section: "history" })
     config.onNudge?.({ tag: "excessive-reads-cumulative", message: msg, iteration })
     if (config.verbose) log.logError(`Cumulative excessive reads: ${overReadFiles.join(", ")} at iteration ${iteration}`)
     // Reset so the nudge doesn't fire every iteration after this

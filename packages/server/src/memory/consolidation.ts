@@ -1,7 +1,9 @@
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
+import { MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { ingestTurn } from "./ingestion.js"
 import { DEDUP_JACCARD_THRESHOLD, jaccardSimilarity, tokenize, truncateAtBoundary } from "./scoring.js"
+import { EventType } from "@mia/agent"
 
 // ── Consolidation pipeline (agenc-core pattern) ─────────────────
 //
@@ -84,7 +86,7 @@ export function consolidate(opts?: {
 
   if (totalPromoted > 0 || totalPruned > 0) {
     broadcast({
-      type: "memory.consolidated",
+      type: EventType.MemoryConsolidated,
       data: { promoted: totalPromoted, pruned: totalPruned },
     })
   }
@@ -160,15 +162,15 @@ function consolidateTenant(
     const confidence = Math.min(0.95, 0.5 + cluster.length * 0.1)
 
     ingestTurn({
-      tier: "semantic",
-      role: "summary",
+      tier: MemoryTier.Semantic,
+      role: MemoryRole.Summary,
       content: truncateAtBoundary(merged, 2000, "\n\u2026(consolidated)"),
       metadata: {
         sourceCount: cluster.length,
         provenance: "consolidation:episodic_promotion",
         consolidatedFrom: cluster.map((c) => c.row.id),
       },
-      source: "system",
+      source: MemorySource.System,
       confidence,
       upn: tenantUpn,
     })

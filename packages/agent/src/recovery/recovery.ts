@@ -19,11 +19,11 @@ import { inferRecoveryHint } from "./internal/build-per-call-hints.js"
 import {
     didToolCallFail,
     type ToolCallRecord,
-} from "../tool-helpers/index.js"
+} from "../tools/_helpers/index.js"
 
 // Re-export from tool-result for backwards compatibility
-export { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText, parseToolResultObject } from "../tool-helpers/index.js"
-export type { ToolCallRecord } from "../tool-helpers/index.js"
+export { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText, parseToolResultObject } from "../tools/_helpers/index.js"
+export type { ToolCallRecord } from "../tools/_helpers/index.js"
 
 // Re-export from quality-proxy for backwards compatibility
 export { computeQualityProxy } from "../governance/index.js"

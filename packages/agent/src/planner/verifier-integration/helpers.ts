@@ -5,15 +5,15 @@
  */
 
 import { posix as pathPosix } from "node:path"
-import { normalizeToolExecutionOutput } from "../../tool-helpers/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/_helpers/index.js"
 import type { Tool } from "../../types.js"
-import { normalizeSpecPath } from "../blueprint-contract.js"
+import { normalizeSpecPath } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 import {
     extractDefinedCssClasses,
     extractReferencedCssClassesFromHtml,
     extractReferencedCssClassesFromScript,
-} from "../verifier-helpers.js"
+} from "../verifier-helpers/index.js"
 import { extractModuleImports } from "./module-imports.js"
 
 // ============================================================================

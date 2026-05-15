@@ -2,10 +2,10 @@
  * Notification API routes.
  */
 
-import type { FastifyInstance } from "fastify";
-import { canAccessRun } from "../auth/access.js";
-import * as db from "../db.js";
-import type { AgentOrchestrator } from "../orchestrator.js";
+import type { FastifyInstance } from "fastify"
+import { canAccessRun } from "../auth/access.js"
+import * as db from "../db/index.js"
+import type { AgentOrchestrator } from "../orchestrator/index.js"
 
 /** Returns true if the request's session may see/mutate this notification. */
 function canSee(session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,
@@ -103,7 +103,7 @@ export function registerNotificationRoutes(
         case "rollback-run": {
           const runId = data?.runId as string
           if (!runId) { reply.code(400); return { error: "runId required" } }
-          const { rollbackRun } = await import("../effects.js")
+          const { rollbackRun } = await import("../effects/index.js")
           const result = await rollbackRun(runId)
           return { ok: true, compensated: result.compensated, skipped: result.skipped, failed: result.failed.length }
         }

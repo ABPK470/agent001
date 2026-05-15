@@ -12,6 +12,9 @@
  */
 
 import sqlMod from "mssql"
+import { EventType } from "../../domain/enums/event.js"
+import { SyncOperationType, SyncProgressKind } from "../../domain/enums/sync.js"
+import { SyncRunStatus } from "../../domain/index.js"
 import { getPool } from "../../tools/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { getEnvironment } from "../environments.js"
@@ -92,8 +95,8 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
 
   const onProgress = opts.onProgress ?? (() => {})
   const execT0 = Date.now()
-  onProgress({ type: "started", message: `Executing plan ${planId} → ${plan.target}` })
-  emit("sync.execute.started", {
+  onProgress({ type: SyncProgressKind.Started, message: `Executing plan ${planId} → ${plan.target}` })
+  emit(EventType.SyncExecuteStarted, {
     planId, source: plan.source, target: plan.target,
     actor: opts.userUpn ?? null,
     totals: plan.totals,
@@ -102,7 +105,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   // Same ALS pattern as previewSync — every SQL query inside this scope gets
   // attributed to this planId via `sync.execute.sql` events.
   return runWithSyncContext(
-    { kind: "execute", opId: planId, source: plan.source, target: plan.target },
+    { kind: SyncOperationType.Execute, opId: planId, source: plan.source, target: plan.target },
     () => executeSyncInner(plan, planId, opts, onProgress, execT0),
   )
 }
@@ -121,9 +124,9 @@ async function executeSyncInner(
   const driftPct = await revalidatePlanDrift(plan)
   if (driftPct !== null && driftPct > DRIFT_ABORT_PCT) {
     const msg = `Plan drift ${(driftPct * 100).toFixed(1)}% exceeds ${(DRIFT_ABORT_PCT * 100).toFixed(0)}% threshold — re-preview before executing.`
-    onProgress({ type: "failed", error: msg })
-    emit("sync.execute.failed", { planId, error: msg, durationMs: Date.now() - execT0, driftPct })
-    try { getSyncRunSink().finish({ planId, status: "failed", error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) } catch { /* ignore */ }
+    onProgress({ type: SyncProgressKind.Failed, error: msg })
+    emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0, driftPct })
+    try { getSyncRunSink().finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) } catch { /* ignore */ }
     return { planId, success: false, error: msg }
   }
   void opts
@@ -142,8 +145,8 @@ async function executeSyncInner(
 
   // Helper: emit a step progress event
   const stepEmit = (name: string, message?: string) => {
-    onProgress({ type: "step", step: name, message: message ?? name })
-    emit("sync.execute.step", { planId, step: name })
+    onProgress({ type: SyncProgressKind.Step, step: name, message: message ?? name })
+    emit(EventType.SyncExecuteStep, { planId, step: name })
   }
 
   // Pre-tx contract setup helper (audit-check / dependencies / lock).
@@ -162,8 +165,8 @@ async function executeSyncInner(
       const errMsg = e instanceof Error ? e.message : String(e)
       console.warn(`[sync.execute] ${stepName} (${sprocName}) failed:`, e)
       stepWarnings.push({ step: stepName, sproc: sprocName, error: errMsg })
-      onProgress({ type: "step", step: stepName, message: `${stepName} (${sprocName}) failed`, error: errMsg })
-      emit("sync.execute.step.failed", { planId, step: stepName, sproc: sprocName, error: errMsg })
+      onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} (${sprocName}) failed`, error: errMsg })
+      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: sprocName, error: errMsg })
     }
   }
 
@@ -225,14 +228,14 @@ async function executeSyncInner(
     const stepErrorSummary = hasStepFailures
       ? stepWarnings.map((w) => `${w.step}: ${w.error}`).join("; ")
       : undefined
-    onProgress({ type: "completed", message: completedMsg })
-    emit("sync.execute.completed", { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
+    onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
+    emit(EventType.SyncExecuteCompleted, { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
     try {
       getSyncRunSink().finish({
         planId,
         // Any step failure = failed run. Data may have been applied but the
         // pipeline didn't complete cleanly — never show this as success.
-        status: hasStepFailures ? "failed" : "success",
+        status: hasStepFailures ? SyncRunStatus.Failed : SyncRunStatus.Success,
         error: stepErrorSummary,
         executeTotals: appliedTotals,
         driftDetectedPct: driftPct,
@@ -250,9 +253,9 @@ async function executeSyncInner(
 
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[sync.execute] plan ${planId} failed:`, e)
-    onProgress({ type: "failed", error: msg })
-    emit("sync.execute.failed", { planId, error: msg, durationMs: Date.now() - execT0 })
-    try { getSyncRunSink().finish({ planId, status: "failed", error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
+    onProgress({ type: SyncProgressKind.Failed, error: msg })
+    emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0 })
+    try { getSyncRunSink().finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
     catch { /* ignore */ }
     return { planId, success: false, error: msg }
   }

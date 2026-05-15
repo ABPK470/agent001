@@ -1,5 +1,5 @@
 /**
- * ActiveUsers — admin observability: who's using agent001 and what happened.
+ * ActiveUsers — admin observability: who's using mia and what happened.
  *
  * Features:
  *   - Summary stat strip (online / users / runs / tokens)
@@ -292,7 +292,11 @@ export function ActiveUsers(): ReactNode {
         </span>
       </div>
 
-      {/* Scrollable table */}
+      {/* Scrollable table — responsive column hiding kicks in at narrow
+          widths so the essential cols (status / name / UPN) always fit
+          without horizontal scroll, while richer metrics progressively
+          appear at sm/md/lg/xl. The container still allows
+          overflow-auto as a last-resort fallback. */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-20 bg-surface">
@@ -300,16 +304,16 @@ export function ActiveUsers(): ReactNode {
               <SortTh k="status"     current={sortKey} dir={sortDir} onClick={onSort} className="w-8"    label="" />
               <SortTh k="name"       current={sortKey} dir={sortDir} onClick={onSort}                     label="Name" />
               <SortTh k="upn"        current={sortKey} dir={sortDir} onClick={onSort}                     label="UPN / Session" />
-              <SortTh k="sessions"   current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Sessions" />
-              <SortTh k="totalRuns"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Total Runs" />
-              <SortTh k="runs24h"    current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Runs 24h" />
-              <SortTh k="failed24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Failed 24h" />
-              <SortTh k="tokens24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Tokens 24h" />
-              <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="LLM Calls" />
-              <SortTh k="lastModel"  current={sortKey} dir={sortDir} onClick={onSort}                     label="Model" />
-              <SortTh k="firstSeen"  current={sortKey} dir={sortDir} onClick={onSort}                     label="First Seen" />
-              <SortTh k="lastSeen"   current={sortKey} dir={sortDir} onClick={onSort}                     label="Last Seen" />
-              <th className="py-2 px-3 w-6" />
+              <SortTh k="sessions"   current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden sm:table-cell" label="Sessions" />
+              <SortTh k="totalRuns"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden md:table-cell" label="Total Runs" />
+              <SortTh k="runs24h"    current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden sm:table-cell" label="Runs 24h" />
+              <SortTh k="failed24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden lg:table-cell" label="Failed 24h" />
+              <SortTh k="tokens24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden md:table-cell" label="Tokens 24h" />
+              <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden lg:table-cell" label="LLM Calls" />
+              <SortTh k="lastModel"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden lg:table-cell"             label="Model" />
+              <SortTh k="firstSeen"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="First Seen" />
+              <SortTh k="lastSeen"   current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="Last Seen" />
+              <th className="py-2 px-3 w-6 hidden sm:table-cell" />
             </tr>
           </thead>
           <tbody>
@@ -349,43 +353,43 @@ export function ActiveUsers(): ReactNode {
                       <CopyBtn value={u.upn ?? u.identifier} label="UPN" />
                     </td>
                     {/* Sessions */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted">{u.sessionCount}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden sm:table-cell">{u.sessionCount}</td>
                     {/* Total Runs */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text">
+                    <td className="py-2 px-3 text-right tabular-nums text-text hidden md:table-cell">
                       {u.totalRuns > 0 ? u.totalRuns : <span className="text-text-muted/50">0</span>}
                     </td>
                     {/* Runs 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text">
+                    <td className="py-2 px-3 text-right tabular-nums text-text hidden sm:table-cell">
                       {u.runs24h > 0 ? u.runs24h : <span className="text-text-muted/50">0</span>}
                     </td>
                     {/* Failed 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums">
+                    <td className="py-2 px-3 text-right tabular-nums hidden lg:table-cell">
                       {u.runsFailed24h > 0
                         ? <span className="text-error">{u.runsFailed24h}</span>
                         : <span className="text-text-muted/50">0</span>}
                     </td>
                     {/* Tokens 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden md:table-cell">
                       {u.totalTokens24h > 0 ? formatCompact(u.totalTokens24h) : <span className="text-text-muted/50">0</span>}
                     </td>
                     {/* LLM Calls 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden lg:table-cell">
                       {u.totalLlmCalls24h > 0 ? u.totalLlmCalls24h : <span className="text-text-muted/50">0</span>}
                     </td>
                     {/* Model */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap">
+                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden lg:table-cell">
                       {u.lastModel ?? <span className="text-text-muted/50">—</span>}
                     </td>
                     {/* First Seen */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.firstSeenAt}>
+                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden xl:table-cell" title={u.firstSeenAt}>
                       {formatRelative(u.firstSeenAt)}
                     </td>
                     {/* Last Seen */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.lastSeenAt}>
+                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden xl:table-cell" title={u.lastSeenAt}>
                       {formatRelative(u.lastSeenAt)}
                     </td>
                     {/* Expand arrow */}
-                    <td className="py-2 px-3 text-text-muted text-xs">{isOpen ? "▾" : "▸"}</td>
+                    <td className="py-2 px-3 text-text-muted text-xs hidden sm:table-cell">{isOpen ? "▾" : "▸"}</td>
                   </tr>
                   {isOpen && (
                     <tr className="bg-overlay-1">

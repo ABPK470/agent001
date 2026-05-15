@@ -1,6 +1,8 @@
-import type { Tool } from "@agent001/agent"
-import { recordEffect, recordFileWrite } from "../effects.js"
-import { broadcast } from "../event-broadcaster.js"
+import type { Tool } from "@mia/agent"
+import { EventType } from "@mia/agent"
+import { recordEffect, recordFileWrite } from "../effects/index.js"
+import { EffectKind } from "../enums/effects.js"
+import { NotificationActionType } from "../enums/notifications.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { applyWorkspaceDiff, cleanupRunWorkspace, computeWorkspaceDiff } from "../run-workspace.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
@@ -39,7 +41,7 @@ export function wrapWithEffects(
       ...tool,
       execute: async (args) => {
         const result = await tool.execute(args)
-        recordEffect({ runId, kind: "command", tool: "run_command", target: String(args.command ?? args.cmd ?? ""), metadata: { output: String(result).slice(0, 1000) } })
+        recordEffect({ runId, kind: EffectKind.Command, tool: "run_command", target: String(args.command ?? args.cmd ?? ""), metadata: { output: String(result).slice(0, 1000) } })
         return result
       },
     }
@@ -83,15 +85,15 @@ export async function captureRunWorkspaceDiff(
   }
 
   saveTrace(runId, { kind: "workspace_diff", diff })
-  broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry: { kind: "workspace_diff", diff } } })
+  broadcastTrace(runId, Date.now(), { kind: "workspace_diff", diff })
   createNotification({
-    type: "run.completed",
+    type: EventType.RunCompleted,
     title: "Apply run changes",
     message: `Run ${runId.slice(0, 8)} produced ${total} isolated workspace changes pending approval.`,
     runId,
     actions: [
-      { label: "Review", action: "view-run", data: { runId } },
-      { label: "Apply", action: "apply-run-diff", data: { runId } },
+      { label: "Review", action: NotificationActionType.ViewRun, data: { runId } },
+      { label: "Apply", action: NotificationActionType.ApplyRunDiff, data: { runId } },
     ],
   })
 }
@@ -117,13 +119,13 @@ export async function applyRunWorkspaceDiff(
   completedRunDiffs.delete(runId)
 
   saveTrace(runId, { kind: "workspace_diff_applied", summary })
-  broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry: { kind: "workspace_diff_applied", summary } } })
+  broadcastTrace(runId, Date.now(), { kind: "workspace_diff_applied", summary })
   createNotification({
-    type: "run.completed",
+    type: EventType.RunCompleted,
     title: "Run changes applied",
     message: `Applied ${summary.added + summary.modified + summary.deleted} file changes from isolated run ${runId.slice(0, 8)}.`,
     runId,
-    actions: [{ label: "View", action: "view-run", data: { runId } }],
+    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }],
   })
 
   return summary

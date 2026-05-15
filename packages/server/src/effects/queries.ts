@@ -1,4 +1,4 @@
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import type { Effect, EffectKind, EffectStatus, FileSnapshot } from "./types.js"
 
 // ── Row mappers (module-private) ─────────────────────────────────

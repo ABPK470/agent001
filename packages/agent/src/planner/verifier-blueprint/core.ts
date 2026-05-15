@@ -4,13 +4,13 @@
  * @module
  */
 
-import type { BlueprintSharedTypeSpec } from "../blueprint-contract.js"
+import type { BlueprintSharedTypeSpec } from "../blueprint-contract/index.js"
 import {
     normalizeBasename,
     normalizeSpecPath,
     parseBlueprintContractBlock,
     uniqueStrings,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 import type { PipelineStepResult, SubagentTaskStep } from "../types.js"
 import {
     BLUEPRINT_FILE_PATH_RE,

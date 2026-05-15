@@ -4,15 +4,17 @@
  * @module
  */
 
-import type { AgentLoopState } from "../loop/index.js"
 import { truncateMessages } from "../context/index.js"
+import { MessageRole } from "../domain/enums/message.js"
+import { CoherentGenerationTraceKind } from "../domain/enums/planner-trace.js"
+import type { AgentLoopState } from "../loop/index.js"
+import type { VerifierDecision } from "../planner/index.js"
 import {
     buildCoherentVerificationPipelineResult,
     summarizeCoherentVerifierDecision,
+    verify,
 } from "../planner/index.js"
-import type { VerifierDecision } from "../planner/index.js"
-import { verify } from "../planner/index.js"
-import type { ToolCallRecord } from "../tool-helpers/index.js"
+import type { ToolCallRecord } from "../tools/_helpers/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 
 export interface CoherentVerificationDeps {
@@ -43,7 +45,7 @@ export async function runCoherentVerification(
   ce.lastVerifiedToolCallCount = deps.allToolCalls.length
   const summary = summarizeCoherentVerifierDecision(decision)
   deps.onPlannerTrace?.({
-    kind: "coherent-generation-verified",
+    kind: CoherentGenerationTraceKind.Verified,
     overall: summary.overall,
     confidence: summary.confidence,
     issueCount: summary.issueCount,
@@ -84,13 +86,23 @@ export function buildInitialMessages(
   config: { systemMessages: Message[] | null; systemPrompt: string },
 ): Message[] {
   if (config.systemMessages && config.systemMessages.length > 0) {
+    // Mark the last system message as a cache breakpoint (Gap 6).
+    // Anthropic prompt caching applies to everything BEFORE the marker, so
+    // tagging the final system entry caches the entire system block —
+    // critical for delegation siblings that share the parent's resolved
+    // system prompt and for multi-iteration agents that reuse the prompt
+    // across every round.
+    const sys = config.systemMessages
+    const last = sys[sys.length - 1]
+    const prefix = sys.slice(0, -1)
     return [
-      ...config.systemMessages,
-      { role: "user", content: goal, section: "user" },
+      ...prefix,
+      last ? { ...last, cacheHint: last.cacheHint ?? "ephemeral" } : last!,
+      { role: MessageRole.User, content: goal, section: "user" },
     ]
   }
   return [
-    { role: "system", content: config.systemPrompt, section: "system_anchor" },
-    { role: "user", content: goal, section: "user" },
+    { role: MessageRole.System, content: config.systemPrompt, section: "system_anchor", cacheHint: "ephemeral" },
+    { role: MessageRole.User, content: goal, section: "user" },
   ]
 }

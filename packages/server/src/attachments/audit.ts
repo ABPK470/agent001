@@ -17,6 +17,7 @@
 
 import { broadcast } from "../event-broadcaster.js"
 import type { AttachmentRow } from "./repo.js"
+import { EventType } from "@mia/agent"
 
 function payloadFor(row: AttachmentRow): Record<string, unknown> {
   return {
@@ -33,18 +34,18 @@ function payloadFor(row: AttachmentRow): Record<string, unknown> {
 }
 
 export function auditAttachmentUploaded(row: AttachmentRow): void {
-  broadcast({ type: "attachment.uploaded", data: payloadFor(row) })
+  broadcast({ type: EventType.AttachmentUploaded, data: payloadFor(row) })
 }
 
 export function auditAttachmentImported(row: AttachmentRow, sandboxPath: string): void {
   broadcast({
-    type: "attachment.imported",
+    type: EventType.AttachmentImported,
     data: { ...payloadFor(row), sandboxPath },
   })
 }
 
 export function auditAttachmentPromoted(row: AttachmentRow): void {
-  broadcast({ type: "attachment.promoted", data: payloadFor(row) })
+  broadcast({ type: EventType.AttachmentPromoted, data: payloadFor(row) })
 }
 
 export function auditAttachmentDeleted(opts: {
@@ -53,12 +54,12 @@ export function auditAttachmentDeleted(opts: {
   reason: "user" | "retention"
 }): void {
   broadcast({
-    type: "attachment.deleted",
+    type: EventType.AttachmentDeleted,
     data: { id: opts.id, ownerUpn: opts.ownerUpn, reason: opts.reason },
   })
 }
 
 export function auditAttachmentsPruned(count: number): void {
   if (count <= 0) return
-  broadcast({ type: "attachment.pruned", data: { count } })
+  broadcast({ type: EventType.AttachmentPruned, data: { count } })
 }

@@ -19,9 +19,9 @@ import {
     searchEntities,
     type EntityType,
     type ExecuteProgress,
-} from "@agent001/agent"
+} from "@mia/agent"
 import type { FastifyInstance, FastifyReply } from "fastify"
-import * as db from "../db.js"
+import * as db from "../db/index.js"
 
 interface PreviewBody {
   entityType: EntityType
@@ -33,25 +33,20 @@ interface PreviewBody {
 }
 
 /**
- * Persist a sync action to the audit_log table. Sync ops have no agent run,
- * so we use a synthetic run_id of "sync:<planId>" (or "sync:<entityType>:<entityId>"
- * for preview-time failures before a plan exists). Searchable via:
- *   SELECT * FROM audit_log WHERE run_id LIKE 'sync:%'
+ * Persist a sync action to the sync_audit table. The plan_id FK cascades
+ * with the parent sync_runs row, so audit history disappears when the plan
+ * is deleted. The legacy 'sync:<planId>' prefix in audit_log.run_id has
+ * been retired.
  */
 function auditSync(
-  runId: string,
+  planId: string,
   actor: string,
+  actorUpn: string | null,
   action: string,
   detail: Record<string, unknown>,
 ): void {
   try {
-    db.saveAudit({
-      run_id: runId,
-      actor,
-      action,
-      detail: JSON.stringify(detail),
-      timestamp: new Date().toISOString(),
-    })
+    db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
   } catch (e) {
     console.error("auditSync failed:", e instanceof Error ? e.message : e)
   }
@@ -86,7 +81,8 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
   // ── Plan: preview ───────────────────────────────────────────
   app.post<{ Body: PreviewBody }>("/api/sync/preview", async (req, reply) => {
 
-    const actor = req.session?.upn ?? req.session?.displayName ?? "anonymous"
+    const actor = req.session.upn
+    const actorUpn = req.session.upn
     try {
       const plan = await previewSync({
         entityType: req.body.entityType,
@@ -96,7 +92,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
         force: Boolean(req.body.force),
         enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : undefined,
       })
-      auditSync(`sync:${plan.planId}`, actor, "sync.preview", {
+      auditSync(plan.planId, actor, actorUpn, "sync.preview", {
         entityType: req.body.entityType,
         entityId: req.body.entityId,
         source: req.body.source,
@@ -108,12 +104,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
       return plan
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      auditSync(
-        `sync:${req.body.entityType}:${req.body.entityId}`,
-        actor,
-        "sync.preview.failed",
-        { source: req.body.source, target: req.body.target, error: msg },
-      )
+      // Preview failed before a plan was minted, so there is no plan_id to
+      // FK against. Skip audit — the failure is logged via the agent's
+      // emit() chain and visible in the structured event log.
+      console.warn(`[sync.preview] failed for ${req.body.entityType} ${req.body.entityId}: ${msg}`)
       reply.code(400)
       return { error: msg }
     }
@@ -132,22 +126,23 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
   // ── Execute (synchronous; for tooling, not UI) ──────────────
   app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId", async (req, reply) => {
 
-    const actor = req.session?.upn ?? req.session?.displayName ?? "anonymous"
+    const actor = req.session.upn
+    const actorUpn = req.session.upn
     const plan = loadPlan(req.params.planId)
     const planDetail = plan
       ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals }
       : {}
-    auditSync(`sync:${req.params.planId}`, actor, "sync.execute.start", planDetail)
+    auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {
       const result = await executeSync(req.params.planId, { confirm: true, userUpn: actor })
-      auditSync(`sync:${req.params.planId}`, actor,
+      auditSync(req.params.planId, actor, actorUpn,
         result.success ? "sync.execute.completed" : "sync.execute.failed",
         { ...planDetail, error: result.error ?? null })
       if (!result.success) reply.code(500)
       return result
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      auditSync(`sync:${req.params.planId}`, actor, "sync.execute.failed", { ...planDetail, error: msg })
+      auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", { ...planDetail, error: msg })
       reply.code(400)
       return { error: msg }
     }
@@ -156,12 +151,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
   // ── Execute (SSE stream; UI uses this) ──────────────────────
   app.get<{ Params: { planId: string } }>("/api/sync/execute/:planId/stream", async (req, reply) => {
 
-    const actor = req.session?.upn ?? req.session?.displayName ?? "anonymous"
+    const actor = req.session.upn
+    const actorUpn = req.session.upn
     const plan = loadPlan(req.params.planId)
     const planDetail = plan
       ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals }
       : {}
-    auditSync(`sync:${req.params.planId}`, actor, "sync.execute.start", planDetail)
+    auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     setupSse(reply)
     const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     const heartbeat = setInterval(() => reply.raw.write(`: hb\n\n`), 25_000)
@@ -170,13 +166,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
     try {
       const result = await executeSync(req.params.planId, { confirm: true, onProgress: send, userUpn: actor })
       // Terminal event (completed/failed) already sent by orchestrator via onProgress
-      auditSync(`sync:${req.params.planId}`, actor,
+      auditSync(req.params.planId, actor, actorUpn,
         result.success ? "sync.execute.completed" : "sync.execute.failed",
         { ...planDetail, error: result.error ?? null })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       send({ type: "failed", error: msg })
-      auditSync(`sync:${req.params.planId}`, actor, "sync.execute.failed",
+      auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed",
         { ...planDetail, error: msg })
     } finally {
       clearInterval(heartbeat)
@@ -186,37 +182,37 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
 
   // ── History — recent sync audit entries ─────────────────────
   app.get<{ Querystring: { limit?: string } }>("/api/sync/history", async (req, _reply) => {
-    const isAdmin = !!req.session?.isAdmin
-    const viewerUpn = req.session?.upn ?? null
+    const isAdmin = !!req.session.isAdmin
+    const viewerUpn = req.session.upn
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100))
-    // Audit-log rows (manual syncs — backward compat)
-    const auditRowsRaw = db.getDb()
-      .prepare(`
-        SELECT run_id AS planId, actor, action, detail, timestamp
-        FROM audit_log
-        WHERE run_id LIKE 'sync:%'
-        ORDER BY timestamp DESC
-        LIMIT ?
-      `)
-      .all(limit) as Array<{ planId: string; actor: string; action: string; detail: string; timestamp: string }>
-    const auditRows = isAdmin
-      ? auditRowsRaw
-      : auditRowsRaw.filter((r) => viewerUpn != null && r.actor === viewerUpn)
-    const auditPlanIds = new Set(auditRows.map((r) => r.planId.replace(/^sync:/, "")))
-    // Agent-initiated syncs — present in sync_runs but not in audit_log.
+    // sync_audit-driven rows (manual UI-initiated syncs).
+    const auditRowsRaw = db.listRecentSyncAudit(limit, isAdmin ? undefined : { actorUpn: viewerUpn })
+    const auditRows = auditRowsRaw.map((r) => ({
+      planId: `sync:${r.plan_id}`,
+      actor: r.actor,
+      action: r.action,
+      detail: r.detail,
+      timestamp: r.timestamp,
+    }))
+    const auditPlanIds = new Set(auditRowsRaw.map((r) => r.plan_id))
+    // Agent-initiated syncs — present in sync_runs but not in sync_audit.
     // Emit TWO rows per run: a synthetic sync.preview (so the UI can show the
     // entity name and preview totals) followed by the execute result row.
     const agentRows = db.listSyncRuns(limit)
       .filter((r) => !auditPlanIds.has(r.plan_id))
       .filter((r) => isAdmin || (viewerUpn != null && r.actor_upn === viewerUpn))
       .flatMap((r) => {
-        let previewTotals: unknown = null
-        try { previewTotals = JSON.parse(r.preview_totals_json) } catch { /* skip */ }
-        let executeTotals: unknown = null
-        if (r.execute_totals_json) {
-          try { executeTotals = JSON.parse(r.execute_totals_json) } catch { /* skip */ }
+        const previewTotals = {
+          insert: r.preview_inserts,
+          update: r.preview_updates,
+          delete: r.preview_deletes,
         }
-        const actor = r.actor_upn ?? "agent"
+        const executeTotals = r.executed_inserts === null ? null : {
+          insert: r.executed_inserts,
+          update: r.executed_updates,
+          delete: r.executed_deletes,
+        }
+        const actor = r.actor_upn
         const entityDetail = {
           entityType: r.entity_type, entityId: r.entity_id,
           entityName: r.entity_display_name,
@@ -229,7 +225,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
           detail: JSON.stringify({ ...entityDetail, totals: previewTotals }),
           timestamp: r.started_at,
         }
-        if (r.status === "started") return [previewRow]
+        if (r.status === "started" || r.status === "preview") return [previewRow]
         const execAction = r.status === "success" ? "sync.execute.completed" : "sync.execute.failed"
         const execRow = {
           planId: `sync:${r.plan_id}`,
@@ -261,8 +257,8 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
   // most recent manual sync the user ran — the sync-equivalent of the
   // agent loop's "auto-select latest run" behaviour.
   app.get<{ Querystring: { limit?: string } }>("/api/sync/runs", async (req, _reply) => {
-    const isAdmin = !!req.session?.isAdmin
-    const viewerUpn = req.session?.upn ?? null
+    const isAdmin = !!req.session.isAdmin
+    const viewerUpn = req.session.upn
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 25))
     return db.listSyncRuns(limit)
       .filter((r) => isAdmin || (viewerUpn && r.actor_upn === viewerUpn))

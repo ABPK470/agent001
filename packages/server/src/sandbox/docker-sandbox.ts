@@ -2,6 +2,7 @@ import { execFile } from "node:child_process"
 import { randomBytes } from "node:crypto"
 import { resolve } from "node:path"
 import { promisify } from "node:util"
+import { WorkspaceMountMode } from "../enums/sandbox.js"
 import {
     BROWSER_DOCKERFILE,
     BROWSER_IMAGE,
@@ -145,7 +146,7 @@ export class DockerSandbox {
     const timeout = options?.timeout ?? this.config.timeout
     const containerCwd = options?.cwd ? `/workspace/${options.cwd}` : "/workspace"
     const allowNetwork = options?.network ?? this.config.network
-    const containerId = `agent001-sandbox-${randomBytes(6).toString("hex")}`
+    const containerId = `mia-sandbox-${randomBytes(6).toString("hex")}`
     const mountArgs = this.buildWorkspaceMount(workspacePath)
 
     const args: string[] = [
@@ -246,9 +247,9 @@ export class DockerSandbox {
   buildWorkspaceMount(workspacePath: string, overrideAccess?: SandboxConfig["workspaceAccess"]): string[] {
     const access = overrideAccess ?? this.config.workspaceAccess
     switch (access) {
-      case "none": return []
-      case "readonly": return ["-v", `${workspacePath}:/workspace:ro`]
-      case "readwrite":
+      case WorkspaceMountMode.None: return []
+      case WorkspaceMountMode.Readonly: return ["-v", `${workspacePath}:/workspace:ro`]
+      case WorkspaceMountMode.Readwrite:
       default: return ["-v", `${workspacePath}:/workspace:rw`]
     }
   }
@@ -303,7 +304,7 @@ export class DockerSandbox {
     }
 
     const timeout = options?.timeout ?? 30_000
-    const containerId = `agent001-browser-${randomBytes(6).toString("hex")}`
+    const containerId = `mia-browser-${randomBytes(6).toString("hex")}`
 
     const args: string[] = [
       "run", "--rm", "--name", containerId,
@@ -315,10 +316,9 @@ export class DockerSandbox {
       "--security-opt=no-new-privileges",
       "--read-only",
       "--tmpfs", "/tmp:rw,exec,nosuid,size=128m",
-      ...this.buildWorkspaceMount(workspacePath, "readonly"),
+      ...this.buildWorkspaceMount(workspacePath, WorkspaceMountMode.Readonly),
       "-w", "/workspace",
-      "-e", "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true",
-      "-e", "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium",
+      "-e", "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
       "-e", "NO_COLOR=1",
       BROWSER_IMAGE,
       "node", "-e", scriptContent,

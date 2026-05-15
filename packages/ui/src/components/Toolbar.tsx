@@ -2,7 +2,7 @@
  * Toolbar — top bar with branding, view tabs, menu dropdown, and widget button.
  */
 
-import { Activity, Bot, LayoutGrid, LogOut, Menu, Plus, Shield, Terminal, X } from "lucide-react"
+import { Activity, Bot, ChevronDown, LayoutGrid, LogOut, Menu, Plus, Shield, Terminal, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
@@ -35,6 +35,14 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const menuRef = useRef<HTMLDivElement>(null)
+  // Tab overflow handling: when the tab strip is narrower than its
+  // total tab width we expose a "More" dropdown so views aren't lost.
+  // Without this, narrow widths (or right-side controls eating space)
+  // hide the trailing tabs behind a horizontal scroll users can't see.
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [tabsOverflow, setTabsOverflow] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -47,6 +55,36 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [menuOpen])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    function handleClick(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [moreOpen])
+
+  // Detect overflow on the tab strip and re-evaluate when views change
+  // or the toolbar resizes (e.g. window resize, right-controls grow).
+  useEffect(() => {
+    const el = tabsRef.current
+    if (!el) return
+    const check = () => setTabsOverflow(el.scrollWidth > el.clientWidth + 1)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [views.length])
+
+  // Keep the active tab visible when the user switches via the
+  // dropdown or programmatically.
+  useEffect(() => {
+    const el = tabsRef.current?.querySelector<HTMLElement>(`[data-view-id="${activeViewId}"]`)
+    el?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" })
+  }, [activeViewId])
 
   function handleDoubleClick(id: string, name: string) {
     setEditing(id)
@@ -66,10 +104,11 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
         <Logo size={30} online={connected} />
 
         {/* View tabs */}
-        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
+        <div ref={tabsRef} className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto scrollbar-none">
           {views.map((view) => (
             <div
               key={view.id}
+              data-view-id={view.id}
               className={`
                 group flex items-center gap-1.5 px-3 h-9 text-[13px] cursor-pointer shrink-0
                 transition-colors
@@ -116,6 +155,40 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
             <Plus size={16} />
           </button>
         </div>
+
+        {/* "More" dropdown — visible whenever the tab strip overflows
+            so trailing views aren't lost behind a scroll the user
+            can't see. Always lists every view for quick navigation. */}
+        {tabsOverflow && (
+          <div className="relative shrink-0" ref={moreRef}>
+            <button
+              className="flex items-center gap-1 h-9 px-2 text-[13px] text-text-muted hover:text-text hover:bg-overlay-hover rounded-lg transition-colors"
+              onClick={() => setMoreOpen((v) => !v)}
+              title="All views"
+            >
+              <span className="hidden sm:inline">More</span>
+              <ChevronDown size={14} />
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-56 max-h-[60vh] overflow-y-auto bg-panel-2 border border-border rounded-xl shadow-xl shadow-black/40 py-1.5 z-50">
+                {views.map((view) => (
+                  <button
+                    key={view.id}
+                    className={`flex items-center justify-between w-full px-4 py-2.5 text-sm transition-colors ${
+                      view.id === activeViewId
+                        ? "text-text font-semibold bg-overlay-hover"
+                        : "text-text-secondary hover:text-text hover:bg-overlay-hover"
+                    }`}
+                    onClick={() => { setActiveView(view.id); setMoreOpen(false) }}
+                  >
+                    <span className="truncate">{view.name}</span>
+                    {view.id === activeViewId && <span className="text-accent text-xs">●</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Right controls — uniform 36px icon buttons; greeting pinned far right */}
         <div className="flex items-center gap-1">

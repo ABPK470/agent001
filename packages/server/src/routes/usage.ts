@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import * as db from "../db.js"
+import * as db from "../db/index.js"
 
 export function registerUsageRoutes(app: FastifyInstance): void {
 

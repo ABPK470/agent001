@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@mia/shared-enums": "*",
+    "@mia/shared-types": "*",
     "@types/three": "^0.184.0",
     "axios": "^1.15.0",
     "lucide-react": "^1.8.0",

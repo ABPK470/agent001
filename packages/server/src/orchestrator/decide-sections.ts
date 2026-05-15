@@ -22,6 +22,12 @@ export interface SectionDecision {
   includeAbiSync:        boolean
   /** Include the MSSQL "DATA TOOLS / RULES / EFFICIENCY" guidance prose. */
   includeMssqlGuidance:  boolean
+  /**
+   * Include the big-table / micro-ETL discipline section (canonical
+   * #temp staging pattern + anti-patterns). Same trigger as
+   * `includeMssqlGuidance` — fires whenever the goal looks DB-shaped.
+   */
+  includeBigTableEtl:    boolean
   /** Include the per-connection knowledge body (the largest single block). */
   includeMssqlKnowledge: boolean
   /** Include the live schema-catalog summary. */
@@ -37,25 +43,101 @@ export interface SectionDecision {
   includeChartCatalogue: boolean
   /** Append the memory-XML-tag guidance trailer. Only useful when a tier is present. */
   includeMemoryGuidance: boolean
+  /**
+   * Optional debug payload. Additive — kept here so tests and the run
+   * trace can assert on / log *why* a gate fired. Not consumed by the
+   * prompt assembler.
+   */
+  dbScore?: number
+  triggers?: {
+    operational: boolean
+    domain:      boolean
+    tableHint:   boolean
+    nonDb:       boolean
+    sync:        boolean
+  }
 }
 
 const SYNC_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\buspSync|\bmymi\b|\bpipelineActivity\b|\bgateMetadata\b|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
 
-// Words that indicate the goal is database-shaped. Conservative on
-// purpose — false positives cost a few thousand tokens; false negatives
-// cost a follow-up tool call. We bias to "include when in doubt".
-const DB_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|database|schema|tables?|columns?|rows?|join(s|ed|ing)?|select|from\s+\w|where\s+\w|group\s+by|order\s+by|index(es|ing)?|view(s)?|stored?\s+proc|catalog|lineage|fact|dim\.|publish\.|archive|persistedView|core\.|gate\.|agent\.PipelineRun|query|queries|profile_data|inspect_definition|search_catalog|explore_mssql|discover_relationships|export_query|dwh|warehouse|client(s)?|revenue|balances?|merchant|risk|rwa|impairment|trading|markets?|sales\s+credits?|africa(flex|brains)|FrontArena|UnoTranspose|IMEX|recipe|pipeline\s+(run|status)|etl|dataset(s)?|rule(s)?\s+(test|created|modified|engine))\b/i
+// ── DB gate — two-signal scorer ────────────────────────────────────
+//
+// Replaces the previous flat `DB_RE` OR-list. Three orthogonal signals:
+//
+//   DB_OPERATIONAL_RE — strong SQL / platform / tool tokens. If this
+//     fires, we are very confident this is a DB task regardless of any
+//     other cue (it cancels the NON_DB down-score).
+//
+//   DB_DOMAIN_RE — banking / DWH domain vocabulary. In THIS product these
+//     terms almost always refer to the data warehouse (the user's chief
+//     concern was that "visualize revenue by client" must trigger DB
+//     blocks even though it has zero SQL syntax). Domain alone is
+//     sufficient to fire the gate.
+//
+//   NON_DB_RE — narrowly scoped to "this is not a data-warehouse task at
+//     all" cues (Monte Carlo, mockup, Sharpe ratio, etc.). DESIGN RULE:
+//     rendering verbs (chart / plot / visualize / render / dashboard /
+//     animated) MUST NEVER appear here — they're orthogonal to data
+//     source and would false-negative legitimate DWH-viz questions.
+//
+// Scoring:
+//   +2  DB_OPERATIONAL_RE
+//   +2  DB_DOMAIN_RE
+//   +1  TABLE_DB_HINT_RE | DB_TABLE_HINT_RE
+//   +3  SYNC_RE
+//   −3  NON_DB_RE matches AND DB_OPERATIONAL_RE does NOT match
+// isDbLike = score >= 2.
+const DB_OPERATIONAL_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|fact\.|dim\.|publish\.|core\.|gate\.|persistedView|agent\.PipelineRun|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
+
+const DB_DOMAIN_RE = /\b(client(s)?|customer(s)?|banker(s)?|revenue|balances?|merchant(s)?|risk|rwa|impairment|trading|markets?|sales\s+credits?|africa(flex|brains)|FrontArena|UnoTranspose|IMEX|country(ies)?|branch(es)?|cost\s+cent(re|er)|counterparty|facility|book\s+group|segment|breakdown)\b/i
+
+// "Non-DB task type" cues only. NEVER add rendering verbs here.
+const NON_DB_RE = /\b(monte\s*carlo|simulation|mockup|mock-up|wireframe|prototype|sharpe\s+ratio|black.scholes|brownian|stochastic\s+process|geometric\s+brownian)\b/i
+
+// "table" only counts as a DB signal when it co-occurs with a clearly
+// DB-shaped qualifier in the same goal. This catches "table in the
+// fact schema", "list tables", "describe table dim.X" — without
+// catching "render the table you just did" or "recreate the table".
+const TABLE_DB_HINT_RE = /\b(table(s)?)\b[^.\n]{0,80}\b(in\s+(the\s+)?(database|schema|db)|schema|sql|database|db|join|column|row|query|publish|fact|dim|core|gate|persistedView|archive)\b/i
+const DB_TABLE_HINT_RE = /\b(database|schema|sql|join|column|row|query|publish|fact|dim|core|gate|persistedView|archive)\b[^.\n]{0,80}\b(table(s)?)\b/i
 
 // "Visual" intent — any of these usually benefits from the chart catalogue.
 const CHART_RE = /\b(chart|charts|graph|graphs|graphed|plot|plots|plotted|visuali[sz]e|visuali[sz]ation|dashboard|kpi|kpis|trend(s)?|distribution|breakdown|histogram|heatmap|relationship\s+map|diagram|figure|render)\b/i
+
+export interface DbScoreResult {
+  score:       number
+  operational: boolean
+  domain:      boolean
+  tableHint:   boolean
+  nonDb:       boolean
+  sync:        boolean
+}
+
+/** Compute the DB-likelihood score for a goal. Exported for telemetry / tests. */
+export function scoreDbLikelihood(goal: string): DbScoreResult {
+  const operational = DB_OPERATIONAL_RE.test(goal)
+  const domain      = DB_DOMAIN_RE.test(goal)
+  const tableHint   = TABLE_DB_HINT_RE.test(goal) || DB_TABLE_HINT_RE.test(goal)
+  const nonDb       = NON_DB_RE.test(goal)
+  const sync        = SYNC_RE.test(goal)
+
+  let score = 0
+  if (operational)             score += 2
+  if (domain)                  score += 2
+  if (tableHint)               score += 1
+  if (sync)                    score += 3
+  if (nonDb && !operational)   score -= 3
+
+  return { score, operational, domain, tableHint, nonDb, sync }
+}
 
 export function decideSections(opts: {
   goal:    string
   memory?: { working?: string; episodic?: string; semantic?: string }
 }): SectionDecision {
   const goal       = opts.goal ?? ""
-  const isSync     = SYNC_RE.test(goal)
-  const isDbLike   = DB_RE.test(goal) || isSync
+  const db         = scoreDbLikelihood(goal)
+  const isDbLike   = db.score >= 2
   // Chart catalogue requires EXPLICIT visual intent. DB-shaped goals no
   // longer auto-include it — the model can call `get_chart_specs` if it
   // decides a visualisation is warranted.
@@ -63,11 +145,20 @@ export function decideSections(opts: {
   const hasMemory  = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
 
   return {
-    includeAbiSync:        isSync,
+    includeAbiSync:        db.sync,
     includeMssqlGuidance:  isDbLike,
     includeMssqlKnowledge: isDbLike,
     includeMssqlCatalog:   isDbLike,
+    includeBigTableEtl:    isDbLike,
     includeChartCatalogue: isVisual,
     includeMemoryGuidance: hasMemory,
+    dbScore:               db.score,
+    triggers: {
+      operational: db.operational,
+      domain:      db.domain,
+      tableHint:   db.tableHint,
+      nonDb:       db.nonDb,
+      sync:        db.sync,
+    },
   }
 }

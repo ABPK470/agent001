@@ -1,3 +1,4 @@
+import { ToolOutcomeSeverity } from "@mia/agent"
 /**
  * Artifact-tracking helpers used by `executeToolRound` to record
  * mutation outcomes, count repeat failures, route replace_in_file
@@ -8,7 +9,7 @@
  */
 
 import type { AgentLoopState } from "../state.js"
-import { executeToolWithTimeout } from "../../tool-helpers/index.js"
+import { executeToolWithTimeout } from "../../tools/_helpers/index.js"
 import { normalizeArtifactPath } from "./types.js"
 
 export function recordBlockedArtifactFailure(
@@ -101,7 +102,7 @@ export function processArtifactOutcome(
     }
   }
 
-  if (execResult.outcome?.severity === "fatal") {
+  if (execResult.outcome?.severity === ToolOutcomeSeverity.Fatal) {
     for (const artifact of execResult.outcome.artifacts ?? []) {
       const normalizedPath = normalizeArtifactPath(artifact.path)
       if (!normalizedPath) continue

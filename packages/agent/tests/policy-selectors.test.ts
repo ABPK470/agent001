@@ -16,7 +16,7 @@ import {
     type HostedPolicyContext,
     type PolicyRule,
     type Step
-} from "../src/engine/index.js"
+} from "../src/domain/index.js"
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {

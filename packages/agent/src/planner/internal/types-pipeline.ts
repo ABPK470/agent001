@@ -1,3 +1,5 @@
+import { PipelineBlockCode, PipelineStatus } from "../../domain/enums/planner.js"
+export { PipelineBlockCode, PipelineStatus }
 // ============================================================================
 // Pipeline execution types (extracted from types.ts)
 // ============================================================================
@@ -63,7 +65,7 @@ export interface ChildExecutionResult {
 }
 
 export interface ContractReconciliationFinding {
-  readonly code: "forbidden_artifact_write" | "missing_required_output" | "hallucinated_artifact" | "unresolved_blocker" | "required_check_skipped"
+  readonly code: PipelineBlockCode
   readonly severity: "warning" | "error"
   readonly message: string
   readonly artifactPaths: readonly string[]
@@ -99,8 +101,6 @@ export interface PipelineStepResult {
   readonly reconciliation?: ContractReconciliationResult
 }
 
-export type PipelineStatus = "running" | "completed" | "failed"
-
 export interface PipelineResult {
   readonly status: PipelineStatus
   readonly stepResults: ReadonlyMap<string, PipelineStepResult>
@@ -114,7 +114,8 @@ export interface PipelineResult {
 // ============================================================================
 
 export type {
-    CircuitBreakerState, LegacyRetryPlan,
-    PlannerRepairCompatibilityMode, RepairPlan, RepairPlanCompatibilityReport, RepairTask, VerificationEvidence, VerifierDecision, VerifierIssue, VerifierIssueSeverity, VerifierOutcome, VerifierOwnershipMode,
-    VerifierRepairClass, VerifierStepAssessment, VerifierSystemCheck
+  CircuitBreakerState, LegacyRetryPlan,
+  PlannerRepairCompatibilityMode, RepairPlan, RepairPlanCompatibilityReport, RepairTask, VerificationEvidence, VerifierDecision, VerifierIssue, VerifierIssueSeverity, VerifierOutcome, VerifierOwnershipMode,
+  VerifierRepairClass, VerifierStepAssessment, VerifierSystemCheck
 } from "./types-verifier.js"
+

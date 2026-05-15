@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Web entry-point runtime wiring probe — checks that HTML artifacts reach
  * their related runtime JS artifacts via <script> / module imports and that
@@ -6,7 +7,7 @@
  * @module
  */
 
-import { normalizeSpecPath } from "../../blueprint-contract.js"
+import { normalizeSpecPath } from "../../blueprint-contract/index.js"
 import {
     type IntegrationProbeContext,
     collectReachableRuntimeArtifacts,
@@ -66,7 +67,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
         const existing = assessments[idx]
         assessments[idx] = {
           stepName: existing.stepName,
-          outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+          outcome: existing.outcome === VerifierOutcome.Pass ? VerifierOutcome.Retry : existing.outcome,
           confidence: existing.outcome === "pass" ? 0.4 : existing.confidence,
           issues: [...existing.issues, issue],
           retryable: true,
@@ -108,7 +109,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
         const existing = assessments[idx]
         assessments[idx] = {
           stepName: existing.stepName,
-          outcome: "retry",
+          outcome: VerifierOutcome.Retry,
           confidence: 0.0,
           issues: [...existing.issues, ...missingRefIssues],
           retryable: true,

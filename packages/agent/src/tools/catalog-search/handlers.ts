@@ -1,4 +1,4 @@
-import type { CatalogGraph, ConceptPathResult } from "../catalog.js"
+import type { CatalogGraph, ConceptPathResult } from "../catalog/index.js"
 import { fmtLineage, fmtPath, fmtRow } from "./formatters.js"
 
 export function handleStats(catalog: CatalogGraph): string {

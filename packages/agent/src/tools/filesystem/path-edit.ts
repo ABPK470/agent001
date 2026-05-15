@@ -1,3 +1,4 @@
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 import { readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../governance/index.js"
@@ -87,8 +88,8 @@ export const replaceInFileTool: Tool = {
           `REPLACE REJECTED for ${filePath} — the replacement was blocked due to structural integrity issues.`,
           {
             ok: false,
-            severity: "fatal",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Fatal,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_integrity_violation",
             details: [...integrityWarnings, "Use read_file to inspect the current file before another replacement attempt."],
             artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
@@ -105,8 +106,8 @@ export const replaceInFileTool: Tool = {
           `REPLACE REJECTED for ${filePath} — incomplete placeholder/stub logic was blocked before commit.`,
           {
             ok: false,
-            severity: "recoverable",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Recoverable,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_incomplete_mutation",
             details: [
               ...integrityWarnings,
@@ -125,8 +126,8 @@ export const replaceInFileTool: Tool = {
           `REPLACED WITH ISSUES in ${filePath} — inspect the saved file before continuing.`,
           {
             ok: false,
-            severity: "recoverable",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Recoverable,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_incomplete_mutation",
             details: integrityWarnings,
             artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
@@ -136,8 +137,8 @@ export const replaceInFileTool: Tool = {
 
       return buildToolOutcome(`Successfully replaced in ${filePath}`, {
         ok: true,
-        severity: "info",
-        directive: "continue",
+        severity: ToolOutcomeSeverity.Info,
+        directive: ToolControlDirective.Continue,
         artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
       })
     } catch (err) {

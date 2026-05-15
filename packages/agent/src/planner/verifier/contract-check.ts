@@ -1,3 +1,4 @@
+import { PlannerTraceKind, VerifierOutcome } from "@mia/agent"
 /**
  * Phase-0 delegation contract validation. Returns contractFailures detected
  * before LLM verification needs to run.
@@ -50,13 +51,13 @@ export function runContractValidation(
     if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
       contractFailures.push({
         stepName: step.name,
-        outcome: "retry",
+        outcome: VerifierOutcome.Retry,
         confidence: 0.97,
         issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
         retryable: true,
       })
       opts.onTrace?.({
-        kind: "verifier-reconciliation-check",
+        kind: PlannerTraceKind.VerifierReconciliation,
         stepName: step.name,
         findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
       })
@@ -67,7 +68,7 @@ export function runContractValidation(
       const guidance = getCorrectionGuidance(contractResult.code)
       contractFailures.push({
         stepName: step.name,
-        outcome: "retry",
+        outcome: VerifierOutcome.Retry,
         confidence: 0.95,
         issues: [
           `[contract:${contractResult.code}] ${contractResult.message}`,
@@ -76,7 +77,7 @@ export function runContractValidation(
         retryable: true,
       })
       opts.onTrace?.({
-        kind: "verifier-contract-check",
+        kind: PlannerTraceKind.VerifierContractCheck,
         stepName: step.name,
         code: contractResult.code,
         message: contractResult.message,

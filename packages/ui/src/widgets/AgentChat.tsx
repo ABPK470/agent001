@@ -6,7 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -87,6 +87,39 @@ const TOOL_LABELS: Record<string, string> = {
   sync_execute:          "Executing sync",
   list_environments:     "Listing environments",
   compare_catalogs:      "Comparing catalogs",
+}
+
+// Render a tool's full input as `key="value"` pairs, copilot-cli style.
+// Used in the expanded step view so the user sees the EXACT command/query/args
+// the agent dispatched, not just the brief one-line summary.
+function formatToolArgs(input: Record<string, unknown>): string {
+  const entries = Object.entries(input)
+  if (entries.length === 0) return ""
+  return entries
+    .map(([k, v]) => {
+      if (v === null || v === undefined) return `${k}=null`
+      if (typeof v === "string") return `${k}=${JSON.stringify(v)}`
+      if (typeof v === "number" || typeof v === "boolean") return `${k}=${v}`
+      // Objects / arrays — inline JSON; multi-line acceptable, the panel uses
+      // pre-wrap so it stays readable.
+      try { return `${k}=${JSON.stringify(v)}` }
+      catch { return `${k}=[unserialisable]` }
+    })
+    .join(" ")
+}
+
+// Coerce a step's output payload into displayable text. step.output is
+// typically `{ result: "..." }` from the orchestrator's step.completed event
+// (and from the trace-derived path in tracesToSteps). Fall back to a
+// JSON dump for unusual shapes so nothing is silently dropped.
+function formatToolOutput(output: Record<string, unknown>, error: string | null): string {
+  if (error) return error
+  if (!output || Object.keys(output).length === 0) return ""
+  const result = output["result"]
+  if (typeof result === "string") return result
+  if (typeof result === "number" || typeof result === "boolean") return String(result)
+  try { return JSON.stringify(output, null, 2) }
+  catch { return String(result ?? "") }
 }
 
 // Brief detail extractor — pulls the most human-readable arg from tool inputs
@@ -288,6 +321,19 @@ export function AgentChat() {
   const steps = useStore((s) => s.steps)
   const liveUsage = useStore((s) => s.liveUsage)
   const executingToolCalls = useStore((s) => s.executingToolCalls)
+  // Per-step expand/collapse state for the inline tool list. Holds the
+  // step ids the user has clicked open so they can see the FULL tool
+  // input (e.g. the exact `command="…"`) and the FULL output text —
+  // not just the brief one-line summary that the collapsed row shows.
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
+  const toggleStep = useCallback((id: string) => {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   const activeRun = runs.find((r) => r.id === activeRunId)
   const trace = activeRun?.trace ?? []
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
@@ -453,7 +499,15 @@ export function AgentChat() {
       const { runId } = await api.startRun(goal, agentId, attachmentIds)
       setActiveRun(runId)
     } catch (err) {
+      // Surface the server error and clear any optimistic activeRun so
+      // the chat doesn't get stuck on "Working" when startRun never
+      // produced a runs row server-side.
+      const msg = err instanceof Error ? err.message : String(err)
       console.error("Failed to start run:", err)
+      setError(`Failed to start run: ${msg}`)
+      setActiveRun(null)
+      setInput(goal)
+      setAttachments(attachments)
     } finally {
       setSending(false)
     }
@@ -624,6 +678,84 @@ export function AgentChat() {
               </div>
             )}
 
+            {/* Post-completion tool review — for the active run, after the
+                answer (or error) lands, keep the inline expandable tool list
+                visible so the user can drill into each `Ran <tool>` row to
+                see the FULL command/args and the FULL output, mirroring
+                Copilot Chat's "Used X" disclosure. The live progress section
+                below renders the same list during execution; this block
+                preserves the same UX once the run has finished. */}
+            {run.id === activeRunId && steps.length > 0 && (run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
+              <div className="flex items-start gap-2 w-full">
+                <div className="flex-1 min-w-0">
+                  <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
+                    <div className="divide-y divide-border-subtle">
+                      {steps.map((step) => {
+                        const isFailed = step.status === "failed"
+                        const label = TOOL_LABELS[step.action] ?? step.action
+                        const detail = getToolDetail(step.action, step.input)
+                        const duration = step.startedAt && step.completedAt
+                          ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
+                          : null
+                        const isExpanded = expandedSteps.has(step.id)
+                        const fullArgs = formatToolArgs(step.input)
+                        const fullOutput = formatToolOutput(step.output, step.error)
+                        const canExpand = fullArgs.length > 0 || fullOutput.length > 0
+                        return (
+                          <div key={`done-${step.id}`}>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); if (canExpand) toggleStep(step.id) }}
+                              disabled={!canExpand}
+                              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
+                            >
+                              {canExpand ? (
+                                isExpanded
+                                  ? <ChevronDown size={10} className="shrink-0 text-text-muted" />
+                                  : <ChevronRight size={10} className="shrink-0 text-text-muted" />
+                              ) : (
+                                <span className="w-2.5 shrink-0" />
+                              )}
+                              {isFailed
+                                ? <XCircle size={12} className="shrink-0 text-error" />
+                                : <CheckCircle2 size={12} className="shrink-0 text-success/50" />}
+                              <span className="text-base shrink-0 text-text-muted">{label}</span>
+                              {detail ? (
+                                <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">{detail}</span>
+                              ) : (
+                                <span className="flex-1" />
+                              )}
+                              {duration !== null && (
+                                <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
+                              )}
+                            </button>
+                            {isExpanded && canExpand && (
+                              <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
+                                {fullArgs && (
+                                  <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
+                                    <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
+                                      <span className="text-accent">{step.action}</span> {fullArgs}
+                                    </pre>
+                                  </div>
+                                )}
+                                {fullOutput && (
+                                  <div className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}>
+                                    <pre className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}>
+                                      {fullOutput}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Pending workspace file changes — accept/reject card (like ask_user) */}
             {(run.pendingWorkspaceChanges ?? 0) > 0 && !dismissedWorkspaceDiffRunIds.has(run.id) && (
               <WorkspaceChangesCard
@@ -666,53 +798,95 @@ export function AgentChat() {
                               const tc = isRunning
                                 ? [...executingToolCalls.values()].find((t) => t.toolName === step.action)
                                 : null
+                              const isExpanded = expandedSteps.has(step.id)
+                              const fullArgs = formatToolArgs(step.input)
+                              const fullOutput = formatToolOutput(step.output, step.error)
+                              const canExpand = fullArgs.length > 0 || fullOutput.length > 0
                               return (
-                                <div
-                                  key={step.id}
-                                  className={`flex items-center gap-2 px-2.5 py-1.5 ${isRunning ? "bg-overlay-1" : ""}`}
-                                >
-                                  {/* Status icon */}
-                                  {isRunning ? (
-                                    <Loader2 size={12} className="shrink-0 text-accent animate-spin" />
-                                  ) : isFailed ? (
-                                    <XCircle size={12} className="shrink-0 text-error" />
-                                  ) : (
-                                    <CheckCircle2 size={12} className="shrink-0 text-success/50" />
-                                  )}
+                                <div key={step.id} className={isRunning ? "bg-overlay-1" : ""}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); if (canExpand) toggleStep(step.id) }}
+                                    disabled={!canExpand}
+                                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
+                                  >
+                                    {/* Disclosure chevron — only when there's something to reveal */}
+                                    {canExpand ? (
+                                      isExpanded
+                                        ? <ChevronDown size={10} className="shrink-0 text-text-muted" />
+                                        : <ChevronRight size={10} className="shrink-0 text-text-muted" />
+                                    ) : (
+                                      <span className="w-2.5 shrink-0" />
+                                    )}
 
-                                  {/* Tool label */}
-                                  <span className={`text-base shrink-0 ${isRunning ? "text-text" : "text-text-muted"}`}>
-                                    {label}
-                                  </span>
+                                    {/* Status icon */}
+                                    {isRunning ? (
+                                      <Loader2 size={12} className="shrink-0 text-accent animate-spin" />
+                                    ) : isFailed ? (
+                                      <XCircle size={12} className="shrink-0 text-error" />
+                                    ) : (
+                                      <CheckCircle2 size={12} className="shrink-0 text-success/50" />
+                                    )}
 
-                                  {/* Brief detail — path, query, command, etc. */}
-                                  {detail ? (
-                                    <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
-                                      {detail}
+                                    {/* Tool label */}
+                                    <span className={`text-base shrink-0 ${isRunning ? "text-text" : "text-text-muted"}`}>
+                                      {label}
                                     </span>
-                                  ) : (
-                                    <span className="flex-1" />
-                                  )}
 
-                                  {/* Duration (completed) or cancel (running) */}
-                                  {duration !== null && !isRunning && (
-                                    <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
-                                  )}
-                                  {isRunning && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (tc) {
-                                          api.killToolCall(activeRunId!, tc.toolCallId, "Cancelled by user").catch(() => {})
-                                        } else {
-                                          handleCancel()
-                                        }
-                                      }}
-                                      className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
-                                      title="Stop this tool call"
-                                    >
-                                      <Square size={8} fill="currentColor" />
-                                    </button>
+                                    {/* Brief detail — path, query, command, etc. */}
+                                    {detail ? (
+                                      <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
+                                        {detail}
+                                      </span>
+                                    ) : (
+                                      <span className="flex-1" />
+                                    )}
+
+                                    {/* Duration (completed) or cancel (running) */}
+                                    {duration !== null && !isRunning && (
+                                      <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
+                                    )}
+                                    {isRunning && (
+                                      <span
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          if (tc) {
+                                            api.killToolCall(activeRunId!, tc.toolCallId, "Cancelled by user").catch(() => {})
+                                          } else {
+                                            handleCancel()
+                                          }
+                                        }}
+                                        className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
+                                        title="Stop this tool call"
+                                      >
+                                        <Square size={8} fill="currentColor" />
+                                      </span>
+                                    )}
+                                  </button>
+
+                                  {/* Expanded detail panel — full input as `key="value"` pairs
+                                      and the raw tool output below. Mirrors the screenshot the
+                                      user shared: clicking the leaf reveals the actual command
+                                      that was dispatched and what it returned. */}
+                                  {isExpanded && canExpand && (
+                                    <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
+                                      {fullArgs && (
+                                        <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
+                                          <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
+                                            <span className="text-accent">{step.action}</span> {fullArgs}
+                                          </pre>
+                                        </div>
+                                      )}
+                                      {fullOutput && (
+                                        <div className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}>
+                                          <pre className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}>
+                                            {fullOutput}
+                                          </pre>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )

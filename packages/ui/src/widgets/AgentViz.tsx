@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d"
 import ForceGraph2D from "react-force-graph-2d"
 import { api } from "../api"
+import { RunStatus, VizMode } from "../enums"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry } from "../types"
 import { remediationHintForValidationCode } from "../util"
@@ -103,8 +104,6 @@ interface VizLink {
 
 // ── Component ────────────────────────────────────────────────────
 
-type VizMode = "live" | "reflect"
-
 export function AgentViz() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
@@ -124,7 +123,7 @@ export function AgentViz() {
   const zoomBaseRef = useRef(1)
 
   // Mode: live (real-time) or reflect (review past run)
-  const [mode, setMode] = useState<VizMode>("live")
+  const [mode, setMode] = useState<VizMode>(VizMode.Live)
   const [reflectRunId, setReflectRunId] = useState<string | null>(null)
   const [reflectTrace, setReflectTrace] = useState<TraceEntry[]>([])
   const [liveTrace, setLiveTrace] = useState<TraceEntry[]>([])
@@ -151,7 +150,7 @@ export function AgentViz() {
   // Throttle live trace propagation so mounted heavy widgets do not re-drive
   // the entire force-graph on every single incoming trace append.
   useEffect(() => {
-    if (mode !== "live") return
+    if (mode !== VizMode.Live) return
     const timer = window.setTimeout(() => {
       setLiveTrace((prev) => (prev === rawLiveTrace ? prev : rawLiveTrace))
     }, 120)
@@ -159,7 +158,7 @@ export function AgentViz() {
   }, [mode, rawLiveTrace])
 
   // Active trace depends on mode
-  const trace = mode === "live" ? liveTrace : reflectTrace
+  const trace = mode === VizMode.Live ? liveTrace : reflectTrace
 
   // Feed width for the left panel — generous so headers don't clip
   const feedW = Math.max(200, Math.min(360, size.w * 0.45))
@@ -196,7 +195,7 @@ export function AgentViz() {
 
   // Load trace for reflect mode
   useEffect(() => {
-    if (mode !== "reflect" || !reflectRunId) return
+    if (mode !== VizMode.Reflect || !reflectRunId) return
     setLoadingReflect(true)
     api.getRunTrace(reflectRunId)
       .then((entries) => setReflectTrace(entries as TraceEntry[]))
@@ -206,31 +205,31 @@ export function AgentViz() {
 
   // When switching to reflect, auto-select the most recent completed run
   useEffect(() => {
-    if (mode === "reflect" && !reflectRunId) {
-      const completed = runs.filter((r) => r.status === "completed" || r.status === "failed")
+    if (mode === VizMode.Reflect && !reflectRunId) {
+      const completed = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed)
       if (completed.length > 0) setReflectRunId(completed[0].id)
     }
   }, [mode, reflectRunId, runs])
 
   // Auto-switch to live when a new run starts
   useEffect(() => {
-    if (activeRunId && mode === "reflect") {
+    if (activeRunId && mode === VizMode.Reflect) {
       const run = runs.find((r) => r.id === activeRunId)
-      if (run?.status === "running") {
-        setMode("live")
+      if (run?.status === RunStatus.Running) {
+        setMode(VizMode.Live)
       }
     }
   }, [activeRunId, runs, mode])
 
   // Derive state
   const reflectRun = reflectRunId ? runs.find((r) => r.id === reflectRunId) : null
-  const displayRun = mode === "live" ? activeRun : reflectRun
-  const isRunning = mode === "live" && activeRun?.status === "running"
+  const displayRun = mode === VizMode.Live ? activeRun : reflectRun
+  const isRunning = mode === VizMode.Live && activeRun?.status === RunStatus.Running
 
   // The agent that owns the current run (works in both live and reflect)
   const activeAgentId = displayRun?.agentId ?? null
   // Whether we have a run context at all (live with trace data, or reflect with loaded trace)
-  const hasRunContext = (mode === "live" && activeAgentId != null && trace.length > 0) || (mode === "reflect" && reflectRunId != null && trace.length > 0)
+  const hasRunContext = (mode === VizMode.Live && activeAgentId != null && trace.length > 0) || (mode === VizMode.Reflect && reflectRunId != null && trace.length > 0)
 
   // Pulse the status dot while running
   useEffect(() => {
@@ -522,7 +521,7 @@ export function AgentViz() {
 
   // Emit particles when new tool calls arrive (live mode only)
   useEffect(() => {
-    if (mode !== "live") return
+    if (mode !== VizMode.Live) return
     if (liveTrace.length <= prevTraceLen.current) {
       prevTraceLen.current = liveTrace.length
       return
@@ -1021,8 +1020,8 @@ export function AgentViz() {
         <div ref={feedRef} className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 pt-2 flex flex-col gap-0.5 relative pointer-events-auto">
           {recentActivity.length === 0 ? (
             <div className="text-xs" style={{ color: C.mid }}>
-              {mode === "reflect" && !reflectRunId ? "Select a past run to review"
-                : mode === "live" && !isRunning ? ""
+              {mode === VizMode.Reflect && !reflectRunId ? "Select a past run to review"
+                : mode === VizMode.Live && !isRunning ? ""
                 : "Waiting for activity"}
             </div>
           ) : (
@@ -1193,20 +1192,20 @@ export function AgentViz() {
             <button
               className="text-[11px] transition-colors cursor-pointer"
               style={{
-                color: mode === "live" ? C.text : C.muted,
-                fontWeight: mode === "live" ? 600 : 400,
+                color: mode === VizMode.Live ? C.text : C.muted,
+                fontWeight: mode === VizMode.Live ? 600 : 400,
               }}
-              onClick={() => { setMode("live"); setReflectRunId(null); setReflectTrace([]); setPickerOpen(false) }}
+              onClick={() => { setMode(VizMode.Live); setReflectRunId(null); setReflectTrace([]); setPickerOpen(false) }}
             >
               Live
             </button>
             <button
               className="text-[11px] transition-colors cursor-pointer"
               style={{
-                color: mode === "reflect" ? C.text : C.muted,
-                fontWeight: mode === "reflect" ? 600 : 400,
+                color: mode === VizMode.Reflect ? C.text : C.muted,
+                fontWeight: mode === VizMode.Reflect ? 600 : 400,
               }}
-              onClick={() => setMode("reflect")}
+              onClick={() => setMode(VizMode.Reflect)}
             >
               Reflect
             </button>
@@ -1214,8 +1213,8 @@ export function AgentViz() {
             {/* Status dot */}
             {(() => {
               const run = displayRun
-              if (mode === "live" && !run) return null
-              if (mode === "live" && run?.status === "running") {
+              if (mode === VizMode.Live && !run) return null
+              if (mode === VizMode.Live && run?.status === RunStatus.Running) {
                 return (
                   <span
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-opacity duration-700 ml-1"
@@ -1223,10 +1222,10 @@ export function AgentViz() {
                   />
                 )
               }
-              if (run?.status === "failed") {
+              if (run?.status === RunStatus.Failed) {
                 return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1" style={{ background: C.coral }} />
               }
-              if (run?.status === "completed") {
+              if (run?.status === RunStatus.Completed) {
                 return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1" style={{ background: C.mid }} />
               }
               return null
@@ -1238,10 +1237,10 @@ export function AgentViz() {
             className="relative transition-all duration-150"
             ref={pickerRef}
             style={{
-              opacity: mode === "reflect" ? 1 : 0,
-              pointerEvents: mode === "reflect" ? "auto" : "none",
-              maxWidth: mode === "reflect" ? 220 : 0,
-              clipPath: mode === "reflect" ? "none" : "inset(0)",
+              opacity: mode === VizMode.Reflect ? 1 : 0,
+              pointerEvents: mode === VizMode.Reflect ? "auto" : "none",
+              maxWidth: mode === VizMode.Reflect ? 220 : 0,
+              clipPath: mode === VizMode.Reflect ? "none" : "inset(0)",
             }}
           >
             <button
@@ -1257,7 +1256,7 @@ export function AgentViz() {
               <ChevronDown size={11} className="shrink-0 opacity-50" />
             </button>
 
-            {pickerOpen && mode === "reflect" && (
+            {pickerOpen && mode === VizMode.Reflect && (
               <div
                 className="absolute left-0 top-full mt-1.5 w-64 rounded-lg shadow-xl z-50 overflow-hidden max-h-56 overflow-y-auto"
                 style={{ background: C.elevated, border: `1px solid rgba(255,255,255,0.08)` }}

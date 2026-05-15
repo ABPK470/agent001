@@ -1,26 +1,30 @@
 /**
  * LLM provider registry — builds the right LLMClient from a stored config.
  *
- * Supported providers:
- *   copilot-chat — Copilot Chat API (same as VS Code, full context window)
- *   copilot      — GitHub Models (OpenAI-compatible, 8K token limit)
- *   openai       — OpenAI API or any OpenAI-compatible endpoint
- *   local        — Local model via OpenAI-compatible API (Ollama, LM Studio, etc.)
+ * Supported providers (intranet-only deployment, no third-party SaaS):
+ *   copilot-chat — Copilot Chat API (Device Flow, full context window)
+ *   databricks   — Foundation Model APIs over corporate Databricks workspace
+ *
+ * Removed (do not re-add — see commit history):
+ *   copilot      — GitHub Models. Token-capped, redundant with copilot-chat.
+ *   openai       — Direct OpenAI SaaS. Out of policy for intranet deployments.
+ *   anthropic    — UI-only stub, never had a server-side implementation.
+ *   local        — Out of policy. The OpenAICompatibleClient class is retained
+ *                  as the wire-format base for DatabricksClient only.
  */
 
-import { DatabricksClient, OpenAIClient, type LLMClient } from "@agent001/agent";
-import type { DbLlmConfig } from "../db.js";
-import { CopilotChatClient } from "./copilot-chat.js";
-import { CopilotClient } from "./copilot.js";
-import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js";
+import { DatabricksClient, type LLMClient } from "@mia/agent"
+import type { DbLlmConfig } from "../db/index.js"
+import { CopilotChatClient } from "./copilot-chat.js"
+import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js"
+
+/** Default model used when no override is set. */
+export const DEFAULT_MODEL = "gpt-5.4"
 
 /** Default models per provider shown in the UI picker. */
 export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
-  "copilot-chat": { model: "gpt-4o",              baseUrl: "",                                   placeholder: "Automatic (Device Flow — authorize once)" },
-  copilot:    { model: "gpt-4o",                  baseUrl: "",                                   placeholder: "Automatic (from GITHUB_TOKEN / gh CLI)" },
-  openai:     { model: "gpt-4o",                  baseUrl: "https://api.openai.com",             placeholder: "sk-..." },
-  local:      { model: "llama3",                  baseUrl: "http://localhost:11434",              placeholder: "none required (or model API key)" },
-  databricks: { model: "databricks-claude-sonnet-4", baseUrl: "",                                placeholder: "Automatic (M2M OAuth from .env)" },
+  "copilot-chat": { model: DEFAULT_MODEL,                  baseUrl: "", placeholder: "Automatic (Device Flow — authorize once)" },
+  databricks:     { model: "databricks-claude-sonnet-4",   baseUrl: "", placeholder: "Automatic (M2M OAuth from .env)" },
 }
 
 /**
@@ -34,31 +38,7 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
     case "copilot-chat":
       return new CopilotChatClient({
         token: api_key || undefined,
-        model: model || "gpt-4o",
-      })
-
-    case "copilot":
-      return new CopilotClient({
-        token:   api_key || undefined,
-        model:   model || "gpt-4o",
-        baseUrl: base_url || undefined,
-      })
-
-    case "openai":
-      return new OpenAIClient({
-        apiKey:  api_key,
-        model:   model || "gpt-4o",
-        baseUrl: base_url || undefined,
-      })
-
-    case "local":
-      // Local models expose an OpenAI-compatible endpoint.
-      // Ollama: http://localhost:11434/v1  (no auth needed)
-      // LM Studio: http://localhost:1234/v1
-      return new OpenAIClient({
-        apiKey:  api_key || "local",          // most local servers ignore the key
-        model:   model || "llama3",
-        baseUrl: base_url || "http://localhost:11434",
+        model: model || DEFAULT_MODEL,
       })
 
     case "databricks":
@@ -74,6 +54,6 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
       })
 
     default:
-      throw new Error(`Unknown LLM provider: ${provider}`)
+      throw new Error(`Unknown LLM provider: ${provider}. Allowed: copilot-chat, databricks.`)
   }
 }

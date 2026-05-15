@@ -1,4 +1,4 @@
-# agent001
+# MI:A
 
 Governed AI agent platform with multi-agent orchestration, intelligent task routing, and real-time observability.
 
@@ -21,12 +21,11 @@ Open [http://localhost:5179](http://localhost:5179).
 
 ## LLM providers
 
-| Provider | Env var | Default model |
+| Provider | Env / auth | Default model |
 |---|---|---|
-| **GitHub Copilot** (default) | `GITHUB_TOKEN` | gpt-4o |
-| **OpenAI** | `OPENAI_API_KEY` | gpt-4o |
-| **Anthropic** | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
-| **Local** (Ollama, LM Studio) | — | llama3 |
+| **Copilot Chat** (default) | GitHub Device Flow (no env needed) | gpt-5.4 |
+| **Databricks** | M2M creds in `.env` | (workspace-configured) |
+| **Local** (Ollama / LM Studio / any OpenAI-compatible) | `LLM_BASE_URL`, `LLM_API_KEY`, `MODEL` | llama3 |
 
 Hot-swap provider at runtime via the UI (Policies → Model) — no restart needed.
 
@@ -60,8 +59,11 @@ The foundation is **LLM + Tools + Loop**: the LLM decides what to do, tools exec
 | `search_files` | Grep across files with text or regex |
 | `run_command` | Shell command (abort-signal aware, Docker or host) |
 | `fetch_url` | HTTP fetch, HTML stripped to readable text |
-| `browse_web` | Puppeteer browser session (navigate, click, fill, read) |
-| `browser_check` | Open an HTML file in headless Chrome; report console errors, JS exceptions, network failures |
+| `browse_web` | Persistent stealth Playwright session — navigate, click, fill, upload, switch tabs/iframes, intercept requests |
+| `browser_auto_login` | Vault-backed sign-in: types stored credentials or generates a TOTP code into a live `browse_web` session |
+| `browser_human_handoff` | Mints a noVNC URL so the user can take over the live browser to clear a CAPTCHA / non-TOTP 2FA, then resumes the agent |
+| `web_search` | Real-browser search via DuckDuckGo / Bing / Google with auto fail-over on CAPTCHA |
+| `browser_check` | Open an HTML file in headless Chromium (Playwright); report console errors, JS exceptions, network failures |
 | `query_mssql` | Execute T-SQL against a configured SQL Server |
 | `explore_mssql_schema` | Inspect SQL Server schemas, tables, and columns |
 | `delegate` | Spawn a child agent for a sub-task (sequential) |
@@ -73,6 +75,27 @@ The foundation is **LLM + Tools + Loop**: the LLM decides what to do, tools exec
 ```bash
 curl http://localhost:3001/api/tools   # full list with descriptions
 ```
+
+## Identity & login
+
+Every request is authenticated. There is no anonymous mode.
+
+Two paths to a session:
+
+1. **Local accounts** — `POST /api/auth/register` then `POST /api/auth/login`. Passwords are bcrypt-hashed; the cookie (`mia_sid`) is an HMAC-signed opaque session id and identity is JOIN-resolved against the `users` table on every request, so revoking a session in the DB invalidates all in-flight cookies instantly.
+2. **SSO header** — set a reverse-proxy header (`From-User-Name`, `X-User-Name`, `X-Forwarded-User`, or `X-Remote-User`); the first contact provisions a `users` row (`source='sso'`) and mints a session.
+
+Admin status is the `users.is_admin` column. There is no admin cookie, no access-code login, no `MIA_ADMIN_UPNS` whitelist.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MIA_SESSION_SECRET` | dev-only fallback | HMAC key for the `mia_sid` cookie. **Required in production.** |
+| `MIA_ALLOW_LOCAL_REGISTRATION` | `1` outside production / `0` in production | Toggles `POST /api/auth/register`. |
+| `MIA_BOOTSTRAP_ADMIN_USERNAME` | _(unset)_ | If set together with the two below, the server provisions exactly one admin user on first boot when the `users` table is empty. |
+| `MIA_BOOTSTRAP_ADMIN_PASSWORD` | _(unset)_ | Initial password for the bootstrap admin. |
+| `MIA_BOOTSTRAP_ADMIN_DISPLAY_NAME` | _(unset)_ | Display name for the bootstrap admin. |
+
+> **v19 schema is destructive.** The migration drops legacy identity tables (sessions, runs, attachments, browser-*, notifications, …) and recreates them with `users(upn)` as a hard FK. Existing local databases will be wiped except for `llm_config` and `schema_meta`. After upgrade, every user re-registers (or is provisioned via SSO on first request); the bootstrap env-vars give you exactly one survivor.
 
 ## Governance
 

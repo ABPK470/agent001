@@ -2,7 +2,11 @@
  * Layout & policy persistence.
  */
 
+import { PolicyEffect } from "@mia/agent"
+import { PolicySource } from "../enums/index.js"
 import { getDb } from "./connection.js"
+
+export { PolicySource } from "../enums/index.js"
 
 // ── Layout queries ───────────────────────────────────────────────
 
@@ -48,11 +52,10 @@ export function deleteLayout(id: string): void {
  * rule if no row with that `name` exists. Deletes are persistent
  * (operator opt-out is intentional and survives restart).
  */
-export type PolicySource = "db" | "hosted_default" | "env_derived"
 
 export interface DbPolicyRule {
   name: string
-  effect: string
+  effect: PolicyEffect
   condition: string
   parameters: string
   created_at: string
@@ -72,7 +75,7 @@ export function savePolicyRule(rule: DbPolicyRule): void {
     INSERT OR REPLACE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, @updated_at, @updated_by)
   `).run({
-    source:     rule.source ?? "db",
+    source:     rule.source ?? PolicySource.Db,
     updated_at: rule.updated_at ?? null,
     updated_by: rule.updated_by ?? null,
     ...rule,
@@ -88,7 +91,7 @@ export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
     INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, NULL, NULL)
   `).run({
-    source: rule.source ?? "hosted_default",
+    source: rule.source ?? PolicySource.HostedDefault,
     ...rule,
   })
   return result.changes > 0

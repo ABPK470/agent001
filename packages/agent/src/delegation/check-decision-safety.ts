@@ -1,3 +1,4 @@
+import { DelegationHardBlockedMatchSource } from "../domain/enums/delegation.js"
 /**
  * Safety risk assessment and hard-block detection for delegation decisions.
  *
@@ -8,11 +9,10 @@
 
 import type {
     DelegationDecisionInput,
-    DelegationHardBlockedMatchSource,
     DelegationHardBlockedTaskClass,
     DelegationSubagentStepProfile,
     ResolvedDelegationDecisionConfig,
-} from "./decision.js"
+} from "./decision/index.js"
 
 // ============================================================================
 // Risk patterns
@@ -120,22 +120,22 @@ export function detectHardBlockedTaskClass(
 
   if (config.hardBlockedTaskClasses.has("wallet_signing")) {
     const textMatch = findTextMatch(textBlob, [WALLET_SIGNING_TEXT_RE])
-    if (textMatch) return { taskClass: "wallet_signing", source: "text", signal: summarizeSignal(textMatch) }
+    if (textMatch) return { taskClass: "wallet_signing", source: DelegationHardBlockedMatchSource.Text, signal: summarizeSignal(textMatch) }
   }
 
   if (config.hardBlockedTaskClasses.has("wallet_transfer")) {
     const textMatch = findTextMatch(textBlob, [WALLET_TRANSFER_TEXT_RE])
-    if (textMatch) return { taskClass: "wallet_transfer", source: "text", signal: summarizeSignal(textMatch) }
+    if (textMatch) return { taskClass: "wallet_transfer", source: DelegationHardBlockedMatchSource.Text, signal: summarizeSignal(textMatch) }
   }
 
   if (config.hardBlockedTaskClasses.has("stake_or_rewards")) {
     const textMatch = findTextMatch(textBlob, STAKE_OR_REWARDS_TEXT_PATTERNS)
-    if (textMatch) return { taskClass: "stake_or_rewards", source: "text", signal: summarizeSignal(textMatch) }
+    if (textMatch) return { taskClass: "stake_or_rewards", source: DelegationHardBlockedMatchSource.Text, signal: summarizeSignal(textMatch) }
   }
 
   if (config.hardBlockedTaskClasses.has("destructive_host_mutation")) {
     const capMatch = findCapabilityMatch(capabilities, /^(?:delete|execute|rm)$/i)
-    if (capMatch) return { taskClass: "destructive_host_mutation", source: "capability", signal: capMatch }
+    if (capMatch) return { taskClass: "destructive_host_mutation", source: DelegationHardBlockedMatchSource.Capability, signal: capMatch }
   }
 
   if (config.hardBlockedTaskClasses.has("credential_exfiltration")) {
@@ -143,7 +143,7 @@ export function detectHardBlockedTaskClass(
     const exfilMatch = findTextMatch(textBlob, CREDENTIAL_EXFIL_INTENT_PATTERNS)
     const networkCapMatch = findCapabilityMatch(capabilities, NETWORK_EGRESS_CAPABILITY_RE)
     if (credentialMatch && exfilMatch && networkCapMatch) {
-      return { taskClass: "credential_exfiltration", source: "capability", signal: summarizeSignal(networkCapMatch) }
+      return { taskClass: "credential_exfiltration", source: DelegationHardBlockedMatchSource.Capability, signal: summarizeSignal(networkCapMatch) }
     }
   }
 

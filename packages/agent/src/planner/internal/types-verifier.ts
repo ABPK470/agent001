@@ -1,3 +1,13 @@
+import {
+  PlannerRepairCompatibilityMode,
+  VerifierEvidenceSource,
+  VerifierIssueSeverity,
+  VerifierMode,
+  VerifierOutcome,
+} from "../../domain/enums/planner.js"
+export {
+  PlannerRepairCompatibilityMode, VerifierEvidenceSource, VerifierIssueSeverity, VerifierMode, VerifierOutcome
+}
 /**
  * Verifier types — verification outcomes, evidence, issues, repair plans.
  *
@@ -11,10 +21,6 @@ import type { CoherentSharedContract, CoherentSystemInvariant } from "../types.j
 // ============================================================================
 // Verifier
 // ============================================================================
-
-export type VerifierOutcome = "pass" | "retry" | "fail"
-
-export type VerifierIssueSeverity = "warning" | "error" | "fatal"
 
 export type VerifierOwnershipMode =
   | "deterministic_owner"
@@ -36,7 +42,7 @@ export type VerifierRepairClass =
 export interface VerificationEvidence {
   readonly id: string
   readonly stepName: string
-  readonly source: "contract" | "deterministic" | "llm"
+  readonly source: VerifierEvidenceSource
   readonly kind: string
   readonly message: string
   readonly artifactPaths: readonly string[]
@@ -71,7 +77,7 @@ export interface VerifierSystemCheck {
 
 export interface RepairTask {
   readonly stepName: string
-  readonly mode: "repair" | "reverify" | "blocked"
+  readonly mode: VerifierMode
   readonly ownedIssues: readonly VerifierIssue[]
   readonly dependencyContext: readonly VerifierIssue[]
   readonly requiredAcceptedArtifacts: readonly string[]
@@ -92,8 +98,6 @@ export interface LegacyRetryPlan {
   readonly rerunOrder: readonly string[]
   readonly skippedVerifiedSteps: readonly string[]
 }
-
-export type PlannerRepairCompatibilityMode = "shadow" | "legacy" | "repair"
 
 export interface RepairPlanCompatibilityReport {
   readonly mode: PlannerRepairCompatibilityMode

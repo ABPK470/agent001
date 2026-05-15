@@ -10,8 +10,8 @@
  */
 
 export * from "./state.js"
-export * from "./completion-guards.js"
-export * from "./post-round.js"
+export * from "./completion-guards/index.js"
+export * from "./post-round/index.js"
 export * from "./system-prompt.js"
-export * from "./tool-execution.js"
+export * from "./tool-execution/index.js"
 

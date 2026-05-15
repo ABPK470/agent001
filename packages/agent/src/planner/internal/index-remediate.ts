@@ -1,3 +1,4 @@
+import { StepRole, VerificationMode } from "@mia/agent"
 /**
  * Plan remediation — step merging, dependency graph traversal, and
  * automatic remediation of validation errors.
@@ -7,7 +8,7 @@
  * @module
  */
 
-import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize.js"
+import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize/index.js"
 import type {
     Plan,
     PlanDiagnostic,
@@ -174,7 +175,7 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
     canRunParallel: false,
     workflowStep: mergedWorkflowRelations.length > 0
       ? {
-        role: primary.workflowStep?.role ?? secondary.workflowStep?.role ?? primary.executionContext.role ?? secondary.executionContext.role ?? "writer",
+        role: primary.workflowStep?.role ?? secondary.workflowStep?.role ?? primary.executionContext.role ?? secondary.executionContext.role ?? StepRole.Writer,
         artifactRelations: [
           ...new Map(mergedWorkflowRelations.map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation])).values(),
         ],
@@ -269,15 +270,15 @@ export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagn
     for (const diag of premature) {
       const step = subagentSteps.find(s => s.name === diag.stepName)
       if (!step) continue
-      if (step.executionContext.verificationMode === "browser_check") {
-        ;(step.executionContext as unknown as { verificationMode: SubagentTaskStep["executionContext"]["verificationMode"] }).verificationMode = "none"
+      if (step.executionContext.verificationMode === VerificationMode.BrowserCheck) {
+        ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
         changed = true
       }
     }
   }
 
   for (const step of subagentSteps) {
-    if (step.executionContext.verificationMode !== "browser_check") continue
+    if (step.executionContext.verificationMode !== VerificationMode.BrowserCheck) continue
     const hasBrowserEntry = step.executionContext.targetArtifacts.some(a => /\.(?:html?|xhtml)$/i.test(a))
     if (!hasBrowserEntry) continue
 
@@ -291,7 +292,7 @@ export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagn
     )
     if (!hasForeignRuntime) continue
 
-    ;(step.executionContext as unknown as { verificationMode: SubagentTaskStep["executionContext"]["verificationMode"] }).verificationMode = "none"
+    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
     changed = true
   }
 

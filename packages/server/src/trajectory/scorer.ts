@@ -1,3 +1,4 @@
+import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { loadTrajectory } from "./loader.js"
 import type { ToolCallEvent, Trajectory } from "./types.js"
 
@@ -45,7 +46,7 @@ export function generateScorecard(trajectory: Trajectory): Scorecard {
   const toolErrors = events.filter((e) => e.kind === "tool-error")
   const iterations = events.filter((e) => e.kind === "iteration")
   const thinkingEvents = events.filter((e) => e.kind === "thinking")
-  const delegations = events.filter((e) => e.kind === "delegation-start")
+  const delegations = events.filter((e) => e.kind === TrajectoryEventKind.DelegationStart)
 
   const hasAnswer = events.some((e) => e.kind === "answer")
   const hasError = events.some((e) => e.kind === "error")
@@ -132,34 +133,34 @@ export function summarizeTrajectory(runId: string): string {
   for (const { seq, event, timestamp } of t.events) {
     const time = timestamp.split("T")[1]?.split(".")[0] ?? ""
     switch (event.kind) {
-      case "goal":
+      case TrajectoryEventKind.Goal:
         lines.push(`  [${seq}] ${time} GOAL: ${event.text.slice(0, 80)}`)
         break
-      case "thinking":
+      case TrajectoryEventKind.Thinking:
         lines.push(`  [${seq}] ${time} THINK: ${event.text.slice(0, 60)}…`)
         break
-      case "tool-call":
+      case TrajectoryEventKind.ToolCall:
         lines.push(`  [${seq}] ${time} CALL: ${event.tool}(${event.argsSummary})`)
         break
-      case "tool-result":
+      case TrajectoryEventKind.ToolResult:
         lines.push(`  [${seq}] ${time} RESULT: ${event.text.slice(0, 60)}…`)
         break
-      case "tool-error":
+      case TrajectoryEventKind.ToolError:
         lines.push(`  [${seq}] ${time} ERROR: ${event.text.slice(0, 60)}…`)
         break
-      case "iteration":
+      case TrajectoryEventKind.Iteration:
         lines.push(`  [${seq}] ${time} ITER: ${event.current}/${event.max}`)
         break
-      case "delegation-start":
+      case TrajectoryEventKind.DelegationStart:
         lines.push(`  [${seq}] ${time} DELEGATE: ${event.childGoal.slice(0, 60)}`)
         break
-      case "delegation-end":
+      case TrajectoryEventKind.DelegationEnd:
         lines.push(`  [${seq}] ${time} DELEGATE-DONE: ${event.result.slice(0, 60)}`)
         break
-      case "answer":
+      case TrajectoryEventKind.Answer:
         lines.push(`  [${seq}] ${time} ANSWER: ${event.text.slice(0, 80)}`)
         break
-      case "error":
+      case TrajectoryEventKind.Error:
         lines.push(`  [${seq}] ${time} FATAL: ${event.text.slice(0, 80)}`)
         break
     }

@@ -21,71 +21,82 @@ config({
   path: resolve(_projectRoot, ".env"),
 })
 
-import {
-  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
-  setAttachmentService,
-  setBasePath,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
-  setSearchBasePath,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
-  setSyncEventSink,
-  setSyncRunSink,
-  setupEnvironments
-} from "@agent001/agent"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
+import {
+    EventType,
+    buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
+    setAttachmentService,
+    setBasePath,
+    setBrowserCheckCwd,
+    setBrowserCheckExecutor,
+    setBrowserContextProvider,
+    setBrowserCredentialProvider,
+    setBrowserHandoffProvider,
+    setSearchBasePath,
+    setShellCwd,
+    setShellExecutor,
+    setShellSandboxStrict,
+    setSyncEventSink,
+    setSyncRunSink,
+    setupEnvironments
+} from "@mia/agent"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
 import { registerIdentity } from "./auth/identity.js"
+import { bootstrapAdminFromEnv } from "./auth/users.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
+import { serverBrowserCredentialProvider } from "./browser/credential-provider.js"
+import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
+import { serverBrowserContextProvider } from "./browser/provider.js"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import {
-  clearTransactionalData,
-  getDb, getDbStats, getLlmConfig,
-  getSyncRunPlanJson,
-  migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-  pruneOldData,
-  recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
-} from "./db.js"
+    clearTransactionalData,
+    getDb, getDbPath, getDbStats, getLlmConfig,
+    getSyncRunPlanJson,
+    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
+    normaliseUnknownRunStatuses,
+    pruneOldData,
+    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
+} from "./db/index.js"
 import { addSseClient, broadcast } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
-import { migrateMemory, prune as pruneMemory } from "./memory.js"
-import { AgentOrchestrator } from "./orchestrator.js"
+import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
+import { AgentOrchestrator } from "./orchestrator/index.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
+import { registerAuthRoutes } from "./routes/auth.js"
 import {
-  registerAdminRoutes,
-  registerAgentRoutes,
-  registerAttachmentRoutes,
-  registerEventRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMymiRoutes,
-  registerNotificationRoutes,
-  registerOperationRoutes,
-  registerPolicyRoutes,
-  registerProfileRoutes,
-  registerRunRoutes,
-  registerSyncEnvironmentRoutes,
-  registerSyncRoutes,
-  registerToolCacheRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes,
+    registerAdminRoutes,
+    registerAgentRoutes,
+    registerAttachmentRoutes,
+    registerBrowserRoutes,
+    registerEventRoutes,
+    registerLayoutRoutes,
+    registerLlmRoutes,
+    registerMemoryRoutes,
+    registerMymiRoutes,
+    registerNotificationRoutes,
+    registerOperationRoutes,
+    registerPolicyRoutes,
+    registerProfileRoutes,
+    registerRunRoutes,
+    registerSyncEnvironmentRoutes,
+    registerSyncRoutes,
+    registerToolCacheRoutes,
+    registerUsageRoutes,
+    registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
-import { initSandbox } from "./sandbox.js"
+import { initSandbox } from "./sandbox/index.js"
 import { setupMssql } from "./setup-mssql.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
@@ -104,6 +115,18 @@ async function main() {
   // HostedPolicyContext at call time, so a single instance is safe for
   // every concurrent run.
   setAttachmentService(serverAttachmentService)
+
+  // Bridge agent-side browse_web tool to per-tenant persistent browser
+  // contexts (cookies / localStorage) stored under ~/.mia/browser-contexts/.
+  // Anonymous sessions get null and stay ephemeral.
+  setBrowserContextProvider(serverBrowserContextProvider)
+
+  // Bridge agent-side browser_auto_login tool to vault-encrypted credentials.
+  // Refused for anonymous tenants by the provider itself.
+  setBrowserCredentialProvider(serverBrowserCredentialProvider)
+
+  // Bridge agent-side browser_human_handoff tool to the in-process handoff registry.
+  setBrowserHandoffProvider(serverBrowserHandoffProvider)
 
   // ── ABI sync subsystem ──
   await setupEnvironments(_projectRoot)
@@ -216,7 +239,16 @@ function initDatabase(): void {
   migrateEventLog()
   migrateWebhookDrains()
   migrateMemory()
-  console.log("Database initialized (~/.mia/mia.db)")
+  console.log(`Database initialized (${getDbPath()})`)
+
+  // Heal any legacy runs.status values that don't match the canonical
+  // RunStatus enum. Without this, rows written before the enum guard
+  // existed (e.g. the short-lived 'queued' state) would render as
+  // perpetually in-flight in every widget that reads the column.
+  const normalised = normaliseUnknownRunStatuses()
+  if (normalised > 0) {
+    console.log(`Normalised ${normalised} runs with unknown legacy statuses to 'failed'`)
+  }
 
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
@@ -232,6 +264,11 @@ function initDatabase(): void {
   if (memPrune.deleted > 0) {
     console.log(`Pruned ${memPrune.deleted} stale/duplicate memory entries`)
   }
+
+  // v19: seed bootstrap admin from env if the users table is empty. This
+  // is the only way to get the first admin into the system after the v19
+  // schema reset (the legacy MIA_ADMIN_UPNS whitelist no longer exists).
+  bootstrapAdminFromEnv()
 }
 
 function resolveWorkspace(): string {
@@ -392,8 +429,13 @@ async function buildApp(opts: AppOpts) {
   await app.register(cookie, { secret: process.env["MIA_COOKIE_SECRET"] ?? undefined })
 
   // Identity middleware — resolves req.session and seeds AsyncLocalStorage.
-  // Must be registered AFTER @fastify/cookie. Adds GET/POST /api/me.
+  // Must be registered AFTER @fastify/cookie. Adds GET /api/auth/whoami,
+  // POST /api/auth/logout, and the 401 gate for everything outside the
+  // auth bypass list.
   await registerIdentity(app)
+  // Auth routes (register/login/config) — paths are on the bypass list in
+  // identity.ts so they're reachable without a session.
+  await registerAuthRoutes(app)
 
   app.addHook("onRequest", (req, _reply, done) => {
     ;(req as any)._startTime = Date.now()
@@ -416,13 +458,13 @@ async function buildApp(opts: AppOpts) {
     }
     try {
       saveApiRequest(entry)
-      broadcast({ type: "api.request", data: entry as unknown as Record<string, unknown> })
+      broadcast({ type: EventType.ApiRequest, data: entry as unknown as Record<string, unknown> })
     } catch { /* don't break responses if logging fails */ }
     // Multi-user observability: stamp user identity on console for ops greppability.
-    // Only for non-trivial endpoints (skip /api/me polling noise).
-    if (!req.url.startsWith("/api/me") && !req.url.startsWith("/api/admin/sessions") && !req.url.startsWith("/api/admin/active-runs") && !req.url.startsWith("/api/admin/users")) {
-      const s = (req as { session?: { upn?: string | null; displayName?: string; sid?: string } }).session
-      const who = s?.upn ?? s?.displayName ?? s?.sid?.slice(0, 12) ?? "anon"
+    // Skip auth/whoami polling noise + admin observability endpoints.
+    if (!req.url.startsWith("/api/auth/whoami") && !req.url.startsWith("/api/admin/sessions") && !req.url.startsWith("/api/admin/active-runs") && !req.url.startsWith("/api/admin/users")) {
+      const s = (req as { session?: { upn?: string; displayName?: string; sid?: string } }).session
+      const who = s?.upn ?? s?.displayName ?? s?.sid?.slice(0, 12) ?? "—"
       console.log(`[${who}] ${req.method} ${req.url} → ${reply.statusCode} (${duration}ms)`)
     }
     done()
@@ -462,10 +504,15 @@ async function buildApp(opts: AppOpts) {
     // Disable Nagle's algorithm so each SSE frame is sent immediately
     // instead of being coalesced with subsequent writes into one TCP packet.
     reply.raw.socket?.setNoDelay(true)
+    // identity.ts:resolveSession() runs in onRequest BEFORE this handler and
+    // guarantees req.session is populated with a non-empty sid (header path,
+    // signed cookie, or `anon:<random>` minted on first contact). No defensive
+    // fallbacks here — a missing session would indicate the identity hook is
+    // broken and we want that to surface loudly, not be masked by "anon".
     const dispose = addSseClient(reply.raw, {
-      upn:     req.session?.upn ?? null,
-      sid:     req.session?.sid ?? "anon",
-      isAdmin: req.session?.isAdmin ?? false,
+      upn:     req.session.upn,
+      sid:     req.session.sid,
+      isAdmin: req.session.isAdmin,
     })
     // Heartbeat every 25s — keeps intermediaries from idle-closing the stream.
     const heartbeat = setInterval(() => {
@@ -476,6 +523,7 @@ async function buildApp(opts: AppOpts) {
 
   registerRunRoutes(app, orchestrator)
   registerAgentRoutes(app, orchestrator)
+  registerBrowserRoutes(app)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
   registerSyncEnvironmentRoutes(app)

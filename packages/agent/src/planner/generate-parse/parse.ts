@@ -1,3 +1,4 @@
+import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "@mia/agent"
 /**
  * Plan parsing — parse LLM JSON responses into typed Plan objects, with auto-fix passes.
  *
@@ -8,16 +9,16 @@
 
 import type { DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 import {
-    deduplicateWriteOwnership,
-    ensureVerificationCoverage,
-    isValidArtifactPath,
-    normalizeArtifactDirectories,
-    parseArtifactRelations,
-    parseEffectClass,
-    parseStepRole,
-    parseVerificationMode,
-    safeStringArray,
-    stripRedundantVerificationSteps,
+  deduplicateWriteOwnership,
+  ensureVerificationCoverage,
+  isValidArtifactPath,
+  normalizeArtifactDirectories,
+  parseArtifactRelations,
+  parseEffectClass,
+  parseStepRole,
+  parseVerificationMode,
+  safeStringArray,
+  stripRedundantVerificationSteps,
 } from "./helpers.js"
 
 // ============================================================================
@@ -42,7 +43,7 @@ export function parsePlanFromResponse(raw: string): {
     obj = JSON.parse(jsonStr)
   } catch {
     diagnostics.push({
-      category: "parse", severity: "error",
+      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
       code: "invalid_json",
       message: "Response is not valid JSON. Respond with ONLY a JSON object, no markdown.",
     })
@@ -51,7 +52,7 @@ export function parsePlanFromResponse(raw: string): {
 
   if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     diagnostics.push({
-      category: "parse", severity: "error",
+      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
       code: "not_object",
       message: "Response must be a JSON object with { reason, steps, edges }.",
     })
@@ -63,7 +64,7 @@ export function parsePlanFromResponse(raw: string): {
   // Validate required fields
   if (!Array.isArray(data.steps) || data.steps.length === 0) {
     diagnostics.push({
-      category: "parse", severity: "error",
+      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
       code: "missing_steps",
       message: "Plan must have a non-empty 'steps' array.",
     })
@@ -77,7 +78,7 @@ export function parsePlanFromResponse(raw: string): {
     const raw = data.steps[i] as Record<string, unknown>
     if (!raw || typeof raw !== "object") {
       diagnostics.push({
-        category: "parse", severity: "error",
+        category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
         code: "invalid_step",
         message: `Step ${i} is not an object.`,
       })
@@ -87,7 +88,7 @@ export function parsePlanFromResponse(raw: string): {
     const name = String(raw.name ?? `step_${i}`)
     if (stepNames.has(name)) {
       diagnostics.push({
-        category: "graph", severity: "error",
+        category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
         code: "duplicate_step_name",
         message: `Duplicate step name "${name}". Each step must have a unique name.`,
       })
@@ -107,7 +108,7 @@ export function parsePlanFromResponse(raw: string): {
       steps.push(parsed.step!)
     } else {
       diagnostics.push({
-        category: "parse", severity: "error",
+        category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
         code: "unknown_step_type",
         message: `Step "${name}" has unknown stepType "${stepType}". Must be "deterministic_tool" or "subagent_task".`,
       })
@@ -124,7 +125,7 @@ export function parsePlanFromResponse(raw: string): {
       const to = String(edge.to ?? "")
       if (!stepNames.has(from)) {
         diagnostics.push({
-          category: "graph", severity: "error",
+          category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
           code: "edge_unknown_source",
           message: `Edge from "${from}" → "${to}": source step "${from}" not found.`,
         })
@@ -132,7 +133,7 @@ export function parsePlanFromResponse(raw: string): {
       }
       if (!stepNames.has(to)) {
         diagnostics.push({
-          category: "graph", severity: "error",
+          category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
           code: "edge_unknown_target",
           message: `Edge from "${from}" → "${to}": target step "${to}" not found.`,
         })
@@ -148,7 +149,7 @@ export function parsePlanFromResponse(raw: string): {
       for (const dep of step.dependsOn) {
         if (!stepNames.has(dep)) {
           diagnostics.push({
-            category: "graph", severity: "error",
+            category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
             code: "dependency_not_found",
             message: `Step "${step.name}" depends on "${dep}", which doesn't exist.`,
           })
@@ -201,7 +202,7 @@ function parseSubagentStep(
 
   if (!raw.objective || typeof raw.objective !== "string") {
     diagnostics.push({
-      category: "contract", severity: "error",
+      category: DiagnosticCategory.Contract, severity: DiagnosticSeverity.Error,
       code: "missing_objective",
       message: `Subagent step "${name}" must have a string 'objective'.`,
     })
@@ -211,7 +212,7 @@ function parseSubagentStep(
   const acceptanceCriteria = safeStringArray(raw.acceptanceCriteria)
   if (acceptanceCriteria.length === 0) {
     diagnostics.push({
-      category: "contract", severity: "error",
+      category: DiagnosticCategory.Contract, severity: DiagnosticSeverity.Error,
       code: "missing_acceptance_criteria",
       message: `Subagent step "${name}" must have non-empty 'acceptanceCriteria' array.`,
     })
@@ -236,8 +237,8 @@ function parseSubagentStep(
     allowedTools: [],
     requiredSourceArtifacts: [],
     targetArtifacts: [],
-    effectClass: "filesystem_write" as const,
-    verificationMode: "none" as const,
+    effectClass: EffectClass.FilesystemWrite,
+    verificationMode: VerificationMode.None,
     artifactRelations: [],
   }
 

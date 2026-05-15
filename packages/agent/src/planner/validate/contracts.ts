@@ -1,3 +1,4 @@
+import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "@mia/agent"
 /**
  * Step contract, artifact ownership, and verification coverage passes.
  * Extracted from validate.ts.
@@ -16,8 +17,8 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
 
       if (!sa.objective || sa.objective.trim().length < 10) {
         diagnostics.push({
-          category: "contract",
-          severity: "warning",
+          category: DiagnosticCategory.Contract,
+          severity: DiagnosticSeverity.Warning,
           code: "vague_objective",
           message: `Subagent step "${step.name}" has a vague or missing objective. Provide a specific, measurable objective (min 10 chars).`,
           stepName: step.name,
@@ -26,8 +27,8 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
 
       if (sa.acceptanceCriteria.length === 0) {
         diagnostics.push({
-          category: "contract",
-          severity: "warning",
+          category: DiagnosticCategory.Contract,
+          severity: DiagnosticSeverity.Warning,
           code: "missing_acceptance_criteria",
           message: `Subagent step "${step.name}" has no acceptance criteria. Add at least one measurable success condition.`,
           stepName: step.name,
@@ -37,8 +38,8 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
       for (const crit of sa.acceptanceCriteria) {
         if (crit.length < 10 || /^(done|works?|good|complete|ok)$/i.test(crit.trim())) {
           diagnostics.push({
-            category: "contract",
-            severity: "warning",
+            category: DiagnosticCategory.Contract,
+            severity: DiagnosticSeverity.Warning,
             code: "vague_criteria",
             message: `Subagent step "${step.name}" has vague acceptance criterion: "${crit}". Be specific and measurable.`,
             stepName: step.name,
@@ -48,8 +49,8 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
 
       if (sa.requiredToolCapabilities.length === 0) {
         diagnostics.push({
-          category: "contract",
-          severity: "warning",
+          category: DiagnosticCategory.Contract,
+          severity: DiagnosticSeverity.Warning,
           code: "no_tool_capabilities",
           message: `Subagent step "${step.name}" declares no required tool capabilities. Specify which tools the child needs.`,
           stepName: step.name,
@@ -87,8 +88,8 @@ export function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagn
   for (const [artifact, owners] of writeOwners) {
     if (owners.length > 1) {
       diagnostics.push({
-        category: "ownership",
-        severity: "error",
+        category: DiagnosticCategory.Ownership,
+        severity: DiagnosticSeverity.Error,
         code: "multiple_write_owners",
         message: `Artifact "${artifact}" has ${owners.length} write owners: [${owners.join(", ")}]. Only ONE step may be write_owner for a given artifact.`,
       })
@@ -104,16 +105,16 @@ export function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDi
   const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
 
   const hasWriters = subagentSteps.some(
-    s => s.executionContext?.effectClass !== "readonly",
+    s => s.executionContext?.effectClass !== EffectClass.Readonly,
   )
   const hasVerification = subagentSteps.some(
-    s => s.executionContext?.verificationMode !== "none",
+    s => s.executionContext?.verificationMode !== VerificationMode.None,
   )
 
   if (hasWriters && !hasVerification && subagentSteps.length > 1) {
     diagnostics.push({
-      category: "verification",
-      severity: "warning",
+      category: DiagnosticCategory.Verification,
+      severity: DiagnosticSeverity.Warning,
       code: "no_verification_steps",
       message: "Plan has write steps but no per-step verification mode. This is allowed; final verifier checks run after implementation. Consider setting verificationMode only on steps that fully own runnable artifacts.",
     })

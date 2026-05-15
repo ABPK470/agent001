@@ -28,7 +28,8 @@ export type EntityType =
   | "content"
 
 /** How a given table was discovered as part of an entity's dependency closure. */
-export type DiscoverySource = "fk+pipeline" | "fk-only" | "pipeline-only"
+import { DiscoverySource, SyncRecipeDiscrepancyKind } from "../domain/enums/sync.js"
+export type { DiscoverySource }
 
 export interface SyncRecipeTable {
   /** Schema-qualified name e.g. `core.ContractColumn`. */
@@ -64,7 +65,7 @@ export interface SyncRecipeDiscrepancy {
    *              from the root (e.g. via dynamic SQL); manually verified.
    * `drift`    — pipeline references a table that doesn't exist in the catalog.
    */
-  kind: "leak" | "implicit" | "drift"
+  kind: SyncRecipeDiscrepancyKind
   note: string
 }
 
@@ -225,7 +226,7 @@ function emptyBundle(): SyncRecipeBundle {
 }
 
 function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
-  const groundedByPipeline = table.groundedByPipeline ?? table.source !== "fk-only"
+  const groundedByPipeline = table.groundedByPipeline ?? table.source !== DiscoverySource.FkOnly
   const userControllable = table.userControllable ?? !groundedByPipeline
   const enabledByDefault = table.enabledByDefault ?? !userControllable
   return {

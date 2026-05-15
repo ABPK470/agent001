@@ -22,17 +22,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
+import { EnvAccessMode, EnvRole } from "../domain/enums/sync.js"
 import { getMssqlConfig, getPool } from "../tools/index.js"
 
-export type EnvRole = "source" | "target" | "both"
-
-/**
- * Per-environment access mode. UAT and PROD default to `read_only` so a
- * fresh deployment cannot mutate either accidentally; explicit operator
- * config in `deploy/mssql/sync-environments.json` is the only way to
- * widen the default.
- */
-export type EnvAccessMode = "read_only" | "read_write"
+export type { EnvAccessMode, EnvRole }
 
 /**
  * Operation classes the policy engine knows about. Mirror of
@@ -66,7 +59,7 @@ export interface SyncEnvironment {
   ringOrder: number
   /**
    * UPN allowlist for sync_execute on this environment. Empty = open to all
-   * authenticated users. Cross-checked against `agent001_sid` cookie identity.
+   * authenticated users. Cross-checked against `mia_sid` cookie identity.
    */
   syncAllowlist: string[]
   /**
@@ -147,9 +140,9 @@ export function withPermissionDefaults(
   const isProdLike = /\bprod\b/i.test(e.name)
   const isUatLike  = /\buat\b|\bstag(e|ing)?\b/i.test(e.name)
   const lockedDown = isProdLike || isUatLike
-  const defaultAccessMode: EnvAccessMode = e.defaultAccessMode ?? (lockedDown ? "read_only" : "read_write")
-  const denyDml = e.denyDml ?? (defaultAccessMode === "read_only")
-  const denyDdl = e.denyDdl ?? (defaultAccessMode === "read_only")
+  const defaultAccessMode: EnvAccessMode = e.defaultAccessMode ?? (lockedDown ? EnvAccessMode.ReadOnly : EnvAccessMode.ReadWrite)
+  const denyDml = e.denyDml ?? (defaultAccessMode === EnvAccessMode.ReadOnly)
+  const denyDdl = e.denyDdl ?? (defaultAccessMode === EnvAccessMode.ReadOnly)
   const allowedOperations = e.allowedOperations ?? (
     lockedDown
       ? ["query_read", "schema_introspect", "sync_preview"] as EnvOperation[]
@@ -161,7 +154,7 @@ export function withPermissionDefaults(
     name:               e.name,
     displayName:        e.displayName ?? e.name,
     color:              e.color ?? "slate",
-    role:               (e.role ?? "both") as EnvRole,
+    role:               (e.role ?? EnvRole.Both),
     linkedServerName:   e.linkedServerName ?? null,
     ringOrder:          typeof e.ringOrder === "number" ? e.ringOrder : 0,
     syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
@@ -194,7 +187,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
         name: e.name,
         displayName: e.displayName ?? e.name,
         color: e.color ?? "slate",
-        role: (e.role ?? "both") as EnvRole,
+        role: (e.role ?? EnvRole.Both),
         linkedServerName: e.linkedServerName ?? null,
         ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
         syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
@@ -220,7 +213,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
       name: c.name,
       displayName: c.name,
       color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
-      role: "both" as EnvRole,
+      role: EnvRole.Both,
       linkedServerName: null,
       ringOrder: i,
       syncAllowlist: [],

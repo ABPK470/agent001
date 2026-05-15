@@ -1,4 +1,4 @@
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import type { MemoryEntry, MemoryTier } from "./types.js"
 
 // ── Vector embeddings (Ollama) ───────────────────────────────────
@@ -110,6 +110,12 @@ export async function vectorSearch(
           where.push("(e.tier != 'episodic' OR v.shared = 1)")
         }
       }
+    } else if (sessionId) {
+      // Sid-scope bridge — see retrieval.ts named-user predicate (Layer C C4).
+      // Lets the welcome-modal flow keep continuity across the upn promotion
+      // by including legacy anon rows from the same sid.
+      where.push("(v.upn = ? OR v.shared = 1 OR (v.upn IS NULL AND e.session_id = ?))")
+      params.push(upn, sessionId)
     } else {
       where.push("(v.upn = ? OR v.shared = 1)")
       params.push(upn)

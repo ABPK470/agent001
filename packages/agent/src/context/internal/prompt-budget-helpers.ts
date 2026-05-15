@@ -7,6 +7,7 @@
 
 import { SECTION_ORDER, type PromptBudgetCaps } from "../prompt-budget-types.js"
 import type { Message, PromptBudgetSection } from "../../types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 // ── Working entry ─────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ export function rebalanceSectionCaps(
 export function resolveSections(messages: readonly Message[]): PromptBudgetSection[] {
   const lastUserIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") return i
+      if (messages[i].role === MessageRole.User) return i
     }
     return -1
   })()
@@ -114,19 +115,19 @@ export function resolveSections(messages: readonly Message[]): PromptBudgetSecti
     }
 
     // Auto-resolve section from role
-    if (msg.role === "system") {
+    if (msg.role === MessageRole.System) {
       if (!anchorAssigned) {
         anchorAssigned = true
         return "system_anchor"
       }
       return "system_runtime"
     }
-    if (msg.role === "tool") return "history"
-    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) return "history"
-    if (msg.role === "user") {
+    if (msg.role === MessageRole.Tool) return "history"
+    if (msg.role === MessageRole.Assistant && msg.toolCalls && msg.toolCalls.length > 0) return "history"
+    if (msg.role === MessageRole.User) {
       return index === lastUserIndex ? "user" : "history"
     }
-    if (msg.role === "assistant") return "history"
+    if (msg.role === MessageRole.Assistant) return "history"
     return "history"
   })
 }

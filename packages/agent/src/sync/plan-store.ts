@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
+import { SyncPlanChangeType } from "../domain/enums/sync.js"
 import type { EntityType } from "./recipes.js"
 
 export interface SyncPlanTableCounts {
@@ -85,7 +86,7 @@ export interface SyncPlanGraphNode {
   id: string
   label: string
   /** Net change pill: green/amber/red/grey. */
-  status: "unchanged" | "updates" | "deletes" | "inserts"
+  status: SyncPlanChangeType
   counts: SyncPlanTableCounts
 }
 

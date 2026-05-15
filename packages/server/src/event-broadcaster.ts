@@ -26,14 +26,12 @@
  * here via `broadcast(...)`.
  */
 
+import { EventType } from "@mia/shared-enums"
+import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
-import { getRun, listWebhookDrains, saveEvent } from "./db.js"
+import { getRun, listWebhookDrains, saveEvent } from "./db/index.js"
 
-export interface SseEvent {
-  type: string
-  data: Record<string, unknown>
-  timestamp: string
-}
+export type { SseEvent }
 
 /** Identity attached to a connected SSE client. */
 export interface WsClientIdentity {
@@ -71,7 +69,7 @@ export class EventBroadcaster {
     // Initial padding + hello event
     sink.write(`: connected\n\n`)
     sink.write(`data: ${JSON.stringify({
-      type: "events.connected",
+      type: EventType.EventsConnected,
       data: { version: "0.1.0", clients: this.clientCount() },
       timestamp: new Date().toISOString(),
     })}\n\n`)
@@ -113,7 +111,7 @@ export class EventBroadcaster {
 
     // Persist to event_log (skip high-frequency ephemeral events to keep
     // the table compact and avoid blocking between SSE writes).
-    if (msg.type !== "answer.chunk" && msg.type !== "stream.reset") {
+    if (msg.type !== EventType.AnswerChunk && msg.type !== EventType.StreamReset) {
       try {
         saveEvent(msg.type, msg.data, msg.timestamp)
       } catch { /* don't break broadcast if DB write fails */ }
@@ -169,10 +167,10 @@ export class EventBroadcaster {
       const headers: Record<string, string> = { "Content-Type": "application/json" }
       if (drain.secret) {
         const sig = createHmac("sha256", drain.secret).update(json).digest("hex")
-        headers["X-Agent001-Signature"] = `sha256=${sig}`
+        headers["X-Mia-Signature"] = `sha256=${sig}`
       }
-      headers["X-Agent001-Event"] = event.type
-      headers["X-Agent001-Drain-Id"] = drain.id
+      headers["X-Mia-Event"] = event.type
+      headers["X-Mia-Drain-Id"] = drain.id
 
       fetch(drain.url, {
         method: "POST",
@@ -202,4 +200,20 @@ export function clientCount(): number {
 
 export function subscribeToEvents(fn: (event: SseEvent) => void): () => void {
   return _default.subscribe(fn)
+}
+
+/**
+ * Typed convenience wrapper for the canonical `EventType.DebugTrace`
+ * envelope. The wire shape `{ runId, seq, entry }` is fixed; the
+ * `entry` discriminator (`TraceEntry["kind"]`) is the contract every
+ * UI trace renderer narrows on. Centralising the wrapper here means
+ * adding a new trace kind requires updating `TraceEntry` in
+ * `@mia/shared-types` first — every call site then either narrows or
+ * fails compilation.
+ */
+export function broadcastTrace(runId: string, seq: number, entry: TraceEntry): void {
+  _default.broadcast({
+    type: EventType.DebugTrace,
+    data: { runId, seq, entry },
+  })
 }

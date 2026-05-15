@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Verification-failure remediation helper. Extracted from planner-routing.ts.
  *
@@ -5,10 +6,11 @@
  */
 
 import * as log from "../logger.js"
-import type { PlannerRoutingContext } from "../planner-routing.js"
+import type { PlannerRoutingContext } from "../planner-routing/index.js"
 import type { PlannerContext, PlannerResult } from "../planner/index.js"
 import { executePlannerPath } from "../planner/index.js"
 import type { SubagentTaskStep } from "../planner/index.js"
+import { MessageRole } from "../domain/enums/message.js"
 
 export async function handleVerificationFailure(
   ctx: PlannerRoutingContext,
@@ -19,7 +21,7 @@ export async function handleVerificationFailure(
   const decision = plannerResult.verifierDecision!
 
   const unresolvedIssues = decision.steps
-    .filter(s => s.outcome !== "pass")
+    .filter(s => s.outcome !== VerifierOutcome.Pass)
     .flatMap(s => s.issues.filter(i => !i.startsWith("[non-blocking]")))
 
   const planStepCount = plannerResult.plan?.steps.length ?? 0
@@ -46,7 +48,7 @@ export async function handleVerificationFailure(
         ...plannerCtx,
         history: [
           ...messages,
-          { role: "system", content: remediationContext, section: "history" },
+          { role: MessageRole.System, content: remediationContext, section: "history" },
         ],
       },
       config.plannerDelegateFn!,
@@ -82,7 +84,7 @@ export async function handleVerificationFailure(
       `${editInstruction}\n` +
       `4. Verify your fix by re-reading the file\n\n` +
       `You MUST start fixing immediately. Do NOT respond with a question or ask the user for permission. You are fully authorized to read, modify, and fix these files right now.`
-    messages.push({ role: "user", content: repairMsg })
+    messages.push({ role: MessageRole.User, content: repairMsg })
   }
 
   return undefined

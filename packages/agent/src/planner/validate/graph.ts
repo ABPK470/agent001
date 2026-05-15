@@ -1,3 +1,4 @@
+import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
 /**
  * Plan graph + tool reference validation passes. Extracted from validate.ts.
  *
@@ -34,8 +35,8 @@ export function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEd
   for (const name of stepNames) {
     if (color.get(name) === WHITE && dfs(name)) {
       diagnostics.push({
-        category: "graph",
-        severity: "error",
+        category: DiagnosticCategory.Graph,
+        severity: DiagnosticSeverity.Error,
         code: "cycle_detected",
         message: "Plan dependency graph contains a cycle. Remove circular dependencies between steps.",
         stepName: name,
@@ -47,8 +48,8 @@ export function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEd
   for (const [name, neighbors] of adj) {
     if (neighbors.length > 8) {
       diagnostics.push({
-        category: "graph",
-        severity: "warning",
+        category: DiagnosticCategory.Graph,
+        severity: DiagnosticSeverity.Warning,
         code: "excessive_fanout",
         message: `Step "${name}" has ${neighbors.length} outgoing edges. Reduce fanout to <=8 to keep the plan manageable.`,
         stepName: name,
@@ -60,8 +61,8 @@ export function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEd
     const depth = longestPath(stepNames, adj)
     if (depth > 10) {
       diagnostics.push({
-        category: "graph",
-        severity: "warning",
+        category: DiagnosticCategory.Graph,
+        severity: DiagnosticSeverity.Warning,
         code: "excessive_depth",
         message: `Plan has critical path depth ${depth}. Reduce to <=10 by parallelizing independent work.`,
       })
@@ -70,9 +71,9 @@ export function validateGraph(steps: readonly PlanStep[], edges: readonly PlanEd
 
   if (steps.length > 15) {
     diagnostics.push({
-      category: "graph",
+      category: DiagnosticCategory.Graph,
       code: "too_many_steps",
-      severity: "warning",
+      severity: DiagnosticSeverity.Warning,
       message: `Plan has ${steps.length} steps. Prefer 2-8 steps. Consolidate related work into fewer subagent tasks.`,
     })
   }
@@ -111,8 +112,8 @@ export function validateToolReferences(
       const dt = step as DeterministicToolStep
       if (!toolNames.has(dt.tool)) {
         diagnostics.push({
-          category: "contract",
-          severity: "error",
+          category: DiagnosticCategory.Contract,
+          severity: DiagnosticSeverity.Error,
           code: "unknown_tool",
           message: `Deterministic step "${step.name}" references tool "${dt.tool}" which is not available. Available tools: ${[...toolNames].join(", ")}`,
           stepName: step.name,

@@ -8,7 +8,7 @@
 
 import sql from "mssql"
 import type { Tool } from "../types.js"
-import { getPool } from "./mssql.js"
+import { getPool } from "./mssql/index.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 

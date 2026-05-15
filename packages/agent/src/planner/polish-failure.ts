@@ -17,6 +17,7 @@
  */
 
 import type { LLMClient, Message } from "../types.js"
+import { MessageRole } from "../domain/enums/message.js"
 
 export interface PolishFailureInput {
   /** Original user goal/request. */
@@ -105,8 +106,8 @@ export async function polishFailureForUser(
   opts?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<string | null> {
   const messages: Message[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user",   content: buildUserPrompt(input) },
+    { role: MessageRole.System, content: SYSTEM_PROMPT },
+    { role: MessageRole.User,   content: buildUserPrompt(input) },
   ]
 
   // Hard deadline so a slow LLM doesn't keep the user staring at "Thinking".

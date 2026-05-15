@@ -24,8 +24,10 @@
 
 import { AsyncLocalStorage } from "node:async_hooks"
 import { currentRuntime } from "../agent-runtime.js"
+import { EventType } from "../domain/enums/event.js"
+import { SyncOperationType } from "../domain/enums/sync.js"
 
-export type SyncEvent = { type: string; data: Record<string, unknown> }
+export type SyncEvent = { type: EventType; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
 
 // State container — `const` reference to a mutable record so the lint rule
@@ -38,7 +40,7 @@ export function setSyncEventSink(sink: SyncEventSink): void {
 }
 
 /** Fire-and-forget emit. Sink errors NEVER propagate. */
-export function emitSyncEvent(type: string, data: Record<string, unknown>): void {
+export function emitSyncEvent(type: EventType, data: Record<string, unknown>): void {
   try { currentRuntime().sync.eventSink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }
@@ -53,7 +55,7 @@ export function emitSyncEvent(type: string, data: Record<string, unknown>): void
 
 export interface SyncOpContext {
   /** "preview" or "execute" — sets the event-type prefix. */
-  kind: "preview" | "execute"
+  kind: SyncOperationType
   /** Correlation key — previewId for preview, planId for execute. */
   opId: string
   /** Optional source/target connection names for richer event payloads. */
@@ -100,11 +102,11 @@ export interface SqlEventInput {
 
 export function emitSyncSqlEvent(input: SqlEventInput): void {
   const ctx = getSyncContext()
-  const prefix = ctx?.kind ?? "preview"
+  const prefix = ctx?.kind ?? SyncOperationType.Preview
   const truncated = input.sql.length > SQL_EVENT_MAX_CHARS
     ? input.sql.slice(0, SQL_EVENT_MAX_CHARS) + `… [+${input.sql.length - SQL_EVENT_MAX_CHARS} chars]`
     : input.sql
-  emitSyncEvent(`sync.${prefix}.sql`, {
+  emitSyncEvent(prefix === SyncOperationType.Execute ? EventType.SyncExecuteSql : EventType.SyncPreviewSql, {
     opId: ctx?.opId ?? null,
     label: input.label,
     connection: input.connection,

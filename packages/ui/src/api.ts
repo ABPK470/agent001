@@ -435,8 +435,7 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-export type OperationKind = "agent-run" | "sync-preview" | "sync-execute" | "system"
-export type OperationStatus = "running" | "success" | "failed" | "cancelled" | "unknown"
+export { OperationKind, OperationStatus } from "@mia/shared-enums"
 
 export interface OperationEvent {
   type: string

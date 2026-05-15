@@ -14,7 +14,7 @@
  *      Allow-listed files (Phase 2b migration targets) keep working.
  *
  *   3. SERVER MAY NOT REACH INTO AGENT INTERNALS
- *      `packages/server/**` may only import `@agent001/agent`, never
+ *      `packages/server/**` may only import `@mia/agent`, never
  *      `packages/agent/src/**`.
  *
  * Run with: `node scripts/lint-arch.mjs`
@@ -153,7 +153,7 @@ function lintServerImports() {
       const m = lines[i].match(/from\s+["'](\.\.\/.*?packages\/agent\/src\/[^"']+)["']/)
       if (m) {
         fail(file, i + 1, "server-no-agent-internals",
-          `server must not import from packages/agent/src/** — use "@agent001/agent": ${m[1]}`)
+          `server must not import from packages/agent/src/** — use "@mia/agent": ${m[1]}`)
       }
     }
   }

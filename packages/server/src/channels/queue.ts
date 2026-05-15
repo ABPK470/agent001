@@ -16,10 +16,12 @@
  * This is the same pattern OpenClaw uses for multi-platform delivery.
  */
 
+import { EventType } from "@mia/agent"
 import { randomUUID } from "node:crypto"
+import { DeliveryStatus } from "../enums/channels.js"
 import { broadcast } from "../event-broadcaster.js"
 import { DEFAULT_RETRY_POLICY, withRetry } from "./retry.js"
-import type { Channel, ChannelType, DeliveryStatus, OutboundMessage, RetryPolicy } from "./types.js"
+import type { Channel, ChannelType, OutboundMessage, RetryPolicy } from "./types.js"
 
 // ── Queue entry ──────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ export interface QueueStore {
   save(msg: OutboundMessage): void
   updateStatus(id: string, status: DeliveryStatus, error: string | null, nextRetryAt: Date | null, deliveredAt: Date | null): void
   loadPending(): OutboundMessage[]
-  saveAttempt(messageId: string, attempt: number, status: "success" | "failed", error: string | null, durationMs: number): void
+  saveAttempt(messageId: string, attempt: number, status: "success" | DeliveryStatus.Failed, error: string | null, durationMs: number): void
 }
 
 // ── Message Queue ────────────────────────────────────────────────
@@ -93,7 +95,7 @@ export class MessageQueue {
       channelType,
       recipientId,
       text,
-      status: "queued",
+      status: DeliveryStatus.Queued,
       attempts: 0,
       nextRetryAt: null,
       lastError: null,
@@ -102,7 +104,7 @@ export class MessageQueue {
     }
 
     this.store.save(msg)
-    broadcast({ type: "message.queued", data: { messageId: msg.id, channelType, recipientId } })
+    broadcast({ type: EventType.MessageQueued, data: { messageId: msg.id, channelType, recipientId } })
 
     return new Promise((resolve) => {
       this.enqueueInternal(msg, resolve)
@@ -156,16 +158,16 @@ export class MessageQueue {
     const channel = this.channels.get(message.channelType)
 
     if (!channel) {
-      message.status = "failed"
+      message.status = DeliveryStatus.Failed
       message.lastError = `No channel registered for type "${message.channelType}"`
-      this.store.updateStatus(message.id, "failed", message.lastError, null, null)
-      broadcast({ type: "message.failed", data: { messageId: message.id, error: message.lastError } })
+      this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
+      broadcast({ type: EventType.MessageFailed, data: { messageId: message.id, error: message.lastError } })
       entry.resolve(message)
       return
     }
 
-    message.status = "sending"
-    this.store.updateStatus(message.id, "sending", null, null, null)
+    message.status = DeliveryStatus.Sending
+    this.store.updateStatus(message.id, DeliveryStatus.Sending, null, null, null)
 
     const startTime = Date.now()
     const result = await withRetry(
@@ -177,23 +179,23 @@ export class MessageQueue {
     message.attempts = result.attempts
 
     if (result.success) {
-      message.status = "delivered"
+      message.status = DeliveryStatus.Delivered
       message.deliveredAt = new Date()
-      this.store.updateStatus(message.id, "delivered", null, null, message.deliveredAt)
+      this.store.updateStatus(message.id, DeliveryStatus.Delivered, null, null, message.deliveredAt)
       this.store.saveAttempt(message.id, result.attempts, "success", null, durationMs)
 
       broadcast({
-        type: "message.delivered",
+        type: EventType.MessageDelivered,
         data: { messageId: message.id, channelType: message.channelType, recipientId: message.recipientId, attempts: result.attempts },
       })
     } else {
-      message.status = "failed"
+      message.status = DeliveryStatus.Failed
       message.lastError = result.lastError?.message ?? "Unknown error"
-      this.store.updateStatus(message.id, "failed", message.lastError, null, null)
-      this.store.saveAttempt(message.id, result.attempts, "failed", message.lastError, durationMs)
+      this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
+      this.store.saveAttempt(message.id, result.attempts, DeliveryStatus.Failed, message.lastError, durationMs)
 
       broadcast({
-        type: "message.failed",
+        type: EventType.MessageFailed,
         data: { messageId: message.id, error: message.lastError, attempts: result.attempts },
       })
     }

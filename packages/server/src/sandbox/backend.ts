@@ -5,11 +5,11 @@
  * Windows, Linux, and macOS, with Docker as an optional parity backend.
  * This module defines the pluggable interface and ships two implementations:
  *
- *   - "host"   : cross-platform Node child_process backend that always runs
+ *   - SandboxBackendKind.Host   : cross-platform Node child_process backend that always runs
  *                inside an isolated sandbox directory. This is the default
  *                hosted backend on Windows, Linux, and macOS deployments
  *                where Docker is not available.
- *   - "docker" : optional containerized backend that wraps the existing
+ *   - SandboxBackendKind.Docker : optional containerized backend that wraps the existing
  *                {@link DockerSandbox}. Preserved for deployments where
  *                Docker is available and stronger isolation is desired.
  *
@@ -28,6 +28,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
+import { SandboxBackendKind } from "../enums/sandbox.js"
 import { resolve, sep } from "node:path"
 import { getSandbox } from "./index.js"
 import type { SandboxResult } from "./types.js"
@@ -55,7 +56,7 @@ const NETWORK_ENV_VARS_TO_STRIP = [
   "GIT_PROXY_COMMAND", "NPM_CONFIG_PROXY", "NPM_CONFIG_HTTPS_PROXY",
 ] as const
 
-export type SandboxBackendKind = "host" | "docker"
+export { SandboxBackendKind }
 
 export interface SandboxExecOptions {
   /** Hard cap in milliseconds. */
@@ -100,7 +101,7 @@ function resolveCwd(sandboxRoot: string, sub?: string): string {
 // ── Host backend (cross-platform Node child_process) ─────────────────
 
 class HostSandboxBackend implements SandboxBackend {
-  readonly kind = "host" as const
+  readonly kind = SandboxBackendKind.Host as const
 
   async available(): Promise<boolean> {
     return true
@@ -263,7 +264,7 @@ function sanitizeEnv(env?: Record<string, string>): Record<string, string> | und
 // ── Docker backend (wraps existing DockerSandbox) ────────────────────
 
 class DockerSandboxBackend implements SandboxBackend {
-  readonly kind = "docker" as const
+  readonly kind = SandboxBackendKind.Docker as const
 
   async available(): Promise<boolean> {
     return getSandbox().isDockerAvailable()
@@ -280,7 +281,7 @@ let _hostBackend: SandboxBackend | null = null
 let _dockerBackend: SandboxBackend | null = null
 
 export function getSandboxBackend(kind: SandboxBackendKind): SandboxBackend {
-  if (kind === "docker") {
+  if (kind === SandboxBackendKind.Docker) {
     if (!_dockerBackend) _dockerBackend = new DockerSandboxBackend()
     return _dockerBackend
   }
@@ -300,6 +301,6 @@ export function getSandboxBackend(kind: SandboxBackendKind): SandboxBackend {
  * and macOS hosted deployments all use the host backend by default.
  */
 export function resolveSandboxBackendKind(): SandboxBackendKind {
-  const raw = (process.env["AGENT_SANDBOX_BACKEND"] ?? "host").toLowerCase()
-  return raw === "docker" ? "docker" : "host"
+  const raw = (process.env["AGENT_SANDBOX_BACKEND"] ?? SandboxBackendKind.Host).toLowerCase()
+  return raw === SandboxBackendKind.Docker ? SandboxBackendKind.Docker : SandboxBackendKind.Host
 }

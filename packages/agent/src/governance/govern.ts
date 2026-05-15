@@ -18,7 +18,7 @@
  */
 
 
-import { Agent } from "../agent.js"
+import { Agent } from "../agent/index.js"
 import {
     StepStatus,
     completeRun,
@@ -29,7 +29,7 @@ import {
     runStarted,
     startPlanning,
     startRunning,
-} from "../engine/index.js"
+} from "../domain/index.js"
 import { type EngineServices, type GovernedResult, type RunState } from "./types.js"
 import { governTool } from "./govern-tool.js"
 import type { AgentConfig, LLMClient, Tool } from "../types.js"

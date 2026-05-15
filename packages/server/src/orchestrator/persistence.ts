@@ -1,9 +1,10 @@
-import type { Agent, EngineServices } from "@agent001/agent"
+import type { Agent, EngineServices } from "@mia/agent"
+import { EventType, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import * as db from "../db.js"
+import { getCurrentSession } from "../auth/context.js"
+import * as db from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
-
 // ── Trace ─────────────────────────────────────────────────────────
 
 export function saveTrace(
@@ -24,7 +25,7 @@ export function saveTrace(
 // ── Run persistence ───────────────────────────────────────────────
 
 export function persistRun(
-  run: { id: string; status: string; steps: unknown[]; createdAt: Date; completedAt: Date | null },
+  run: { id: string; status: RunStatus; steps: unknown[]; createdAt: Date; completedAt: Date | null },
   goal: string,
   agentId: string | null,
   parentRunId?: string,
@@ -40,7 +41,6 @@ export function persistRun(
     error: error ?? null,
     parent_run_id: parentRunId ?? null,
     agent_id: agentId,
-    data: JSON.stringify(run),
     created_at: run.createdAt.toISOString(),
     completed_at: run.completedAt?.toISOString() ?? null,
   })
@@ -67,7 +67,7 @@ export function persistTokenUsage(runId: string, agent: Agent): void {
       completion_tokens: agent.usage.completionTokens,
       total_tokens: agent.usage.totalTokens,
       llm_calls: agent.llmCalls,
-      model: process.env["MODEL"] ?? "gpt-4o",
+      model: process.env["MODEL"] ?? "gpt-5.4",
       created_at: new Date().toISOString(),
     })
   }
@@ -76,6 +76,34 @@ export function persistTokenUsage(runId: string, agent: Agent): void {
 // ── Notifications ─────────────────────────────────────────────────
 
 export function createNotification(opts: NotificationOpts): void {
+  // Stamp tenancy onto the notification so list queries can scope by
+  // owner without joining back to runs. If we have a run_id, prefer the
+  // run's persisted owner (consistent with how the run was launched);
+  // otherwise fall back to the current request's session context.
+  // v19: owner_upn is NOT NULL — every notification belongs to a real
+  // user. If neither source resolves a upn, that's a programmer error
+  // (background task firing a notification without a run + without an
+  // ALS-bound session) and we want it to surface loudly.
+  let ownerUpn: string | null = null
+  let sessionId: string | null = null
+  if (opts.runId) {
+    const r = db.getRun(opts.runId)
+    if (r) {
+      ownerUpn  = r.upn          ?? null
+      sessionId = r.session_id   ?? null
+    }
+  }
+  if (!ownerUpn || !sessionId) {
+    const ctx = getCurrentSession()
+    if (ctx) {
+      ownerUpn  = ownerUpn  ?? ctx.upn
+      sessionId = sessionId ?? ctx.sid
+    }
+  }
+  if (!ownerUpn) {
+    throw new Error("createNotification: no owner upn (no runId match and no current session)")
+  }
+
   const notification: db.DbNotification = {
     id: randomUUID(),
     type: opts.type,
@@ -83,13 +111,15 @@ export function createNotification(opts: NotificationOpts): void {
     message: opts.message,
     run_id: opts.runId ?? null,
     step_id: opts.stepId ?? null,
+    owner_upn: ownerUpn,
+    session_id: sessionId,
     actions: JSON.stringify(opts.actions ?? []),
     read: 0,
     created_at: new Date().toISOString(),
   }
   db.saveNotification(notification)
   broadcast({
-    type: "notification",
+    type: EventType.Notification,
     data: {
       id: notification.id,
       notificationType: notification.type,

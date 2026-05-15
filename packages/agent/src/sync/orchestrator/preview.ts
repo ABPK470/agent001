@@ -7,8 +7,10 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { EventType } from "../../domain/enums/event.js"
+import { SyncOperationType } from "../../domain/enums/sync.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
-import { buildDependencyGraph, diffTable } from "../diff-engine.js"
+import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { getEnvironment } from "../environments.js"
 import {
     allocPlanId,
@@ -46,7 +48,7 @@ export interface PreviewInput {
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   const previewId = randomUUID()
   const t0 = Date.now()
-  emit("sync.preview.started", {
+  emit(EventType.SyncPreviewStarted, {
     previewId,
     entityType: input.entityType,
     entityId: input.entityId,
@@ -60,7 +62,7 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   // PK lookup, display-name lookup) can attribute its `sync.preview.sql` event
   // to this previewId without us having to plumb the id through every helper.
   return runWithSyncContext(
-    { kind: "preview", opId: previewId, source: input.source, target: input.target },
+    { kind: SyncOperationType.Preview, opId: previewId, source: input.source, target: input.target },
     () => previewSyncInner(input, previewId, t0),
   )
 }
@@ -131,7 +133,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         const predicate = expandedIds
           ? instantiatePredicateWithTree(t.predicate, input.entityId, expandedIds)
           : instantiatePredicate(t.predicate, input.entityId)
-        emit("sync.preview.table.start", { previewId, table: t.name, predicate })
+        emit(EventType.SyncPreviewTableStart, { previewId, table: t.name, predicate })
         try {
           const r = await diffTable(
             recipe,
@@ -142,7 +144,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             pkColumnsByTable.get(t.name) ?? [],
             { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds },
           )
-          emit("sync.preview.table.done", {
+          emit(EventType.SyncPreviewTableDone, {
             previewId, table: t.name, counts: r.counts, durationMs: r.diffDurationMs,
           })
           return r
@@ -151,7 +153,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
           // would otherwise swallow it into a single-line warning string.
           const errMsg = e instanceof Error ? e.message : String(e)
           console.error(`[sync.preview] diffTable(${t.name}) failed after retries:`, e)
-          emit("sync.preview.table.failed", { previewId, table: t.name, error: errMsg })
+          emit(EventType.SyncPreviewTableFailed, { previewId, table: t.name, error: errMsg })
           return {
             table: t.name,
             scopePredicate: predicate,
@@ -227,7 +229,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     }
     savePlan(plan)
 
-    emit("sync.preview.completed", {
+    emit(EventType.SyncPreviewCompleted, {
       previewId,
       planId: plan.planId,
       entityType: input.entityType,
@@ -242,7 +244,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     return plan
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
-    emit("sync.preview.failed", {
+    emit(EventType.SyncPreviewFailed, {
       previewId,
       entityType: input.entityType,
       entityId: input.entityId,

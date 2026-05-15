@@ -1,3 +1,4 @@
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 /**
  * Filesystem path validation and security helpers.
  *
@@ -32,8 +33,8 @@ export function buildToolOutcome(
   return {
     ...overrides,
     ok: overrides.ok ?? true,
-    severity: overrides.severity ?? (overrides.ok === false ? "recoverable" : "info"),
-    directive: overrides.directive ?? "continue",
+    severity: overrides.severity ?? (overrides.ok === false ? ToolOutcomeSeverity.Recoverable : ToolOutcomeSeverity.Info),
+    directive: overrides.directive ?? ToolControlDirective.Continue,
     retryable: overrides.retryable ?? true,
     summary,
   }

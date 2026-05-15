@@ -12,6 +12,8 @@
  */
 
 import sqlMod from "mssql"
+import { EventType } from "../../domain/enums/event.js"
+import { SyncProgressKind } from "../../domain/enums/sync.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
@@ -65,25 +67,25 @@ export async function runMetadataSync(
       if (!tableResult) continue
       if (tableResult.counts.insert + tableResult.counts.update === 0) continue
       const rowsTotal = tableResult.counts.insert + tableResult.counts.update
-      onProgress({ type: "table-started", table: tableName, rowsTotal })
-      emit("sync.execute.table.start", { planId, table: tableName, op: "upsert", rowsTotal })
+      onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal })
+      emit(EventType.SyncExecuteTableStart, { planId, table: tableName, op: "upsert", rowsTotal })
       await maybeArchive(plan, tableName, triggerCache)
       const applied = await applyInsertsUpdates(tx, plan, tableName, pkByTable.get(tableName) ?? [])
       appliedTotals.update += applied
-      onProgress({ type: "table-done", table: tableName, rowsApplied: applied })
-      emit("sync.execute.table.done", { planId, table: tableName, op: "upsert", rowsApplied: applied })
+      onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
+      emit(EventType.SyncExecuteTableDone, { planId, table: tableName, op: "upsert", rowsApplied: applied })
     }
 
     // Deletes: children → parents
     for (const tableName of plan.recipeSnapshot.reverseOrder) {
       const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
       if (!tableResult || tableResult.counts.delete === 0) continue
-      onProgress({ type: "table-started", table: tableName, rowsTotal: tableResult.counts.delete })
-      emit("sync.execute.table.start", { planId, table: tableName, op: "delete", rowsTotal: tableResult.counts.delete })
+      onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal: tableResult.counts.delete })
+      emit(EventType.SyncExecuteTableStart, { planId, table: tableName, op: "delete", rowsTotal: tableResult.counts.delete })
       const applied = await applyDeletes(tx, plan, tableName, pkByTable.get(tableName) ?? [])
       appliedTotals.delete += applied
-      onProgress({ type: "table-done", table: tableName, rowsApplied: applied })
-      emit("sync.execute.table.done", { planId, table: tableName, op: "delete", rowsApplied: applied })
+      onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
+      emit(EventType.SyncExecuteTableDone, { planId, table: tableName, op: "delete", rowsApplied: applied })
     }
 
     // Re-enable FK constraints only on tables we disabled them on

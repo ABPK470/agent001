@@ -5,7 +5,7 @@
  * and reusable independently of the run lifecycle.
  */
 
-import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@agent001/agent"
+import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
 
 // ── Environment detection ────────────────────────────────────────
@@ -101,6 +101,11 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     // each unique body exactly once with a header listing every env
     // it covers. This is the single biggest per-call token win — see
     // /memories/session/plan.md (Phase 1).
+    //
+    // TODO(prompt-diet): split mymi-knowledge into a tiny always-on header
+    // (≤500B: schema namespaces, common joins, key tables) plus an
+    // on-demand `get_database_knowledge` tool that returns the relevant
+    // section by topic. Today the entire body ships whenever isDbLike fires.
     if (includeMssqlKnowledge && cfgs.some((c) => c.knowledge)) {
       const groups = new Map<string, string[]>()  // body → [env names]
       for (const c of cfgs) {
@@ -136,6 +141,12 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         "  • NEVER SELECT * or COUNT(*) without a WHERE clause on large tables.",
         "  • prefer persistedView.X over publish.X when it exists — same data, pre-materialized.",
         "  • Before any JOIN to dim.Client or dim.Account: confirm cardinality with profile_data first.",
+        "  • Multi-large-object joins: see the BIG-TABLE / MICRO-ETL section above for the canonical #temp staging pattern. Single-shot multi-join SELECTs against billion-row tables time out.",
+        "",
+        "T-SQL DIALECT:",
+        "  • Target is Microsoft SQL Server. NOT supported: QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC, INTERVAL, EXTRACT, backticks.",
+        "  • Use: TOP n / OFFSET-FETCH, LIKE, CAST(x AS type), DATEADD/DATEDIFF/DATEPART, [brackets].",
+        "  • MIN/MAX/SUM/AVG fail on bit columns — wrap as SUM(CAST(col AS int)).",
         "",
         "DATA TOOLS — use in this order:",
         "  0. search_catalog  ★ START HERE. Keyword search over 97K columns + FK graph. Zero SQL queries.",

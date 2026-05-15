@@ -1,4 +1,4 @@
-export { CatalogGraph } from "./graph.js"
+export { CatalogGraph } from "./graph/index.js"
 export { buildCatalog, getCatalog, getCatalogConnectionNames, getCatalogPromptSummary, hasCatalog, loadLineage } from "./store.js"
 export type {
     CatalogBuildOptions,

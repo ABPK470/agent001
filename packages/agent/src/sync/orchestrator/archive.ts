@@ -14,6 +14,7 @@
  */
 
 import type { ConnectionPool } from "mssql"
+import { EventType } from "../../domain/enums/event.js"
 import { tableHasTriggers } from "../catalog-drift.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
@@ -51,7 +52,7 @@ export async function probeTriggers(
     for (const row of r.recordset as Array<{ schemaName: string; tableName: string; triggerCount: number }>) {
       triggerCache.set(`${row.schemaName}.${row.tableName}`, row.triggerCount > 0)
     }
-    emit("sync.execute.archive.probe.batch", {
+    emit(EventType.SyncExecuteArchiveProbeBatch, {
       planId, tables: upsertTables.length, durationMs: Date.now() - probeT0,
     })
   } catch (e) {
@@ -98,7 +99,7 @@ export async function maybeArchive(
       hasTriggers = await tableHasTriggers(plan.target, tableName)
       cached = false
     }
-    emit("sync.execute.archive.probe", {
+    emit(EventType.SyncExecuteArchiveProbe, {
       planId: plan.planId,
       table: tableName,
       hasTriggers,
@@ -106,7 +107,7 @@ export async function maybeArchive(
       durationMs: Date.now() - probeT0,
     })
     if (!hasTriggers) {
-      emit("sync.execute.archive.skipped", {
+      emit(EventType.SyncExecuteArchiveSkipped, {
         planId: plan.planId,
         table: tableName,
         reason:

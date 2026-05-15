@@ -1,3 +1,4 @@
+import { DelegationSpanEventKind, VerifierOutcome } from "@mia/agent"
 /**
  * Verifier code structure analysis — deterministic import/declaration
  * extraction and LLM verification wrapper.
@@ -7,20 +8,21 @@
  * @module
  */
 
+import { MessageRole } from "../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierDecision,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierDecision,
+  VerifierStepAssessment,
 } from "../types.js"
-import type { StepSpecEvidence } from "./verifier-blueprint.js"
-import { buildFallbackDecision, parseLLMVerification } from "../verifier-helpers.js"
+import { buildFallbackDecision, parseLLMVerification } from "../verifier-helpers/index.js"
 import {
-    analyzeCodeStructure,
-    wrapArtifactWithStructureAnalysis,
+  analyzeCodeStructure,
+  wrapArtifactWithStructureAnalysis,
 } from "../verifier-llm/code-structure.js"
+import type { StepSpecEvidence } from "./verifier-blueprint.js"
 export type { CodeStructureAnalysis } from "../verifier-llm/code-structure.js"
 export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
 
@@ -207,15 +209,15 @@ export async function runLLMVerification(
   }
 
   const messages: Message[] = [
-    { role: "system", content: VERIFIER_SYSTEM_PROMPT },
+    { role: MessageRole.System, content: VERIFIER_SYSTEM_PROMPT },
     {
-      role: "user",
+      role: MessageRole.User,
       content: `Verify the following plan execution results:\n\nPlan reason: ${plan.reason}\n\nStep results:\n${JSON.stringify(stepSummaries, null, 2)}${artifactSection}`,
     },
   ]
 
   opts?.onTrace?.({
-    kind: "llm-request",
+    kind: DelegationSpanEventKind.LlmRequest,
     iteration: -1,
     messageCount: messages.length,
     toolCount: 0,
@@ -233,7 +235,7 @@ export async function runLLMVerification(
     const durationMs = Date.now() - t0
 
     opts?.onTrace?.({
-      kind: "llm-response",
+      kind: DelegationSpanEventKind.LlmResponse,
       iteration: -1,
       durationMs,
       content: response.content,
@@ -265,15 +267,15 @@ export async function runLLMVerification(
       return {
         ...step,
         issues: processedIssues,
-        outcome: remainingBlocking.length === 0 ? "pass" as const : step.outcome,
+        outcome: remainingBlocking.length === 0 ? VerifierOutcome.Pass : step.outcome,
       }
     })
 
-    const anyRetry = downgraded.some(s => s.outcome === "retry")
-    const anyFail = downgraded.some(s => s.outcome === "fail")
+    const anyRetry = downgraded.some(s => s.outcome === VerifierOutcome.Retry)
+    const anyFail = downgraded.some(s => s.outcome === VerifierOutcome.Fail)
     return {
       ...rawDecision,
-      overall: anyFail ? "fail" : anyRetry ? "retry" : "pass",
+      overall: anyFail ? VerifierOutcome.Fail : anyRetry ? VerifierOutcome.Retry : VerifierOutcome.Pass,
       steps: downgraded,
     }
   } catch {

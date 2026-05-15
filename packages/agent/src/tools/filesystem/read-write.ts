@@ -1,3 +1,4 @@
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 import { appendFile as fsAppendFile, mkdir, readFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import type { Tool } from "../../types.js"
@@ -98,8 +99,8 @@ export const appendFileTool: Tool = {
           `APPEND REJECTED for ${filePath} — the update was blocked due to structural integrity issues.`,
           {
             ok: false,
-            severity: "fatal",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Fatal,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_integrity_violation",
             details: [...integrityWarnings, "Use read_file to inspect the current file before any new append or rewrite."],
             artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
@@ -114,8 +115,8 @@ export const appendFileTool: Tool = {
           `APPENDED WITH ISSUES to ${filePath} — inspect the resulting file before continuing.`,
           {
             ok: false,
-            severity: "recoverable",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Recoverable,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_incomplete_mutation",
             details: integrityWarnings,
             artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
@@ -125,8 +126,8 @@ export const appendFileTool: Tool = {
 
       return buildToolOutcome(`Successfully appended to ${filePath}`, {
         ok: true,
-        severity: "info",
-        directive: "continue",
+        severity: ToolOutcomeSeverity.Info,
+        directive: ToolControlDirective.Continue,
         artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
       })
     } catch (err) {

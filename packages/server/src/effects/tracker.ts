@@ -1,9 +1,11 @@
+import { EventType } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
+import { EffectKind, EffectStatus } from "../enums/effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import { captureSnapshot, hashContent } from "./snapshots.js"
-import type { Effect, EffectKind } from "./types.js"
+import type { Effect } from "./types.js"
 
 // ── EffectTracker (stateful — holds per-run sequence counters) ───
 
@@ -39,7 +41,7 @@ export class EffectTracker {
       target: opts.target,
       preHash: opts.preHash ?? null,
       postHash: opts.postHash ?? null,
-      status: "applied",
+      status: EffectStatus.Applied,
       metadata: opts.metadata ?? {},
       createdAt: now,
     }
@@ -57,7 +59,7 @@ export class EffectTracker {
     })
 
     broadcast({
-      type: "effect.recorded",
+      type: EventType.EffectRecorded,
       data: {
         id: effect.id,
         runId: effect.runId,
@@ -84,7 +86,7 @@ export class EffectTracker {
       if (existingHash === newHash) {
         return this.recordEffect({
           runId: opts.runId,
-          kind: "modify",
+          kind: EffectKind.Modify,
           tool: opts.tool,
           target: opts.filePath,
           preHash: existingHash,
@@ -93,14 +95,14 @@ export class EffectTracker {
         })
       }
     } catch {
-      // File doesn't exist yet — this will be a "create"
+      // File doesn't exist yet — this will be a EffectKind.Create
     }
 
-    let kind: EffectKind = "create"
+    let kind: EffectKind = EffectKind.Create
     let preHash: string | null = null
     try {
       await stat(opts.filePath)
-      kind = "modify"
+      kind = EffectKind.Modify
       const existing = await readFile(opts.filePath, "utf-8")
       preHash = hashContent(existing)
     } catch {
@@ -132,7 +134,7 @@ export class EffectTracker {
     } catch {
       return this.recordEffect({
         runId: opts.runId,
-        kind: "delete",
+        kind: EffectKind.Delete,
         tool: opts.tool,
         target: opts.filePath,
         preHash: null,
@@ -143,7 +145,7 @@ export class EffectTracker {
 
     const effect = this.recordEffect({
       runId: opts.runId,
-      kind: "delete",
+      kind: EffectKind.Delete,
       tool: opts.tool,
       target: opts.filePath,
       preHash,

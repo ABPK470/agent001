@@ -9,6 +9,10 @@ COPY packages/agent/package.json packages/agent/
 COPY packages/server/package.json packages/server/
 COPY packages/ui/package.json packages/ui/
 
+# Skip Playwright browser download in the build image — browsers live in the
+# dedicated mia-browser sandbox image.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 RUN npm ci --workspaces
 
 # Copy source
@@ -30,19 +34,10 @@ RUN cd packages/server && npx tsc
 # ── Stage 2: Production runtime ──────────────────────────────
 FROM node:20-slim AS runtime
 
-# better-sqlite3 needs shared libs; puppeteer needs chromium deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    fonts-liberation \
-    libgbm1 \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libgtk-3-0 \
-    libasound2 \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# better-sqlite3 needs build libs already present in node:20-slim.
+# Browser work happens in the mia-browser sandbox container, so the main
+# runtime image does NOT bundle Chromium.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 WORKDIR /app
 

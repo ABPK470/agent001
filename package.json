@@ -1,10 +1,10 @@
 {
-  "name": "agent001",
+  "name": "mia",
   "version": "0.1.0",
-  "description": "AI Agent Command Center — autonomous agents with tools, policies, memory, and a real-time dashboard.",
+  "description": "MI:A Command Center — autonomous agents with tools, policies, memory, and a real-time dashboard.",
   "type": "module",
   "bin": {
-    "agent001": "bin/agent001.js"
+    "mia": "bin/mia.js"
   },
   "main": "./dist/server.js",
   "files": [
@@ -27,7 +27,8 @@
     "eval:reliability": "node scripts/reliability-eval.mjs",
     "lint": "npm run lint --workspaces",
     "lint:arch": "node scripts/lint-arch.mjs",
-    "pack:test": "npm run build && npm pack"
+    "pack:test": "npm run build && npm pack",
+    "postinstall": "node scripts/install-playwright.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.3",
@@ -36,7 +37,7 @@
     "dotenv": "^17.3.1",
     "fastify": "^5.3.3",
     "mssql": "^12.2.1",
-    "puppeteer": "^24.40.0"
+    "playwright": "^1.49.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

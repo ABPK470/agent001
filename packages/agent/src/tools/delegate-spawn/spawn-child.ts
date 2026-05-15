@@ -1,8 +1,10 @@
 import { AgentRuntime } from "../../agent-runtime.js"
-import { Agent } from "../../agent.js"
+import { Agent } from "../../agent/index.js"
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
+import { LLMCallPhase } from "../../domain/enums/llm.js"
+import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
 import type { Tool } from "../../types.js"
-import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate.js"
+import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate/index.js"
 import type { ChildSpec } from "./helpers.js"
 
 const DEFAULT_CHILD_ITERATIONS = 50
@@ -76,7 +78,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   }
 
   ctx.onChildTrace?.({
-    kind: "delegation-start",
+    kind: DelegationTraceKind.Start,
     goal: spec.goal,
     depth: ctx.depth + 1,
     tools: childTools.map(t => t.name),
@@ -127,7 +129,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     runtime: childRuntime,
     onThinking: (content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
-        kind: "delegation-iteration",
+        kind: DelegationTraceKind.Iteration,
         depth: ctx.depth + 1,
         iteration: iteration + 1,
         maxIterations: maxIter,
@@ -136,7 +138,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
       pendingLlmEvents = []
       if (content) {
         ctx.onChildTrace?.({
-          kind: "thinking",
+          kind: DelegationSpanEventKind.Thinking,
           text: `[D${ctx.depth + 1}] ${content.slice(0, 500)}`,
         })
       }
@@ -147,16 +149,16 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     },
     onNudge: (data) => {
       ctx.onChildTrace?.({
-        kind: "nudge",
+        kind: DelegationSpanEventKind.Nudge,
         tag: `[D${ctx.depth + 1}] ${data.tag}`,
         message: data.message,
         iteration: data.iteration,
       })
     },
     onLlmCall: (data) => {
-      if (data.phase === "request") {
+      if (data.phase === LLMCallPhase.Request) {
         pendingLlmEvents.push({
-          kind: "llm-request",
+          kind: DelegationSpanEventKind.LlmRequest,
           iteration: data.iteration,
           messageCount: data.messages.length,
           toolCount: data.tools.length,
@@ -169,7 +171,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         })
       } else {
         pendingLlmEvents.push({
-          kind: "llm-response",
+          kind: DelegationSpanEventKind.LlmResponse,
           iteration: data.iteration,
           durationMs: data.durationMs,
           content: data.response.content,
@@ -186,7 +188,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)
     ctx.onChildTrace?.({
-      kind: "delegation-end",
+      kind: DelegationTraceKind.End,
       depth: ctx.depth + 1,
       status: hitLimit ? "error" : "done",
       answer: answer.slice(0, 500),
@@ -204,7 +206,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     const errMsg = err instanceof Error ? err.message : String(err)
 
     ctx.onChildTrace?.({
-      kind: "delegation-end",
+      kind: DelegationTraceKind.End,
       depth: ctx.depth + 1,
       status: "error",
       error: errMsg,

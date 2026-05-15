@@ -1,3 +1,4 @@
+import { PlannerNeedLevel } from "@mia/agent"
 /**
  * Planner decision — layered routing for agent tasks.
  *
@@ -218,7 +219,7 @@ export async function assessPlannerDecision(
   }
 
   const routingConfidence: RoutingConfidence = llmClassified
-    ? (effectiveAxes.coordinationNeed === "low" ? "lean_coherent" : "lean_planner")
+    ? (effectiveAxes.coordinationNeed === PlannerNeedLevel.Low ? "lean_coherent" : "lean_planner")
     : heuristicConfidence
 
   // ── Layer 5: Sanity override + coherence gates ───────────────

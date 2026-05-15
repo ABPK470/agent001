@@ -1,3 +1,5 @@
+import { ChannelType } from "../enums/channels.js"
+import { DeliveryStatus } from "../enums/channels.js"
 /**
  * Channel types — the vocabulary for multi-platform message routing.
  *
@@ -7,12 +9,7 @@
 
 // ── Delivery tracking ────────────────────────────────────────────
 
-export type DeliveryStatus =
-  | "queued"    // In the queue, not yet attempted
-  | "sending"   // Currently being sent
-  | "delivered" // Successfully delivered to the platform
-  | "failed"    // All retries exhausted — dead letter
-  | "retrying"  // Failed but will retry
+export { DeliveryStatus }
 
 // ── Messages ─────────────────────────────────────────────────────
 
@@ -62,7 +59,7 @@ export interface OutboundMessage {
 
 // ── Channel interface ────────────────────────────────────────────
 
-export type ChannelType = "teams"
+export { ChannelType }
 
 /** Configuration for a registered channel. */
 export interface ChannelConfig {

@@ -1,17 +1,15 @@
 /**
  * WelcomeFlow — login + intro/outro animation.
  *
- * INTRO:
- *   Bot on the left, input fields below.
- *   User submits → inputs vanish, bot (same element, same spot)
- *   moves L→R generating "agent001" wordmark as a trail.
- *   Mosaic tiles break outward revealing the platform.
+ * INPUT FLOW (v19):
+ *   Step 1: username
+ *   Step 2: password (bullet-masked)
+ *   Submit → caller does login-or-register; on success the morph plays.
  *
- * OUTRO (exact reverse):
- *   Mosaic tiles cover inward.
- *   Wordmark "agent001" appears with bot on right.
- *   Bot eats wordmark R→L.
- *   Screen clears → done → login reappears.
+ * The visual story (bot, mosaic, wave canvas, wordmark) is unchanged —
+ * only the form's two prompts moved from "name + access code" to
+ * "username + password". `onSubmit(username, password)` keeps the same
+ * (a, b) shape so call sites only need to relabel their args.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -228,7 +226,7 @@ function WaveCanvas({ visible }: { visible: boolean }) {
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 export interface WelcomeFlowProps {
-  onSubmit: (displayName: string, upn: string) => Promise<void>
+  onSubmit: (username: string, password: string) => Promise<void>
   onDone: () => void
   mode?: "intro" | "outro" | "reveal"
 }
@@ -242,7 +240,7 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
   const [step, setStep] = useState<Step>(isOutro || isReveal ? "dissolving" : "login")
   const [draft, setDraft] = useState("")
   const [nameVal, setNameVal] = useState("")
-  const [nameStep, setNameStep] = useState(true)   // true = name, false = upn
+  const [nameStep, setNameStep] = useState(true)   // true = username, false = password
   const [err, setErr] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [cells, setCells] = useState<Cell[]>(hiddenCells)
@@ -375,11 +373,12 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
     const v = draft.trim()
     setErr(null)
     if (nameStep) {
-      if (!v) { setErr("name required"); return }
+      if (!v) { setErr("username required"); return }
       setNameVal(v); setDraft(""); setNameStep(false)
     } else {
+      if (!v) { setErr("password required"); return }
       setDraft("")
-      const uname = nameVal  // BE appends #xxxx suffix for anon users
+      const uname = nameVal
       setStep("submitting")
       onSubmit(uname, v)
         .then(() => setStep("morphing"))
@@ -389,6 +388,24 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
         })
     }
   }, [draft, nameStep, nameVal, onSubmit])
+
+  /* ── go back from password → username ──
+   * Two affordances, both terminal-native:
+   *   • Backspace on an empty password input — the natural "erase past
+   *     the start of the line" gesture maps cleanly to "erase the line
+   *     itself, back up a step".
+   *   • Escape — the universal "abandon current prompt" key.
+   * The previously-typed username is restored as the draft so the user
+   * can edit a typo instead of retyping. */
+  const onBackToUsername = useCallback(() => {
+    if (step !== "login" || nameStep) return
+    setNameStep(true); setDraft(nameVal); setNameVal(""); setErr(null)
+    // place caret at end of restored username on next paint
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (el) { el.setSelectionRange(el.value.length, el.value.length); syncCursor() }
+    })
+  }, [nameStep, nameVal, step, syncCursor])
 
   /* ── mosaic cells ── */
   const mosaic = useMemo(() => {
@@ -472,7 +489,14 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
               <input ref={inputRef} autoFocus value={draft}
                 placeholder=""
                 onChange={e => { setDraft(e.target.value); if (err) setErr(null); syncCursor(); resetBlinkIdle() }}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onEnter(); return }; syncCursor(); resetBlinkIdle() }}
+                onKeyDown={e => {
+                  if (e.key === "Enter")  { e.preventDefault(); onEnter(); return }
+                  if (e.key === "Escape" && !nameStep) { e.preventDefault(); onBackToUsername(); return }
+                  if (e.key === "Backspace" && !nameStep && draft.length === 0) {
+                    e.preventDefault(); onBackToUsername(); return
+                  }
+                  syncCursor(); resetBlinkIdle()
+                }}
                 onSelect={syncCursor}
                 onFocus={syncCursor}
                 onMouseUp={syncCursor}
@@ -500,13 +524,17 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
                   <>
                     <span className="wf-block-cursor" style={{ visibility: cursorOn ? "visible" : "hidden" }} />
                     <span className="wf-placeholder">
-                      {nameStep ? "name" : step === "submitting" ? "saving…" : <>access code<span style={{ opacity: 0.65, marginLeft: 14, display: "inline-flex", alignItems: "center", gap: 7, verticalAlign: "middle" }}>· skip <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--border, rgba(228,228,231,0.35))", borderRadius: 4, padding: "3px 7px", lineHeight: 1 }}><svg width="13" height="11" viewBox="0 0 13 11" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}><path d="M12 1v4a2 2 0 0 1-2 2H2m0 0 3-3M2 7l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></span></span></>}
+                      {nameStep ? "username" : step === "submitting" ? "signing in…" : "password"}
                     </span>
                   </>
                 )}
               </div>
               <div style={{ marginTop: 10, fontSize: 11, minHeight: "1.2em", color: DIM }}>
-                {err ? <span style={{ color: ERR }}>! {err}</span> : null}
+                {err
+                  ? <span style={{ color: ERR }}>! {err}</span>
+                  : !nameStep && step === "login"
+                    ? <span>← <span style={{ opacity: 0.75 }}>backspace</span> to edit username</span>
+                    : null}
               </div>
             </div>
           )}

@@ -13,8 +13,8 @@ import {
     getUnresolvedAcceptanceBlockers,
     summarizeRepairTask,
 } from "../internal/pipeline-repair.js"
-import { isGibberishIssue } from "../pipeline-validation.js"
-import type { PipelineExecutorOptions } from "../pipeline.js"
+import { isGibberishIssue } from "../pipeline-validation/index.js"
+import type { PipelineExecutorOptions } from "../pipeline/index.js"
 import type {
     PipelineStepResult,
     Plan,
@@ -22,7 +22,7 @@ import type {
     RepairPlan,
     SubagentTaskStep,
 } from "../types.js"
-import { buildChildRepairPayload } from "../verification-model.js"
+import { buildChildRepairPayload } from "../verification-model/index.js"
 
 export function buildRepairStep(
   sa: SubagentTaskStep,

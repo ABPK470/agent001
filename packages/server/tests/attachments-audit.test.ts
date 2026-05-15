@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { seedTestUsers } from "./_fk-helpers.js";
 
 let testDb: Database.Database
 let dataDir: string
@@ -33,11 +34,12 @@ afterEach(() => {
 
 describe("attachment audit events", () => {
   it("emits attachment.uploaded on upload and attachment.pruned on retention prune", async () => {
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment, pruneExpiredAttachments } = await import("../src/attachments/index.js")
     const { subscribeToEvents } = await import("../src/event-broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
 
     const events: { type: string; data: unknown }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data }))

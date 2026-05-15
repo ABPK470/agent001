@@ -17,7 +17,7 @@
  */
 
 import type { LLMClient, LLMResponse, Message, Tool } from "../types.js"
-import { OpenAIClient } from "./openai.js"
+import { OpenAICompatibleClient } from "./openai-compat.js"
 
 export class DatabricksClient implements LLMClient {
   private readonly host: string
@@ -46,7 +46,7 @@ export class DatabricksClient implements LLMClient {
     // resolves correctly. The "model" field is ignored by Databricks
     // (the endpoint name in the URL determines the model) but we still
     // pass the endpoint name for log-correlation.
-    const client = new OpenAIClient({
+    const client = new OpenAICompatibleClient({
       apiKey: token,
       model: this.endpoint,
       baseUrl: `${this.host}/serving-endpoints/${this.endpoint}`,

@@ -1,4 +1,4 @@
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Schema migration ─────────────────────────────────────────────
@@ -8,130 +8,66 @@ export function migrateMemory(): void {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS memory_entries (
-      id TEXT PRIMARY KEY,
-      tier TEXT NOT NULL CHECK (tier IN ('working', 'episodic', 'semantic')),
-      role TEXT NOT NULL DEFAULT 'assistant',
-      content TEXT NOT NULL,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      source TEXT NOT NULL DEFAULT 'agent',
-      confidence REAL NOT NULL DEFAULT 0.5,
-      salience REAL NOT NULL DEFAULT 0.5,
+      id           TEXT PRIMARY KEY,
+      tier         TEXT NOT NULL CHECK (tier IN ('working', 'episodic', 'semantic')),
+      role         TEXT NOT NULL DEFAULT 'assistant'
+        CHECK (role IN ('user','assistant','tool','system','summary')),
+      content      TEXT NOT NULL,
+      metadata     TEXT NOT NULL DEFAULT '{}',
+      source       TEXT NOT NULL DEFAULT 'agent'
+        CHECK (source IN ('system','tool','user','agent','external')),
+      confidence   REAL NOT NULL DEFAULT 0.5,
+      salience     REAL NOT NULL DEFAULT 0.5,
       access_count INTEGER NOT NULL DEFAULT 0,
-      session_id TEXT,
-      run_id TEXT,
-      parent_id TEXT,
-      upn TEXT,
-      shared INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      session_id   TEXT REFERENCES sessions(sid)      ON DELETE CASCADE,
+      run_id       TEXT REFERENCES runs(id)           ON DELETE SET NULL,
+      parent_id    TEXT REFERENCES memory_entries(id) ON DELETE SET NULL,
+      upn          TEXT,
+      shared       INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL,
+      updated_at   TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_me_tier ON memory_entries(tier);
+    CREATE INDEX IF NOT EXISTS idx_me_tier    ON memory_entries(tier);
     CREATE INDEX IF NOT EXISTS idx_me_session ON memory_entries(session_id);
-    CREATE INDEX IF NOT EXISTS idx_me_run ON memory_entries(run_id);
+    CREATE INDEX IF NOT EXISTS idx_me_run     ON memory_entries(run_id);
     CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);
+    CREATE INDEX IF NOT EXISTS idx_me_upn     ON memory_entries(upn);
+    CREATE INDEX IF NOT EXISTS idx_me_shared  ON memory_entries(shared);
 
     CREATE TABLE IF NOT EXISTS procedural_memories (
-      id TEXT PRIMARY KEY,
-      trigger TEXT NOT NULL,
+      id            TEXT PRIMARY KEY,
+      trigger       TEXT NOT NULL,
       tool_sequence TEXT NOT NULL,
       success_count INTEGER NOT NULL DEFAULT 1,
       failure_count INTEGER NOT NULL DEFAULT 0,
-      run_id TEXT NOT NULL,
-      upn TEXT,
-      session_id TEXT,
-      shared INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      run_id        TEXT REFERENCES runs(id)      ON DELETE SET NULL,
+      session_id    TEXT REFERENCES sessions(sid) ON DELETE CASCADE,
+      upn           TEXT,
+      shared        INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_proc_upn     ON procedural_memories(upn);
+    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_proc_shared  ON procedural_memories(shared);
+
     CREATE TABLE IF NOT EXISTS memory_vectors (
-      entry_id TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
+      entry_id  TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
       embedding BLOB NOT NULL,
       dimension INTEGER NOT NULL,
       -- Tenant columns mirrored from memory_entries so vectorSearch can
       -- push tenant isolation into the SQL JOIN instead of post-filtering
       -- top-K. Without this, a tenant whose rows dominate the cosine
       -- top-K can starve everyone else of vector recall.
-      upn TEXT,
-      shared INTEGER NOT NULL DEFAULT 0
+      upn       TEXT,
+      shared    INTEGER NOT NULL DEFAULT 0
     );
-  `)
 
-  // ── In-place migration for pre-existing DBs ────────────────────
-  // Add the upn / shared columns and indexes if they don't exist yet, then
-  // backfill upn from the runs table by joining on run_id. Rows whose run_id
-  // is NULL or whose run no longer exists are left with upn=NULL — those are
-  // legacy/global entries; queries scoped by upn won't surface them.
-  const addColumnIfMissing = (table: string, col: string, ddl: string): void => {
-    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
-    if (!cols.some((c) => c.name === col)) {
-      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`) } catch { /* race / already added */ }
-    }
-  }
-  addColumnIfMissing("memory_entries", "upn", "upn TEXT")
-  addColumnIfMissing("memory_entries", "shared", "shared INTEGER NOT NULL DEFAULT 0")
-  addColumnIfMissing("procedural_memories", "upn", "upn TEXT")
-  addColumnIfMissing("procedural_memories", "session_id", "session_id TEXT")
-  addColumnIfMissing("procedural_memories", "shared", "shared INTEGER NOT NULL DEFAULT 0")
-  addColumnIfMissing("memory_vectors", "upn", "upn TEXT")
-  addColumnIfMissing("memory_vectors", "shared", "shared INTEGER NOT NULL DEFAULT 0")
-
-  // Indexes (no-op if columns added above didn't exist before; idempotent)
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_me_upn ON memory_entries(upn);
-    CREATE INDEX IF NOT EXISTS idx_me_shared ON memory_entries(shared);
-    CREATE INDEX IF NOT EXISTS idx_proc_upn ON procedural_memories(upn);
-    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
-    CREATE INDEX IF NOT EXISTS idx_proc_shared ON procedural_memories(shared);
-    CREATE INDEX IF NOT EXISTS idx_mv_upn ON memory_vectors(upn);
+    CREATE INDEX IF NOT EXISTS idx_mv_upn    ON memory_vectors(upn);
     CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
   `)
-
-  // Backfill upn from runs.upn — only fills rows where memory.upn IS NULL
-  // and runs.upn IS NOT NULL. Safe to re-run on every boot (cheap NOOP once
-  // saturated). Wrapped in try/catch because the runs table may not exist
-  // in standalone test fixtures that exercise memory in isolation.
-  try {
-    db.exec(`
-      UPDATE memory_entries
-      SET upn = (SELECT upn FROM runs WHERE runs.id = memory_entries.run_id)
-      WHERE upn IS NULL AND run_id IS NOT NULL
-        AND EXISTS (SELECT 1 FROM runs WHERE runs.id = memory_entries.run_id AND runs.upn IS NOT NULL);
-    `)
-    db.exec(`
-      UPDATE procedural_memories
-      SET upn = (SELECT upn FROM runs WHERE runs.id = procedural_memories.run_id)
-      WHERE upn IS NULL
-        AND EXISTS (SELECT 1 FROM runs WHERE runs.id = procedural_memories.run_id AND runs.upn IS NOT NULL);
-    `)
-    db.exec(`
-      UPDATE memory_entries
-      SET session_id = COALESCE(session_id, (SELECT session_id FROM runs WHERE runs.id = memory_entries.run_id))
-      WHERE session_id IS NULL AND run_id IS NOT NULL;
-    `)
-    db.exec(`
-      UPDATE procedural_memories
-      SET session_id = COALESCE(session_id, (SELECT session_id FROM runs WHERE runs.id = procedural_memories.run_id))
-      WHERE session_id IS NULL;
-    `)
-  } catch { /* runs table not present in this DB context */ }
-
-  // Backfill memory_vectors.upn / shared from the joined memory_entries row.
-  // Cheap idempotent NOOP once saturated; no dependency on the runs table.
-  try {
-    db.exec(`
-      UPDATE memory_vectors
-      SET upn = (SELECT upn FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id)
-      WHERE upn IS NULL
-        AND EXISTS (SELECT 1 FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id AND memory_entries.upn IS NOT NULL);
-    `)
-    db.exec(`
-      UPDATE memory_vectors
-      SET shared = COALESCE((SELECT shared FROM memory_entries WHERE memory_entries.id = memory_vectors.entry_id), 0)
-      WHERE shared = 0;
-    `)
-  } catch { /* memory_entries missing in this context */ }
 
   // FTS5 for memory_entries — create then integrity-check and rebuild if corrupt.
   try {
@@ -223,36 +159,6 @@ export function migrateMemory(): void {
       VALUES (new.rowid, new.trigger);
     END;
   `)
-
-  // Migrate data from old 'memories' table if it exists
-  try {
-    const oldExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='memories'"
-    ).get()
-    if (oldExists) {
-      db.exec(`
-        INSERT OR IGNORE INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, created_at, updated_at)
-        SELECT id,
-               CASE WHEN tier = 'procedural' THEN 'episodic' ELSE tier END,
-               'assistant',
-               content,
-               metadata,
-               source,
-               confidence,
-               0.5,
-               access_count,
-               NULL,
-               run_id,
-               NULL,
-               created_at,
-               updated_at
-        FROM memories;
-
-        DROP TABLE IF EXISTS memories_fts;
-        DROP TABLE IF EXISTS memories;
-      `)
-    }
-  } catch { /* migration already done or table doesn't exist */ }
 }
 
 // ── Row mappers ──────────────────────────────────────────────────

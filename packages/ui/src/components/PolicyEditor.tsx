@@ -34,6 +34,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
 import type { EnvOperation, PolicyRule, SyncEnvironmentAdmin, ToolInfo } from "../types"
+import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 
 interface Props {
   onClose: () => void
@@ -94,12 +95,6 @@ const ALL_OPS: EnvOperation[] = [
   "query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml",
 ]
 
-const SOURCE_BADGE: Record<NonNullable<PolicyRule["source"]>, { label: string; cls: string }> = {
-  db:             { label: "operator",      cls: "text-accent bg-accent/10" },
-  hosted_default: { label: "hosted default", cls: "text-text-muted bg-overlay-3" },
-  env_derived:    { label: "env-derived",    cls: "text-warning bg-warning/10" },
-}
-
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
   const [tools, setTools] = useState<ToolInfo[]>([])
@@ -110,6 +105,7 @@ export function PolicyEditor({ onClose }: Props) {
   // Security section expand
   const [shellExpanded, setShellExpanded] = useState(false)
   const [ssrfExpanded, setSsrfExpanded] = useState(false)
+  const [sqlGuardExpanded, setSqlGuardExpanded] = useState(false)
 
   // Workspace
   const [wsPath, setWsPath] = useState("")
@@ -123,7 +119,7 @@ export function PolicyEditor({ onClose }: Props) {
   const [resetting, setResetting] = useState(false)
 
   // LLM config
-  const [llmProvider, setLlmProvider] = useState("copilot")
+  const [llmProvider, setLlmProvider] = useState("copilot-chat")
   const [llmModel, setLlmModel] = useState("")
   const [llmApiKey, setLlmApiKey] = useState("")
   const [llmBaseUrl, setLlmBaseUrl] = useState("")
@@ -134,15 +130,6 @@ export function PolicyEditor({ onClose }: Props) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [llmActiveProvider, setLlmActiveProvider] = useState("")
   const [llmActiveModel, setLlmActiveModel] = useState("")
-
-  // Selector rules tab state
-  const [ruleFilter, setRuleFilter] = useState<"all" | "db" | "hosted_default" | "env_derived">("all")
-  const [editingRule, setEditingRule] = useState<PolicyRule | null>(null)
-  const [ruleForm, setRuleForm] = useState<{ name: string; effect: Effect; condition: string; parameters: string }>({
-    name: "", effect: "allow", condition: "selectors", parameters: "{}",
-  })
-  const [ruleSaving, setRuleSaving] = useState(false)
-  const [ruleError, setRuleError] = useState<string | null>(null)
 
   // Environments tab state
   const [envs, setEnvs] = useState<SyncEnvironmentAdmin[]>([])
@@ -168,38 +155,7 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
   useEffect(() => { loadEnvs() }, [loadEnvs])
 
-  function startEditRule(r: PolicyRule | null): void {
-    setRuleError(null)
-    if (r) {
-      setEditingRule(r)
-      setRuleForm({
-        name:       r.name,
-        effect:     r.effect,
-        condition:  r.condition,
-        parameters: JSON.stringify(r.parameters ?? {}, null, 2),
-      })
-    } else {
-      setEditingRule({} as PolicyRule)
-      setRuleForm({ name: "", effect: "allow", condition: "selectors", parameters: '{\n  "selectors": {},\n  "priority": 50,\n  "reason": ""\n}' })
-    }
-  }
-  async function saveRule(): Promise<void> {
-    setRuleSaving(true); setRuleError(null)
-    try {
-      let parsed: Record<string, unknown> = {}
-      if (ruleForm.parameters.trim()) {
-        try { parsed = JSON.parse(ruleForm.parameters) as Record<string, unknown> }
-        catch (e) { setRuleError(`Invalid JSON: ${e instanceof Error ? e.message : e}`); setRuleSaving(false); return }
-      }
-      await api.createPolicy({ name: ruleForm.name.trim(), effect: ruleForm.effect, condition: ruleForm.condition.trim(), parameters: parsed })
-      await loadRules()
-      setEditingRule(null)
-    } catch {
-      setRuleError("Save failed")
-    } finally {
-      setRuleSaving(false)
-    }
-  }
+
   async function saveEnv(name: string, fields: Record<string, unknown>): Promise<void> {
     setEnvSavingName(name); setEnvError(null)
     try {
@@ -340,10 +296,6 @@ export function PolicyEditor({ onClose }: Props) {
     { id: "security", label: "Security" },
   ]
 
-  const filteredRules = ruleFilter === "all"
-    ? rules
-    : rules.filter((r) => (r.source ?? "db") === ruleFilter)
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
@@ -388,7 +340,7 @@ export function PolicyEditor({ onClose }: Props) {
             {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on selectors (tool, path, command regex, dbEnvironment, scope, etc.) and resolves by priority. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
             {tab === "envs"     && <><strong className="text-text">Sync Environments</strong> — per-environment MSSQL access mode. Edits here become DB overrides on top of <code className="font-mono">deploy/mssql/sync-environments.json</code> and re-derive the env-scoped selector rules. Applies to the next run start (no restart).</>}
             {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
-            {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
+            {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards, SQL engine invariants). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
           </p>
         </div>
 
@@ -444,115 +396,13 @@ export function PolicyEditor({ onClose }: Props) {
               })}
             </div>
           ) : tab === "rules" ? (
-            /* ── Selector Rules tab ───────────────────────── */
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-border-subtle">
-                <div className="flex items-center gap-1 rounded-lg bg-overlay-2 border border-border-subtle p-1">
-                  {([
-                    { v: "all",            label: "All",      n: rules.length },
-                    { v: "db",             label: "Operator", n: rules.filter((r) => (r.source ?? "db") === "db").length },
-                    { v: "hosted_default", label: "Default",  n: rules.filter((r) => r.source === "hosted_default").length },
-                    { v: "env_derived",    label: "Env",      n: rules.filter((r) => r.source === "env_derived").length },
-                  ] as const).map((f) => (
-                    <button
-                      key={f.v}
-                      onClick={() => setRuleFilter(f.v)}
-                      className={`px-2.5 py-1 text-[12px] rounded-md transition-colors ${
-                        ruleFilter === f.v
-                          ? "bg-surface text-text shadow-sm"
-                          : "text-text-muted hover:text-text"
-                      }`}
-                    >{f.label} <span className="opacity-60">{f.n}</span></button>
-                  ))}
-                </div>
-                <button
-                  className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 flex items-center gap-1.5"
-                  onClick={() => startEditRule(null)}
-                ><FilePlus size={13} /> New rule</button>
-              </div>
-
-              {editingRule && (
-                <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-accent/30 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-text">{ruleForm.name && rules.find((r) => r.name === ruleForm.name) ? "Edit rule" : "New rule"}</span>
-                    <button onClick={() => setEditingRule(null)} className="text-text-muted hover:text-text p-1 rounded hover:bg-overlay-3"><X size={14} /></button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1.4fr] gap-2 items-stretch">
-                    <input
-                      placeholder="rule name (e.g. allow_dev_query)"
-                      value={ruleForm.name}
-                      onChange={(e) => setRuleForm((s) => ({ ...s, name: e.target.value }))}
-                      className="px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
-                    />
-                    <div className="flex rounded-lg bg-surface border border-border-subtle overflow-hidden">
-                      {(["allow","require_approval","deny"] as const).map((eff) => {
-                        const style = getEffectStyle(eff)
-                        const active = ruleForm.effect === eff
-                        return (
-                          <button
-                            key={eff}
-                            type="button"
-                            onClick={() => setRuleForm((s) => ({ ...s, effect: eff }))}
-                            title={style.label}
-                            className={`px-2.5 py-1.5 text-[12px] transition-colors ${active ? `${style.color} bg-overlay-3 font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"}`}
-                          >{style.label}</button>
-                        )
-                      })}
-                    </div>
-                    <input
-                      placeholder='condition (e.g. "selectors" or "action:run_command")'
-                      value={ruleForm.condition}
-                      onChange={(e) => setRuleForm((s) => ({ ...s, condition: e.target.value }))}
-                      className="px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[12px] text-text-muted block mb-1">Parameters (JSON — supports <code className="font-mono">selectors</code>, <code className="font-mono">priority</code>, <code className="font-mono">reason</code>)</label>
-                    <textarea
-                      value={ruleForm.parameters}
-                      onChange={(e) => setRuleForm((s) => ({ ...s, parameters: e.target.value }))}
-                      rows={6}
-                      className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-[12px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
-                    />
-                  </div>
-                  {ruleError && <p className="text-[12px] text-error">{ruleError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={saveRule} disabled={ruleSaving || !ruleForm.name.trim()}
-                      className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40">
-                      {ruleSaving ? "Saving…" : "Save"}
-                    </button>
-                    <button onClick={() => setEditingRule(null)} className="px-3 py-1.5 text-[13px] text-text-muted">Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                {filteredRules.map((r) => {
-                  const src = (r.source ?? "db") as NonNullable<PolicyRule["source"]>
-                  const badge = SOURCE_BADGE[src]
-                  const eff = getEffectStyle(r.effect)
-                  const EffIcon = eff.icon
-                  return (
-                    <div key={r.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-overlay-2 border border-border-subtle">
-                      <EffIcon size={14} className={eff.color} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13px] font-mono text-text truncate">{r.name}</span>
-                          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
-                          {r.updatedAt && <span className="text-[10px] text-text-muted">edited by {r.updatedBy ?? "?"}</span>}
-                        </div>
-                        <div className="text-[12px] text-text-muted truncate">{r.condition} · prio {String((r.parameters as { priority?: number } | undefined)?.priority ?? "—")}</div>
-                      </div>
-                      <button onClick={() => startEditRule(r)} className="text-text-muted hover:text-text text-[12px] px-2">Edit</button>
-                      <button onClick={() => handleDelete(r.name)} className="text-error/70 hover:text-error p-1"><Trash2 size={13} /></button>
-                    </div>
-                  )
-                })}
-                {filteredRules.length === 0 && (
-                  <div className="text-text-muted text-[13px] text-center py-6">No rules match this filter.</div>
-                )}
-              </div>
-            </div>
+            /* ── Selector Rules tab — see ./policy/SelectorRulesTab.tsx ── */
+            <SelectorRulesTab
+              rules={rules}
+              tools={tools}
+              onReload={loadRules}
+              onDelete={handleDelete}
+            />
           ) : tab === "envs" ? (
             /* ── Environments tab ─────────────────────────── */
             <div className="space-y-3">
@@ -598,7 +448,7 @@ export function PolicyEditor({ onClose }: Props) {
                   Choose the LLM backend. Switching provider updates the model and URL defaults below.
                 </p>
                 <div className="flex gap-2 flex-wrap">
-                  {(["copilot-chat", "copilot", "databricks", "openai", "anthropic", "local"] as const).map((p) => (
+                  {(["copilot-chat", "databricks"] as const).map((p) => (
                     <button
                       key={p}
                       onClick={() => {
@@ -613,7 +463,7 @@ export function PolicyEditor({ onClose }: Props) {
                           : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text hover:bg-overlay-3"
                       }`}
                     >
-                      {p === "copilot-chat" ? "Copilot Chat" : p === "copilot" ? "GitHub Models" : p === "databricks" ? "Databricks" : p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Local (Ollama)"}
+                      {p === "copilot-chat" ? "Copilot Chat" : "Databricks"}
                     </button>
                   ))}
                 </div>
@@ -638,11 +488,11 @@ export function PolicyEditor({ onClose }: Props) {
                     />
                   </div>
 
-                  {/* API Key — hidden for local and databricks (M2M from .env) */}
-                  {llmProvider !== "local" && llmProvider !== "databricks" && (
+                  {/* API Key — only shown for copilot-chat (Device Flow auto-fills if blank). */}
+                  {llmProvider === "copilot-chat" && (
                     <div>
                       <label className="text-[13px] text-text-muted block mb-1.5">
-                        {llmProvider === "copilot-chat" || llmProvider === "copilot" ? "GitHub Token" : llmProvider === "anthropic" ? "Anthropic API Key" : "OpenAI API Key"}
+                        GitHub Token
                       </label>
                       <div className="relative">
                         <input
@@ -664,22 +514,7 @@ export function PolicyEditor({ onClose }: Props) {
                     </div>
                   )}
 
-                  {/* Base URL — shown for openai and local */}
-                  {(llmProvider === "openai" || llmProvider === "local") && (
-                    <div>
-                      <label className="text-[13px] text-text-muted block mb-1.5">Base URL</label>
-                      <input
-                        type="text"
-                        value={llmBaseUrl}
-                        onChange={(e) => setLlmBaseUrl(e.target.value)}
-                        placeholder={llmDefaults[llmProvider]?.baseUrl ?? "https://api.openai.com/v1"}
-                        className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
-                      />
-                      {llmProvider === "local" && (
-                        <p className="text-[12px] text-text-muted mt-1">Default: <code className="font-mono">http://localhost:11434/v1</code> for Ollama.</p>
-                      )}
-                    </div>
-                  )}
+                  {/* Base URL — not shown; copilot-chat & databricks both auto-resolve */}
                 </div>
 
                 {/* Save */}
@@ -803,6 +638,42 @@ export function PolicyEditor({ onClose }: Props) {
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
                 </p>
+              </div>
+
+              {/* SQL engine invariants — hard-coded in the tool layer, not policy-editable */}
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+                <button
+                  className="flex items-center gap-2.5 w-full text-left"
+                  onClick={() => setSqlGuardExpanded((v) => !v)}
+                >
+                  {sqlGuardExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
+                  <Database size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">SQL Engine Invariants</span>
+                  <span className="text-[12px] text-text-muted ml-auto">read-only · enforced in tool layer</span>
+                </button>
+                {sqlGuardExpanded && (
+                  <div className="mt-3 space-y-2.5">
+                    <p className="text-[12px] text-text-muted leading-relaxed">
+                      These rails are baked into <code className="font-mono text-text">query_mssql</code> /
+                      <code className="font-mono text-text"> export_query_to_file</code> at the agent layer
+                      (<code className="font-mono text-text">packages/agent/src/tools/mssql/validation.ts</code>).
+                      They are <strong>not</strong> stored in the policy DB and are intentionally
+                      <strong> not operator-toggleable</strong> — weakening them would let the agent
+                      mutate production data.
+                    </p>
+                    <ul className="text-[12.5px] text-text-secondary leading-relaxed space-y-1.5 pl-1">
+                      <li><span className="text-success font-medium">✓ ALLOWED on local <code className="font-mono">#temp</code> tables</span> — <code className="font-mono">CREATE TABLE</code>, <code className="font-mono">SELECT … INTO</code>, <code className="font-mono">INSERT</code>, <code className="font-mono">UPDATE</code>, <code className="font-mono">DELETE</code>, <code className="font-mono">CREATE INDEX</code>, <code className="font-mono">TRUNCATE</code>, <code className="font-mono">DROP</code>, <code className="font-mono">MERGE</code>.</li>
+                      <li><span className="text-error font-medium">✗ BLOCKED forever</span> — any mutation (CREATE/INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/MERGE/CREATE INDEX/SELECT INTO) targeting an <strong>existing real table, view, index, procedure, schema</strong>, or <code className="font-mono">sys.*</code> object.</li>
+                      <li><span className="text-error font-medium">✗ BLOCKED</span> — global <code className="font-mono">##temp</code> tables (would survive past the session and leak across runs). Only single-<code className="font-mono">#</code> local temps are permitted.</li>
+                      <li><span className="text-error font-medium">✗ BLOCKED</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">sp_executesql</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">OPENQUERY</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, <code className="font-mono">SHUTDOWN</code>, <code className="font-mono">RECONFIGURE</code>.</li>
+                      <li><span className="text-text-muted">ℹ Per-row safety cap</span> — <code className="font-mono">query_mssql</code> hard-limits to 1 000 rows; use <code className="font-mono">export_query_to_file</code> for larger pulls.</li>
+                    </ul>
+                    <p className="text-[11.5px] text-text-muted/80 leading-relaxed pt-2 border-t border-border-subtle/40">
+                      Want to relax this? You can't, by design. To stage data, the agent uses a <code className="font-mono text-text">#temp</code> table
+                      and follows the micro-ETL pattern (that prompt section is injected only on data-shaped goals to keep token cost low for non-DB chats).
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Reset data */}

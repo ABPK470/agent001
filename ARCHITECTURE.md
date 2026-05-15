@@ -46,9 +46,9 @@
 
 ## What This Platform Is
 
-agent001 is three things in one:
+MI:A is three things in one:
 
-1. **An AI agent** (`packages/agent`) — an LLM (GPT-4o, Claude, GitHub Copilot, etc.) with tools (filesystem, shell, web fetch, browser testing, delegation) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
+1. **An AI agent** (`packages/agent`) — an LLM (Copilot Chat by default; Databricks or local Ollama optional) with tools (filesystem, shell, web fetch, browser testing, delegation) running in a Think → Act → Observe loop, wrapped by a governance engine that provides policy checks, audit trails, run tracking, domain events, and execution metrics.
 2. **A command-center server** (`packages/server`) — a Fastify backend with SQLite persistence, agent orchestration (start/cancel/resume runs), 3-tier persistent memory, effect tracking with atomic rollback, Docker sandbox execution, trajectory replay & validation, multi-platform messaging (WhatsApp, Messenger), real-time SSE updates, and a comprehensive REST API.
 3. **A real-time dashboard** (`packages/ui`) — a React 19 + Tailwind CSS web UI with 11 draggable widgets (chat, trace, graph visualization, run history, step timeline, tool stats, audit trail, live logs, run status, command center, trajectory replay), notifications with action buttons, and a mobile-responsive layout.
 
@@ -74,7 +74,7 @@ The key insight: **the agent runs _on_ a governance engine embedded within it.**
 │   orchestrator.ts  →  routes/*  →  db.ts  →  event-broadcaster.ts │
 │   Start/cancel/resume runs, persist, broadcast events        │
 └──────────────────────────┬──────────────────────────────────┘
-                           │ imports @agent001/agent
+                           │ imports @mia/agent
 ┌──────────────────────────▼──────────────────────────────────┐
 │                   packages/agent                             │
 │                                                              │
@@ -120,10 +120,10 @@ agent001/                          ← npm workspaces monorepo root
 │   ├── NETWORK_ACCESS.md         ← guide for accessing server from other devices
 │   ├── memory-system.md          ← memory system architecture & context mechanisms
 │   └── notes.md                  ← working notes
-├── .env                           ← API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
+├── .env                           ← server-side secrets (Copilot Device Flow tokens, Databricks M2M, etc.)
 │
 ├── packages/agent/                ← THE AGENT — LLM + tools + governance engine (embedded)
-│   ├── package.json               ← @agent001/agent, zero runtime deps, exports: { ".": "./src/lib.ts" }
+│   ├── package.json               ← @mia/agent, zero runtime deps, exports: { ".": "./src/lib.ts" }
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   ├── src/
@@ -133,7 +133,7 @@ agent001/                          ← npm workspaces monorepo root
 │   │   ├── retry.ts               ← tool retry with exponential backoff + jitter
 │   │   ├── cli.ts                 ← standalone entry point — governed/raw modes, REPL + one-shot
 │   │   ├── logger.ts              ← colored console output for CLI mode
-│   │   ├── lib.ts                 ← barrel export — public API for @agent001/agent
+│   │   ├── lib.ts                 ← barrel export — public API for @mia/agent
 │   │   ├── engine/                ← governance infrastructure (10 files, flat)
 │   │   │   ├── index.ts           ← barrel re-export for engine/
 │   │   │   ├── models.ts          ← AgentRun, Step, PolicyRule, AuditEntry — state machines
@@ -146,21 +146,21 @@ agent001/                          ← npm workspaces monorepo root
 │   │   │   ├── audit.ts           ← AuditService — immutable audit trail
 │   │   │   └── learner.ts         ← Learner — execution stats aggregator
 │   │   ├── llm/
-│   │   │   ├── openai.ts          ← OpenAI Chat Completions client (raw fetch, no SDK)
-│   │   │   └── anthropic.ts       ← Anthropic Messages API client (raw fetch, no SDK)
+│   │   │   ├── openai-compat.ts   ← OpenAICompatibleClient — raw fetch /v1/chat/completions (backs `local`/Ollama)
+│   │   │   └── databricks.ts      ← DatabricksClient — thin wrapper over OpenAICompatibleClient with M2M auth
 │   │   └── tools/
 │   │       ├── filesystem.ts      ← read_file, write_file, list_directory (4-layer path validation)
 │   │       ├── shell.ts           ← run_command (30s timeout, 2-tier deny list: container vs host)
 │   │       ├── fetch-url.ts       ← fetch_url (SSRF blocker, DNS pre-check, 15s timeout)
 │   │       ├── think.ts           ← think (chain-of-thought passthrough)
-│   │       ├── browser-check.ts   ← browser_check (headless Chrome via Puppeteer, Docker sandbox)
+│   │       ├── browser-check.ts   ← browser_check (headless Chromium via Playwright, Docker sandbox)
 │   │       └── delegate.ts        ← delegate, delegate_parallel (sub-agent spawning)
 │   └── tests/
 │       ├── governance.test.ts     ← 18 tests (mock LLM, no API keys needed)
 │       └── retry.test.ts          ← 13 tests (exponential backoff, retryable error detection)
 │
 ├── packages/server/               ← THE SERVER — persistence, orchestration, messaging, REST API
-│   ├── package.json               ← @agent001/server, depends on @agent001/agent + fastify + better-sqlite3
+│   ├── package.json               ← @mia/server, depends on @mia/agent + fastify + better-sqlite3
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   ├── src/
@@ -185,9 +185,9 @@ agent001/                          ← npm workspaces monorepo root
 │   │   │   ├── router.ts          ← MessageRouter — inbound → agent run, run → outbound queue
 │   │   │   └── store.ts           ← SqliteConversationStore, SqliteQueueStore (4 tables)
 │   │   ├── llm/                   ← LLM provider management
-│   │   │   ├── copilot.ts         ← CopilotClient — GitHub Models API (OpenAI-compatible)
 │   │   │   ├── copilot-chat.ts    ← CopilotChatClient — Copilot Chat API (Device Flow auth, full context)
-│   │   │   └── registry.ts        ← buildLlmClient() factory, PROVIDER_DEFAULTS for 5 providers
+│   │   │   ├── databricks-broker.ts ← server-side Databricks broker
+│   │   │   └── registry.ts        ← buildLlmClient() factory; allowed providers: copilot-chat, local, databricks
 │   │   └── routes/                ← REST API endpoints (9 files)
 │   │       ├── runs.ts            ← GET/POST /api/runs — start, list, resume, cancel, trace
 │   │       ├── agents.ts          ← GET/POST/PUT/DELETE /api/agents, GET /api/tools
@@ -203,7 +203,7 @@ agent001/                          ← npm workspaces monorepo root
 │       └── notifications.test.ts  ← 10 tests (CRUD, unread counts, stale-run detection)
 │
 └── packages/ui/                   ← THE DASHBOARD — React 19 + Tailwind CSS + Zustand
-    ├── package.json               ← @agent001/ui, react@19, zustand@5, react-grid-layout, react-force-graph-2d
+    ├── package.json               ← @mia/ui, react@19, zustand@5, react-grid-layout, react-force-graph-2d
     ├── tsconfig.json
     ├── vite.config.ts             ← Vite 6 + React plugin + Tailwind CSS v4
     ├── index.html
@@ -249,7 +249,7 @@ agent001/                          ← npm workspaces monorepo root
 
 **Why three packages?** Separation of concerns:
 - **agent** — pure TypeScript, zero runtime dependencies. The LLM loop + governance engine + tools (8 built-in). Can run standalone via CLI or be imported as a library.
-- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + SSE event stream. Imports `@agent001/agent`.
+- **server** — adds persistence (SQLite), orchestration (manages multiple concurrent runs), 3-tier memory, effect tracking with rollback, Docker sandbox, trajectory replay, messaging (WhatsApp/Messenger), and a REST API + SSE event stream. Imports `@mia/agent`.
 - **ui** — the visual interface. 11 draggable widgets including a command center and trajectory debugger. Connects to the server via HTTP + SSE. No direct dependency on the agent package.
 
 ---
@@ -287,19 +287,20 @@ Open the browser. You see a dashboard with draggable widgets — chat, trace, gr
 
 ```bash
 # Governed mode (default) — full audit + policies + tracking
-ANTHROPIC_API_KEY=sk-ant-... npm start -w packages/agent
+# Default backend is local Ollama; point at any OpenAI-compatible endpoint via env vars.
+MODEL=llama3 LLM_BASE_URL=http://localhost:11434/v1 npm start -w packages/agent
 
 # One-shot mode (non-interactive)
 npm start -w packages/agent -- "Summarize the README"
 
 # Raw mode — bare agent loop, no governance
-AGENT_MODE=raw OPENAI_API_KEY=sk-... npm start -w packages/agent
+AGENT_MODE=raw npm start -w packages/agent
 ```
 
 ### What You See (CLI — Governed Mode)
 
 ```
-🧠 Using Anthropic (claude-sonnet-4-20250514)
+🧠 Using OpenAI-compatible endpoint (llama3 @ http://localhost:11434/v1)
 🔧 Tools: fetch_url, read_file, write_file, list_directory, run_command, think
 🛡️  Governed mode — audit trail + policies + run tracking
 
@@ -367,7 +368,7 @@ This file defines the 6 interfaces that every agent component speaks. It has zer
 
 **Design decision**: `Tool.execute()` returns `Promise<string>`, not structured data. Why? LLMs consume text. Every tool result goes back into the message history as a string. Structured output would just get serialized anyway.
 
-**Design decision**: `LLMClient` is an interface, not tied to a provider. The agent doesn't know if it's talking to OpenAI or Anthropic. This is the **Strategy pattern** — swap the brain without touching the loop.
+**Design decision**: `LLMClient` is an interface, not tied to a provider. The agent doesn't know if it's talking to Copilot Chat, Databricks, or a local Ollama. This is the **Strategy pattern** — swap the brain without touching the loop.
 
 ### `src/agent.ts` — THE Agent (40 Lines of Core Logic)
 
@@ -412,7 +413,7 @@ Both modes support:
 - **REPL**: No argument → interactive prompt loop → `exit` to quit
 
 **Key functions in this file**:
-- `createLLMClient()` — reads `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, picks provider, respects `MODEL` env var for override. Auto-detection order: Anthropic first, then OpenAI.
+- `createLLMClient()` — reads `LLM_BASE_URL` (default `http://localhost:11434/v1`), `LLM_API_KEY` (default `"local"`), and `MODEL` (default `"llama3"`); always returns an `OpenAICompatibleClient`. Production deployments use the server’s LLM registry (Copilot Chat / Databricks) instead.
 - `allTools()` — returns the array of 8 tools (fetch, read, write, list, shell, think, browser-check, delegate)
 - `setupDefaultPolicies()` — hook with commented-out examples showing how to add rules
 - `main()` — the actual entrypoint: create client → check mode → run/repl
@@ -434,31 +435,24 @@ Eight functions, each for a specific agent activity:
 
 Uses ANSI color codes (CYAN, GREEN, YELLOW, RED, MAGENTA, DIM, BOLD). Truncates long results to keep output readable.
 
-### `src/llm/openai.ts` — OpenAI Client
+### `src/llm/openai-compat.ts` — OpenAI-Compatible Client
 
-Implements `LLMClient` using raw `fetch()` — no SDK dependency.
+Implements `LLMClient` using raw `fetch()` — no SDK dependency. Backs the `local` provider (Ollama, LM Studio, vLLM) and is also reused by the Databricks client.
 
 **Request flow**: Messages + Tools → OpenAI format → POST `/v1/chat/completions` → parse response.
 
 **Key transformations**:
-- `Tool[]` → `{ type: "function", function: { name, description, parameters } }[]` (OpenAI's function calling schema)
+- `Tool[]` → `{ type: "function", function: { name, description, parameters } }[]` (OpenAI's function-calling schema)
 - `Message[]` → OpenAI message format (tool results use `role: "tool"`)
 - Response `tool_calls[]` → `ToolCall[]` (id, name, parsed JSON arguments)
 
-**Configurable**: `baseUrl` defaults to `https://api.openai.com` but can be overridden for Azure OpenAI, vLLM, Ollama, or any OpenAI-compatible API.
+**Configurable**: `baseUrl` defaults to `http://localhost:11434/v1` (Ollama) but can be pointed at any OpenAI-compatible endpoint.
 
-### `src/llm/anthropic.ts` — Anthropic Client
+### `src/llm/databricks.ts` — Databricks Client
 
-Same `LLMClient` interface, completely different wire protocol:
+Thin wrapper around `OpenAICompatibleClient` that injects Databricks workspace base URL and M2M credentials. Same `LLMClient` interface, identical wire format.
 
-**Key differences from OpenAI**:
-- System prompt is a top-level `system` parameter, not a message
-- Content is an array of blocks (`[{ type: "text", text: "..." }, { type: "tool_use", ... }]`)
-- Tool results are sent as `user` messages with `tool_result` content blocks
-- Consecutive tool results must be merged into a single user message (Anthropic rejects otherwise)
-- Response parsing: content blocks → extract `text` for content, `tool_use` for tool calls
-
-**Why raw fetch instead of SDKs?** Zero dependencies. The OpenAI and Anthropic SDKs are heavy. We need exactly one endpoint from each. Raw fetch keeps the agent package dependency-free (except the engine workspace link).
+**Why raw fetch instead of SDKs?** Zero dependencies. The agent package is dependency-free (except the engine workspace link); we need exactly one endpoint, so raw fetch keeps it lean.
 
 ### `src/tools/filesystem.ts` — File I/O (Sandboxed)
 
@@ -501,12 +495,20 @@ execute: async (args) => args.thought as string
 
 ### `src/tools/browser-check.ts` — Headless Browser Testing
 
-Opens URLs in headless Chrome (Puppeteer) to verify rendered output:
+Opens URLs in headless Chromium (Playwright) to verify rendered output:
 - Loads a URL, waits for network idle
 - Captures console errors, network failures, and page content
 - Supports optional click interactions before capture
-- Runs in a Docker container when sandbox mode is enabled (`agent001-browser:latest` image)
-- Lazy-loads Puppeteer (not bundled) — gracefully degrades if unavailable
+- Runs in a Docker container when sandbox mode is enabled (`mia-browser:playwright` image)
+- Lazy-loads Playwright (not bundled) — gracefully degrades if unavailable
+
+### `src/tools/browse-web.ts` — Persistent Stealth Browser
+
+Real Playwright Chromium session per agent run, augmented with `playwright-extra` + the stealth plugin so it presents like a normal user. Supports navigate, click, type, upload, multi-tab, iframe switching, request interception, and per-tenant persistent storage state (cookies / local storage) under `~/.mia/browser-contexts/`. Optional BYO upstream proxy and tenant-scoped domain policy + token-bucket rate limits are enforced by the server provider before each navigation. Companions:
+
+- **`browser_auto_login`** — types vault-stored passwords or generates a TOTP code (otplib v13 functional API) and submits the live form. The TOTP shared secret never leaves the server.
+- **`browser_human_handoff`** — when the page hits a CAPTCHA / non-TOTP 2FA, the tool mints a noVNC URL and blocks the agent until the user clicks "I'm done" or the handoff times out.
+- **`web_search`** — drives DuckDuckGo, Bing, or Google's public HTML interfaces with auto fail-over (DDG → Bing → Google) on CAPTCHA. No 3rd-party APIs.
 
 ### `src/tools/delegate.ts` — Sub-Agent Spawning
 
@@ -600,13 +602,13 @@ Non-transient errors (validation, permission, logic) fail immediately with no re
 
 ### `src/lib.ts` — Barrel Export
 
-The public API for `@agent001/agent`. This is what the server package imports. Re-exports everything consumers need:
+The public API for `@mia/agent`. This is what the server package imports. Re-exports everything consumers need:
 
 - **Core**: `Agent`, `Message`, `Tool`, `LLMClient`, `ToolCall`, `AgentConfig`
 - **Governance**: `createEngineServices()`, `governTool()`, `runGoverned()`, `printGovernanceReport()`, `GovernToolOptions`, `GovernedResult`
 - **Engine**: all models, enums, events, errors, interfaces, services, adapters
 - **Retry**: `withToolRetry()`, `ToolRetryPolicy`, `isRetryableError()`
-- **LLM clients**: `AnthropicClient`, `OpenAIClient`
+- **LLM clients**: `OpenAICompatibleClient`, `DatabricksClient`
 - **Tools**: `fetchUrlTool`, `readFileTool`, `writeFileTool`, `listDirectoryTool`, `shellTool`, `thinkTool`, `browserCheckTool`, `createDelegateTools`, `setBasePath`, `setShellCwd`, `setShellExecutor`, `setBrowserCheckCwd`
 
 ---
@@ -739,7 +741,7 @@ Re-exports everything from the engine subdirectory: all models, enums, events, e
 <a id="the-server-package"></a>
 ## The Server Package
 
-The server package (`packages/server`) adds persistence, orchestration, messaging, and a REST API on top of the agent. It imports `@agent001/agent` as a workspace dependency.
+The server package (`packages/server`) adds persistence, orchestration, messaging, and a REST API on top of the agent. It imports `@mia/agent` as a workspace dependency.
 
 **Runtime dependencies**: Fastify v5, better-sqlite3, @fastify/cors, @fastify/static, dotenv.
 
@@ -767,7 +769,7 @@ Tracks active runs in a `Map<runId, { controller, services, ... }>`. Wires domai
 
 #### `src/db.ts` — SQLite Persistence
 
-Single-file database layer using better-sqlite3. Data lives in `~/.agent001/agent001.db`.
+Single-file database layer using better-sqlite3. Data lives in `~/.mia/mia.db`.
 
 **Tables** (~22 total across modules):
 
@@ -975,9 +977,9 @@ The `channels/` subdirectory implements inbound/outbound messaging for WhatsApp 
 
 | File | Purpose |
 |------|---------|
-| `llm/copilot.ts` | `CopilotClient` — GitHub Models API (OpenAI-compatible endpoint for Copilot Pro users) |
-| `llm/copilot-chat.ts` | `CopilotChatClient` — Copilot Chat API (Device Flow OAuth, full context window, same endpoint as VS Code Copilot) |
-| `llm/registry.ts` | `buildLlmClient()` factory — creates LLM client based on provider config. Supports 5 providers: `copilot-chat`, `copilot`, `openai`, `anthropic`, `local` (any OpenAI-compatible endpoint) |
+| `llm/copilot-chat.ts` | `CopilotChatClient` — Copilot Chat API (Device Flow auth) |
+| `llm/databricks-broker.ts` | server-side Databricks broker (M2M creds) |
+| `llm/registry.ts` | `buildLlmClient()` factory — creates LLM client based on provider config. Supports 3 providers: `copilot-chat`, `local` (any OpenAI-compatible endpoint), `databricks` |
 
 <a id="rest-api-routes"></a>
 ### REST API Routes (9 files)
@@ -1071,7 +1073,7 @@ packages/agent/src/lib.ts              ← The barrel export (the agent's public
     ▼
 packages/server/src/orchestrator.ts    ← The primary consumer
     │
-    │ imports @agent001/agent to:
+    │ imports @mia/agent to:
     │   - Create governed agent runs (governance.ts functions)
     │   - Track state via AgentRun/Step entities
     │   - Emit domain events (runStarted, stepCompleted, etc.)
@@ -1123,7 +1125,7 @@ The server's `AgentOrchestrator` is the orchestration layer:
 
 ```
 Server (orchestrator.ts)
-  ├─ imports: createRun, governTool, runGovernedMode from @agent001/agent
+  ├─ imports: createRun, governTool, runGovernedMode from @mia/agent
   ├─ adds: SQLite persistence, SSE broadcast, checkpoint/resume
   └─ exposes: REST API (/api/runs, /api/agents, etc.)
 ```
@@ -2012,8 +2014,9 @@ The `DockerSandbox` class manages container lifecycle:
 
 ### Browser Container
 
-For `browser_check` tool calls, a specialized Docker image (`agent001-browser:latest`) is built on demand:
-- Base: `node:20-slim` + Chromium + Puppeteer
+For `browser_check`, `browse_web`, and `web_search` tool calls, a specialized Docker image (`mia-browser:playwright`) is built on demand:
+- Base: `mcr.microsoft.com/playwright:v1.49.0-jammy` (Node 20 + Chromium pre-bundled, all system libs)
+- Adds `xvfb`, `x11vnc`, and `websockify` so visible-browser handoff (noVNC) works without 3rd-party services
 - Built via `ensureBrowserImage()` (lazy, once per session)
 - Workspace mounted read-only
 - Used for SSR verification, console error capture, and visual testing
@@ -2217,7 +2220,7 @@ packages/ui (React + Tailwind)
     │  HTTP + SSE to
     ▼
 packages/server (Fastify + SQLite)
-    │  imports @agent001/agent
+    │  imports @mia/agent
     ▼
 packages/agent (zero runtime deps)
     ├─ src/agent.ts        (LLM loop)

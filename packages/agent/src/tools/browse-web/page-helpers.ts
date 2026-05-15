@@ -5,7 +5,7 @@
  */
 
 /** Try to auto-dismiss common cookie consent banners. */
-export async function dismissCookieConsent(page: import("puppeteer").Page): Promise<void> {
+export async function dismissCookieConsent(page: import("playwright").Page): Promise<void> {
   try {
     // Runs in browser context — use string eval to avoid DOM type issues in Node tsconfig
     await page.evaluate(`(() => {
@@ -29,7 +29,7 @@ export async function dismissCookieConsent(page: import("puppeteer").Page): Prom
 }
 
 /** Extract readable text from current page. */
-export async function readPageText(page: import("puppeteer").Page, maxLength: number): Promise<string> {
+export async function readPageText(page: import("playwright").Page, maxLength: number): Promise<string> {
   let text = String(await page.evaluate('document.body?.innerText ?? ""'))
   text = text.replace(/\s+/g, " ").trim()
   if (text.length > maxLength) text = text.slice(0, maxLength) + "\n... (truncated)"

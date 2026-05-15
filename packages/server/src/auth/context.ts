@@ -6,7 +6,7 @@
  * downstream, `getCurrentSession()` returns the session or null.
  *
  * Also hosts the per-run AbortController map; tools register a per-run
- * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@agent001/agent`)
+ * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@mia/agent`)
  * picks it up via AsyncLocalStorage. The legacy module-global
  * `setMssqlKillSignal()` was deleted in agent Phase 2 — this is the only
  * supported path now.
@@ -14,10 +14,15 @@
 
 import { AsyncLocalStorage } from "node:async_hooks"
 
+/**
+ * v19: identity is always resolved (no anon). `upn` is the canonical
+ * verified user key (FK to users.upn). `displayName` and `isAdmin` come
+ * from JOIN with the users table at request time.
+ */
 export interface CurrentSession {
   sid: string
   displayName: string
-  upn: string | null
+  upn: string
   isAdmin: boolean
   ip: string
   userAgent: string

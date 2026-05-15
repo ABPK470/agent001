@@ -16,19 +16,83 @@
  * @module
  */
 
-import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { existsSync, readFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+
+/**
+ * Resolve candidate paths for a prompt asset, in priority order.
+ *
+ * Why three candidates?
+ *   1. Live source under cwd: when the bundled `dist/server.js` is launched
+ *      from the repo root (the typical dev loop), edits to
+ *      packages/agent/prompts/X.md should be picked up on restart WITHOUT
+ *      rebundling. Without this candidate, the bundled fallback (#3) wins
+ *      and silently serves a stale copy from `dist/prompts/`.
+ *   2. Source tree relative to this file: works when running TypeScript
+ *      directly via tsx / vitest.
+ *   3. Bundled assets next to dist/server.js: production deployments where
+ *      the source tree is absent.
+ *
+ * The first candidate that exists wins. The chosen path + content hash is
+ * logged once at module init so prompt-staleness bugs are self-diagnosing.
+ */
+function resolvePromptCandidates(name: string): string[] {
+  const out: string[] = []
+
+  // 1. Live source under process.cwd() — wins for dev when the user is in
+  //    the repo root, even when they're running `node dist/server.js`.
+  const cwdSource = resolve(process.cwd(), "packages/agent/prompts", name)
+  out.push(cwdSource)
+
+  // 2. Source tree relative to this module (depth-2 escape from src/loop/).
+  out.push(fileURLToPath(new URL(`../../prompts/${name}`, import.meta.url)))
+
+  // 3. Bundled path next to dist/server.js (production).
+  out.push(fileURLToPath(new URL(`./prompts/${name}`, import.meta.url)))
+
+  return out
+}
 
 function loadPrompt(name: string): string {
-  // Try source-tree path first (depth-2 escape from src/loop/), then bundled path.
-  const candidates = [
-    new URL(`../../prompts/${name}`, import.meta.url),
-    new URL(`./prompts/${name}`,    import.meta.url),
-  ]
+  const candidates = resolvePromptCandidates(name)
+  let chosenPath: string | null = null
+  let body: string | null = null
   let lastErr: unknown
-  for (const url of candidates) {
-    try { return readFileSync(url, "utf8") } catch (err) { lastErr = err }
+  for (const p of candidates) {
+    if (!existsSync(p)) continue
+    try {
+      body = readFileSync(p, "utf8")
+      chosenPath = p
+      break
+    } catch (err) { lastErr = err }
   }
-  throw new Error(`prompt asset not found: ${name} (tried ${candidates.map(u => u.pathname).join(", ")}) — last error: ${String(lastErr)}`)
+  if (body === null || chosenPath === null) {
+    throw new Error(`prompt asset not found: ${name} (tried ${candidates.join(", ")}) — last error: ${String(lastErr)}`)
+  }
+
+  // Boot log: makes it trivial to see which file actually loaded — answers
+  // "why is the agent still serving the old prompt?" by inspection.
+  const sha = createHash("sha1").update(body).digest("hex").slice(0, 8)
+  // eslint-disable-next-line no-console
+  console.log(`[prompt] ${name} ← ${chosenPath} sha=${sha} bytes=${body.length}`)
+
+  // Drift warning: if a different candidate also exists with a different hash,
+  // surface it once so the operator knows there's a stale shadow file.
+  for (const p of candidates) {
+    if (p === chosenPath) continue
+    if (!existsSync(p)) continue
+    try {
+      const otherSha = createHash("sha1").update(readFileSync(p, "utf8")).digest("hex").slice(0, 8)
+      if (otherSha !== sha) {
+        // eslint-disable-next-line no-console
+        console.warn(`[prompt] drift: ${name} also exists at ${p} (sha=${otherSha}) — using ${chosenPath} (sha=${sha})`)
+      }
+    } catch { /* ignore */ }
+  }
+
+  return body
 }
 
 /**
@@ -53,3 +117,12 @@ export const CHART_CATALOGUE_SECTION = loadPrompt("chart-catalogue.md")
  * DEFAULT_SYSTEM_PROMPT to avoid wasting token budget on non-sync tasks.
  */
 export const ABI_SYNC_SECTION = loadPrompt("abi-sync.md")
+
+/**
+ * Big-table / micro-ETL discipline (canonical #temp staging pattern,
+ * anti-patterns, allowed mutation list). Injected ONLY when the goal is
+ * data/SQL/warehouse-shaped (`includeMssqlGuidance`). The default system
+ * prompt keeps a one-line reality hint pointing at this section so casual
+ * "hi" / non-DB requests don't pay its ~2 KB cost.
+ */
+export const BIG_TABLE_ETL_SECTION = loadPrompt("big-table-etl.md")

@@ -28,8 +28,8 @@ import {
     setEnvironments,
     withPermissionDefaults,
     type SyncEnvironment,
-} from "@agent001/agent"
-import * as db from "../db.js"
+} from "@mia/agent"
+import * as db from "../db/index.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 
 // ── Environment overrides (DB on top of JSON) ────────────────────
@@ -81,7 +81,7 @@ export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDeri
       condition:  r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     "hosted_default",
+      source:     db.PolicySource.HostedDefault,
     })
     if (inserted) hostedDefault++
   }
@@ -93,7 +93,7 @@ export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDeri
       condition:  r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     "env_derived",
+      source:     db.PolicySource.EnvDerived,
     })
     if (inserted) envDerived++
   }
@@ -112,7 +112,7 @@ export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDeri
  */
 export function refreshEnvDerivedPolicies(envName: string): void {
   const prefix = `env_${envName}_`
-  const existing = db.listPolicyRules().filter((r) => r.source === "env_derived" && r.name.startsWith(prefix))
+  const existing = db.listPolicyRules().filter((r) => r.source === db.PolicySource.EnvDerived && r.name.startsWith(prefix))
   for (const r of existing) db.deletePolicyRule(r.name)
 
   const env = getEnvironments().find((e) => e.name === envName)
@@ -125,7 +125,7 @@ export function refreshEnvDerivedPolicies(envName: string): void {
       condition:  r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     "env_derived",
+      source:     db.PolicySource.EnvDerived,
     })
   }
 }

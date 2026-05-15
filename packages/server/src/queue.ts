@@ -18,10 +18,12 @@
  */
 
 import { broadcast } from "./event-broadcaster.js"
+import { RunPriority } from "./enums/queue.js"
+import { EventType } from "@mia/agent"
 
 // ── Types ────────────────────────────────────────────────────────
 
-export type RunPriority = "critical" | "high" | "normal" | "low"
+export { RunPriority }
 
 const PRIORITY_ORDER: Record<RunPriority, number> = {
   critical: 0, // system recovery
@@ -69,7 +71,7 @@ export class RunQueue {
    * If the AbortSignal fires while waiting, the promise rejects and the entry
    * is removed from the queue.
    */
-  acquire(runId: string, priority: RunPriority = "normal", signal?: AbortSignal): Promise<() => void> {
+  acquire(runId: string, priority: RunPriority = RunPriority.Normal, signal?: AbortSignal): Promise<() => void> {
     // Fast path: slot available immediately
     if (this.active < this.maxConcurrent) {
       this.active++
@@ -100,7 +102,7 @@ export class RunQueue {
 
       // Broadcast queue position
       broadcast({
-        type: "run.queued",
+        type: EventType.RunQueued,
         data: {
           runId,
           position: this.waiting.indexOf(entry) + 1,

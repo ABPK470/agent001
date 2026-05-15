@@ -17,10 +17,12 @@
 import sql from "mssql"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
 import type { Tool } from "../../types.js"
 import { safePathResolved } from "../filesystem-security.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
-import { validateQuery } from "./validation.js"
+import { decorateMssqlError } from "./error-hints.js"
+import { getQueryWarnings, validateQuery } from "./validation.js"
 
 /** Maximum rows we'll write to a single file. Anything beyond this should be paginated. */
 const MAX_EXPORT_ROWS = 1_000_000
@@ -28,19 +30,17 @@ const MAX_EXPORT_ROWS = 1_000_000
 /** Number of preview rows returned to the LLM in the tool result. */
 const PREVIEW_ROWS = 20
 
-type ExportFormat = "csv" | "tsv" | "json" | "jsonl" | "txt"
-
 function inferFormat(path: string, explicit?: string): ExportFormat {
   if (explicit) {
     const f = explicit.toLowerCase()
-    if (f === "csv" || f === "tsv" || f === "json" || f === "jsonl" || f === "txt") return f
+    if (isExportFormat(f)) return f
   }
   const lower = path.toLowerCase()
-  if (lower.endsWith(".csv")) return "csv"
-  if (lower.endsWith(".tsv")) return "tsv"
-  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return "jsonl"
-  if (lower.endsWith(".json")) return "json"
-  return "txt"
+  if (lower.endsWith(".csv")) return ExportFormat.Csv
+  if (lower.endsWith(".tsv")) return ExportFormat.Tsv
+  if (lower.endsWith(".jsonl") || lower.endsWith(".ndjson")) return ExportFormat.Jsonl
+  if (lower.endsWith(".json")) return ExportFormat.Json
+  return ExportFormat.Txt
 }
 
 /** CSV-escape a single field. */
@@ -102,7 +102,7 @@ export const exportQueryToFileTool: Tool = {
       },
       format: {
         type: "string",
-        enum: ["csv", "tsv", "json", "jsonl", "txt"],
+        enum: EXPORT_FORMATS,
         description: "Optional explicit format. If omitted, inferred from the path extension. " +
           "csv = comma-separated with header. tsv = tab-separated with header. " +
           "json = single JSON array. jsonl = one JSON object per line. " +
@@ -193,21 +193,21 @@ export const exportQueryToFileTool: Tool = {
       // for hundreds of thousands of rows.
       const chunks: string[] = []
 
-      if (format === "csv") {
+      if (format === ExportFormat.Csv) {
         chunks.push(columns.map(csvField).join(",") + "\n")
         for (const row of rs) {
           const r = row as Record<string, unknown>
           chunks.push(columns.map((c) => csvField(r[c])).join(",") + "\n")
         }
-      } else if (format === "tsv") {
+      } else if (format === ExportFormat.Tsv) {
         chunks.push(columns.map(tsvField).join("\t") + "\n")
         for (const row of rs) {
           const r = row as Record<string, unknown>
           chunks.push(columns.map((c) => tsvField(r[c])).join("\t") + "\n")
         }
-      } else if (format === "json") {
+      } else if (format === ExportFormat.Json) {
         chunks.push(JSON.stringify(rs, null, 2))
-      } else if (format === "jsonl") {
+      } else if (format === ExportFormat.Jsonl) {
         for (const row of rs) chunks.push(JSON.stringify(row) + "\n")
       } else {
         // txt
@@ -251,10 +251,12 @@ export const exportQueryToFileTool: Tool = {
         ? `\nFirst ${PREVIEW_ROWS} rows (full data is in the file):`
         : `\nAll rows:`
 
-      return `${summary}${previewLabel}\n${previewLines.join("\n")}`
+      const warn = getQueryWarnings(query)
+      const body = `${summary}${previewLabel}\n${previewLines.join("\n")}`
+      return warn ? `${warn}\n${body}` : body
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return `SQL Error: ${msg}`
+      return `SQL Error: ${decorateMssqlError(msg)}`
     } finally {
       killSignal?.removeEventListener("abort", onKill)
     }

@@ -10,7 +10,7 @@ import {
     getRunSnapshots,
     previewRollback,
     rollbackRun,
-} from "../effects.js"
+} from "../effects/index.js"
 import {
     clearAllMemories,
     consolidate,
@@ -21,15 +21,15 @@ import {
     searchEntries,
     searchProcedures,
     type MemoryTier,
-} from "../memory.js"
-import type { AgentOrchestrator } from "../orchestrator.js"
+} from "../memory/index.js"
+import type { AgentOrchestrator } from "../orchestrator/index.js"
 import {
     compareTrajectories,
     loadTrajectory,
     replay,
     summarizeTrajectory,
     type Mutation,
-} from "../trajectory.js"
+} from "../trajectory/index.js"
 
 export function registerMemoryRoutes(
   app: FastifyInstance,
@@ -39,13 +39,12 @@ export function registerMemoryRoutes(
 
   /**
    * Per-tenant scope helper. Admins see everything; non-admins see only
-   * their own rows plus shared=true. Returns `undefined` to skip filtering
-   * (admin), or the upn string / null to filter on it.
+   * their own rows plus shared=true. v19: every request has a verified
+   * upn (the 401 gate guarantees it), so the non-admin branch is just
+   * `session.upn` — no nullable fallback.
    */
-  const tenantScope = (req: { session?: { isAdmin?: boolean; upn?: string | null } }): string | null | undefined => {
-    const s = req.session
-    if (!s || s.isAdmin) return undefined
-    return s.upn ?? null
+  const tenantScope = (req: { session: { isAdmin: boolean; upn: string } }): string | undefined => {
+    return req.session.isAdmin ? undefined : req.session.upn
   }
 
   /** Search memories (FTS5). */

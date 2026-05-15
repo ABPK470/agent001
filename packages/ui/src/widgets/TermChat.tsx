@@ -14,6 +14,7 @@ import { AttachmentChips, type PendingAttachment } from "../components/Attachmen
 import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
+import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -28,6 +29,16 @@ interface ToolRow {
   id: string
   tool: string
   summary: string
+  // Raw JSON args from the tool-call event — kept verbatim so the
+  // expanded view can show the FULL command/query/path the agent
+  // dispatched (not just a truncated summary). Mirrors what Copilot
+  // Chat reveals when you click into a leaf tool row.
+  argsFormatted?: string
+  // Tool's output text from the tool-result event (or error text from
+  // tool-error). Distinct from argsFormatted so the expanded view can
+  // render BOTH input and output side-by-side. Previously this slot
+  // was overloaded — first set to argsFormatted, then clobbered by the
+  // result — which is why expanded leaves only ever showed the output.
   details?: string
   status: "running" | "done" | "error"
 }
@@ -103,7 +114,7 @@ function stripFailureMarker(text: string): string {
 }
 
 function isRunActiveStatus(status: string | null | undefined): boolean {
-  return status === "pending" || status === "running" || status === "planning"
+  return status === RunStatus.Pending || status === RunStatus.Running || status === RunStatus.Planning
 }
 
 function StatusDot({ status, animated = true }: { status: "running" | "done" | "error"; animated?: boolean }) {
@@ -328,6 +339,151 @@ function buildIterationHeader(tools: Array<{ tool: string; target?: string }>): 
   return stripped.length > 0
     ? stripped[0].toUpperCase() + stripped.slice(1)
     : "Worked on it"
+}
+
+// ── Live milestone (parent shimmer) ──────────────────────────────
+// The bottom shimmer label needs to mirror what the agent is actually
+// doing *right now*, not the static planner-routing label that fired
+// once at the start of the iteration ("Direct"). We pick the most
+// specific signal available, in priority order:
+//   1. The most recent in-flight tool call → "Reading monte-carlo.html"
+//   2. An iteration block whose tools are still finishing → re-use its
+//      collapsed-header summary so the parent reads as a sum of work.
+//   3. A still-running PRIMARY_ACTIVITY (Plan / Generating / Verifying /
+//      Direct) — but only as a fallback, since these are routing names,
+//      not activity descriptions.
+//   4. "Thinking" if a thinking-progress is running with no tools yet.
+//   5. "Working" generic fallback so the shimmer is always meaningful.
+const TOOL_PRESENT_TENSE: Record<string, string> = {
+  read_file:           "Reading",
+  write_file:          "Writing",
+  replace_in_file:     "Editing",
+  list_dir:            "Listing",
+  grep_search:         "Searching",
+  search_files:        "Searching",
+  file_search:         "Finding",
+  run_command:         "Running",
+  fetch_url:           "Fetching",
+  browser_check:       "Checking browser",
+  delegate:            "Delegating to",
+  ask_user:            "Asking",
+  search_catalog:      "Searching catalog for",
+  explore_mssql_schema:"Inspecting schema of",
+  query_mssql:         "Querying",
+}
+
+function presentTenseLabel(tool: string, target?: string): string {
+  const verb = TOOL_PRESENT_TENSE[tool]
+  if (!verb) {
+    // Unknown tool — humanize the snake_case name as a last resort.
+    const human = tool.replace(/_/g, " ")
+    return target ? `${human} ${target}` : human.charAt(0).toUpperCase() + human.slice(1)
+  }
+  return target ? `${verb} ${target}` : verb
+}
+
+// Coarse, high-level verb for the parent live shimmer ("Querying" rather
+// than "Querying ;WITH latest_month AS (\n SELECT MAX(...)). Per-tool
+// verbs in TOOL_PRESENT_TENSE are good for the collapsed history rows
+// where targets like a filename add real signal, but the bottom shimmer
+// must read as a one-word narrative state. Unknown tools fall back to
+// "Working".
+const LIVE_ACTIVITY_VERB: Record<string, string> = {
+  read_file:               "Reading",
+  write_file:              "Writing",
+  replace_in_file:         "Writing",
+  append_file:             "Writing",
+  list_dir:                "Listing",
+  grep_search:             "Searching",
+  search_files:            "Searching",
+  file_search:             "Searching",
+  search_catalog:          "Searching",
+  web_search:              "Searching",
+  run_command:             "Executing",
+  query_mssql:             "Executing",
+  export_query_to_file:    "Executing",
+  explore_mssql_schema:    "Analyzing",
+  inspect_definition:      "Analyzing",
+  discover_relationships:  "Analyzing",
+  profile_data:            "Analyzing",
+  compare_catalogs:        "Analyzing",
+  fetch_url:               "Fetching",
+  browse_web:              "Browsing",
+  browser_check:           "Checking",
+  delegate:                "Delegating",
+  delegate_parallel:       "Delegating",
+  ask_user:                "Asking",
+  think:                   "Thinking",
+  get_chart_specs:         "Loading chart specs",
+  sync_preview:            "Synchronizing",
+  sync_execute:            "Synchronizing",
+  list_environments:       "Synchronizing",
+}
+
+function liveActivityVerb(tool: string): string {
+  return LIVE_ACTIVITY_VERB[tool] ?? "Working"
+}
+
+function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
+  // 1. Most recent in-flight tool — search top-level + inside iteration
+  //    blocks since the build pass moves tools into blocks at boundaries.
+  let lastRunningTool: ResponseToolPart | null = null
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.kind === "tool" && part.row.status === "running") {
+      lastRunningTool = part
+      break
+    }
+    if (part.kind === "iteration-block" && part.hasRunning) {
+      for (let j = part.tools.length - 1; j >= 0; j--) {
+        if (part.tools[j].row.status === "running") {
+          lastRunningTool = part.tools[j]
+          break
+        }
+      }
+      if (lastRunningTool) break
+    }
+  }
+  if (lastRunningTool) {
+    // Parent shimmer reads as a high-level narrative verb only —
+    // never the messy tool argument (long SQL, multi-line script…).
+    // The collapsed history row already shows the verb + target;
+    // duplicating it in the live label is noise.
+    return liveActivityVerb(lastRunningTool.row.tool)
+  }
+
+  // 2. Iteration block still settling (e.g. tool finished but block
+  //    not yet sealed by next iteration boundary) — mirror the header
+  //    so the parent reads as the cumulative sum.
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.kind === "iteration-block" && part.hasRunning) {
+      return part.summary || "Working"
+    }
+  }
+
+  // 3. PRIMARY_ACTIVITY fallback. Skip the bare routing decisions
+  //    ("Direct") when nothing else is going on — they're not
+  //    descriptive of work — and only keep the meatier ones
+  //    (Plan / Generating / Verifying).
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)) {
+      if (part.id === "direct") continue   // routing label, not work
+      return part.detail ? `${part.label} — ${part.detail}` : part.label
+    }
+  }
+
+  // 4. Thinking with no tools yet — common at the very start of a turn.
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    if (part.kind === "progress" && part.id === "thinking" && part.status === "running") {
+      return "Thinking"
+    }
+  }
+
+  // 5. Generic.
+  return "Working"
 }
 
 // Patch a tool's status both at the top level AND inside any
@@ -703,7 +859,10 @@ function buildResponseParts(
             // render the full single-arg value. Fall back to the
             // persisted argsSummary only if JSON parsing fails.
             summary: buildArgsSummary(entry.argsFormatted) || entry.argsSummary || compactToolPreview(entry.argsFormatted),
-            details: entry.argsFormatted,
+            argsFormatted: entry.argsFormatted,
+            // details holds the OUTPUT only — populated on tool-result /
+            // tool-error. argsFormatted holds the INPUT separately.
+            details: undefined,
             status: "running",
           },
         }
@@ -785,7 +944,7 @@ function buildResponseParts(
   }
 
   if (!isRunActiveStatus(runStatus)) {
-    const terminalStatus: "done" | "error" = runStatus === "completed" ? "done" : "error"
+    const terminalStatus: "done" | "error" = runStatus === RunStatus.Completed ? "done" : "error"
     parts = parts.map((part) => {
       if (part.kind === "progress" && part.status === "running") {
         return { ...part, status: terminalStatus, shimmer: false }
@@ -888,12 +1047,18 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
   const calmRunning = row.status === "running" && row.tool === "ask_user"
   const [expanded, setExpanded] = useState(false)
   // Pill preview uses `summary` (short — argsSummary like `command="python3 -"`
-  // or extracted target). The full `details` JSON only appears in the
-  // expanded body. Previously we used details first, which dumped raw
-  // JSON-with-newline-escapes onto the pill line.
+  // or extracted target). The expanded body now renders TWO blocks: the
+  // raw input (argsFormatted, e.g. the full `command` or `query`) and
+  // the tool's output (details). Previously the expanded body showed
+  // only the output — the input was hidden once the result arrived
+  // because `details` was overloaded for both.
   const previewText = compactToolPreview(row.summary || "")
-  const canExpand = Boolean(row.details && row.details.trim().length > 0)
-  const extracted = row.details ? extractToolCode(row.tool, row.details) : null
+  const hasInput = Boolean(row.argsFormatted && row.argsFormatted.trim().length > 0)
+  const hasOutput = Boolean(row.details && row.details.trim().length > 0)
+  const canExpand = hasInput || hasOutput
+  const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
+  const extractedOutput = row.details ? extractToolCode(row.tool, row.details) : null
+  const isError = row.status === "error"
   const buttonRef = useRef<HTMLButtonElement>(null)
   return (
     <div className="relative py-0.5">
@@ -934,12 +1099,23 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
           )}
         </div>
       </div>
-      {expanded && row.details && (
-        <div className="ml-[14px] mt-0.5 pl-3">
-          {extracted ? (
-            <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={176} />
-          ) : (
-            <ScrollMaskedDetails text={row.details} maxHeight={176} />
+      {expanded && (hasInput || hasOutput) && (
+        <div className="ml-[14px] mt-1 pl-3 space-y-2">
+          {hasInput && row.argsFormatted && (
+            extractedInput ? (
+              <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
+            ) : (
+              <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
+            )
+          )}
+          {hasOutput && row.details && (
+            extractedOutput ? (
+              <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
+            ) : (
+              <div className={isError ? "border-l border-error/50 pl-3" : ""}>
+                <ScrollMaskedDetails text={row.details} maxHeight={176} />
+              </div>
+            )
           )}
         </div>
       )}
@@ -1548,19 +1724,26 @@ function RunMessageImpl({
       }
     })
 
-    // Single bottom shimmer — the only "current activity" indicator,
-    // matching Copilot's behaviour. We show it whenever the run is still
-    // active AND we're not currently streaming the final answer AND no
-    // tool-call row is already pulsing as running (which would make the
-    // shimmer redundant).
+    // Single bottom shimmer — the persistent "we're still working"
+    // milestone indicator. Shown whenever the run is active and we're
+    // not already streaming the final answer. We deliberately keep it
+    // visible while a tool row is also pulsing (the per-tool dot
+    // signals that *this* tool is active; the shimmer signals that the
+    // overall iteration / agent loop is still progressing — they answer
+    // different questions for the user).
     const hasStreamingAnswer = responseParts.some(
       (p) => p.kind === "markdown" && p.streaming === true,
     )
-    if (!isDone && !hasStreamingAnswer && !lastToolHasRunning) {
+    // Pick the milestone label from the most recent primary activity
+    // part if any, otherwise fall back to a generic "Working".
+    let milestoneLabel = deriveActiveMilestoneLabel(responseParts)
+    if (!isDone && !hasStreamingAnswer) {
+      // Suppress `lastToolHasRunning` to silence noise (avoid unused warning)
+      void lastToolHasRunning
       items.push(
         <div key="active-shimmer" className="py-1.5 pr-2">
           <span className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block text-text-muted">
-            Working
+            {milestoneLabel}
           </span>
         </div>,
       )
@@ -1778,8 +1961,15 @@ export function TermChat() {
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
       setAttachError(null)
-    } catch {
-      // handled by global error state
+    } catch (e) {
+      // Surface the server error and ensure the chat doesn't get stuck on
+      // "Working". A failed startRun never produces a runs row, so any
+      // activeRunId we may have optimistically picked up from an SSE
+      // race must be cleared too.
+      const msg = e instanceof Error ? e.message : String(e)
+      setAttachError(`Failed to start run: ${msg}`)
+      setActiveRun(null)
+      setInput(goal)
     } finally {
       setSending(false)
     }
@@ -1861,7 +2051,7 @@ export function TermChat() {
   // Build message list: each "run" is a (user msg, assistant response) pair
   // Show all non-active terminal runs + the active one at the end
   const displayRuns = useMemo(() => {
-    const TERMINAL = new Set(["completed", "failed", "cancelled"])
+    const TERMINAL = new Set<string>([RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled])
     const completed = runs
       .filter((r) => r.id !== activeRunId && TERMINAL.has(r.status))
       .slice()

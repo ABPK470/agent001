@@ -1,0 +1,19 @@
+{
+    "name": "@mia/shared-enums",
+    "version": "0.1.0",
+    "description": "Single source of truth for every enum that crosses an HTTP/WS/JSON boundary between MI:A's agent, server, and UI packages. Zero runtime deps; browser-safe ESM.",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest run",
+        "lint": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.3",
+        "vitest": "^3.2.4"
+    }
+}

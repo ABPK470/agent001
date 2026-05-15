@@ -21,7 +21,9 @@ beforeEach(() => {
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
-  testDb.pragma("foreign_keys = ON")
+  // FK enforcement is verified by dedicated cascade tests; this suite uses
+  // synthetic runIds that don't exist in the runs table.
+  testDb.pragma("foreign_keys = OFF")
 })
 
 afterEach(() => {
@@ -32,12 +34,16 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/db.js")
+  const { _setDb, _migrate } = await import("../src/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  const { migrateMemory } = await import("../src/memory.js")
+  // _migrate re-enables foreign_keys after the hard-reset; turn it off
+  // again so this suite can use synthetic runIds without seeding parents.
+  // Cascade behaviour is verified by dedicated FK tests.
+  testDb.pragma("foreign_keys = OFF")
+  const { migrateMemory } = await import("../src/memory/index.js")
   migrateMemory()
-  return await import("../src/memory.js")
+  return await import("../src/memory/index.js")
 }
 
 describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
@@ -223,7 +229,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
   it("anonymous episodic memory is scoped by sid instead of the shared null-UPN pool", async () => {
     const mem = await setupMemory()
-    const { getDb } = await import("../src/db.js")
+    const { getDb } = await import("../src/db/index.js")
 
     mem.ingestRunTurns({
       id: "anon-a", goal: "draft deployment checklist", answer: "Session A answer",
@@ -280,7 +286,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
   it("memory_vectors mirrors upn/shared and SQL filter prevents cross-tenant rows", async () => {
     const mem = await setupMemory()
-    const { getDb } = await import("../src/db.js")
+    const { getDb } = await import("../src/db/index.js")
 
     // Insert a few entries for two tenants and stamp synthetic embeddings
     // directly so the test does not depend on Ollama being reachable.
@@ -338,5 +344,226 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     `).all() as Array<{ entry_id: string }>
     expect(anonVisible.length).toBe(1)
     expect(anonVisible[0].entry_id).toBe(sharedVec!.entry_id)
+  })
+
+  // ── Regression: write→read sessionId roundtrip ──────────────────
+  //
+  // Bug history: the `feat(memory): implement session-based isolation` sweep
+  // (commit ae2fcd47) hardened ingestion to key working-memory rows by
+  // `run.sessionId` (the cookie session), but the matching read site in
+  // `orchestrator/run-executor.ts` continued passing `agentId ?? "default"`
+  // into `retrieveContext`. Result: working memory was written under one key
+  // and read under another, so follow-up turns like "yes" / "do it" / "now
+  // exclude X" surfaced ZERO conversation context — even though the prior
+  // assistant answer was sitting in the table all along.
+  //
+  // These tests pin the contract: whatever sessionId ingestion uses MUST be
+  // the same sessionId retrieval queries with, including the empty-FTS
+  // recency fallback path that one-word follow-ups always hit.
+  it("REGRESSION: working-memory ingestion and retrieval agree on sessionId (full-text path)", async () => {
+    const mem = await setupMemory()
+    const sid = "browser-session-abc123"
+
+    // Content is engineered to pass the salience filter (length + action
+    // keywords) so we measure sessionId routing, not the unrelated salience
+    // gate. computeSalience: lengthScore(0.35) + actionScore(0.40) + structureScore(0.25).
+    mem.ingestRunTurns({
+      id: "run-1", goal: "summarize the deployment runbook for the platform",
+      answer: "Deployment runbook summary deeply-distinctive-roundtrip-marker-XYZ. " +
+        "We configure the build, install dependencies, run the migration, execute the smoke test, " +
+        "and write the release tag. Update the changelog after each completed step. " +
+        "Refactor any failed scripts and migrate the data on success.",
+      status: "completed", agentId: null, sessionId: sid,
+      tools: ["read_file"], stepCount: 4, trace: [], upn: null,
+    })
+
+    // Same session, FTS-matchable goal → working memory must surface the answer.
+    const sameSession = await mem.retrieveContext("deeply-distinctive-roundtrip-marker-XYZ", {
+      sessionId: sid, runId: "run-2", upn: null,
+    })
+    expect(sameSession.perTier.working).toContain("deeply-distinctive-roundtrip-marker-XYZ")
+
+    // Different session → must NOT see it (isolation still holds).
+    const otherSession = await mem.retrieveContext("deeply-distinctive-roundtrip-marker-XYZ", {
+      sessionId: "different-session-zzz", runId: "run-3", upn: null,
+    })
+    expect(otherSession.perTier.working).toBe("")
+  })
+
+  it("REGRESSION: working-memory empty-FTS recency fallback respects sessionId (the 'yes' follow-up path)", async () => {
+    const mem = await setupMemory()
+    const sid = "browser-session-followup"
+
+    // Same salience-engineering as above so the row actually lands in working
+    // memory. The recency-fallback path (one-word goals) does not apply FTS
+    // matching, so any salient row in the same session must surface.
+    mem.ingestRunTurns({
+      id: "run-prev", goal: "should I rebuild the index now?",
+      answer: "Yes, proceed. We will run the rebuild, execute the index migration, " +
+        "update statistics, and write the completed status. The configure step finishes " +
+        "after the rebuilding-now-will-take-roundtrip-marker step. " +
+        "This refactor reclaims about 12 percent of the heap on success.",
+      status: "completed", agentId: null, sessionId: sid,
+      tools: ["mssql"], stepCount: 2, trace: [], upn: null,
+    })
+
+    // The exact failure mode reported by the user: a one-word follow-up.
+    // sanitizeFtsQuery("yes") yields no usable FTS tokens → retrieval falls
+    // back to getRecentEntries(tier, maxItems, sessionId, upn). That path
+    // MUST find the prior assistant answer in the same session.
+    const followup = await mem.retrieveContext("yes", {
+      sessionId: sid, runId: "run-followup", upn: null,
+    })
+    expect(followup.perTier.working).toContain("rebuilding-now-will-take-roundtrip-marker")
+
+    // Cross-session "yes" must remain empty (no leakage between browser tabs).
+    const crossSession = await mem.retrieveContext("yes", {
+      sessionId: "another-session", runId: "run-other", upn: null,
+    })
+    expect(crossSession.perTier.working).toBe("")
+  })
+
+  // ── Regression: write→read UPN roundtrip ────────────────────────
+  //
+  // Same bug class as the sessionId regression above, applied to the upn
+  // axis. The risk: a future refactor changes which field of activeRun is
+  // forwarded as `upn` at the read site (e.g. swaps `ownerUpn` for some
+  // other field) without also updating ingestion. These tests pin the
+  // contract that whatever upn ingestion stamps on a row MUST be the same
+  // upn retrieval queries with — otherwise per-tenant memory becomes
+  // invisible to its owner (under-fetch) or visible to others (leakage).
+  it("REGRESSION: ingestRunTurns and retrieveContext agree on upn (full-text path)", async () => {
+    const mem = await setupMemory()
+
+    mem.ingestRunTurns({
+      id: "run-alice-1", goal: "draft the alpha launch checklist for the platform",
+      answer: "Alpha launch checklist alpha-upn-roundtrip-marker-AAAA. " +
+        "We configure the staging stack, install the release scripts, run the smoke test, " +
+        "execute the migration, write the announcement, and update the dashboard. " +
+        "Refactor any failed steps until success is completed.",
+      status: "completed", agentId: null, sessionId: "sid-alice",
+      tools: ["fs"], stepCount: 3, trace: [], upn: "alice@corp",
+    })
+
+    // Alice retrieves with her own upn → must surface her answer.
+    const aliceCtx = await mem.retrieveContext("alpha-upn-roundtrip-marker-AAAA", {
+      sessionId: "sid-alice", runId: "run-alice-2", upn: "alice@corp",
+    })
+    expect(aliceCtx.perTier.working).toContain("alpha-upn-roundtrip-marker-AAAA")
+
+    // Bob retrieves the same content → must NOT see Alice's row even with the
+    // same sessionId, because the upn predicate isolates tenants across all tiers.
+    const bobCtx = await mem.retrieveContext("alpha-upn-roundtrip-marker-AAAA", {
+      sessionId: "sid-alice", runId: "run-bob-1", upn: "bob@corp",
+    })
+    expect(bobCtx.perTier.working).toBe("")
+  })
+
+  it("REGRESSION: working-memory recency fallback respects upn (one-word follow-up across tenants)", async () => {
+    const mem = await setupMemory()
+
+    // Two tenants share the same browser session id (same shared workstation,
+    // different SSO accounts) — the recency fallback must still isolate by upn.
+    mem.ingestRunTurns({
+      id: "run-alice-prev", goal: "should I deploy alpha now?",
+      answer: "Alice approves, proceed with the deploy. We will run the rollout, " +
+        "execute the verification, update the status page, write the changelog, " +
+        "configure monitoring, refactor failed checks, migrate the data on success " +
+        "alpha-followup-roundtrip-marker.",
+      status: "completed", agentId: null, sessionId: "shared-sid",
+      tools: ["mssql"], stepCount: 2, trace: [], upn: "alice@corp",
+    })
+    mem.ingestRunTurns({
+      id: "run-bob-prev", goal: "should I deploy bravo now?",
+      answer: "Bob approves, proceed with the deploy. We will run the rollout, " +
+        "execute the verification, update the status page, write the changelog, " +
+        "configure monitoring, refactor failed checks, migrate the data on success " +
+        "bravo-followup-roundtrip-marker.",
+      status: "completed", agentId: null, sessionId: "shared-sid",
+      tools: ["mssql"], stepCount: 2, trace: [], upn: "bob@corp",
+    })
+
+    // Empty-FTS recency fallback (the "yes" path) for Alice — must surface her
+    // answer ONLY, never bleed Bob's content even though they share sessionId.
+    const aliceFollow = await mem.retrieveContext("yes", {
+      sessionId: "shared-sid", runId: "run-alice-followup", upn: "alice@corp",
+    })
+    expect(aliceFollow.perTier.working).toContain("alpha-followup-roundtrip-marker")
+    expect(aliceFollow.perTier.working).not.toContain("bravo-followup-roundtrip-marker")
+
+    // Mirror for Bob.
+    const bobFollow = await mem.retrieveContext("yes", {
+      sessionId: "shared-sid", runId: "run-bob-followup", upn: "bob@corp",
+    })
+    expect(bobFollow.perTier.working).toContain("bravo-followup-roundtrip-marker")
+    expect(bobFollow.perTier.working).not.toContain("alpha-followup-roundtrip-marker")
+  })
+
+  // ── Wiring contract: run-executor pairs the same key on both sides ──
+  //
+  // Module-level roundtrip tests (above) prove the memory module behaves
+  // correctly when called consistently. They CANNOT catch a regression
+  // where the orchestrator call sites pick different keys — exactly the
+  // bug we just shipped. This test reads run-executor.ts as text and asserts
+  // the contract: ingestRunTurns(...) and retrieveContext(...) MUST be
+  // called with byte-identical sessionId and upn expressions. If a future
+  // refactor changes one site without the other, this fails loudly.
+  it("WIRING: run-executor passes the same sessionId/upn expression to ingestRunTurns and retrieveContext", async () => {
+    const { readFileSync } = await import("node:fs")
+    const { fileURLToPath } = await import("node:url")
+    const { dirname, join } = await import("node:path")
+    const here = dirname(fileURLToPath(import.meta.url))
+    const src = readFileSync(join(here, "..", "src", "orchestrator", "run-executor.ts"), "utf8")
+
+    // Collect every retrieveContext({...}) call's sessionId / upn assignment.
+    const retrieveCalls = [...src.matchAll(/retrieveContext\([^)]*?\{([\s\S]*?)\}\s*\)/g)]
+    expect(retrieveCalls.length).toBeGreaterThan(0)
+
+    // Collect every ingestRunTurns({...}) call's sessionId / upn assignment.
+    const ingestCalls = [...src.matchAll(/ingestRunTurns\(\{([\s\S]*?)\}\)/g)]
+    expect(ingestCalls.length).toBeGreaterThan(0)
+
+    function extractField(block: string, field: "sessionId" | "upn"): string | null {
+      // Match `field: <expr>,` up to the next comma or closing brace at the
+      // same depth. Good enough for the simple expressions used at these sites.
+      const re = new RegExp(`${field}\\s*:\\s*([^,\\n}]+)`)
+      const m = block.match(re)
+      return m ? m[1].trim() : null
+    }
+
+    const retrieveSessionIds = retrieveCalls.map((m) => extractField(m[1], "sessionId"))
+    const retrieveUpns = retrieveCalls.map((m) => extractField(m[1], "upn"))
+    const ingestSessionIds = ingestCalls.map((m) => extractField(m[1], "sessionId"))
+    const ingestUpns = ingestCalls.map((m) => extractField(m[1], "upn"))
+
+    // Every site must specify both fields explicitly — no implicit undefined
+    // that would silently fall through to "default" and re-introduce the bug.
+    for (const v of [...retrieveSessionIds, ...retrieveUpns, ...ingestSessionIds, ...ingestUpns]) {
+      expect(v).not.toBeNull()
+    }
+
+    // The CONTRACT: at least one ingestion sessionId expression must appear
+    // in the retrieval sessionId expression (and vice versa for upn). The
+    // shipped fix uses `activeRun?.sessionId` on both sides; we lock that
+    // anchor so future refactors that drop it will fail this test.
+    const sessionIdAnchor = "activeRun?.sessionId"
+    const upnAnchor = "activeRun?.ownerUpn"
+
+    for (const expr of retrieveSessionIds) {
+      expect(expr, "retrieveContext sessionId expression must reference activeRun?.sessionId")
+        .toContain(sessionIdAnchor)
+    }
+    for (const expr of ingestSessionIds) {
+      expect(expr, "ingestRunTurns sessionId expression must reference activeRun?.sessionId")
+        .toContain(sessionIdAnchor)
+    }
+    for (const expr of retrieveUpns) {
+      expect(expr, "retrieveContext upn expression must reference activeRun?.ownerUpn")
+        .toContain(upnAnchor)
+    }
+    for (const expr of ingestUpns) {
+      expect(expr, "ingestRunTurns upn expression must reference activeRun?.ownerUpn")
+        .toContain(upnAnchor)
+    }
   })
 })

@@ -60,24 +60,27 @@
 
 import type sql from "mssql"
 import { AsyncLocalStorage } from "node:async_hooks"
+import { HumanHandoffReason, UserInputStatus } from "./domain/enums/agent-runtime.js"
+import { AttachmentScope } from "./domain/enums/attachment.js"
+import { IngestionMode } from "./domain/enums/runtime.js"
 
 // ── Type-only forward declarations ────────────────────────────────
 // These imports are erased at runtime, so there is no circular dependency
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-  SyncEnvironment,
-  SyncEventSink,
-  SyncPlan,
-  SyncRecipeBundle,
-  SyncRunSink,
+    SyncEnvironment,
+    SyncEventSink,
+    SyncPlan,
+    SyncRecipeBundle,
+    SyncRunSink,
 } from "./sync/index.js"
 import type {
-  AskUserResolver,
-  BrowserCheckExecutor,
-  BrowserSession,
-  CatalogGraph,
-  ShellExecutor,
+    AskUserResolver,
+    BrowserCheckExecutor,
+    BrowserSession,
+    CatalogGraph,
+    ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -104,6 +107,93 @@ export interface BrowseWebState {
   killSignal: AbortSignal | null
   /** Process-wide idle-session evictor — owned by the root runtime. */
   cleanupTimer: NodeJS.Timeout | null
+  /** Persistent context provider installed by the host (server). Null in CLI/tests → ephemeral sessions. */
+  contextProvider: BrowserContextProvider | null
+  /** Credential resolver installed by the host (server). Null in CLI/tests → auto-login refused. */
+  credentialProvider: BrowserCredentialProvider | null
+  /** Visible-browser handoff provider installed by the host. Null in CLI/tests → human handoff refused. */
+  handoffProvider: BrowserHandoffProvider | null
+}
+
+/**
+ * Persistent browser-context provider — installed by the server at boot
+ * via {@link setBrowserContextProvider}. Returns null for anonymous sessions
+ * (no upn) or when no provider is configured (CLI / tests).
+ */
+export interface BrowserContextProvider {
+  acquire(): Promise<BrowserContextHandle | null>
+}
+
+export interface BrowserContextHandle {
+  /** Stable seed for fingerprint selection (typically the upn). */
+  fingerprintSeed: string
+  /** Pass directly to Playwright `browser.newContext({ storageState })`. */
+  storageState: unknown | null
+  /**
+   * Optional BYO upstream proxy for this tenant. Plumbed straight into
+   * Playwright's `chromium.launch({ proxy })`. Null = direct connection.
+   * Hosts MUST never resolve a proxy for anonymous sessions.
+   */
+  proxy?: { server: string; bypass?: string; username?: string; password?: string } | null
+  /**
+   * Optional compliance guard. When present the agent calls
+   * `guard.checkUrl(url)` immediately before navigation and refuses to
+   * proceed if `allow === false`. The agent also records each successful
+   * action via `guard.recordAction(...)` so the host can append to the
+   * audit log.
+   */
+  guard?: BrowserGuard | null
+  /** Persist the latest storage state. Caller invokes after meaningful changes. */
+  save(state: unknown): Promise<void>
+}
+
+/**
+ * Compliance hooks installed by the host alongside the persistent
+ * context. The agent treats `null` as a permissive default — only the
+ * server actually enforces policy / rate limits / auditing.
+ */
+export interface BrowserGuard {
+  /**
+   * Approve (or deny) a navigation. The host should also consume the
+   * tenant's per-domain token bucket here so rate limits are enforced
+   * even for tools that don't call `recordAction` afterwards.
+   */
+  checkUrl(url: string): Promise<{ allow: boolean; reason: string; retryAfterMs?: number }>
+  /** Record a successful action for auditing. Best-effort; never throws. */
+  recordAction(input: { action: string; url?: string; detail?: string }): Promise<void>
+}
+
+/**
+ * Credential resolver — installed by the host (server) at boot. Resolves
+ * a credential id against the active tenant (per AsyncLocalStorage).
+ * Returns null for cross-tenant lookups, missing rows, or anonymous
+ * sessions, so the agent surfaces a friendly "not found" without leaking
+ * existence info.
+ *
+ * For TOTP credentials the host computes the live 6-digit code so the
+ * agent never sees the raw shared secret.
+ */
+export interface BrowserCredentialProvider {
+  resolvePassword(id: string): Promise<{ label: string; targetOrigin: string; username: string; password: string } | null>
+  resolveTotp(id: string): Promise<{ label: string; targetOrigin: string; code: string } | null>
+}
+
+/**
+ * Visible-browser handoff provider. Installed by the host so the agent
+ * can mint a noVNC URL and wait for the user to complete a CAPTCHA /
+ * non-TOTP 2FA challenge inside the live sandbox session.
+ *
+ * Returns null for anonymous sessions or when no provider is wired —
+ * the agent should then fail loudly rather than silently skip the human
+ * step.
+ */
+export interface BrowserHandoffProvider {
+  request(input: {
+    browserSessionId: string
+    reason: HumanHandoffReason
+    ttlMs?: number
+  }): Promise<{ id: string; url: string; expiresAt: number } | null>
+  await(id: string): Promise<{ status: UserInputStatus }>
 }
 
 export interface ShellState {
@@ -163,13 +253,13 @@ export interface SyncState {
  */
 export interface AttachmentMetadata {
   id:             string
-  scope:          "run" | "session" | "workspace_asset"
+  scope:          AttachmentScope
   originalName:   string
   normalizedName: string
   mediaType:      string
   sizeBytes:      number
   contentHash:    string
-  ingestionMode:  "text_inline" | "text_retrieval" | "binary_reference" | "provider_file_api"
+  ingestionMode:  IngestionMode
   uploadedAt:     string
   purposeTag:     string | null
 }
@@ -290,6 +380,9 @@ export class AgentRuntime {
         counter: 0,
         killSignal: null,
         cleanupTimer: parent.browseWeb.cleanupTimer,
+        contextProvider: parent.browseWeb.contextProvider,
+        credentialProvider: parent.browseWeb.credentialProvider,
+        handoffProvider: parent.browseWeb.handoffProvider,
       }
       this.fetchUrl = { killSignal: null }
       this.filesystem = { basePath: parent.filesystem.basePath }
@@ -306,7 +399,7 @@ export class AgentRuntime {
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null }
-      this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null }
+      this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null, contextProvider: null, credentialProvider: null, handoffProvider: null }
       this.shell = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
       this.browserCheck = { cwd: process.cwd(), executor: null }
       this.fetchUrl = { killSignal: null }

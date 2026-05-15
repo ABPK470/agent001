@@ -1,3 +1,4 @@
+import { PipelineStatus, VerifierOutcome } from "@mia/agent"
 /**
  * Verifier deterministic probes — top-level loop that fans out per-step
  * assessment and runs cross-step integration probes.
@@ -27,10 +28,10 @@ export async function runDeterministicProbes(
 
   for (const step of plan.steps) {
     const stepResult = pipelineResult.stepResults.get(step.name)
-    if (!stepResult || stepResult.status !== "completed") {
+    if (!stepResult || stepResult.status !== PipelineStatus.Completed) {
       assessments.push({
         stepName: step.name,
-        outcome: "fail",
+        outcome: VerifierOutcome.Fail,
         confidence: 1.0,
         issues: [stepResult?.error ?? `Step ${step.name} did not complete`],
         retryable: true,
@@ -43,7 +44,7 @@ export async function runDeterministicProbes(
     } else {
       assessments.push({
         stepName: step.name,
-        outcome: "pass",
+        outcome: VerifierOutcome.Pass,
         confidence: 1.0,
         issues: [],
         retryable: false,
@@ -54,7 +55,7 @@ export async function runDeterministicProbes(
   // Cross-step integration probe
   const allSubagentStepsCompleted = plan.steps
     .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
-    .every((s) => pipelineResult.stepResults.get(s.name)?.status === "completed")
+    .every((s) => pipelineResult.stepResults.get(s.name)?.status === PipelineStatus.Completed)
 
   if (allSubagentStepsCompleted) {
     await runIntegrationProbes(plan, pipelineResult, toolMap, assessments)

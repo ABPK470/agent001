@@ -13,7 +13,7 @@
  *      and that the audit event log captured every step in order
  */
 
-import { importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@agent001/agent"
+import { importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -59,7 +59,7 @@ function ctx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
 
 describe("hosted-mode end-to-end happy path", () => {
   it("upload → list → read → import → produce → promote, with audit", async () => {
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment, serverAttachmentService, getAttachment, listAttachments }
       = await import("../src/attachments/index.js")
     const { subscribeToEvents } = await import("../src/event-broadcaster.js")
@@ -67,6 +67,10 @@ describe("hosted-mode end-to-end happy path", () => {
     _migrate(testDb)
 
     setAttachmentService(serverAttachmentService)
+    // Seed FK parents required by the attachments table.
+    const { seedSession, seedRun } = await import("./_fk-helpers.js")
+    seedSession(testDb, "sid-alice", "alice@example.com")
+    seedRun(testDb, "run-e2e", { sessionSid: "sid-alice" })
 
     // 1. user upload (mimics POST /api/attachments)
     const uploaded = await uploadAttachment({

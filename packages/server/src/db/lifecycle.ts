@@ -8,17 +8,13 @@ import { getDb } from "./connection.js"
 
 export function clearTransactionalData(): void {
   const db = getDb()
-  db.exec(`
-    DELETE FROM runs;
-    DELETE FROM audit_log;
-    DELETE FROM checkpoints;
-    DELETE FROM logs;
-    DELETE FROM token_usage;
-    DELETE FROM trace_entries;
-    DELETE FROM notifications;
-    DELETE FROM effects;
-    DELETE FROM file_snapshots;
-  `)
+  // Deleting runs cascades to audit_log, checkpoints, logs, token_usage,
+  // trace_entries, notifications (where run-scoped), effects, file_snapshots,
+  // attachment_imports, and attachments owned by those runs.
+  db.exec(`DELETE FROM runs;`)
+  // System-wide notifications (run_id IS NULL) survive a `runs` purge —
+  // wipe them explicitly so the inbox is empty after reset.
+  db.exec(`DELETE FROM notifications;`)
   try { db.exec("DELETE FROM api_requests") } catch { /* table may not exist yet */ }
 }
 
@@ -47,14 +43,8 @@ export function pruneOldData(opts?: {
   if (runsToPrune.length > 0) {
     const ids = runsToPrune.map((r) => r.id)
     const placeholders = ids.map(() => "?").join(",")
-
-    db.prepare(`DELETE FROM trace_entries WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM audit_log WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM logs WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM token_usage WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM checkpoints WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM file_snapshots WHERE run_id IN (${placeholders})`).run(...ids)
-    db.prepare(`DELETE FROM effects WHERE run_id IN (${placeholders})`).run(...ids)
+    // ON DELETE CASCADE on every run-owned child handles the cleanup;
+    // a single DELETE replaces the previous eight per-table DELETEs.
     db.prepare(`DELETE FROM runs WHERE id IN (${placeholders})`).run(...ids)
     prunedRuns = ids.length
   }

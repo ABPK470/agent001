@@ -1,3 +1,4 @@
+import { VerifierIssueSeverity } from "@mia/agent"
 /**
  * System-level verifier checks — derived from per-step issue details to
  * surface cross-cutting failures (ownership ambiguity, integration drift).
@@ -5,8 +6,8 @@
  * @module
  */
 
-import type { VerifierDecision, VerifierSystemCheck } from "../types.js"
 import { uniqueStrings } from "../internal/verification-inference.js"
+import type { VerifierDecision, VerifierSystemCheck } from "../types.js"
 
 export function buildSystemChecks(decision: VerifierDecision): VerifierSystemCheck[] {
   const checks: VerifierSystemCheck[] = []
@@ -16,7 +17,7 @@ export function buildSystemChecks(decision: VerifierDecision): VerifierSystemChe
   if (ambiguousIssues.length > 0) {
     checks.push({
       code: "system_ownership_ambiguity",
-      severity: ambiguousIssues.some((issue) => issue.severity === "fatal") ? "fatal" : "error",
+      severity: ambiguousIssues.some((issue) => issue.severity === "fatal") ? VerifierIssueSeverity.Fatal : VerifierIssueSeverity.Error,
       summary: `Multiple issues have ambiguous/shared ownership (${ambiguousIssues.length} issue(s)); repair convergence depends on coordination across suspected owners.`,
       confidence: Math.max(0.4, Math.min(0.9, ambiguousIssues.reduce((acc, issue) => acc + issue.confidence, 0) / ambiguousIssues.length)),
       affectedStepNames: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.suspectedOwners)),
@@ -28,7 +29,7 @@ export function buildSystemChecks(decision: VerifierDecision): VerifierSystemChe
   if (integrationArtifacts.length > 1) {
     checks.push({
       code: "system_integration_drift",
-      severity: "error",
+      severity: VerifierIssueSeverity.Error,
       summary: `Cross-step integration invariants are failing across ${uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts)).length} artifact(s).`,
       confidence: 0.78,
       affectedStepNames: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.suspectedOwners)),

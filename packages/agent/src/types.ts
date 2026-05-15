@@ -1,3 +1,6 @@
+import { ToolControlDirective, ToolOutcomeSeverity } from "./domain/enums/delegation.js"
+import { LLMCallPhase } from "./domain/enums/llm.js"
+import { MessageRole } from "./domain/enums/message.js"
 /**
  * Core types for the AI agent.
  *
@@ -62,7 +65,7 @@ export const SECTION_WEIGHTS: Readonly<Record<PromptBudgetSection, number>> = {
 // ── Messages ─────────────────────────────────────────────────────
 
 export interface Message {
-  role: "system" | "user" | "assistant" | "tool"
+  role: MessageRole
   content: string | null
   /** Tool calls the assistant wants to make (only on assistant messages). */
   toolCalls?: ToolCall[]
@@ -81,6 +84,15 @@ export interface Message {
    * is simply missed.
    */
   cacheHint?: "ephemeral"
+  /**
+   * Optional runtime-hint marker. System messages tagged with this
+   * are subject to the per-iteration hint cap (see Gap 11) — only the
+   * most recent N are retained, the rest are dropped before the LLM
+   * call. Use for budget warnings, output-truncation nudges, recovery
+   * hints, and similar self-injected coaching that loses value once
+   * superseded.
+   */
+  hint?: boolean
 }
 
 // ── Tool calling ─────────────────────────────────────────────────
@@ -91,9 +103,9 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
-export type ToolOutcomeSeverity = "info" | "recoverable" | "fatal"
+export type { ToolOutcomeSeverity }
 
-export type ToolControlDirective = "continue" | "retry_after_inspection" | "abort_round" | "abort_loop"
+export type { ToolControlDirective }
 
 export interface ToolResultArtifactState {
   readonly path: string
@@ -151,6 +163,12 @@ export interface LLMResponse {
  */
 export interface LLMClient {
   chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse>
+  /**
+   * Optional model identifier for downstream consumers (token estimators,
+   * provider-specific cache hints). Implementations should expose the
+   * configured model id (e.g. "gpt-4o", "claude-3-5-sonnet") when known.
+   */
+  readonly modelHint?: string
 }
 
 // ── Agent config ─────────────────────────────────────────────────
@@ -244,7 +262,7 @@ export interface AgentConfig {
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
   /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */
-  onLlmCall?: (data: { phase: "request"; messages: Message[]; tools: Tool[]; iteration: number } | { phase: "response"; response: LLMResponse; iteration: number; durationMs: number }) => void
+  onLlmCall?: (data: { phase: LLMCallPhase.Request; messages: Message[]; tools: Tool[]; iteration: number } | { phase: LLMCallPhase.Response; response: LLMResponse; iteration: number; durationMs: number }) => void
   /** Called when the agent loop injects a system nudge/guard message. */
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /**
@@ -270,7 +288,7 @@ export interface AgentConfig {
   /** Called with planner/pipeline trace events for UI. */
   onPlannerTrace?: (entry: Record<string, unknown>) => void
   /** Delegation function for planner-spawned children (injected by server). */
-  plannerDelegateFn?: (step: import("./planner/types.js").SubagentTaskStep, envelope: import("./planner/types.js").ExecutionEnvelope) => Promise<import("./planner/pipeline.js").DelegateResult>
+  plannerDelegateFn?: (step: import("./planner/types.js").SubagentTaskStep, envelope: import("./planner/types.js").ExecutionEnvelope) => Promise<import("./planner/pipeline/index.js").DelegateResult>
   /**
    * Completion validator — called when the agent tries to exit (0 tool calls).
    * If it returns a non-null string, that string is injected as a system message

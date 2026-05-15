@@ -1,3 +1,4 @@
+import { EffectClass, StepRole, VerificationMode, isEffectClass, isStepRole, isVerificationMode } from "@mia/agent"
 /**
  * Parse helpers and auto-fix normalizers for plan structures.
  *
@@ -24,28 +25,28 @@ export function isValidArtifactPath(path: string): boolean {
   return true
 }
 
-export function parseEffectClass(value: unknown): "readonly" | "filesystem_write" | "filesystem_scaffold" | "shell" | "mixed" {
+export function parseEffectClass(value: unknown): EffectClass {
   const s = String(value ?? "")
-  if (s === "readonly" || s === "filesystem_write" || s === "filesystem_scaffold" || s === "shell" || s === "mixed") {
+  if (isEffectClass(s)) {
     return s
   }
-  return "filesystem_write"
+  return EffectClass.FilesystemWrite
 }
 
-export function parseVerificationMode(value: unknown): "none" | "browser_check" | "run_tests" | "mutation_required" | "deterministic_followup" {
+export function parseVerificationMode(value: unknown): VerificationMode {
   const s = String(value ?? "")
-  if (s === "none" || s === "browser_check" || s === "run_tests" || s === "mutation_required" || s === "deterministic_followup") {
+  if (isVerificationMode(s)) {
     return s
   }
-  return "none"
+  return VerificationMode.None
 }
 
-export function parseStepRole(value: unknown): "writer" | "reviewer" | "validator" | "grounding" {
+export function parseStepRole(value: unknown): StepRole {
   const s = String(value ?? "")
-  if (s === "writer" || s === "reviewer" || s === "validator" || s === "grounding") {
+  if (isStepRole(s)) {
     return s
   }
-  return "writer"
+  return StepRole.Writer
 }
 
 export function parseArtifactRelations(value: unknown): Array<{ relationType: "read_dependency" | "write_owner"; artifactPath: string }> {
@@ -244,7 +245,7 @@ export function ensureVerificationCoverage(steps: PlanStep[]): void {
     s => s.executionContext?.effectClass !== "readonly",
   )
   const hasVerification = subagentSteps.some(
-    s => s.executionContext?.verificationMode !== "none",
+    s => s.executionContext?.verificationMode !== VerificationMode.None,
   )
 
   if (hasWriters && !hasVerification) {
@@ -254,11 +255,11 @@ export function ensureVerificationCoverage(steps: PlanStep[]): void {
         const tools = s.requiredToolCapabilities ?? []
         const ctx = s.executionContext as { verificationMode: string }
         if (tools.includes("browser_check")) {
-          ctx.verificationMode = "browser_check"
+          ctx.verificationMode = VerificationMode.BrowserCheck
         } else if (tools.includes("run_command")) {
-          ctx.verificationMode = "run_tests"
+          ctx.verificationMode = VerificationMode.RunTests
         } else {
-          ctx.verificationMode = "deterministic_followup"
+          ctx.verificationMode = VerificationMode.DeterministicFollowup
         }
         break
       }

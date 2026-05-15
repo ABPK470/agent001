@@ -5,6 +5,7 @@
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
+import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
@@ -151,9 +152,9 @@ export function RunStatus() {
     )
   }
 
-  const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
-  const completedSteps = steps.filter((s) => s.status === "completed").length
-  const failedSteps = steps.filter((s) => s.status === "failed").length
+  const isActive = run.status === RunStatus.Running || run.status === RunStatus.Pending || run.status === RunStatus.Planning
+  const completedSteps = steps.filter((s) => s.status === RunStatus.Completed).length
+  const failedSteps = steps.filter((s) => s.status === RunStatus.Failed).length
   const latestCompatibility = [...trace].reverse().find((entry): entry is CompatibilityTrace => entry.kind === "planner-repair-compatibility")
   const latestPlannerDecision = [...trace].reverse().find((entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision")
   const latestArchitectureState = [...trace].reverse().find((entry): entry is ArchitectureStateTrace => entry.kind === "planner-architecture-state")
@@ -381,7 +382,7 @@ export function RunStatus() {
             Cancel
           </button>
         )}
-        {(run.status === "failed" || run.status === "cancelled") && (
+        {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
             onClick={handleResume}
@@ -390,7 +391,7 @@ export function RunStatus() {
             Resume
           </button>
         )}
-        {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && !rolledBack && (
+        {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && !rolledBack && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
             onClick={handleRollbackPreview}

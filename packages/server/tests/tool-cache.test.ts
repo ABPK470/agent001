@@ -99,14 +99,23 @@ describe("tool-cache", () => {
 
   it("rejects unsafe sessionIds so cache cannot escape its partition", async () => {
     const { writeCache, readCache } = await import("../src/tool-cache.js")
-    // A sessionId containing path-traversal must be sandboxed under the
-    // \"invalid\" bucket, never resolved relative to another session.
-    await writeCache({ tool: "t", input: 1, sessionId: "../escape", value: "evil" })
-    // The same evil sessionId reads its own bucket back \u2014 it does NOT see
-    // any neighbouring session's data.
-    const back = await readCache<string>({ tool: "t", input: 1, sessionId: "../escape" })
-    expect(back).toBe("evil")
-    // A different sessionId never sees the evil entry.
+    // A sessionId containing path-traversal characters must be rejected
+    // outright \u2014 throwing loudly is preferred over silently mapping to a
+    // shared "invalid" bucket, since the latter collapsed every malformed
+    // caller into one shared partition (the bug class fixed in
+    // wiring-contracts.test.ts B-AUDIT). identity.ts:resolveSession()
+    // guarantees real callers always have a clean sid.
+    await expect(
+      writeCache({ tool: "t", input: 1, sessionId: "../escape", value: "evil" }),
+    ).rejects.toThrow(/invalid sessionId/)
+    await expect(
+      readCache({ tool: "t", input: 1, sessionId: "../escape" }),
+    ).rejects.toThrow(/invalid sessionId/)
+    // An empty / whitespace sessionId is also rejected (no shared bucket).
+    await expect(
+      writeCache({ tool: "t", input: 1, sessionId: "", value: "evil" }),
+    ).rejects.toThrow(/invalid sessionId/)
+    // A well-formed neighbouring session never sees any leaked entry.
     const other = await readCache<string>({ tool: "t", input: 1, sessionId: "real-session" })
     expect(other).toBeNull()
   })

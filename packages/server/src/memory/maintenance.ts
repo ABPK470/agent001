@@ -1,4 +1,4 @@
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
 import { rowToEntry } from "./schema.js"
 import { WORKING_SESSION_WINDOW_H } from "./scoring.js"
 import type { Memory, MemoryTier } from "./types.js"

@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { seedTestUsers } from "./_fk-helpers.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -36,10 +37,13 @@ afterEach(() => {
 describe("attachment lifecycle", () => {
   it("sets a retention_until on insert that respects the scope-specific TTL", async () => {
     process.env["MIA_ATTACHMENT_RETENTION_RUN_DAYS"] = "1"
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment, getAttachment } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
     const before = Date.now()
     const a = await uploadAttachment({
@@ -55,11 +59,14 @@ describe("attachment lifecycle", () => {
   })
 
   it("pruneExpiredAttachments soft-deletes rows past their retention", async () => {
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment, getAttachment, pruneExpiredAttachments }
       = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
     const a = await uploadAttachment({
       scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "x.txt",
@@ -75,11 +82,12 @@ describe("attachment lifecycle", () => {
 
   it("rejects an upload that would exceed the per-owner quota", async () => {
     process.env["MIA_ATTACHMENT_OWNER_QUOTA_BYTES"] = "100"
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment, QuotaExceededError, getOwnerUsage }
       = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
 
     await uploadAttachment({
       scope: "session", ownerUpn: "u@x", originalName: "a.bin",
@@ -95,16 +103,16 @@ describe("attachment lifecycle", () => {
     })).rejects.toBeInstanceOf(QuotaExceededError)
   })
 
-  it("owner-less uploads are exempt from the quota", async () => {
-    process.env["MIA_ATTACHMENT_OWNER_QUOTA_BYTES"] = "10"
-    const { _setDb, _migrate } = await import("../src/db.js")
+  it("owner-less uploads are rejected (v19: every attachment has an owner)", async () => {
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment } = await import("../src/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
 
     await expect(uploadAttachment({
       scope: "session", ownerUpn: null, originalName: "big.bin",
       mediaType: "application/octet-stream", bytes: new Uint8Array(1000),
-    })).resolves.toMatchObject({ size_bytes: 1000 })
+    })).rejects.toThrow()
   })
 })

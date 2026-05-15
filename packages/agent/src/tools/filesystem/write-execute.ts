@@ -1,3 +1,4 @@
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 /**
  * write_file execution logic. Extracted from read-write.ts.
  *
@@ -102,8 +103,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
           `WRITE REJECTED for ${filePath} — the mutation was blocked and the existing file was preserved.`,
           {
             ok: false,
-            severity: "fatal",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Fatal,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_integrity_violation",
             details: [
               ...integrityWarnings,
@@ -127,8 +128,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
           `WRITE REJECTED for ${filePath} — incomplete placeholder/stub logic was blocked before commit.`,
           {
             ok: false,
-            severity: "recoverable",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Recoverable,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_incomplete_mutation",
             details: [
               ...integrityWarnings,
@@ -150,8 +151,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
             `WRITTEN WITH ISSUES to ${filePath} — the file was saved but still contains incomplete logic.`,
             {
               ok: false,
-              severity: "recoverable",
-              directive: "abort_round",
+              severity: ToolOutcomeSeverity.Recoverable,
+              directive: ToolControlDirective.AbortRound,
               errorCode: "artifact_incomplete_mutation",
               details: [
                 ...integrityWarnings,
@@ -166,8 +167,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
           `WRITTEN WITH ERRORS to ${filePath} — the file was saved with invalid content that must be repaired before more work continues.`,
           {
             ok: false,
-            severity: "fatal",
-            directive: "abort_round",
+            severity: ToolOutcomeSeverity.Fatal,
+            directive: ToolControlDirective.AbortRound,
             errorCode: "artifact_corrupted_mutation",
             details: [
               ...integrityWarnings,
@@ -181,8 +182,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
 
       return buildToolOutcome(`Successfully wrote to ${filePath}`, {
         ok: true,
-        severity: "info",
-        directive: "continue",
+        severity: ToolOutcomeSeverity.Info,
+        directive: ToolControlDirective.Continue,
         artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
       })
     } catch (err) {

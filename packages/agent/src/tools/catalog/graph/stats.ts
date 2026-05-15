@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { CatalogGraph } from "../graph.js"
+import type { CatalogGraph } from "../graph/index.js"
 import type { CatalogStats } from "../types.js"
 
 export function computeStats(graph: CatalogGraph): CatalogStats {

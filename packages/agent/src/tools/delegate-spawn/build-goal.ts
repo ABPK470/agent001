@@ -1,3 +1,4 @@
+import { StepRole } from "@mia/agent"
 /**
  * Build the child agent's goal prompt from a planner step + envelope.
  * Extracted from spawn-for-plan.ts.
@@ -99,7 +100,7 @@ export function buildPlanChildGoal(
   goalParts.push(
     `## Step Contract\n` +
     `Step Name: ${step.name}\n` +
-    `Role: ${normalizedEnvelope.role ?? "writer"}\n` +
+    `Role: ${normalizedEnvelope.role ?? StepRole.Writer}\n` +
     `Effect Class: ${normalizedEnvelope.effectClass}\n` +
     `Verification Mode: ${normalizedEnvelope.verificationMode}\n` +
     `Owned Artifacts:\n${normalizedEnvelope.targetArtifacts.map(a => `- ${a}`).join("\n") || "- none"}\n` +

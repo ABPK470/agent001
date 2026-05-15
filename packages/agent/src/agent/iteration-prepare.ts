@@ -5,12 +5,47 @@
  * @module
  */
 
-import type { AgentLoopState } from "../loop/index.js"
-import { applyFullCompaction, shouldApplyFullCompaction } from "../context/index.js"
-import { compactMessages, truncateMessages } from "../context/index.js"
+import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, truncateMessages } from "../context/index.js"
+import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
-import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tool-helpers/index.js"
+import type { AgentLoopState } from "../loop/index.js"
+import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tools/_helpers/index.js"
 import type { AgentConfig, Message, Tool } from "../types.js"
+
+/**
+ * Maximum number of `hint: true` system messages retained in history.
+ * Older hints are dropped before each LLM call (Gap 11) — once a budget
+ * warning, recovery hint, or stuck-detection nudge is superseded by a
+ * newer one, the older one is pure noise that competes with real
+ * tool-result history for the budget. Override via MIA_MAX_RUNTIME_HINTS.
+ */
+const MAX_RUNTIME_HINTS = (() => {
+  const raw = process.env.MIA_MAX_RUNTIME_HINTS
+  const n = raw ? Number.parseInt(raw, 10) : 4
+  return Number.isFinite(n) && n > 0 ? n : 4
+})()
+
+/**
+ * Drop all but the most recent N `hint: true` messages. Returns the
+ * same array reference when nothing was removed (zero-cost when there
+ * are few hints, which is the common case).
+ */
+export function capRuntimeHints(messages: Message[], maxHints: number = MAX_RUNTIME_HINTS): Message[] {
+  let count = 0
+  for (const m of messages) if (m.hint) count++
+  if (count <= maxHints) return messages
+  const toDrop = count - maxHints
+  let dropped = 0
+  const out: Message[] = []
+  for (const m of messages) {
+    if (m.hint && dropped < toDrop) {
+      dropped++
+      continue
+    }
+    out.push(m)
+  }
+  return out
+}
 
 export interface IterationPrepResult {
   contractMessages: Message[]
@@ -22,6 +57,8 @@ export interface IterationPrepInput {
   iteration: number
   state: AgentLoopState
   toolList: Tool[]
+  /** Optional model identifier for token-estimate calibration (Gap 7). */
+  modelHint?: string
   config: {
     verbose: boolean
     onNudge: AgentConfig["onNudge"]
@@ -29,7 +66,7 @@ export interface IterationPrepInput {
 }
 
 export function prepareIterationContext(input: IterationPrepInput): IterationPrepResult {
-  const { messages, iteration: i, state, toolList, config } = input
+  const { messages, iteration: i, state, toolList, modelHint, config } = input
 
   // ── Full history compaction ──
   if (shouldApplyFullCompaction(messages, i, state.lastFullCompactionIteration)) {
@@ -44,6 +81,12 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
   }
 
   // ── Context management: compact then truncate ──
+  const capped = capRuntimeHints(messages)
+  if (capped !== messages) {
+    // Mutate the source array so the agent loop sees the cap too —
+    // otherwise stale hints would re-accumulate over iterations.
+    messages.splice(0, messages.length, ...capped)
+  }
   const compacted = compactMessages(messages)
   const compactedCount = compacted.filter((m, idx) => m.content !== messages[idx]?.content).length
   if (compactedCount > 0) {
@@ -55,7 +98,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
       iteration: i,
     })
   }
-  const truncationResult = truncateMessages(compacted)
+  const truncationResult = truncateMessages(compacted, modelHint)
   const chatMessages = truncationResult.messages
 
   if (truncationResult.budgetDiagnostics) {
@@ -90,7 +133,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     const nameSet = new Set(applied.filteredToolNames)
     chatToolsForLLM = toolList.filter(t => nameSet.has(t.name))
     if (applied.injectedInstruction && contractMessages.length > 0) {
-      contractMessages.push({ role: "system", content: applied.injectedInstruction, section: "history" })
+      contractMessages.push({ role: MessageRole.System, content: applied.injectedInstruction, section: "history" })
     }
     if (config.verbose) {
       log.logError(`[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`)

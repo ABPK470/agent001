@@ -1,11 +1,14 @@
+import { CoherentGenerationTraceKind, LLMCallPhase, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
 /**
  * Coherent generation execution helper. Extracted from planner-routing.ts.
  *
  * @module
  */
 
-import type { PlannerRoutingContext } from "../planner-routing.js"
+import { MessageRole } from "../domain/enums/message.js"
+import type { PlannerRoutingContext } from "../planner-routing/index.js"
 import {
+    applyCoherentPromptBudget,
     buildCoherentGenerationMessages,
     buildCoherentRepairInstructions,
     buildCoherentVerificationPlan,
@@ -21,16 +24,19 @@ export async function attemptCoherentGeneration(
 ): Promise<{ failed: boolean }> {
   const { messages, state, config } = ctx
 
-  config.onPlannerTrace?.({ kind: "coherent-generation-start", route })
+  config.onPlannerTrace?.({ kind: CoherentGenerationTraceKind.Start, route })
   config.onPlannerTrace?.({
-    kind: "planner-architecture-state",
+    kind: PlannerTraceKind.ArchitectureState,
     lane: route,
     status: "preserved",
     reason: "coherent_lane_selected",
   })
 
-  const coherentMessages = buildCoherentGenerationMessages(ctx.goal, config.workspaceRoot, messages)
-  config.onLlmCall?.({ phase: "request", messages: coherentMessages, tools: [], iteration: 0 })
+  const coherentMessages = applyCoherentPromptBudget(
+    buildCoherentGenerationMessages(ctx.goal, config.workspaceRoot, messages),
+    ctx.llm.modelHint,
+  )
+  config.onLlmCall?.({ phase: LLMCallPhase.Request, messages: coherentMessages, tools: [], iteration: 0 })
 
   const t0 = Date.now()
   // Hard cap: the Copilot Chat API (and most proxied LLM endpoints) reject
@@ -42,12 +48,12 @@ export async function attemptCoherentGeneration(
     {
       signal: config.signal,
       maxTokens: coherentTokens,
-      onToken: (token) => config.onPlannerTrace?.({ kind: "coherent-generation-token", token }),
+      onToken: (token) => config.onPlannerTrace?.({ kind: CoherentGenerationTraceKind.Token, token }),
     },
   )
   const durationMs = Date.now() - t0
   ctx.incrementLlmCalls()
-  config.onLlmCall?.({ phase: "response", response: coherentResponse, iteration: 0, durationMs })
+  config.onLlmCall?.({ phase: LLMCallPhase.Response, response: coherentResponse, iteration: 0, durationMs })
 
   if (coherentResponse.usage) {
     ctx.usage.promptTokens += coherentResponse.usage.promptTokens
@@ -60,9 +66,9 @@ export async function attemptCoherentGeneration(
     // One repair attempt
     const repairMessages: Message[] = [
       ...coherentMessages,
-      { role: "assistant", content: coherentResponse.content ?? "" },
+      { role: MessageRole.Assistant, content: coherentResponse.content ?? "" },
       {
-        role: "user",
+        role: MessageRole.User,
         content:
           "Your previous response could not be parsed as JSON.\n" +
           "Diagnostics: " + coherentParse.diagnostics.join("; ") + "\n\n" +
@@ -80,7 +86,7 @@ export async function attemptCoherentGeneration(
       {
         signal: config.signal,
         maxTokens: coherentTokens,
-        onToken: (token) => config.onPlannerTrace?.({ kind: "coherent-generation-token", token }),
+        onToken: (token) => config.onPlannerTrace?.({ kind: CoherentGenerationTraceKind.Token, token }),
       },
     )
     ctx.incrementLlmCalls()
@@ -89,12 +95,12 @@ export async function attemptCoherentGeneration(
       ctx.usage.completionTokens += repairResponse.usage.completionTokens
       ctx.usage.totalTokens += repairResponse.usage.totalTokens
     }
-    config.onLlmCall?.({ phase: "response", response: repairResponse, iteration: 0, durationMs: 0 })
+    config.onLlmCall?.({ phase: LLMCallPhase.Response, response: repairResponse, iteration: 0, durationMs: 0 })
 
     coherentParse = parseCoherentSolutionBundle(repairResponse.content ?? "")
     if (!coherentParse.bundle) {
       config.onPlannerTrace?.({
-        kind: "coherent-generation-failed",
+        kind: CoherentGenerationTraceKind.Failed,
         stage: "bundle_parse",
         diagnostics: [...coherentParse.diagnostics],
       })
@@ -103,7 +109,7 @@ export async function attemptCoherentGeneration(
   }
 
   config.onPlannerTrace?.({
-    kind: "coherent-generation-bundle",
+    kind: CoherentGenerationTraceKind.Bundle,
     artifactCount: coherentParse.bundle.artifacts.length,
     artifacts: coherentParse.bundle.artifacts.map((a) => ({ path: a.path, purpose: a.purpose })),
     sharedContracts: coherentParse.bundle.sharedContracts?.map((c) => c.name) ?? [],
@@ -135,7 +141,7 @@ export async function attemptCoherentGeneration(
 
   if (materialized.diagnostics.length > 0) {
     config.onPlannerTrace?.({
-      kind: "coherent-generation-failed",
+      kind: CoherentGenerationTraceKind.Failed,
       stage: "materialization",
       diagnostics: [...materialized.diagnostics],
     })
@@ -151,21 +157,21 @@ export async function attemptCoherentGeneration(
   }
 
   config.onPlannerTrace?.({
-    kind: "coherent-generation-materialized",
+    kind: CoherentGenerationTraceKind.Materialized,
     artifactCount: materialized.writtenArtifacts.length,
     artifacts: [...materialized.writtenArtifacts],
     readBackArtifacts: [...materialized.readBackArtifacts],
   })
 
   messages.push({
-    role: "assistant",
+    role: MessageRole.Assistant,
     content:
       `Coherent solution bundle materialized with ${materialized.writtenArtifacts.length} files. ` +
       `Architecture: ${coherentParse.bundle.architecture}`,
     section: "history",
   })
   messages.push({
-    role: "system",
+    role: MessageRole.System,
     content:
       `A coherent multi-file solution bundle has already been written to disk for this goal.\n` +
       `Files: ${materialized.writtenArtifacts.join(", ")}\n` +
@@ -175,31 +181,31 @@ export async function attemptCoherentGeneration(
   })
 
   const initialDecision = await ctx.runCoherentVerification(true)
-  if (initialDecision && initialDecision.overall !== "pass") {
+  if (initialDecision && initialDecision.overall !== VerifierOutcome.Pass) {
     const summary = summarizeCoherentVerifierDecision(initialDecision)
     config.onPlannerTrace?.({
-      kind: "coherent-generation-repair-needed",
+      kind: CoherentGenerationTraceKind.RepairNeeded,
       repairAttempt: 1,
       issueCount: summary.issueCount,
       issues: [...summary.issues],
       affectedArtifacts: [...summary.affectedArtifacts],
     })
     config.onPlannerTrace?.({
-      kind: "planner-architecture-state",
+      kind: PlannerTraceKind.ArchitectureState,
       lane: route,
       status: "repairing_in_place",
       reason: "coherent_verifier_requested_repair",
       architecture: coherentParse.bundle.architecture,
     })
     messages.push({
-      role: "system",
+      role: MessageRole.System,
       content: buildCoherentRepairInstructions(coherentParse.bundle, initialDecision, 1),
       section: "history",
     })
   }
 
   config.onPlannerTrace?.({
-    kind: "coherent-generation-handoff",
+    kind: CoherentGenerationTraceKind.Handoff,
     artifactCount: materialized.writtenArtifacts.length,
     verificationRoute: "coherent_verifier_then_direct_tool_loop",
   })

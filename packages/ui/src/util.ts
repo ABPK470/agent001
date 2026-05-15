@@ -1,5 +1,7 @@
 /** Utility functions. */
 
+import { RunStatus } from "./enums"
+
 export function randomId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
@@ -27,10 +29,10 @@ export function formatMs(ms: number): string {
 
 export function statusColor(status: string): string {
   switch (status) {
-    case "completed": return "var(--color-success)"
-    case "failed": return "var(--color-error)"
-    case "running": case "pending": case "planning": return "var(--color-accent)"
-    case "cancelled": return "var(--color-warning)"
+    case RunStatus.Completed: return "var(--color-success)"
+    case RunStatus.Failed: return "var(--color-error)"
+    case RunStatus.Running: case RunStatus.Pending: case RunStatus.Planning: return "var(--color-accent)"
+    case RunStatus.Cancelled: return "var(--color-warning)"
     default: return "var(--color-text-muted)"
   }
 }

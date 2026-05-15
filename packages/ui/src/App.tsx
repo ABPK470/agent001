@@ -1,7 +1,6 @@
 import { Activity, MoreVertical, Shield, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
-import { AdminLoginModal } from "./components/AdminLoginModal"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
@@ -11,6 +10,7 @@ import { WelcomeFlow } from "./components/WelcomeFlow"
 import { WidgetCatalog } from "./components/WidgetCatalog"
 import { WidgetModal } from "./components/WidgetModal"
 import { restoreDashboardState, startDashboardSync } from "./dashboardSync"
+import { AppPhase } from "./enums"
 import { useIsMobile } from "./hooks/useIsMobile"
 import { useMe } from "./hooks/useMe"
 import { useStore } from "./store"
@@ -65,8 +65,7 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
-  const [adminLoginOpen, setAdminLoginOpen] = useState(false)
-  const { me, needsWelcome, refresh: refreshMe, setIdentity, switchUser } = useMe()
+  const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
 
   const popOut = getPopOutWidget()
   const currentView = useMemo(
@@ -87,74 +86,73 @@ export function App() {
   const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
   const shouldHydrateRecentEvents = visibleWidgetTypes.has("live-logs")
 
-  // Phase state machine — single source of truth for all transitions.
-  //   "loading" — initial fetch; blank screen
-  //   "login"  — needs identity; WelcomeFlow handles login + intro as one flow
-  //   "shell"  — fully authenticated, dashboard visible
-  type Phase = "loading" | "login" | "shell" | "outro" | "switching" | "reveal"
-  const [phase, setPhase] = useState<Phase>(() => {
-    if (!!popOut) return "loading" // popout goes straight to shell
-    return "loading"
-  })
+  // Phase state machine — v19 simplified.
+  //   Loading   — initial whoami fetch in flight; blank screen
+  //   Login     — not authenticated; <WelcomeFlow/> renders intro + form
+  //   Shell     — authenticated; dashboard visible
+  //   Outro     — logout in progress; mosaic covers inward, then logout
+  //                  fires and we land back on Login (which plays intro)
+  //   Switching — navigating to ui-term; mosaic covers inward, then redirect
+  //   Reveal    — arrived from ui-term; mosaic dissolves outward over shell
+  const [phase, setPhase] = useState<AppPhase>(AppPhase.Loading)
 
-  // After initial load, decide starting phase.
+  // Decide phase from auth state. v19: identity is binary — either we have
+  // a verified user (shell) or we don't (login). No welcome modal, no
+  // anon fallback, no "reveal" path because there's no longer a separate
+  // identity-collection step that runs after the page mounts.
   useEffect(() => {
-    if (!me) return // still loading
-    if (phase === "loading") {
-      // Check if arriving from ui-term → play reveal animation
-      const flag = "mia:ui-transition"
-      try {
-        if (window.localStorage.getItem(flag)) {
-          window.localStorage.removeItem(flag)
-          if (!needsWelcome) {
-            setPhase("reveal")
-            return
+    if (popOut) { setPhase(AppPhase.Shell); return }
+    if (meLoading) return
+    // Don't yank a running animation out from under the user just because
+    // `me` updated mid-flight. Outro/switching/reveal own their own exit.
+    if (phase === AppPhase.Outro || phase === AppPhase.Switching || phase === AppPhase.Reveal) return
+    if (me) {
+      // During phase=Login with me set, we're mid-intro — the WelcomeFlow
+      // is playing its morph + dissolve over the now-rendered shell. Don't
+      // flip to Shell here; let WelcomeFlow.onDone do it once the mosaic
+      // has fully dissolved. Otherwise we'd unmount the animation halfway.
+      if (phase === AppPhase.Login) return
+      // First paint after a cross-shell hop — honor the transition flag
+      // ui-term sets when it sends us here, so the mosaic dissolve plays.
+      if (phase === AppPhase.Loading) {
+        try {
+          if (window.localStorage.getItem("mia:ui-transition")) {
+            window.localStorage.removeItem("mia:ui-transition")
+            setPhase(AppPhase.Reveal); return
           }
-        }
-      } catch { /* ignore */ }
-      setPhase(needsWelcome ? "login" : "shell")
-    } else if (needsWelcome && phase === "shell") {
-      setPhase("login")
+        } catch { /* ignore */ }
+      }
+      setPhase(AppPhase.Shell)
+    } else {
+      setPhase(AppPhase.Login)
     }
-  }, [me, needsWelcome, phase])
+  }, [me, meLoading, popOut, phase])
 
   const handleSwitchUser = useCallback(() => {
-    setPhase("outro")
+    // Cover the shell with the outro animation; the actual logout fires
+    // when the animation hits its done frame, so the dashboard stays
+    // visible underneath the dissolving mosaic the whole time.
+    setPhase(AppPhase.Outro)
   }, [])
 
   // Switch to ui-term — play mosaic cover inward, then navigate.
   const handleSwitchUi = useCallback(() => {
-    setPhase("switching")
-  }, [])
-
-  // Ctrl+Shift+A → admin login modal (fallback when UPN whitelist unavailable).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
-        e.preventDefault()
-        setAdminLoginOpen(true)
-      }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    setPhase(AppPhase.Switching)
   }, [])
 
   // Connect event stream — main window uses SSE, popouts use BroadcastChannel relay.
   //
   // Identity is bound to the SSE connection at the moment the EventSource is
-  // opened (the server reads req.session and stamps the client). When the
-  // welcome modal sets the cookie (sid + upn), every fresh HTTP request after
-  // it carries the new identity, but the long-lived SSE socket still has the
-  // OLD anonymous identity attached server-side. New runs are owned by the
-  // new sid/upn → the broadcast filter drops every event for this client and
-  // the chat sits forever on "Thinking". Re-create the stream whenever
-  // identity changes so the server re-stamps the new client.
+  // opened (the server stamps req.session.upn onto the client). Logout/login
+  // mints a new sid + may swap upn, so we re-create the stream on every
+  // identity transition. The single-input dep [me?.upn] covers all cases
+  // because every login/logout cycle changes either upn or null↔upn.
   useEffect(() => {
     const stream = popOut
       ? createPopoutEventRelay(handleEvent, setConnected)
       : createEventStream(handleEvent, setConnected)
     return () => stream.close()
-  }, [handleEvent, setConnected, popOut, me?.sessionId, me?.upn])
+  }, [handleEvent, setConnected, popOut, me?.upn])
 
   // Load initial runs + auto-select the most recent. Re-runs on identity
   // change so each user only sees runs the server scopes to them.
@@ -178,13 +176,13 @@ export function App() {
         setActiveRun(latest.id)
       }
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace, shouldHydrateSelectedRun])
+  }, [me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace, shouldHydrateSelectedRun])
 
   // Reload notifications on identity change so each user only sees their own.
   useEffect(() => {
     if (!me) return
     api.listNotifications(50).then(setNotifications).catch(() => {})
-  }, [me?.sessionId, me?.upn, setNotifications])
+  }, [me?.upn, setNotifications])
 
   // Restore the EnvSync widget to the user's most recent manual sync run.
   // Mirrors the agent loop's auto-select-latest-run behaviour but for
@@ -200,7 +198,7 @@ export function App() {
       const latest = rows[0]
       if (!latest) return
       // Only restore if it belongs to this user (or is unowned, e.g. legacy rows).
-      if (latest.actorUpn && me.upn && latest.actorUpn !== me.upn) return
+      if (latest.actorUpn !== me.upn) return
       useStore.getState().setEnvSyncForm({
         planId: latest.planId,
         source: latest.source,
@@ -209,7 +207,7 @@ export function App() {
         entityId: latest.entityId,
       })
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn, shouldRestoreSyncState])
+  }, [me?.upn, shouldRestoreSyncState])
 
   // Backfill the LiveLogs widget on cold start with recent persisted events
   // (sync runs, agent runs, audit, system) so the log isn't empty after a
@@ -222,15 +220,17 @@ export function App() {
     api.recentEvents(500).then((res) => {
       useStore.getState().hydrateLogsFromEvents(res.events)
     }).catch(() => {})
-  }, [me?.sessionId, me?.upn, shouldHydrateRecentEvents])
+  }, [me?.upn, shouldHydrateRecentEvents])
 
   // Restore dashboard layout from server + start auto-sync.
-  // Re-runs when identity changes (welcome modal submit / switch user) so
-  // each user gets their own per-user layout instead of sharing one.
+  // v19: dashboardIdFor() on the server is `dashboard:${upn}` — single
+  // input, no admin special case, no sid fallback. So [me?.upn] is the
+  // only dep needed. Every login/logout transition flips it and triggers
+  // a re-fetch under the new key.
   useEffect(() => {
     if (!me) return
     restoreDashboardState().then(() => startDashboardSync())
-  }, [me?.sessionId, me?.upn])
+  }, [me?.upn])
 
   // Pop-out: restore state from main window, then follow active run changes
   useEffect(() => {
@@ -306,9 +306,97 @@ export function App() {
     )
   }
 
+  // ── Stable WelcomeFlow overlay ──
+  // Always at fragment-position 0 in every return below, so React preserves
+  // the same component instance as we transition login → (mid-animation
+  // shell mounts) → shell. Without this, the body switch would unmount
+  // WelcomeFlow halfway through its morph + dissolve.
+  const loginOrRegister = async (username: string, password: string) => {
+    const post = (url: string, body: Record<string, unknown>) =>
+      fetch(url, {
+        method:      "POST",
+        credentials: "include",
+        headers:     { "content-type": "application/json" },
+        body:        JSON.stringify(body),
+      })
+    const login = await post("/api/auth/login", { username, password })
+    if (login.ok) { await refreshMe(); return }
+    if (login.status === 401) {
+      const reg = await post("/api/auth/register", { username, password, displayName: username })
+      if (reg.ok) { await refreshMe(); return }
+      if (reg.status === 409) {
+        // Username exists but login was rejected → wrong password.
+        throw new Error("wrong password")
+      }
+      const body = await reg.json().catch(() => ({})) as { error?: string }
+      throw new Error(body.error ?? `sign-up failed (${reg.status})`)
+    }
+    const body = await login.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? `sign-in failed (${login.status})`)
+  }
+  const welcomeOverlay =
+    phase === AppPhase.Login ? (
+      <WelcomeFlow
+        key="login"
+        onSubmit={loginOrRegister}
+        onDone={() => setPhase(AppPhase.Shell)}
+      />
+    ) : phase === AppPhase.Outro ? (
+      <WelcomeFlow
+        key="outro"
+        mode="outro"
+        onSubmit={async () => {}}
+        onDone={async () => {
+          try { await logout() } catch { /* server-side already gone */ }
+          setPhase(AppPhase.Login)
+        }}
+      />
+    ) : phase === AppPhase.Switching ? (
+      <WelcomeFlow
+        key="switching"
+        mode="outro"
+        onSubmit={async () => {}}
+        onDone={() => {
+          try { window.localStorage.setItem("mia:ui", "term") } catch { /* ignore */ }
+          try { window.localStorage.setItem("mia:ui-transition", "1") } catch { /* ignore */ }
+          const { protocol, hostname, port, pathname } = window.location
+          const url = port === "5179"
+            ? `${protocol}//${hostname}:5180${pathname}`
+            : `${protocol}//${hostname}${port ? ":" + port : ""}${pathname}?ui=term`
+          window.location.assign(url)
+        }}
+      />
+    ) : phase === AppPhase.Reveal ? (
+      <WelcomeFlow
+        key="reveal"
+        mode="reveal"
+        onSubmit={async () => {}}
+        onDone={() => setPhase(AppPhase.Shell)}
+      />
+    ) : null
+
   // ── Phase-based rendering ──────────────────────────────────────
-  if (phase === "loading") {
-    return <div className="h-screen" style={{ background: "var(--bg)" }} />
+  // Every branch below wraps with `<>{welcomeOverlay}{body}</>` so the
+  // overlay sits at a stable position-0 across all render paths.
+  if (phase === AppPhase.Loading) {
+    return (
+      <>
+        {welcomeOverlay}
+        <div className="h-screen" style={{ background: "var(--bg)" }} />
+      </>
+    )
+  }
+  // Login with no `me` yet: just blank background under the overlay.
+  // The moment login succeeds, refreshMe populates `me` and we fall
+  // through to the real shell — which paints behind the still-covering
+  // mosaic and is then revealed by its dissolve.
+  if (phase === AppPhase.Login && !me) {
+    return (
+      <>
+        {welcomeOverlay}
+        <div className="h-screen" style={{ background: "var(--bg)" }} />
+      </>
+    )
   }
   const widgets = currentView?.widgets ?? []
 
@@ -317,10 +405,11 @@ export function App() {
   const currentWidget = widgets[clampedIdx]
   const WidgetComponent = currentWidget ? widgetRegistry[currentWidget.type] : null
 
-  // ── Mobile layout ──────────────────────────────────────────────
+  // ── Mobile layout ──
   if (isMobile) {
     return (
       <>
+      {welcomeOverlay}
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
         <header className="flex items-center gap-3 px-4 h-12 bg-surface shrink-0 select-none">
@@ -373,10 +462,10 @@ export function App() {
         </header>
 
         {/* Widget area — full remaining space */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden flex flex-col">
           {widgets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 px-6">
-              <p className="text-text-secondary text-center">No widgets yet</p>
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
+              <p className="text-text-secondary text-center">No widgets in this view yet</p>
               <button
                 className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
                 onClick={() => setMobileCatalogOpen(true)}
@@ -385,54 +474,50 @@ export function App() {
               </button>
             </div>
           ) : WidgetComponent ? (
-            <div className="h-full p-2">
-              <div className="h-full bg-surface rounded-xl overflow-hidden p-3">
-                <WidgetComponent />
+            <>
+              {/* Intra-view pager — only when this view holds more than
+                  one widget. Lets the user step through them on mobile
+                  without taking nav space away from view switching. */}
+              {widgets.length > 1 && (
+                <div className="flex items-center justify-center gap-1.5 py-1.5 shrink-0">
+                  {widgets.map((w, i) => (
+                    <button
+                      key={w.id}
+                      onClick={() => setMobileWidgetIdx(i)}
+                      aria-label={`Widget ${i + 1}`}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === clampedIdx ? "w-6 bg-accent" : "w-1.5 bg-border"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="flex-1 min-h-0 p-2">
+                <div className="h-full bg-surface rounded-xl overflow-hidden p-3">
+                  <WidgetComponent />
+                </div>
               </div>
-            </div>
+            </>
           ) : null}
         </main>
 
-        {/* Bottom navigation */}
-        {widgets.length > 0 && (
-          <MobileNav
-            widgets={widgets}
-            activeIndex={clampedIdx}
-            onChange={setMobileWidgetIdx}
-            onAdd={() => setMobileCatalogOpen(true)}
-          />
-        )}
+        {/* Bottom navigation — always visible so the user can switch
+            views even when the active view is empty. */}
+        <MobileNav
+          views={views}
+          activeViewId={activeViewId}
+          onSelectView={(id) => { useStore.getState().setActiveView(id); setMobileWidgetIdx(0) }}
+          onAdd={() => {
+            const newId = useStore.getState().addView(`View ${views.length + 1}`)
+            useStore.getState().setActiveView(newId)
+            setMobileCatalogOpen(true)
+          }}
+        />
 
         {mobileCatalogOpen && <WidgetCatalog onClose={() => setMobileCatalogOpen(false)} />}
         {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
         {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       </div>
-      {phase === "login" && (
-        <WelcomeFlow
-          key="login-mobile"
-          onSubmit={async (displayName, upn) => { await setIdentity(displayName, upn) }}
-          onDone={() => setPhase("shell")}
-        />
-      )}
-      {phase === "outro" && (
-        <WelcomeFlow
-          key="outro-mobile"
-          mode="outro"
-          onSubmit={async () => {}}
-          onDone={async () => {
-            try { await switchUser() } catch { /* ignore */ }
-            setPhase("login")
-          }}
-        />
-      )}
-      {phase === "reveal" && (
-        <WelcomeFlow
-          key="reveal-mobile"
-          mode="reveal"
-          onSubmit={async () => {}}
-          onDone={() => setPhase("shell")}
-        />
-      )}
       </>
     )
   }
@@ -440,60 +525,12 @@ export function App() {
   // ── Desktop layout ─────────────────────────────────────────────
   return (
     <>
-
+    {welcomeOverlay}
     <div className="flex flex-col h-screen bg-base">
       <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} onSwitchUser={handleSwitchUser} onSwitchUi={handleSwitchUi} me={me} />
       <Canvas ref={canvasRef} />
       <WidgetModal />
-      {adminLoginOpen && (
-        <AdminLoginModal
-          onClose={() => setAdminLoginOpen(false)}
-          onSuccess={() => { setAdminLoginOpen(false); refreshMe() }}
-        />
-      )}
     </div>
-    {phase === "login" && (
-      <WelcomeFlow
-        key="login"
-        onSubmit={async (displayName, upn) => { await setIdentity(displayName, upn) }}
-        onDone={() => setPhase("shell")}
-      />
-    )}
-    {phase === "outro" && (
-      <WelcomeFlow
-        key="outro"
-        mode="outro"
-        onSubmit={async () => {}}
-        onDone={async () => {
-          try { await switchUser() } catch { /* ignore */ }
-          setPhase("login")
-        }}
-      />
-    )}
-    {phase === "switching" && (
-      <WelcomeFlow
-        key="switching"
-        mode="outro"
-        onSubmit={async () => {}}
-        onDone={() => {
-          try { window.localStorage.setItem("mia:ui", "term") } catch { /* ignore */ }
-          try { window.localStorage.setItem("mia:ui-transition", "1") } catch { /* ignore */ }
-          const { protocol, hostname, port, pathname } = window.location
-          const url = port === "5179"
-            ? `${protocol}//${hostname}:5180${pathname}`
-            : `${protocol}//${hostname}${port ? ":" + port : ""}${pathname}?ui=term`
-          window.location.assign(url)
-        }}
-      />
-    )}
-    {phase === "reveal" && (
-      <WelcomeFlow
-        key="reveal"
-        mode="reveal"
-        onSubmit={async () => {}}
-        onDone={() => setPhase("shell")}
-      />
-    )}
     </>
   )
 }

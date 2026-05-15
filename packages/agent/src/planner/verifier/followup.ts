@@ -5,14 +5,15 @@
  * @module
  */
 
-import { uniqueStrings } from "../blueprint-contract.js"
+import { VerifierEvidenceSource } from "@mia/agent"
+import { uniqueStrings } from "../blueprint-contract/index.js"
 import type {
-    PipelineResult,
-    Plan,
-    VerificationEvidence,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  VerificationEvidence,
+  VerifierStepAssessment,
 } from "../types.js"
-import { deriveIssuesFromEvidence } from "../verification-model.js"
+import { deriveIssuesFromEvidence } from "../verification-model/index.js"
 
 export function needsFollowupVerification(assessments: readonly VerifierStepAssessment[]): VerifierStepAssessment[] {
   return assessments.filter((assessment) => {
@@ -39,7 +40,7 @@ export function collectFollowupEvidence(
         evidence.push({
           id: `${assessment.stepName}:followup:reconciliation:${index + 1}`,
           stepName: assessment.stepName,
-          source: "deterministic",
+          source: VerifierEvidenceSource.Deterministic,
           kind: finding.code,
           message: finding.message,
           artifactPaths: [...finding.artifactPaths],
@@ -54,7 +55,7 @@ export function collectFollowupEvidence(
         evidence.push({
           id: `${assessment.stepName}:followup:verification:${index + 1}`,
           stepName: assessment.stepName,
-          source: "deterministic",
+          source: VerifierEvidenceSource.Deterministic,
           kind: "verification_attempt_failure",
           message: `${attempt.toolName}${attempt.target ? `:${attempt.target}` : ""} failed: ${attempt.summary}`,
           artifactPaths: attempt.target ? [attempt.target] : [],

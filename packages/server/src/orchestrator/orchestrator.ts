@@ -1,20 +1,23 @@
 import {
-  createEngineServices,
-  PolicyEffect,
-  type LLMClient,
-  type Message,
-  type PolicyRole,
-  type Tool,
-} from "@agent001/agent"
+    createEngineServices,
+    EventType,
+    PolicyEffect,
+    PolicyRole,
+    RunStatus,
+    type LLMClient,
+    type Message,
+    type Tool
+} from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
 import { getCurrentSession } from "../auth/context.js"
 import type { MessageRouter } from "../channels/router.js"
-import * as db from "../db.js"
-import { migrateEffects } from "../effects.js"
+import * as db from "../db/index.js"
+import { migrateEffects } from "../effects/index.js"
+import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast } from "../event-broadcaster.js"
-import { migrateMemory } from "../memory.js"
-import { RunQueue, type RunPriority } from "../queue.js"
+import { migrateMemory } from "../memory/index.js"
+import { RunPriority, RunQueue } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
 import { cleanupExpiredCache } from "../tool-cache.js"
@@ -74,7 +77,7 @@ export class AgentOrchestrator {
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
     const session = getCurrentSession()
-    const role: PolicyRole = !session ? "admin" : session.isAdmin ? "admin" : "hosted_user"
+    const role: PolicyRole = !session ? PolicyRole.Admin : session.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     if (session && !session.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
@@ -89,11 +92,63 @@ export class AgentOrchestrator {
     // through the admin UI; this loop already loaded them above.
 
     this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [], ownerUpn: session?.upn ?? null, sessionId: session?.sid ?? null })
-    broadcast({ type: "run.queued", data: { runId, goal, agentId, queueStats: this.queue.stats() } })
-    saveTrace(this.activeRuns, runId, { kind: "goal", text: goal })
+
+    // Persist the run row BEFORE broadcasting or writing trace entries.
+    // trace_entries.run_id has a hard FK to runs(id), so saveTrace below
+    // would fail with SQLITE_CONSTRAINT_FOREIGNKEY otherwise. Doing this
+    // first also means: cancel route (which checks db.getRun) can find
+    // the row immediately, and SSE consumers never see a `run.queued`
+    // event for a run that does not exist server-side.
+    db.saveRun({
+      id:            runId,
+      goal,
+      status:        RunStatus.Pending,
+      answer:        null,
+      step_count:    0,
+      error:         null,
+      parent_run_id: null,
+      agent_id:      agentId,
+      created_at:    new Date().toISOString(),
+      completed_at:  null,
+      session_id:    session?.sid ?? null,
+      upn:           session?.upn ?? null,
+      display_name:  session?.displayName ?? null,
+    })
+
+    broadcast({ type: EventType.RunQueued, data: { runId, goal, agentId, queueStats: this.queue.stats() } })
+    saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
     this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
+      // executeRun threw before its own try/catch could mark the run
+      // failed (e.g. crash during prepareWorkspace). Without this the
+      // runs row stays at status="queued" forever and the UI's
+      // PIPELINES widget shows a perpetual "running" badge. Persist
+      // a failed status and emit run.failed so all SSE consumers can
+      // settle their local state.
+      const message = err instanceof Error ? err.message : String(err)
+      try {
+        const existing = db.getRun(runId)
+        db.saveRun({
+          id:            runId,
+          goal,
+          status:        RunStatus.Failed,
+          answer:        existing?.answer ?? null,
+          step_count:    existing?.step_count ?? 0,
+          error:         message,
+          parent_run_id: existing?.parent_run_id ?? null,
+          agent_id:      agentId,
+          created_at:    existing?.created_at ?? new Date().toISOString(),
+          completed_at:  new Date().toISOString(),
+          session_id:    existing?.session_id ?? session?.sid ?? null,
+          upn:           existing?.upn ?? session?.upn ?? null,
+          display_name:  existing?.display_name ?? session?.displayName ?? null,
+        })
+      } catch (persistErr) {
+        console.error(`Failed to persist failure for run ${runId}:`, persistErr)
+      }
+      broadcast({ type: EventType.RunFailed, data: { runId, error: message } })
+      this.activeRuns.delete(runId)
     })
 
     return runId
@@ -107,7 +162,7 @@ export class AgentOrchestrator {
       // cancel either way so list/status calls reflect reality immediately.
       db.markRunCancelled(runId)
       const removed = this.queue.remove(runId)
-      broadcast({ type: "run.cancelled", data: { runId } })
+      broadcast({ type: EventType.RunCancelled, data: { runId } })
       return removed || true
     }
     active.controller.abort()
@@ -116,7 +171,7 @@ export class AgentOrchestrator {
     // the row would stay 'running' forever. This is a no-op if the loop
     // races us to completion (markRunCancelled only touches active rows).
     db.markRunCancelled(runId)
-    broadcast({ type: "run.cancelled", data: { runId } })
+    broadcast({ type: EventType.RunCancelled, data: { runId } })
     return true
   }
 
@@ -125,10 +180,10 @@ export class AgentOrchestrator {
     const originalRun = db.getRun(runId)
     if (!checkpoint || !originalRun) return null
     if (this.activeRuns.has(runId)) return null
-    if (originalRun.status === "completed") return null
+    if (originalRun.status === RunStatus.Completed) return null
 
     const existingRuns = db.listRuns(200)
-    const alreadyResumed = existingRuns.find((r) => r.parent_run_id === runId && (r.status === "running" || r.status === "pending" || r.status === "planning"))
+    const alreadyResumed = existingRuns.find((r) => r.parent_run_id === runId && (r.status === RunStatus.Running || r.status === RunStatus.Pending || r.status === RunStatus.Planning))
     if (alreadyResumed) return alreadyResumed.id
 
     const newRunId = randomUUID()
@@ -149,10 +204,10 @@ export class AgentOrchestrator {
     // above already covers them.)
 
     const resumeSession = getCurrentSession()
-    const resumeRole: PolicyRole = !resumeSession ? "admin" : resumeSession.isAdmin ? "admin" : "hosted_user"
+    const resumeRole: PolicyRole = !resumeSession ? PolicyRole.Admin : resumeSession.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [], ownerUpn: resumeSession?.upn ?? null, sessionId: resumeSession?.sid ?? null })
-    broadcast({ type: "run.queued", data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
-    saveTrace(this.activeRuns, newRunId, { kind: "goal", text: originalRun.goal })
+    broadcast({ type: EventType.RunQueued, data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
+    saveTrace(this.activeRuns, newRunId, { kind: TrajectoryEventKind.Goal, text: originalRun.goal })
 
     const messages = JSON.parse(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
@@ -185,8 +240,8 @@ export class AgentOrchestrator {
     if (!pending) return false
     pending.resolve(response)
     this.pendingInputs.delete(runId)
-    saveTrace(this.activeRuns, runId, { kind: "user-input-response", text: response })
-    broadcast({ type: "user_input.response", data: { runId } })
+    saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.UserInputResponse, text: response })
+    broadcast({ type: EventType.UserInputResponse, data: { runId } })
     return true
   }
 
@@ -197,7 +252,7 @@ export class AgentOrchestrator {
     pending.perToolCtrl.abort()
     pending.resolve(message)
     this.pendingKills.delete(key)
-    broadcast({ type: "tool_call.killed", data: { runId, toolCallId, message } })
+    broadcast({ type: EventType.ToolCallKilled, data: { runId, toolCallId, message } })
     return true
   }
 
@@ -256,7 +311,7 @@ export class AgentOrchestrator {
     controller: AbortController,
     bus: AgentBus,
     resume?: { messages: Message[]; iteration: number; parentRunId: string },
-    priority: RunPriority = "normal",
+    priority: RunPriority = RunPriority.Normal,
   ): Promise<void> {
     return executeRunImpl(this.getCtx(), runId, goal, tools, systemPrompt, agentId, services, controller, bus, resume, priority)
   }

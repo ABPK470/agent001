@@ -1,44 +1,52 @@
 import {
-  Agent,
-  AgentRuntime,
-  askUserTool,
-  cancelRun,
-  completeRun,
-  createDelegateTools,
-  createRun,
-  detectInternalFailure,
-  failRun,
-  fillRunReference,
-  governTool,
-  isPlatformUnconfiguredAnswer,
-  isUserSafeFailureAnswer,
-  mapFailureKindForPolish,
-  markPolishedFailure,
-  polishFailureForUser,
-  runCompleted,
-  runFailed,
-  runStarted,
-  runWithMssqlKillSignal,
-  runWithPolicyContext,
-  spawnChildForPlan,
-  startPlanning,
-  startRunning,
-  synthesizeGenericFailureAnswer,
-  type DelegateContext,
-  type EngineServices,
-  type HostedPolicyContext,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
-  type ToolKillManager
-} from "@agent001/agent"
+    Agent,
+    AgentRuntime,
+    askUserTool,
+    cancelRun,
+    completeRun,
+    createDelegateTools,
+    createRun,
+    detectInternalFailure,
+    EventType,
+    failRun,
+    fillRunReference,
+    governTool,
+    isPlatformUnconfiguredAnswer,
+    isUserSafeFailureAnswer,
+    mapFailureKindForPolish,
+    markPolishedFailure,
+    PolicyRole,
+    PolicyRunMode,
+    polishFailureForUser,
+    runCompleted,
+    runFailed,
+    runStarted,
+    runWithMssqlKillSignal,
+    runWithPolicyContext,
+    spawnChildForPlan,
+    startPlanning,
+    startRunning,
+    SyncRunStatus,
+    synthesizeGenericFailureAnswer,
+    type DelegateContext,
+    type EngineServices,
+    type HostedPolicyContext,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
+    type ToolKillManager
+} from "@mia/agent"
+import type { TraceEntry } from "@mia/shared-types"
 import { AgentBus, createBusTools } from "../agent-bus.js"
-import * as db from "../db.js"
-import { resetEffectSeq } from "../effects.js"
-import { broadcast } from "../event-broadcaster.js"
-import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory.js"
-import type { RunPriority } from "../queue.js"
+import * as db from "../db/index.js"
+import { resetEffectSeq } from "../effects/index.js"
+import { AuditActor } from "../enums/audit.js"
+import { NotificationActionType } from "../enums/notifications.js"
+import { TrajectoryEventKind } from "../enums/trajectory.js"
+import { broadcast, broadcastTrace } from "../event-broadcaster.js"
+import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory/index.js"
+import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { getAllTools } from "../tools.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
@@ -63,7 +71,7 @@ export async function executeRunImpl(
   controller: AbortController,
   bus: AgentBus,
   resume?: { messages: Message[]; iteration: number; parentRunId: string },
-  priority: RunPriority = "normal",
+  priority: RunPriority = RunPriority.Normal,
 ): Promise<void> {
   // Acquire a queue slot (waits if at capacity)
   let releaseSlot: () => void
@@ -131,7 +139,7 @@ export async function executeRunImpl(
     maxDepth: maxDelegationDepth,
     signal: controller.signal,
     extraChildTools: busTools,
-    acquireSlot: (childRunId: string) => ctx.queue.acquire(childRunId, "high", controller.signal),
+    acquireSlot: (childRunId: string) => ctx.queue.acquire(childRunId, RunPriority.High, controller.signal),
     resolveAgent: (aId: string): ResolvedAgent | null => {
       const def = db.getAgentDefinition(aId)
       if (!def) return null
@@ -140,24 +148,24 @@ export async function executeRunImpl(
     },
     onChildTrace: (entry) => {
       boundSaveTrace(runId, entry)
-      if (entry.kind === "delegation-start") {
-        broadcast({ type: "delegation.started", data: { runId, ...entry } })
-        services.auditService.log({ actor: "agent", action: "delegation.started", resourceType: "AgentRun", resourceId: runId, detail: { goal: entry.goal, depth: entry.depth, tools: entry.tools, agentName: entry.agentName } }).catch(() => {})
-      } else if (entry.kind === "delegation-end") {
-        broadcast({ type: "delegation.ended", data: { runId, ...entry } })
-        services.auditService.log({ actor: "agent", action: entry.status === "done" ? "delegation.completed" : "delegation.failed", resourceType: "AgentRun", resourceId: runId, detail: { depth: entry.depth, status: entry.status, answer: entry.answer, error: entry.error } }).catch(() => {})
-      } else if (entry.kind === "delegation-iteration") {
-        broadcast({ type: "delegation.iteration", data: { runId, ...entry } })
-      } else if (entry.kind === "delegation-parallel-start") {
-        broadcast({ type: "delegation.parallel-started", data: { runId, ...entry } })
-      } else if (entry.kind === "delegation-parallel-end") {
-        broadcast({ type: "delegation.parallel-ended", data: { runId, ...entry } })
+      if (entry.kind === TrajectoryEventKind.DelegationStart) {
+        broadcast({ type: EventType.DelegationStarted, data: { runId, ...entry } })
+        services.auditService.log({ actor: AuditActor.Agent, action: "delegation.started", resourceType: "AgentRun", resourceId: runId, detail: { goal: entry.goal, depth: entry.depth, tools: entry.tools, agentName: entry.agentName } }).catch(() => {})
+      } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
+        broadcast({ type: EventType.DelegationEnded, data: { runId, ...entry } })
+        services.auditService.log({ actor: AuditActor.Agent, action: entry.status === "done" ? "delegation.completed" : "delegation.failed", resourceType: "AgentRun", resourceId: runId, detail: { depth: entry.depth, status: entry.status, answer: entry.answer, error: entry.error } }).catch(() => {})
+      } else if (entry.kind === TrajectoryEventKind.DelegationIteration) {
+        broadcast({ type: EventType.DelegationIteration, data: { runId, ...entry } })
+      } else if (entry.kind === TrajectoryEventKind.DelegationParallelStart) {
+        broadcast({ type: EventType.DelegationParallelStarted, data: { runId, ...entry } })
+      } else if (entry.kind === TrajectoryEventKind.DelegationParallelEnd) {
+        broadcast({ type: EventType.DelegationParallelEnded, data: { runId, ...entry } })
       } else if (entry.kind === "thinking") {
-        broadcast({ type: "agent.thinking", data: { runId, content: entry.text } })
+        broadcast({ type: EventType.AgentThinking, data: { runId, content: entry.text } })
       } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
-        broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
+        broadcastTrace(runId, Date.now(), entry as TraceEntry)
       } else if (entry.kind === "llm-request" || entry.kind === "llm-response" || entry.kind === "nudge") {
-        broadcast({ type: "debug.trace", data: { runId, seq: Date.now(), entry } })
+        broadcastTrace(runId, Date.now(), entry as TraceEntry)
       }
     },
     onChildUsage: (() => {
@@ -174,7 +182,7 @@ export async function executeRunImpl(
         agent.usage.completionTokens = totalCompletion
         agent.usage.totalTokens = totalTokens
         agent.llmCalls = totalLlmCalls
-        broadcast({ type: "usage.updated", data: { runId, promptTokens: totalPrompt, completionTokens: totalCompletion, totalTokens, llmCalls: totalLlmCalls } })
+        broadcast({ type: EventType.UsageUpdated, data: { runId, promptTokens: totalPrompt, completionTokens: totalCompletion, totalTokens, llmCalls: totalLlmCalls } })
       }
     })(),
   }
@@ -187,8 +195,8 @@ export async function executeRunImpl(
       if (!question) return "Error: 'question' is required"
       const options = Array.isArray(args.options) ? args.options.map(String) : undefined
       const sensitive = Boolean(args.sensitive)
-      boundSaveTrace(runId, { kind: "user-input-request", question, options, sensitive })
-      broadcast({ type: "user_input.required", data: { runId, question, options: options ?? [], sensitive } })
+      boundSaveTrace(runId, { kind: TrajectoryEventKind.UserInputRequest, question, options, sensitive })
+      broadcast({ type: EventType.UserInputRequired, data: { runId, question, options: options ?? [], sensitive } })
       const response = await new Promise<string>((resolve) => {
         ctx.pendingInputs.set(runId, { resolve })
       })
@@ -238,7 +246,7 @@ export async function executeRunImpl(
                 console.warn("[sync-history] recordSyncRunStart failed:", e instanceof Error ? e.message : e)
               }
               broadcast({
-                type: "sync.agent.preview",
+                type: EventType.SyncAgentPreview,
                 data: {
                   runId,
                   planId,
@@ -259,7 +267,7 @@ export async function executeRunImpl(
         ...t,
         execute: async (args: Record<string, unknown>) => {
           const planId = String(args["planId"] ?? "")
-          broadcast({ type: "sync.agent.execute.started", data: { runId, planId } })
+          broadcast({ type: EventType.SyncAgentExecuteStarted, data: { runId, planId } })
           const t0 = Date.now()
           const result = await t.execute(args)
           const success = typeof result === "string" && result.toLowerCase().includes("successfully")
@@ -269,7 +277,7 @@ export async function executeRunImpl(
           try {
             db.recordSyncRunFinish({
               planId,
-              status: success ? "success" : "failed",
+              status: success ? SyncRunStatus.Success : SyncRunStatus.Failed,
               error: success ? null : (typeof result === "string" ? result : null),
               durationMs: Date.now() - t0,
             })
@@ -277,7 +285,7 @@ export async function executeRunImpl(
             console.warn("[sync-history] recordSyncRunFinish failed:", e instanceof Error ? e.message : e)
           }
           broadcast({
-            type: "sync.agent.execute.completed",
+            type: EventType.SyncAgentExecuteCompleted,
             data: { runId, planId, success, result: typeof result === "string" ? result : String(result) },
           })
           return result
@@ -294,7 +302,7 @@ export async function executeRunImpl(
   if (shouldUseMemory) {
     try {
       const result = await retrieveContext(goal, {
-        sessionId: agentId ?? "default",
+        sessionId: activeRun?.sessionId ?? agentId ?? "default",
         runId,
         upn: activeRun?.ownerUpn ?? null,
       })
@@ -318,13 +326,13 @@ export async function executeRunImpl(
   delegateCtx.parentSystemPrompt = effectivePrompt
 
   const debugSeqRef = { value: 0 }
-  const systemPromptEntry = { kind: "system-prompt" as const, text: effectivePrompt ?? "(no system prompt)" }
+  const systemPromptEntry = { kind: TrajectoryEventKind.SystemPrompt as const, text: effectivePrompt ?? "(no system prompt)" }
   boundSaveTrace(runId, systemPromptEntry)
-  broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry: systemPromptEntry } })
+  broadcastTrace(runId, debugSeqRef.value++, systemPromptEntry)
 
-  const toolsResolvedEntry = { kind: "tools-resolved" as const, tools: allTools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }
+  const toolsResolvedEntry = { kind: TrajectoryEventKind.ToolsResolved as const, tools: allTools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }
   boundSaveTrace(runId, toolsResolvedEntry)
-  broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry: toolsResolvedEntry } })
+  broadcastTrace(runId, debugSeqRef.value++, toolsResolvedEntry)
 
   let prevTotalTokens = 0
 
@@ -346,7 +354,7 @@ export async function executeRunImpl(
         return new Promise<string>((resolve) => {
           const key = `${runId}:${toolCallId}`
           ctx.pendingKills.set(key, { resolve, perToolCtrl })
-          broadcast({ type: "tool_call.executing", data: { runId, toolCallId, toolName } })
+          broadcast({ type: EventType.ToolCallExecuting, data: { runId, toolCallId, toolName } })
         })
       },
       unregister: (toolCallId: string) => {
@@ -355,7 +363,7 @@ export async function executeRunImpl(
         runtime.shell.killSignal = controller.signal
         runtime.fetchUrl.killSignal = null
         runtime.browseWeb.killSignal = null
-        broadcast({ type: "tool_call.completed", data: { runId, toolCallId } })
+        broadcast({ type: EventType.ToolCallCompleted, data: { runId, toolCallId } })
       },
       wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
         const sig = callSignals.get(toolCallId)
@@ -380,46 +388,46 @@ export async function executeRunImpl(
     onNudge: (data) => {
       const entry = { kind: "nudge" as const, tag: data.tag, message: data.message, iteration: data.iteration }
       boundSaveTrace(runId, entry)
-      broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry } })
+      broadcastTrace(runId, debugSeqRef.value++, entry)
     },
     onLlmCall: (data) => {
       if (data.phase === "request") {
-        const entry = { kind: "llm-request" as const, iteration: data.iteration, messageCount: data.messages.length, toolCount: data.tools.length, messages: data.messages.map((m) => ({ role: m.role, content: m.content, toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [], toolCallId: m.toolCallId ?? null })) }
+        const entry = { kind: TrajectoryEventKind.LlmRequest as const, iteration: data.iteration, messageCount: data.messages.length, toolCount: data.tools.length, messages: data.messages.map((m) => ({ role: m.role, content: m.content, toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [], toolCallId: m.toolCallId ?? null })) }
         boundSaveTrace(runId, entry)
-        broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry } })
+        broadcastTrace(runId, debugSeqRef.value++, entry)
       } else {
-        const entry = { kind: "llm-response" as const, iteration: data.iteration, durationMs: data.durationMs, content: data.response.content, toolCalls: data.response.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })), usage: data.response.usage ?? null }
+        const entry = { kind: TrajectoryEventKind.LlmResponse as const, iteration: data.iteration, durationMs: data.durationMs, content: data.response.content, toolCalls: data.response.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })), usage: data.response.usage ?? null }
         boundSaveTrace(runId, entry)
-        broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry } })
+        broadcastTrace(runId, debugSeqRef.value++, entry)
       }
     },
     onThinking: (content, _toolCalls, iteration) => {
-      const iterEntry = { kind: "iteration" as const, current: iteration + 1, max: 30 }
+      const iterEntry = { kind: TrajectoryEventKind.Iteration as const, current: iteration + 1, max: 30 }
       boundSaveTrace(runId, iterEntry)
-      broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry: iterEntry } })
+      broadcastTrace(runId, debugSeqRef.value++, iterEntry)
       if (content) {
-        boundSaveTrace(runId, { kind: "thinking", text: content })
-        broadcast({ type: "agent.thinking", data: { runId, content, iteration } })
+        boundSaveTrace(runId, { kind: TrajectoryEventKind.Thinking, text: content })
+        broadcast({ type: EventType.AgentThinking, data: { runId, content, iteration } })
       }
       const iterationTokens = agent.usage.totalTokens - prevTotalTokens
       prevTotalTokens = agent.usage.totalTokens
-      const usageEntry = { kind: "usage" as const, iterationTokens, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls }
+      const usageEntry = { kind: TrajectoryEventKind.Usage as const, iterationTokens, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls }
       boundSaveTrace(runId, usageEntry)
-      broadcast({ type: "debug.trace", data: { runId, seq: debugSeqRef.value++, entry: usageEntry } })
-      broadcast({ type: "usage.updated", data: { runId, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls } })
+      broadcastTrace(runId, debugSeqRef.value++, usageEntry)
+      broadcast({ type: EventType.UsageUpdated, data: { runId, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls } })
     },
     onStep: (messages, iteration) => {
       lastMessages = messages
       lastIteration = iteration
       db.saveCheckpoint({ run_id: runId, messages: JSON.stringify(messages), iteration, step_counter: state.stepCounter, updated_at: new Date().toISOString() })
-      broadcast({ type: "checkpoint.saved", data: { runId, iteration, stepCounter: state.stepCounter } })
+      broadcast({ type: EventType.CheckpointSaved, data: { runId, iteration, stepCounter: state.stepCounter } })
       persistRun(run, goal, agentId, resume?.parentRunId)
     },
     onToken: (token) => {
-      broadcast({ type: "answer.chunk", data: { runId, chunk: token } })
+      broadcast({ type: EventType.AnswerChunk, data: { runId, chunk: token } })
     },
     onStreamDiscard: () => {
-      broadcast({ type: "stream.reset", data: { runId } })
+      broadcast({ type: EventType.StreamReset, data: { runId } })
     },
   })
 
@@ -435,8 +443,8 @@ export async function executeRunImpl(
     // in scope by the time queued work resumes.
     const policyCtx: HostedPolicyContext = {
       runId,
-      runMode:     runWorkspace.profile === "hosted" ? "hosted" : "developer",
-      role:        activeRun?.role ?? "admin",
+      runMode:     runWorkspace.profile === "hosted" ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
+      role:        activeRun?.role ?? PolicyRole.Admin,
       sandboxRoot: runWorkspace.executionRoot,
       actorUpn:    activeRun?.ownerUpn ?? null,
       sessionId:   activeRun?.sessionId ?? null,
@@ -492,7 +500,7 @@ export async function executeRunImpl(
         })
       } catch { /* best-effort */ }
       try {
-        broadcast({ type: "run.user_safe_failure", data: { runId, kind: internalFailure.kind, summary: internalFailure.summary } })
+        broadcast({ type: EventType.RunUserSafeFailure, data: { runId, kind: internalFailure.kind, summary: internalFailure.summary } })
       } catch { /* best-effort */ }
       console.error(`[run-executor] Internal failure for run ${runId} (${internalFailure.kind}): ${internalFailure.summary}`)
 
@@ -515,9 +523,9 @@ export async function executeRunImpl(
       persistRun(run, goal, agentId, resume?.parentRunId)
       await persistAuditLog(services, runId)
       persistTokenUsage(runId, agent)
-      broadcast({ type: "run.cancelled", data: { runId, status: "cancelled", stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
+      broadcast({ type: EventType.RunCancelled, data: { runId, status: RunStatus.Cancelled, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
       db.saveLog({ run_id: runId, level: "run:error", message: "Cancelled", timestamp: new Date().toISOString() })
-      createNotification({ type: "run.cancelled", title: "Run cancelled", message: `"${goal.slice(0, 80)}" was cancelled after ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: "view-run", data: { runId } }, { label: "Rollback", action: "rollback-run", data: { runId } }] })
+      createNotification({ type: EventType.RunCancelled, title: "Run cancelled", message: `"${goal.slice(0, 80)}" was cancelled after ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }, { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId } }] })
       return
     }
 
@@ -529,7 +537,7 @@ export async function executeRunImpl(
     await persistAuditLog(services, runId)
     persistTokenUsage(runId, agent)
 
-    boundSaveTrace(runId, { kind: "answer", text: answer })
+    boundSaveTrace(runId, { kind: TrajectoryEventKind.Answer, text: answer })
     await captureRunWorkspaceDiff(runId, ctx.activeRuns, ctx.completedRunWorkspaces, ctx.completedRunDiffs, boundSaveTrace, createNotification)
     const pendingDiff = ctx.completedRunDiffs.get(runId)
     const pendingChangeCount = pendingDiff ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length : 0
@@ -565,9 +573,9 @@ export async function executeRunImpl(
     extractProcedural({ id: runId, goal, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null, sessionId: activeRun?.sessionId ?? null })
     consolidate({ minAgeHours: 24, upn: activeRun?.ownerUpn ?? null })
 
-    broadcast({ type: "run.completed", data: { runId, answer, status: "completed", stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls, pendingWorkspaceChanges: pendingChangeCount } })
+    broadcast({ type: EventType.RunCompleted, data: { runId, answer, status: RunStatus.Completed, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls, pendingWorkspaceChanges: pendingChangeCount } })
     db.saveLog({ run_id: runId, level: "run", message: `Completed — ${run.steps.length} steps`, timestamp: new Date().toISOString() })
-    createNotification({ type: "run.completed", title: "Run completed", message: pendingChangeCount > 0 ? `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.` : `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: "view-run", data: { runId } }] })
+    createNotification({ type: EventType.RunCompleted, title: "Run completed", message: pendingChangeCount > 0 ? `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.` : `"${goal.slice(0, 80)}" finished with ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }] })
 
     if (ctx.messageRouter) {
       ctx.messageRouter.sendReply(runId, answer).catch((err) => { console.error(`Failed to send reply for run ${runId}:`, err) })
@@ -595,22 +603,22 @@ export async function executeRunImpl(
 
     if (lastMessages.length > 0) {
       db.saveCheckpoint({ run_id: runId, messages: JSON.stringify(lastMessages), iteration: lastIteration, step_counter: state.stepCounter, updated_at: new Date().toISOString() })
-      broadcast({ type: "checkpoint.saved", data: { runId, iteration: lastIteration, stepCounter: state.stepCounter } })
+      broadcast({ type: EventType.CheckpointSaved, data: { runId, iteration: lastIteration, stepCounter: state.stepCounter } })
     }
 
     persistRun(run, goal, agentId, resume?.parentRunId, undefined, errMsg)
     await persistAuditLog(services, runId)
     persistTokenUsage(runId, agent)
 
-    boundSaveTrace(runId, { kind: "error", text: errMsg })
+    boundSaveTrace(runId, { kind: TrajectoryEventKind.Error, text: errMsg })
     await captureRunWorkspaceDiff(runId, ctx.activeRuns, ctx.completedRunWorkspaces, ctx.completedRunDiffs, boundSaveTrace, createNotification)
 
-    ingestRunTurns({ id: runId, goal, answer: null, status: "failed", agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
+    ingestRunTurns({ id: runId, goal, answer: null, status: RunStatus.Failed, agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: errMsg, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
 
-    broadcast({ type: "run.failed", data: { runId, error: errMsg, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
+    broadcast({ type: EventType.RunFailed, data: { runId, error: errMsg, stepCount: run.steps.length, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls } })
     db.saveLog({ run_id: runId, level: "run:error", message: `Failed — ${errMsg.slice(0, 200)}`, timestamp: new Date().toISOString() })
     const hasCheckpoint = !!db.getCheckpoint(runId)
-    createNotification({ type: "run.failed", title: "Run failed", message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`, runId, actions: [{ label: "Review", action: "view-run", data: { runId } }, ...(hasCheckpoint ? [{ label: "Resume", action: "resume-run", data: { runId } }] : []), { label: "Rollback", action: "rollback-run", data: { runId } }] })
+    createNotification({ type: EventType.RunFailed, title: "Run failed", message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`, runId, actions: [{ label: "Review", action: NotificationActionType.ViewRun, data: { runId } }, ...(hasCheckpoint ? [{ label: "Resume", action: NotificationActionType.ResumeRun, data: { runId } }] : []), { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId } }] })
   } finally {
     await runtime.dispose()
     releaseSlot()

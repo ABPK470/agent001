@@ -9,7 +9,9 @@
 import {
     appendFileTool,
     askUserTool,
+    browserAutoLoginTool,
     browserCheckTool,
+    browserHumanHandoffTool,
     browseWebTool,
     compareCatalogsTool,
     createDelegateTools,
@@ -35,10 +37,11 @@ import {
     syncExecuteTool,
     syncPreviewTool,
     thinkTool,
+    webSearchTool,
     writeFileTool,
     type LLMClient,
     type Tool,
-} from "@agent001/agent"
+} from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 
 export { thinkTool }
@@ -59,6 +62,9 @@ const ALL_TOOLS: Tool[] = [
   fetchUrlTool,
   browserCheckTool,
   browseWebTool,
+  browserAutoLoginTool,
+  browserHumanHandoffTool,
+  webSearchTool,
   askUserTool,
   getChartSpecsTool,
   mssqlTool,

@@ -1,5 +1,8 @@
-import type { DomainEvent, EngineServices } from "@agent001/agent"
-import * as db from "../db.js"
+import type { DomainEvent, EngineServices } from "@mia/agent"
+import { EventType } from "@mia/agent"
+import * as db from "../db/index.js"
+import { NotificationActionType } from "../enums/notifications.js"
+import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { NotificationOpts } from "./types.js"
 
@@ -28,7 +31,7 @@ export function wireEventBroadcasting(
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
   createNotification: (opts: NotificationOpts) => void,
 ): void {
-  const events = ["run.started", "step.started", "step.completed", "step.failed"]
+  const events: EventType[] = [EventType.RunStarted, EventType.StepStarted, EventType.StepCompleted, EventType.StepFailed]
   for (const eventType of events) {
     services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
       const data = event as unknown as Record<string, unknown>
@@ -48,8 +51,9 @@ export function wireEventBroadcasting(
 
       broadcast({ type: eventType, data })
 
-      if (eventType === "step.started") {
+      if (eventType === EventType.StepStarted) {
         const toolName = (data["action"] as string) ?? "unknown"
+        const stepId = data["stepId"] as string
         const input = (data["input"] as Record<string, unknown>) ?? {}
         const argsFormatted = JSON.stringify(input, null, 2)
         const keys = Object.keys(input)
@@ -58,13 +62,20 @@ export function wireEventBroadcasting(
         const argsSummary = keys.length > 0
           ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
           : ""
-        saveTrace(runId, { kind: "tool-call", tool: toolName, argsSummary, argsFormatted })
-      } else if (eventType === "step.completed") {
+        // invocationId MUST be present so the UI can pair tool-call with
+        // its later tool-result/tool-error entry. Without it, historical
+        // trace replay (TermChat / AgentChat / IOE chat) drops the result
+        // text and only shows the input — leaving every tool row in the
+        // expanded view without an output panel.
+        saveTrace(runId, { kind: TrajectoryEventKind.ToolCall, invocationId: stepId, tool: toolName, argsSummary, argsFormatted })
+      } else if (eventType === EventType.StepCompleted) {
+        const stepId = data["stepId"] as string
         const output = (data["output"] as Record<string, unknown>) ?? {}
         const result = (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
-        saveTrace(runId, { kind: "tool-result", text: result })
-      } else if (eventType === "step.failed") {
-        saveTrace(runId, { kind: "tool-error", text: (data["error"] as string) ?? "unknown error" })
+        saveTrace(runId, { kind: TrajectoryEventKind.ToolResult, invocationId: stepId, text: result })
+      } else if (eventType === EventType.StepFailed) {
+        const stepId = data["stepId"] as string
+        saveTrace(runId, { kind: TrajectoryEventKind.ToolError, invocationId: stepId, text: (data["error"] as string) ?? "unknown error" })
       }
 
       // Save a human-readable log (not raw JSON) with the type group
@@ -73,16 +84,16 @@ export function wireEventBroadcasting(
       const isError = eventType.includes("failed")
       let logMsg: string
       switch (eventType) {
-        case "run.started":
+        case EventType.RunStarted:
           logMsg = `Started — run ${(data["runId"] as string)?.slice(0, 8) ?? "?"}`
           break
-        case "step.started":
+        case EventType.StepStarted:
           logMsg = `${(data["action"] as string) ?? "unknown"} started`
           break
-        case "step.completed":
+        case EventType.StepCompleted:
           logMsg = `${(data["action"] as string) ?? "unknown"} completed`
           break
-        case "step.failed":
+        case EventType.StepFailed:
           logMsg = `${(data["action"] as string) ?? "unknown"} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`
           break
         default:
@@ -101,7 +112,7 @@ export function wireEventBroadcasting(
   const originalLog = services.auditService.log.bind(services.auditService)
   services.auditService.log = async (entry) => {
     const result = await originalLog(entry)
-    broadcast({ type: "audit", data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} } })
+    broadcast({ type: EventType.Audit, data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} } })
     return result
   }
 
@@ -112,16 +123,16 @@ export function wireEventBroadcasting(
     const reason = data["reason"] as string
     const stepId = data["stepId"] as string
     createNotification({
-      type: "approval.required",
+      type: EventType.ApprovalRequired,
       title: "Approval required",
       message: `Tool "${toolName}" needs approval: ${reason}`,
       runId,
       stepId,
       actions: [
-        { label: "Review", action: "view-run", data: { runId } },
-        { label: "Edit Policies", action: "open-policies", data: { runId } },
+        { label: "Review", action: NotificationActionType.ViewRun, data: { runId } },
+        { label: "Edit Policies", action: NotificationActionType.OpenPolicies, data: { runId } },
       ],
     })
-    broadcast({ type: "approval.required", data: { runId, stepId, toolName, reason } })
+    broadcast({ type: EventType.ApprovalRequired, data: { runId, stepId, toolName, reason } })
   })
 }

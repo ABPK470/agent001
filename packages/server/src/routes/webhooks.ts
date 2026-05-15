@@ -14,17 +14,8 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import {
-    deleteChannelConfig,
-    getDeliveryStats,
-    getOutboundMessages,
-    listChannelConfigs,
-    saveChannelConfig,
-    TeamsChannel,
-    type ChannelType,
-    type MessageQueue,
-    type MessageRouter,
-} from "../channels/index.js"
+import { deleteChannelConfig, getDeliveryStats, getOutboundMessages, listChannelConfigs, saveChannelConfig, TeamsChannel, type MessageQueue, type MessageRouter } from "../channels/index.js"
+import { ChannelType, isChannelType } from "../enums/channels.js"
 
 export function registerWebhookRoutes(app: FastifyInstance, router: MessageRouter, queue: MessageQueue): void {
 
@@ -34,7 +25,7 @@ export function registerWebhookRoutes(app: FastifyInstance, router: MessageRoute
   // Authentication is via JWT Bearer token in the Authorization header.
 
   app.post("/webhooks/teams", async (req, reply) => {
-    const channel = router.getChannel("teams")
+    const channel = router.getChannel(ChannelType.Teams)
     if (!channel) {
       reply.code(404)
       return { error: "Teams channel not configured" }
@@ -65,7 +56,7 @@ export function registerWebhookRoutes(app: FastifyInstance, router: MessageRoute
   // ── Channel management API ────────────────────────────────
   //
   // POST /api/channels body:
-  //   { type: "teams", platformId: "<AppId>", appSecret: "<AppPassword>",
+  //   { type: ChannelType.Teams, platformId: "<AppId>", appSecret: "<AppPassword>",
   //     accessToken: "", verifyToken: "" }
 
   app.get("/api/channels", async () => {
@@ -93,7 +84,7 @@ export function registerWebhookRoutes(app: FastifyInstance, router: MessageRoute
       return { error: "Required fields: type, platformId (App ID), appSecret (App Password)" }
     }
 
-    if (type !== "teams") {
+    if (type !== ChannelType.Teams) {
       reply.code(400)
       return { error: "type must be 'teams'" }
     }
@@ -117,8 +108,12 @@ export function registerWebhookRoutes(app: FastifyInstance, router: MessageRoute
   })
 
   app.delete<{ Params: { type: string } }>("/api/channels/:type", async (req, reply) => {
-    const type = req.params.type as ChannelType
-    if (type !== "teams") {
+    if (!isChannelType(req.params.type)) {
+      reply.code(400)
+      return { error: "Invalid channel type" }
+    }
+    const type: ChannelType = req.params.type
+    if (type !== ChannelType.Teams) {
       reply.code(400)
       return { error: "Invalid channel type" }
     }

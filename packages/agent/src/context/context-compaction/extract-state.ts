@@ -8,8 +8,9 @@
  * @module
  */
 
-import type { ArtifactCompactionState, CompactedFileRecord } from "../context-compaction.js"
+import { MessageRole } from "../../domain/enums/message.js"
 import type { Message } from "../../types.js"
+import type { ArtifactCompactionState, CompactedFileRecord } from "../context-compaction/index.js"
 
 /** Look up the file-path argument under any of the common arg key names. */
 export function extractFilePath(args: Record<string, unknown>): string | null {
@@ -19,11 +20,66 @@ export function extractFilePath(args: Record<string, unknown>): string | null {
   return null
 }
 
+// ── Memoization (Gap 9) ──────────────────────────────────────────
+//
+// `extractCompactionState` is called once per iteration during agent
+// loops and again on the planner / coherent paths. The function is
+// pure over (messages, goal, currentIteration) but a single call walks
+// the entire history — O(N) per invocation, called from O(N) loops.
+//
+// We cache the last result keyed on the message-array reference, the
+// length, and the identity of the final message. When only new
+// messages were appended (the common case), the cached prefix is
+// discarded and we re-walk from scratch — this is intentional: the
+// inner state (writeMap, toolCallMeta) cannot be safely mutated from
+// outside without invariants we don't want to maintain. The win is
+// avoiding repeat work when the same `messages` array is passed twice
+// in a row (planner → loop → coherent in the same iteration).
+
+interface CacheEntry {
+  readonly messages: readonly Message[]
+  readonly length: number
+  readonly lastRef: Message | undefined
+  readonly goal: string
+  readonly currentIteration: number
+  readonly result: ArtifactCompactionState
+}
+let lastCache: CacheEntry | null = null
+let _walkCount = 0
+
+/** Test-only: how many times the inner extractor walked the history. */
+export function __getExtractWalkCount(): number { return _walkCount }
+/** Test-only: reset the memo + counter. */
+export function __resetExtractCache(): void { lastCache = null; _walkCount = 0 }
+
 export function extractCompactionState(
   messages: readonly Message[],
   goal: string,
   currentIteration: number,
 ): ArtifactCompactionState {
+  const length = messages.length
+  const lastRef = length > 0 ? messages[length - 1] : undefined
+  if (
+    lastCache
+    && lastCache.length === length
+    && lastCache.lastRef === lastRef
+    && lastCache.messages === messages
+    && lastCache.goal === goal
+    && lastCache.currentIteration === currentIteration
+  ) {
+    return lastCache.result
+  }
+  const result = extractCompactionStateInner(messages, goal, currentIteration)
+  lastCache = { messages, length, lastRef, goal, currentIteration, result }
+  return result
+}
+
+function extractCompactionStateInner(
+  messages: readonly Message[],
+  goal: string,
+  currentIteration: number,
+): ArtifactCompactionState {
+  _walkCount++
   const toolCallCounts: Record<string, number> = {}
   const writeMap = new Map<
     string,
@@ -45,7 +101,7 @@ export function extractCompactionState(
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i]
 
-    if (m.role === "assistant") {
+    if (m.role === MessageRole.Assistant) {
       if (m.toolCalls && m.toolCalls.length > 0) {
         toolRoundCount++
         for (const tc of m.toolCalls) {
@@ -87,7 +143,7 @@ export function extractCompactionState(
       continue
     }
 
-    if (m.role === "tool" && m.toolCallId && m.content) {
+    if (m.role === MessageRole.Tool && m.toolCallId && m.content) {
       const meta = toolCallMeta.get(m.toolCallId)
       if (!meta) continue
       const content = m.content

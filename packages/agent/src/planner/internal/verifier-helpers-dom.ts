@@ -4,7 +4,7 @@
  * @module
  */
 
-import { uniqueStrings } from "../blueprint-contract.js"
+import { uniqueStrings } from "../blueprint-contract/index.js"
 
 // ============================================================================
 // CSS helpers

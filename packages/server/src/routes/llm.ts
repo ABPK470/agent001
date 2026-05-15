@@ -6,12 +6,13 @@
  *                  returns the new client (triggers hot-swap in server)
  */
 
-import type { LLMClient } from "@agent001/agent"
+import type { LLMClient } from "@mia/agent"
+import { LlmProvider } from "../enums/llm.js"
 import type { FastifyInstance } from "fastify"
-import { getLlmConfig, saveLlmConfig, type LlmProvider } from "../db.js"
+import { getLlmConfig, saveLlmConfig } from "../db/index.js"
 import { buildLlmClient, PROVIDER_DEFAULTS } from "../llm/registry.js"
 
-const VALID_PROVIDERS: LlmProvider[] = ["copilot-chat", "copilot", "openai", "local", "databricks"]
+const VALID_PROVIDERS: LlmProvider[] = [LlmProvider.CopilotChat, LlmProvider.Databricks]
 
 export function registerLlmRoutes(
   app: FastifyInstance,

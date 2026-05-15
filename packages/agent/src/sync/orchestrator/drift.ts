@@ -8,6 +8,7 @@
  */
 
 import { getPool } from "../../tools/index.js"
+import { EventType } from "../../domain/enums/event.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { qtable } from "./db-helpers.js"
@@ -41,6 +42,6 @@ export async function revalidatePlanDrift(plan: SyncPlan): Promise<number | null
       console.warn(`[sync.drift-revalidate] ${t.table}: ${e instanceof Error ? e.message : e}`)
     }
   }
-  emit("sync.execute.drift.revalidated", { planId: plan.planId, maxDriftPct: maxDrift })
+  emit(EventType.SyncExecuteDriftRevalidated, { planId: plan.planId, maxDriftPct: maxDrift })
   return maxDrift
 }

@@ -2,8 +2,8 @@
  * UsageModal — token consumption tracking modal.
  *
  * Shows cumulative token usage, per-run breakdown, and model info.
- * GitHub Copilot Pro includes GitHub Models API — no per-token cost,
- * but rate limits apply.
+ * Copilot Chat (Device Flow) is the default backend on intranet
+ * deployments — it has no per-token cost but rate limits apply.
  */
 
 import { Activity, Hash, MessageSquare, X, Zap } from "lucide-react"

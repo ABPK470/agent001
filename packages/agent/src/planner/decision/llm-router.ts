@@ -6,6 +6,7 @@
 
 import type { LLMClient } from "../../types.js"
 import type { PlannerNeedLevel } from "../types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 export interface LLMRouterResult {
   coherence_need: PlannerNeedLevel
@@ -41,8 +42,8 @@ export async function callLLMRouter(
   try {
     const response = await llm.chat(
       [
-        { role: "system", content: LLM_ROUTER_SYSTEM },
-        { role: "user", content: `Task:\n${normalized.slice(0, 1200)}` },
+        { role: MessageRole.System, content: LLM_ROUTER_SYSTEM },
+        { role: MessageRole.User, content: `Task:\n${normalized.slice(0, 1200)}` },
       ],
       [],
       { signal },

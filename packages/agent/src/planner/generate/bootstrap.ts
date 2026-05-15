@@ -1,3 +1,4 @@
+import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
 /**
  * Planner coherent bootstrap generation. Extracted from generate.ts.
  *
@@ -15,6 +16,7 @@ import {
     parseJsonObject,
 } from "../internal/generate-prompts.js"
 import type { PlanDiagnostic, PlannerCoherentBootstrap } from "../types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 export interface CoherentBootstrapGenerationContext {
   readonly goal: string
@@ -34,21 +36,21 @@ export async function generateCoherentBootstrap(
   opts?: { signal?: AbortSignal },
 ): Promise<CoherentBootstrapGenerationResult> {
   const messages: Message[] = [
-    { role: "system", content: COHERENT_BOOTSTRAP_SYSTEM_PROMPT },
+    { role: MessageRole.System, content: COHERENT_BOOTSTRAP_SYSTEM_PROMPT },
     {
-      role: "system",
+      role: MessageRole.System,
       content: `Workspace root: ${ctx.workspaceRoot}\nFreeze architecture, contracts, and invariants before decomposition.`,
     },
     {
-      role: "user",
+      role: MessageRole.User,
       content: `Goal: ${ctx.goal}\n\nReturn the frozen architecture bootstrap JSON.`,
     },
   ]
 
-  const recentHistory = ctx.history.slice(-10).filter((m) => m.role === "user" || m.role === "assistant")
+  const recentHistory = ctx.history.slice(-10).filter((m) => m.role === MessageRole.User || m.role === MessageRole.Assistant)
   if (recentHistory.length > 0) {
     messages.splice(2, 0, {
-      role: "system",
+      role: MessageRole.System,
       content: `Recent conversation context:\n${recentHistory.map((m) => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`,
     })
   }
@@ -61,7 +63,7 @@ export async function generateCoherentBootstrap(
       return {
         bootstrap: null,
         rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "empty_bootstrap_response", message: "Planner bootstrap returned empty response" }],
+        diagnostics: [{ category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error, code: "empty_bootstrap_response", message: "Planner bootstrap returned empty response" }],
       }
     }
 
@@ -70,7 +72,7 @@ export async function generateCoherentBootstrap(
       return {
         bootstrap: null,
         rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_json", message: "Planner bootstrap response is not valid JSON" }],
+        diagnostics: [{ category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error, code: "invalid_bootstrap_json", message: "Planner bootstrap response is not valid JSON" }],
       }
     }
 
@@ -88,7 +90,7 @@ export async function generateCoherentBootstrap(
       return {
         bootstrap: null,
         rawResponse,
-        diagnostics: [{ category: "parse", severity: "error", code: "invalid_bootstrap_shape", message: "Planner bootstrap must include summary, architecture, and at least one artifact" }],
+        diagnostics: [{ category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error, code: "invalid_bootstrap_shape", message: "Planner bootstrap must include summary, architecture, and at least one artifact" }],
       }
     }
 
@@ -111,7 +113,7 @@ export async function generateCoherentBootstrap(
     return {
       bootstrap: null,
       rawResponse,
-      diagnostics: [{ category: "parse", severity: "error", code: "bootstrap_llm_error", message: `Planner bootstrap failed: ${errMsg}` }],
+      diagnostics: [{ category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error, code: "bootstrap_llm_error", message: `Planner bootstrap failed: ${errMsg}` }],
     }
   }
 }

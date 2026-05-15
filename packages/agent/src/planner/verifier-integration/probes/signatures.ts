@@ -1,3 +1,4 @@
+import { VerifierOutcome } from "@mia/agent"
 /**
  * Cross-file function signature probe — detects parameter count mismatches
  * between function definitions and call sites across plan artifacts.
@@ -98,7 +99,7 @@ export async function probeCrossFileFunctionSignatures(ctx: IntegrationProbeCont
       if (!existing.issues.includes(issue)) {
         assessments[idx] = {
           stepName: existing.stepName,
-          outcome: existing.outcome === "pass" ? "retry" : existing.outcome,
+          outcome: existing.outcome === VerifierOutcome.Pass ? VerifierOutcome.Retry : existing.outcome,
           confidence: existing.outcome === "pass" ? 0.3 : existing.confidence,
           issues: [...existing.issues, issue],
           retryable: true,

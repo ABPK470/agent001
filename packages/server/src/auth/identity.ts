@@ -1,27 +1,35 @@
 /**
- * Identity middleware — resolves the current user for every request.
+ * Identity middleware (v19) — accounts-based.
  *
- * Resolution order:
- *   1. Opportunistic header `From-User-Name` (free win if some intranet
- *      proxy injects it; not required, not configured by us).
- *   2. Signed `mia_sid` cookie (set by the welcome modal via
- *      POST /api/me).
- *   3. Anonymous fallback — assigns a transient sid so the request
- *      still works; client should pop the welcome modal.
+ * Every request resolves to a real, verified user backed by the
+ * `users` table OR is rejected with 401. There are exactly two
+ * authentication paths:
  *
- * Auto-admin: any UPN matching MIA_ADMIN_UPNS (comma-separated,
- * case-insensitive) is promoted to admin without further checks. Plus
- * an optional admin password cookie (verified by auth/session.ts) for
- * cases where UPN spoofing is a concern.
+ *   1. SSO header (proxy-injected): From-User-Name / X-User-Name /
+ *      X-Forwarded-User / X-Remote-User. Trusted because the deployment
+ *      contract is "the proxy authenticated this user". On first sight,
+ *      a `users` row is created (source='sso'), then a normal session
+ *      is minted exactly as for local login. Subsequent requests from
+ *      the same browser carry the session cookie.
  *
- * Every request is then wrapped in AsyncLocalStorage so deep code can
- * call getCurrentSession() without explicit threading.
+ *   2. Local password (POST /api/auth/login): username/password verified
+ *      via auth/users.ts; on success a sessions row is inserted and the
+ *      sid is HMAC-signed into the cookie.
+ *
+ * Auth-bypass paths are listed in AUTH_BYPASS_PATHS — only login,
+ * register, the health probe, and static assets are reachable without
+ * a session.
+ *
+ * Anonymous identity, the welcome modal, the admin login modal, the
+ * `MIA_ADMIN_UPNS` whitelist, and the `mia_admin` cookie are ALL gone
+ * in this version. Admin status is a column on the users row.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { touchSession } from "../db/sessions.js"
+import { createSession, deleteSession, getSessionWithUser, touchSession } from "../db/sessions.js"
 import { sessionAls, type CurrentSession } from "./context.js"
-import { ADMIN_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS, newSid, signSession, verifyAdminCookie, verifySession, type SessionPayload } from "./session.js"
+import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSid, verifySid } from "./session.js"
+import { upsertSsoUser } from "./users.js"
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -29,21 +37,44 @@ declare module "fastify" {
   }
 }
 
-function getAdminUpns(): Set<string> {
-  const raw = process.env["MIA_ADMIN_UPNS"] ?? ""
-  return new Set(
-    raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
-  )
-}
+/**
+ * Path prefixes that bypass the 401 gate. Everything not listed here
+ * requires a logged-in session.
+ *
+ * Health probes and the auth endpoints themselves obviously cannot
+ * require auth. Static asset paths are served by @fastify/static AFTER
+ * the request hook runs, so we whitelist their prefix here too — the
+ * SPA itself must load before the user can log in.
+ */
+const AUTH_BYPASS_PATHS = [
+  "/api/auth/",        // register / login / logout / whoami
+  "/api/health",
+] as const
 
-function isAdminUpn(upn: string | null): boolean {
-  if (!upn) return false
-  return getAdminUpns().has(upn.toLowerCase())
+const STATIC_BYPASS_PREFIXES = [
+  "/assets/",
+  "/favicon",
+  "/index.html",
+  "/login",            // SPA route
+  "/manifest",
+  "/robots.txt",
+] as const
+
+function pathIsAuthExempt(url: string): boolean {
+  // url may include query string
+  const path = url.split("?")[0]
+  if (path === "/") return true
+  if (AUTH_BYPASS_PATHS.some((p) => path.startsWith(p))) return true
+  if (STATIC_BYPASS_PREFIXES.some((p) => path.startsWith(p))) return true
+  return false
 }
 
 function readHeaderUpn(req: FastifyRequest): string | null {
-  // Various corp proxies use slightly different header names. Accept the
-  // common ones; first non-empty wins.
+  // Various corp proxies use slightly different header names. First
+  // non-empty wins. We only honour SSO headers if they were not present
+  // BUT the existing session is anonymous — i.e., the very first request
+  // from this browser. After login, the cookie sid takes precedence
+  // regardless of headers.
   const candidates = ["from-user-name", "x-user-name", "x-forwarded-user", "x-remote-user"]
   for (const h of candidates) {
     const v = req.headers[h]
@@ -62,146 +93,140 @@ function readHeaderDisplayName(req: FastifyRequest): string | null {
   return null
 }
 
-function resolveSession(req: FastifyRequest): CurrentSession {
-  // 1. Header path (proxy-injected identity)
-  const headerUpn = readHeaderUpn(req)
-  if (headerUpn) {
-    return {
-      sid: `header:${headerUpn.toLowerCase()}`,
-      displayName: readHeaderDisplayName(req) ?? headerUpn,
-      upn: headerUpn,
-      isAdmin: isAdminUpn(headerUpn) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
-      ip: req.ip,
-      userAgent: String(req.headers["user-agent"] ?? ""),
-    }
-  }
+function setSessionCookie(reply: FastifyReply, sid: string): void {
+  reply.setCookie(SESSION_COOKIE, signSid(sid), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure:   process.env["NODE_ENV"] === "production",
+    path:     "/",
+    maxAge:   SESSION_TTL_SECONDS,
+  })
+}
 
-  // 2. Cookie path (welcome-modal payload)
-  const cookieRaw = req.cookies?.[SESSION_COOKIE]
-  const payload = verifySession(cookieRaw)
-  if (payload) {
-    return {
-      sid: payload.sid,
-      displayName: payload.displayName,
-      upn: payload.upn,
-      // isAdmin baked at login takes priority; fall back to live UPN check and admin cookie
-      isAdmin: payload.isAdmin === true || isAdminUpn(payload.upn) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
-      ip: req.ip,
-      userAgent: String(req.headers["user-agent"] ?? ""),
-    }
-  }
-
-  // 3. Anonymous fallback — transient sid (not persisted to cookie until
-  // the welcome modal posts /api/me). Client should pop the modal.
-  return {
-    sid: `anon:${newSid()}`,
-    displayName: "Anonymous",
-    upn: null,
-    isAdmin: verifyAdminCookie(req.cookies?.[ADMIN_COOKIE]),
-    ip: req.ip,
-    userAgent: String(req.headers["user-agent"] ?? ""),
-  }
+function clearSessionCookie(reply: FastifyReply): void {
+  reply.clearCookie(SESSION_COOKIE, { path: "/" })
 }
 
 /**
- * Register the identity hook + /api/me endpoints.
- * Must be called AFTER @fastify/cookie is registered.
+ * Try to materialise a session from the cookie or an SSO header. Returns
+ * the session on success; null on failure (caller decides 401 vs bypass).
+ */
+function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSession | null {
+  const ip = req.ip
+  const userAgent = String(req.headers["user-agent"] ?? "")
+
+  // 1. Existing cookie path — JOIN users and return.
+  const sid = verifySid(req.cookies?.[SESSION_COOKIE])
+  if (sid) {
+    const row = getSessionWithUser(sid)
+    if (row) {
+      try { touchSession(sid) } catch { /* observability only; never fail the request */ }
+      return {
+        sid:         row.sid,
+        upn:         row.upn,
+        displayName: row.display_name,
+        isAdmin:     row.is_admin === 1,
+        ip,
+        userAgent,
+      }
+    }
+    // Cookie was signed by us but no DB row matches — likely revoked
+    // (DELETE FROM sessions) or the DB was reset. Clear so the SPA stops
+    // re-presenting the dead cookie on every request.
+    try { clearSessionCookie(reply) } catch { /* SSE may have flushed headers */ }
+  }
+
+  // 2. SSO header path — trusted if the deployment configured a proxy
+  // to inject these headers. Auto-provisions a user row on first sight,
+  // then immediately mints a session so subsequent requests work via
+  // the cookie path above (no need to re-trust headers every time).
+  const headerUpn = readHeaderUpn(req)
+  if (headerUpn) {
+    const user = upsertSsoUser({
+      upn:         headerUpn,
+      displayName: readHeaderDisplayName(req) ?? headerUpn,
+    })
+    const newSid = createSession({ upn: user.upn, ip, userAgent })
+    try { setSessionCookie(reply, newSid) } catch { /* SSE-first request — cookie set on next request */ }
+    return {
+      sid:         newSid,
+      upn:         user.upn,
+      displayName: user.display_name,
+      isAdmin:     user.is_admin === 1,
+      ip,
+      userAgent,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Register the identity hook. Must be called AFTER @fastify/cookie is
+ * registered and AFTER routes/auth.ts has been registered (so its paths
+ * exist on the bypass list). The auth routes themselves do not enforce
+ * the gate — see pathIsAuthExempt.
  */
 export async function registerIdentity(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
-    const session = resolveSession(req)
-    req.session = session
-    // Sticky anonymous identity. If we just created a transient anon sid
-    // (no header, no cookie), persist it as a signed session cookie so that
-    // every subsequent request from this browser carries the SAME sid.
-    // Without this, every request gets a fresh `anon:${random}` and the SSE
-    // socket / run owner stamp end up with different sids → broadcast filter
-    // drops every event for the user, chat sticks on "Thinking" forever.
-    if (session.sid.startsWith("anon:") && !req.cookies?.[SESSION_COOKIE]) {
-      const payload: SessionPayload = {
-        sid: session.sid,
-        displayName: session.displayName,
-        upn: null,
-        createdAt: Date.now(),
-      }
-      try {
-        reply.setCookie(SESSION_COOKIE, signSession(payload), {
-          httpOnly: true,
-          sameSite: "lax",
-          secure:   process.env["NODE_ENV"] === "production",
-          path:     "/",
-          maxAge:   SESSION_TTL_SECONDS,
-        })
-      } catch { /* SSE responses already streamed headers — best-effort */ }
+    // HEAD requests and explicit health probes never carry cookies and
+    // never need identity. We don't touch the DB for them.
+    const isProbe =
+      req.method === "HEAD" ||
+      req.url === "/api/health" ||
+      req.url.startsWith("/api/health?")
+    if (isProbe) return
+
+    const session = tryResolveSession(req, reply)
+    if (session) {
+      req.session = session
+      sessionAls.enterWith({ session })
+      return
     }
-    // enterWith persists the ALS store for the rest of this async chain
-    // (handlers, db calls, tool calls) so getCurrentSession() works downstream.
-    sessionAls.enterWith({ session })
-    // Bump last-seen for the admin Active Users widget. Cheap upsert; skipped
-    // for transient anonymous sids (handled inside touchSession).
-    try { touchSession(session) } catch { /* don't break requests on logging */ }
+
+    // No session AND not on the bypass list → 401. The SPA's fetch
+    // wrapper interprets 401 as "redirect to /login".
+    if (!pathIsAuthExempt(req.url)) {
+      reply.code(401).send({ error: "authentication required" })
+      return reply
+    }
+    // Bypass path with no session — leave req.session unset; handler
+    // must not assume a session.
   })
 
-  // GET /api/me — what the SPA needs to render
-  app.get("/api/me", async (req) => {
+  // GET /api/auth/whoami — what the SPA needs to render the shell.
+  app.get("/api/auth/whoami", async (req, reply) => {
+    if (!req.session) {
+      reply.code(401)
+      return { error: "not logged in" }
+    }
     return {
-      sessionId:   req.session.sid,
-      displayName: req.session.displayName,
       upn:         req.session.upn,
+      displayName: req.session.displayName,
       isAdmin:     req.session.isAdmin,
     }
   })
 
-  // POST /api/me — welcome modal submits { displayName, upn } to set the cookie
-  app.post<{ Body: { displayName?: string; upn?: string } }>("/api/me", async (req, reply) => {
-    const rawName = (req.body?.displayName ?? "").trim()
-    const upn = (req.body?.upn ?? "").trim()
-    if (!rawName) {
-      reply.code(400)
-      return { error: "displayName is required" }
+  // POST /api/auth/logout — delete the server-side row + clear cookie.
+  app.post("/api/auth/logout", async (req, reply) => {
+    if (req.session?.sid) {
+      try { deleteSession(req.session.sid) } catch (err) {
+        req.log.warn({ err, sid: req.session.sid }, "deleteSession failed")
+      }
     }
-    if (upn && /\s/.test(upn)) {
-      reply.code(400)
-      return { error: "upn must not contain whitespace" }
-    }
-    const displayName = rawName
-    // Reuse existing stable sid if the browser already has one — avoids
-    // creating a fresh orphan session row every time the modal is submitted
-    // from the same browser (e.g. new tab, page reload before cookie expires).
-    const existingCookie = req.cookies?.[SESSION_COOKIE]
-    const existingPayload = existingCookie ? verifySession(existingCookie) : null
-    const sid = (existingPayload && !existingPayload.sid.startsWith("anon:"))
-      ? existingPayload.sid
-      : newSid()
-    const isAdmin = isAdminUpn(upn || null) || verifyAdminCookie(req.cookies?.[ADMIN_COOKIE])
-    const payload: SessionPayload = {
-      sid,
-      displayName,
-      // Admin access codes are a pure auth gate — don't bake them into identity as a UPN.
-      // This way changing MIA_ADMIN_UPNS never creates a new identity / fragments session history.
-      upn: isAdmin && isAdminUpn(upn || null) ? null : (upn || null),
-      isAdmin,
-      createdAt: existingPayload?.createdAt ?? Date.now(),
-    }
-    const value = signSession(payload)
-    reply.setCookie(SESSION_COOKIE, value, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure:   process.env["NODE_ENV"] === "production",
-      path:     "/",
-      maxAge:   SESSION_TTL_SECONDS,
-    })
-    return {
-      sessionId:   payload.sid,
-      displayName: payload.displayName,
-      upn:         payload.upn,
-      isAdmin:     isAdmin,
-    }
-  })
-
-  // POST /api/me/clear — "Switch user" button
-  app.post("/api/me/clear", async (_req, reply) => {
-    reply.clearCookie(SESSION_COOKIE, { path: "/" })
+    clearSessionCookie(reply)
     return { ok: true }
   })
+}
+
+/** @internal — exported for routes/auth.ts to mint the cookie after login/register. */
+export function loginAndSetCookie(args: {
+  reply: FastifyReply
+  upn: string
+  ip: string
+  userAgent: string
+}): string {
+  const sid = createSession({ upn: args.upn, ip: args.ip, userAgent: args.userAgent })
+  setSessionCookie(args.reply, sid)
+  return sid
 }

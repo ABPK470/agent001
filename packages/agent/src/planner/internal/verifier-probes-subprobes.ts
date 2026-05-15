@@ -15,7 +15,7 @@ import {
     detectPotentialUseBeforeDeclaration,
     detectUnresolvedBareHelpers,
     detectUnresolvedMethods,
-} from "../verifier-helpers.js"
+} from "../verifier-helpers/index.js"
 import { executeToolForText, readArtifactContent } from "./verifier-io.js"
 
 // ============================================================================

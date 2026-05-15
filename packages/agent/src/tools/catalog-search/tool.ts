@@ -1,5 +1,5 @@
 import type { Tool } from "../../types.js"
-import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog.js"
+import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
     handleColumn,
     handleConceptPath,

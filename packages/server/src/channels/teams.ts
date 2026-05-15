@@ -20,6 +20,7 @@
  */
 
 import { createPublicKey, createVerify } from "node:crypto"
+import { ChannelType } from "../enums/channels.js"
 import { ChannelApiError } from "./retry.js"
 import type { Channel, ChannelConfig, InboundMessage } from "./types.js"
 
@@ -183,7 +184,7 @@ export interface TeamsConversationRef {
 // ── Teams channel ─────────────────────────────────────────────────
 
 export class TeamsChannel implements Channel {
-  readonly type = "teams" as const
+  readonly type = ChannelType.Teams as const
   private readonly config: ChannelConfig
 
   constructor(config: ChannelConfig) {
@@ -265,7 +266,7 @@ export class TeamsChannel implements Channel {
     return [
       {
         platformMessageId: activity.id ?? `teams-${Date.now()}`,
-        channelType: "teams",
+        channelType: ChannelType.Teams,
         senderId: JSON.stringify(ref),
         senderName: activity.from?.name,
         text: activity.text.trim(),

@@ -1,5 +1,5 @@
 // ── Types ────────────────────────────────────────────────────────
-
+import type { WorkspaceMountMode } from "../enums/sandbox.js"
 /** Sandbox configuration — matches agenc-core's SandboxConfig shape. */
 export interface SandboxConfig {
   /**
@@ -27,7 +27,7 @@ export interface SandboxConfig {
    *   "readonly"  — read-only mount (browser sandbox default)
    *   "none"      — workspace not mounted at all
    */
-  workspaceAccess?: "none" | "readonly" | "readwrite"
+  workspaceAccess?: WorkspaceMountMode
   /** Command timeout in ms. Default: 30_000 */
   timeout?: number
   /** Allow network access inside container. Default: false */

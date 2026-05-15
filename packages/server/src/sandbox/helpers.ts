@@ -1,16 +1,17 @@
 import { resolve } from "node:path"
+import { WorkspaceMountMode } from "../enums/sandbox.js"
 
 // ── Constants ────────────────────────────────────────────────────
 
 export const DEFAULT_IMAGE = "node:20-slim"
-export const BROWSER_IMAGE = "agent001-browser:latest"
+export const BROWSER_IMAGE = "mia-browser:playwright"
 export const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../../docker/Dockerfile.browser")
 export const DEFAULT_MAX_MEMORY = "4g"
 export const DEFAULT_MAX_CPU = "2.0"
 export const DEFAULT_MAX_CONCURRENT = 4
 export const DEFAULT_IDLE_TIMEOUT = 30 * 60 * 1000  // 30 min
 export const DEFAULT_MAX_LIFETIME = 5 * 60 * 1000   // 5 min
-export const DEFAULT_WORKSPACE_ACCESS = "readwrite" as const
+export const DEFAULT_WORKSPACE_ACCESS = WorkspaceMountMode.Readwrite
 export const DEFAULT_TIMEOUT = 30_000
 export const MAX_OUTPUT = 16_000
 export const WATCHDOG_INTERVAL = 60_000  // check every 60s

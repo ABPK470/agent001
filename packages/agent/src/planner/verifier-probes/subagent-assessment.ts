@@ -1,3 +1,4 @@
+import { StepRole, VerifierOutcome } from "@mia/agent"
 /**
  * Per-subagent-step deterministic assessment — extracted from
  * verifier-probes.ts to keep the runDeterministicProbes loop readable.
@@ -19,7 +20,7 @@ import {
     isBlockingCriteriaProofGap,
     outputIntersectsArtifacts,
     safeParseJson
-} from "../verifier-helpers.js"
+} from "../verifier-helpers/index.js"
 import {
     extractActualPaths,
     probeArtifact,
@@ -151,8 +152,8 @@ export async function assessSubagentStep(
   }
 
   // Role-specific validation
-  const role = sa.executionContext.role ?? "writer"
-  if (role === "writer") {
+  const role = sa.executionContext.role ?? StepRole.Writer
+  if (role === StepRole.Writer) {
     let mutationConfirmed = false
     for (const artifact of sa.executionContext.targetArtifacts) {
       const cached = probeCache.get(artifact)
@@ -196,10 +197,10 @@ export async function assessSubagentStep(
   const hasBlockingGap = issues.some(isBlockingCriteriaProofGap)
   const confidence = Math.max(0, 1 - Math.min(0.9, effectiveIssueCount * 0.18))
   const outcome = hasBlockingGap
-    ? "fail" as const
+    ? VerifierOutcome.Fail
     : effectiveIssueCount > 0
-      ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? "fail" as const : "retry" as const)
-      : "pass" as const
+      ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? VerifierOutcome.Fail : VerifierOutcome.Retry)
+      : VerifierOutcome.Pass
 
   const positiveSignals: string[] = []
   if (browserCheckPassed) {

@@ -21,8 +21,8 @@ import {
     isWatchModeTestRunnerFailure,
 } from "./recovery-detectors.js"
 import type { RecoveryHint } from "../recovery.js"
-import type { ToolCallRecord } from "../../tool-helpers/index.js"
-import { parseToolResultObject } from "../../tool-helpers/index.js"
+import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import { parseToolResultObject } from "../../tools/_helpers/index.js"
 
 export interface AdvancedHintContext {
   readonly call: ToolCallRecord

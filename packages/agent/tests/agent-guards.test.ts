@@ -1,3 +1,4 @@
+import { ToolOutcomeSeverity, ToolControlDirective } from "@mia/agent"
 /**
  * Agent loop guard tests — verify all exit guards fire correctly.
  *
@@ -12,7 +13,7 @@
  *   8. normal exit when no guards fire
  */
 import { describe, expect, it } from "vitest"
-import { Agent } from "../src/agent.js"
+import { Agent } from "../src/agent/index.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
@@ -298,8 +299,8 @@ describe("Agent loop guards", () => {
         return {
           ok: false,
           summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
-          severity: "recoverable",
-          directive: "abort_round",
+          severity: ToolOutcomeSeverity.Recoverable,
+          directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
           details: [
             "STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation.",
@@ -341,8 +342,8 @@ describe("Agent loop guards", () => {
         return {
           ok: false,
           summary: `WRITTEN WITH ISSUES to ${path} — the file was saved but still contains incomplete logic.`,
-          severity: "recoverable",
-          directive: "abort_round",
+          severity: ToolOutcomeSeverity.Recoverable,
+          directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
           details: ["STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation."],
           artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],

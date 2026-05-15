@@ -1,7 +1,9 @@
+import { EffectKind } from "../enums/effects.js"
+import { EffectStatus } from "../enums/effects.js"
 // ── Types ────────────────────────────────────────────────────────
 
-export type EffectKind = "create" | "modify" | "delete" | "command" | "network"
-export type EffectStatus = "pending" | "applied" | "compensated" | "skipped"
+export { EffectKind }
+export { EffectStatus }
 
 export interface Effect {
   id: string

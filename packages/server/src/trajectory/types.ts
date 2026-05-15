@@ -1,62 +1,64 @@
 // ── Event types ──────────────────────────────────────────────────
 
+import { TrajectoryEditOperation, TrajectoryEventKind } from "../enums/trajectory.js"
+
 export interface GoalEvent {
-  kind: "goal"
+  kind: TrajectoryEventKind.Goal
   text: string
 }
 
 export interface ThinkingEvent {
-  kind: "thinking"
+  kind: TrajectoryEventKind.Thinking
   text: string
 }
 
 export interface ToolCallEvent {
-  kind: "tool-call"
+  kind: TrajectoryEventKind.ToolCall
   tool: string
   argsSummary: string
   argsFormatted: string
 }
 
 export interface ToolResultEvent {
-  kind: "tool-result"
+  kind: TrajectoryEventKind.ToolResult
   text: string
 }
 
 export interface ToolErrorEvent {
-  kind: "tool-error"
+  kind: TrajectoryEventKind.ToolError
   text: string
 }
 
 export interface IterationEvent {
-  kind: "iteration"
+  kind: TrajectoryEventKind.Iteration
   current: number
   max: number
 }
 
 export interface DelegationStartEvent {
-  kind: "delegation-start"
+  kind: TrajectoryEventKind.DelegationStart
   childGoal: string
   childRunId: string
 }
 
 export interface DelegationEndEvent {
-  kind: "delegation-end"
+  kind: TrajectoryEventKind.DelegationEnd
   childRunId: string
   result: string
 }
 
 export interface AnswerEvent {
-  kind: "answer"
+  kind: TrajectoryEventKind.Answer
   text: string
 }
 
 export interface ErrorEvent {
-  kind: "error"
+  kind: TrajectoryEventKind.Error
   text: string
 }
 
 export interface UsageEvent {
-  kind: "usage"
+  kind: TrajectoryEventKind.Usage
   iterationTokens: number
   totalTokens: number
   promptTokens: number
@@ -65,21 +67,21 @@ export interface UsageEvent {
 }
 
 export interface DelegationIterationEvent {
-  kind: "delegation-iteration"
+  kind: TrajectoryEventKind.DelegationIteration
   depth: number
   iteration: number
   maxIterations: number
 }
 
 export interface DelegationParallelStartEvent {
-  kind: "delegation-parallel-start"
+  kind: TrajectoryEventKind.DelegationParallelStart
   depth: number
   taskCount: number
   goals: string[]
 }
 
 export interface DelegationParallelEndEvent {
-  kind: "delegation-parallel-end"
+  kind: TrajectoryEventKind.DelegationParallelEnd
   depth: number
   taskCount: number
   fulfilled: number
@@ -87,17 +89,17 @@ export interface DelegationParallelEndEvent {
 }
 
 export interface SystemPromptEvent {
-  kind: "system-prompt"
+  kind: TrajectoryEventKind.SystemPrompt
   text: string
 }
 
 export interface ToolsResolvedEvent {
-  kind: "tools-resolved"
+  kind: TrajectoryEventKind.ToolsResolved
   tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>
 }
 
 export interface LlmRequestEvent {
-  kind: "llm-request"
+  kind: TrajectoryEventKind.LlmRequest
   iteration: number
   messageCount: number
   toolCount: number
@@ -105,7 +107,7 @@ export interface LlmRequestEvent {
 }
 
 export interface LlmResponseEvent {
-  kind: "llm-response"
+  kind: TrajectoryEventKind.LlmResponse
   iteration: number
   durationMs: number
   content: string | null
@@ -114,19 +116,19 @@ export interface LlmResponseEvent {
 }
 
 export interface PlannerValidationRemediatedEvent {
-  kind: "planner-validation-remediated"
+  kind: TrajectoryEventKind.PlannerValidationRemediated
   diagnostics: Array<{ code: string; message: string }>
 }
 
 export interface UserInputRequestEvent {
-  kind: "user-input-request"
+  kind: TrajectoryEventKind.UserInputRequest
   question: string
   options?: string[]
   sensitive?: boolean
 }
 
 export interface UserInputResponseEvent {
-  kind: "user-input-response"
+  kind: TrajectoryEventKind.UserInputResponse
   text: string
 }
 
@@ -168,6 +170,6 @@ export interface Trajectory {
  *   - inject(seq, ev)  — insert a new event before the given seq
  */
 export type Mutation =
-  | { type: "drop"; seq: number }
-  | { type: "replace"; seq: number; event: TrajectoryEvent }
-  | { type: "inject"; seq: number; event: TrajectoryEvent }
+  | { type: TrajectoryEditOperation.Drop; seq: number }
+  | { type: TrajectoryEditOperation.Replace; seq: number; event: TrajectoryEvent }
+  | { type: TrajectoryEditOperation.Inject; seq: number; event: TrajectoryEvent }

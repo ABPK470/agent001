@@ -22,7 +22,7 @@
  *     and agents re-discover state from tools (file system, etc.)
  */
 
-import type { Tool } from "@agent001/agent"
+import type { Tool } from "@mia/agent"
 
 // ── Types ────────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@
  */
 
 import { currentRuntime } from "../agent-runtime.js"
+import { SyncRunStatus } from "../domain/index.js"
 import type { SyncPlan } from "./plan-store.js"
 
 export interface SyncRunStartInput {
@@ -22,7 +23,7 @@ export interface SyncRunStartInput {
 
 export interface SyncRunFinishInput {
   planId: string
-  status: "success" | "failed"
+  status: SyncRunStatus.Success | SyncRunStatus.Failed
   error?: string | null
   executeTotals?: unknown
   driftDetectedPct?: number | null

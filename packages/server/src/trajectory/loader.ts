@@ -1,5 +1,6 @@
-import { getDb } from "../db.js";
-import type { Mutation, Trajectory, TrajectoryEvent } from "./types.js";
+import { getDb } from "../db/index.js"
+import { TrajectoryEditOperation } from "../enums/trajectory.js"
+import type { Mutation, Trajectory, TrajectoryEvent } from "./types.js"
 
 // ── Loader ───────────────────────────────────────────────────────
 
@@ -37,17 +38,17 @@ export function applyMutations(
 
   for (const mut of sorted) {
     switch (mut.type) {
-      case "drop":
+      case TrajectoryEditOperation.Drop:
         events = events.filter((e) => e.seq !== mut.seq)
         break
-      case "replace": {
+      case TrajectoryEditOperation.Replace: {
         const idx = events.findIndex((e) => e.seq === mut.seq)
         if (idx >= 0) {
           events[idx] = { ...events[idx], event: mut.event }
         }
         break
       }
-      case "inject": {
+      case TrajectoryEditOperation.Inject: {
         const insertIdx = events.findIndex((e) => e.seq >= mut.seq)
         const entry = {
           seq: mut.seq,

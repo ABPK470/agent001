@@ -1,4 +1,4 @@
-import type { CatalogFK, CatalogTable, SysEntry, ViewLineage } from "../catalog.js"
+import type { CatalogFK, CatalogTable, SysEntry, ViewLineage } from "../catalog/index.js"
 
 // ── Formatters ───────────────────────────────────────────────────
 

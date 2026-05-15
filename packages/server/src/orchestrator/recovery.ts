@@ -1,5 +1,8 @@
-import * as db from "../db.js";
-import { createNotification } from "./persistence.js";
+import { EventType } from "@mia/agent"
+import * as db from "../db/index.js"
+import { NotificationActionType } from "../enums/notifications.js"
+import { broadcast } from "../event-broadcaster.js"
+import { createNotification } from "./persistence.js"
 
 // ── Recovery depends interface ────────────────────────────────────
 
@@ -31,26 +34,30 @@ export function recoverStaleRunsImpl(
   for (const stale of staleRuns) {
     db.markRunCrashed(stale.id)
     failed.push(stale.id)
+    // Broadcast a synthetic run.failed so any live UI (PIPELINES,
+    // ActiveUsers in-flight count, run.status badges, ...) settles
+    // immediately instead of waiting for the next manual refetch.
+    broadcast({ type: EventType.RunFailed, data: { runId: stale.id, error: "Server restarted — run interrupted" } })
 
     const checkpoint = db.getCheckpoint(stale.id)
     if (checkpoint) {
       createNotification({
-        type: "run.failed",
+        type: EventType.RunFailed,
         title: "Run interrupted",
         message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`,
         runId: stale.id,
         actions: [
-          { label: "Review", action: "view-run", data: { runId: stale.id } },
-          { label: "Resume", action: "resume-run", data: { runId: stale.id } },
+          { label: "Review", action: NotificationActionType.ViewRun, data: { runId: stale.id } },
+          { label: "Resume", action: NotificationActionType.ResumeRun, data: { runId: stale.id } },
         ],
       })
     } else {
       createNotification({
-        type: "run.failed",
+        type: EventType.RunFailed,
         title: "Run lost",
         message: `"${stale.goal.slice(0, 80)}" was interrupted with no checkpoint available.`,
         runId: stale.id,
-        actions: [{ label: "Review", action: "view-run", data: { runId: stale.id } }],
+        actions: [{ label: "Review", action: NotificationActionType.ViewRun, data: { runId: stale.id } }],
       })
     }
   }

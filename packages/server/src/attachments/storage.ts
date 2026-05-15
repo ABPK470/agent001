@@ -7,9 +7,9 @@
  * per-upload metadata. Sandbox imports always copy bytes out; the durable
  * blob is never opened for writing by tools.
  *
- * Path resolution honours the same env overrides as the SQLite database
- * (`MIA_DATA_DIR` / `AGENT001_DATA_DIR`), so a deployment can move data,
- * attachments, and the DB together with one variable.
+ * Path resolution honours the same env override as the SQLite database
+ * (`MIA_DATA_DIR`), so a deployment can move data, attachments, and the
+ * DB together with one variable.
  */
 
 import { createHash } from "node:crypto"
@@ -18,7 +18,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 function dataDir(): string {
-  return process.env["MIA_DATA_DIR"] || process.env["AGENT001_DATA_DIR"] || join(homedir(), ".agent001")
+  return process.env["MIA_DATA_DIR"] || join(homedir(), ".mia")
 }
 
 export function getAttachmentRoot(): string {

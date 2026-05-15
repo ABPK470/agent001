@@ -1,5 +1,5 @@
-import type { Message, Tool } from "@agent001/agent"
-import { ABI_SYNC_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "@agent001/agent"
+import type { Message, Tool } from "@mia/agent"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MessageRole } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
@@ -31,7 +31,7 @@ export async function buildSystemMessages(opts: {
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
   const envBlock = buildEnvironmentContext()
   systemMessages.push({
-    role: "system",
+    role: MessageRole.System,
     content: `${basePrompt}\n${envBlock}`,
     section: "system_anchor",
   })
@@ -41,7 +41,7 @@ export async function buildSystemMessages(opts: {
   // on all non-sync tasks (coding, data analysis, etc.).
   if (decision.includeAbiSync) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: ABI_SYNC_SECTION,
       section: "system_anchor",
     })
@@ -54,9 +54,20 @@ export async function buildSystemMessages(opts: {
   // fetch the catalogue on demand.
   if (decision.includeChartCatalogue) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: CHART_CATALOGUE_SECTION,
       section: "system_runtime",
+    })
+  }
+
+  // Section 1d: big-table / micro-ETL discipline — only on data-shaped
+  // goals. Keeps the canonical #temp staging pattern + anti-patterns out
+  // of every "hi" / non-DB request (~2 KB).
+  if (decision.includeBigTableEtl) {
+    systemMessages.push({
+      role: MessageRole.System,
+      content: BIG_TABLE_ETL_SECTION,
+      section: "system_anchor",
     })
   }
 
@@ -70,7 +81,7 @@ export async function buildSystemMessages(opts: {
   })
   if (toolCtx) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: toolCtx.trim(),
       section: "system_runtime",
     })
@@ -82,14 +93,14 @@ export async function buildSystemMessages(opts: {
   // workspace tree dump for tool-call grounding.
   if (runWorkspace.profile === "hosted") {
     systemMessages.push({
-      role:    "system",
+      role:    MessageRole.System,
       content: buildHostedRuntimeContext({ sandboxRoot: runWorkspace.executionRoot }),
       section: "system_runtime",
     })
   } else if (runWorkspace.executionRoot) {
     const wsContext = await getWorkspaceContext(runWorkspace.executionRoot)
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: [`Workspace: ${runWorkspace.executionRoot}`, wsContext, ""].join("\n"),
       section: "system_runtime",
     })
@@ -102,7 +113,7 @@ export async function buildSystemMessages(opts: {
   const attachmentBlock = buildAttachmentManifest(attachmentIds ?? [])
   if (attachmentBlock) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: attachmentBlock,
       section: "system_runtime",
     })
@@ -111,7 +122,7 @@ export async function buildSystemMessages(opts: {
   // Sections 4–6: memory tiers (each independent for fine-grained truncation)
   if (perTier.working) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: `<working_memory>\n${perTier.working}\n</working_memory>`,
       section: "memory_working",
     })
@@ -164,7 +175,7 @@ export async function buildSystemMessages(opts: {
         ].join("\n")
       : perTier.episodic
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: `<episodic_memory>\n${episodicContent}\n</episodic_memory>`,
       section: "memory_episodic",
     })
@@ -172,7 +183,7 @@ export async function buildSystemMessages(opts: {
 
   if (perTier.semantic) {
     systemMessages.push({
-      role: "system",
+      role: MessageRole.System,
       content: `<semantic_memory>\n${perTier.semantic}\n</semantic_memory>`,
       section: "memory_semantic",
     })
@@ -182,7 +193,7 @@ export async function buildSystemMessages(opts: {
   // otherwise it is ~30 lines of guidance for content that does not exist.
   if (decision.includeMemoryGuidance) {
     systemMessages.push({
-      role:    "system",
+      role:    MessageRole.System,
       content: buildMemoryGuidance(),
       section: "memory_semantic",
     })

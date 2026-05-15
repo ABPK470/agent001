@@ -8,7 +8,7 @@
 import {
     normalizeSpecPath,
     uniqueStrings,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 import {
     type BlueprintFunctionSpec,

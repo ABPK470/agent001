@@ -18,7 +18,7 @@ import {
     RulePolicyEvaluator,
     type Step,
     StepStatus,
-} from "../engine/index.js"
+} from "../domain/index.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
 

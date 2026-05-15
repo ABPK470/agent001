@@ -1,3 +1,4 @@
+import { VerifierIssueSeverity } from "@mia/agent"
 /**
  * Verification inference helpers — issue classification, severity, repair class,
  * ownership attribution, path extraction.
@@ -13,7 +14,6 @@ import type {
     SubagentTaskStep,
     VerificationEvidence,
     VerifierIssue,
-    VerifierIssueSeverity,
     VerifierOwnershipMode,
     VerifierRepairClass,
 } from "../types.js"
@@ -53,9 +53,9 @@ export function inferIssueCode(summary: string): string {
 }
 
 export function inferSeverity(summary: string): VerifierIssueSeverity {
-  if (/FUNCTION LOSS|contradictory_completion_claim|unresolved_handoff_output|fatal/i.test(summary)) return "fatal"
-  if (/fail|error|mismatch|missing|violation|corrupted|gibberish|syntax|rejected/i.test(summary)) return "error"
-  return "warning"
+  if (/FUNCTION LOSS|contradictory_completion_claim|unresolved_handoff_output|fatal/i.test(summary)) return VerifierIssueSeverity.Fatal
+  if (/fail|error|mismatch|missing|violation|corrupted|gibberish|syntax|rejected/i.test(summary)) return VerifierIssueSeverity.Error
+  return VerifierIssueSeverity.Warning
 }
 
 export function inferRepairClass(summary: string): VerifierRepairClass {

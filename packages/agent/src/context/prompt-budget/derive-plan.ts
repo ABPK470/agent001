@@ -7,8 +7,8 @@
  * @module
  */
 
+import { BASE_SECTION_KEYS } from "../../domain/enums/context.js"
 import {
-    BASE_SECTION_KEYS,
     BASE_SECTION_SPECS,
     DEFAULT_CHAR_PER_TOKEN,
     DEFAULT_CONTEXT_WINDOW_TOKENS,

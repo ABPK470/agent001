@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { seedTestUsers } from "./_fk-helpers.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -35,14 +36,17 @@ afterEach(() => {
 
 describe("attachments in system prompt", () => {
   it("includes a manifest line per attachment when ids are supplied", async () => {
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { uploadAttachment } = await import("../src/attachments/index.js")
     const { buildSystemMessages } = await import("../src/orchestrator/system-messages.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "r1")
 
-    const a = await uploadAttachment({ scope: "run", runId: "r1", originalName: "spec.csv", mediaType: "text/csv", bytes: new TextEncoder().encode("a,b\n1,2\n") })
-    const b = await uploadAttachment({ scope: "run", runId: "r1", originalName: "image.png", mediaType: "image/png", bytes: new Uint8Array([0, 1, 2, 3]) })
+    const a = await uploadAttachment({ scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "spec.csv", mediaType: "text/csv", bytes: new TextEncoder().encode("a,b\n1,2\n") })
+    const b = await uploadAttachment({ scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "image.png", mediaType: "image/png", bytes: new Uint8Array([0, 1, 2, 3]) })
 
     const messages = await buildSystemMessages({
       goal: "summarise the inputs",
@@ -68,10 +72,11 @@ describe("attachments in system prompt", () => {
   })
 
   it("omits the manifest section entirely when no attachments are bound", async () => {
-    const { _setDb, _migrate } = await import("../src/db.js")
+    const { _setDb, _migrate } = await import("../src/db/index.js")
     const { buildSystemMessages } = await import("../src/orchestrator/system-messages.js")
     _setDb(testDb)
     _migrate(testDb)
+    seedTestUsers(testDb);
 
     const messages = await buildSystemMessages({
       goal: "x",

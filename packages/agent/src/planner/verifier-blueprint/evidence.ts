@@ -9,9 +9,9 @@ import {
     normalizeBasename,
     normalizeSpecPath,
     uniqueStrings,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 import type { PipelineStepResult, Plan, SubagentTaskStep } from "../types.js"
-import { escapeRegExp } from "../verifier-helpers.js"
+import { escapeRegExp } from "../verifier-helpers/index.js"
 import {
     buildBlueprintArtifactCoverageIssues,
     buildBlueprintFunctionContractIssues,

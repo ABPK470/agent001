@@ -1,3 +1,5 @@
+import { VerifierOutcome } from "@mia/agent"
+import { EscalationAction, EscalationReason } from "../domain/enums/delegation.js"
 /**
  * Escalation graph — deterministic state machine for verification outcomes.
  *
@@ -23,24 +25,13 @@
 // ============================================================================
 
 /** Possible outcomes from the escalation graph. */
-export type EscalationAction = "pass" | "retry" | "revise" | "escalate"
 
-/** Reason codes for escalation decisions. */
-export type EscalationReason =
-  | "pass"
-  | "retry_allowed"
-  | "needs_revision"
-  | "retries_exhausted"
-  | "revision_unavailable"
-  | "disagreement_threshold"
-  | "timeout"
-  | "budget_exhausted"
-  | "all_steps_stuck"
+export { EscalationAction, EscalationReason }
 
 /** Input to the escalation graph. */
 export interface EscalationInput {
   /** Current verification verdict. */
-  readonly verdict: "pass" | "retry" | "fail"
+  readonly verdict: VerifierOutcome
   /** Current attempt number (0-based). */
   readonly attempt: number
   /** Maximum allowed attempts. */
@@ -90,53 +81,53 @@ export interface EscalationDecision {
 export function resolveEscalation(input: EscalationInput): EscalationDecision {
   // Hard stops — these override everything
   if (input.timedOut) {
-    return { action: "escalate", reason: "timeout" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.Timeout }
   }
   if (input.budgetExhausted) {
-    return { action: "escalate", reason: "budget_exhausted" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.BudgetExhausted }
   }
   if (input.allStepsStuck) {
-    return { action: "escalate", reason: "all_steps_stuck" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.AllStepsStuck }
   }
 
   // Success
-  if (input.verdict === "pass") {
-    return { action: "pass", reason: "pass" }
+  if (input.verdict === VerifierOutcome.Pass) {
+    return { action: EscalationAction.Pass, reason: EscalationReason.Pass }
   }
 
   // Disagreement threshold — too many conflicting verifier assessments
   if (input.disagreements >= input.maxDisagreements) {
-    return { action: "escalate", reason: "disagreement_threshold" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.DisagreementThreshold }
   }
 
   // No attempts left
   if (input.attempt >= input.maxAttempts - 1) {
-    return { action: "escalate", reason: "retries_exhausted" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.RetriesExhausted }
   }
 
   // Fail verdict — if a repair path exists, keep revising until attempts are exhausted
   // or the caller marks the run as stuck. Syntax errors and similar structural defects
   // are often fixable in a second or third pass and should not escalate after one try.
-  if (input.verdict === "fail") {
+  if (input.verdict === VerifierOutcome.Fail) {
     if (input.revisionAvailable) {
-      return { action: "revise", reason: "needs_revision" }
+      return { action: EscalationAction.Revise, reason: EscalationReason.NeedsRevision }
     }
-    return { action: "escalate", reason: "retries_exhausted" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.RetriesExhausted }
   }
 
   // Retry verdict — choose between revise (targeted) and retry (full re-execute)
-  if (input.verdict === "retry") {
+  if (input.verdict === VerifierOutcome.Retry) {
     if (input.revisionAvailable) {
-      return { action: "revise", reason: "needs_revision" }
+      return { action: EscalationAction.Revise, reason: EscalationReason.NeedsRevision }
     }
     if (input.reexecuteOnNeedsRevision) {
-      return { action: "retry", reason: "retry_allowed" }
+      return { action: EscalationAction.Retry, reason: EscalationReason.RetryAllowed }
     }
-    return { action: "escalate", reason: "revision_unavailable" }
+    return { action: EscalationAction.Escalate, reason: EscalationReason.RevisionUnavailable }
   }
 
   // Default fallback
-  return { action: "retry", reason: "retry_allowed" }
+  return { action: EscalationAction.Retry, reason: EscalationReason.RetryAllowed }
 }
 
 // ============================================================================
@@ -149,7 +140,7 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
  * escalation graph.
  */
 export function buildEscalationInput(params: {
-  verifierOverall: "pass" | "retry" | "fail"
+  verifierOverall: VerifierOutcome
   attempt: number
   maxAttempts: number
   hasRetryableSteps: boolean
@@ -161,10 +152,10 @@ export function buildEscalationInput(params: {
     verdict: params.verifierOverall,
     attempt: params.attempt,
     maxAttempts: params.maxAttempts,
-    disagreements: 0, // agent001 doesn't yet track multi-candidate disagreement
+    disagreements: 0, // mia doesn't yet track multi-candidate disagreement
     maxDisagreements: 3, // default threshold
     revisionAvailable: params.hasRetryableSteps,
-    reexecuteOnNeedsRevision: true, // agent001 always re-executes (no targeted revision yet)
+    reexecuteOnNeedsRevision: true, // mia always re-executes (no targeted revision yet)
     timedOut: params.timedOut,
     budgetExhausted: params.budgetExhausted,
     allStepsStuck: params.allStepsRepeatedFailure,

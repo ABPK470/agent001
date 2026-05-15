@@ -3,10 +3,11 @@
  */
 
 import { getDb } from "./connection.js"
+import { LlmProvider } from "../enums/llm.js"
 
 // ── LLM config ───────────────────────────────────────────────────
 
-export type LlmProvider = "copilot-chat" | "copilot" | "openai" | "local" | "databricks"
+export { LlmProvider }
 
 export interface DbLlmConfig {
   provider: LlmProvider
@@ -38,7 +39,6 @@ export interface DbAgentDefinition {
   name: string
   description: string
   system_prompt: string
-  tools: string          // JSON array of tool names
   created_at: string
   updated_at: string
 }
@@ -57,8 +57,8 @@ export function getAgentDefinition(id: string): DbAgentDefinition | undefined {
 
 export function saveAgentDefinition(agent: DbAgentDefinition): void {
   getDb().prepare(`
-    INSERT OR REPLACE INTO agent_definitions (id, name, description, system_prompt, tools, created_at, updated_at)
-    VALUES (@id, @name, @description, @system_prompt, @tools, @created_at, datetime('now'))
+    INSERT OR REPLACE INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
+    VALUES (@id, @name, @description, @system_prompt, @created_at, datetime('now'))
   `).run(agent)
 }
 

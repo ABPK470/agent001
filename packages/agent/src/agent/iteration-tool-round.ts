@@ -9,8 +9,9 @@ import type { AgentLoopState } from "../loop/index.js"
 import * as log from "../logger.js"
 import { processPostRound, type PostRoundContext } from "../loop/index.js"
 import { executeToolRound, type ToolExecContext } from "../loop/index.js"
-import type { ToolCallRecord } from "../tool-helpers/index.js"
+import type { ToolCallRecord } from "../tools/_helpers/index.js"
 import type { Message, Tool } from "../types.js"
+import { MessageRole } from "../domain/enums/message.js"
 
 export interface ToolCallsBranchInput {
   response: { content: string | null; toolCalls: readonly { name: string }[] }
@@ -43,7 +44,7 @@ export async function executeToolCallsBranch(
   // This iteration was intermediate — discard the buffered tokens.
   config.onStreamDiscard?.()
   messages.push({
-    role: "assistant",
+    role: MessageRole.Assistant,
     content: response.content,
     toolCalls: response.toolCalls as Message["toolCalls"],
     section: "history",
@@ -62,7 +63,7 @@ export async function executeToolCallsBranch(
 
   if (roundResult.forcedAbortLoopMessage) {
     allToolCalls.push(...roundResult.roundToolCalls)
-    messages.push({ role: "system", content: roundResult.forcedAbortLoopMessage, section: "history" })
+    messages.push({ role: MessageRole.System, content: roundResult.forcedAbortLoopMessage, section: "history" })
     config.onNudge?.({ tag: "fatal-tool-outcome", message: roundResult.forcedAbortLoopMessage, iteration: i })
     if (config.verbose) log.logError(roundResult.forcedAbortLoopMessage)
     return { finalAnswer: roundResult.forcedAbortLoopMessage }
@@ -70,7 +71,7 @@ export async function executeToolCallsBranch(
 
   if (roundResult.forcedAbortRoundMessage) {
     allToolCalls.push(...roundResult.roundToolCalls)
-    messages.push({ role: "system", content: roundResult.forcedAbortRoundMessage, section: "history" })
+    messages.push({ role: MessageRole.System, content: roundResult.forcedAbortRoundMessage, section: "history" })
     config.onNudge?.({ tag: "abort-round-tool-outcome", message: roundResult.forcedAbortRoundMessage, iteration: i })
     if (config.verbose) log.logError(roundResult.forcedAbortRoundMessage)
     config.onStep?.(messages, i)

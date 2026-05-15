@@ -5,8 +5,9 @@
  * @module
  */
 
-import type { ArtifactCompactionState } from "../context-compaction.js"
+import type { ArtifactCompactionState } from "../context-compaction/index.js"
 import type { Message, PromptBudgetSection } from "../../types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 export function buildResumeAnchorMessage(state: ArtifactCompactionState): Message {
   const lines: string[] = [
@@ -64,7 +65,7 @@ export function buildResumeAnchorMessage(state: ArtifactCompactionState): Messag
   lines.push("[Do NOT repeat the completed steps above. Continue from this checkpoint.]")
 
   return {
-    role: "system",
+    role: MessageRole.System,
     content: lines.join("\n"),
     section: "history" as PromptBudgetSection,
   }

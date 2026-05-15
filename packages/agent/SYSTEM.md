@@ -213,7 +213,7 @@ This is the only cluster shaped like a "service": it has interfaces and a wiring
 
 ## 12. `llm/` — the model adapters
 
-Two files: `openai.ts`, `databricks.ts`. Each implements the `LLMClient` interface from `types.ts`. Adding a new provider = one new file. There's no abstract `LLMProvider` base class because there's nothing to share — they all just translate to/from the provider's HTTP API.
+Two files: `openai-compat.ts`, `databricks.ts`. Each implements the `LLMClient` interface from `types.ts`. Adding a new provider = one new file. There's no abstract `LLMProvider` base class because there's nothing to share — they all just translate to/from the provider's HTTP API.
 
 ---
 

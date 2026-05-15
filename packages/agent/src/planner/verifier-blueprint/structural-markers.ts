@@ -6,7 +6,7 @@
  * @module
  */
 
-import { normalizeSpecPath, uniqueStrings } from "../blueprint-contract.js"
+import { normalizeSpecPath, uniqueStrings } from "../blueprint-contract/index.js"
 
 function normalizeStructuralMarker(kind: string, value: string): string {
   return `${kind}:${value.trim().toLowerCase()}`

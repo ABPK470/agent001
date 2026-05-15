@@ -1,12 +1,14 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
 import { AgentRuntime } from "../../agent-runtime.js"
-import { Agent } from "../../agent.js"
+import { Agent } from "../../agent/index.js"
+import { LLMCallPhase } from "../../domain/enums/llm.js"
+import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
 import { detectPlaceholderPatterns } from "../../governance/index.js"
 import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../planner/index.js"
 import type { Tool } from "../../types.js"
 import { canonicalizeEnvelope, computePlannerChildBudgetMetrics, wrapPlannerChildToolsForWriteScope } from "../delegate-paths.js"
-import { CHILD_SYSTEM_PROMPT, type DelegateContext } from "../delegate.js"
+import { CHILD_SYSTEM_PROMPT, type DelegateContext } from "../delegate/index.js"
 import { buildPlanChildGoal } from "./build-goal.js"
 import { buildChildExecutionResult } from "./helpers.js"
 
@@ -64,7 +66,7 @@ export async function spawnChildForPlan(
   const maxIter = budgetMetrics.computedMaxIterations
 
   ctx.onChildTrace?.({
-    kind: "planner-delegation-start",
+    kind: DelegationTraceKind.PlannerStart,
     goal: step.objective,
     stepName: step.name,
     depth: ctx.depth + 1,
@@ -146,7 +148,7 @@ export async function spawnChildForPlan(
     completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
-        kind: "planner-delegation-iteration",
+        kind: DelegationTraceKind.PlannerIteration,
         stepName: step.name,
         depth: ctx.depth + 1,
         iteration: iteration + 1,
@@ -161,16 +163,16 @@ export async function spawnChildForPlan(
     },
     onNudge: (data) => {
       ctx.onChildTrace?.({
-        kind: "nudge",
+        kind: DelegationSpanEventKind.Nudge,
         tag: `[${step.name}] ${data.tag}`,
         message: data.message,
         iteration: data.iteration,
       })
     },
     onLlmCall: (data) => {
-      if (data.phase === "request") {
+      if (data.phase === LLMCallPhase.Request) {
         pendingPlannerLlmEvents.push({
-          kind: "llm-request",
+          kind: DelegationSpanEventKind.LlmRequest,
           iteration: data.iteration,
           messageCount: data.messages.length,
           toolCount: data.tools.length,
@@ -183,7 +185,7 @@ export async function spawnChildForPlan(
         })
       } else {
         pendingPlannerLlmEvents.push({
-          kind: "llm-response",
+          kind: DelegationSpanEventKind.LlmResponse,
           iteration: data.iteration,
           durationMs: data.durationMs,
           content: data.response.content,
@@ -200,7 +202,7 @@ export async function spawnChildForPlan(
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)
     ctx.onChildTrace?.({
-      kind: "planner-delegation-end",
+      kind: DelegationTraceKind.PlannerEnd,
       stepName: step.name,
       depth: ctx.depth + 1,
       status: hitLimit ? "error" : "done",
@@ -224,7 +226,7 @@ export async function spawnChildForPlan(
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     ctx.onChildTrace?.({
-      kind: "planner-delegation-end",
+      kind: DelegationTraceKind.PlannerEnd,
       stepName: step.name,
       depth: ctx.depth + 1,
       status: "error",

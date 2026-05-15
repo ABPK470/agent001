@@ -17,8 +17,8 @@
  */
 
 import { getDb } from "../db/connection.js"
+import { AttachmentScope } from "../enums/attachments.js"
 import { auditAttachmentsPruned } from "./audit.js"
-import type { AttachmentScope } from "./repo.js"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const MIB = 1024 * 1024
@@ -53,9 +53,9 @@ export function getRetentionPolicy(): RetentionPolicy {
  */
 export function computeRetentionUntil(scope: AttachmentScope, now: Date = new Date()): string {
   const policy = getRetentionPolicy()
-  const days = scope === "run"
+  const days = scope === AttachmentScope.Run
     ? policy.runDays
-    : scope === "session"
+    : scope === AttachmentScope.Session
       ? policy.sessionDays
       : policy.workspaceAssetDays
   return new Date(now.getTime() + days * DAY_MS).toISOString()

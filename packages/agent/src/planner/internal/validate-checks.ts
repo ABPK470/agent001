@@ -1,3 +1,4 @@
+import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
 /**
  * Plan validation checks — path consistency, dependency wiring, visual completeness,
  * shared data contracts.
@@ -60,8 +61,8 @@ export function validateArtifactDependencyWiring(steps: readonly PlanStep[]): Pl
 
     if (!wiringCue && !mentionsProducer) {
       diagnostics.push({
-        category: "contract",
-        severity: "warning",
+        category: DiagnosticCategory.Contract,
+        severity: DiagnosticSeverity.Warning,
         code: "missing_dependency_wiring_criteria",
         message: `Step "${ownerStep.name}" creates consumer artifact "${consumerArtifact}" and also owns dependency artifacts (${ownProducer.map(a => a.split("/").pop()).join(", ")}), but its objective/criteria don't mention dependency wiring/integration. ` +
           `Add explicit criteria describing how produced artifacts are linked or consumed together.`,
@@ -109,8 +110,8 @@ export function validateVisualCompleteness(steps: readonly PlanStep[]): PlanDiag
 
   if (!hasVisualCriteria) {
     diagnostics.push({
-      category: "contract",
-      severity: "warning",
+      category: DiagnosticCategory.Contract,
+      severity: DiagnosticSeverity.Warning,
       code: "missing_visual_rendering_criteria",
       message: `This appears to be a visual/UI task but NO step has acceptance criteria for rendering visual content. ` +
         `Add specific criteria like "pieces display correct Unicode symbols", "tiles show their values", or "chart renders data points". ` +
@@ -156,8 +157,8 @@ export function validateSharedDataContract(steps: readonly PlanStep[]): PlanDiag
 
   if (!hasFormatSpec) {
     diagnostics.push({
-      category: "contract",
-      severity: "warning",
+      category: DiagnosticCategory.Contract,
+      severity: DiagnosticSeverity.Warning,
       code: "missing_shared_data_contract",
       message: `Plan has ${jsWriterSteps.length} steps writing JS files that reference shared data (${
         allObjectives.match(DATA_FORMAT_RE)?.[0] ?? "state"

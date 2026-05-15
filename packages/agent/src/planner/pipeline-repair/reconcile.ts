@@ -1,3 +1,4 @@
+import { DiagnosticSeverity, EffectClass, PipelineBlockCode } from "@mia/agent"
 /**
  * Repair plan helpers, reconciliation, and blueprint retry guidance.
  *
@@ -5,17 +6,17 @@
  */
 
 import type {
-    ContractReconciliationFinding,
-    PipelineStepResult,
-    PlannerRuntimeModel,
-    RepairPlan,
-    RepairTask,
-    SubagentTaskStep,
+  ContractReconciliationFinding,
+  PipelineStepResult,
+  PlannerRuntimeModel,
+  RepairPlan,
+  RepairTask,
+  SubagentTaskStep,
 } from "../types.js"
 import {
-    buildIssueRepairActions,
-    buildLanguageRepairGuidance,
-    detectArtifactFamilies,
+  buildIssueRepairActions,
+  buildLanguageRepairGuidance,
+  detectArtifactFamilies,
 } from "./artifacts.js"
 
 // ============================================================================
@@ -137,8 +138,8 @@ export function applyPostExecutionReconciliation(
   const forbiddenTouched = [...reportedArtifacts].filter((artifact) => forbiddenArtifacts.has(artifact))
   if (forbiddenTouched.length > 0) {
     findings.push({
-      code: "forbidden_artifact_write",
-      severity: "error",
+      code: PipelineBlockCode.ForbiddenArtifactWrite,
+      severity: DiagnosticSeverity.Error,
       message: `Step modified forbidden artifacts: ${forbiddenTouched.join(", ")}`,
       artifactPaths: forbiddenTouched,
     })
@@ -148,13 +149,13 @@ export function applyPostExecutionReconciliation(
   // the target artifacts were already produced in a prior attempt and remain on disk.
   const childAlreadySatisfied = stepResult.childResult?.status === "success" &&
     (stepResult.childResult.unresolvedBlockers.length ?? 0) === 0
-  const missingOutputs = step.executionContext.effectClass !== "readonly" && !childAlreadySatisfied
+  const missingOutputs = step.executionContext.effectClass !== EffectClass.Readonly && !childAlreadySatisfied
     ? [...targetArtifacts].filter((artifact) => !reportedArtifacts.has(artifact))
     : []
   if (missingOutputs.length > 0) {
     findings.push({
-      code: "missing_required_output",
-      severity: "error",
+      code: PipelineBlockCode.MissingRequiredOutput,
+      severity: DiagnosticSeverity.Error,
       message: `Step did not produce or modify all required target artifacts: ${missingOutputs.join(", ")}`,
       artifactPaths: missingOutputs,
     })
@@ -163,8 +164,8 @@ export function applyPostExecutionReconciliation(
   const hallucinatedArtifacts = [...reportedArtifacts].filter((artifact) => !targetArtifacts.has(artifact) && !sourceArtifacts.has(artifact))
   if (hallucinatedArtifacts.length > 0) {
     findings.push({
-      code: "hallucinated_artifact",
-      severity: "error",
+      code: PipelineBlockCode.HallucinatedArtifact,
+      severity: DiagnosticSeverity.Error,
       message: `Step reported mutations to artifacts outside its contract: ${hallucinatedArtifacts.join(", ")}`,
       artifactPaths: hallucinatedArtifacts,
     })
@@ -172,8 +173,8 @@ export function applyPostExecutionReconciliation(
 
   if ((stepResult.childResult?.unresolvedBlockers.length ?? 0) > 0) {
     findings.push({
-      code: "unresolved_blocker",
-      severity: "error",
+      code: PipelineBlockCode.UnresolvedBlocker,
+      severity: DiagnosticSeverity.Error,
       message: `Step reported unresolved blockers: ${stepResult.childResult!.unresolvedBlockers.join("; ")}`,
       artifactPaths: [],
     })
@@ -181,8 +182,8 @@ export function applyPostExecutionReconciliation(
 
   if ((step.executionContext.requiredChecks?.length ?? 0) > 0 && (stepResult.verificationAttempts?.length ?? 0) === 0) {
     findings.push({
-      code: "required_check_skipped",
-      severity: "warning",
+      code: PipelineBlockCode.RequiredCheckSkipped,
+      severity: DiagnosticSeverity.Warning,
       message: "Step completed without recording any verification attempts for its required checks.",
       artifactPaths: [],
     })
@@ -227,7 +228,7 @@ export function applyPostExecutionReconciliation(
 // ============================================================================
 
 export {
-    buildBlueprintRetryGuidance, executeToolForText, hasSuccessfulReadBackAfterWrite, isBlueprintLikeStep, validateBlueprintStepCompletion
+  buildBlueprintRetryGuidance, executeToolForText, hasSuccessfulReadBackAfterWrite, isBlueprintLikeStep, validateBlueprintStepCompletion
 } from "./blueprint.js"
 export type { SubagentValidationFailure } from "./blueprint.js"
 

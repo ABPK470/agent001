@@ -1,3 +1,4 @@
+import { VerificationMode } from "@mia/agent"
 /**
  * Runtime probes for subagent assessment — browser_check on HTML artifacts
  * and `npm test` execution when verificationMode is run_tests.
@@ -6,8 +7,8 @@
  */
 
 import type { Tool } from "../../types.js"
-import type { SubagentTaskStep } from "../types.js"
 import { executeToolForText } from "../internal/verifier-io.js"
+import type { SubagentTaskStep } from "../types.js"
 
 export interface BrowserCheckOutcome {
   passed: boolean
@@ -71,7 +72,7 @@ export async function runTestsProbe(
   issues: string[],
   executedModalities: Set<string>,
 ): Promise<void> {
-  if (step.executionContext.verificationMode !== "run_tests") return
+  if (step.executionContext.verificationMode !== VerificationMode.RunTests) return
   const runCmd = toolMap.get("run_command")
   if (!runCmd) return
   try {

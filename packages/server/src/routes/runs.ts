@@ -2,12 +2,15 @@
  * Runs API routes — manage agent runs.
  */
 
+import { EventType } from "@mia/agent"
+import type { AuditEntry, LogEntry, Run, RunDetail } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { canAccessRun } from "../auth/access.js"
-import * as db from "../db.js"
-import { flagRunMemory } from "../memory.js"
-import type { AgentOrchestrator } from "../orchestrator.js"
+import * as db from "../db/index.js"
+import { MemoryValidationAction } from "../enums/memory.js"
+import { flagRunMemory } from "../memory/index.js"
+import type { AgentOrchestrator } from "../orchestrator/index.js"
 import { getAllTools } from "../tools.js"
 
 export function registerRunRoutes(
@@ -24,26 +27,19 @@ export function registerRunRoutes(
     const runs = s?.isAdmin
       ? db.listRunsWithUsage()
       : db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
-    return runs.map((r) => ({
-      pendingWorkspaceChanges: (() => {
-        const diff = orchestrator.getRunWorkspaceDiff(r.id)
-        return diff ? diff.added.length + diff.modified.length + diff.deleted.length : 0
-      })(),
-      id: r.id,
-      goal: r.goal,
-      status: r.status,
-      answer: r.answer,
-      stepCount: r.step_count,
-      error: r.error,
-      parentRunId: r.parent_run_id,
-      agentId: r.agent_id ?? null,
-      createdAt: r.created_at,
-      completedAt: r.completed_at,
-      totalTokens: r.total_tokens ?? 0,
-      promptTokens: r.prompt_tokens ?? 0,
-      completionTokens: r.completion_tokens ?? 0,
-      llmCalls: r.llm_calls ?? 0,
-    }))
+    return runs.map((r): Run => {
+      const diff = orchestrator.getRunWorkspaceDiff(r.id)
+      const pendingWorkspaceChanges = diff
+        ? diff.added.length + diff.modified.length + diff.deleted.length
+        : 0
+      return db.dbRunToWire(r, {
+        totalTokens:      r.total_tokens      ?? 0,
+        promptTokens:     r.prompt_tokens     ?? 0,
+        completionTokens: r.completion_tokens ?? 0,
+        llmCalls:         r.llm_calls         ?? 0,
+        pendingWorkspaceChanges,
+      })
+    })
   })
 
   // Get run details
@@ -69,29 +65,20 @@ export function registerRunRoutes(
       : 0
 
     return {
-      id: run.id,
-      goal: run.goal,
-      status: run.status,
-      answer: run.answer,
-      stepCount: run.step_count,
-      error: run.error,
-      parentRunId: run.parent_run_id,
-      agentId: run.agent_id ?? null,
-      data: JSON.parse(run.data),
-      createdAt: run.created_at,
-      completedAt: run.completed_at,
-      totalTokens: usage?.total_tokens ?? 0,
-      promptTokens: usage?.prompt_tokens ?? 0,
-      completionTokens: usage?.completion_tokens ?? 0,
-      llmCalls: usage?.llm_calls ?? 0,
-      pendingWorkspaceChanges,
-      audit: audit.map((a) => ({
+      ...db.dbRunToWire(run, {
+        totalTokens:      usage?.total_tokens      ?? 0,
+        promptTokens:     usage?.prompt_tokens     ?? 0,
+        completionTokens: usage?.completion_tokens ?? 0,
+        llmCalls:         usage?.llm_calls         ?? 0,
+        pendingWorkspaceChanges,
+      }),
+      audit: audit.map((a): AuditEntry => ({
         actor: a.actor,
         action: a.action,
         detail: JSON.parse(a.detail),
         timestamp: a.timestamp,
       })),
-      logs: logs.map((l) => {
+      logs: logs.map((l): LogEntry => {
         // New format: level = "step" | "step:error" | "run" | etc.
         // Old format: level = "info" | "error", message = "event.type: {json}"
         const isOldFormat = l.level === "info" || l.level === "error"
@@ -106,10 +93,10 @@ export function registerRunRoutes(
             const payload = JSON.parse(l.message.slice(colonIdx + 2)) as Record<string, unknown>
             const action = (payload.action ?? payload.name ?? "unknown") as string
             switch (rawType) {
-              case "run.started": msg = `Started — run ${((payload.runId as string) ?? "?").slice(0, 8)}`; break
-              case "step.started": msg = `${action} started`; break
-              case "step.completed": msg = `${action} completed`; break
-              case "step.failed": msg = `${action} failed — ${((payload.error as string) ?? "unknown").slice(0, 200)}`; error = true; break
+              case EventType.RunStarted: msg = `Started — run ${((payload.runId as string) ?? "?").slice(0, 8)}`; break
+              case EventType.StepStarted: msg = `${action} started`; break
+              case EventType.StepCompleted: msg = `${action} completed`; break
+              case EventType.StepFailed: msg = `${action} failed — ${((payload.error as string) ?? "unknown").slice(0, 200)}`; error = true; break
               default: msg = rawType.replace(/^[^.]+\./, "")
             }
           } catch { /* keep original message if JSON parse fails */ }
@@ -122,7 +109,7 @@ export function registerRunRoutes(
         return { type, message: l.message, timestamp: l.timestamp, ...(hasError ? { error: true } : {}) }
       }),
       hasCheckpoint: !!checkpoint,
-    }
+    } satisfies RunDetail
   })
 
   // Start a new run (optionally scoped to an agent definition)
@@ -292,14 +279,14 @@ export function registerRunRoutes(
       const { useful, note } = req.body ?? {}
       if (useful !== false) {
         // Only negative feedback does anything for now
-        return { ok: true, action: "none" }
+        return { ok: true, action: MemoryValidationAction.None }
       }
       const flagged = flagRunMemory(req.params.id, note)
       if (!flagged) {
         // No episodic memory entry found — may be too recent or already pruned
-        return { ok: true, action: "no_memory_entry" }
+        return { ok: true, action: MemoryValidationAction.NoMemoryEntry }
       }
-      return { ok: true, action: "flagged", runId: req.params.id }
+      return { ok: true, action: MemoryValidationAction.Flagged, runId: req.params.id }
     },
   )
 

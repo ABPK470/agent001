@@ -8,19 +8,20 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { api } from "./api"
+import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
-    AuditEntry,
-    LayoutItem,
-    LogEntry,
-    Notification,
-    Run,
-    RunDetail,
-    SseEvent,
-    Step,
-    TraceEntry,
-    ViewConfig,
-    Widget,
-    WidgetType,
+  AuditEntry,
+  LayoutItem,
+  LogEntry,
+  Notification,
+  Run,
+  RunDetail,
+  SseEvent,
+  Step,
+  TraceEntry,
+  ViewConfig,
+  Widget,
+  WidgetType,
 } from "./types"
 import { randomId } from "./util"
 
@@ -47,6 +48,60 @@ function mapRunTrace(runs: Run[], runId: string, update: (trace: TraceEntry[]) =
   const next = [...runs]
   next[index] = { ...next[index], trace: update(next[index].trace ?? []) }
   return next
+}
+
+/**
+ * Reconstruct Step rows from a trace stream.
+ *
+ * Schema v14 dropped the `runs.data` column, so the server no longer
+ * persists step rows directly — they live only as `tool-call` /
+ * `tool-result` / `tool-error` entries inside `trace_entries`. Several
+ * widgets (StepTimeline, ToolTimelinePanel, OperatorEnvironment's
+ * "current activity" derivation, etc.) still consume `Step[]`, so we
+ * rebuild the shape here from whatever trace the server returns.
+ *
+ * Pairing rule: tool-result / tool-error are matched to the most recent
+ * un-terminated tool-call sharing the same `invocationId` (or by FIFO if
+ * the entry has no invocationId, which can happen for legacy traces).
+ */
+function tracesToSteps(trace: TraceEntry[]): Step[] {
+  const steps: Step[] = []
+  const byInvocation = new Map<string, Step>()
+  let order = 0
+  for (const e of trace) {
+    if (e.kind === "tool-call") {
+      let input: Record<string, unknown> = {}
+      try { input = e.argsFormatted ? JSON.parse(e.argsFormatted) as Record<string, unknown> : {} }
+      catch { input = {} }
+      const step: Step = {
+        id: e.invocationId,
+        name: e.tool,
+        action: e.tool,
+        status: RunStatus.Running,
+        order: order++,
+        input,
+        output: {},
+        error: null,
+        startedAt: null,
+        completedAt: null,
+      }
+      steps.push(step)
+      byInvocation.set(e.invocationId, step)
+    } else if (e.kind === "tool-result") {
+      const target = e.invocationId ? byInvocation.get(e.invocationId) : steps.slice().reverse().find((s) => s.status === RunStatus.Running)
+      if (target) {
+        target.status = RunStatus.Completed
+        target.output = { result: e.text }
+      }
+    } else if (e.kind === "tool-error") {
+      const target = e.invocationId ? byInvocation.get(e.invocationId) : steps.slice().reverse().find((s) => s.status === RunStatus.Running)
+      if (target) {
+        target.status = RunStatus.Failed
+        target.error = e.text
+      }
+    }
+  }
+  return steps
 }
 
 // ── Store shape ──────────────────────────────────────────────────
@@ -172,38 +227,38 @@ interface AppState {
 
 /** Persisted IOE panel layout. */
 export interface IoeLayout {
-  sidebarSection: string
+  sidebarSection: SidebarSection
   sidebarVisible: boolean
   sidebarSplit: boolean
-  sidebarBottomSection: string
+  sidebarBottomSection: SidebarSection
   sidebarSplitRatio: number
   bottomVisible: boolean
   chatVisible: boolean
-  editorTab: string
+  editorTab: EditorTab
   editorSplit: boolean
-  editorRightTab: string
-  bottomTab: string
+  editorRightTab: EditorTab
+  bottomTab: BottomTab
   bottomSplit: boolean
-  bottomRightTab: string
+  bottomRightTab: BottomTab
   sidebarWidth: number
   bottomHeight: number
   chatWidth: number
 }
 
 const DEFAULT_IOE_LAYOUT: IoeLayout = {
-  sidebarSection: "details",
+  sidebarSection: SidebarSection.Details,
   sidebarVisible: true,
   sidebarSplit: false,
-  sidebarBottomSection: "runs",
+  sidebarBottomSection: SidebarSection.Runs,
   sidebarSplitRatio: 0.5,
   bottomVisible: true,
   chatVisible: true,
-  editorTab: "tool-timeline",
+  editorTab: EditorTab.ToolTimeline,
   editorSplit: false,
-  editorRightTab: "llm-calls",
-  bottomTab: "output",
+  editorRightTab: EditorTab.LlmCalls,
+  bottomTab: BottomTab.Output,
   bottomSplit: false,
-  bottomRightTab: "audit",
+  bottomRightTab: BottomTab.Audit,
   sidebarWidth: 260,
   bottomHeight: 200,
   chatWidth: 300,
@@ -702,7 +757,32 @@ export const useStore = create<AppState>()(
       // Runs
       runs: [],
       activeRunId: null,
-      setRuns: (runs) => set({ runs }),
+      // Merge incoming run rows into the store WITHOUT clobbering live,
+      // SSE-accumulated per-run fields. `api.listRuns()` returns the row
+      // metadata only (id/goal/status/counts) — it never carries the live
+      // `trace`, `streamingAnswer`, `coherentStream`, `stepData`, or
+      // `auditTrail` that we accumulate from the event stream. A plain
+      // `set({ runs })` would wipe all of that, which is exactly what
+      // happened when widgets like RunHistory re-fetched the run list on
+      // mount: switching to a view containing RunHistory and then back
+      // to TermChat would erase the active run's narrative + tool calls.
+      setRuns: (runs) => set((s) => {
+        const prevById = new Map(s.runs.map((r) => [r.id, r]))
+        const merged = runs.map((incoming) => {
+          const existing = prevById.get(incoming.id)
+          if (!existing) return incoming
+          return {
+            ...incoming,
+            // Preserve fields the listRuns endpoint does not ship.
+            trace: existing.trace ?? incoming.trace,
+            streamingAnswer: existing.streamingAnswer ?? incoming.streamingAnswer,
+            coherentStream: existing.coherentStream ?? incoming.coherentStream,
+            stepData: existing.stepData?.length ? existing.stepData : incoming.stepData,
+            auditTrail: existing.auditTrail?.length ? existing.auditTrail : incoming.auditTrail,
+          }
+        })
+        return { runs: merged }
+      }),
       setActiveRun: (activeRunId) => {
         set({ activeRunId })
         if (!activeRunId) return
@@ -710,22 +790,29 @@ export const useStore = create<AppState>()(
         // the selected run (steps, trace, audit, logs).
         const store = get()
         const run = store.runs.find((r) => r.id === activeRunId)
-        const isLive = run?.status === "pending" || run?.status === "running" || run?.status === "planning"
+        const isLive = run?.status === RunStatus.Pending || run?.status === RunStatus.Running || run?.status === RunStatus.Planning
         if (isLive) return  // live run already has fresh data in store
         Promise.all([
           api.getRun(activeRunId),
           api.getRunTrace(activeRunId),
         ]).then(([detail, rawTrace]) => {
           const d = detail as RunDetail
-          get().setSteps(d.data?.steps ?? [])
+          const trace = rawTrace as TraceEntry[]
+          // Schema v14: server no longer ships steps in d.data — derive
+          // from the trace so all step-driven widgets (StepTimeline,
+          // ToolTimelinePanel, problems, current-activity) keep working
+          // for historical runs. If the server ever brings back d.data.steps,
+          // we prefer that over the derived shape.
+          const steps = d.data?.steps?.length ? d.data.steps : tracesToSteps(trace)
+          get().setSteps(steps)
           get().setAudit(d.audit ?? [])
           if (d.logs?.length) get().mergeLogs(d.logs)
-          get().setTrace(rawTrace as TraceEntry[])
+          get().setTrace(trace)
           set((s) => ({
             runs: patchRunFields(s.runs, activeRunId, {
-              stepData: d.data?.steps ?? [],
+              stepData: steps,
               auditTrail: d.audit ?? [],
-              trace: rawTrace as TraceEntry[],
+              trace,
               streamingAnswer: "",
               coherentStream: "",
             }),
@@ -936,7 +1023,7 @@ export const useStore = create<AppState>()(
             store.upsertRun({
               id: data["runId"] as string,
               goal: data["goal"] as string,
-              status: "pending",
+              status: RunStatus.Pending,
               answer: null,
               stepCount: 0,
               error: null,
@@ -960,7 +1047,7 @@ export const useStore = create<AppState>()(
           case "run.started":
             store.upsertRun({
               id: data["runId"] as string,
-              status: "running",
+              status: RunStatus.Running,
             })
             break
 
@@ -969,7 +1056,7 @@ export const useStore = create<AppState>()(
             store.addTrace({ kind: "answer", text: data["answer"] as string })
             store.upsertRun({
               id: data["runId"] as string,
-              status: "completed",
+              status: RunStatus.Completed,
               answer: data["answer"] as string,
               stepCount: data["stepCount"] as number,
               pendingWorkspaceChanges: (data["pendingWorkspaceChanges"] as number) ?? 0,
@@ -989,7 +1076,7 @@ export const useStore = create<AppState>()(
             store.addTrace({ kind: "error", text: data["error"] as string })
             store.upsertRun({
               id: data["runId"] as string,
-              status: "failed",
+              status: RunStatus.Failed,
               error: data["error"] as string,
               stepCount: data["stepCount"] as number,
               completedAt: timestamp,
@@ -1008,7 +1095,7 @@ export const useStore = create<AppState>()(
             store.addTrace({ kind: "error", text: "Run cancelled by user" })
             store.upsertRun({
               id: data["runId"] as string,
-              status: "cancelled",
+              status: RunStatus.Cancelled,
               completedAt: timestamp,
               streamingAnswer: "",
             })
@@ -1061,7 +1148,7 @@ export const useStore = create<AppState>()(
               input,
               output: {},
               error: null,
-              status: "running",
+              status: RunStatus.Running,
               startedAt: timestamp,
             } as Step)
             if (runId) {
@@ -1074,7 +1161,7 @@ export const useStore = create<AppState>()(
                     input,
                     output: {},
                     error: null,
-                    status: "running",
+                    status: RunStatus.Running,
                     order: 0,
                     startedAt: timestamp,
                     completedAt: null,
@@ -1099,7 +1186,7 @@ export const useStore = create<AppState>()(
               input: (data["input"] as Record<string, unknown>) ?? {},
               output,
               error: null,
-              status: "completed",
+              status: RunStatus.Completed,
               completedAt: timestamp,
             } as Step)
             if (runId) {
@@ -1107,7 +1194,7 @@ export const useStore = create<AppState>()(
                 runs: patchRunFields(s.runs, runId, {
                   stepData: (s.runs.find((run) => run.id === runId)?.stepData ?? []).map((step) =>
                     step.id === data["stepId"]
-                      ? { ...step, output, error: null, status: "completed", completedAt: timestamp }
+                      ? { ...step, output, error: null, status: RunStatus.Completed, completedAt: timestamp }
                       : step,
                   ),
                 }),
@@ -1161,7 +1248,7 @@ export const useStore = create<AppState>()(
               action: data["action"] as string ?? "",
               input: (data["input"] as Record<string, unknown>) ?? {},
               output: (data["output"] as Record<string, unknown>) ?? {},
-              status: "failed",
+              status: RunStatus.Failed,
               error: errText,
               completedAt: timestamp,
             } as Step)
@@ -1170,7 +1257,7 @@ export const useStore = create<AppState>()(
                 runs: patchRunFields(s.runs, runId, {
                   stepData: (s.runs.find((run) => run.id === runId)?.stepData ?? []).map((step) =>
                     step.id === data["stepId"]
-                      ? { ...step, output: (data["output"] as Record<string, unknown>) ?? {}, status: "failed", error: errText, completedAt: timestamp }
+                      ? { ...step, output: (data["output"] as Record<string, unknown>) ?? {}, status: RunStatus.Failed, error: errText, completedAt: timestamp }
                       : step,
                   ),
                 }),

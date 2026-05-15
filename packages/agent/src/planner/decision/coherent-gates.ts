@@ -1,3 +1,4 @@
+import { PlannerNeedLevel } from "@mia/agent"
 /**
  * Layer 5: sanity override + coherence gates. Extracted from assess.ts.
  *
@@ -29,7 +30,7 @@ export function isSanityOverrideBoundedBuild(signals: RequestSignals, axes: Rout
   if (LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized)) return false
   if (signals.hasMultiStepCue) return false
   if (signals.structuredBulletCount > 0) return false
-  if (axes.coordinationNeed === "high") return false
+  if (axes.coordinationNeed === PlannerNeedLevel.High) return false
   if (signals.priorToolMessages >= 4) return false
   if (hasRealOwnershipSeparation(signals)) return false
   if (signals.targetFilePaths.length > 1) return false
@@ -39,7 +40,7 @@ export function isSanityOverrideBoundedBuild(signals: RequestSignals, axes: Rout
 export function shouldUseBoundedCoherentGeneration(signals: RequestSignals, axes: RoutingAxes): boolean {
   if (!signals.hasImplementationScopeCue) return false
   if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  if (axes.coordinationNeed !== "low") return false
+  if (axes.coordinationNeed !== PlannerNeedLevel.Low) return false
   if (hasRealOwnershipSeparation(signals)) return false
   if (signals.priorToolMessages >= 4) return false
   if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
@@ -52,7 +53,7 @@ export function shouldUsePlannerWithCoherentBootstrap(signals: RequestSignals, a
   if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
   if (!LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized) && signals.structuredBulletCount < 3 && signals.targetFilePaths.length < 3) return false
   if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
-  if (axes.coherenceNeed !== "high") return false
-  if (axes.coordinationNeed === "low") return false
+  if (axes.coherenceNeed !== PlannerNeedLevel.High) return false
+  if (axes.coordinationNeed === PlannerNeedLevel.Low) return false
   return !(signals.hasDelegationCue && signals.hasMultiStepCue)
 }

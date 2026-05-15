@@ -10,12 +10,12 @@ import type {
     BlueprintFunctionSpec,
     BlueprintSharedTypeSpec,
     ParsedBlueprintContractBlock,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 import {
     normalizeBasename,
     normalizeSpecPath,
     uniqueStrings,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 
 const BLUEPRINT_CONTRACT_BLOCK_RE = /```blueprint-contract\s*([\s\S]*?)```/iu
 

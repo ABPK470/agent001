@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
@@ -29,17 +30,17 @@ import { fmtTokens } from "../util"
 import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
 import { ChatPanel, type FileAttachment } from "./ioe/chat"
 import {
+    BottomTab,
     C,
+    EditorTab,
+    SidebarSection,
     buildChatMessages,
     buildProblems,
     buildSearchResults,
     dur,
     fmtK,
-    type BottomTab,
-    type EditorTab,
     type HealthData,
     type LlmConfig,
-    type SidebarSection,
     type UsageData
 } from "./ioe/constants"
 import { EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
@@ -116,7 +117,7 @@ export function OperatorEnvironment() {
   const setSidebarVisible = useCallback((v: boolean) => setIoeLayout({ sidebarVisible: v }), [setIoeLayout])
   const sidebarSplit = ioeLayout.sidebarSplit
   const setSidebarSplit = useCallback((v: boolean) => setIoeLayout({ sidebarSplit: v }), [setIoeLayout])
-  const sidebarBottomSection = (ioeLayout.sidebarBottomSection ?? "runs") as SidebarSection
+  const sidebarBottomSection = (ioeLayout.sidebarBottomSection ?? SidebarSection.Runs) as SidebarSection
   const setSidebarBottomSection = useCallback((v: SidebarSection) => setIoeLayout({ sidebarBottomSection: v }), [setIoeLayout])
   const sidebarSplitRatio = ioeLayout.sidebarSplitRatio ?? 0.5
   const bottomVisible = ioeLayout.bottomVisible
@@ -185,9 +186,9 @@ export function OperatorEnvironment() {
   }, [logs.length])
   // ── Derived data ──────────────────────────────────────────────
   const activeRun = runs.find((r) => r.id === activeRunId)
-  const isRunning = activeRun?.status === "running"
-  const isFailed = activeRun?.status === "failed"
-  const isCancelled = activeRun?.status === "cancelled"
+  const isRunning = activeRun?.status === RunStatus.Running
+  const isFailed = activeRun?.status === RunStatus.Failed
+  const isCancelled = activeRun?.status === RunStatus.Cancelled
   const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
 
   const currentIteration = useMemo(() => {
@@ -206,10 +207,10 @@ export function OperatorEnvironment() {
   const streamingAnswer = useStore((s) => s.streamingAnswer)
 
   const currentActivity = useMemo(() => {
-    if (!activeRun || activeRun.status === "pending") return null
-    if (activeRun.status === "planning") return "Planning"
-    if (activeRun.status !== "running") return null
-    const running = [...steps].reverse().find((s) => s.status === "running")
+    if (!activeRun || activeRun.status === RunStatus.Pending) return null
+    if (activeRun.status === RunStatus.Planning) return "Planning"
+    if (activeRun.status !== RunStatus.Running) return null
+    const running = [...steps].reverse().find((s) => s.status === RunStatus.Running)
     if (running) return TOOL_LABELS[running.action] ?? running.name
     for (let i = trace.length - 1; i >= 0; i--) {
       const e = trace[i]
@@ -367,9 +368,9 @@ export function OperatorEnvironment() {
 
   // ── Activity bar items ────────────────────────────────────────
   const activityItems: Array<{ id: SidebarSection; Icon: LucideIcon; label: string; badge?: number }> = [
-    { id: "runs", Icon: History, label: "Runs" },
-    { id: "compare", Icon: GitCompareArrows, label: "Compare Runs" },
-    { id: "details", Icon: Info, label: "Details" },
+    { id: SidebarSection.Runs, Icon: History, label: "Runs" },
+    { id: SidebarSection.Compare, Icon: GitCompareArrows, label: "Compare Runs" },
+    { id: SidebarSection.Details, Icon: Info, label: "Details" },
   ]
 
   const renderSidebarTabs = (
@@ -430,12 +431,12 @@ export function OperatorEnvironment() {
   }, [])
 
   const renderSidebarSection = (section: SidebarSection) => {
-    if (section === "runs")
+    if (section === SidebarSection.Runs)
       return <RunsPanel runs={runs} activeRunId={activeRunId} onSelect={setActiveRun} />
-    if (section === "compare")
+    if (section === SidebarSection.Compare)
       return <ComparePanel runs={runs} onCompare={handleCompare}
         result={compareResult} loading={compareLoading} error={compareError} />
-    if (section === "details")
+    if (section === SidebarSection.Details)
       return (
         <DetailsPanel run={activeRun} agents={agents} tools={tools}
           policies={policies} llm={llm} health={health} usage={usage} />
@@ -444,16 +445,16 @@ export function OperatorEnvironment() {
   }
 
   const renderBottomContent = (tab: BottomTab) => {
-    if (tab === "output") return <OutputPanel logs={logs} />
-    if (tab === "audit") return <AuditPanel audit={audit} />
-    if (tab === "problems") return <ProblemsPanel problems={problems} />
+    if (tab === BottomTab.Output) return <OutputPanel logs={logs} />
+    if (tab === BottomTab.Audit) return <AuditPanel audit={audit} />
+    if (tab === BottomTab.Problems) return <ProblemsPanel problems={problems} />
     return null
   }
 
   const renderEditorContent = (tab: EditorTab) => {
-    if (tab === "tool-timeline") return <ToolTimelinePanel steps={steps} />
-    if (tab === "llm-calls") return <LlmCallsPanel trace={trace} />
-    if (tab === "map")
+    if (tab === EditorTab.ToolTimeline) return <ToolTimelinePanel steps={steps} />
+    if (tab === EditorTab.LlmCalls) return <LlmCallsPanel trace={trace} />
+    if (tab === EditorTab.Map)
       return <MapPanel trace={trace} run={activeRun} agents={agents} />
     // Fallback for old persisted "trace" → show tool-timeline
     return <ToolTimelinePanel steps={steps} />
@@ -644,7 +645,7 @@ export function OperatorEnvironment() {
             <div className="flex items-center gap-1 flex-wrap justify-end">
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
               {(isFailed || isCancelled) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
-              {(activeRun?.status === "completed" || isFailed || isCancelled) && (
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && (
                 <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
               )}
               {pendingWorkspaceChanges > 0 && (
@@ -654,7 +655,7 @@ export function OperatorEnvironment() {
                   onClick={handleApplyWorkspace}
                 />
               )}
-              {(activeRun?.status === "completed" || isFailed || isCancelled) && !rolledBack && (
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (
@@ -729,7 +730,7 @@ export function OperatorEnvironment() {
                   stepCount={steps.length}
                 />
                 <div className="flex-1" />
-                {editorTab === "llm-calls" && trace.length > 0 && (
+                {editorTab === EditorTab.LlmCalls && trace.length > 0 && (
                   <button
                     className="px-2 py-1 mr-0.5 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                     style={{ color: C.dim }}
@@ -768,7 +769,7 @@ export function OperatorEnvironment() {
                       stepCount={steps.length}
                     />
                     <div className="flex-1" />
-                    {editorRightTab === "llm-calls" && trace.length > 0 && (
+                    {editorRightTab === EditorTab.LlmCalls && trace.length > 0 && (
                       <button
                         className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                         style={{ color: C.dim }}
@@ -803,7 +804,7 @@ export function OperatorEnvironment() {
               style={{ height: bottom.size, borderTop: `1px solid ${C.borderSolid}` }}
             >
               <div className="flex items-center shrink-0 select-none" style={{ borderBottom: `1px solid ${C.border}` }}>
-                {(["output", "audit", "problems"] as BottomTab[]).map((tab) => (
+                {([BottomTab.Output, BottomTab.Audit, BottomTab.Problems]).map((tab) => (
                   <button
                     key={tab}
                     className="px-3 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"
@@ -814,7 +815,7 @@ export function OperatorEnvironment() {
                     onClick={() => setBottomTab(tab)}
                   >
                     {tab}
-                    {tab === "problems" && problems.length > 0 && (
+                    {tab === BottomTab.Problems && problems.length > 0 && (
                       <span
                         className="ml-1.5 text-[11px] px-1 rounded-full"
                         style={{ background: C.error + "30", color: C.error }}
@@ -827,7 +828,7 @@ export function OperatorEnvironment() {
                 <div className="flex-1" />
                 {bottomSplit && (
                   <>
-                    {(["output", "audit", "problems"] as BottomTab[]).map((tab) => (
+                    {([BottomTab.Output, BottomTab.Audit, BottomTab.Problems]).map((tab) => (
                       <button
                         key={`r-${tab}`}
                         className="px-2 py-1 text-[13px] uppercase tracking-wide transition-colors cursor-pointer"

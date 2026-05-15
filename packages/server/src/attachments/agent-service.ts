@@ -8,7 +8,7 @@
  * (no module-global state).
  */
 
-import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@agent001/agent"
+import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@mia/agent"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
 import {
@@ -19,6 +19,7 @@ import {
     uploadAttachment,
     type AttachmentRow,
 } from "../attachments/index.js"
+import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 
 const TEXT_MEDIA_PREFIXES = ["text/"]
@@ -181,7 +182,7 @@ export const serverAttachmentService: AttachmentService = {
       attachmentId: id,
       runId,
       sandboxPath:  dest,
-      importMode:   "copy",
+      importMode:   AttachmentImportMode.Copy,
     })
     auditAttachmentImported(row, dest)
     return { sandboxPath: dest, sizeBytes: bytes.byteLength }
@@ -206,11 +207,11 @@ export const serverAttachmentService: AttachmentService = {
       // Bind to the run that produced it, but keep the bytes around as a
       // workspace asset so the user can still access them after the run
       // finishes.
-      scope:        "workspace_asset",
+      scope:        AttachmentScope.WorkspaceAsset,
       runId,
       sessionId,
       ownerUpn,
-      source:       "generated",
+      source:       AttachmentSource.Generated,
       ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {}),
     })
     auditAttachmentPromoted(row)

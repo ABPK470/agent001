@@ -1,65 +1,80 @@
 /**
- * Session persistence — upsert the current session into the `sessions`
- * table and bump last_seen_at. Powers the admin "Active Users" widget.
+ * Sessions persistence — opaque transport tokens FK'd to users.
  *
- * Called from the identity middleware for every request (cheap upsert).
+ * In v19 (the real-accounts redesign), sessions hold no identity claims:
+ * sid, FK to users(upn), ip, user_agent, timestamps. All identity
+ * (display_name, is_admin, …) is JOIN'd from `users` at read time.
+ *
+ * Lifecycle:
+ *   - createSession(upn, ip, ua) — called on POST /api/auth/login and on
+ *     SSO header detection.
+ *   - touchSession(sid) — bumps last_seen_at on every request.
+ *   - deleteSession(sid) — POST /api/auth/logout.
+ *
+ * The old anonymous-fingerprint reuse logic is gone — there are no anon
+ * sessions any more.
  */
 
+import { newSid } from "../auth/session.js"
 import { getDb } from "./connection.js"
 
 export interface DbSession {
   sid: string
-  upn: string | null
-  display_name: string | null
+  upn: string
   ip: string | null
   user_agent: string | null
   created_at: string
   last_seen_at: string
 }
 
-export function touchSession(s: {
-  sid: string
-  upn: string | null
-  displayName: string
-  ip: string
-  userAgent: string
-}): void {
-  // Skip transient anonymous sessions — they spawn a new sid each request and
-  // would flood the table. Welcome-modal sessions get persisted on POST /api/me
-  // (their sid is stable across requests via the cookie).
-  if (s.sid.startsWith("anon:")) return
-  getDb().prepare(`
-    INSERT INTO sessions (sid, upn, display_name, ip, user_agent, created_at, last_seen_at)
-    VALUES (@sid, @upn, @display_name, @ip, @user_agent, datetime('now'), datetime('now'))
-    ON CONFLICT(sid) DO UPDATE SET
-      upn          = excluded.upn,
-      display_name = excluded.display_name,
-      ip           = excluded.ip,
-      user_agent   = excluded.user_agent,
-      last_seen_at = datetime('now')
-  `).run({
-    sid:          s.sid,
-    upn:          s.upn,
-    display_name: s.displayName,
-    ip:           s.ip,
-    user_agent:   s.userAgent,
-  })
+export interface SessionWithUser extends DbSession {
+  display_name: string
+  is_admin: number   // 0 | 1
 }
 
-export function listSessions(opts?: { sinceSeconds?: number }): DbSession[] {
-  const since = opts?.sinceSeconds
-  if (since !== undefined) {
-    return getDb()
-      .prepare(`
-        SELECT * FROM sessions
-        WHERE last_seen_at >= datetime('now', ?)
-        ORDER BY last_seen_at DESC
-      `)
-      .all(`-${since} seconds`) as DbSession[]
-  }
-  return getDb()
-    .prepare("SELECT * FROM sessions ORDER BY last_seen_at DESC")
-    .all() as DbSession[]
+export function createSession(args: {
+  upn: string
+  ip: string
+  userAgent: string
+}): string {
+  const sid = newSid()
+  getDb().prepare(`
+    INSERT INTO sessions (sid, upn, ip, user_agent, created_at, last_seen_at)
+    VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(sid, args.upn.toLowerCase(), args.ip, args.userAgent)
+  return sid
+}
+
+export function touchSession(sid: string): void {
+  getDb()
+    .prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE sid = ?")
+    .run(sid)
+}
+
+export function deleteSession(sid: string): void {
+  getDb().prepare("DELETE FROM sessions WHERE sid = ?").run(sid)
+}
+
+export function deleteSessionsForUser(upn: string): void {
+  getDb()
+    .prepare("DELETE FROM sessions WHERE upn = ?")
+    .run(upn.toLowerCase())
+}
+
+/**
+ * Look up a session and JOIN with users. Returns null if the sid does
+ * not match any row (e.g. logged out / revoked). Used by the identity
+ * hook on every request.
+ */
+export function getSessionWithUser(sid: string): SessionWithUser | null {
+  const row = getDb().prepare(`
+    SELECT s.sid, s.upn, s.ip, s.user_agent, s.created_at, s.last_seen_at,
+           u.display_name, u.is_admin
+    FROM sessions s
+    JOIN users u ON u.upn = s.upn
+    WHERE s.sid = ?
+  `).get(sid) as SessionWithUser | undefined
+  return row ?? null
 }
 
 export function getSession(sid: string): DbSession | undefined {
@@ -68,16 +83,32 @@ export function getSession(sid: string): DbSession | undefined {
     .get(sid) as DbSession | undefined
 }
 
+export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[] {
+  const since = opts?.sinceSeconds
+  const sql = `
+    SELECT s.sid, s.upn, s.ip, s.user_agent, s.created_at, s.last_seen_at,
+           u.display_name, u.is_admin
+    FROM sessions s
+    JOIN users u ON u.upn = s.upn
+    ${since !== undefined ? "WHERE s.last_seen_at >= datetime('now', ?)" : ""}
+    ORDER BY s.last_seen_at DESC
+  `
+  return since !== undefined
+    ? getDb().prepare(sql).all(`-${since} seconds`) as SessionWithUser[]
+    : getDb().prepare(sql).all() as SessionWithUser[]
+}
+
 // ── Per-user aggregations (admin observability) ──────────────────
 
 export interface UserStatsRow {
-  /** Stable identity key — the UPN if present, otherwise `sid:<sid>`. */
+  /** Stable identity key — always the UPN now (anon is gone). */
   identifier: string
-  upn: string | null
-  displayName: string | null
+  upn: string
+  displayName: string
+  isAdmin: boolean
   sessionCount: number
-  firstSeenAt: string  // earliest created_at across that user's sessions
-  lastSeenAt: string   // latest last_seen_at
+  firstSeenAt: string
+  lastSeenAt: string
   online: boolean
   lastIp: string | null
   lastUserAgent: string | null
@@ -91,12 +122,9 @@ export interface UserStatsRow {
 }
 
 /**
- * Aggregates sessions + runs + token_usage grouped by UPN, or by sid for
- * every no-UPN session. One row per login/session when no stable identity
- * exists, which keeps two anonymous "John" users separate in the admin UI.
- *
- * @param sinceSeconds — window for "session counted as recent" (default 7d)
- * @param activityWindowSeconds — window for "runs24h / tokens24h" (default 24h)
+ * Per-user activity aggregates. With anonymous sessions removed, every
+ * row in `sessions` has a real `upn` and JOINs into `users` — the heavy
+ * "group by sid for no-UPN sessions" CTE the v18 query needed is gone.
  */
 export function listUsersWithStats(opts?: {
   sinceSeconds?: number
@@ -107,107 +135,52 @@ export function listUsersWithStats(opts?: {
   const rows = getDb().prepare(`
     WITH grouped_sessions AS (
       SELECT
-        -- For UPN-identified users: group by UPN.
-        -- For every no-UPN session: group by sid. Display name is metadata,
-        -- not identity; two anonymous users named "John" must remain distinct.
-        CASE
-          WHEN upn IS NOT NULL THEN upn
-          ELSE 'sid:' || sid
-        END                          AS identifier,
-        MAX(upn)                     AS upn,
-        -- Use the most-recently-seen display_name, not MAX() which picks
-        -- lexicographically-largest (e.g. 'pk' beats 'admin').
-        (SELECT display_name FROM sessions s2
-           WHERE CASE
-             WHEN s2.upn IS NOT NULL THEN s2.upn
-             ELSE 'sid:' || s2.sid
-           END = CASE
-             WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             ELSE 'sid:' || sessions.sid
-           END
-           ORDER BY s2.last_seen_at DESC LIMIT 1) AS display_name,
-        COUNT(*)                     AS session_count,
-        MIN(created_at)              AS first_seen_at,
-        MAX(last_seen_at)            AS last_seen_at,
-        (SELECT ip         FROM sessions s2
-           WHERE CASE
-             WHEN s2.upn IS NOT NULL THEN s2.upn
-             ELSE 'sid:' || s2.sid
-           END = CASE
-             WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             ELSE 'sid:' || sessions.sid
-           END
-           ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
-        (SELECT user_agent FROM sessions s2
-           WHERE CASE
-             WHEN s2.upn IS NOT NULL THEN s2.upn
-             ELSE 'sid:' || s2.sid
-           END = CASE
-             WHEN sessions.upn IS NOT NULL THEN sessions.upn
-             ELSE 'sid:' || sessions.sid
-           END
-           ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
-      FROM sessions
-      WHERE last_seen_at >= datetime('now', ?)
-      GROUP BY identifier
+        u.upn                  AS upn,
+        u.display_name         AS display_name,
+        u.is_admin             AS is_admin,
+        COUNT(s.sid)           AS session_count,
+        MIN(s.created_at)      AS first_seen_at,
+        MAX(s.last_seen_at)    AS last_seen_at,
+        (SELECT s2.ip         FROM sessions s2 WHERE s2.upn = u.upn ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_ip,
+        (SELECT s2.user_agent FROM sessions s2 WHERE s2.upn = u.upn ORDER BY s2.last_seen_at DESC LIMIT 1) AS last_user_agent
+      FROM users u
+      LEFT JOIN sessions s ON s.upn = u.upn AND s.last_seen_at >= datetime('now', ?)
+      GROUP BY u.upn
     ),
     run_totals AS (
-      -- Resolve each run to the same identifier space used by grouped_sessions:
-      -- UPN → upn, no-UPN → 'sid:'||session_id.
       SELECT
-        CASE
-          WHEN r.upn IS NOT NULL THEN r.upn
-          ELSE 'sid:' || r.session_id
-        END AS identifier,
+        upn AS upn,
         COUNT(*) AS total_runs,
-        SUM(CASE WHEN r.created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
-        SUM(CASE WHEN r.created_at >= datetime('now', ?) AND r.status IN ('error','failed','timeout') THEN 1 ELSE 0 END) AS runs_failed_24h,
-        MAX(r.created_at) AS last_run_at
-      FROM runs r
-      LEFT JOIN sessions s ON s.sid = r.session_id
-      WHERE r.upn IS NOT NULL OR r.session_id IS NOT NULL
-      GROUP BY identifier
+        SUM(CASE WHEN created_at >= datetime('now', ?) THEN 1 ELSE 0 END) AS runs_24h,
+        SUM(CASE WHEN created_at >= datetime('now', ?) AND status IN ('error','failed','timeout') THEN 1 ELSE 0 END) AS runs_failed_24h,
+        MAX(created_at) AS last_run_at
+      FROM runs
+      GROUP BY upn
     ),
     token_totals AS (
       SELECT
-        CASE
-          WHEN r.upn IS NOT NULL THEN r.upn
-          ELSE 'sid:' || r.session_id
-        END AS identifier,
+        r.upn AS upn,
         SUM(t.total_tokens) AS total_tokens_24h,
         SUM(t.llm_calls)    AS total_llm_calls_24h
       FROM runs r
       JOIN token_usage t ON t.run_id = r.id
-      LEFT JOIN sessions s ON s.sid = r.session_id
       WHERE r.created_at >= datetime('now', ?)
-      GROUP BY identifier
+      GROUP BY r.upn
     ),
     last_models AS (
-      SELECT
-        identifier, model
-      FROM (
+      SELECT upn, model FROM (
         SELECT
-          CASE
-            WHEN r.upn IS NOT NULL THEN r.upn
-            ELSE 'sid:' || r.session_id
-          END AS identifier,
+          r.upn AS upn,
           t.model,
-          ROW_NUMBER() OVER (PARTITION BY
-            CASE
-              WHEN r.upn IS NOT NULL THEN r.upn
-              ELSE 'sid:' || r.session_id
-            END
-          ORDER BY t.created_at DESC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY r.upn ORDER BY t.created_at DESC) AS rn
         FROM runs r
         JOIN token_usage t ON t.run_id = r.id
-        LEFT JOIN sessions s ON s.sid = r.session_id
-      )
-      WHERE rn = 1
+      ) WHERE rn = 1
     )
     SELECT
-      g.identifier,
       g.upn,
       g.display_name,
+      g.is_admin,
       g.session_count,
       g.first_seen_at,
       g.last_seen_at,
@@ -221,9 +194,9 @@ export function listUsersWithStats(opts?: {
       rt.last_run_at,
       lm.model AS last_model
     FROM grouped_sessions g
-    LEFT JOIN run_totals   rt ON rt.identifier = g.identifier
-    LEFT JOIN token_totals tt ON tt.identifier = g.identifier
-    LEFT JOIN last_models  lm ON lm.identifier = g.identifier
+    LEFT JOIN run_totals   rt ON rt.upn = g.upn
+    LEFT JOIN token_totals tt ON tt.upn = g.upn
+    LEFT JOIN last_models  lm ON lm.upn = g.upn
     ORDER BY g.last_seen_at DESC
   `).all(
     `-${sinceSeconds} seconds`,
@@ -231,8 +204,8 @@ export function listUsersWithStats(opts?: {
     `-${activityWindow} seconds`,
     `-${activityWindow} seconds`,
   ) as Array<{
-    identifier: string; upn: string | null; display_name: string | null
-    session_count: number; first_seen_at: string; last_seen_at: string
+    upn: string; display_name: string; is_admin: number
+    session_count: number; first_seen_at: string | null; last_seen_at: string | null
     last_ip: string | null; last_user_agent: string | null
     total_runs: number; runs_24h: number; runs_failed_24h: number
     total_tokens_24h: number; total_llm_calls_24h: number
@@ -241,13 +214,14 @@ export function listUsersWithStats(opts?: {
 
   const onlineCutoff = Date.now() - 60_000
   return rows.map((r) => ({
-    identifier:       r.identifier,
+    identifier:       r.upn,
     upn:              r.upn,
     displayName:      r.display_name,
+    isAdmin:          r.is_admin === 1,
     sessionCount:     r.session_count,
-    firstSeenAt:      r.first_seen_at,
-    lastSeenAt:       r.last_seen_at,
-    online:           Date.parse(r.last_seen_at + "Z") >= onlineCutoff,
+    firstSeenAt:      r.first_seen_at ?? "",
+    lastSeenAt:       r.last_seen_at ?? "",
+    online:           r.last_seen_at ? Date.parse(r.last_seen_at + "Z") >= onlineCutoff : false,
     lastIp:           r.last_ip,
     lastUserAgent:    r.last_user_agent,
     totalRuns:        r.total_runs,
@@ -275,34 +249,26 @@ export interface UserHistoryRunRow {
 }
 
 /**
- * Recent runs for a single user (looked up by UPN, or by `sid:<sid>` for
- * no-UPN sessions). Joined with token_usage so the widget can render
- * tokens / model in one round-trip.
+ * Recent runs for a single user (looked up by UPN). Joined with
+ * token_usage so the widget can render tokens / model in one round-trip.
  */
 export function listUserHistory(identifier: string, limit = 25, offset = 0): { runs: UserHistoryRunRow[]; total: number } {
-  const isSid  = identifier.startsWith("sid:")
-  const key = isSid ? identifier.slice(4) : identifier
-
-  // Two identifier spaces match listUsersWithStats:
-  //   upn       → runs.upn = ?
-  //   sid:<sid> → runs.session_id = ? AND runs.upn IS NULL
-  const joinClause  = ``
-  const whereClause = isSid
-    ? `WHERE r.session_id = ? AND r.upn IS NULL`
-    : `WHERE r.upn = ?`
-  const countSql = `SELECT COUNT(*) AS cnt FROM runs r ${joinClause} ${whereClause}`
-  const total = (getDb().prepare(countSql).get(key) as { cnt: number }).cnt
+  // v19: identifier is always a UPN (anonymous "sid:..." identifiers are gone).
+  // We strip the legacy "sid:" prefix defensively so older client links keep working.
+  const upn = identifier.startsWith("sid:") ? identifier.slice(4) : identifier
+  const total = (getDb()
+    .prepare("SELECT COUNT(*) AS cnt FROM runs WHERE upn = ?")
+    .get(upn) as { cnt: number }).cnt
   const rows = getDb().prepare(`
     SELECT
       r.id, r.goal, r.status, r.step_count, r.created_at, r.completed_at, r.error,
       t.total_tokens, t.llm_calls, t.model
     FROM runs r
     LEFT JOIN token_usage t ON t.run_id = r.id
-    ${joinClause}
-    ${whereClause}
+    WHERE r.upn = ?
     ORDER BY r.created_at DESC
     LIMIT ? OFFSET ?
-  `).all(key, limit, offset) as Array<{
+  `).all(upn, limit, offset) as Array<{
     id: string; goal: string; status: string; step_count: number
     created_at: string; completed_at: string | null; error: string | null
     total_tokens: number | null; llm_calls: number | null; model: string | null
@@ -330,5 +296,3 @@ export function listUserHistory(identifier: string, limit = 25, offset = 0): { r
     }),
   }
 }
-
-

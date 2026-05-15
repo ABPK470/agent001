@@ -6,7 +6,7 @@
 
 import type { AgentLoopState } from "../state.js"
 import { canonicalizeRelative } from "../../internal/index.js"
-import type { ToolCallRecord } from "../../tool-helpers/index.js"
+import type { ToolCallRecord } from "../../tools/_helpers/index.js"
 import type { AgentConfig, Message, Tool } from "../../types.js"
 
 export const FILE_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])

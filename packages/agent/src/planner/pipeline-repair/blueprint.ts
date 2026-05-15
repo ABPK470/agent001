@@ -7,20 +7,21 @@
  * @module
  */
 
+import { DelegationOutputValidationCode } from "../../domain/enums/delegation.js"
 import type { ToolCallRecord } from "../../recovery/index.js"
-import { normalizeToolExecutionOutput } from "../../tool-helpers/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/_helpers/index.js"
 import type { Tool } from "../../types.js"
 import {
     buildBlueprintSeedTemplate,
     getPlannedBlueprintArtifacts,
     validateBlueprintArtifactContract,
-} from "../blueprint-contract.js"
+} from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 import type { SubagentStepValidationContext } from "./artifacts.js"
 import { normalizeToolCallPath } from "./reconcile.js"
 
 export interface SubagentValidationFailure {
-  code?: import("../../delegation/validation.js").DelegationOutputValidationCode
+  code?: DelegationOutputValidationCode
   message: string
 }
 
@@ -110,7 +111,7 @@ export async function validateBlueprintStepCompletion(
 
   if (!hasSuccessfulReadBackAfterWrite(calls, blueprintPath)) {
     return {
-      code: "acceptance_evidence_missing",
+      code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
       message:
         `BLUEPRINT SELF-CHECK MISSING: Step \"${step.name}\" must read back ${blueprintPath} after writing it and repair the same file until the \`blueprint-contract\` fence and exact planned targetArtifacts are present.`,
     }
@@ -119,7 +120,7 @@ export async function validateBlueprintStepCompletion(
   const blueprintContent = await executeToolForText(readFileTool, { path: blueprintPath })
   if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(blueprintContent)) {
     return {
-      code: "acceptance_evidence_missing",
+      code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
       message: `BLUEPRINT CONTRACT UNREADABLE: could not read ${blueprintPath} after generation (${blueprintContent})`,
     }
   }
@@ -128,7 +129,7 @@ export async function validateBlueprintStepCompletion(
     const blueprintIssues = validateBlueprintArtifactContract(step, validationCtx.plan, blueprintPath, blueprintContent)
     if (blueprintIssues.length > 0) {
       return {
-        code: "acceptance_evidence_missing",
+        code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
         message: blueprintIssues.join("; "),
       }
     }

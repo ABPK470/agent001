@@ -1,16 +1,17 @@
+import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
 /**
  * Coherent-verification completion guard. Extracted from completion-guards.ts.
  *
  * @module
  */
 
-import type { CompletionGuardContext, CompletionGuardResult } from "../completion-guards.js"
 import {
     buildCoherentPlannerEscalationGoal,
     buildCoherentRepairInstructions,
+    executePlannerPath,
     summarizeCoherentVerifierDecision,
 } from "../../planner/index.js"
-import { executePlannerPath } from "../../planner/index.js"
+import type { CompletionGuardContext, CompletionGuardResult } from "../completion-guards/index.js"
 
 export async function checkCoherentVerification(
   ctx: CompletionGuardContext,
@@ -23,7 +24,7 @@ export async function checkCoherentVerification(
   if (!decision) return null
 
   // Pass → allow immediate completion (bypasses other guards intentionally)
-  if (decision.overall === "pass") {
+  if (decision.overall === VerifierOutcome.Pass) {
     return {
       tag: "coherent-pass",
       message: "",
@@ -36,14 +37,14 @@ export async function checkCoherentVerification(
   const nextRepairAttempt = ce.repairAttempts + 1
 
   ctx.onPlannerTrace?.({
-    kind: "coherent-generation-repair-needed",
+    kind: CoherentGenerationTraceKind.RepairNeeded,
     repairAttempt: nextRepairAttempt,
     issueCount: summary.issueCount,
     issues: [...summary.issues],
     affectedArtifacts: [...summary.affectedArtifacts],
   })
   ctx.onPlannerTrace?.({
-    kind: "planner-architecture-state",
+    kind: PlannerTraceKind.ArchitectureState,
     lane: "bounded_coherent_generation",
     status: "repairing_in_place",
     reason: "coherent_completion_blocked_by_verifier",
@@ -61,13 +62,13 @@ export async function checkCoherentVerification(
   if (!ce.escalated && ctx.config.enablePlanner && ctx.config.plannerDelegateFn) {
     ce.escalated = true
     ctx.onPlannerTrace?.({
-      kind: "coherent-generation-escalated",
+      kind: CoherentGenerationTraceKind.Escalated,
       target: "planner_repair_path",
       issueCount: summary.issueCount,
       reason: "coherent_repair_still_failing",
     })
     ctx.onPlannerTrace?.({
-      kind: "planner-architecture-state",
+      kind: PlannerTraceKind.ArchitectureState,
       lane: "bounded_coherent_generation",
       status: "abandoned",
       reason: "coherent_repair_still_failing",

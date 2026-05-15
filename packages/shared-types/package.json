@@ -1,0 +1,21 @@
+{
+    "name": "@mia/shared-types",
+    "version": "0.1.0",
+    "description": "Wire-format DTOs that cross HTTP/WS/SSE boundaries between MI:A's agent, server, and UI packages. Pulls enums from @mia/shared-enums. Zero runtime deps; browser-safe ESM.",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "tsc",
+        "test": "echo no-tests",
+        "lint": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@mia/shared-enums": "*"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.3"
+    }
+}

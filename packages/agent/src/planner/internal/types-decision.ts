@@ -1,3 +1,5 @@
+import { PlannerNeedLevel } from "../../domain/enums/planner.js"
+export { PlannerNeedLevel }
 /**
  * Coherent solution / bootstrap types and routing decision types.
  * Extracted from planner/types.ts.
@@ -6,8 +8,6 @@
  */
 
 import type { PlanEdge } from "../types.js"
-
-export type PlannerNeedLevel = "low" | "medium" | "high"
 
 export type PlannerRoute =
   | "direct"

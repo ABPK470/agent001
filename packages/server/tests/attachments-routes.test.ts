@@ -14,6 +14,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { CurrentSession } from "../src/auth/context.js"
+import { seedTestUsers } from "./_fk-helpers.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -25,14 +26,24 @@ interface BuildOptions {
 
 async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   // Dynamic import after env is set so storage uses our temp dir.
-  const { _setDb, _migrate } = await import("../src/db.js")
+  const { _setDb, _migrate } = await import("../src/db/index.js")
   const { registerAttachmentRoutes } = await import("../src/routes/attachments.js")
   _setDb(testDb)
   _migrate(testDb)
+  seedTestUsers(testDb);
 
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
-    if (opts.session) (req as unknown as { session: CurrentSession }).session = opts.session
+    if (opts.session) {
+      (req as unknown as { session: CurrentSession }).session = opts.session
+      // FK on attachments.session_id + owner_upn require parent rows.
+      const { seedUser, seedSession } = await import("./_fk-helpers.js")
+      seedUser(testDb, opts.session.upn, {
+        displayName: opts.session.displayName,
+        isAdmin: opts.session.isAdmin,
+      })
+      seedSession(testDb, opts.session.sid, opts.session.upn)
+    }
   })
   registerAttachmentRoutes(app)
   await app.ready()

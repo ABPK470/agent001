@@ -19,19 +19,9 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
+import { AttachmentScope } from "../enums/attachments.js"
 import { Buffer } from "node:buffer"
-import {
-    auditAttachmentDeleted,
-    getAttachment,
-    listAttachments,
-    listAttachmentTags,
-    QuotaExceededError,
-    readAttachmentBlob,
-    softDeleteAttachment,
-    uploadAttachment,
-    type AttachmentRow,
-    type AttachmentScope,
-} from "../attachments/index.js"
+import { auditAttachmentDeleted, getAttachment, listAttachments, listAttachmentTags, QuotaExceededError, readAttachmentBlob, softDeleteAttachment, uploadAttachment, type AttachmentRow } from "../attachments/index.js"
 
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
@@ -119,7 +109,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
         reply.code(413)
         return { error: `payload exceeds ${MAX_UPLOAD_BYTES} bytes` }
       }
-      const scope: AttachmentScope = body.scope ?? "session"
+      const scope: AttachmentScope = body.scope ?? AttachmentScope.Session
       if (scope === "run" && !body.runId) {
         reply.code(400)
         return { error: "runId is required when scope === 'run'" }

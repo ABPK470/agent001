@@ -9,6 +9,7 @@
  * Works with any OpenAI-compatible API (OpenAI, Azure, local vLLM, etc.)
  */
 
+import { MessageRole } from "../domain/enums/message.js"
 import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
 
 function safeParseArgs(raw: string): Record<string, unknown> {
@@ -53,7 +54,7 @@ interface OpenAITool {
   }
 }
 
-export class OpenAIClient implements LLMClient {
+export class OpenAICompatibleClient implements LLMClient {
   private readonly apiKey: string
   private readonly model: string
   private readonly baseUrl: string
@@ -65,6 +66,9 @@ export class OpenAIClient implements LLMClient {
     this.baseUrl = opts.baseUrl ?? "https://api.openai.com"
     this.enablePromptCaching = opts.enablePromptCaching ?? false
   }
+
+  /** Expose the configured model id so token estimators can pick the right factor. */
+  get modelHint(): string { return this.model }
 
   async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
     if (opts?.onToken) return this.chatStream(messages, tools, opts)
@@ -80,7 +84,7 @@ export class OpenAIClient implements LLMClient {
       stream_options: { include_usage: true },
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
-    if (tools.length > 0) body.tools = tools.map(formatTool)
+    if (tools.length > 0) body.tools = formatTools(tools)
 
     const maxRetries = 5
     let res: Response | undefined
@@ -158,7 +162,7 @@ export class OpenAIClient implements LLMClient {
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
 
     if (tools.length > 0) {
-      body.tools = tools.map(formatTool)
+      body.tools = formatTools(tools)
     }
 
     const maxRetries = 5
@@ -237,9 +241,9 @@ export class OpenAIClient implements LLMClient {
 // ── Format helpers ───────────────────────────────────────────────
 
 function formatMessage(msg: Message, enablePromptCaching = false): OpenAIMessage {
-  if (msg.role === "assistant" && msg.toolCalls?.length) {
+  if (msg.role === MessageRole.Assistant && msg.toolCalls?.length) {
     return {
-      role: "assistant",
+      role: MessageRole.Assistant,
       content: msg.content,
       tool_calls: msg.toolCalls.map((tc) => ({
         id: tc.id,
@@ -252,9 +256,9 @@ function formatMessage(msg: Message, enablePromptCaching = false): OpenAIMessage
     }
   }
 
-  if (msg.role === "tool") {
+  if (msg.role === MessageRole.Tool) {
     return {
-      role: "tool",
+      role: MessageRole.Tool,
       content: msg.content,
       tool_call_id: msg.toolCallId,
     }
@@ -275,6 +279,11 @@ function formatMessage(msg: Message, enablePromptCaching = false): OpenAIMessage
 }
 
 function formatTool(tool: Tool): OpenAITool {
+  // NOTE: `JSON.stringify(body)` at the wire layer already produces
+  // minified JSON (no separators), so the parameters object does not
+  // need a manual minification pass — JS objects don't carry whitespace.
+  // Do NOT switch to `JSON.stringify(body, null, 2)` anywhere; that
+  // would inflate every request by 30–60%.
   return {
     type: "function",
     function: {
@@ -284,3 +293,26 @@ function formatTool(tool: Tool): OpenAITool {
     },
   }
 }
+
+/**
+ * Per-tool-array cache of formatted OpenAI tool descriptors.
+ *
+ * Tool[] is constructed once at agent boot and reused across every
+ * iteration; without this cache `tools.map(formatTool)` re-builds
+ * ~30 wrapper objects on every LLM call (and re-serialises them via
+ * JSON.stringify when assembling the request body). Keying on the
+ * array identity via WeakMap means a new tool registry naturally
+ * invalidates without us tracking versions.
+ */
+const formattedToolCache = new WeakMap<Tool[], OpenAITool[]>()
+
+function formatTools(tools: Tool[]): OpenAITool[] {
+  const cached = formattedToolCache.get(tools)
+  if (cached) return cached
+  const formatted = tools.map(formatTool)
+  formattedToolCache.set(tools, formatted)
+  return formatted
+}
+
+// Exposed for tests only — do not call from production code.
+export const __internal = { formatTools, formattedToolCache }

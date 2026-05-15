@@ -1,8 +1,10 @@
+import { EventType, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../db.js"
+import { getDb } from "../db/index.js"
+import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
-import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
+import type { MemoryEntry } from "./types.js"
 import { embedEntry } from "./vectors.js"
 
 // ── Ingestion ────────────────────────────────────────────────────
@@ -31,9 +33,9 @@ export function ingestTurn(opts: {
 
   if (salience < SALIENCE_THRESHOLD && opts.role !== "system") {
     broadcast({
-      type: "memory.filtered",
+      type: EventType.MemoryFiltered,
       data: {
-        reason: "low-salience",
+        reason: MemoryIngestionExclusionReason.LowSalience,
         salience,
         threshold: SALIENCE_THRESHOLD,
         tier: opts.tier,
@@ -56,9 +58,9 @@ export function ingestTurn(opts: {
 
   if (isDuplicate(opts.content, recentRows.map((r) => r.content))) {
     broadcast({
-      type: "memory.filtered",
+      type: EventType.MemoryFiltered,
       data: {
-        reason: "duplicate",
+        reason: MemoryIngestionExclusionReason.Duplicate,
         tier: opts.tier,
         role: opts.role,
         contentPreview: opts.content.slice(0, 80),
@@ -74,7 +76,7 @@ export function ingestTurn(opts: {
     role: opts.role,
     content: opts.content,
     metadata: opts.metadata ?? {},
-    source: opts.source ?? "agent",
+    source: opts.source ?? MemorySource.Agent,
     confidence: opts.confidence ?? 0.5,
     salience,
     accessCount: 0,
@@ -113,7 +115,7 @@ export function ingestTurn(opts: {
   embedEntry(entry).catch(() => {})
 
   broadcast({
-    type: "memory.ingested",
+    type: EventType.MemoryIngested,
     data: {
       id: entry.id,
       tier: entry.tier,
@@ -157,11 +159,11 @@ export function ingestRunTurns(run: {
   for (const t of run.trace) {
     if (t.kind === "tool-call" && t.tool && t.text) {
       ingestTurn({
-        tier: "working",
-        role: "tool",
+        tier: MemoryTier.Working,
+        role: MemoryRole.Tool,
         content: `[Tool: ${t.tool}] ${t.text}`,
         metadata: { type: "tool-call", tool: t.tool },
-        source: "tool",
+        source: MemorySource.Tool,
         confidence: 0.6,
         sessionId,
         runId: run.id,
@@ -169,11 +171,11 @@ export function ingestRunTurns(run: {
       })
     } else if (t.kind === "tool-result" && t.text) {
       ingestTurn({
-        tier: "working",
-        role: "tool",
+        tier: MemoryTier.Working,
+        role: MemoryRole.Tool,
         content: t.text,
         metadata: { type: "tool-result" },
-        source: "tool",
+        source: MemorySource.Tool,
         confidence: 0.6,
         sessionId,
         runId: run.id,
@@ -187,13 +189,13 @@ export function ingestRunTurns(run: {
   //    so this answer is visible as hot context for follow-up questions in the same session
   //    (e.g. "now filter those top 3 by region") but won't surface in a run started hours later.
   //    The episodic upsert (step below) is the cross-session canonical record.
-  if (run.answer && run.status === "completed") {
+  if (run.answer && run.status === RunStatus.Completed) {
     ingestTurn({
-      tier: "working",
-      role: "assistant",
+      tier: MemoryTier.Working,
+      role: MemoryRole.Assistant,
       content: run.answer,
       metadata: { type: "answer", runId: run.id, status: run.status },
-      source: "agent",
+      source: MemorySource.Agent,
       confidence: 0.8,
       sessionId,
       runId: run.id,
@@ -220,7 +222,7 @@ export function ingestRunTurns(run: {
     } else if (t.kind === "tool-result" && t.text) {
       // Catch SQL Server "Invalid object name" / "does not exist" errors surfaced as results
       if (/invalid object name|does not exist|cannot find|object.*not found|no such table/i.test(t.text)) {
-        const tool = t.tool ?? "tool"
+        const tool = t.tool ?? MemoryRole.Tool
         toolErrors.push(`${tool} result contained error: ${t.text.slice(0, 200)}`)
       }
     }
@@ -233,7 +235,7 @@ export function ingestRunTurns(run: {
   const episodicContent = lines.join("\n")
   const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status, hasCorrections: toolErrors.length > 0 }
   // Lower confidence when tool errors were detected — the approach was flawed.
-  const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === "completed" ? 0.7 : 0.3
+  const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === RunStatus.Completed ? 0.7 : 0.3
 
   // Check for an existing summary for the same goal scoped to this user
   // (or to the unowned/global pool if no upn). Tenant isolation: a different
@@ -277,7 +279,7 @@ export function ingestRunTurns(run: {
       episodicContent,
       JSON.stringify(episodicMeta),
       episodicConfidence,
-      computeSalience(episodicContent, "summary"),
+      computeSalience(episodicContent, MemoryRole.Summary),
       run.id,
       upn,
       sessionId,
@@ -286,11 +288,11 @@ export function ingestRunTurns(run: {
     )
   } else {
     ingestTurn({
-      tier: "episodic",
-      role: "summary",
+      tier: MemoryTier.Episodic,
+      role: MemoryRole.Summary,
       content: episodicContent,
       metadata: episodicMeta,
-      source: "agent",
+      source: MemorySource.Agent,
       confidence: episodicConfidence,
       sessionId,
       runId: run.id,

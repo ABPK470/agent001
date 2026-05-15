@@ -16,7 +16,7 @@ import type { RecoveryHint } from "../recovery.js"
 import {
     extractToolFailureText,
     type ToolCallRecord,
-} from "../../tool-helpers/index.js"
+} from "../../tools/_helpers/index.js"
 
 export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result

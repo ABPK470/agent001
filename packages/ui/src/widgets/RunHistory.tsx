@@ -8,6 +8,7 @@
 import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import type { AgentDefinition } from "../types"
 import { fmtTokens, statusColor, timeAgo, truncate } from "../util"
@@ -57,7 +58,7 @@ export function RunHistory() {
       <ScopeToggle scope={scope} onChange={setScope} />
       <div className="flex-1 overflow-y-auto space-y-0.5">
       {runs.map((run) => {
-        const isActive = run.status === "running" || run.status === "pending" || run.status === "planning"
+        const isActive = run.status === RunStatus.Running || run.status === RunStatus.Pending || run.status === RunStatus.Planning
 
         return (
         <div
@@ -118,7 +119,7 @@ export function RunHistory() {
                 <Square size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === "failed" || run.status === "cancelled") && (
+            {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
               <button
                 className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
@@ -132,7 +133,7 @@ export function RunHistory() {
                 <RotateCcw size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
+            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
               <button
                 className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
@@ -146,8 +147,7 @@ export function RunHistory() {
                 <Play size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === "completed" || run.status === "failed" || run.status === "cancelled") && !rolledBackIds.has(run.id) && (
-              <button
+            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && !rolledBackIds.has(run.id) && (              <button
                 className="p-1.5 text-warning/80 hover:text-warning hover:bg-warning/10 rounded-md ring-1 ring-border hover:ring-warning/30 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
