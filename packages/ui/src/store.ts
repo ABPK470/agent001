@@ -1119,6 +1119,17 @@ export const useStore = create<AppState>()(
             // The LLM response that was streaming had tool calls — it was
             // intermediate reasoning, not the final answer. Clear the buffer.
             store.clearStreamingAnswer()
+            // Also drop any chunks that arrived before this reset but
+            // haven't yet been flushed by the next requestAnimationFrame —
+            // otherwise they get re-applied on top of the cleared answer
+            // and surface as a garbled fragment of the discarded reasoning
+            // (visible in the chat between a tool call and the next
+            // iteration as e.g. "PRO blocks temp D'll-only").
+            {
+              const resetRunId = (data["runId"] as string) ?? get().activeRunId
+              if (resetRunId) runAnswerBuf.delete(resetRunId)
+              else runAnswerBuf.clear()
+            }
             set((s) => ({
               runs: s.activeRunId ? patchRunFields(s.runs, s.activeRunId, { streamingAnswer: "" }) : s.runs,
             }))
