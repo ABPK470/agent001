@@ -194,6 +194,18 @@ export function broadcast(event: Omit<SseEvent, "timestamp">): void {
   _default.broadcast(event)
 }
 
+/**
+ * Adapter for SSE wire format — widens a typed event payload (e.g.
+ * `DomainEvent`, audit/api-request entries) into the loosely-indexed
+ * `Record<string, unknown>` that `SseEvent.data` exposes for the
+ * downstream JSON serializer. Centralizes the single unavoidable
+ * structural-widening cast so call sites do not sprinkle
+ * `as unknown as Record<string, unknown>`.
+ */
+export function toBroadcastData<T extends object>(value: T): Record<string, unknown> {
+  return value as unknown as Record<string, unknown>
+}
+
 export function clientCount(): number {
   return _default.clientCount()
 }
@@ -215,5 +227,28 @@ export function broadcastTrace(runId: string, seq: number, entry: TraceEntry): v
   _default.broadcast({
     type: EventType.DebugTrace,
     data: { runId, seq, entry },
+  })
+}
+
+/**
+ * Permissive trace broadcaster — for forwarding trace shapes that are
+ * structurally compatible with `TraceEntry` but reach this boundary
+ * with a wider declared type (e.g. `Record<string, unknown>` from the
+ * agent's `onChildTrace` callback or `unknown` planner-trace entries
+ * dispatched in `planner-events.ts`).
+ *
+ * Centralizes the single structural-narrowing cast so the 4 forwarders
+ * do not each carry their own `as TraceEntry` and so that any future
+ * tightening (e.g. runtime kind validation against `TraceEntry["kind"]`)
+ * can be added in one place.
+ */
+export function broadcastTraceLoose(
+  runId: string,
+  seq: number,
+  entry: { kind: string } & Record<string, unknown>,
+): void {
+  _default.broadcast({
+    type: EventType.DebugTrace,
+    data: { runId, seq, entry: entry as unknown as TraceEntry },
   })
 }

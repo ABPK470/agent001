@@ -17,7 +17,7 @@ import { PipelineStatus, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
  * @module
  */
 
-import type { LLMClient, Tool } from "../types.js"
+import type { LLMClient, Tool } from "../../types.js"
 import { uniqueStrings } from "../blueprint-contract/index.js"
 import type { StepSpecEvidence } from "../internal/verifier-blueprint.js"
 import { buildStepSpecEvidence } from "../internal/verifier-blueprint.js"
@@ -25,20 +25,20 @@ import { extractActualPaths, probeArtifact, readArtifactContent } from "../inter
 import { runLLMVerification } from "../internal/verifier-llm.js"
 import { runDeterministicProbes } from "../internal/verifier-probes.js"
 import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerificationEvidence,
-    VerifierDecision,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerificationEvidence,
+  VerifierDecision,
+  VerifierStepAssessment,
 } from "../types.js"
 import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "../verification-model/index.js"
 import { buildFallbackDecision } from "../verifier-helpers/index.js"
 import { runContractValidation } from "./contract-check.js"
 import {
-    collectFollowupEvidence,
-    mergeFollowupIntoAssessments,
-    needsFollowupVerification,
+  collectFollowupEvidence,
+  mergeFollowupIntoAssessments,
+  needsFollowupVerification,
 } from "./followup.js"
 
 // ============================================================================

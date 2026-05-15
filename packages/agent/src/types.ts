@@ -262,7 +262,7 @@ export interface AgentConfig {
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
   /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */
-  onLlmCall?: (data: { phase: LLMCallPhase.Request; messages: Message[]; tools: Tool[]; iteration: number } | { phase: LLMCallPhase.Response; response: LLMResponse; iteration: number; durationMs: number }) => void
+  onLlmCall?: (data: { phase: typeof LLMCallPhase.Request; messages: Message[]; tools: Tool[]; iteration: number } | { phase: typeof LLMCallPhase.Response; response: LLMResponse; iteration: number; durationMs: number }) => void
   /** Called when the agent loop injects a system nudge/guard message. */
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /**

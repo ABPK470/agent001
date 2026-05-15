@@ -7,12 +7,12 @@
  */
 
 import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../constants.js"
+import type { ToolResultEnvelope } from "../../../types.js"
 import {
     didToolCallFail,
     extractToolFailureText,
     normalizeToolExecutionOutput,
 } from "../result.js"
-import type { ToolResultEnvelope } from "../../types.js"
 
 export interface ToolExecutionConfig {
   /** Timeout for a single tool call in ms. 0 = no timeout. */

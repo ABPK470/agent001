@@ -16,6 +16,17 @@ import { StepRole } from "@mia/agent"
  * @module
  */
 
+import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import {
+    gateAcceptanceCriteria,
+    gateContradictoryCompletion,
+    gateExecutableVerification,
+} from "./gates-completion.js"
+import {
+    gateBrowserEvidence,
+    gateFileArtifactEvidence,
+    gateTargetCoverage,
+} from "./gates-coverage.js"
 import {
     gateBlockedPhase,
     gatePresence,
@@ -27,31 +38,20 @@ import {
     gateSuccessfulTool,
     gateWorkspaceInspection,
 } from "./gates-tools.js"
-import {
-    gateBrowserEvidence,
-    gateFileArtifactEvidence,
-    gateTargetCoverage,
-} from "./gates-coverage.js"
-import {
-    gateAcceptanceCriteria,
-    gateContradictoryCompletion,
-    gateExecutableVerification,
-} from "./gates-completion.js"
 import type {
     DelegationContractSpec,
     DelegationOutputValidationCode,
     DelegationOutputValidationResult,
     GateParams,
 } from "./types.js"
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
 
 // ── Public re-exports (preserve original public API) ─────────────
 
 export {
     DELEGATION_OUTPUT_VALIDATION_CODES,
+    DelegationOutputValidationCode,
     type DelegationContractSpec,
-    type DelegationOutputValidationCode,
-    type DelegationOutputValidationResult,
+    type DelegationOutputValidationResult
 } from "./types.js"
 
 export { getCorrectionGuidance } from "../correct-validation.js"
@@ -65,7 +65,7 @@ export {
     specRequiresFileMutationEvidence,
     specRequiresSuccessfulToolEvidence,
     specRequiresWorkspaceInspection,
-    type TaskIntent,
+    type TaskIntent
 } from "../validation-patterns/index.js"
 
 export {
@@ -73,7 +73,7 @@ export {
     didToolCallFail,
     extractToolFailureText,
     parseToolResultObject,
-    type ToolCallRecord,
+    type ToolCallRecord
 } from "../../tools/_helpers/index.js"
 
 export { computeQualityProxy } from "../../governance/index.js"
@@ -144,7 +144,7 @@ export function buildContractSpec(
       ...step.requiredToolCapabilities,
     ],
     effectClass: envelope.effectClass as DelegationContractSpec["effectClass"],
-    verificationMode: envelope.verificationMode,
+    verificationMode: envelope.verificationMode as DelegationContractSpec["verificationMode"],
     role: (envelope.role ?? StepRole.Writer) as DelegationContractSpec["role"],
     lastValidationCode,
     knownProjectArtifacts,

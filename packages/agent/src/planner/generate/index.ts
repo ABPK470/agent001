@@ -10,11 +10,12 @@ import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
  * @module
  */
 
+import type { LLMClient, Message, Tool } from "../../types.js"
 import { parsePlanFromResponse } from "../internal/generate-parse.js"
 import {
-    PLANNER_SYSTEM_PROMPT,
+  PLANNER_SYSTEM_PROMPT,
 } from "../internal/generate-prompts.js"
-import type { LLMClient, Message, Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute, Tool } from "../types.js"
+import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "../types.js"
 
 export { isValidArtifactPath } from "../internal/generate-parse.js"
 export { generateCoherentBootstrap } from "./bootstrap.js"
@@ -226,7 +227,7 @@ export async function generatePlan(
 
 import { MessageRole } from "../../domain/enums/message.js"
 import {
-    normalizeWorkspaceRoots,
-    salvagePlanFromMalformedResponse,
+  normalizeWorkspaceRoots,
+  salvagePlanFromMalformedResponse,
 } from "./normalize.js"
 

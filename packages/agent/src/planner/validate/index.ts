@@ -14,18 +14,18 @@ import { DiagnosticCategory, DiagnosticSeverity, VerificationMode } from "@mia/a
  * @module
  */
 
-import type { Tool } from "../types.js"
+import type { Tool } from "../../types.js"
 import {
-    validateArtifactDependencyWiring,
-    validatePathConsistency,
-    validateSharedDataContract,
-    validateVisualCompleteness,
+  validateArtifactDependencyWiring,
+  validatePathConsistency,
+  validateSharedDataContract,
+  validateVisualCompleteness,
 } from "../internal/validate-checks.js"
 import type { Plan, PlanDiagnostic, PlanStep, SubagentTaskStep } from "../types.js"
 import {
-    validateArtifactOwnership,
-    validateStepContracts,
-    validateVerificationCoverage,
+  validateArtifactOwnership,
+  validateStepContracts,
+  validateVerificationCoverage,
 } from "./contracts.js"
 import { validateGraph, validateToolReferences } from "./graph.js"
 
@@ -141,12 +141,12 @@ function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanD
 // ============================================================================
 
 export {
-    validateArtifactOwnership,
-    validateStepContracts,
-    validateVerificationCoverage
+  validateArtifactOwnership,
+  validateStepContracts,
+  validateVerificationCoverage
 } from "./contracts.js"
 export {
-    validateGraph,
-    validateToolReferences
+  validateGraph,
+  validateToolReferences
 } from "./graph.js"
 

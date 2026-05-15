@@ -3,7 +3,7 @@ import { EventType } from "@mia/agent"
 import * as db from "../db/index.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
-import { broadcast } from "../event-broadcaster.js"
+import { broadcast, toBroadcastData } from "../event-broadcaster.js"
 import type { NotificationOpts } from "./types.js"
 
 type RunLike = {
@@ -34,7 +34,7 @@ export function wireEventBroadcasting(
   const events: EventType[] = [EventType.RunStarted, EventType.StepStarted, EventType.StepCompleted, EventType.StepFailed]
   for (const eventType of events) {
     services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
-      const data = event as unknown as Record<string, unknown>
+      const data = toBroadcastData(event)
 
       // Enrich step events with details from the run
       if (eventType.startsWith("step.")) {
@@ -118,7 +118,7 @@ export function wireEventBroadcasting(
 
   // Approval requests → notifications
   services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
-    const data = event as unknown as Record<string, unknown>
+    const data = toBroadcastData(event)
     const toolName = data["toolName"] as string
     const reason = data["reason"] as string
     const stepId = data["stepId"] as string

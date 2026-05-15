@@ -30,6 +30,20 @@ async function main() {
     if (existsSync(DIST)) rmSync(DIST, { recursive: true })
     mkdirSync(DIST, { recursive: true })
 
+    // Purge stale per-package dist/ outputs left over from earlier
+    // per-package `tsc` runs. esbuild bundles directly from src/, so
+    // these dirs are never consumed at runtime — but stale .js files
+    // can mask refactor regressions if someone wires a tool to them.
+    // NOTE: keep `packages/ui/dist` — server serves UI static files
+    // from there during dev (see packages/server/src/index.ts).
+    for (const pkg of ["agent", "server", "ui-term"]) {
+        const stale = resolve(ROOT, `packages/${pkg}/dist`)
+        if (existsSync(stale)) {
+            rmSync(stale, { recursive: true })
+            console.log(`   ✓ purged stale packages/${pkg}/dist`)
+        }
+    }
+
     // ── 1. Bundle server + agent with esbuild ────────────────
     console.log("1/3  Bundling server + agent → dist/server.js")
 

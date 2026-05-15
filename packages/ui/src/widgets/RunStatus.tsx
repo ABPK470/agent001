@@ -5,7 +5,7 @@
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
-import { RunStatus } from "../enums"
+import { RunStatus as RunStatusEnum } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
@@ -152,9 +152,9 @@ export function RunStatus() {
     )
   }
 
-  const isActive = run.status === RunStatus.Running || run.status === RunStatus.Pending || run.status === RunStatus.Planning
-  const completedSteps = steps.filter((s) => s.status === RunStatus.Completed).length
-  const failedSteps = steps.filter((s) => s.status === RunStatus.Failed).length
+  const isActive = run.status === RunStatusEnum.Running || run.status === RunStatusEnum.Pending || run.status === RunStatusEnum.Planning
+  const completedSteps = steps.filter((s) => s.status === RunStatusEnum.Completed).length
+  const failedSteps = steps.filter((s) => s.status === RunStatusEnum.Failed).length
   const latestCompatibility = [...trace].reverse().find((entry): entry is CompatibilityTrace => entry.kind === "planner-repair-compatibility")
   const latestPlannerDecision = [...trace].reverse().find((entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision")
   const latestArchitectureState = [...trace].reverse().find((entry): entry is ArchitectureStateTrace => entry.kind === "planner-architecture-state")
@@ -382,7 +382,7 @@ export function RunStatus() {
             Cancel
           </button>
         )}
-        {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
+        {(run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled) && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
             onClick={handleResume}
@@ -391,7 +391,7 @@ export function RunStatus() {
             Resume
           </button>
         )}
-        {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && !rolledBack && (
+        {(run.status === RunStatusEnum.Completed || run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled) && !rolledBack && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
             onClick={handleRollbackPreview}

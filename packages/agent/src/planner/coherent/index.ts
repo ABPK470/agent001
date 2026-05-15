@@ -2,6 +2,8 @@ import { EffectClass, PipelineStatus, StepRole, VerificationMode } from "@mia/ag
 import { applyPromptBudget } from "../../context/prompt-budget/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import { canonicalizeRelative } from "../../internal/index.js"
+import type { ToolCallRecord } from "../../recovery/index.js"
+import type { Message } from "../../types.js"
 import {
     asNonEmptyString,
     COHERENT_GENERATION_PROMPT,
@@ -11,11 +13,11 @@ import {
     parseJsonObject,
     parseSharedContracts,
 } from "../internal/coherent-parse.js"
-import type { ToolCallRecord } from "../recovery/index.js"
 import type {
     ArtifactRelation,
     CoherentSolutionArtifact,
-    CoherentSolutionBundle, Message, PipelineResult,
+    CoherentSolutionBundle,
+    PipelineResult,
     PipelineStepResult,
     Plan
 } from "../types.js"

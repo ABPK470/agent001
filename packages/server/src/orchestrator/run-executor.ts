@@ -1,50 +1,50 @@
 import {
-    Agent,
-    AgentRuntime,
-    askUserTool,
-    cancelRun,
-    completeRun,
-    createDelegateTools,
-    createRun,
-    detectInternalFailure,
-    EventType,
-    failRun,
-    fillRunReference,
-    governTool,
-    isPlatformUnconfiguredAnswer,
-    isUserSafeFailureAnswer,
-    mapFailureKindForPolish,
-    markPolishedFailure,
-    PolicyRole,
-    PolicyRunMode,
-    polishFailureForUser,
-    runCompleted,
-    runFailed,
-    runStarted,
-    runWithMssqlKillSignal,
-    runWithPolicyContext,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    SyncRunStatus,
-    synthesizeGenericFailureAnswer,
-    type DelegateContext,
-    type EngineServices,
-    type HostedPolicyContext,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager
+  Agent,
+  AgentRuntime,
+  askUserTool,
+  cancelRun,
+  completeRun,
+  createDelegateTools,
+  createRun,
+  detectInternalFailure,
+  EventType,
+  failRun,
+  fillRunReference,
+  governTool,
+  isPlatformUnconfiguredAnswer,
+  isUserSafeFailureAnswer,
+  mapFailureKindForPolish,
+  markPolishedFailure,
+  PolicyRole,
+  PolicyRunMode,
+  polishFailureForUser,
+  runCompleted,
+  runFailed,
+  runStarted,
+  runWithMssqlKillSignal,
+  runWithPolicyContext,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  SyncRunStatus,
+  synthesizeGenericFailureAnswer,
+  type DelegateContext,
+  type EngineServices,
+  type HostedPolicyContext,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager
 } from "@mia/agent"
-import type { TraceEntry } from "@mia/shared-types"
+import { RunStatus } from "@mia/shared-enums"
 import { AgentBus, createBusTools } from "../agent-bus.js"
 import * as db from "../db/index.js"
 import { resetEffectSeq } from "../effects/index.js"
 import { AuditActor } from "../enums/audit.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
-import { broadcast, broadcastTrace } from "../event-broadcaster.js"
+import { broadcast, broadcastTrace, broadcastTraceLoose } from "../event-broadcaster.js"
 import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory/index.js"
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
@@ -163,9 +163,9 @@ export async function executeRunImpl(
       } else if (entry.kind === "thinking") {
         broadcast({ type: EventType.AgentThinking, data: { runId, content: entry.text } })
       } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
-        broadcastTrace(runId, Date.now(), entry as TraceEntry)
+        broadcastTraceLoose(runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       } else if (entry.kind === "llm-request" || entry.kind === "llm-response" || entry.kind === "nudge") {
-        broadcastTrace(runId, Date.now(), entry as TraceEntry)
+        broadcastTraceLoose(runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       }
     },
     onChildUsage: (() => {
@@ -326,11 +326,11 @@ export async function executeRunImpl(
   delegateCtx.parentSystemPrompt = effectivePrompt
 
   const debugSeqRef = { value: 0 }
-  const systemPromptEntry = { kind: TrajectoryEventKind.SystemPrompt as const, text: effectivePrompt ?? "(no system prompt)" }
+  const systemPromptEntry = { kind: TrajectoryEventKind.SystemPrompt, text: effectivePrompt ?? "(no system prompt)" }
   boundSaveTrace(runId, systemPromptEntry)
   broadcastTrace(runId, debugSeqRef.value++, systemPromptEntry)
 
-  const toolsResolvedEntry = { kind: TrajectoryEventKind.ToolsResolved as const, tools: allTools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }
+  const toolsResolvedEntry = { kind: TrajectoryEventKind.ToolsResolved, tools: allTools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }
   boundSaveTrace(runId, toolsResolvedEntry)
   broadcastTrace(runId, debugSeqRef.value++, toolsResolvedEntry)
 
@@ -392,17 +392,17 @@ export async function executeRunImpl(
     },
     onLlmCall: (data) => {
       if (data.phase === "request") {
-        const entry = { kind: TrajectoryEventKind.LlmRequest as const, iteration: data.iteration, messageCount: data.messages.length, toolCount: data.tools.length, messages: data.messages.map((m) => ({ role: m.role, content: m.content, toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [], toolCallId: m.toolCallId ?? null })) }
+        const entry = { kind: TrajectoryEventKind.LlmRequest, iteration: data.iteration, messageCount: data.messages.length, toolCount: data.tools.length, messages: data.messages.map((m) => ({ role: m.role, content: m.content, toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [], toolCallId: m.toolCallId ?? null })) }
         boundSaveTrace(runId, entry)
         broadcastTrace(runId, debugSeqRef.value++, entry)
       } else {
-        const entry = { kind: TrajectoryEventKind.LlmResponse as const, iteration: data.iteration, durationMs: data.durationMs, content: data.response.content, toolCalls: data.response.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })), usage: data.response.usage ?? null }
+        const entry = { kind: TrajectoryEventKind.LlmResponse, iteration: data.iteration, durationMs: data.durationMs, content: data.response.content, toolCalls: data.response.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })), usage: data.response.usage ?? null }
         boundSaveTrace(runId, entry)
         broadcastTrace(runId, debugSeqRef.value++, entry)
       }
     },
     onThinking: (content, _toolCalls, iteration) => {
-      const iterEntry = { kind: TrajectoryEventKind.Iteration as const, current: iteration + 1, max: 30 }
+      const iterEntry = { kind: TrajectoryEventKind.Iteration, current: iteration + 1, max: 30 }
       boundSaveTrace(runId, iterEntry)
       broadcastTrace(runId, debugSeqRef.value++, iterEntry)
       if (content) {
@@ -411,7 +411,7 @@ export async function executeRunImpl(
       }
       const iterationTokens = agent.usage.totalTokens - prevTotalTokens
       prevTotalTokens = agent.usage.totalTokens
-      const usageEntry = { kind: TrajectoryEventKind.Usage as const, iterationTokens, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls }
+      const usageEntry = { kind: TrajectoryEventKind.Usage, iterationTokens, totalTokens: agent.usage.totalTokens, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, llmCalls: agent.llmCalls }
       boundSaveTrace(runId, usageEntry)
       broadcastTrace(runId, debugSeqRef.value++, usageEntry)
       broadcast({ type: EventType.UsageUpdated, data: { runId, promptTokens: agent.usage.promptTokens, completionTokens: agent.usage.completionTokens, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls } })
@@ -569,7 +569,7 @@ export async function executeRunImpl(
       answer.startsWith("Task FAILED")
       || answer.startsWith("Task verification FAILED")
       || isUserSafeFailureAnswer(answer)
-    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? "failed" : "completed", agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
+    ingestRunTurns({ id: runId, goal, answer: taskInternallyFailed ? null : answer, status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed, agentId, sessionId: activeRun?.sessionId ?? null, tools: [...new Set(run.steps.map((s) => s.action))], stepCount: run.steps.length, error: taskInternallyFailed ? answer.slice(0, 200) : undefined, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null })
     extractProcedural({ id: runId, goal, trace: persistedToolTrace, upn: activeRun?.ownerUpn ?? null, sessionId: activeRun?.sessionId ?? null })
     consolidate({ minAgeHours: 24, upn: activeRun?.ownerUpn ?? null })
 

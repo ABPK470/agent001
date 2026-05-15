@@ -8,40 +8,40 @@
  */
 
 import type {
-    DecompositionStrategy,
-    DelegationEndStatus,
-    DirectLoopFallbackSource,
-    EffectClass,
-    EscalationAction,
-    EscalationReason,
-    EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
-    PlannerRoute,
-    PlannerStepPhase,
-    PolicySource,
-    VerificationMode,
-    VerifierMode,
-    VerifierOutcome,
+  DecompositionStrategy,
+  DelegationEndStatus,
+  DirectLoopFallbackSource,
+  EffectClass,
+  EscalationAction,
+  EscalationReason,
+  EventType,
+  PlannerNeedLevel,
+  PlannerRepairActivePath,
+  PlannerRepairCompatibilityMode,
+  PlannerRoute,
+  PlannerStepPhase,
+  PolicySource,
+  VerificationMode,
+  VerifierMode,
+  VerifierOutcome,
 } from "@mia/shared-enums"
 
 export type {
-    DecompositionStrategy,
-    DelegationEndStatus,
-    DirectLoopFallbackSource,
-    EffectClass,
-    EscalationAction,
-    EscalationReason,
-    EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
-    PlannerRoute,
-    PlannerStepPhase,
-    VerificationMode,
-    VerifierMode,
-    VerifierOutcome
+  DecompositionStrategy,
+  DelegationEndStatus,
+  DirectLoopFallbackSource,
+  EffectClass,
+  EscalationAction,
+  EscalationReason,
+  EventType,
+  PlannerNeedLevel,
+  PlannerRepairActivePath,
+  PlannerRepairCompatibilityMode,
+  PlannerRoute,
+  PlannerStepPhase,
+  VerificationMode,
+  VerifierMode,
+  VerifierOutcome
 }
 
 
@@ -293,7 +293,7 @@ export type TraceEntry =
   | { kind: "nudge"; tag: string; message: string; iteration: number }
   | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
   | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
-  | { kind: "workspace_diff"; diff: { added: string[]; modified: string[]; deleted: string[] } }
+  | { kind: "workspace_diff"; diff: { added: readonly string[]; modified: readonly string[]; deleted: readonly string[] } }
   | { kind: "workspace_diff_applied"; summary: { added: number; modified: number; deleted: number } }
 
 // ── Layout ───────────────────────────────────────────────────────

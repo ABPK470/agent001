@@ -16,13 +16,14 @@ import {
     validateDelegatedOutputContract,
 } from "../../delegation/index.js"
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../governance/index.js"
+import type { ToolCallRecord } from "../../recovery/index.js"
+import type { Tool } from "../../types.js"
 import {
     type SubagentStepValidationContext,
     type SubagentValidationFailure,
     validateBlueprintStepCompletion
 } from "../internal/pipeline-repair.js"
-import type { ToolCallRecord } from "../recovery/index.js"
-import type { SubagentTaskStep, Tool } from "../types.js"
+import type { SubagentTaskStep } from "../types.js"
 
 // ============================================================================
 // Tool call analysis

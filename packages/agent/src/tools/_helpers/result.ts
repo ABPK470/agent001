@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { ToolResultEnvelope } from "../types.js"
+import type { ToolResultEnvelope } from "../../types.js"
 
 // ============================================================================
 // Types

@@ -1,9 +1,8 @@
 import type { EngineServices } from "@mia/agent"
-import { EventType } from "@mia/agent"
-import type { TraceEntry } from "@mia/shared-types"
+import { EventType, PipelineStatus } from "@mia/agent"
 import * as db from "../db/index.js"
 import { AuditActor } from "../enums/audit.js"
-import { broadcast, broadcastTrace } from "../event-broadcaster.js"
+import { broadcast, broadcastTraceLoose } from "../event-broadcaster.js"
 
 // ── Planner trace event dispatcher ───────────────────────────────
 
@@ -24,7 +23,7 @@ export function handlePlannerTrace(
   const { runId, services, debugSeqRef, saveTrace } = ctx
 
   ctx.saveTrace(runId, e)
-  broadcastTrace(runId, debugSeqRef.value++, entry as TraceEntry)
+  broadcastTraceLoose(runId, debugSeqRef.value++, e as { kind: string } & Record<string, unknown>)
 
   const kind = e.kind as string
 
@@ -39,7 +38,7 @@ export function handlePlannerTrace(
     services.auditService.log({ actor: AuditActor.Agent, action: "planner.architecture.state", resourceType: "AgentRun", resourceId: runId, detail: { lane: e.lane, status: e.status, reason: e.reason, architecture: e.architecture } }).catch(() => {})
   } else if (kind === "planner-pipeline-end") {
     broadcast({ type: EventType.PlannerCompleted, data: { runId, status: e.status, completedSteps: e.completedSteps, totalSteps: e.totalSteps } })
-    services.auditService.log({ actor: AuditActor.Agent, action: e.status === "completed" ? "planner.completed" : "planner.failed", resourceType: "AgentRun", resourceId: runId, detail: { status: e.status, completedSteps: e.completedSteps, totalSteps: e.totalSteps } }).catch(() => {})
+    services.auditService.log({ actor: AuditActor.Agent, action: e.status === PipelineStatus.Completed ? "planner.completed" : "planner.failed", resourceType: "AgentRun", resourceId: runId, detail: { status: e.status, completedSteps: e.completedSteps, totalSteps: e.totalSteps } }).catch(() => {})
   } else if (kind === "planner-pipeline-start") {
     broadcast({ type: EventType.PlannerPipelineStarted, data: { runId, attempt: e.attempt, maxRetries: e.maxRetries } })
   } else if (kind === "planner-validation-failed") {
@@ -121,7 +120,7 @@ export function handlePlannerTrace(
   if (kind === "planner-delegation-start" || kind === "planner-delegation-iteration" || kind === "planner-delegation-end") {
     // already broadcast above
   } else if (kind === "llm-request" || kind === "llm-response" || kind === "nudge") {
-    broadcastTrace(runId, debugSeqRef.value++, entry as TraceEntry)
+    broadcastTraceLoose(runId, debugSeqRef.value++, e as { kind: string } & Record<string, unknown>)
   }
   void saveTrace // already called at top — keep TypeScript happy
 }

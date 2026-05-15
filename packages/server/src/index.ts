@@ -68,7 +68,7 @@ import {
     pruneOldData,
     recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db/index.js"
-import { addSseClient, broadcast } from "./event-broadcaster.js"
+import { addSseClient, broadcast, toBroadcastData } from "./event-broadcaster.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
 import { AgentOrchestrator } from "./orchestrator/index.js"
@@ -458,7 +458,7 @@ async function buildApp(opts: AppOpts) {
     }
     try {
       saveApiRequest(entry)
-      broadcast({ type: EventType.ApiRequest, data: entry as unknown as Record<string, unknown> })
+      broadcast({ type: EventType.ApiRequest, data: toBroadcastData(entry) })
     } catch { /* don't break responses if logging fails */ }
     // Multi-user observability: stamp user identity on console for ops greppability.
     // Skip auth/whoami polling noise + admin observability endpoints.
