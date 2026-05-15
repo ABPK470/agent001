@@ -4,16 +4,19 @@ Governed AI agent platform with multi-agent orchestration, intelligent task rout
 
 ```
 packages/
-├── agent/   # LLM loop, tools, planner, governance engine, delegation
-├── server/  # Orchestrator, queue, SQLite, REST API, SSE
-└── ui/      # React dashboard: chat, trace, audit, policies, usage
+├── agent/         # LLM loop, tools, planner, governance engine, delegation
+├── server/        # Orchestrator, queue, SQLite, REST API, SSE
+├── ui/            # React dashboard: chat, trace, audit, policies, usage
+├── ui-term/       # Terminal-style UI variant
+├── shared-enums/  # Wire-format enums shared across agent/server/ui
+└── shared-types/  # Wire-format DTOs shared across agent/server/ui
 ```
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev    # backend :3001 · UI :5179
+npm run dev    # backend :3102 · UI :5179
 npm test
 ```
 
@@ -73,7 +76,7 @@ The foundation is **LLM + Tools + Loop**: the LLM decides what to do, tools exec
 | `ask_user` | Pause and request human input |
 
 ```bash
-curl http://localhost:3001/api/tools   # full list with descriptions
+curl http://localhost:3102/api/tools   # full list with descriptions
 ```
 
 ## Identity & login
@@ -103,12 +106,12 @@ Policy rules are evaluated before every tool call:
 
 ```bash
 # Deny shell commands
-curl -X POST http://localhost:3001/api/policies \
+curl -X POST http://localhost:3102/api/policies \
   -H "Content-Type: application/json" \
   -d '{ "name": "no_shell", "effect": "deny", "condition": "action:run_command" }'
 
 # Require approval before any file write
-curl -X POST http://localhost:3001/api/policies \
+curl -X POST http://localhost:3102/api/policies \
   -H "Content-Type: application/json" \
   -d '{ "name": "approve_writes", "effect": "require_approval", "condition": "action:write_file" }'
 ```
@@ -152,7 +155,7 @@ Effects: `allow` · `require_approval` · `deny`
 
 ---
 
-See [SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md) for a full technical deep-dive.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a full technical deep-dive.
 
 MIT
 

@@ -37,6 +37,10 @@ Does **not** live here:
 ## Adoption status
 
 - ✅ `@mia/ui` re-exports its old `src/types.ts` from here.
-- ⏳ `@mia/server` and `@mia/agent` still shape these DTOs implicitly. A
-  future pass should import the types here when emitting / persisting
-  trace + run records so the contract is enforced statically end-to-end.
+- 🟡 `@mia/server` imports `Run`, `RunDetail`, `TraceEntry`, `SseEvent`,
+  `AuditEntry`, `LogEntry` at the wire boundaries (`db/runs.ts`,
+  `routes/runs.ts`, `event-broadcaster.ts`). Other DTOs are still shaped
+  implicitly; keep migrating as new boundaries are touched.
+- ⏳ `@mia/agent` still shapes these DTOs implicitly. A future pass
+  should import the types here when emitting trace + run records so the
+  contract is enforced statically end-to-end.
