@@ -42,6 +42,11 @@ function tbl(over: Partial<EntityTable> & Pick<EntityTable, "name" | "scope" | "
     archiveTable: null,
     note:         null,
     provenance:   { kind: "manual" },
+    scopeColumn: null,
+    source: null,
+    groundedByPipeline: null,
+    enabledByDefault: null,
+    userControllable: null,
     ...over,
   }
 }
@@ -63,6 +68,9 @@ function makeDef(over: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2:           { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs:    [],
     provenance:     { kind: "manual" },
+    legacyEntrySproc: null,
+    reverseOrder: [],
+    discrepancies: [],
     version:        1,
     versionLabel:   null,
     createdBy:      "test",

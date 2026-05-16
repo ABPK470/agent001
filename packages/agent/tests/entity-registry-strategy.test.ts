@@ -22,6 +22,11 @@ function table(scd2Override: Scd2Override | null = null): EntityTable {
     archiveTable: null,
     note: null,
     provenance: { kind: "manual" },
+    scopeColumn: null,
+    source: null,
+    groundedByPipeline: null,
+    enabledByDefault: null,
+    userControllable: null,
   }
 }
 

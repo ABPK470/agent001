@@ -618,7 +618,7 @@ async function buildApp(opts: AppOpts) {
   registerUsageRoutes(app)
   registerMymiRoutes(app)
   registerSyncRoutes(app, _projectRoot)
-  registerEntityRegistryRoutes(app)
+  registerEntityRegistryRoutes(app, _projectRoot)
   registerToolCacheRoutes(app)
   registerEventRoutes(app)
   registerOperationRoutes(app)

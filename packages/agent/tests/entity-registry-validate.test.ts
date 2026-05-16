@@ -31,6 +31,11 @@ function validTable(overrides: Partial<EntityTable> = {}): EntityTable {
     archiveTable: "coreArchive.ContractColumn",
     note: null,
     provenance: { kind: "manual" },
+    scopeColumn: null,
+    source: null,
+    groundedByPipeline: null,
+    enabledByDefault: null,
+    userControllable: null,
     ...overrides,
   }
 }
@@ -50,6 +55,9 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    legacyEntrySproc: null,
+    reverseOrder: [],
+    discrepancies: [],
     version: 1,
     versionLabel: null,
     createdBy: "alice@example.com",

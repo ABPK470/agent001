@@ -150,6 +150,17 @@ export type EntityTableProvenance =
   | { kind: "importer"; importerId: string }
   | { kind: "fkGraphSuggester"; confidence: "high" | "medium" | "low" }
 
+/**
+ * How an `EntityTable` row was discovered / validated. Mirrors the fields in
+ * `sync-recipes.json` so the registry is a faithful superset of the
+ * introspection output and round-trips losslessly.
+ */
+export type EntityTableSource =
+  | "fk+pipeline"   // both FK graph and legacy pipeline agree
+  | "fk-only"       // only FK graph; predicate inferred, needs verification
+  | "pipeline-only" // only legacy pipeline body referenced it
+  | "manual"        // hand-authored
+
 export interface EntityTable {
   /** Schema-qualified name e.g. `core.ContractColumn`. */
   name: string
@@ -166,6 +177,22 @@ export interface EntityTable {
   note: string | null
   /** Where this row was discovered. */
   provenance: EntityTableProvenance
+
+  // ── Enriched introspection fields (additive, all nullable) ──────
+  // Source FK column name even when the scope is expressed as raw SQL
+  // (e.g. `contractId` for a `core.Pipeline` row whose predicate joins
+  // through a parent table). Used by the UI to render "Scope: rootPk
+  // · contractId" or for analytics that need to group by the original
+  // FK column without parsing the SQL.
+  scopeColumn: string | null
+  /** How this table was discovered (FK graph, legacy pipeline, etc.). */
+  source: EntityTableSource | null
+  /** True if a legacy MyMI pipeline body confirmed this table belongs. */
+  groundedByPipeline: boolean | null
+  /** Whether this table is included in a sync run by default. */
+  enabledByDefault: boolean | null
+  /** Whether the operator can toggle this table on/off in the UI. */
+  userControllable: boolean | null
 }
 
 export interface EntityPolicies {
@@ -232,6 +259,21 @@ export interface EntityDefinition {
   }
   lineageRefs: EntityLineageRef[]
   provenance: EntityDefinitionProvenance
+
+  // ── Enriched introspection fields (additive, all optional) ───────
+  /** Legacy MyMI entry-point stored procedure name (if migrated). */
+  legacyEntrySproc: string | null
+  /**
+   * Explicit reverse-order override (for deletes). When empty, the projector
+   * computes the reverse of `tables.executionOrder` automatically.
+   */
+  reverseOrder: string[]
+  /**
+   * Diagnostic notes captured during introspection (e.g. "Step.scopeColumn
+   * inferred; verify against sproc body"). Free-form, surfaced in the UI.
+   */
+  discrepancies: string[]
+
   /** Monotonic version (bumped on every save). */
   version: number
   /** Optional human label for the version. */

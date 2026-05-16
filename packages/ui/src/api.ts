@@ -464,6 +464,12 @@ export const api = {
       },
     )
   },
+  reseedEntityRegistry: () => {
+    return json<{ imported: number; skipped: number; errors: string[] }>(
+      `/api/entity-registry/reseed`,
+      { method: "POST" },
+    )
+  },
   listEntityRegistryStrategies: (opts?: { tenant?: string }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)

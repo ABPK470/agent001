@@ -75,6 +75,10 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
   if (def.lineageRefs.length > 0) out["lineageRefs"] = def.lineageRefs
   out["provenance"] = def.provenance
 
+  if (def.legacyEntrySproc) out["legacyEntrySproc"] = def.legacyEntrySproc
+  if (def.reverseOrder.length > 0) out["reverseOrder"] = def.reverseOrder
+  if (def.discrepancies.length > 0) out["discrepancies"] = def.discrepancies
+
   // Informational (NOT consumed by the importer):
   out["__meta"] = {
     version:      def.version,
@@ -94,6 +98,11 @@ function orderTable(t: EntityTable): Record<string, unknown> {
     executionOrder: t.executionOrder,
     verified:       t.verified,
   }
+  if (t.scopeColumn) out["scopeColumn"] = t.scopeColumn
+  if (t.source) out["source"] = t.source
+  if (t.groundedByPipeline !== null) out["groundedByPipeline"] = t.groundedByPipeline
+  if (t.enabledByDefault !== null) out["enabledByDefault"] = t.enabledByDefault
+  if (t.userControllable !== null) out["userControllable"] = t.userControllable
   if (t.archiveTable) out["archiveTable"] = t.archiveTable
   if (t.note) out["note"] = t.note
   if (t.scd2Override) out["scd2Override"] = cleanOverride(t.scd2Override)
@@ -216,6 +225,9 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
       ? (r["lineageRefs"] as EntityDefinition["lineageRefs"])
       : [],
     provenance: r["provenance"] as EntityDefinition["provenance"],
+    legacyEntrySproc: typeof r["legacyEntrySproc"] === "string" ? r["legacyEntrySproc"] : null,
+    reverseOrder: Array.isArray(r["reverseOrder"]) ? (r["reverseOrder"] as unknown[]).map(String) : [],
+    discrepancies: Array.isArray(r["discrepancies"]) ? (r["discrepancies"] as unknown[]).map(String) : [],
     // Server-stamped (placeholders — overwritten on save):
     version:      0,
     versionLabel: null,
@@ -243,7 +255,16 @@ function shapeTable(raw: unknown, idx: number): EntityTable {
     archiveTable:   typeof t["archiveTable"] === "string" ? t["archiveTable"] : null,
     note:           typeof t["note"] === "string" ? t["note"] : null,
     provenance:     (t["provenance"] as EntityTable["provenance"]) ?? { kind: "manual" },
+    scopeColumn:        typeof t["scopeColumn"] === "string" ? t["scopeColumn"] : null,
+    source:             isTableSource(t["source"]) ? t["source"] : null,
+    groundedByPipeline: typeof t["groundedByPipeline"] === "boolean" ? t["groundedByPipeline"] : null,
+    enabledByDefault:   typeof t["enabledByDefault"] === "boolean" ? t["enabledByDefault"] : null,
+    userControllable:   typeof t["userControllable"] === "boolean" ? t["userControllable"] : null,
   }
+}
+
+function isTableSource(v: unknown): v is EntityTable["source"] & string {
+  return v === "fk+pipeline" || v === "fk-only" || v === "pipeline-only" || v === "manual"
 }
 
 function shapeScope(raw: unknown, idx: number): EntityTableScope {

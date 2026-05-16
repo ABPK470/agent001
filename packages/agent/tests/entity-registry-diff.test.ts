@@ -19,6 +19,11 @@ function table(overrides: Partial<EntityTable> = {}): EntityTable {
     archiveTable: null,
     note: null,
     provenance: { kind: "manual" },
+    scopeColumn: null,
+    source: null,
+    groundedByPipeline: null,
+    enabledByDefault: null,
+    userControllable: null,
     ...overrides,
   }
 }
@@ -38,6 +43,9 @@ function def(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    legacyEntrySproc: null,
+    reverseOrder: [],
+    discrepancies: [],
     version: 1,
     versionLabel: null,
     createdBy: "u",

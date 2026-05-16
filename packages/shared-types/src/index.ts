@@ -555,6 +555,8 @@ export interface EntityRegistryScd2Override {
   onUpdate?: Record<string, string>
 }
 
+export type EntityRegistryTableSource = "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
+
 export interface EntityRegistryTable {
   name: string
   scope: EntityRegistryTableScope
@@ -564,6 +566,12 @@ export interface EntityRegistryTable {
   archiveTable: string | null
   note: string | null
   provenance: EntityRegistryProvenance
+  // Enriched (additive, nullable)
+  scopeColumn: string | null
+  source: EntityRegistryTableSource | null
+  groundedByPipeline: boolean | null
+  enabledByDefault: boolean | null
+  userControllable: boolean | null
 }
 
 export interface EntityRegistryPolicies {
@@ -598,6 +606,10 @@ export interface EntityRegistryDefinition {
   scd2: EntityRegistryStrategyRef
   lineageRefs: EntityRegistryLineageRef[]
   provenance: EntityRegistryProvenance
+  // Enriched (additive)
+  legacyEntrySproc: string | null
+  reverseOrder: string[]
+  discrepancies: string[]
   version: number
   versionLabel: string | null
   createdBy: string

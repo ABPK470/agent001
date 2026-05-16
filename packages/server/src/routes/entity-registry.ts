@@ -36,12 +36,12 @@ import type {
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
+import { bootstrapEntityRegistryFromYaml } from "../sync/entity-bootstrap.js"
 import {
     formatEntitiesYaml,
     formatEntityYaml,
     parseEntitiesYaml,
 } from "../sync/entity-yaml.js"
-
 const DEFAULT_TENANT_ID = "_default"
 
 function resolveTenant(req: FastifyRequest): string {
@@ -64,7 +64,7 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
   }
 }
 
-export function registerEntityRegistryRoutes(app: FastifyInstance): void {
+export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
   // ── List entities ────────────────────────────────────────────────
   app.get("/api/entity-registry/entities", async (req) => {
     const tenantId = resolveTenant(req)
@@ -227,6 +227,34 @@ export function registerEntityRegistryRoutes(app: FastifyInstance): void {
       }
     },
   )
+
+  // ── Re-seed from disk (admin) ────────────────────────────────────
+  // Re-runs the on-boot bootstrap importer against `deploy/mssql/entities/`.
+  // Add-missing-only semantics: idempotent per-entity, never overwrites an
+  // existing definition (use the import-yaml route for that). Returns the
+  // exact BootstrapResult shape the boot-time seeder produces so the UI
+  // can tell the operator how many entities were brought in.
+  app.post("/api/entity-registry/reseed", async (req, reply) => {
+    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    if (!projectRoot) { reply.code(500); return { error: "projectRoot not configured" } }
+    try {
+      const result = bootstrapEntityRegistryFromYaml(projectRoot)
+      audit(req, "entity_registry.reseeded", {
+        imported: result.imported,
+        skipped:  result.skipped,
+        errors:   result.errors.length,
+      })
+      if (result.imported > 0) {
+        broadcast({
+          type: EventType.EntityRegistryImported,
+          data: { tenantId: DEFAULT_TENANT_ID, actor: req.session.upn, imported: result.imported, source: "reseed" },
+        })
+      }
+      return result
+    } catch (e) {
+      reply.code(500); return { error: (e as Error).message }
+    }
+  })
 
   // ── List strategies ──────────────────────────────────────────────
   app.get("/api/entity-registry/strategies", async (req) => {
