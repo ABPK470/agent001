@@ -10,9 +10,9 @@
 import { describe, expect, it } from "vitest"
 import { projectRecipe } from "../src/sync/entity-registry/projector.js"
 import type {
-  EntityDefinition,
-  EntityTable,
-  Scd2Strategy,
+    EntityDefinition,
+    EntityTable,
+    Scd2Strategy,
 } from "../src/sync/entity-registry/types.js"
 
 const STRATEGY: Scd2Strategy = {

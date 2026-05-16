@@ -20,7 +20,7 @@ export {
     tryResolveRecipe,
     type RecipeResolver,
     type ResolvedRecipe,
-    type ResolvedRecipePolicies,
+    type ResolvedRecipePolicies
 } from "./resolver.js"
 export { resolveEffectiveScd2 } from "./strategy-resolver.js"
 export * from "./types.js"

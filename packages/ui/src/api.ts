@@ -472,6 +472,117 @@ export const api = {
       `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
     )
   },
+
+  // ── F1 — Reconciliation proposer ─────────────────────────────
+  listProposerRuns:  (opts?: { tenant?: string; limit?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/proposer/runs${qs ? `?${qs}` : ""}`)
+  },
+  triggerProposerRun: (source: string, target: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/proposer/run${qs}`, {
+      method: "POST", body: JSON.stringify({ source, target }),
+    })
+  },
+  listProposals: (opts: {
+    tenant?: string; status?: string; riskTier?: string;
+    source?: string; target?: string; limit?: number;
+  } = {}) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(opts)) if (v != null) p.set(k, String(v))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/proposer/proposals${qs ? `?${qs}` : ""}`)
+  },
+  getProposal: (id: string) =>
+    json<Record<string, unknown>>(`/api/proposer/proposals/${encodeURIComponent(id)}`),
+  updateProposalStatus: (id: string, body: { to: string; reason?: string; planId?: string; snoozeUntil?: string; supersededBy?: string }) =>
+    json<Record<string, unknown>>(`/api/proposer/proposals/${encodeURIComponent(id)}/status`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  listProposerSchedules: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/proposer/schedules${qs}`)
+  },
+  upsertProposerSchedule: (body: { source: string; target: string; cron: string; enabled?: boolean }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/proposer/schedules${qs}`, {
+      method: "POST", body: JSON.stringify(body),
+    })
+  },
+  deleteProposerSchedule: (tenant: string, source: string, target: string) =>
+    json<{ ok: boolean }>(
+      `/api/proposer/schedules/${encodeURIComponent(tenant)}/${encodeURIComponent(source)}/${encodeURIComponent(target)}`,
+      { method: "DELETE" },
+    ),
+
+  // ── F1 — Approvals ──────────────────────────────────────────
+  listApprovals: (opts: { tenant?: string; state?: string; proposalId?: string } = {}) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(opts)) if (v != null) p.set(k, String(v))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/approvals${qs ? `?${qs}` : ""}`)
+  },
+  getApproval: (id: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}`),
+  createApproval: (body: { proposalId: string; planId?: string; planHash?: string; ttlMs?: number }) =>
+    json<Record<string, unknown>>(`/api/approvals`, { method: "POST", body: JSON.stringify(body) }),
+  grantApproval: (id: string, planHashAtGrant?: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/grant`, {
+      method: "POST", body: JSON.stringify({ planHashAtGrant }),
+    }),
+  rejectApproval: (id: string, reason: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/reject`, {
+      method: "POST", body: JSON.stringify({ reason }),
+    }),
+  bypassApproval: (id: string, reason: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/bypass`, {
+      method: "POST", body: JSON.stringify({ reason }),
+    }),
+  listApprovalPolicies: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/approvals/policies${qs}`)
+  },
+  upsertApprovalPolicy: (body: { riskTier: string; kind: "none"|"single"|"dual"; ttlMs: number; allowSelfRequester?: boolean; bypassRole?: string }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<{ ok: boolean }>(`/api/approvals/policies${qs}`, { method: "PUT", body: JSON.stringify(body) })
+  },
+
+  // ── F1 — Evidence ───────────────────────────────────────────
+  listEvidence: (opts: { tenant?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.tenant) p.set("tenant", opts.tenant)
+    if (opts.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/evidence${qs ? `?${qs}` : ""}`)
+  },
+  getEvidenceByPlan: (planId: string) =>
+    json<Record<string, unknown>>(`/api/evidence/by-plan/${encodeURIComponent(planId)}`),
+  verifyEvidence: (id: string) =>
+    json<Record<string, unknown>>(`/api/evidence/${encodeURIComponent(id)}/verify`, { method: "POST" }),
+  evidenceEnvelopeUrl: (id: string) => `/api/evidence/${encodeURIComponent(id)}/envelope.json`,
+  evidencePdfUrl:      (id: string) => `/api/evidence/${encodeURIComponent(id)}/evidence.pdf`,
+
+  // ── F1 — Notification routes ────────────────────────────────
+  listNotificationRoutes: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/notification-routes${qs}`)
+  },
+  upsertNotificationRoute: (body: { id?: string; eventType: string; filter: Record<string, unknown>; channel: "email"|"teams"|"slack"; target: string; enabled?: boolean }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/notification-routes${qs}`, { method: "POST", body: JSON.stringify(body) })
+  },
+  deleteNotificationRoute: (id: string) =>
+    json<{ ok: boolean }>(`/api/notification-routes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  listNotificationLog: (opts: { status?: "sent"|"retrying"|"dlq"|"suppressed"; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.status) p.set("status", opts.status)
+    if (opts.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/notification-routes/log${qs ? `?${qs}` : ""}`)
+  },
 }
 
 export interface UploadedAttachment {

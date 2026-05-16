@@ -68,27 +68,36 @@ import {
     pruneOldData,
     recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db/index.js"
-import { addSseClient, broadcast, toBroadcastData } from "./event-broadcaster.js"
+import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
+import { tryBuildSignerFromEnv } from "./evidence/signer.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
+import { dispatchNotification } from "./notifications/router.js"
 import { AgentOrchestrator } from "./orchestrator/index.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
+import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
+import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
 import { registerAuthRoutes } from "./routes/auth.js"
 import {
     registerAdminRoutes,
     registerAgentRoutes,
+    registerApprovalRoutes,
     registerAttachmentRoutes,
     registerBrowserRoutes,
     registerEntityRegistryRoutes,
     registerEventRoutes,
+    registerEvidenceRoutes,
     registerLayoutRoutes,
     registerLlmRoutes,
     registerMemoryRoutes,
+    registerMetricsRoutes,
     registerMymiRoutes,
+    registerNotificationRouteRoutes,
     registerNotificationRoutes,
     registerOperationRoutes,
     registerPolicyRoutes,
     registerProfileRoutes,
+    registerProposerRoutes,
     registerRunRoutes,
     registerSyncEnvironmentRoutes,
     registerSyncRoutes,
@@ -197,6 +206,56 @@ async function main() {
 
   const llm = await buildLlmAndCatalog(mssqlSummary)
 
+  // ── F1 evidence signer ────────────────────────────────────────
+  // Built once at boot. If the operator has not configured a signer
+  // (no env vars set), `tryBuildSignerFromEnv` returns `ok: false` and
+  // evidence sealing routes will fail with a clear error — better than
+  // silently writing unsigned envelopes.
+  const evidenceStorageRoot = resolve(_projectRoot, "packages/server/data/evidence")
+  const signerResult = tryBuildSignerFromEnv()
+  if (!signerResult.ok) {
+    console.warn(`[evidence] signer not configured (kind=${signerResult.error.kind}): ${signerResult.error.message}`)
+  } else {
+    console.log(`[evidence] signer ready: ${signerResult.signer.id} (${signerResult.signer.alg})`)
+  }
+  const evidenceSigner = signerResult.ok ? signerResult.signer : null
+
+  // ── F1 proposer scheduler ─────────────────────────────────────
+  // Build the proposer LLM port from the active LLM client and start
+  // the cron-style scheduler. The port is rebuilt on hot-swap via
+  // `registerLlmRoutes` below (kept in a holder so the running
+  // scheduler picks up the new client).
+  const llmPortHolder = { current: llmClientAsCompletionPort(llm) }
+  startScheduler({ llm: () => llmPortHolder.current })
+  // Graceful shutdown — drain in-flight proposer runs before exit.
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      void stopScheduler(60_000).finally(() => process.exit(0))
+    })
+  }
+
+  // ── F1 notification fan-out ───────────────────────────────────
+  // Every event broadcast through `broadcast()` is also offered to the
+  // notification router; the router will only act when a matching
+  // `notification_routes` row exists for the tenant+eventType.
+  subscribeToEvents((ev) => {
+    try {
+      const data = (ev.data ?? {}) as Record<string, unknown>
+      const tenantId = (typeof data["tenantId"] === "string" ? data["tenantId"] : null) ?? "_default"
+      dispatchNotification({
+        tenantId,
+        eventType:  ev.type,
+        riskTier:   typeof data["riskTier"]   === "string" ? data["riskTier"]   as string : undefined,
+        envPair:    typeof data["envPair"]    === "string" ? data["envPair"]    as string : undefined,
+        entityType: typeof data["entityType"] === "string" ? data["entityType"] as string : undefined,
+        context:    { ...data, eventType: ev.type },
+      })
+    } catch (e) {
+      // never let notification dispatch take down the broadcaster
+      console.warn("[notifications] dispatch failed:", e instanceof Error ? e.message : e)
+    }
+  })
+
   const orchestrator = new AgentOrchestrator({ llm, workspace: currentWorkspace })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
@@ -208,6 +267,9 @@ async function main() {
     uiDist,
     getWorkspace: () => currentWorkspace,
     setWorkspace: (w) => { currentWorkspace = w; applyWorkspace(w, orchestrator) },
+    evidenceStorageRoot,
+    evidenceSigner,
+    llmPortHolder,
   })
 
   await app.listen({ port: PORT, host: HOST })
@@ -435,10 +497,15 @@ interface AppOpts {
   uiDist: string
   getWorkspace: () => string
   setWorkspace: (w: string) => void
+  // F1 — evidence + proposer wiring built at boot, threaded into routes.
+  evidenceStorageRoot: string
+  evidenceSigner: import("./evidence/signer.js").Signer | null
+  llmPortHolder: { current: import("@mia/agent").LlmCompletionPort }
 }
 
 async function buildApp(opts: AppOpts) {
-  const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace } = opts
+  const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace,
+          evidenceStorageRoot, evidenceSigner, llmPortHolder } = opts
 
   // trustProxy: when behind a corporate HTTPS terminator (proxy-https, IIS,
   // nginx) Fastify needs to honour X-Forwarded-* headers so req.ip reflects
@@ -560,8 +627,15 @@ async function buildApp(opts: AppOpts) {
   registerMemoryRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
+    llmPortHolder.current = llmClientAsCompletionPort(newClient)
     console.log("LLM client hot-swapped")
   })
+  // F1 — reconciliation proposer + approvals + evidence + metrics + notification routes
+  registerProposerRoutes(app, { getLlm: () => llmPortHolder.current })
+  registerApprovalRoutes(app)
+  registerEvidenceRoutes(app, { storageRoot: evidenceStorageRoot, signer: evidenceSigner })
+  registerMetricsRoutes(app)
+  registerNotificationRouteRoutes(app)
   registerAdminRoutes(app, orchestrator)
 
   app.get("/api/health", async () => ({

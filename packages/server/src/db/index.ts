@@ -69,3 +69,21 @@ export {
     EntityRegistryValidationError, getEntityDefinition, listAvailableStrategies, listEntityDefinitionHistory, listEntityDefinitions, readEntityVersionBody, resolveScd2Strategy, retireEntityDefinition, saveEntityDefinition, saveScd2Strategy, type EntityDefinitionHistoryEntry, type EntityDefinitionRecord, type EntityDefinitionVersionRow, type SaveEntityResult, type SaveStrategyResult
 } from "./entity-defs.js"
 
+// F1 — Reconciliation proposer
+export {
+    countProposalsByStatus, createProposerRun, finishProposerRun, getProposal,
+    getProposerRun, ingestFindings, listProposalHistory, listProposals,
+    listProposerRuns, markProposerRunRunning, parseAnnotation, parseCounts,
+    saveAnnotation, saveRankScore, updateProposalStatus,
+    type ProposalHistoryRow, type ProposalRow, type ProposerRunRow
+} from "./proposals.js"
+
+// F1 — Approval workflow
+export {
+    ApprovalError, ApprovalPolicyKind, ApprovalState, bypassApproval,
+    consumeApprovalToken, createApproval, expireDueApprovals, findActiveApprovalForProposal,
+    getApproval, getApprovalPolicy, grantApproval, issueApprovalToken,
+    listApprovalPolicies, rejectApproval, upsertApprovalPolicy,
+    type ApprovalPolicy, type ApprovalRow, type ConsumedToken, type IssuedToken
+} from "./approvals.js"
+

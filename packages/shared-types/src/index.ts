@@ -8,40 +8,40 @@
  */
 
 import type {
-  DecompositionStrategy,
-  DelegationEndStatus,
-  DirectLoopFallbackSource,
-  EffectClass,
-  EscalationAction,
-  EscalationReason,
-  EventType,
-  PlannerNeedLevel,
-  PlannerRepairActivePath,
-  PlannerRepairCompatibilityMode,
-  PlannerRoute,
-  PlannerStepPhase,
-  PolicySource,
-  VerificationMode,
-  VerifierMode,
-  VerifierOutcome,
+    DecompositionStrategy,
+    DelegationEndStatus,
+    DirectLoopFallbackSource,
+    EffectClass,
+    EscalationAction,
+    EscalationReason,
+    EventType,
+    PlannerNeedLevel,
+    PlannerRepairActivePath,
+    PlannerRepairCompatibilityMode,
+    PlannerRoute,
+    PlannerStepPhase,
+    PolicySource,
+    VerificationMode,
+    VerifierMode,
+    VerifierOutcome,
 } from "@mia/shared-enums"
 
 export type {
-  DecompositionStrategy,
-  DelegationEndStatus,
-  DirectLoopFallbackSource,
-  EffectClass,
-  EscalationAction,
-  EscalationReason,
-  EventType,
-  PlannerNeedLevel,
-  PlannerRepairActivePath,
-  PlannerRepairCompatibilityMode,
-  PlannerRoute,
-  PlannerStepPhase,
-  VerificationMode,
-  VerifierMode,
-  VerifierOutcome
+    DecompositionStrategy,
+    DelegationEndStatus,
+    DirectLoopFallbackSource,
+    EffectClass,
+    EscalationAction,
+    EscalationReason,
+    EventType,
+    PlannerNeedLevel,
+    PlannerRepairActivePath,
+    PlannerRepairCompatibilityMode,
+    PlannerRoute,
+    PlannerStepPhase,
+    VerificationMode,
+    VerifierMode,
+    VerifierOutcome
 }
 
 
@@ -329,6 +329,10 @@ export type WidgetType =
   | "env-sync"
   | "operation-log"
   | "entity-registry"
+  | "sync-proposals"
+  | "sync-approvals"
+  | "sync-evidence"
+  | "sync-admin"
 
 /**
  * Widget types visible AND interactive for non-admin "visitor" users.

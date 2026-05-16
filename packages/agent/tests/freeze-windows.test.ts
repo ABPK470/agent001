@@ -7,10 +7,10 @@
 
 import { beforeEach, describe, expect, it } from "vitest"
 import {
-  evaluateFreezeWindows,
-  installFreezeWindowRegistry,
-  listFreezeWindows,
-  type FreezeWindowDefinition,
+    evaluateFreezeWindows,
+    installFreezeWindowRegistry,
+    listFreezeWindows,
+    type FreezeWindowDefinition,
 } from "../src/sync/governance/freeze-windows.js"
 
 const WINDOW_A: FreezeWindowDefinition = {

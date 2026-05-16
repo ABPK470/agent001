@@ -27,6 +27,10 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "env-sync": "Sync",
   "operation-log": "Pipelines",
   "entity-registry": "Entity Registry",
+  "sync-proposals": "Sync Proposals",
+  "sync-approvals": "Sync Approvals",
+  "sync-evidence":  "Sync Evidence",
+  "sync-admin":     "Sync Admin",
 }
 
 export function WidgetModal() {

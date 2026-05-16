@@ -10,18 +10,18 @@ import { persist } from "zustand/middleware"
 import { api } from "./api"
 import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
-  AuditEntry,
-  LayoutItem,
-  LogEntry,
-  Notification,
-  Run,
-  RunDetail,
-  SseEvent,
-  Step,
-  TraceEntry,
-  ViewConfig,
-  Widget,
-  WidgetType,
+    AuditEntry,
+    LayoutItem,
+    LogEntry,
+    Notification,
+    Run,
+    RunDetail,
+    SseEvent,
+    Step,
+    TraceEntry,
+    ViewConfig,
+    Widget,
+    WidgetType,
 } from "./types"
 import { randomId } from "./util"
 
@@ -321,6 +321,10 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "env-sync": { w: 12, h: 14, minW: 4, minH: 4 },
   "operation-log": { w: 8, h: 12, minW: 4, minH: 4 },
   "entity-registry": { w: 12, h: 14, minW: 6, minH: 6 },
+  "sync-proposals": { w: 12, h: 14, minW: 6, minH: 6 },
+  "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
+  "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },
+  "sync-admin":     { w: 12, h: 14, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12

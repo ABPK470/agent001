@@ -18,6 +18,10 @@ import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
+import { SyncAdmin } from "./SyncAdmin"
+import { SyncApprovals } from "./SyncApprovals"
+import { SyncEvidence } from "./SyncEvidence"
+import { SyncProposals } from "./SyncProposals"
 import { TermChat } from "./TermChat"
 import { ToolStats } from "./ToolStats"
 
@@ -38,4 +42,8 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "env-sync": EnvSync,
   "operation-log": OperationLog,
   "entity-registry": EntityRegistry,
+  "sync-proposals": SyncProposals,
+  "sync-approvals": SyncApprovals,
+  "sync-evidence":  SyncEvidence,
+  "sync-admin":     SyncAdmin,
 }

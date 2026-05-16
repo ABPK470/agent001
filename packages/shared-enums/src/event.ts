@@ -145,6 +145,24 @@ export const EventType = {
   EntityRegistryStrategySaved: "entity_registry.strategy.saved",
   EntityRegistryImported: "entity_registry.imported",
 
+  // Reconciliation Proposer (Phase 1)
+  SyncProposerRunStarted:    "sync.proposer.run.started",
+  SyncProposerRunCompleted:  "sync.proposer.run.completed",
+  SyncProposerRunFailed:     "sync.proposer.run.failed",
+  SyncProposalCreated:       "sync.proposal.created",
+  SyncProposalAnnotated:     "sync.proposal.annotated",
+  SyncProposalStatusChanged: "sync.proposal.status.changed",
+  SyncApprovalRequested:     "sync.approval.requested",
+  SyncApprovalGranted:       "sync.approval.granted",
+  SyncApprovalRejected:      "sync.approval.rejected",
+  SyncApprovalExpired:       "sync.approval.expired",
+  SyncApprovalBypassed:      "sync.approval.bypassed",
+  SyncEvidenceSealed:        "sync.evidence.sealed",
+  SyncVerificationCompleted: "sync.verification.completed",
+  SyncVerificationFailed:    "sync.verification.failed",
+  SyncNotificationDelivered: "sync.notification.delivered",
+  SyncNotificationFailed:    "sync.notification.failed",
+
   // Memory
   MemoryIngested: "memory.ingested",
   MemoryFiltered: "memory.filtered",

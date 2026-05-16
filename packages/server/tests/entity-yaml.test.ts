@@ -7,13 +7,13 @@
  * so we ignore them when comparing.
  */
 
-import { describe, expect, it } from "vitest"
 import type { EntityDefinition } from "@mia/agent"
+import { describe, expect, it } from "vitest"
 import {
-  formatEntitiesYaml,
-  formatEntityYaml,
-  parseEntitiesYaml,
-  parseEntityYaml,
+    formatEntitiesYaml,
+    formatEntityYaml,
+    parseEntitiesYaml,
+    parseEntityYaml,
 } from "../src/sync/entity-yaml.js"
 
 const FULL_DEF: EntityDefinition = {

@@ -45,7 +45,7 @@ export function _setDb(db: Database.Database): void {
 // other tables are re-created from scratch with the declarative schema
 // below. Use sparingly — this WILL drop data; only safe in dev.
 
-export const SCHEMA_VERSION = 20
+export const SCHEMA_VERSION = 21
 const SEED_VERSION = SCHEMA_VERSION
 // v19: introduce real `users` table; identity is no longer self-declared.
 //      upn becomes NOT NULL FK on every per-user table. Triggers a one-time
@@ -57,6 +57,12 @@ const SEED_VERSION = SCHEMA_VERSION
 //      tables (immutable history). Non-breaking — new tables only — so
 //      HARD_RESET_THRESHOLD stays at 19. On boot we seed the bundled
 //      SCD2 strategies into the `_default` tenant if they're missing.
+// v21: introduce F1 reconciliation-proposer subsystem. Adds tables
+//      `proposer_runs`, `sync_proposals`, `sync_proposal_history`,
+//      `sync_approvals`, `sync_approval_tokens`, `sync_evidence`,
+//      `notification_routes`, `notification_log`,
+//      `approval_policies`, `proposer_schedule`. All additive — no
+//      hard reset required.
 const HARD_RESET_THRESHOLD = 19
 
 /** @internal — exported for testing. */
@@ -556,6 +562,220 @@ export function _migrate(db: Database.Database): void {
       ON entity_defs(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_entity_def_versions_lookup
       ON entity_def_versions(tenant_id, id, version DESC);
+
+    -- ══════════════════════════════════════════════════════════════
+    -- F1 — Reconciliation Proposer subsystem (Phase 1)
+    -- ══════════════════════════════════════════════════════════════
+
+    -- Per-pass record of a proposer scan over one env-pair. We keep
+    -- counts + status here; per-finding rows live in sync_proposals.
+    CREATE TABLE IF NOT EXISTS proposer_runs (
+      id            TEXT PRIMARY KEY,
+      tenant_id     TEXT NOT NULL,
+      source        TEXT NOT NULL,
+      target        TEXT NOT NULL,
+      started_at    TEXT NOT NULL,
+      finished_at   TEXT,
+      status        TEXT NOT NULL
+        CHECK (status IN ('pending','running','completed','failed','cancelled')),
+      scanned       INTEGER NOT NULL DEFAULT 0,
+      produced      INTEGER NOT NULL DEFAULT 0,
+      errors        INTEGER NOT NULL DEFAULT 0,
+      duration_ms   INTEGER,
+      triggered_by  TEXT NOT NULL,
+      trigger       TEXT NOT NULL CHECK (trigger IN ('schedule','manual','retry')),
+      error         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_proposer_runs_pair
+      ON proposer_runs(tenant_id, source, target, started_at DESC);
+
+    -- A single divergence finding awaiting human review. Lifecycle is
+    -- enforced in proposals.ts; we store status as a free TEXT here
+    -- with a CHECK guarding the closed set of legal values.
+    CREATE TABLE IF NOT EXISTS sync_proposals (
+      id                 TEXT PRIMARY KEY,
+      tenant_id          TEXT NOT NULL,
+      run_id             TEXT NOT NULL REFERENCES proposer_runs(id) ON DELETE CASCADE,
+      fingerprint        TEXT NOT NULL,
+      source             TEXT NOT NULL,
+      target             TEXT NOT NULL,
+      entity_type        TEXT NOT NULL,
+      entity_id          TEXT NOT NULL,
+      entity_label       TEXT NOT NULL,
+      kind               TEXT NOT NULL CHECK (kind IN ('drift','out_of_sync','new')),
+      counts_json        TEXT NOT NULL,
+      detail_json        TEXT NOT NULL,
+      entity_def_version INTEGER,
+      observed_at        TEXT NOT NULL,
+      enqueued_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      status             TEXT NOT NULL
+        CHECK (status IN ('open','awaiting_approval','previewed','executed','dismissed','snoozed','superseded','failed')),
+      annotation_json    TEXT,
+      annotation_failed_open INTEGER NOT NULL DEFAULT 0,
+      risk_tier          TEXT,
+      risk_score         REAL,
+      rank_score         REAL,
+      plan_id            TEXT,
+      snooze_until       TEXT,
+      superseded_by      TEXT,
+      last_actor         TEXT,
+      last_action        TEXT,
+      last_action_at     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_proposals_status
+      ON sync_proposals(tenant_id, status, risk_tier);
+    CREATE INDEX IF NOT EXISTS idx_sync_proposals_pair
+      ON sync_proposals(tenant_id, source, target, status);
+    CREATE INDEX IF NOT EXISTS idx_sync_proposals_fp
+      ON sync_proposals(tenant_id, fingerprint, status);
+
+    -- Append-only audit log of proposal lifecycle transitions.
+    CREATE TABLE IF NOT EXISTS sync_proposal_history (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      proposal_id    TEXT NOT NULL REFERENCES sync_proposals(id) ON DELETE CASCADE,
+      from_status    TEXT,
+      to_status      TEXT NOT NULL,
+      actor          TEXT NOT NULL,
+      reason         TEXT NOT NULL DEFAULT '',
+      detail_json    TEXT NOT NULL DEFAULT '{}',
+      at             TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_proposal_history_pid
+      ON sync_proposal_history(proposal_id, at DESC);
+    CREATE TRIGGER IF NOT EXISTS sync_proposal_history_no_update
+      BEFORE UPDATE ON sync_proposal_history
+      BEGIN SELECT RAISE(ABORT, 'sync_proposal_history is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS sync_proposal_history_no_delete
+      BEFORE DELETE ON sync_proposal_history
+      BEGIN SELECT RAISE(ABORT, 'sync_proposal_history is append-only'); END;
+
+    -- ── Approval policies (per env, per risk tier) ──────────────
+    -- One row per (tenant, target_env, risk_tier). policy is one of
+    -- 'none' (no human required), 'single' (1 approver, not self),
+    -- 'dual' (2 approvers, both ≠ requester and ≠ each other).
+    CREATE TABLE IF NOT EXISTS approval_policies (
+      tenant_id    TEXT NOT NULL,
+      target_env   TEXT NOT NULL,
+      risk_tier    TEXT NOT NULL CHECK (risk_tier IN ('low','medium','high','critical')),
+      policy       TEXT NOT NULL CHECK (policy IN ('none','single','dual')),
+      approvers_json TEXT NOT NULL DEFAULT '[]',
+      bypass_role  TEXT,
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by   TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, target_env, risk_tier)
+    );
+
+    -- ── Approval requests per proposal ──────────────────────────
+    -- An approval row is created when a proposal moves to
+    -- awaiting_approval. The route handlers populate granted_by_*
+    -- columns as each approver acts; once policy is satisfied the
+    -- proposal flips to executed (asynchronously by the runner).
+    CREATE TABLE IF NOT EXISTS sync_approvals (
+      id              TEXT PRIMARY KEY,
+      proposal_id     TEXT NOT NULL REFERENCES sync_proposals(id) ON DELETE CASCADE,
+      tenant_id       TEXT NOT NULL,
+      requested_by    TEXT NOT NULL,
+      requested_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at      TEXT NOT NULL,
+      policy          TEXT NOT NULL CHECK (policy IN ('none','single','dual')),
+      state           TEXT NOT NULL
+        CHECK (state IN ('pending','partially_granted','granted','rejected','expired','bypassed','cancelled')),
+      granted_by_1    TEXT,
+      granted_at_1    TEXT,
+      granted_by_2    TEXT,
+      granted_at_2    TEXT,
+      rejected_by     TEXT,
+      rejected_at     TEXT,
+      reject_reason   TEXT,
+      bypass_by       TEXT,
+      bypass_reason   TEXT,
+      plan_id_at_request TEXT,
+      plan_hash_at_request TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_approvals_state
+      ON sync_approvals(tenant_id, state, expires_at);
+
+    -- One-click HMAC tokens for email/chat actions. token_hash is
+    -- sha256(secret || raw_token) so DB compromise does not yield
+    -- usable tokens.
+    CREATE TABLE IF NOT EXISTS sync_approval_tokens (
+      token_hash    TEXT PRIMARY KEY,
+      approval_id   TEXT NOT NULL REFERENCES sync_approvals(id) ON DELETE CASCADE,
+      action        TEXT NOT NULL CHECK (action IN ('grant','reject')),
+      issued_to     TEXT NOT NULL,
+      issued_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at    TEXT NOT NULL,
+      used_at       TEXT,
+      used_by       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_approval_tokens_app
+      ON sync_approval_tokens(approval_id);
+
+    -- ── Evidence index (one row per envelope) ───────────────────
+    -- envelope_path is relative to data/evidence/. signer_id +
+    -- signature_alg let the verifier route requests to the right
+    -- signer (HMAC/FILE-RSA/KMS). content_hash is the SHA-256 of the
+    -- canonical JSON envelope (signature stripped).
+    CREATE TABLE IF NOT EXISTS sync_evidence (
+      id             TEXT PRIMARY KEY,
+      tenant_id      TEXT NOT NULL,
+      plan_id        TEXT NOT NULL,
+      proposal_id    TEXT,
+      envelope_path  TEXT NOT NULL,
+      pdf_path       TEXT,
+      content_hash   TEXT NOT NULL,
+      signature_alg  TEXT NOT NULL,
+      signer_id      TEXT NOT NULL,
+      signature      TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_evidence_plan
+      ON sync_evidence(tenant_id, plan_id);
+
+    -- ── Notification routes + delivery log ──────────────────────
+    CREATE TABLE IF NOT EXISTS notification_routes (
+      id            TEXT PRIMARY KEY,
+      tenant_id     TEXT NOT NULL,
+      event_type    TEXT NOT NULL,
+      filter_json   TEXT NOT NULL DEFAULT '{}',
+      channel       TEXT NOT NULL CHECK (channel IN ('email','teams','slack')),
+      target        TEXT NOT NULL,
+      enabled       INTEGER NOT NULL DEFAULT 1,
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_routes_ev
+      ON notification_routes(tenant_id, event_type, enabled);
+
+    CREATE TABLE IF NOT EXISTS notification_log (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      route_id      TEXT REFERENCES notification_routes(id) ON DELETE SET NULL,
+      event_type    TEXT NOT NULL,
+      channel       TEXT NOT NULL,
+      target        TEXT NOT NULL,
+      payload_json  TEXT NOT NULL,
+      status        TEXT NOT NULL CHECK (status IN ('sent','retrying','dlq','suppressed')),
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      last_error    TEXT,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      sent_at       TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_log_status
+      ON notification_log(status, created_at DESC);
+
+    -- ── Proposer schedule (per env-pair) ────────────────────────
+    CREATE TABLE IF NOT EXISTS proposer_schedule (
+      tenant_id     TEXT NOT NULL,
+      source        TEXT NOT NULL,
+      target        TEXT NOT NULL,
+      cron          TEXT NOT NULL,
+      enabled       INTEGER NOT NULL DEFAULT 1,
+      last_run_at   TEXT,
+      next_run_at   TEXT,
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by    TEXT NOT NULL,
+      PRIMARY KEY (tenant_id, source, target)
+    );
   `)
 
   // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
