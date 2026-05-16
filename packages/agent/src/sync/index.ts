@@ -8,6 +8,7 @@
 
 export * from "./catalog-drift.js"
 export * from "./diff-engine/index.js"
+export * from "./entity-registry/index.js"
 export * from "./environments.js"
 export * from "./orchestrator/index.js"
 export * from "./plan-store.js"

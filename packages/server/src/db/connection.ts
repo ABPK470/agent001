@@ -6,7 +6,7 @@
  * Env override: MIA_DATA_DIR.
  */
 
-import { DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
+import { BUNDLED_SCD2_STRATEGIES, DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
@@ -45,12 +45,18 @@ export function _setDb(db: Database.Database): void {
 // other tables are re-created from scratch with the declarative schema
 // below. Use sparingly — this WILL drop data; only safe in dev.
 
-export const SCHEMA_VERSION = 19
+export const SCHEMA_VERSION = 20
 const SEED_VERSION = SCHEMA_VERSION
 // v19: introduce real `users` table; identity is no longer self-declared.
-// upn becomes NOT NULL FK on every per-user table. Triggers a one-time
-// hard reset of all app data — only safe in dev (the project has no prod
-// data yet).
+//      upn becomes NOT NULL FK on every per-user table. Triggers a one-time
+//      hard reset of all app data — only safe in dev (the project has no
+//      prod data yet).
+// v20: introduce entity registry (Phase 0 config uplift). Adds tables
+//      `scd2_strategies`, `scd2_strategy_versions`, `entity_defs`,
+//      `entity_def_versions` with append-only triggers on the *_versions
+//      tables (immutable history). Non-breaking — new tables only — so
+//      HARD_RESET_THRESHOLD stays at 19. On boot we seed the bundled
+//      SCD2 strategies into the `_default` tenant if they're missing.
 const HARD_RESET_THRESHOLD = 19
 
 /** @internal — exported for testing. */
@@ -481,7 +487,104 @@ export function _migrate(db: Database.Database): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_browser_audit_owner ON browser_audit_log(owner_upn, created_at DESC);
+
+    -- ── Entity registry: SCD2 strategies (versioned) ─────────────
+    -- Tenant-scoped registry of column-handling strategies referenced by
+    -- entity definitions. Two-table pattern: scd2_strategies is the
+    -- pointer (current_version + retired_at), scd2_strategy_versions
+    -- is the immutable history. Update + delete on *_versions are
+    -- refused by triggers below.
+    CREATE TABLE IF NOT EXISTS scd2_strategies (
+      tenant_id        TEXT NOT NULL,
+      id               TEXT NOT NULL,
+      current_version  INTEGER NOT NULL,
+      retired_at       TEXT,
+      PRIMARY KEY (tenant_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS scd2_strategy_versions (
+      tenant_id        TEXT NOT NULL,
+      id               TEXT NOT NULL,
+      version          INTEGER NOT NULL,
+      body_json        TEXT NOT NULL,
+      created_by       TEXT NOT NULL,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      reason           TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (tenant_id, id, version)
+    );
+    CREATE TRIGGER IF NOT EXISTS scd2_strategy_versions_no_update
+      BEFORE UPDATE ON scd2_strategy_versions
+      BEGIN SELECT RAISE(ABORT, 'scd2_strategy_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS scd2_strategy_versions_no_delete
+      BEFORE DELETE ON scd2_strategy_versions
+      BEGIN SELECT RAISE(ABORT, 'scd2_strategy_versions is append-only'); END;
+    CREATE INDEX IF NOT EXISTS idx_scd2_versions_lookup
+      ON scd2_strategy_versions(tenant_id, id, version DESC);
+
+    -- ── Entity registry: entity definitions (versioned) ──────────
+    -- Same pointer + immutable history pattern. body_json is the full
+    -- EntityDefinition JSON (excluding the version/version_label/etc.
+    -- columns surfaced separately for indexing). diff_json is the
+    -- structured diff vs the prior version produced by
+    -- diffEntityDefinitions() — stored so evidence envelopes can replay
+    -- exactly what the proposer saw without recomputing.
+    CREATE TABLE IF NOT EXISTS entity_defs (
+      tenant_id        TEXT NOT NULL,
+      id               TEXT NOT NULL,
+      current_version  INTEGER NOT NULL,
+      retired_at       TEXT,
+      PRIMARY KEY (tenant_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS entity_def_versions (
+      tenant_id        TEXT NOT NULL,
+      id               TEXT NOT NULL,
+      version          INTEGER NOT NULL,
+      body_json        TEXT NOT NULL,
+      version_label    TEXT,
+      created_by       TEXT NOT NULL,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      reason           TEXT NOT NULL DEFAULT '',
+      diff_json        TEXT NOT NULL DEFAULT '[]',
+      PRIMARY KEY (tenant_id, id, version)
+    );
+    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
+      BEFORE UPDATE ON entity_def_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_delete
+      BEFORE DELETE ON entity_def_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+    CREATE INDEX IF NOT EXISTS idx_entity_defs_tenant
+      ON entity_defs(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_entity_def_versions_lookup
+      ON entity_def_versions(tenant_id, id, version DESC);
   `)
+
+  // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
+  // Idempotent: only inserts strategies that don't already exist. We
+  // never UPDATE existing rows — bumping a bundled strategy requires a
+  // new version number which inserts a new row in scd2_strategy_versions
+  // and advances the pointer. The default tenant id matches
+  // DEFAULT_TENANT_ID exported from @mia/agent.
+  const seedStrategyPointer = db.prepare(
+    `INSERT OR IGNORE INTO scd2_strategies (tenant_id, id, current_version, retired_at)
+     VALUES (?, ?, ?, NULL)`,
+  )
+  const seedStrategyVersion = db.prepare(
+    `INSERT OR IGNORE INTO scd2_strategy_versions
+       (tenant_id, id, version, body_json, created_by, created_at, reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  for (const s of BUNDLED_SCD2_STRATEGIES) {
+    seedStrategyPointer.run("_default", s.id, s.version)
+    seedStrategyVersion.run(
+      "_default",
+      s.id,
+      s.version,
+      JSON.stringify(s),
+      s.createdBy,
+      s.createdAt,
+      "bundled",
+    )
+  }
 
   // Seed default agent (no `tools` column anymore)
   db.prepare(`
