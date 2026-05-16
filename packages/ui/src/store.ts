@@ -320,6 +320,7 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "active-users": { w: 10, h: 10, minW: 2, minH: 2 },
   "env-sync": { w: 12, h: 14, minW: 4, minH: 4 },
   "operation-log": { w: 8, h: 12, minW: 4, minH: 4 },
+  "entity-registry": { w: 12, h: 14, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12

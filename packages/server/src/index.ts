@@ -79,6 +79,7 @@ import {
     registerAgentRoutes,
     registerAttachmentRoutes,
     registerBrowserRoutes,
+    registerEntityRegistryRoutes,
     registerEventRoutes,
     registerLayoutRoutes,
     registerLlmRoutes,
@@ -98,6 +99,8 @@ import {
 import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox/index.js"
 import { setupMssql } from "./setup-mssql.js"
+import { bootstrapEntityRegistryFromYaml } from "./sync/entity-bootstrap.js"
+import { installRegistryRecipeResolver } from "./sync/registry-resolver.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -138,6 +141,22 @@ async function main() {
   seedDefaultPoliciesIfMissing()
   configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
   configureSyncOrchestrator(_projectRoot)
+  // Bridge the in-DB entity registry into the orchestrator's recipe
+  // lookup path. When an entity has a registry record, the projected
+  // recipe wins over the bundled JSON; on miss, the orchestrator falls
+  // back to the bundle automatically.
+  installRegistryRecipeResolver()
+  // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
+  // `_default` tenant on first boot (idempotent — files that already
+  // exist as registry rows are skipped).
+  try {
+    const seeded = bootstrapEntityRegistryFromYaml(_projectRoot)
+    if (seeded.imported > 0) {
+      console.log(`[entity-registry] seeded ${seeded.imported} entity definition(s) from deploy/mssql/entities/`)
+    }
+  } catch (e) {
+    console.warn("[entity-registry] bootstrap from deploy/mssql/entities/ failed:", e instanceof Error ? e.message : e)
+  }
   // Fan sync events out via broadcast(): SSE for live UI, event_log table
   // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
   // for the full list of emitted event types.
@@ -532,6 +551,7 @@ async function buildApp(opts: AppOpts) {
   registerUsageRoutes(app)
   registerMymiRoutes(app)
   registerSyncRoutes(app, _projectRoot)
+  registerEntityRegistryRoutes(app)
   registerToolCacheRoutes(app)
   registerEventRoutes(app)
   registerOperationRoutes(app)

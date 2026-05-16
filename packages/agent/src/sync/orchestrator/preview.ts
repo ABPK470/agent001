@@ -11,6 +11,7 @@ import { EventType } from "../../domain/enums/event.js"
 import { SyncOperationType } from "../../domain/enums/sync.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
+import { tryResolveRecipe } from "../entity-registry/resolver.js"
 import { getEnvironment } from "../environments.js"
 import {
     allocPlanId,
@@ -69,8 +70,15 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
 
 async function previewSyncInner(input: PreviewInput, previewId: string, t0: number): Promise<SyncPlan> {
   try {
-    const bundle = loadSyncRecipes(projectRoot())
-    const fullRecipe = getRecipe(bundle, input.entityType)
+    // Lookup order: entity-registry resolver wins; on miss, fall back to
+    // the bundled JSON. Both produce the same `SyncRecipe` shape so the
+    // downstream code path is identical.
+    const resolved = tryResolveRecipe({ tenantId: "_default", entityId: input.entityType })
+    const fullRecipe = resolved?.recipe ?? (() => {
+      const bundle = loadSyncRecipes(projectRoot())
+      return getRecipe(bundle, input.entityType)
+    })()
+    const resolvedPolicies = resolved?.policies ?? null
     const selection = selectRecipeTables(fullRecipe, input.enabledOptionalTables)
     const selectedTableNames = new Set(selection.tables.map((table) => table.name))
     const recipe: SyncRecipe = {
@@ -102,16 +110,21 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       ? await expandTreeIds(recipe, input.entityId, input.source)
       : null
 
-    // Preflight: catalog drift restricted to recipe tables. Surfaces missing
-    // tables / columns / type mismatches as warnings — does NOT block preview
-    // (so the user can still see the diff and understand what's broken). The
-    // execute path uses the same check as a HARD refusal.
+    //// Allowed schemas come from the recipe itself — every table is
+    // schema-qualified, so we union the prefixes and feed them to the
+    // drift check. This removes the historical hardcoded Mymi-only
+    // allowlist and lets registry-defined entities span any schemas.
+    const allowedSchemas = Array.from(new Set(recipe.tables.map((t) => {
+      const ix = t.name.indexOf(".")
+      return ix > 0 ? t.name.slice(0, ix) : ""
+    }).filter((s) => s.length > 0)))
     let preflight: { catalogCompatible: boolean; issues: string[] }
     try {
       preflight = await detectCatalogDrift(
         input.source,
         input.target,
         recipe.tables.map((t) => t.name),
+        allowedSchemas,
       )
     } catch (e) {
       preflight = {
@@ -226,6 +239,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         reverseOrder: recipe.reverseOrder,
         enabledOptionalTables: recipe.tables.filter((table) => table.userControllable).map((table) => table.name),
       },
+      entityPolicies: resolvedPolicies,
     }
     savePlan(plan)
 

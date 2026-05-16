@@ -33,6 +33,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "active-users": "Active Users",
   "env-sync": "Sync",
   "operation-log": "Pipelines",
+  "entity-registry": "Entity Registry",
 }
 
 const SYNC_CHANNEL = "mia-active-run"

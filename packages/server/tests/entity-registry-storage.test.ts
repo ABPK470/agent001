@@ -15,9 +15,9 @@
  */
 
 import {
-  BUNDLED_SCD2_STRATEGIES,
-  type EntityDefinition,
-  type Scd2Strategy,
+    BUNDLED_SCD2_STRATEGIES,
+    type EntityDefinition,
+    type Scd2Strategy,
 } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"

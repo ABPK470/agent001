@@ -25,4 +25,10 @@ export interface ExecuteOptions {
   onProgress?: (p: ExecuteProgress) => void
   /** Identity of the user requesting execute (for safety rails / audit). */
   userUpn?: string | null
+  /**
+   * Bypass the entity-registry freeze-window soft block. Off by default;
+   * the UI surfaces an explicit "override freeze window" affordance that
+   * passes this through. Audited.
+   */
+  overrideFreezeWindow?: boolean
 }

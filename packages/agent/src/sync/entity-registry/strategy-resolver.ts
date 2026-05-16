@@ -21,10 +21,10 @@
  */
 
 import type {
-  EffectiveScd2,
-  EntityTable,
-  Scd2Override,
-  Scd2Strategy,
+    EffectiveScd2,
+    EntityTable,
+    Scd2Override,
+    Scd2Strategy,
 } from "./types.js"
 
 export function resolveEffectiveScd2(args: {

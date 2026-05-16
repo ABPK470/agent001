@@ -8,15 +8,15 @@
 
 import { describe, expect, it } from "vitest"
 import {
-  type EntityDefinition,
-  type EntityTable,
-  type EntityTableScope,
-  type Scd2Strategy,
-  isIdentifier,
-  isSchemaQualifiedTable,
-  looksUnsafeSqlFragment,
-  validateEntityDefinition,
-  validateScd2Strategy,
+    type EntityDefinition,
+    type EntityTable,
+    type EntityTableScope,
+    type Scd2Strategy,
+    isIdentifier,
+    isSchemaQualifiedTable,
+    looksUnsafeSqlFragment,
+    validateEntityDefinition,
+    validateScd2Strategy,
 } from "../src/sync/entity-registry/index.js"
 
 // ── Fixture factories ────────────────────────────────────────────

@@ -9,9 +9,9 @@
  */
 
 import type {
-  EntityDefinition,
-  EntityDefinitionChange,
-  EntityTable,
+    EntityDefinition,
+    EntityDefinitionChange,
+    EntityTable,
 } from "./types.js"
 
 export function diffEntityDefinitions(

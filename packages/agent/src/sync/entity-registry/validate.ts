@@ -24,15 +24,15 @@
  */
 
 import {
-  type EntityDefinition,
-  type EntityTable,
-  type EntityTableScope,
-  type Scd2Strategy,
-  type ValidationError,
-  type ValidationResult,
-  type ValidationWarning,
-  isValidId,
-  RESERVED_ENTITY_IDS,
+    type EntityDefinition,
+    type EntityTable,
+    type EntityTableScope,
+    type Scd2Strategy,
+    type ValidationError,
+    type ValidationResult,
+    type ValidationWarning,
+    isValidId,
+    RESERVED_ENTITY_IDS,
 } from "./types.js"
 
 // ── Public entrypoints ───────────────────────────────────────────

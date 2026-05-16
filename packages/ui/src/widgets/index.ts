@@ -9,6 +9,7 @@ import { AgentChat } from "./AgentChat"
 import { AgentViz } from "./AgentViz"
 import { AuditTrail } from "./AuditTrail"
 import { DebugInspector } from "./DebugInspector"
+import { EntityRegistry } from "./EntityRegistry"
 import { EnvSync } from "./EnvSync"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
@@ -36,4 +37,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "active-users": ActiveUsers,
   "env-sync": EnvSync,
   "operation-log": OperationLog,
+  "entity-registry": EntityRegistry,
 }

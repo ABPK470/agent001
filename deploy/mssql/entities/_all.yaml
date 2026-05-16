@@ -1,0 +1,186 @@
+# Seed entity-registry definitions for the Mymi ABI sync subsystem.
+#
+# Imported into the `_default` tenant on first boot if the entity
+# does not already exist in the registry. Edit via the UI / REST
+# import endpoint after first boot; this file is the "as-built"
+# baseline matching deploy/mssql/sync-recipes.json.
+#
+# Strategy: mymi-scd2 (bundled). Override per-table/per-entity via
+# `scd2Override` when local conventions diverge.
+
+---
+id: contract
+tenantId: _default
+displayName: Contract
+description: Root entity for an ABI contract and its full dependency closure.
+rootTable: core.Contract
+idColumn: contractId
+labelColumn: name
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: core.Contract,              executionOrder: 0,  verified: true,  scope: { kind: rootPk, column: contractId } }
+  - { name: core.Pipeline,              executionOrder: 1,  verified: true,  scope: { kind: rootPk, column: contractId } }
+  - { name: core.ContractColumn,        executionOrder: 2,  verified: true,  scope: { kind: rootPk, column: contractId } }
+  - { name: core.Dataset,               executionOrder: 3,  verified: true,  scope: { kind: rootPk, column: contractId } }
+  - { name: core.Step,                  executionOrder: 4,  verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})" } }
+  - { name: core.Activity,              executionOrder: 5,  verified: true,  scope: { kind: rootPk, column: pipelineId } }
+  - { name: core.DatasetColumn,         executionOrder: 6,  verified: true,  scope: { kind: rootPk, column: datasetId } }
+  - { name: core.DatasetMapping,        executionOrder: 7,  verified: true,  scope: { kind: rootPk, column: datasetId_Left } }
+  - { name: core.Rule,                  executionOrder: 8,  verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[Dataset] p WHERE p.datasetId = [core].[Rule].inputDatasetId AND p.contractId = {id})" } }
+  - { name: core.DatasetMappingColumn,  executionOrder: 9,  verified: true,  scope: { kind: rootPk, column: datasetMappingId } }
+  - { name: core.RuleColumn,            executionOrder: 10, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId AND _p1.contractId = {id})" } }
+  - { name: core.RuleCondition,         executionOrder: 11, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId AND _p1.contractId = {id})" } }
+  - { name: core.RuleLink,              executionOrder: 12, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId AND _p1.contractId = {id})" } }
+  - { name: core.RuleConditionValue,    executionOrder: 13, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId INNER JOIN [core].[Dataset] _p2 ON _p2.datasetId = _p1.lookupDatasetId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p2.contractId = {id})" } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 788 }
+
+---
+id: dataset
+tenantId: _default
+displayName: Dataset
+description: ABI dataset entity (self-referencing via parentDatasetId).
+rootTable: core.Dataset
+idColumn: datasetId
+labelColumn: name
+selfJoinColumn: parentDatasetId
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: core.Dataset,               executionOrder: 0, verified: true, scope: { kind: rootPk, column: datasetId } }
+  - { name: core.DatasetColumn,         executionOrder: 1, verified: true, scope: { kind: rootPk, column: datasetId } }
+  - { name: core.DatasetMapping,        executionOrder: 2, verified: true, scope: { kind: rootPk, column: datasetMappingId } }
+  - { name: core.Rule,                  executionOrder: 3, verified: true, scope: { kind: rootPk, column: inputDatasetId } }
+  - { name: core.Pipeline,              executionOrder: 4, verified: true, scope: { kind: rootPk, column: pipelineId } }
+  - { name: core.DatasetMappingColumn,  executionOrder: 5, verified: true, scope: { kind: rootPk, column: datasetMappingId } }
+  - { name: core.RuleColumn,            executionOrder: 6, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId AND p.datasetId = {id})" } }
+  - { name: core.RuleCondition,         executionOrder: 7, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId AND p.datasetId = {id})" } }
+  - { name: core.RuleLink,              executionOrder: 8, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId AND p.datasetId = {id})" } }
+  - { name: core.Step,                  executionOrder: 9, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.datasetId = {id})" } }
+  - { name: core.Activity,              executionOrder: 10, verified: true, scope: { kind: rootPk, column: pipelineId } }
+  - { name: core.RuleConditionValue,    executionOrder: 11, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p1.datasetId = {id})" } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 792 }
+
+---
+id: rule
+tenantId: _default
+displayName: Rule
+description: Validation rule (self-referencing via parentRuleId).
+rootTable: core.Rule
+idColumn: ruleId
+labelColumn: name
+selfJoinColumn: parentRuleId
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: core.Rule,                  executionOrder: 0, verified: true, scope: { kind: rootPk, column: ruleId } }
+  - { name: core.RuleColumn,            executionOrder: 1, verified: true, scope: { kind: rootPk, column: ruleId } }
+  - { name: core.RuleCondition,         executionOrder: 2, verified: true, scope: { kind: rootPk, column: ruleId } }
+  - { name: core.RuleLink,              executionOrder: 3, verified: true, scope: { kind: rootPk, column: ruleId } }
+  - { name: core.RuleConditionValue,    executionOrder: 4, verified: true, scope: { kind: rootPk, column: ruleConditionId } }
+  - { name: core.DatasetMappingColumn,  executionOrder: 5, verified: true, scope: { kind: rootPk, column: datasetMappingId } }
+  - { name: core.DatasetMapping,        executionOrder: 6, verified: true, scope: { kind: rootPk, column: datasetMappingId } }
+  - { name: core.DatasetColumn,         executionOrder: 7, verified: true, scope: { kind: rootPk, column: datasetId } }
+  - { name: core.Dataset,               executionOrder: 8, verified: true, scope: { kind: rootPk, column: datasetId } }
+  - { name: core.RuleLinkType,          executionOrder: 9, verified: true, scope: { kind: rootPk, column: ruleLinkTypeId } }
+  - { name: core.RuleType,              executionOrder: 10, verified: true, scope: { kind: rootPk, column: ruleTypeId } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 791 }
+
+---
+id: pipelineActivity
+tenantId: _default
+displayName: Pipeline & Activities
+description: Pipeline with its activity execution closure.
+rootTable: core.Pipeline
+idColumn: pipelineId
+labelColumn: name
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: core.Pipeline,              executionOrder: 0, verified: true, scope: { kind: rootPk, column: pipelineId } }
+  - { name: core.Step,                  executionOrder: 1, verified: true, scope: { kind: rootPk, column: pipelineId } }
+  - { name: core.Activity,              executionOrder: 2, verified: true, scope: { kind: rootPk, column: pipelineId } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 798 }
+
+---
+id: gateMetadata
+tenantId: _default
+displayName: Gate Metadata
+description: Gate table metadata + its content closure.
+rootTable: gate.MetaTable
+idColumn: tableId
+labelColumn: name
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: gate.MetaTable,             executionOrder: 0, verified: true, scope: { kind: rootPk, column: tableId } }
+  - { name: gate.MetaColumn,            executionOrder: 1, verified: true, scope: { kind: rootPk, column: viewId } }
+  - { name: gate.MetaView,              executionOrder: 2, verified: true, scope: { kind: rootPk, column: viewId } }
+  - { name: gate.Content,               executionOrder: 3, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [gate].[MetaView] p WHERE p.viewId = [gate].[Content].viewId AND p.tableId = {id})" } }
+  - { name: gate.ContentLink,           executionOrder: 4, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[ContentLink].contentId AND _p1.tableId = {id})" } }
+  - { name: gate.UserGroupPermission,   executionOrder: 5, verified: true,
+      scope: { kind: sql, predicate: "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[UserGroupPermission].contentId AND _p1.tableId = {id})" } }
+  - { name: gate.jsonSchema,            executionOrder: 6, verified: true, scope: { kind: rootPk, column: jsonSchemaId } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 780 }
+
+---
+id: content
+tenantId: _default
+displayName: Content
+description: Gate content with link + permission closure (self-referencing via parentContentId).
+rootTable: gate.Content
+idColumn: contentId
+labelColumn: name
+selfJoinColumn: parentContentId
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables:
+  - { name: gate.Content,               executionOrder: 0, verified: true, scope: { kind: rootPk, column: contentId } }
+  - { name: gate.ContentLink,           executionOrder: 1, verified: true, scope: { kind: rootPk, column: contentId } }
+  - { name: gate.UserGroupPermission,   executionOrder: 2, verified: true, scope: { kind: rootPk, column: contentId } }
+  - { name: gate.ContentType,           executionOrder: 3, verified: true, scope: { kind: rootPk, column: contentTypeId } }
+  - { name: gate.ContentLinkType,       executionOrder: 4, verified: true, scope: { kind: rootPk, column: contentLinkTypeId } }
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1.0
+provenance: { kind: legacy-migration, legacyPipelineId: 692 }

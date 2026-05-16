@@ -398,6 +398,80 @@ export const api = {
 
   deleteAttachment: (id: string) =>
     json<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" }),
+
+  // ── Entity registry ──────────────────────────────────────────
+  listEntityRegistry: (opts?: { tenant?: string; includeRetired?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.includeRetired) p.set("includeRetired", "true")
+    const qs = p.toString()
+    return json<{ tenantId: string; items: import("./types").EntityRegistryDefinition[] }>(
+      `/api/entity-registry/entities${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistry: (id: string, opts?: { tenant?: string; version?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.version !== undefined) p.set("version", String(opts.version))
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryDefinition>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistryHistory: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryHistoryEntry[]>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}/history${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistryYaml: async (id: string, opts?: { tenant?: string }): Promise<string> => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.yaml${qs ? `?${qs}` : ""}`, { credentials: "include" })
+    if (!res.ok) throw new Error(await res.text())
+    return await res.text()
+  },
+  saveEntityRegistry: (def: import("./types").EntityRegistryDefinition, reason: string, opts?: { tenant?: string; versionLabel?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistrySaveResponse>(
+      `/api/entity-registry/entities${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ def, reason, versionLabel: opts?.versionLabel ?? null }),
+      },
+    )
+  },
+  retireEntityRegistry: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ retiredAt: string }>(`/api/entity-registry/entities/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`, { method: "DELETE" })
+  },
+  importEntityRegistryYaml: (yaml: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import-yaml${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ yaml, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
+  listEntityRegistryStrategies: (opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ tenantId: string; items: import("./types").EntityRegistryStrategy[] }>(
+      `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
+    )
+  },
 }
 
 export interface UploadedAttachment {

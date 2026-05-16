@@ -17,6 +17,7 @@ import { SyncOperationType, SyncProgressKind } from "../../domain/enums/sync.js"
 import { SyncRunStatus } from "../../domain/index.js"
 import { getPool } from "../../tools/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
+import { evaluateFreezeWindows } from "../governance/freeze-windows.js"
 import { getEnvironment } from "../environments.js"
 import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
@@ -48,10 +49,17 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   }
 
   // Hard refusal on catalog drift (preview surfaces it as warning; execute treats it as fatal).
+  // Allowed-schemas set is derived from the recipe snapshot so we don't depend
+  // on the legacy Mymi-only hardcoded allowlist.
+  const allowedSchemas = Array.from(new Set(plan.recipeSnapshot.tables.map((t) => {
+    const ix = t.name.indexOf(".")
+    return ix > 0 ? t.name.slice(0, ix) : ""
+  }).filter((s) => s.length > 0)))
   const drift = await detectCatalogDrift(
     plan.source,
     plan.target,
     plan.recipeSnapshot.tables.map((t) => t.name),
+    allowedSchemas,
   )
   if (!drift.catalogCompatible) {
     throw new Error(
@@ -59,6 +67,23 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
       drift.issues.slice(0, 10).map((i) => `  • ${i}`).join("\n") +
       (drift.issues.length > 10 ? `\n  … and ${drift.issues.length - 10} more` : ""),
     )
+  }
+
+  // Governance: evaluate entity-registry freeze windows. Soft block — the
+  // operator can override (audited) via opts.overrideFreezeWindow. When
+  // no windows are configured this is a no-op.
+  if (plan.entityPolicies && plan.entityPolicies.freezeWindowIds.length > 0) {
+    const ev = evaluateFreezeWindows(plan.entityPolicies.freezeWindowIds)
+    if (ev.active && !opts.overrideFreezeWindow) {
+      const names = ev.activeWindows.map((w) => `${w.id} (${w.displayName})`).join(", ")
+      throw new Error(
+        `Sync blocked by active freeze window(s): ${names}. ` +
+        `Pass overrideFreezeWindow=true to bypass (audited).`,
+      )
+    }
+    if (ev.unknownIds.length > 0) {
+      console.warn(`[sync.govern] entity references freeze windows with no registered definition: ${ev.unknownIds.join(", ")}`)
+    }
   }
 
   // Hard refusal on scope-misattribution conflicts. Inserting a row whose PK

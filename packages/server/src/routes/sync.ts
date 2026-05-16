@@ -100,6 +100,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
         force: Boolean(req.body.force),
         enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : [],
         totals: plan.totals,
+        entityPolicies: plan.entityPolicies ?? null,
       })
       return plan
     } catch (e) {
@@ -130,7 +131,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
     const actorUpn = req.session.upn
     const plan = loadPlan(req.params.planId)
     const planDetail = plan
-      ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals }
+      ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null }
       : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {
@@ -155,7 +156,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
     const actorUpn = req.session.upn
     const plan = loadPlan(req.params.planId)
     const planDetail = plan
-      ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals }
+      ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null }
       : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     setupSse(reply)

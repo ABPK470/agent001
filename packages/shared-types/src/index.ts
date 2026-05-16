@@ -328,6 +328,7 @@ export type WidgetType =
   | "active-users"
   | "env-sync"
   | "operation-log"
+  | "entity-registry"
 
 /**
  * Widget types visible AND interactive for non-admin "visitor" users.
@@ -376,13 +377,17 @@ export interface SseEvent {
 
 // ── ABI Environment Sync ─────────────────────────────────────────
 
-export type SyncEntityType =
-  | "contract"
-  | "dataset"
-  | "rule"
-  | "pipelineActivity"
-  | "gateMetadata"
-  | "content"
+/**
+ * Identifier for a sync entity (e.g. "contract", "dataset", "rule",
+ * "pipelineActivity", "gateMetadata", "content" — or any tenant-defined
+ * id from the entity registry).
+ *
+ * Historically this was a compile-time string union; Phase 0 lifts it to
+ * a plain string to let the registry add new entities at runtime without
+ * a code change. Validation against the registered set happens at the
+ * boundaries (route handlers + orchestrator).
+ */
+export type SyncEntityType = string
 
 export interface SyncEnvironment {
   name: string
@@ -505,6 +510,195 @@ export interface SyncExecuteProgress {
   rowsTotal?: number
   message?: string
   error?: string
+}
+
+// ── Entity registry (Phase 0 config uplift) ──────────────────────
+//
+// Wire shape for the entity registry's REST + SSE surface. The full
+// in-memory shape (with discriminated `scope.kind`, override semantics,
+// validation codes, etc.) lives in `@mia/agent` — these DTOs are just
+// JSON-stable mirrors used by the UI store and route bodies.
+
+export type EntityRegistryProvenanceKind = "bundled" | "imported" | "manual" | "agent"
+
+export interface EntityRegistryProvenance {
+  kind: EntityRegistryProvenanceKind
+  templateId?: string | null
+  sourcePath?: string | null
+  importBatchId?: string | null
+}
+
+export interface EntityRegistryFkHop {
+  table: string
+  fromColumn: string
+  toColumn: string
+}
+
+export type EntityRegistryTableScope =
+  | { kind: "rootPk"; column: string }
+  | { kind: "fkPath"; through: EntityRegistryFkHop[] }
+  | { kind: "sql"; predicate: string }
+
+export interface EntityRegistryScd2Override {
+  validFromCol?: string | null
+  validToCol?: string | null
+  isLockedCol?: string | null
+  syncDateCol?: string | null
+  deployDateCol?: string | null
+  identityHandling?: "none" | "setIdentityInsertOn" | "skipIdentityCols"
+  excludedFromDiffCols?: string[]
+  onInsert?: Record<string, string>
+  onUpdate?: Record<string, string>
+}
+
+export interface EntityRegistryTable {
+  name: string
+  scope: EntityRegistryTableScope
+  executionOrder: number
+  scd2Override: EntityRegistryScd2Override | null
+  verified: boolean
+  archiveTable: string | null
+  note: string | null
+  provenance: EntityRegistryProvenance
+}
+
+export interface EntityRegistryPolicies {
+  approvalPolicyId: string | null
+  freezeWindowIds: string[]
+  riskMultiplier: number
+}
+
+export interface EntityRegistryLineageRef {
+  object: string
+  kind: "view-source" | "sproc-input" | "etl-source" | "publish-target"
+  note: string | null
+}
+
+export interface EntityRegistryStrategyRef {
+  strategyId: string
+  strategyVersion: number | "latest"
+  entityOverride: EntityRegistryScd2Override | null
+}
+
+export interface EntityRegistryDefinition {
+  id: string
+  tenantId: string
+  displayName: string
+  description: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  selfJoinColumn: string | null
+  tables: EntityRegistryTable[]
+  policies: EntityRegistryPolicies
+  scd2: EntityRegistryStrategyRef
+  lineageRefs: EntityRegistryLineageRef[]
+  provenance: EntityRegistryProvenance
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  reason: string
+  createdAt: string
+  retiredAt: string | null
+}
+
+export interface EntityRegistryStrategy {
+  id: string
+  displayName: string
+  description: string
+  validFromCol: string | null
+  validToCol: string | null
+  isLockedCol: string | null
+  syncDateCol: string | null
+  deployDateCol: string | null
+  identityHandling: "none" | "setIdentityInsertOn" | "skipIdentityCols"
+  excludedFromDiffCols: string[]
+  onInsert: Record<string, string>
+  onUpdate: Record<string, string>
+  provenance: EntityRegistryProvenance
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+}
+
+export interface EntityRegistryValidationIssue {
+  path: string
+  code: string
+  message: string
+  hint?: string
+}
+
+export interface EntityRegistryValidationWarning {
+  path: string
+  code: string
+  message: string
+}
+
+export interface EntityRegistryValidationResult {
+  ok: boolean
+  errors: EntityRegistryValidationIssue[]
+  warnings: EntityRegistryValidationWarning[]
+}
+
+export type EntityRegistryChangeKind =
+  | "created" | "renamed" | "rootTableChanged" | "idColumnChanged"
+  | "scd2StrategyChanged" | "scd2OverrideChanged"
+  | "tableAdded" | "tableRemoved" | "tableReordered"
+  | "scopeChanged" | "verifiedFlagChanged"
+  | "policiesChanged" | "lineageChanged"
+  | "retired" | "unretired"
+
+export interface EntityRegistryChange {
+  kind: EntityRegistryChangeKind
+  tableName: string | null
+  description: string
+  before?: unknown
+  after?: unknown
+}
+
+export interface EntityRegistryHistoryEntry {
+  tenantId: string
+  id: string
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+  reason: string
+  diff: EntityRegistryChange[]
+}
+
+export interface EntityRegistrySaveRequest {
+  def: EntityRegistryDefinition
+  reason: string
+  versionLabel?: string | null
+}
+
+export interface EntityRegistrySaveResponse {
+  tenantId: string
+  id: string
+  version: number
+  diff: EntityRegistryChange[]
+}
+
+export interface EntityRegistryStrategySaveRequest {
+  strategy: EntityRegistryStrategy
+  reason: string
+}
+
+export interface EntityRegistryYamlImportRequest {
+  yaml: string
+  reason: string
+  /** When true the server validates + diffs but does NOT persist. */
+  dryRun?: boolean
+}
+
+export interface EntityRegistryYamlImportResponse {
+  ok: boolean
+  saved: Array<{ id: string; version: number; created: boolean }>
+  skipped: Array<{ id: string; reason: string }>
+  errors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
+  dryRun: boolean
 }
 
 // ── Agent Definitions ────────────────────────────────────────────

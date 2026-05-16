@@ -4,9 +4,9 @@
 
 import { describe, expect, it } from "vitest"
 import {
-  diffEntityDefinitions,
-  type EntityDefinition,
-  type EntityTable,
+    diffEntityDefinitions,
+    type EntityDefinition,
+    type EntityTable,
 } from "../src/sync/entity-registry/index.js"
 
 function table(overrides: Partial<EntityTable> = {}): EntityTable {

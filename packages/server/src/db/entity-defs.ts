@@ -28,13 +28,13 @@
  */
 
 import {
-  bundledStrategyById,
-  diffEntityDefinitions,
-  type EntityDefinition,
-  type Scd2Strategy,
-  type ValidationResult,
-  validateEntityDefinition,
-  validateScd2Strategy,
+    bundledStrategyById,
+    diffEntityDefinitions,
+    validateEntityDefinition,
+    validateScd2Strategy,
+    type EntityDefinition,
+    type Scd2Strategy,
+    type ValidationResult,
 } from "@mia/agent"
 import { getDb } from "./connection.js"
 

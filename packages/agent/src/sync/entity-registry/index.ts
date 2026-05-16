@@ -8,17 +8,26 @@
  * `./projector.ts` (forthcoming in this phase).
  */
 
+export {
+    BUNDLED_SCD2_STRATEGIES,
+    bundledStrategyById
+} from "./bundled-strategies.js"
+export { diffEntityDefinitions } from "./diff.js"
+export { projectRecipe, type ProjectedSyncRecipe } from "./projector.js"
+export {
+    getRecipeResolver,
+    installRecipeResolver,
+    tryResolveRecipe,
+    type RecipeResolver,
+    type ResolvedRecipe,
+    type ResolvedRecipePolicies,
+} from "./resolver.js"
+export { resolveEffectiveScd2 } from "./strategy-resolver.js"
 export * from "./types.js"
 export {
-  validateEntityDefinition,
-  validateScd2Strategy,
-  isIdentifier,
-  isSchemaQualifiedTable,
-  looksUnsafeSqlFragment,
+    isIdentifier,
+    isSchemaQualifiedTable,
+    looksUnsafeSqlFragment, validateEntityDefinition,
+    validateScd2Strategy
 } from "./validate.js"
-export {
-  BUNDLED_SCD2_STRATEGIES,
-  bundledStrategyById,
-} from "./bundled-strategies.js"
-export { resolveEffectiveScd2 } from "./strategy-resolver.js"
-export { diffEntityDefinitions } from "./diff.js"
+

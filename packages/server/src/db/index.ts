@@ -64,3 +64,8 @@ export {
     listRecentSyncAudit, listSyncAuditForPlan, recordSyncAudit, type SyncAuditRow
 } from "./sync-audit.js"
 
+// Entity registry (Phase 0 config uplift — versioned entity defs + SCD2 strategies)
+export {
+    EntityRegistryValidationError, getEntityDefinition, listAvailableStrategies, listEntityDefinitionHistory, listEntityDefinitions, readEntityVersionBody, resolveScd2Strategy, retireEntityDefinition, saveEntityDefinition, saveScd2Strategy, type EntityDefinitionHistoryEntry, type EntityDefinitionRecord, type EntityDefinitionVersionRow, type SaveEntityResult, type SaveStrategyResult
+} from "./entity-defs.js"
+

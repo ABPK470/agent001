@@ -19,13 +19,25 @@ import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
 
-export type EntityType =
-  | "contract"
-  | "dataset"
-  | "rule"
-  | "pipelineActivity"
-  | "gateMetadata"
-  | "content"
+/**
+ * Identifier for a sync entity. Originally a closed string union
+ * (contract / dataset / rule / pipelineActivity / gateMetadata / content);
+ * Phase 0 of the entity-registry uplift lifts this to `string` so tenants
+ * can register additional entities at runtime. The canonical set still
+ * defines first-class behaviour, but is no longer enforced at compile
+ * time — validation happens at the registry boundary.
+ */
+export type EntityType = string
+
+/** The historically-bundled entity ids (informational; not enforced). */
+export const BUNDLED_ENTITY_IDS = [
+  "contract",
+  "dataset",
+  "rule",
+  "pipelineActivity",
+  "gateMetadata",
+  "content",
+] as const
 
 /** How a given table was discovered as part of an entity's dependency closure. */
 import { DiscoverySource, SyncRecipeDiscrepancyKind } from "../domain/enums/sync.js"
@@ -214,14 +226,9 @@ function emptyBundle(): SyncRecipeBundle {
     version: 1,
     generatedAt: new Date(0).toISOString(),
     introspectedFrom: null,
-    recipes: {
-      contract: null,
-      dataset: null,
-      rule: null,
-      pipelineActivity: null,
-      gateMetadata: null,
-      content: null,
-    },
+    // Recipes is a string-keyed map now; entries are populated by the
+    // introspector + entity registry. Empty initial map is fine.
+    recipes: {},
   }
 }
 

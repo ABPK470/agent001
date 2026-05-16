@@ -122,6 +122,18 @@ export interface SyncPlan {
   estimatedDurationSec: number
   /** Recipe snapshot used — included so execute reproduces preview exactly. */
   recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+  /**
+   * Governance policy snapshot pulled from the entity registry at plan
+   * time. Threads through into the execute preflight so freeze windows
+   * + approval policies are evaluated against the entity-as-it-was-then.
+   * `null` when the entity has no registry record (legacy JSON path).
+   */
+  entityPolicies?: {
+    approvalPolicyId: string | null
+    freezeWindowIds: string[]
+    riskMultiplier: number
+    sourceEntityVersion: number | null
+  } | null
 }
 
 // ── Store ────────────────────────────────────────────────────────

@@ -6,7 +6,9 @@
  *   - the preview preflight gate (restricted to recipe tables)
  *   - the execute preflight gate (hard refusal on drift)
  *
- * Restricted to schemas {core, coreArchive, gate, gateArchive, master}.
+ * Schema scope is supplied by the caller (typically derived from the
+ * active entity registry). Callers that haven't migrated yet pass
+ * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
 import { getPool } from "../tools/index.js"
@@ -15,6 +17,19 @@ export interface CatalogDriftResult {
   catalogCompatible: boolean
   issues: string[]
 }
+
+/**
+ * Historical Mymi schema allowlist — used by callers that pre-date the
+ * entity registry. New callers should pass a set derived from
+ * `recipe.tables[].name` (the schema prefix of each).
+ */
+export const DEFAULT_MYMI_SCHEMA_ALLOWLIST: readonly string[] = Object.freeze([
+  "core",
+  "coreArchive",
+  "gate",
+  "gateArchive",
+  "master",
+])
 
 interface SchemaSnapshot {
   tables: Set<string>
@@ -58,7 +73,15 @@ async function queryWithRetry<T>(
   throw lastErr
 }
 
-async function fetchSchema(connection: string): Promise<SchemaSnapshot> {
+async function fetchSchema(connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
+  if (schemas.length === 0) {
+    // Defensive: an empty allowlist would generate `IN ()` (a SQL syntax
+    // error). Return an empty snapshot instead — the caller's restrict
+    // set will then drive every comparison to a "missing on source" issue,
+    // which is the correct behaviour.
+    return { tables: new Set(), cols: new Map() }
+  }
+  const list = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(",")
   const rows = await queryWithRetry<{
     TABLE_SCHEMA: string
     TABLE_NAME: string
@@ -68,7 +91,7 @@ async function fetchSchema(connection: string): Promise<SchemaSnapshot> {
   }>(connection, `
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
     FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA IN ('core','coreArchive','gate','gateArchive','master')
+    WHERE TABLE_SCHEMA IN (${list})
   `)
   const tables = new Set<string>()
   const cols = new Map<string, Map<string, string>>()
@@ -88,14 +111,29 @@ async function fetchSchema(connection: string): Promise<SchemaSnapshot> {
  * Compare schemas. When `restrictTables` is provided (typically the recipe's
  * `tables[]` list), only those tables are checked — surfaces only issues
  * relevant to the upcoming sync.
+ *
+ * `allowedSchemas` bounds the INFORMATION_SCHEMA query so we don't pull
+ * the entire DB. The set is derived by the caller from the active entity
+ * registry (or {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for legacy callers).
+ * When `restrictTables` is set, the allowed-schemas set is automatically
+ * augmented with the schema prefix of each restricted table.
  */
 export async function detectCatalogDrift(
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
+  allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST,
 ): Promise<CatalogDriftResult> {
   const restrict = restrictTables ? new Set(restrictTables) : null
-  const [src, tgt] = await Promise.all([fetchSchema(source), fetchSchema(target)])
+  const schemaSet = new Set<string>(allowedSchemas)
+  if (restrict) {
+    for (const qn of restrict) {
+      const ix = qn.indexOf(".")
+      if (ix > 0) schemaSet.add(qn.slice(0, ix))
+    }
+  }
+  const schemaList = [...schemaSet]
+  const [src, tgt] = await Promise.all([fetchSchema(source, schemaList), fetchSchema(target, schemaList)])
   const issues: string[] = []
   const tablesToCheck = restrict ?? src.tables
   for (const t of tablesToCheck) {

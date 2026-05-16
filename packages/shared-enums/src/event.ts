@@ -139,6 +139,12 @@ export const EventType = {
   SyncEnvUpdate: "sync_env.update",
   SyncEnvReset: "sync_env.reset",
 
+  // Entity registry (Phase 0 config uplift)
+  EntityRegistrySaved: "entity_registry.saved",
+  EntityRegistryRetired: "entity_registry.retired",
+  EntityRegistryStrategySaved: "entity_registry.strategy.saved",
+  EntityRegistryImported: "entity_registry.imported",
+
   // Memory
   MemoryIngested: "memory.ingested",
   MemoryFiltered: "memory.filtered",

@@ -47,6 +47,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: LayoutDashboard },
   { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: Bug },
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
+  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: Database },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
