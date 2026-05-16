@@ -1,25 +1,38 @@
 /**
  * StrategiesPanel — SCD2 strategy catalogue (bundled + custom).
  *
- * Lists every strategy returned by `GET /api/entity-registry/strategies`,
- * grouped by provenance. Admins can fork a bundled strategy into a
- * tenant-custom one (or edit an existing custom one) via a side-by-side
- * JSON editor.
+ * What a strategy actually is, in plain language:
+ *   When the sync engine writes rows into a target table, it needs to
+ *   know which columns are "system meta" (timestamps, lock flags, etc.)
+ *   so it can (a) ignore them when comparing rows for diffs and
+ *   (b) stamp them automatically on insert/update. A strategy is the
+ *   little manifest that names those columns.
  *
- * Why "fork"? Bundled strategies are immutable code; tenant overrides
- * are versioned data rows. Forking copies the bundled body into a new
- * tenant-scoped id so it can be edited and re-versioned without
- * touching the original.
+ * What the runtime actually consumes today (audited):
+ *   - The diff engine ignores a HARDCODED set of meta columns
+ *     {validFrom, validTo, isLocked, syncDate, deployDate}. The
+ *     strategy's `excludedFromDiffCols` is not yet read.
+ *   - The executor checks if the target table has columns literally
+ *     named `validFrom` / `validTo`; if so it stamps GETUTCDATE() /
+ *     NULL on insert and update. Other strategy fields
+ *     (`onInsert`, `onUpdate`, `identityHandling`, `isLockedCol`,
+ *     `syncDateCol`, `deployDateCol`) are stored and surfaced for
+ *     future expansion but are not consumed by the engine today.
+ *
+ * This panel reflects that honestly: a one-screen summary of what
+ * the strategy will *actually* do at runtime, plus a YAML editor for
+ * the full document (which is what you'd hand-tune anyway).
  */
 
-import { GitFork, Loader2, Save, X } from "lucide-react"
+import { GitFork } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
 import { useMe } from "../../hooks/useMe"
 import { useStore } from "../../store"
 import type { EntityRegistryStrategy } from "../../types"
-import { DetailRow, Empty, ListItem, PanelChrome, SplitView } from "./shared"
+import { Empty, ListItem, PanelChrome, SplitView } from "./shared"
+import { StrategyEditorModal } from "./StrategyEditorModal"
 
 export function StrategiesPanel(): JSX.Element {
   const { me } = useMe()
@@ -55,7 +68,7 @@ export function StrategiesPanel(): JSX.Element {
   return (
     <PanelChrome
       title="SCD2 strategies"
-      subtitle="Templates that govern how row history is preserved when an entity syncs."
+      subtitle="Which columns the sync engine treats as system meta — ignored when comparing rows, stamped automatically on insert/update."
       busy={busy} onRefresh={() => void load()} err={err} onClearErr={() => setErr(null)}
     >
       <SplitView
@@ -67,7 +80,7 @@ export function StrategiesPanel(): JSX.Element {
                   <h3 className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-faint">{kind}</h3>
                   {list.map((s) => (
                     <ListItem key={s.id + ":" + s.version} active={s.id === selected}
-                      onClick={() => { setSelected(s.id); setEditing(null) }}>
+                      onClick={() => setSelected(s.id)}>
                       <span className="font-mono">{s.id}</span>
                       <span className="text-text-muted">{s.displayName}</span>
                       <span className="text-[10px] text-text-faint">v{s.version}</span>
@@ -76,118 +89,120 @@ export function StrategiesPanel(): JSX.Element {
                 </section>
               ))}</>
         }
-        detail={
-          !chosen ? <Empty title="Pick a strategy" />
-          : editing  ? <StrategyEditor seed={editing} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }} />
-          :            <StrategyDetail s={chosen} isAdmin={isAdmin}
-                          onFork={() => setEditing(forkOf(chosen))}
-                          onEdit={() => setEditing(chosen)} />
+        detail={chosen
+          ? <StrategyDetail s={chosen} isAdmin={isAdmin} onEdit={() => setEditing(chosen)} />
+          : <Empty title="Pick a strategy" />
         }
       />
+
+      {editing && (
+        <StrategyEditorModal
+          seed={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); void load() }}
+        />
+      )}
     </PanelChrome>
   )
 }
 
-// ── Detail + editor ───────────────────────────────────────────────
+// ── Detail ────────────────────────────────────────────────────────
 
-function StrategyDetail({ s, isAdmin, onFork, onEdit }: {
-  s: EntityRegistryStrategy; isAdmin: boolean; onFork: () => void; onEdit: () => void
+function StrategyDetail({ s, isAdmin, onEdit }: {
+  s: EntityRegistryStrategy; isAdmin: boolean; onEdit: () => void
 }): JSX.Element {
   const bundled = s.provenance.kind === "bundled"
+  const stampsValidFrom = !!s.validFromCol
+  const stampsValidTo   = !!s.validToCol
+
   return (
     <div className="space-y-5 p-5 text-xs">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">{s.displayName}</h3>
-          <p className="font-mono text-[11px] text-text-faint">{s.id} · v{s.version}</p>
+          <p className="font-mono text-[11px] text-text-faint">{s.id} · v{s.version} · {s.provenance.kind}</p>
         </div>
         {isAdmin && (
-          bundled
-            ? <button onClick={onFork} className="flex items-center gap-1 rounded border border-border-subtle bg-canvas px-2 py-1 text-[11px] hover:bg-overlay-2">
-                <GitFork className="h-3 w-3" /> fork to custom
-              </button>
-            : <button onClick={onEdit} className="rounded bg-accent px-2 py-1 text-[11px] text-text-on-accent hover:bg-accent-hover">
-                edit → new version
-              </button>
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1 rounded border border-border-subtle bg-canvas px-2.5 py-1 text-[11px] hover:bg-overlay-2"
+          >
+            <GitFork className="h-3 w-3" /> {bundled ? "fork to custom" : "edit → new version"}
+          </button>
         )}
       </header>
-      <p className="text-text-muted">{s.description}</p>
+
+      {s.description && <p className="text-text-muted">{s.description}</p>}
+
+      {/* ── What this strategy does at runtime ─────────────────── */}
       <section className="rounded-lg border border-border-subtle bg-panel p-4">
-        <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">columns</h4>
-        <dl className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-1.5 font-mono">
-          <DetailRow label="validFromCol"     value={s.validFromCol} />
-          <DetailRow label="validToCol"       value={s.validToCol} />
-          <DetailRow label="isLockedCol"      value={s.isLockedCol} />
-          <DetailRow label="syncDateCol"      value={s.syncDateCol} />
-          <DetailRow label="deployDateCol"    value={s.deployDateCol} />
-          <DetailRow label="identityHandling" value={s.identityHandling} />
+        <h4 className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          What this does
+        </h4>
+        <ul className="space-y-1.5 leading-relaxed">
+          <Bullet active={stampsValidFrom}>
+            On insert/update, stamps <Code>{s.validFromCol || "validFrom"}</Code> = <Code>GETUTCDATE()</Code>
+            {!stampsValidFrom && <span className="text-text-faint"> (disabled — no validFromCol set)</span>}
+          </Bullet>
+          <Bullet active={stampsValidTo}>
+            On insert/update, sets <Code>{s.validToCol || "validTo"}</Code> = <Code>NULL</Code>
+            {!stampsValidTo && <span className="text-text-faint"> (disabled — no validToCol set)</span>}
+          </Bullet>
+          <Bullet active>
+            Diff engine ignores meta columns: <Code>validFrom</Code>, <Code>validTo</Code>, <Code>isLocked</Code>,{" "}
+            <Code>syncDate</Code>, <Code>deployDate</Code>
+          </Bullet>
+        </ul>
+      </section>
+
+      {/* ── Reference metadata (documented but not yet consumed) ─ */}
+      <section className="rounded-lg border border-border-subtle bg-panel/60 p-4">
+        <h4 className="mb-2.5 flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          Reference metadata
+          <span className="text-[10px] font-normal normal-case tracking-normal text-text-faint">
+            stored on the strategy but not consumed by the engine today
+          </span>
+        </h4>
+        <dl className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-1.5 font-mono text-text-faint">
+          <Ref label="isLockedCol"          value={s.isLockedCol} />
+          <Ref label="syncDateCol"          value={s.syncDateCol} />
+          <Ref label="deployDateCol"        value={s.deployDateCol} />
+          <Ref label="identityHandling"     value={s.identityHandling === "none" ? null : s.identityHandling} />
+          <Ref label="excludedFromDiffCols" value={s.excludedFromDiffCols.length === 0 ? null : s.excludedFromDiffCols.join(", ")} />
+          <Ref label="onInsert"             value={objCount(s.onInsert)} />
+          <Ref label="onUpdate"             value={objCount(s.onUpdate)} />
         </dl>
       </section>
-      <details className="rounded-lg border border-border-subtle bg-panel p-3">
-        <summary className="cursor-pointer text-text-muted">excludedFromDiffCols ({s.excludedFromDiffCols.length})</summary>
-        <ul className="mt-2 list-disc pl-5 font-mono text-[11px]">{s.excludedFromDiffCols.map((c) => <li key={c}>{c}</li>)}</ul>
-      </details>
-      <details className="rounded-lg border border-border-subtle bg-panel p-3">
-        <summary className="cursor-pointer text-text-muted">SQL expressions (onInsert / onUpdate)</summary>
-        <pre className="mt-2 overflow-x-auto text-[11px]">{JSON.stringify({ onInsert: s.onInsert, onUpdate: s.onUpdate }, null, 2)}</pre>
-      </details>
     </div>
   )
 }
 
-function StrategyEditor({ seed, onCancel, onSaved }: {
-  seed: EntityRegistryStrategy; onCancel: () => void; onSaved: () => void
-}): JSX.Element {
-  const [body,   setBody]   = useState(() => JSON.stringify(seed, null, 2))
-  const [reason, setReason] = useState("")
-  const [busy,   setBusy]   = useState(false)
-  const [err,    setErr]    = useState<string | null>(null)
+// ── Small display helpers ─────────────────────────────────────────
 
-  async function doSave(): Promise<void> {
-    setErr(null)
-    if (!reason.trim()) return setErr("reason is required")
-    let parsed: EntityRegistryStrategy
-    try { parsed = JSON.parse(body) as EntityRegistryStrategy }
-    catch (e) { return setErr(`JSON parse error: ${(e as Error).message}`) }
-    setBusy(true)
-    try { await api.saveEntityRegistryStrategy(parsed, reason); onSaved() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
-  }
-
+function Bullet({ active, children }: { active: boolean; children: JSX.Element | (JSX.Element | string | false)[] | string }): JSX.Element {
   return (
-    <div className="flex h-full flex-col gap-3 p-5 text-xs">
-      <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Edit strategy — {seed.id}</h3>
-        <button onClick={onCancel} className="text-text-muted hover:text-text"><X className="h-4 w-4" /></button>
-      </header>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} spellCheck={false}
-        className="input min-h-[260px] flex-1 font-mono text-[11px]" />
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">reason <span className="text-rose-400">*</span></span>
-        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="why this change" className="input" />
-      </label>
-      {err && <p className="text-rose-300">{err}</p>}
-      <div className="flex justify-end gap-2">
-        <button onClick={onCancel} disabled={busy} className="rounded border border-border-subtle px-3 py-1.5 text-xs hover:bg-overlay-2">cancel</button>
-        <button onClick={() => void doSave()} disabled={busy}
-          className="flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs text-text-on-accent hover:bg-accent-hover disabled:opacity-50">
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} save new version
-        </button>
-      </div>
-    </div>
+    <li className="flex items-start gap-2">
+      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-emerald-400" : "bg-text-faint/40"}`} />
+      <span className={active ? "text-text" : "text-text-muted"}>{children}</span>
+    </li>
   )
 }
 
-function forkOf(s: EntityRegistryStrategy): EntityRegistryStrategy {
-  return {
-    ...s,
-    id:           s.id.startsWith("custom-") ? s.id : `custom-${s.id}`,
-    displayName:  `${s.displayName} (custom)`,
-    provenance:   { kind: "manual" },
-    version:      1,
-    versionLabel: "fork",
-    createdBy:    "",
-    createdAt:    new Date().toISOString(),
-  }
+function Code({ children }: { children: string }): JSX.Element {
+  return <code className="rounded bg-overlay-2 px-1 py-0.5 font-mono text-[10.5px]">{children}</code>
+}
+
+function Ref({ label, value }: { label: string; value: string | null }): JSX.Element {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd className="text-text-faint">{value ?? "—"}</dd>
+    </>
+  )
+}
+
+function objCount(o: Record<string, string> | null | undefined): string | null {
+  if (!o) return null
+  const n = Object.keys(o).length
+  return n === 0 ? null : `${n} column${n === 1 ? "" : "s"}`
 }
