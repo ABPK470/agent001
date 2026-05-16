@@ -18,9 +18,10 @@
 
 import { AlertTriangle, FileCode2, FormInput, Loader2, Save } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import type { EntityRegistryDefinition } from "../../types"
+import { deriveDisplayName, deriveEntityId, deriveIdColumn } from "./derive"
 import { FormSurface, YamlSurface } from "./EntityEditSurfaces"
 import { ModalShell } from "./ModalShell"
 
@@ -109,6 +110,24 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   const [yamlBody,    setYamlBody]    = useState<string>(mode === "new" ? NEW_ENTITY_YAML_TEMPLATE : "")
   const [yamlLoading, setYamlLoading] = useState(false)
 
+  // Auto-derive id / displayName / idColumn from rootTable in `new` mode,
+  // but only as long as the operator hasn't manually overridden each one.
+  // We track per-field "touched" flags so user edits stop the derivation
+  // for that specific field — both directions remain editable.
+  const touched = useRef({ id: false, displayName: false, idColumn: false })
+  useEffect(() => {
+    if (mode !== "new") return
+    const r = rootTable.trim()
+    if (!r) return
+    if (!touched.current.id)          setId(deriveEntityId(r))
+    if (!touched.current.displayName) setDisplayName(deriveDisplayName(r))
+    if (!touched.current.idColumn)    setIdColumn(deriveIdColumn(r))
+  }, [rootTable, mode])
+
+  function handleIdChange(v: string)          { touched.current.id          = true; setId(v) }
+  function handleDisplayNameChange(v: string) { touched.current.displayName = true; setDisplayName(v) }
+  function handleIdColumnChange(v: string)    { touched.current.idColumn    = true; setIdColumn(v) }
+
   useEffect(() => {
     if (authoring !== "yaml" || mode !== "edit" || yamlBody) return
     setYamlLoading(true)
@@ -186,12 +205,28 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     onClose()
   }
 
+  // Surface what's blocking save on the button itself rather than
+  // sprinkling red asterisks all over the form.
+  const missing: string | null = (() => {
+    if (authoring === "yaml") {
+      if (!yamlBody.trim()) return "Paste a YAML body"
+      if (!reason.trim())   return "Add a reason for change"
+      return null
+    }
+    if (!rootTable.trim())   return "Pick a root table"
+    if (!displayName.trim()) return "Give it a display name"
+    if (!ID_RE.test(id))     return "Identifier needs a tweak (advanced)"
+    if (!idColumn.trim())    return "Identifier column missing (advanced)"
+    if (!reason.trim())      return "Add a reason for change"
+    return null
+  })()
+
   return (
     <ModalShell
       title={mode === "new" ? "New entity" : `Edit entity · ${seed.id}`}
       subtitle={mode === "edit" ? `v${seed.version} → v${seed.version + 1}` : undefined}
       onClose={onClose}
-      widthClass="max-w-4xl"
+      widthClass="max-w-5xl"
       footer={
         <>
           {err && (
@@ -200,6 +235,9 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
+            {missing && !busy && (
+              <span className="text-[11px] text-text-faint">{missing}</span>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -209,8 +247,9 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
             <button
               type="button"
               onClick={() => void doSave()}
-              disabled={busy || (authoring === "yaml" && yamlLoading)}
-              className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:opacity-50"
+              disabled={busy || missing !== null || (authoring === "yaml" && yamlLoading)}
+              title={missing ?? undefined}
+              className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               {mode === "new" ? "Create" : "Save new version"}
@@ -224,11 +263,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
       {authoring === "form" ? (
         <FormSurface
           mode={mode}
-          id={id}                         onId={setId}
-          displayName={displayName}       onDisplayName={setDisplayName}
+          id={id}                         onId={handleIdChange}
+          displayName={displayName}       onDisplayName={handleDisplayNameChange}
           description={description}       onDescription={setDescription}
           rootTable={rootTable}           onRootTable={setRootTable}
-          idColumn={idColumn}             onIdColumn={setIdColumn}
+          idColumn={idColumn}             onIdColumn={handleIdColumnChange}
           labelColumn={labelColumn}       onLabelColumn={setLabelColumn}
           selfJoinColumn={selfJoinColumn} onSelfJoinColumn={setSelfJoinColumn}
           strategyId={strategyId}         onStrategyId={setStrategyId}

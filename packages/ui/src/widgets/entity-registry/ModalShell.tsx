@@ -18,6 +18,12 @@ export interface ModalShellProps {
   onClose: () => void
   /** Overall max width — default 720px (matches EnvSync's modal vocabulary). */
   widthClass?: string
+  /**
+   * When true, the dialog hugs its content (auto height, capped at
+   * 88vh). Use for short forms (≤6 fields). Default is the tall,
+   * shape-stable shell used by tabbed editors.
+   */
+  compact?: boolean
   children: ReactNode
   footer?: ReactNode
 }
@@ -28,6 +34,7 @@ export function ModalShell({
   icon,
   onClose,
   widthClass = "max-w-3xl",
+  compact = false,
   children,
   footer,
 }: ModalShellProps): JSX.Element {
@@ -43,7 +50,11 @@ export function ModalShell({
       onClick={onClose}
     >
       <div
-        className={`flex w-full ${widthClass} max-h-[88vh] flex-col overflow-hidden rounded-xl bg-surface shadow-2xl`}
+        className={`flex w-full ${widthClass} ${
+          compact
+            ? "max-h-[88vh]"
+            : "h-[88vh] min-h-[640px] max-h-[94vh]"
+        } flex-col overflow-hidden rounded-xl bg-surface shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-5 py-4">

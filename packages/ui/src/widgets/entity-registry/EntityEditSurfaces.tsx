@@ -1,17 +1,20 @@
 /**
- * Authoring surfaces for `EntityEditModal`:
+ * Authoring surfaces for `EntityEditModal`.
  *
- *  - `FormSurface` — structured form fields for identity / schema /
- *    SCD2 / policies, plus a JSON textarea for the `tables` array.
- *  - `YamlSurface` — single-textarea editor for the full
- *    EntityDefinition body rendered as YAML.
+ * The Form surface is built around a single principle: humans should
+ * not type identifiers. The operator picks a real-world root table,
+ * and we silently derive `id`, `displayName`, and `idColumn` from it.
+ * Those derived fields live inside the *Identifiers* disclosure for
+ * power users who need to override them — the day-one user never
+ * sees them.
  *
- * Plus the shared `Section` / `Field` / `AuditSection` layout
- * primitives both surfaces reuse.
+ * Required-ness is communicated by the disabled Save button (which
+ * names what's missing) rather than red asterisks on every label.
  */
 
-import { Info, Loader2 } from "lucide-react"
-import type { JSX } from "react"
+import { ChevronDown, FileCode2, Loader2 } from "lucide-react"
+import type { JSX, ReactNode } from "react"
+import { useState } from "react"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
 import { StrategySelect } from "./StrategySelect"
 
@@ -38,91 +41,145 @@ export interface FormSurfaceProps {
 
 export function FormSurface(p: FormSurfaceProps): JSX.Element {
   return (
-    <div className="space-y-4 p-5 text-xs">
-      <Section title="Identity">
-        <Field label="id" required mono>
+    <div className="space-y-4 p-6 text-xs">
+      {/* ── Basics ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <BigField label="Root table">
           <input
-            value={p.id}
-            onChange={(e) => p.onId(e.target.value)}
-            disabled={p.mode === "edit"}
-            placeholder="my-entity"
-            className="input"
+            value={p.rootTable}
+            onChange={(e) => p.onRootTable(e.target.value)}
+            placeholder="schema.TableName"
+            className="input font-mono text-sm py-2.5"
+            autoFocus={p.mode === "new"}
           />
-        </Field>
-        <Field label="displayName" required>
-          <input value={p.displayName} onChange={(e) => p.onDisplayName(e.target.value)} className="input" />
-        </Field>
-        <Field label="description" wide>
-          <textarea value={p.description} onChange={(e) => p.onDescription(e.target.value)} rows={2} className="input font-sans" />
-        </Field>
-      </Section>
+        </BigField>
 
-      <Section title="Schema">
-        <Field label="rootTable" required mono>
-          <input value={p.rootTable} onChange={(e) => p.onRootTable(e.target.value)} placeholder="core.Contract" className="input" />
-        </Field>
-        <Field label="idColumn" required mono>
-          <input value={p.idColumn} onChange={(e) => p.onIdColumn(e.target.value)} placeholder="contractId" className="input" />
-        </Field>
-        <Field label="labelColumn" mono>
-          <input value={p.labelColumn} onChange={(e) => p.onLabelColumn(e.target.value)} placeholder="name" className="input" />
-        </Field>
-        <Field label="selfJoinColumn" mono>
-          <input value={p.selfJoinColumn} onChange={(e) => p.onSelfJoinColumn(e.target.value)} placeholder="(optional)" className="input" />
-        </Field>
-      </Section>
-
-      <Section title="SCD2 strategy">
-        <div className="sm:col-span-2">
-          <StrategySelect
-            strategyId={p.strategyId}
-            strategyVersion={p.strategyVersion}
-            onStrategyId={p.onStrategyId}
-            onStrategyVersion={p.onStrategyVersion}
-          />
-        </div>
-      </Section>
-
-      <Section title="Policies">
-        <Field label="riskMultiplier">
-          <input value={p.riskMultiplier} onChange={(e) => p.onRiskMultiplier(e.target.value)} className="input" />
-        </Field>
-        <Field label="approvalPolicyId (advisory)">
+        <BigField label="Display name">
           <input
-            value={p.approvalPolicyId ?? ""}
-            onChange={(e) => p.onApprovalPolicyId(e.target.value.trim() === "" ? null : e.target.value)}
-            placeholder="(leave blank)"
-            className="input font-mono"
+            value={p.displayName}
+            onChange={(e) => p.onDisplayName(e.target.value)}
+            placeholder=""
+            className="input py-2.5"
           />
-          <span className="flex items-center gap-1 text-[10px] text-text-faint">
-            <Info className="h-3 w-3" /> approvals resolve at sync time by (target env, risk tier); this field is reserved for future policy sets
-          </span>
-        </Field>
-        <Field label="freezeWindowIds" wide>
+        </BigField>
+      </div>
+
+      <BigField label="Description">
+        <textarea
+          value={p.description}
+          onChange={(e) => p.onDescription(e.target.value)}
+          rows={2}
+          placeholder=""
+          className="input font-sans py-2"
+        />
+      </BigField>
+
+      {/* ── Advanced disclosures ───────────────────────────────── */}
+      <Disclosure
+        title="Identifiers"
+        summary={summary([
+          ["id",       p.id || "—"],
+          ["idColumn", p.idColumn || "—"],
+          p.labelColumn ? ["labelColumn", p.labelColumn] : null,
+        ])}
+        defaultOpen={p.mode === "edit"}
+      >
+        <Grid2>
+          <Field label="id" mono>
+            <input
+              value={p.id}
+              onChange={(e) => p.onId(e.target.value)}
+              disabled={p.mode === "edit"}
+              className="input"
+            />
+          </Field>
+          <Field label="idColumn" mono>
+            <input value={p.idColumn} onChange={(e) => p.onIdColumn(e.target.value)} className="input" />
+          </Field>
+          <Field label="labelColumn" mono>
+            <input value={p.labelColumn} onChange={(e) => p.onLabelColumn(e.target.value)} placeholder="optional" className="input" />
+          </Field>
+          <Field label="selfJoinColumn" mono>
+            <input value={p.selfJoinColumn} onChange={(e) => p.onSelfJoinColumn(e.target.value)} placeholder="optional" className="input" />
+          </Field>
+        </Grid2>
+      </Disclosure>
+
+      <Disclosure
+        title="SCD2 strategy"
+        summary={`${p.strategyId} · ${p.strategyVersion === "latest" ? "latest" : `v${p.strategyVersion}`}`}
+      >
+        <StrategySelect
+          strategyId={p.strategyId}
+          strategyVersion={p.strategyVersion}
+          onStrategyId={p.onStrategyId}
+          onStrategyVersion={p.onStrategyVersion}
+        />
+      </Disclosure>
+
+      <Disclosure
+        title="Sync policies"
+        summary={summary([
+          ["risk×",         p.riskMultiplier],
+          p.approvalPolicyId ? ["approval", p.approvalPolicyId] : null,
+          p.freezeWindowIds.length ? ["freezes", `${p.freezeWindowIds.length}`] : null,
+        ])}
+      >
+        <Grid2>
+          <Field label="Risk multiplier">
+            <input value={p.riskMultiplier} onChange={(e) => p.onRiskMultiplier(e.target.value)} className="input" />
+          </Field>
+          <Field label="Approval policy id">
+            <input
+              value={p.approvalPolicyId ?? ""}
+              onChange={(e) => p.onApprovalPolicyId(e.target.value.trim() === "" ? null : e.target.value)}
+              placeholder="(leave blank)"
+              className="input font-mono"
+            />
+          </Field>
+        </Grid2>
+        <div className="mt-3">
+          <FieldLabel label="Freeze windows" />
           <FreezeWindowsSelect
             selected={p.freezeWindowIds}
             onSelected={p.onFreezeWindowIds}
           />
-        </Field>
-      </Section>
-
-      <Section title="Tables (JSON array)">
-        <p className="sm:col-span-2 text-text-muted">Edit the full table array as JSON. Switch to the YAML tab above for the full body editor.</p>
-        <div className="sm:col-span-2">
-          <textarea
-            value={p.tablesJson}
-            onChange={(e) => p.onTablesJson(e.target.value)}
-            rows={12}
-            className="input font-mono text-[11px]"
-            spellCheck={false}
-          />
         </div>
-      </Section>
+      </Disclosure>
 
-      <AuditSection
-        reason={p.reason} onReason={p.onReason}
-        versionLabel={p.versionLabel} onVersionLabel={p.onVersionLabel}
-      />
+      <Disclosure
+        title="Tables (advanced JSON)"
+        summary={tablesSummary(p.tablesJson)}
+        icon={<FileCode2 className="h-3 w-3 text-text-faint" />}
+      >
+        <textarea
+          value={p.tablesJson}
+          onChange={(e) => p.onTablesJson(e.target.value)}
+          rows={10}
+          className="input font-mono text-[11px]"
+          spellCheck={false}
+        />
+      </Disclosure>
+
+      {/* ── Audit ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-3 rounded-lg border border-border-subtle bg-panel/60 p-4 sm:grid-cols-[2fr_1fr]">
+        <Field label="Reason for change">
+          <input
+            value={p.reason}
+            onChange={(e) => p.onReason(e.target.value)}
+            placeholder="e.g. add risk-tier column"
+            className="input"
+          />
+        </Field>
+        <Field label="Version label">
+          <input
+            value={p.versionLabel}
+            onChange={(e) => p.onVersionLabel(e.target.value)}
+            placeholder="optional"
+            className="input"
+          />
+        </Field>
+      </div>
     </div>
   )
 }
@@ -137,67 +194,93 @@ export interface YamlSurfaceProps {
 
 export function YamlSurface({ loading, body, onBody, reason, onReason }: YamlSurfaceProps): JSX.Element {
   return (
-    <div className="space-y-3 p-5 text-xs">
-      <div className="flex items-center justify-between">
-        <p className="text-text-muted">
-          Authoritative body for this entity. Same shape as the YAML tab of an existing entity. Server validates schema on save.
-        </p>
-        {loading && <Loader2 className="h-3 w-3 animate-spin text-text-muted" />}
-      </div>
+    <div className="flex h-full flex-col gap-3 p-6 text-xs">
+      {loading && (
+        <div className="flex items-center gap-2 text-text-muted">
+          <Loader2 className="h-3 w-3 animate-spin" /> loading…
+        </div>
+      )}
       <textarea
         value={body}
         onChange={(e) => onBody(e.target.value)}
-        rows={22}
         spellCheck={false}
         placeholder={"id: my-entity\ntenantId: _default\n..."}
-        className="input font-mono text-[11px]"
+        className="input flex-1 min-h-0 resize-none font-mono text-[11px]"
       />
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">
-          reason <span className="text-rose-400">*</span>
-        </span>
-        <input value={reason} onChange={(e) => onReason(e.target.value)} placeholder="why this change" className="input" />
-      </label>
+      <Field label="Reason for change">
+        <input value={reason} onChange={(e) => onReason(e.target.value)} placeholder="e.g. backfill schema" className="input" />
+      </Field>
     </div>
   )
 }
 
 // ── Layout primitives ─────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+function BigField({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
-    <fieldset className="rounded-lg border border-border-subtle bg-panel p-3">
-      <legend className="px-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">{title}</legend>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>
-    </fieldset>
-  )
-}
-
-function Field({ label, children, required, mono, wide }: {
-  label: string; children: React.ReactNode; required?: boolean; mono?: boolean; wide?: boolean
-}): JSX.Element {
-  return (
-    <label className={`flex flex-col gap-1 ${mono ? "font-mono" : ""} ${wide ? "sm:col-span-2" : ""}`}>
-      <span className="text-[10px] uppercase tracking-wider text-text-muted">
-        {label}{required && <span className="ml-1 text-rose-400">*</span>}
-      </span>
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-text">{label}</span>
       {children}
     </label>
   )
 }
 
-function AuditSection({ reason, onReason, versionLabel, onVersionLabel }: {
-  reason: string; onReason: (v: string) => void
-  versionLabel: string; onVersionLabel: (v: string) => void
+function Disclosure({ title, summary, defaultOpen, icon, children }: {
+  title: string; summary: string; defaultOpen?: boolean; icon?: ReactNode; children: ReactNode
+}): JSX.Element {
+  const [open, setOpen] = useState(defaultOpen ?? false)
+  return (
+    <section className="rounded-lg border border-border-subtle bg-panel">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-overlay-2/40"
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          {icon}
+          <span className="text-xs font-medium text-text">{title}</span>
+          <span className="truncate text-[11px] text-text-faint">· {summary}</span>
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="border-t border-border-subtle p-4">{children}</div>}
+    </section>
+  )
+}
+
+function Grid2({ children }: { children: ReactNode }): JSX.Element {
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
+}
+
+function FieldLabel({ label }: { label: string }): JSX.Element {
+  return (
+    <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+      {label}
+    </span>
+  )
+}
+
+function Field({ label, children, mono }: {
+  label: string; children: ReactNode; mono?: boolean
 }): JSX.Element {
   return (
-    <Section title="Audit">
-      <Field label="reason" required>
-        <input value={reason} onChange={(e) => onReason(e.target.value)} placeholder="why this change" className="input" />
-      </Field>
-      <Field label="versionLabel">
-        <input value={versionLabel} onChange={(e) => onVersionLabel(e.target.value)} placeholder="(optional, e.g. 'add risk-tier')" className="input" />
-      </Field>
-    </Section>
+    <label className={`flex flex-col gap-1 ${mono ? "font-mono" : ""}`}>
+      <FieldLabel label={label} />
+      {children}
+    </label>
   )
+}
+
+// ── Summary helpers ───────────────────────────────────────────────
+
+function summary(pairs: ([string, string] | null)[]): string {
+  const live = pairs.filter((p): p is [string, string] => p !== null && p[1] !== "")
+  return live.length === 0 ? "defaults" : live.map(([k, v]) => `${k}: ${v}`).join(" · ")
+}
+
+function tablesSummary(json: string): string {
+  try {
+    const arr = JSON.parse(json) as unknown
+    return Array.isArray(arr) ? `${arr.length} table${arr.length === 1 ? "" : "s"}` : "invalid JSON"
+  } catch { return "invalid JSON" }
 }
