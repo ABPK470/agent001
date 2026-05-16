@@ -35,6 +35,12 @@ function Section({ icon, title, rows }: { icon: React.ReactNode; title: string; 
 }
 
 export function EntityOverview({ def }: EntityOverviewProps): JSX.Element {
+  // Defensive defaults — older API responses (pre schema enrichment)
+  // may omit these arrays; treat absent as empty.
+  const tables         = def.tables         ?? []
+  const discrepancies  = def.discrepancies  ?? []
+  const freezeWindows  = def.policies.freezeWindowIds ?? []
+
   const identity: Row[] = [
     { label: "ID",           value: def.id,            mono: true },
     { label: "Tenant",       value: def.tenantId,      mono: true },
@@ -46,12 +52,12 @@ export function EntityOverview({ def }: EntityOverviewProps): JSX.Element {
     { label: "ID column",     value: def.idColumn,     mono: true },
     { label: "Label column",  value: def.labelColumn ?? "—", mono: !!def.labelColumn },
     { label: "Self-join",     value: def.selfJoinColumn ?? "—", mono: !!def.selfJoinColumn },
-    { label: "Tables",        value: `${def.tables.length} (${def.tables.filter((t) => t.verified).length} verified)` },
+    { label: "Tables",        value: `${tables.length} (${tables.filter((t) => t.verified).length} verified)` },
   ]
   const scd2AndPolicy: Row[] = [
     { label: "SCD2 strategy",    value: `${def.scd2.strategyId} · v${String(def.scd2.strategyVersion)}`, mono: true },
     { label: "Approval policy",  value: def.policies.approvalPolicyId ?? "—" },
-    { label: "Freeze windows",   value: def.policies.freezeWindowIds.join(", ") || "—" },
+    { label: "Freeze windows",   value: freezeWindows.join(", ") || "—" },
     { label: "Risk multiplier",  value: `${def.policies.riskMultiplier}×` },
   ]
   const provenance: Row[] = [
@@ -70,13 +76,13 @@ export function EntityOverview({ def }: EntityOverviewProps): JSX.Element {
       <Section icon={<Layers    className="h-3 w-3" />} title="Schema"   rows={schema} />
       <Section icon={<ShieldCheck className="h-3 w-3" />} title="SCD2 & Policies" rows={scd2AndPolicy} />
       <Section icon={<GitBranch className="h-3 w-3" />} title="Provenance" rows={provenance} />
-      {def.discrepancies.length > 0 && (
+      {discrepancies.length > 0 && (
         <section className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 xl:col-span-2">
           <div className="mb-1 text-xs font-medium uppercase tracking-wide text-amber-300">
-            Discrepancies ({def.discrepancies.length})
+            Discrepancies ({discrepancies.length})
           </div>
           <ul className="space-y-1 text-xs text-text">
-            {def.discrepancies.map((d, i) => <li key={i}>• {d}</li>)}
+            {discrepancies.map((d, i) => <li key={i}>• {d}</li>)}
           </ul>
         </section>
       )}

@@ -23,6 +23,21 @@ const OUT_PATH = resolve(ROOT, "deploy/mssql/entities/_all.yaml")
 
 // ── helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Slugify a camelCase or PascalCase identifier into kebab-case to satisfy
+ * the entity-registry id validator (`/^[a-z][a-z0-9_-]{0,63}$/`).
+ *
+ *   gateMetadata     → gate-metadata
+ *   pipelineActivity → pipeline-activity
+ *   content          → content (untouched — already lowercase)
+ */
+function toKebab(id) {
+  return id
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase()
+}
+
 /** Derive the scope kind+payload from a recipe table row. */
 function scopeFor(row, rootKeyColumn) {
   // If predicate is a simple `<col> = {id}` against the root key, it's rootPk.
@@ -73,7 +88,7 @@ function entityFor(recipeId, recipe) {
   const description = describe(recipeId, recipe)
 
   const entity = {
-    id: recipeId,
+    id: toKebab(recipeId),
     tenantId: "_default",
     displayName: recipe.displayName,
     description,
@@ -104,8 +119,7 @@ function entityFor(recipeId, recipe) {
 }
 
 /** Human-readable description for the entity. */
-function describe(id, recipe) {
-  const counts = recipe.tables.length
+function describe(id, recipe) {  const counts = recipe.tables.length
   const verified = recipe.tables.filter((t) => t.verified).length
   const pipelineRef = recipe.legacyPipelineId
     ? ` Derived from legacy MyMI pipeline ${recipe.legacyPipelineId} (${recipe.legacyEntrySproc ?? "n/a"}).`

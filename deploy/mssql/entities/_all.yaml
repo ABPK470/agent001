@@ -536,7 +536,7 @@ reverseOrder:
   - core.Pipeline
   - core.Activity
 ---
-id: gateMetadata
+id: gate-metadata
 tenantId: _default
 displayName: Gate Metadata
 description: Gate Metadata entity covering 7 tables (4 verified) rooted at gate.MetaTable. Derived from legacy MyMI pipeline 780 (core.uspSyncDataListObjectsTran).
@@ -662,7 +662,7 @@ reverseOrder:
   - gate.MetaColumn
   - gate.jsonSchema
 ---
-id: pipelineActivity
+id: pipeline-activity
 tenantId: _default
 displayName: Pipeline & Activities
 description: Pipeline & Activities entity covering 3 tables (2 verified) rooted at core.Pipeline. Derived from legacy MyMI pipeline 798 (core.uspSyncPipelineObjectsTran).

@@ -28,8 +28,8 @@ function sourceBadge(s: EntityRegistryTable["source"]): JSX.Element {
   )
 }
 
-function boolCell(v: boolean | null): JSX.Element {
-  if (v === null) return <span className="text-text-faint">—</span>
+function boolCell(v: boolean | null | undefined): JSX.Element {
+  if (v == null) return <span className="text-text-faint">—</span>
   return v
     ? <Check className="h-3 w-3 text-emerald-400" />
     : <X     className="h-3 w-3 text-text-faint" />
@@ -51,6 +51,7 @@ function scopeCell(t: EntityRegistryTable): JSX.Element {
 }
 
 export function EntityTables({ def }: EntityTablesProps): JSX.Element {
+  const tables = def.tables ?? []
   return (
     <div className="overflow-x-auto rounded-lg border border-border-subtle bg-panel">
       <table className="w-full text-xs">
@@ -73,7 +74,7 @@ export function EntityTables({ def }: EntityTablesProps): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {def.tables.map((t, i) => (
+          {tables.map((t, i) => (
             <tr
               key={i}
               className="border-b border-border-subtle/60 last:border-0 hover:bg-overlay-2"
@@ -95,7 +96,7 @@ export function EntityTables({ def }: EntityTablesProps): JSX.Element {
           ))}
         </tbody>
       </table>
-      {def.tables.some((t) => t.note) && (
+      {tables.some((t) => t.note) && (
         <div className="border-t border-border-subtle px-3 py-2 text-[11px] text-text-muted">
           Rows with hover-tooltips have introspection notes attached.
         </div>

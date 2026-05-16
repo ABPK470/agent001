@@ -11,6 +11,7 @@ import { AuditTrail } from "./AuditTrail"
 import { DebugInspector } from "./DebugInspector"
 import { EntityRegistry } from "./EntityRegistry"
 import { EnvSync } from "./EnvSync"
+import { FreezeWindowRegistry } from "./FreezeWindowRegistry"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
 import { OperationLog } from "./OperationLog"
@@ -18,6 +19,7 @@ import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
+import { StrategyRegistry } from "./StrategyRegistry"
 import { SyncAdmin } from "./SyncAdmin"
 import { SyncApprovals } from "./SyncApprovals"
 import { SyncEvidence } from "./SyncEvidence"
@@ -42,6 +44,8 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "env-sync": EnvSync,
   "operation-log": OperationLog,
   "entity-registry": EntityRegistry,
+  "scd2-strategies": StrategyRegistry,
+  "freeze-windows":  FreezeWindowRegistry,
   "sync-proposals": SyncProposals,
   "sync-approvals": SyncApprovals,
   "sync-evidence":  SyncEvidence,

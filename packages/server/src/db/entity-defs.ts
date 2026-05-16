@@ -30,6 +30,7 @@
 import {
     bundledStrategyById,
     diffEntityDefinitions,
+    listFreezeWindows,
     validateEntityDefinition,
     validateScd2Strategy,
     type EntityDefinition,
@@ -39,6 +40,117 @@ import {
 import { getDb } from "./connection.js"
 
 const DEFAULT_TENANT_ID = "_default"
+
+/**
+ * Forward-compatible normalizer.
+ *
+ * When the EntityDefinition schema is enriched (e.g. adding the
+ * `discrepancies` / `reverseOrder` / `legacyEntrySproc` fields or
+ * per-table introspection fields), older rows that were written to
+ * `entity_def_versions` before the migration are missing those keys.
+ * Returning the raw JSON would surface as runtime `undefined.length`
+ * crashes in any consumer that treats the new fields as required.
+ *
+ * This normalizer applies *additive*, non-destructive defaults at the
+ * read boundary so the in-memory shape always matches the current
+ * TypeScript types. It does NOT rewrite stored rows — the next save of
+ * an entity will persist the canonical shape naturally.
+ */
+function normalizeEntityDefinition(raw: EntityDefinition): EntityDefinition {
+  const r = raw as Partial<EntityDefinition> & EntityDefinition
+  return {
+    ...r,
+    tables:           (r.tables ?? []).map(normalizeEntityTable),
+    legacyEntrySproc: r.legacyEntrySproc ?? null,
+    reverseOrder:     r.reverseOrder ?? [],
+    discrepancies:    r.discrepancies ?? [],
+  }
+}
+
+function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefinition["tables"][number] {
+  const x = t as Partial<EntityDefinition["tables"][number]> & EntityDefinition["tables"][number]
+  return {
+    ...x,
+    scopeColumn:        x.scopeColumn        ?? null,
+    source:             x.source             ?? null,
+    groundedByPipeline: x.groundedByPipeline ?? null,
+    enabledByDefault:   x.enabledByDefault   ?? null,
+    userControllable:   x.userControllable   ?? null,
+  }
+}
+
+// ── Cross-reference validation ──────────────────────────────────────
+//
+// Structural validation (`validateEntityDefinition`) cannot reach into
+// the strategy / freeze-window stores. This validator runs *after*
+// structural pass to guarantee that every id the entity references
+// actually resolves at save time, so admins get an immediate error
+// instead of a silent runtime warn-and-fallback.
+//
+// - scd2.strategyId + scd2.strategyVersion → resolveScd2Strategy
+//                                            (tenant → _default → bundled)
+// - policies.freezeWindowIds[]            → in-process registry (which
+//                                            mirrors freeze_windows DB)
+// - policies.approvalPolicyId             → not validated; the underlying
+//                                            approval_policies table is
+//                                            keyed by (env, risk_tier),
+//                                            not by id, so this field is
+//                                            reserved for a future
+//                                            approval_policy_sets table.
+//                                            Null is the only sensible
+//                                            value today.
+function validateEntityReferences(tenantId: string, def: EntityDefinition): ValidationResult {
+  const errors: ValidationResult["errors"]   = []
+  const warnings: ValidationResult["warnings"] = []
+
+  // strategy resolution
+  const strategy = resolveScd2Strategy(tenantId, def.scd2.strategyId, def.scd2.strategyVersion)
+  if (!strategy) {
+    errors.push({
+      path:    "scd2.strategyId",
+      code:    "scd2_strategy_unknown",
+      message: `SCD2 strategy "${def.scd2.strategyId}" v${def.scd2.strategyVersion} does not resolve for tenant "${tenantId}". Pick one from GET /api/entity-registry/strategies, or create a custom strategy first.`,
+    })
+  }
+
+  // freeze windows: every referenced id must be in the in-process
+  // registry (which mirrors the freeze_windows DB table for _default).
+  if (def.policies.freezeWindowIds.length > 0) {
+    const reg = listFreezeWindowIdsForGate()
+    for (const fwId of def.policies.freezeWindowIds) {
+      if (!reg.has(fwId)) {
+        errors.push({
+          path:    "policies.freezeWindowIds",
+          code:    "freeze_window_unknown",
+          message: `freeze window "${fwId}" is not defined. Create it via GET/POST /api/sync/freeze-windows first.`,
+        })
+      }
+    }
+  }
+
+  // approvalPolicyId — schema gap: the approval_policies table is keyed
+  // by (target_env, risk_tier), so a single string id has no row to
+  // match. Today we accept null; non-null values pass with a warning so
+  // operator intent isn't lost while the policy-set table lands.
+  if (def.policies.approvalPolicyId !== null) {
+    warnings.push({
+      path:    "policies.approvalPolicyId",
+      code:    "approval_policy_unresolved",
+      message: `approvalPolicyId "${def.policies.approvalPolicyId}" is preserved verbatim; the approval gate currently resolves policy by (target_env, risk_tier) at sync time, not by this id.`,
+    })
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+/**
+ * Tenant-agnostic gate over the agent's in-process freeze-window
+ * registry. Bound at call time (not module-load) so test setups that
+ * swap `installFreezeWindowRegistry` between cases see the latest set.
+ */
+function listFreezeWindowIdsForGate(): Set<string> {
+  return new Set(listFreezeWindows().map((w) => w.id))
+}
 
 // ── Entity definitions ──────────────────────────────────────────────
 
@@ -98,6 +210,12 @@ export function saveEntityDefinition(args: {
   const tenantId = args.tenantId ?? args.def.tenantId ?? DEFAULT_TENANT_ID
   const validation = validateEntityDefinition({ ...args.def, tenantId, version: 1 })
   if (!validation.ok) throw new EntityRegistryValidationError(validation)
+
+  // Cross-reference validation: every id the entity points at must
+  // actually resolve. Structural validators above can't do this — they
+  // don't have access to the strategy / freeze-window stores.
+  const xref = validateEntityReferences(tenantId, args.def)
+  if (!xref.ok) throw new EntityRegistryValidationError(xref)
 
   const db = getDb()
 
@@ -183,7 +301,7 @@ export function readEntityVersionBody(
     )
     .get(tenantId, id, version) as { body_json: string } | undefined
   if (!row) return null
-  return JSON.parse(row.body_json) as EntityDefinition
+  return normalizeEntityDefinition(JSON.parse(row.body_json) as EntityDefinition)
 }
 
 /**

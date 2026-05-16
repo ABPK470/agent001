@@ -478,6 +478,50 @@ export const api = {
       `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
     )
   },
+  saveEntityRegistryStrategy: (
+    strategy: import("./types").EntityRegistryStrategy,
+    reason: string,
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ tenantId: string; id: string; version: number }>(
+      `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
+      { method: "POST", body: JSON.stringify({ strategy, reason }) },
+    )
+  },
+
+  // ── Freeze windows (governance) ──────────────────────────────
+  listFreezeWindows: (opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").FreezeWindowListResponse>(
+      `/api/sync/freeze-windows${qs ? `?${qs}` : ""}`,
+    )
+  },
+  upsertFreezeWindow: (
+    body: import("./types").FreezeWindowSaveRequest,
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").FreezeWindow>(
+      `/api/sync/freeze-windows${qs ? `?${qs}` : ""}`,
+      { method: "POST", body: JSON.stringify(body) },
+    )
+  },
+  deleteFreezeWindow: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ ok: true }>(
+      `/api/sync/freeze-windows/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+      { method: "DELETE" },
+    )
+  },
 
   // ── F1 — Reconciliation proposer ─────────────────────────────
   listProposerRuns:  (opts?: { tenant?: string; limit?: number }) => {

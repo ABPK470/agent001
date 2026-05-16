@@ -53,7 +53,7 @@ function resolveTenant(req: FastifyRequest): string {
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {
     db.saveAudit({
-      run_id:    "entity-registry",
+      run_id:    "__admin__",
       actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),

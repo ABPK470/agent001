@@ -53,7 +53,7 @@ export function EntityList({ items, selectedId, onSelect }: EntityListProps): JS
                 )}
               </div>
               <span className="text-text-muted">
-                <span className="font-mono">{it.id}</span> · v{it.version} · {it.tables.length} tbl
+                <span className="font-mono">{it.id}</span> · v{it.version} · {(it.tables ?? []).length} tbl
               </span>
               <span className="text-[10px] font-mono text-text-faint truncate w-full">{it.rootTable}</span>
             </button>

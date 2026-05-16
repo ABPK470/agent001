@@ -357,6 +357,7 @@ export type ValidationErrorCode =
   | "scope_sql_unsafe"
   | "scd2_strategy_unknown"
   | "scd2_strategy_version_unknown"
+  | "freeze_window_unknown"
   | "lineage_object_invalid"
   | "version_not_positive"
 

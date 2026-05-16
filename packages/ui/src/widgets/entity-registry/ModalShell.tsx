@@ -7,8 +7,7 @@
  */
 
 import { X } from "lucide-react"
-import type { JSX } from "react"
-import type { ReactNode } from "react"
+import type { JSX, ReactNode } from "react"
 import { useEffect } from "react"
 import { createPortal } from "react-dom"
 

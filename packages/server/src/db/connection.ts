@@ -763,6 +763,28 @@ export function _migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_notification_log_status
       ON notification_log(status, created_at DESC);
 
+    -- ── Freeze windows (per tenant; referenced from EntityPolicies.freezeWindowIds[]) ──
+    -- Composite PK = (tenant_id, id). Times are ISO-8601 UTC.
+    -- Evaluator semantics are [starts_at, ends_at) — start inclusive,
+    -- end exclusive. Mirror is pushed into the agent's in-process
+    -- registry by refreshFreezeWindowRegistry() at boot and on
+    -- every upsert/delete.
+    CREATE TABLE IF NOT EXISTS freeze_windows (
+      tenant_id    TEXT NOT NULL,
+      id           TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description  TEXT NOT NULL DEFAULT '',
+      starts_at    TEXT NOT NULL,
+      ends_at      TEXT NOT NULL,
+      created_by   TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (tenant_id, id),
+      CHECK (datetime(ends_at) > datetime(starts_at))
+    );
+    CREATE INDEX IF NOT EXISTS idx_freeze_windows_tenant_starts
+      ON freeze_windows(tenant_id, starts_at);
+
     -- ── Proposer schedule (per env-pair) ────────────────────────
     CREATE TABLE IF NOT EXISTS proposer_schedule (
       tenant_id     TEXT NOT NULL,
@@ -777,6 +799,37 @@ export function _migrate(db: Database.Database): void {
       PRIMARY KEY (tenant_id, source, target)
     );
   `)
+
+  // ── Sentinel "__admin__" run row ───────────────────────────────
+  // The `audit_log` table FKs `run_id → runs(id) ON DELETE CASCADE`.
+  // Admin-only routes (policies, sync-environments, entity-registry, …)
+  // are not tied to an actual agent run and use the literal "__admin__"
+  // as their audit `run_id`. Without a matching row in `runs` every
+  // such audit write fails the FK constraint and only emits a
+  // console.warn. Insert the sentinel once at boot so admin actions
+  // are actually persisted to audit_log.
+  //
+  // `runs` further FKs `upn → users` and `session_id → sessions`, both
+  // NOT NULL, so we also need a system user + session. All sentinels
+  // share the literal id `__system__` / `__admin__` and are idempotent.
+  db.prepare(`
+    INSERT OR IGNORE INTO users (upn, username, display_name, is_admin, source)
+    VALUES ('__system__', '__system__', 'System', 1, 'local')
+  `).run()
+  db.prepare(`
+    INSERT OR IGNORE INTO sessions (sid, upn) VALUES ('__system__', '__system__')
+  `).run()
+  db.prepare(`
+    INSERT OR IGNORE INTO runs (
+      id, goal, status, answer, step_count, error,
+      parent_run_id, agent_id, session_id, upn, display_name,
+      created_at, completed_at
+    ) VALUES (
+      '__admin__', 'platform admin actions', 'completed', NULL, 0, NULL,
+      NULL, NULL, '__system__', '__system__', 'System',
+      datetime('now'), datetime('now')
+    )
+  `).run()
 
   // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
   // Idempotent: only inserts strategies that don't already exist. We

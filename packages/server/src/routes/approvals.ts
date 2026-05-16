@@ -17,9 +17,9 @@
  * updates without polling.
  */
 
+import type { RiskTier } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import type { RiskTier } from "@mia/agent"
 import * as db from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
 

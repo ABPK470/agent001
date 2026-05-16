@@ -321,6 +321,8 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "env-sync": { w: 12, h: 14, minW: 4, minH: 4 },
   "operation-log": { w: 8, h: 12, minW: 4, minH: 4 },
   "entity-registry": { w: 12, h: 14, minW: 6, minH: 6 },
+  "scd2-strategies": { w: 12, h: 14, minW: 6, minH: 6 },
+  "freeze-windows":  { w: 10, h: 12, minW: 4, minH: 4 },
   "sync-proposals": { w: 12, h: 14, minW: 6, minH: 6 },
   "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
   "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },

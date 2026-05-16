@@ -182,7 +182,7 @@ export function EntityRegistry(): JSX.Element {
                           : "border-transparent text-text-muted hover:text-text",
                       ].join(" ")}
                     >
-                      {t === "tables" ? `Tables (${selected.tables.length})` : t[0]!.toUpperCase() + t.slice(1)}
+                      {t === "tables" ? `Tables (${(selected.tables ?? []).length})` : t[0]!.toUpperCase() + t.slice(1)}
                     </button>
                   ))}
                 </nav>

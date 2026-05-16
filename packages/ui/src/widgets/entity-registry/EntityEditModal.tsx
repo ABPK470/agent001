@@ -1,93 +1,150 @@
 /**
- * EntityEditModal — admin-only New/Edit form for an EntityDefinition.
+ * EntityEditModal — admin-only New/Edit for an EntityDefinition.
  *
- * Modes:
- *  - "new":  empty starting state, id field editable
- *  - "edit": pre-populated from an existing definition, id locked
+ * Two equivalent authoring surfaces, switchable via the in-modal tab:
  *
- * Covers the core identity fields + SCD2 strategy ref + policies +
- * YAML editor for the tables array (full structural authoring of the
- * tables list is heavy enough that a YAML pane is the cleanest UX
- * for now; later we can layer a per-table form on top).
+ *   ┌─ Form ──┬─ YAML body ──┐
  *
- * Every save requires a `reason` string. The server stamps the version,
- * `createdBy`, and `createdAt`.
+ *  - Form:  structured fields, posts via `saveEntityRegistry`.
+ *  - YAML:  full document editor, posts via `importEntityRegistryYaml`.
+ *
+ * Edit mode + YAML tab: body is lazy-loaded from
+ * `getEntityRegistryYaml(id)` the first time the operator switches.
+ * New mode + YAML tab: seeded from a minimal template.
+ *
+ * Both paths require a `reason` for the audit trail; server stamps
+ * version / createdBy / createdAt.
  */
 
-import { AlertTriangle, Loader2, Save } from "lucide-react"
+import { AlertTriangle, FileCode2, FormInput, Loader2, Save } from "lucide-react"
 import type { JSX } from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
 import type { EntityRegistryDefinition } from "../../types"
+import { FormSurface, YamlSurface } from "./EntityEditSurfaces"
 import { ModalShell } from "./ModalShell"
 
 export interface EntityEditModalProps {
-  mode: "new" | "edit"
+  mode:    "new" | "edit"
   initial: EntityRegistryDefinition | null
   onClose: () => void
   onSaved: (id: string, version: number) => void
 }
 
+type AuthoringMode = "form" | "yaml"
+
+const ID_RE = /^[a-z][a-z0-9_-]{0,63}$/
+
+const NEW_ENTITY_YAML_TEMPLATE = `# Required fields. See the YAML tab of an existing entity for a full example.
+id: my-entity
+tenantId: _default
+displayName: My Entity
+description: ""
+rootTable: schema.MyTable
+idColumn: myEntityId
+scd2:
+  strategyId: mymi-scd2
+  strategyVersion: latest
+tables: []
+policies:
+  approvalPolicyId: null
+  freezeWindowIds: []
+  riskMultiplier: 1
+provenance:
+  kind: manual
+`
+
 function emptyDef(): EntityRegistryDefinition {
   return {
-    id:             "",
-    tenantId:       "_default",
-    displayName:    "",
-    description:    "",
-    rootTable:      "",
-    idColumn:       "",
-    labelColumn:    null,
-    selfJoinColumn: null,
-    tables:         [],
-    policies:       { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1.0 },
-    scd2:           { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
-    lineageRefs:    [],
-    provenance:     { kind: "manual" },
+    id:               "",
+    tenantId:         "_default",
+    displayName:      "",
+    description:      "",
+    rootTable:        "",
+    idColumn:         "",
+    labelColumn:      null,
+    selfJoinColumn:   null,
+    tables:           [],
+    policies:         { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1.0 },
+    scd2:             { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
+    lineageRefs:      [],
+    provenance:       { kind: "manual" },
     legacyEntrySproc: null,
-    reverseOrder:   [],
-    discrepancies:  [],
-    version:        0,
-    versionLabel:   null,
-    createdBy:      "",
-    reason:         "",
-    createdAt:      "",
-    retiredAt:      null,
+    reverseOrder:     [],
+    discrepancies:    [],
+    version:          0,
+    versionLabel:     null,
+    createdBy:        "",
+    reason:           "",
+    createdAt:        "",
+    retiredAt:        null,
   }
 }
 
 export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditModalProps): JSX.Element {
   const seed = useMemo<EntityRegistryDefinition>(() => initial ?? emptyDef(), [initial])
 
-  const [id,            setId]            = useState(seed.id)
-  const [displayName,   setDisplayName]   = useState(seed.displayName)
-  const [description,   setDescription]   = useState(seed.description)
-  const [rootTable,     setRootTable]     = useState(seed.rootTable)
-  const [idColumn,      setIdColumn]      = useState(seed.idColumn)
-  const [labelColumn,   setLabelColumn]   = useState(seed.labelColumn ?? "")
-  const [selfJoinColumn,setSelfJoinColumn]= useState(seed.selfJoinColumn ?? "")
-  const [strategyId,    setStrategyId]    = useState(seed.scd2.strategyId)
-  const [riskMultiplier,setRiskMultiplier]= useState(String(seed.policies.riskMultiplier))
-  const [tablesJson,    setTablesJson]    = useState(JSON.stringify(seed.tables, null, 2))
-  const [reason,        setReason]        = useState("")
-  const [versionLabel,  setVersionLabel]  = useState("")
-  const [busy,          setBusy]          = useState(false)
-  const [err,           setErr]           = useState<string | null>(null)
+  const [authoring,    setAuthoring]    = useState<AuthoringMode>("form")
+  const [reason,       setReason]       = useState("")
+  const [versionLabel, setVersionLabel] = useState("")
+  const [busy,         setBusy]         = useState(false)
+  const [err,          setErr]          = useState<string | null>(null)
+
+  // Form-mode field state.
+  const [id,             setId]             = useState(seed.id)
+  const [displayName,    setDisplayName]    = useState(seed.displayName)
+  const [description,    setDescription]    = useState(seed.description)
+  const [rootTable,      setRootTable]      = useState(seed.rootTable)
+  const [idColumn,       setIdColumn]       = useState(seed.idColumn)
+  const [labelColumn,    setLabelColumn]    = useState(seed.labelColumn ?? "")
+  const [selfJoinColumn, setSelfJoinColumn] = useState(seed.selfJoinColumn ?? "")
+  const [strategyId,     setStrategyId]     = useState(seed.scd2.strategyId)
+  const [strategyVersion, setStrategyVersion] = useState<number | "latest">(seed.scd2.strategyVersion ?? "latest")
+  const [approvalPolicyId, setApprovalPolicyId] = useState<string | null>(seed.policies.approvalPolicyId ?? null)
+  const [freezeWindowIds, setFreezeWindowIds]   = useState<readonly string[]>(seed.policies.freezeWindowIds ?? [])
+  const [riskMultiplier, setRiskMultiplier] = useState(String(seed.policies.riskMultiplier))
+  const [tablesJson,     setTablesJson]     = useState(JSON.stringify(seed.tables, null, 2))
+
+  // YAML-mode body state. Lazy-loaded for edit mode on first tab switch.
+  const [yamlBody,    setYamlBody]    = useState<string>(mode === "new" ? NEW_ENTITY_YAML_TEMPLATE : "")
+  const [yamlLoading, setYamlLoading] = useState(false)
+
+  useEffect(() => {
+    if (authoring !== "yaml" || mode !== "edit" || yamlBody) return
+    setYamlLoading(true)
+    void api.getEntityRegistryYaml(seed.id)
+      .then((y) => setYamlBody(y))
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setYamlLoading(false))
+  }, [authoring, mode, seed.id, yamlBody])
 
   async function doSave() {
     setErr(null)
-    if (!id.trim()        || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(id)) return setErr("id: lower-snake-case, 1–64 chars, must start with a letter")
-    if (!displayName.trim()) return setErr("displayName is required")
-    if (!rootTable.trim())   return setErr("rootTable is required (schema-qualified, e.g. core.Contract)")
-    if (!idColumn.trim())    return setErr("idColumn is required")
-    if (!reason.trim())      return setErr("reason is required (saved with the audit trail)")
+    if (!reason.trim()) return setErr("reason is required (saved with the audit trail)")
+    setBusy(true)
+    try {
+      if (authoring === "yaml") await saveViaYaml()
+      else                      await saveViaForm()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveViaForm() {
+    if (!ID_RE.test(id))     throw new Error(`id: must match ${ID_RE} (kebab-case, lowercase)`)
+    if (!displayName.trim()) throw new Error("displayName is required")
+    if (!rootTable.trim())   throw new Error("rootTable is required (e.g. core.Contract)")
+    if (!idColumn.trim())    throw new Error("idColumn is required")
 
     let tables: EntityRegistryDefinition["tables"]
     try { tables = JSON.parse(tablesJson) }
-    catch (e) { return setErr(`tables JSON parse error: ${(e as Error).message}`) }
-    if (!Array.isArray(tables)) return setErr("tables must be a JSON array")
+    catch (e) { throw new Error(`tables JSON parse error: ${(e as Error).message}`) }
+    if (!Array.isArray(tables)) throw new Error("tables must be a JSON array")
 
     const riskNum = Number(riskMultiplier)
-    if (!Number.isFinite(riskNum) || riskNum <= 0) return setErr("riskMultiplier must be a positive number")
+    if (!Number.isFinite(riskNum) || riskNum <= 0) throw new Error("riskMultiplier must be a positive number")
 
     const def: EntityRegistryDefinition = {
       ...seed,
@@ -99,20 +156,34 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
       labelColumn:    labelColumn.trim()    || null,
       selfJoinColumn: selfJoinColumn.trim() || null,
       tables,
-      policies: { ...seed.policies, riskMultiplier: riskNum },
-      scd2:     { ...seed.scd2, strategyId },
+      policies: {
+        ...seed.policies,
+        approvalPolicyId,
+        freezeWindowIds: [...freezeWindowIds],
+        riskMultiplier:  riskNum,
+      },
+      scd2: { ...seed.scd2, strategyId, strategyVersion },
     }
+    const r = await api.saveEntityRegistry(def, reason, versionLabel.trim() ? { versionLabel } : undefined)
+    onSaved(r.id, r.version)
+    onClose()
+  }
 
-    setBusy(true)
-    try {
-      const r = await api.saveEntityRegistry(def, reason, versionLabel.trim() ? { versionLabel } : undefined)
-      onSaved(r.id, r.version)
-      onClose()
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
+  async function saveViaYaml() {
+    if (!yamlBody.trim()) throw new Error("YAML body is empty")
+    const r = await api.importEntityRegistryYaml(yamlBody, reason)
+    if (!r.ok || r.errors.length > 0) {
+      const first = r.errors[0]
+      throw new Error(
+        first
+          ? `${first.id ?? "(parse)"}: ${typeof first.error === "string" ? first.error : JSON.stringify(first.error.errors)}`
+          : "import failed",
+      )
     }
+    const saved = r.saved[0]
+    if (!saved) throw new Error("import returned no saved entity")
+    onSaved(saved.id, saved.version)
+    onClose()
   }
 
   return (
@@ -138,7 +209,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
             <button
               type="button"
               onClick={() => void doSave()}
-              disabled={busy}
+              disabled={busy || (authoring === "yaml" && yamlLoading)}
               className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
@@ -148,81 +219,60 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
         </>
       }
     >
-      <div className="space-y-4 p-5 text-xs">
-        <Section title="Identity">
-          <Field label="id" required mono>
-            <input
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              disabled={mode === "edit"}
-              placeholder="my-entity"
-              className="input"
-            />
-          </Field>
-          <Field label="displayName" required>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input" />
-          </Field>
-          <Field label="description">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="input font-sans" />
-          </Field>
-        </Section>
+      <ModeToggle value={authoring} onChange={setAuthoring} />
 
-        <Section title="Schema">
-          <Field label="rootTable" required mono><input value={rootTable} onChange={(e) => setRootTable(e.target.value)} placeholder="core.Contract" className="input" /></Field>
-          <Field label="idColumn" required mono><input value={idColumn} onChange={(e) => setIdColumn(e.target.value)} placeholder="contractId" className="input" /></Field>
-          <Field label="labelColumn" mono><input value={labelColumn} onChange={(e) => setLabelColumn(e.target.value)} placeholder="name" className="input" /></Field>
-          <Field label="selfJoinColumn" mono><input value={selfJoinColumn} onChange={(e) => setSelfJoinColumn(e.target.value)} placeholder="(optional)" className="input" /></Field>
-        </Section>
-
-        <Section title="SCD2 & Policies">
-          <Field label="scd2.strategyId" mono><input value={strategyId} onChange={(e) => setStrategyId(e.target.value)} className="input" /></Field>
-          <Field label="riskMultiplier"><input value={riskMultiplier} onChange={(e) => setRiskMultiplier(e.target.value)} className="input" /></Field>
-        </Section>
-
-        <Section title="Tables (JSON array)">
-          <p className="text-text-muted">Edit the full table array as JSON. The server validates schema on save.</p>
-          <textarea
-            value={tablesJson}
-            onChange={(e) => setTablesJson(e.target.value)}
-            rows={14}
-            className="input font-mono text-[11px]"
-            spellCheck={false}
-          />
-        </Section>
-
-        <Section title="Audit">
-          <Field label="reason" required>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="why this change" className="input" />
-          </Field>
-          <Field label="versionLabel">
-            <input value={versionLabel} onChange={(e) => setVersionLabel(e.target.value)} placeholder="(optional, e.g. 'add risk-tier')" className="input" />
-          </Field>
-        </Section>
-      </div>
+      {authoring === "form" ? (
+        <FormSurface
+          mode={mode}
+          id={id}                         onId={setId}
+          displayName={displayName}       onDisplayName={setDisplayName}
+          description={description}       onDescription={setDescription}
+          rootTable={rootTable}           onRootTable={setRootTable}
+          idColumn={idColumn}             onIdColumn={setIdColumn}
+          labelColumn={labelColumn}       onLabelColumn={setLabelColumn}
+          selfJoinColumn={selfJoinColumn} onSelfJoinColumn={setSelfJoinColumn}
+          strategyId={strategyId}         onStrategyId={setStrategyId}
+          strategyVersion={strategyVersion} onStrategyVersion={setStrategyVersion}
+          approvalPolicyId={approvalPolicyId} onApprovalPolicyId={setApprovalPolicyId}
+          freezeWindowIds={freezeWindowIds}   onFreezeWindowIds={setFreezeWindowIds}
+          riskMultiplier={riskMultiplier} onRiskMultiplier={setRiskMultiplier}
+          tablesJson={tablesJson}         onTablesJson={setTablesJson}
+          reason={reason}                 onReason={setReason}
+          versionLabel={versionLabel}     onVersionLabel={setVersionLabel}
+        />
+      ) : (
+        <YamlSurface
+          loading={yamlLoading}
+          body={yamlBody}
+          onBody={setYamlBody}
+          reason={reason}
+          onReason={setReason}
+        />
+      )}
     </ModalShell>
   )
 }
 
-// ── Layout primitives ────────────────────────────────────────────
+// ── Mode toggle ────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="rounded-lg border border-border-subtle bg-panel p-3">
-      <legend className="px-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">{title}</legend>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>
-    </fieldset>
+function ModeToggle({ value, onChange }: { value: AuthoringMode; onChange: (m: AuthoringMode) => void }): JSX.Element {
+  const item = (m: AuthoringMode, label: string, Icon: typeof FormInput) => (
+    <button
+      key={m}
+      type="button"
+      onClick={() => onChange(m)}
+      className={[
+        "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+        value === m ? "border-accent text-text" : "border-transparent text-text-muted hover:text-text",
+      ].join(" ")}
+    >
+      <Icon className="h-3 w-3" /> {label}
+    </button>
   )
-}
-
-function Field({ label, children, required, mono }: {
-  label: string; children: React.ReactNode; required?: boolean; mono?: boolean
-}) {
   return (
-    <label className={`flex flex-col gap-1 ${mono ? "font-mono" : ""} ${label === "description" || label === "Tables (JSON array)" ? "sm:col-span-2" : ""}`}>
-      <span className="text-[10px] uppercase tracking-wider text-text-muted">
-        {label}{required && <span className="ml-1 text-rose-400">*</span>}
-      </span>
-      {children}
-    </label>
+    <nav className="flex items-center gap-0.5 border-b border-border-subtle bg-panel px-4">
+      {item("form", "Form",      FormInput)}
+      {item("yaml", "YAML body", FileCode2)}
+    </nav>
   )
 }

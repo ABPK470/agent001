@@ -34,6 +34,8 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "env-sync": "Sync",
   "operation-log": "Pipelines",
   "entity-registry": "Entity Registry",
+  "scd2-strategies": "SCD2 Strategies",
+  "freeze-windows":  "Freeze Windows",
   "sync-proposals": "Sync Proposals",
   "sync-approvals": "Sync Approvals",
   "sync-evidence":  "Sync Evidence",

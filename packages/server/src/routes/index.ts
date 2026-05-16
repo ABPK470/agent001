@@ -21,6 +21,7 @@ export { registerWebhookRoutes } from "./webhooks.js"
 // F1 — Reconciliation proposer + approvals + evidence + metrics + notification routes
 export { registerApprovalRoutes } from "./approvals.js"
 export { registerEvidenceRoutes, type EvidenceRoutesDeps } from "./evidence.js"
+export { registerFreezeWindowRoutes } from "./freeze-windows.js"
 export { registerMetricsRoutes } from "./metrics.js"
 export { registerNotificationRouteRoutes } from "./notification-routes.js"
 export { registerProposerRoutes, type ProposerRouteDeps } from "./proposer.js"

@@ -87,3 +87,10 @@ export {
     type ApprovalPolicy, type ApprovalRow, type ConsumedToken, type IssuedToken
 } from "./approvals.js"
 
+// Freeze windows (governance — referenced from EntityPolicies.freezeWindowIds[])
+export {
+    deleteFreezeWindow, FreezeWindowValidationError, getFreezeWindow,
+    listFreezeWindowsForTenant, refreshFreezeWindowRegistry, upsertFreezeWindow,
+    type FreezeWindowRecord, type UpsertFreezeWindowArgs
+} from "./freeze-windows.js"
+

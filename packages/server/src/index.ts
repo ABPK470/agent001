@@ -87,6 +87,7 @@ import {
     registerEntityRegistryRoutes,
     registerEventRoutes,
     registerEvidenceRoutes,
+    registerFreezeWindowRoutes,
     registerLayoutRoutes,
     registerLlmRoutes,
     registerMemoryRoutes,
@@ -155,6 +156,14 @@ async function main() {
   // recipe wins over the bundled JSON; on miss, the orchestrator falls
   // back to the bundle automatically.
   installRegistryRecipeResolver()
+  // Push persisted freeze windows into the agent's in-process registry
+  // so the sync gate evaluates against the current set. Subsequent
+  // CRUD calls re-publish automatically via db/freeze-windows.ts.
+  try {
+    (await import("./db/freeze-windows.js")).refreshFreezeWindowRegistry()
+  } catch (e) {
+    console.warn("[freeze-windows] initial registry install failed:", e instanceof Error ? e.message : e)
+  }
   // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
   // `_default` tenant on first boot (idempotent — files that already
   // exist as registry rows are skipped).
@@ -633,6 +642,7 @@ async function buildApp(opts: AppOpts) {
   // F1 — reconciliation proposer + approvals + evidence + metrics + notification routes
   registerProposerRoutes(app, { getLlm: () => llmPortHolder.current })
   registerApprovalRoutes(app)
+  registerFreezeWindowRoutes(app)
   registerEvidenceRoutes(app, { storageRoot: evidenceStorageRoot, signer: evidenceSigner })
   registerMetricsRoutes(app)
   registerNotificationRouteRoutes(app)

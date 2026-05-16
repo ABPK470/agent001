@@ -329,6 +329,8 @@ export type WidgetType =
   | "env-sync"
   | "operation-log"
   | "entity-registry"
+  | "scd2-strategies"
+  | "freeze-windows"
   | "sync-proposals"
   | "sync-approvals"
   | "sync-evidence"
@@ -715,6 +717,40 @@ export interface EntityRegistryYamlImportResponse {
   skipped: Array<{ id: string; reason: string }>
   errors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
   dryRun: boolean
+}
+
+// ── Freeze windows (governance) ─────────────────────────────────
+
+/**
+ * Tenant-scoped scheduled blackout window. Entities reference these by
+ * id via `EntityRegistryPolicies.freezeWindowIds[]`. Evaluator semantics
+ * are `[startsAt, endsAt)` (start inclusive, end exclusive, ISO-8601).
+ */
+export interface FreezeWindow {
+  tenantId:    string
+  id:          string
+  displayName: string
+  description: string
+  /** ISO-8601 inclusive start. */
+  startsAt:    string
+  /** ISO-8601 exclusive end. */
+  endsAt:      string
+  createdBy:   string
+  createdAt:   string
+  updatedAt:   string
+}
+
+export interface FreezeWindowSaveRequest {
+  id:          string
+  displayName: string
+  description: string
+  startsAt:    string
+  endsAt:      string
+}
+
+export interface FreezeWindowListResponse {
+  tenantId: string
+  items:    FreezeWindow[]
 }
 
 // ── Agent Definitions ────────────────────────────────────────────
