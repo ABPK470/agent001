@@ -64,6 +64,13 @@ export const EventType = {
   ApiRequest: "api.request",
   LogDetail: "log.detail",
   EventsConnected: "events.connected",
+  // Periodic dashboard refresh signal — emitted by a single global server
+  // timer (NOT once per client). Lightweight payload-free tick used by
+  // SSE-driven dashboards (e.g. ActiveUsers) to refresh aggregates whose
+  // freshness depends on session liveness (last_seen_at) rather than on
+  // run/agent/tool lifecycle events. Replaces the per-tab 5s polling that
+  // used to keep "Last seen" current.
+  SessionPresenceTick: "session.presence.tick",
 
   // Delegation (engine-side)
   DelegationStarted: "delegation.started",

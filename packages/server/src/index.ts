@@ -712,6 +712,22 @@ async function buildApp(opts: AppOpts) {
     },
   )
 
+  // ── Presence tick ────────────────────────────────────────────────
+  // A single global timer that fans out one tiny SSE frame to every
+  // connected dashboard every 30 s. SSE-driven widgets (e.g. ActiveUsers)
+  // listen on `session.*` and re-fetch their aggregates on tick — this
+  // is what keeps the "Last seen" / online indicator fresh now that
+  // per-request `touchSession()` polling and the heartbeat endpoint are
+  // gone. One event per 30 s for the whole server, not per tab.
+  const presenceTickHandle = setInterval(() => {
+    try {
+      broadcast({ type: EventType.SessionPresenceTick, data: {} })
+    } catch { /* observability only */ }
+  }, 30_000)
+  // Don't keep the event loop alive solely for this timer.
+  if (typeof presenceTickHandle.unref === "function") presenceTickHandle.unref()
+  app.addHook("onClose", async () => { clearInterval(presenceTickHandle) })
+
   return app
 }
 
