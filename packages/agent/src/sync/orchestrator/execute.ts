@@ -11,7 +11,6 @@
  * @module
  */
 
-import sqlMod from "mssql"
 import { EventType } from "../../domain/enums/event.js"
 import { SyncOperationType, SyncProgressKind } from "../../domain/enums/sync.js"
 import { SyncRunStatus } from "../../domain/index.js"
@@ -24,6 +23,7 @@ import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
 import { getSyncRunSink } from "../sync-run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
+import { runAuditCheckDirect, setContractLockDirect } from "./contract-deploy.js"
 import { DRIFT_ABORT_PCT } from "./db-helpers.js"
 import { revalidatePlanDrift } from "./drift.js"
 import { runContractPipeline } from "./execute-pipeline.js"
@@ -163,8 +163,6 @@ async function executeSyncInner(
   const entityId = plan.entity.id
   const entityType = plan.recipeSnapshot.entityType
   const isContract = entityType === "contract"
-  const tgtEnv = getEnvironment(plan.target)
-  const linkedService = tgtEnv?.linkedServiceName ?? "ABI - SYNC"
 
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
 
@@ -174,24 +172,18 @@ async function executeSyncInner(
     emit(EventType.SyncExecuteStep, { planId, step: name })
   }
 
-  // Pre-tx contract setup helper (audit-check / dependencies / lock).
-  // These three sprocs run before tx.begin() so a sproc-level failure
+  // Pre-tx contract setup helper (audit-check / lock).
+  // These sprocs run before tx.begin() so a sproc-level failure
   // doesn't poison the metadata-sync transaction.
-  async function preTxContractSproc(sprocName: string, params: Record<string, unknown>, stepName: string): Promise<void> {
+  async function preTxContractStep(stepName: string, fn: () => Promise<void>): Promise<void> {
     try {
-      const req = tgtPool.request()
-      for (const [k, v] of Object.entries(params)) {
-        if (typeof v === "number") req.input(k, sqlMod.Int, v)
-        else if (typeof v === "boolean") req.input(k, sqlMod.Bit, v)
-        else req.input(k, sqlMod.NVarChar(4000), v == null ? null : String(v))
-      }
-      await req.execute(sprocName)
+      await fn()
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
-      console.warn(`[sync.execute] ${stepName} (${sprocName}) failed:`, e)
-      stepWarnings.push({ step: stepName, sproc: sprocName, error: errMsg })
-      onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} (${sprocName}) failed`, error: errMsg })
-      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: sprocName, error: errMsg })
+      console.warn(`[sync.execute] ${stepName} failed:`, e)
+      stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
+      onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} failed`, error: errMsg })
+      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
     }
   }
 
@@ -202,22 +194,20 @@ async function executeSyncInner(
 
     // ── Step 1: Audit pre-check ──
     stepEmit("audit-check", "Pre-sync audit check")
-    await preTxContractSproc("core.uspAuditRunCheck", {
-      action: "syncOrNot", objType: entityType === "contract" ? "Contract" : entityType, id: entityId,
-    }, "audit-check")
+    await preTxContractStep("audit-check", async () => {
+      await runAuditCheckDirect(tgtPool, {
+        action: "syncOrNot",
+        objType: entityType === "contract" ? "Contract" : entityType,
+        id: entityId,
+      }, plan.target)
+    })
 
-    // ── Step 2: Handle dependencies — contract only ──
-    if (isContract) {
-      stepEmit("dependencies", "Checking dependencies")
-      await preTxContractSproc("core.uspObjectDependencies", {
-        id: entityId, objectName: entityType,
-      }, "dependencies")
-    }
-
-    // ── Step 3: Lock entity for sync ──
+    // ── Step 2: Lock entity for sync ──
     stepEmit("lock", `Locking ${entityType}`)
     if (isContract) {
-      await preTxContractSproc("core.uspSetContractLock", { contractId: entityId, isLocked: true }, "lock")
+      await preTxContractStep("lock", async () => {
+        await setContractLockDirect(tgtPool, Number(entityId), true, plan.target)
+      })
     }
 
     // Pre-flight: batch-probe target triggers BEFORE tx.begin() so the
@@ -229,17 +219,17 @@ async function executeSyncInner(
     })
     const triggerCache = await probeTriggers(tgtPool, planId, plan.target, upsertTables)
 
-    // ── Step 5: Sync metadata in transaction ──
+    // ── Step 4: Sync metadata in transaction ──
     stepEmit("sync-metadata", "Syncing metadata rows")
     const { applied: appliedTotals } = await runMetadataSync({
       plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool,
     })
     stepEmit("sync-metadata-done", "Metadata sync committed")
 
-    // ── Steps 6-24: Post-tx contract pipeline ──
+    // ── Steps 5-23: Post-tx contract pipeline ──
     const { stepWarnings: pipelineWarnings } = await runContractPipeline({
       tgtPool, srcPool, plan, planId, isContract,
-      entityId, entityType, linkedService, onProgress,
+      entityId, entityType, onProgress,
     })
     stepWarnings.push(...pipelineWarnings)
 
@@ -272,7 +262,7 @@ async function executeSyncInner(
     // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
     // helper already rolled back the tx and re-enabled FKs on failure.
     if (isContract) {
-      try { await tgtPool.request().input("contractId", sqlMod.Int, entityId).input("isLocked", sqlMod.Bit, false).execute("core.uspSetContractLock") }
+      try { await setContractLockDirect(tgtPool, Number(entityId), false, plan.target) }
       catch { /* best-effort */ }
     }
 

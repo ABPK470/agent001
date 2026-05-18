@@ -8,6 +8,7 @@
       "color": "blue",
       "role": "both",
       "linkedServiceName": "ABI - SYNC",
+      "agentServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5010/agent",
       "ringOrder": 0,
       "syncAllowlist": []
     },
@@ -17,6 +18,7 @@
       "color": "teal",
       "role": "both",
       "linkedServiceName": "ABI - SYNC",
+      "agentServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5010/agent",
       "ringOrder": 1,
       "syncAllowlist": []
     },
@@ -26,6 +28,7 @@
       "color": "indigo",
       "role": "target",
       "linkedServiceName": "ABI - SYNC",
+      "agentServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5010/agent",
       "ringOrder": 2,
       "syncAllowlist": []
     }
