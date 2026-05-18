@@ -541,6 +541,13 @@ async function buildApp(opts: AppOpts) {
       done()
       return
     }
+    // Heartbeat fires every 30 s from every open tab — logging it
+    // floods the console and writing it to api_requests would grow the
+    // table without bound for zero observability value. Skip entirely.
+    if (req.url === "/api/auth/heartbeat") {
+      done()
+      return
+    }
     const duration = Date.now() - ((req as any)._startTime ?? Date.now())
     const entry = {
       method: req.method,

@@ -20,6 +20,23 @@ export function clearTransactionalData(): void {
 
 // ── Data lifecycle / pruning ─────────────────────────────────────
 
+/**
+ * Prune transient observability rows (api_requests, notifications,
+ * event_log) to keep the SQLite file from growing without bound.
+ *
+ * **Runs are NEVER pruned implicitly.** They represent user work
+ * (goals + their trace, audit, attachments) and are the durable record
+ * a user expects to find when they log back in. Deleting a run also
+ * cascade-deletes its audit_log / checkpoints / logs / token_usage /
+ * trace_entries / effects / file_snapshots / attachment_imports /
+ * notifications rows, which is too destructive to do on a schedule.
+ *
+ * To prune runs the caller must explicitly pass `keepRuns` (admin-only
+ * `POST /api/db/prune`); omitting it leaves every run in place. The
+ * total-reset endpoint `DELETE /api/data` (admin-only) is the only
+ * supported "wipe everything" path and goes through
+ * `clearTransactionalData()`.
+ */
 export function pruneOldData(opts?: {
   keepRuns?: number
   keepApiRequests?: number
@@ -27,26 +44,30 @@ export function pruneOldData(opts?: {
   keepEvents?: number
 }): { prunedRuns: number; prunedApiRequests: number; prunedNotifications: number; prunedEvents: number; vacuumed: boolean } {
   const db = getDb()
-  const keepRuns = opts?.keepRuns ?? 500
+  // keepRuns defaults to `undefined` → no run pruning. Operators that
+  // really want a cap must opt in via the admin endpoint.
+  const keepRuns = opts?.keepRuns
   const keepApiRequests = opts?.keepApiRequests ?? 10_000
   const keepNotifications = opts?.keepNotifications ?? 1000
   const keepEvents = opts?.keepEvents ?? 50_000
 
-  const runsToPrune = db.prepare(`
-    SELECT id FROM runs
-    WHERE status IN ('completed', 'failed', 'cancelled')
-    ORDER BY created_at DESC
-    LIMIT -1 OFFSET ?
-  `).all(keepRuns) as { id: string }[]
-
   let prunedRuns = 0
-  if (runsToPrune.length > 0) {
-    const ids = runsToPrune.map((r) => r.id)
-    const placeholders = ids.map(() => "?").join(",")
-    // ON DELETE CASCADE on every run-owned child handles the cleanup;
-    // a single DELETE replaces the previous eight per-table DELETEs.
-    db.prepare(`DELETE FROM runs WHERE id IN (${placeholders})`).run(...ids)
-    prunedRuns = ids.length
+  if (typeof keepRuns === "number" && keepRuns >= 0) {
+    const runsToPrune = db.prepare(`
+      SELECT id FROM runs
+      WHERE status IN ('completed', 'failed', 'cancelled')
+      ORDER BY created_at DESC
+      LIMIT -1 OFFSET ?
+    `).all(keepRuns) as { id: string }[]
+
+    if (runsToPrune.length > 0) {
+      const ids = runsToPrune.map((r) => r.id)
+      const placeholders = ids.map(() => "?").join(",")
+      // ON DELETE CASCADE on every run-owned child handles the cleanup;
+      // a single DELETE replaces the previous eight per-table DELETEs.
+      db.prepare(`DELETE FROM runs WHERE id IN (${placeholders})`).run(...ids)
+      prunedRuns = ids.length
+    }
   }
 
   const apiResult = db.prepare(`

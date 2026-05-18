@@ -69,6 +69,208 @@ const SEED_VERSION = SCHEMA_VERSION
 //      historical `__admin__` rows and remove sentinel bootstrap rows.
 const HARD_RESET_THRESHOLD = 19
 
+function tableSessionFkIsCascade(db: Database.Database, table: string): boolean {
+  // PRAGMA foreign_key_list(table) returns one row per FK with `table`,
+  // `from` column, `on_delete` action. Return true iff the row for
+  // session_id -> sessions still says CASCADE (the old, buggy default).
+  const rows = db.prepare(`PRAGMA foreign_key_list("${table}")`).all() as Array<{
+    table: string; from: string; on_delete: string
+  }>
+  return rows.some((r) => r.table === "sessions" && r.from === "session_id" && r.on_delete === "CASCADE")
+}
+
+/**
+ * v23: change every `session_id` FK from `ON DELETE CASCADE` to
+ * `ON DELETE SET NULL` so that `DELETE FROM sessions` (i.e. a normal
+ * user logout) no longer cascade-deletes the user's runs, attachments,
+ * notifications, and memories. Logout is supposed to be idempotent at
+ * the user-data layer: the session row goes, the audit trail and chat
+ * history stay.
+ *
+ * Also drops the `NOT NULL` on `runs.session_id`. After a session row
+ * is deleted, the FK now nulls the field — keeping NOT NULL would make
+ * the cascade fail or force re-introducing the bug.
+ *
+ * Idempotent — only rewrites tables whose foreign_key_list still says
+ * CASCADE on the session FK.
+ */
+export function migrateSessionFkSetNull(db: Database.Database): void {
+  const ddl: Record<string, string> = {
+    runs: `
+      CREATE TABLE runs__v23 (
+        id             TEXT PRIMARY KEY,
+        goal           TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending','planning','running','waiting_for_approval','completed','failed','cancelled')),
+        answer         TEXT,
+        step_count     INTEGER NOT NULL DEFAULT 0,
+        error          TEXT,
+        parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
+        agent_id       TEXT REFERENCES agent_definitions(id) ON DELETE SET NULL,
+        session_id     TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+        upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
+        display_name   TEXT NOT NULL,
+        created_at     TEXT NOT NULL,
+        completed_at   TEXT
+      );
+    `,
+    attachments: `
+      CREATE TABLE attachments__v23 (
+        id              TEXT PRIMARY KEY,
+        scope           TEXT NOT NULL
+          CHECK (scope IN ('run','session','workspace_asset')),
+        run_id          TEXT REFERENCES runs(id)     ON DELETE SET NULL,
+        session_id      TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+        owner_upn       TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
+        original_name   TEXT NOT NULL,
+        normalized_name TEXT NOT NULL,
+        media_type      TEXT NOT NULL,
+        size_bytes      INTEGER NOT NULL,
+        content_hash    TEXT NOT NULL,
+        storage_uri     TEXT NOT NULL,
+        text_extract_uri TEXT,
+        ingestion_mode  TEXT NOT NULL
+          CHECK (ingestion_mode IN ('text_inline','text_retrieval','binary_reference','provider_file_api')),
+        status          TEXT NOT NULL DEFAULT 'uploaded'
+          CHECK (status IN ('uploaded','processed','rejected','deleted')),
+        source          TEXT NOT NULL DEFAULT 'user_upload'
+          CHECK (source IN ('user_upload','generated','promoted')),
+        purpose_tag     TEXT,
+        goal_snapshot   TEXT,
+        uploaded_at     TEXT NOT NULL,
+        processed_at    TEXT,
+        retention_until TEXT
+      );
+    `,
+    notifications: `
+      CREATE TABLE notifications__v23 (
+        id         TEXT PRIMARY KEY,
+        type       TEXT NOT NULL,
+        title      TEXT NOT NULL,
+        message    TEXT NOT NULL,
+        run_id     TEXT REFERENCES runs(id)     ON DELETE CASCADE,
+        step_id    TEXT,
+        owner_upn  TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
+        session_id TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+        actions    TEXT NOT NULL DEFAULT '[]',
+        read       INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `,
+    memory_entries: `
+      CREATE TABLE memory_entries__v23 (
+        id           TEXT PRIMARY KEY,
+        tier         TEXT NOT NULL CHECK (tier IN ('working', 'episodic', 'semantic')),
+        role         TEXT NOT NULL DEFAULT 'assistant'
+          CHECK (role IN ('user','assistant','tool','system','summary')),
+        content      TEXT NOT NULL,
+        metadata     TEXT NOT NULL DEFAULT '{}',
+        source       TEXT NOT NULL DEFAULT 'agent'
+          CHECK (source IN ('system','tool','user','agent','external')),
+        confidence   REAL NOT NULL DEFAULT 0.5,
+        salience     REAL NOT NULL DEFAULT 0.5,
+        access_count INTEGER NOT NULL DEFAULT 0,
+        session_id   TEXT REFERENCES sessions(sid)      ON DELETE SET NULL,
+        run_id       TEXT REFERENCES runs(id)           ON DELETE SET NULL,
+        parent_id    TEXT REFERENCES memory_entries(id) ON DELETE SET NULL,
+        upn          TEXT,
+        shared       INTEGER NOT NULL DEFAULT 0,
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL
+      );
+    `,
+    procedural_memories: `
+      CREATE TABLE procedural_memories__v23 (
+        id            TEXT PRIMARY KEY,
+        trigger       TEXT NOT NULL,
+        tool_sequence TEXT NOT NULL,
+        success_count INTEGER NOT NULL DEFAULT 1,
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        run_id        TEXT REFERENCES runs(id)      ON DELETE SET NULL,
+        session_id    TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+        upn           TEXT,
+        shared        INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT NOT NULL,
+        updated_at    TEXT NOT NULL
+      );
+    `,
+  }
+  // Indexes to recreate per table after the rebuild (table-rebuild drops
+  // them along with the original table).
+  const indexes: Record<string, string[]> = {
+    runs: [
+      `CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, created_at DESC);`,
+      `CREATE INDEX IF NOT EXISTS idx_runs_upn     ON runs(upn, created_at DESC);`,
+      `CREATE INDEX IF NOT EXISTS idx_runs_parent  ON runs(parent_run_id);`,
+    ],
+    attachments: [
+      `CREATE INDEX IF NOT EXISTS idx_attachments_run     ON attachments(run_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_attachments_session ON attachments(session_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_attachments_owner   ON attachments(owner_upn);`,
+      `CREATE INDEX IF NOT EXISTS idx_attachments_hash    ON attachments(content_hash);`,
+    ],
+    notifications: [
+      `CREATE INDEX IF NOT EXISTS idx_notifications_read     ON notifications(read, created_at DESC);`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_owner    ON notifications(owner_upn, created_at DESC);`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_session  ON notifications(session_id, created_at DESC);`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);`,
+    ],
+    memory_entries: [
+      `CREATE INDEX IF NOT EXISTS idx_me_tier    ON memory_entries(tier);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_session ON memory_entries(session_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_run     ON memory_entries(run_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_upn     ON memory_entries(upn);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_shared  ON memory_entries(shared);`,
+    ],
+    procedural_memories: [
+      `CREATE INDEX IF NOT EXISTS idx_proc_upn     ON procedural_memories(upn);`,
+      `CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_proc_shared  ON procedural_memories(shared);`,
+    ],
+  }
+
+  const tableExists = (name: string): boolean =>
+    !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name)
+
+  const work: string[] = []
+  for (const table of Object.keys(ddl)) {
+    if (!tableExists(table)) continue
+    if (tableSessionFkIsCascade(db, table)) work.push(table)
+  }
+  if (work.length === 0) return
+
+  db.pragma("foreign_keys = OFF")
+  const tx = db.transaction(() => {
+    for (const table of work) {
+      db.exec(ddl[table]!)
+      // Copy all rows by column list — the new table has the same
+      // columns in the same order so SELECT * INTO is unambiguous. We
+      // also copy the rowid so any external indices (e.g. memory's FTS5
+      // shadow tables that reference memory_entries by rowid) stay valid.
+      const cols = (db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>)
+        .map((c) => `"${c.name}"`)
+        .join(", ")
+      db.exec(`INSERT INTO "${table}__v23" (rowid, ${cols}) SELECT rowid, ${cols} FROM "${table}";`)
+      db.exec(`DROP TABLE "${table}";`)
+      db.exec(`ALTER TABLE "${table}__v23" RENAME TO "${table}";`)
+      for (const idx of indexes[table] ?? []) db.exec(idx)
+    }
+  })
+  tx()
+  db.pragma("foreign_keys = ON")
+  // Sanity check — the new FK graph must still be internally consistent.
+  // Throw loud rather than silently leaving the DB in a broken state.
+  const violations = db.pragma("foreign_key_check") as Array<{ table: string; rowid: number; parent: string }>
+  if (violations.length > 0) {
+    throw new Error(
+      `migrateSessionFkSetNull: foreign_key_check found ${violations.length} violations after rebuild: ${
+        JSON.stringify(violations.slice(0, 5))
+      }`,
+    )
+  }
+}
+
 function migrateAuditLogScopes(db: Database.Database): void {
   const columns = db.prepare("PRAGMA table_info(audit_log)").all() as Array<{ name: string; notnull: number }>
   if (columns.length === 0) return
@@ -237,10 +439,13 @@ export function _migrate(db: Database.Database): void {
       updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    -- ── runs: every run is tied to a session (hard FK) ───────────
-    -- parent_run_id and agent_id use SET NULL so deleting a parent run
-    -- or agent definition leaves the child row intact for audit.
-    -- The legacy 'data' column has been dropped (was never read).
+    -- ── runs: every run is owned by a user (hard FK on upn). ─────
+    -- session_id is captured for traceability but uses SET NULL on
+    -- delete: logout (DELETE FROM sessions) must NOT cascade-wipe
+    -- the user's chat history. parent_run_id and agent_id likewise
+    -- SET NULL so deleting a parent run or agent definition leaves
+    -- the child row intact for audit. The legacy 'data' column has
+    -- been dropped (was never read).
     CREATE TABLE IF NOT EXISTS runs (
       id             TEXT PRIMARY KEY,
       goal           TEXT NOT NULL,
@@ -251,7 +456,7 @@ export function _migrate(db: Database.Database): void {
       error          TEXT,
       parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
       agent_id       TEXT REFERENCES agent_definitions(id) ON DELETE SET NULL,
-      session_id     TEXT NOT NULL REFERENCES sessions(sid) ON DELETE CASCADE,
+      session_id     TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       display_name   TEXT NOT NULL,
       created_at     TEXT NOT NULL,
@@ -396,14 +601,15 @@ export function _migrate(db: Database.Database): void {
 
     -- ── Attachments ──────────────────────────────────────────────
     -- session_id and run_id are nullable to support 'workspace_asset'
-    -- scope (cross-session / cross-run org assets), but FKs cascade
-    -- when the parent session or run is deleted.
+    -- scope (cross-session / cross-run org assets). Both FKs SET NULL
+    -- on parent delete so logout never wipes the user's uploads — the
+    -- user (owner_upn) is the durable owner.
     CREATE TABLE IF NOT EXISTS attachments (
       id              TEXT PRIMARY KEY,
       scope           TEXT NOT NULL
         CHECK (scope IN ('run','session','workspace_asset')),
       run_id          TEXT REFERENCES runs(id)     ON DELETE SET NULL,
-      session_id      TEXT REFERENCES sessions(sid) ON DELETE CASCADE,
+      session_id      TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       owner_upn       TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       original_name   TEXT NOT NULL,
       normalized_name TEXT NOT NULL,
@@ -856,6 +1062,16 @@ export function _migrate(db: Database.Database): void {
   // shape away on boot so admin audit stops polluting the run namespace.
   migrateAuditLogScopes(db)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_scope ON audit_log(scope_type, scope_id, timestamp DESC);`)
+
+  // v23: switch every session_id FK from CASCADE to SET NULL so that
+  // logging out (DELETE FROM sessions) does not cascade-wipe the user's
+  // runs/attachments/memories/notifications. Idempotent — a no-op once
+  // the tables are already on the new schema. Memory + notification
+  // tables are created lazily by their own modules; the migration only
+  // touches whichever of the five target tables already exist here, and
+  // each module's own init also calls migrateSessionFkSetNull so a fresh
+  // boot fixes them in any order.
+  migrateSessionFkSetNull(db)
 
   // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
   // Idempotent: only inserts strategies that don't already exist. We

@@ -120,7 +120,13 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
   if (sid) {
     const row = getSessionWithUser(sid)
     if (row) {
-      try { touchSession(sid) } catch { /* observability only; never fail the request */ }
+      // NOTE: we intentionally do NOT call touchSession() here. Doing
+      // so on every request would bump last_seen_at from background
+      // polls / SSE keepalives in tabs the user is not looking at —
+      // making every open tab register as "online" forever. Liveness is
+      // now driven by an explicit foreground heartbeat from the SPA
+      // (POST /api/auth/heartbeat), which only fires when the tab is
+      // actually visible to the user.
       return {
         sid:         row.sid,
         upn:         row.upn,
@@ -215,6 +221,24 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
       }
     }
     clearSessionCookie(reply)
+    return { ok: true }
+  })
+
+  // POST /api/auth/heartbeat — explicit "this tab is in the foreground
+  // and the user is present" ping. The SPA sends this on mount, every
+  // 30s, and on visibilitychange→visible (see ui/src/main.tsx). It is
+  // the ONLY thing that bumps last_seen_at, which the Active Users
+  // widget reads as the liveness signal. Background tabs / hidden
+  // windows do not send heartbeats and therefore correctly drop out of
+  // the "online" count after the 60s threshold.
+  app.post("/api/auth/heartbeat", async (req, reply) => {
+    if (!req.session?.sid) {
+      reply.code(401)
+      return { error: "not logged in" }
+    }
+    try { touchSession(req.session.sid) } catch (err) {
+      req.log.warn({ err, sid: req.session.sid }, "touchSession failed")
+    }
     return { ok: true }
   })
 }

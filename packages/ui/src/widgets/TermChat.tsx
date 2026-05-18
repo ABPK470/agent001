@@ -15,6 +15,7 @@ import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
+import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -1102,20 +1103,22 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
       {expanded && (hasInput || hasOutput) && (
         <div className="ml-[14px] mt-1 pl-3 space-y-2">
           {hasInput && row.argsFormatted && (
-            extractedInput ? (
-              <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
-            ) : (
-              <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
-            )
+            <div className="rounded-md border border-border-subtle overflow-hidden">
+              {extractedInput ? (
+                <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
+              ) : (
+                <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
+              )}
+            </div>
           )}
           {hasOutput && row.details && (
-            extractedOutput ? (
-              <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
-            ) : (
-              <div className={isError ? "border-l border-error/50 pl-3" : ""}>
+            <div className={`rounded-md border overflow-hidden ${isError ? "border-error/40 bg-error-soft/30" : "border-border-subtle bg-overlay-1"}`}>
+              {extractedOutput ? (
+                <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
+              ) : (
                 <ScrollMaskedDetails text={row.details} maxHeight={176} />
-              </div>
-            )
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1505,7 +1508,7 @@ function WorkspaceDiffCard({ runId }: { runId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-overlay-1 overflow-hidden">
+    <div className="rounded-xl border border-border-subtle overflow-hidden">
       <button
         type="button"
         className="flex items-center gap-2 w-full px-3 py-2 text-left"
@@ -1810,7 +1813,7 @@ function TermChatInputBar({
   isRunning: boolean
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   sending: boolean
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  textareaRef: React.Ref<HTMLTextAreaElement>
   attachments: PendingAttachment[]
   onChange: (value: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
@@ -1822,52 +1825,60 @@ function TermChatInputBar({
 }) {
   const attachDisabled = isRunning || !!pendingInput
   return (
-    <div className={`${className} mx-auto bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}>
-      <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onAttach}
-          disabled={attachDisabled}
-          title="Attach file"
-          aria-label="Attach file"
-          className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
-        >
-          <Paperclip size={16} />
-        </button>
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
-          rows={1}
-          disabled={isRunning || !!pendingInput}
-          className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
-        />
-        {isRunning ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
-            title="Cancel"
-          >
-            <Square size={16} fill="currentColor" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={(!input.trim() && attachments.length === 0) || sending}
-            className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-            title="Send"
-          >
-            <Send size={16} />
-          </button>
-        )}
+      <div
+          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}
+      >
+          <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+          <div className="flex items-center gap-2">
+              <button
+                  type="button"
+                  onClick={onAttach}
+                  disabled={attachDisabled}
+                  title="Attach file"
+                  aria-label="Attach file"
+                  className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+              >
+                  <Paperclip size={16} />
+              </button>
+              <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => onChange(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder={
+                      pendingInput
+                          ? "Respond in the prompt above ↑"
+                          : "Enter your goal or question here..."
+                  }
+                  rows={1}
+                  disabled={isRunning || !!pendingInput}
+                  className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
+              />
+              {isRunning ? (
+                  <button
+                      type="button"
+                      onClick={onCancel}
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
+                      title="Cancel"
+                  >
+                      <Square size={16} fill="currentColor" />
+                  </button>
+              ) : (
+                  <button
+                      type="button"
+                      onClick={onSend}
+                      disabled={
+                          (!input.trim() && attachments.length === 0) || sending
+                      }
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
+                      title="Send"
+                  >
+                      <Send size={16} />
+                  </button>
+              )}
+          </div>
       </div>
-    </div>
-  )
+  );
 }
 
 // ── Main widget ───────────────────────────────────────────────────
@@ -1879,6 +1890,8 @@ export function TermChat() {
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+
+  const { me } = useMe()
 
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
@@ -1893,10 +1906,33 @@ export function TermChat() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const transcriptInnerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const shouldStickToBottomRef = useRef(true)
   const previousActiveRunIdRef = useRef<string | null>(null)
+
+  // Reset the textarea to its intrinsic 1-row height when empty and to
+  // its content's scrollHeight when not. Called both from the callback
+  // ref (so a freshly-mounted textarea — e.g. when the empty-state ↔
+  // chat-state JSX swap toggles which copy of the input bar is in the
+  // tree — gets sized correctly on its very first paint) AND from the
+  // input-change layout effect below (so it grows/shrinks as the user
+  // types). Skipping the scrollHeight write when value is empty matters
+  // because otherwise we'd lock in whatever scrollHeight the browser
+  // reports for an empty textarea (varies by font load + layout context),
+  // which is the root cause of the "input box is huge until F5" bug.
+  const autosizeTextarea = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = "auto"
+    if (el.value.length > 0) {
+      el.style.height = `${el.scrollHeight}px`
+    }
+  }, [])
+
+  const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el
+    autosizeTextarea(el)
+  }, [autosizeTextarea])
 
   // Load agents
   useEffect(() => {
@@ -1933,13 +1969,11 @@ export function TermChat() {
     return () => observer.disconnect()
   }, [])
 
-  // Auto-grow textarea
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
-  }, [input])
+  // Auto-grow textarea as the user types. Uses useLayoutEffect so the
+  // height is committed before the browser paints — no visible jump.
+  useLayoutEffect(() => {
+    autosizeTextarea(textareaRef.current)
+  }, [input, autosizeTextarea])
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
@@ -2129,13 +2163,13 @@ export function TermChat() {
         >
           {showEmptyState && (
             <div className="flex flex-col items-center justify-center min-h-[58vh] px-6 text-center">
-              <div className="w-full max-w-[860px] space-y-10">
-                <div className="space-y-1.5">
+              <div className="w-full max-w-[860px] space-y-8">
+                <div className="space-y-2">
                   <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
-                    What can I help you with today?
+                    What are you working on?
                   </p>
-                  <p className="text-[13px] leading-5 text-text-faint max-w-[620px] mx-auto">
-                    Ask for business data, metadata analysis, reports, or synchronization between our environments.
+                  <p className="text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto">
+                    Query business data, inspect metadata or run environment synchronization.
                   </p>
                 </div>
                 <TermChatInputBar
@@ -2143,7 +2177,7 @@ export function TermChat() {
                   isRunning={isRunning}
                   pendingInput={pendingInput}
                   sending={sending}
-                  textareaRef={textareaRef}
+                  textareaRef={setTextareaRef}
                   attachments={pendingAttachments}
                   onChange={setInput}
                   onKeyDown={onKey}
@@ -2154,7 +2188,7 @@ export function TermChat() {
                   className="w-full max-w-[860px]"
                 />
                 {attachError && (
-                  <p className="-mt-6 text-[12px] text-error text-center">{attachError}</p>
+                  <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
                 )}
               </div>
             </div>
@@ -2162,14 +2196,29 @@ export function TermChat() {
 
           {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className="space-y-6">
-              {/* User goal */}
+              {/* User goal — with optional attribution for admin-view runs */}
               <div className="flex justify-end py-8">
-                <div
-                  className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
-                  style={{ boxShadow: "var(--shadow-bubble)" }}
-                >
-                  {run.goal}
-                </div>
+                {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
+                      {run.displayName ?? run.upn}
+                    </span>
+                    <div
+                      className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                      style={{ boxShadow: "var(--shadow-bubble)" }}
+                    >
+                      {run.goal}
+                    </div>
+                  </div>
+                )}
+                {(!run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()) && (
+                  <div
+                    className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                    style={{ boxShadow: "var(--shadow-bubble)" }}
+                  >
+                    {run.goal}
+                  </div>
+                )}
               </div>
 
               {/* Agent response */}
@@ -2196,7 +2245,7 @@ export function TermChat() {
             isRunning={isRunning}
             pendingInput={pendingInput}
             sending={sending}
-            textareaRef={textareaRef}
+            textareaRef={setTextareaRef}
             attachments={pendingAttachments}
             onChange={setInput}
             onKeyDown={onKey}

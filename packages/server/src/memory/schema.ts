@@ -1,4 +1,5 @@
 import { getDb } from "../db/index.js"
+import { migrateSessionFkSetNull } from "../db/connection.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Schema migration ─────────────────────────────────────────────
@@ -19,7 +20,7 @@ export function migrateMemory(): void {
       confidence   REAL NOT NULL DEFAULT 0.5,
       salience     REAL NOT NULL DEFAULT 0.5,
       access_count INTEGER NOT NULL DEFAULT 0,
-      session_id   TEXT REFERENCES sessions(sid)      ON DELETE CASCADE,
+      session_id   TEXT REFERENCES sessions(sid)      ON DELETE SET NULL,
       run_id       TEXT REFERENCES runs(id)           ON DELETE SET NULL,
       parent_id    TEXT REFERENCES memory_entries(id) ON DELETE SET NULL,
       upn          TEXT,
@@ -42,7 +43,7 @@ export function migrateMemory(): void {
       success_count INTEGER NOT NULL DEFAULT 1,
       failure_count INTEGER NOT NULL DEFAULT 0,
       run_id        TEXT REFERENCES runs(id)      ON DELETE SET NULL,
-      session_id    TEXT REFERENCES sessions(sid) ON DELETE CASCADE,
+      session_id    TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       upn           TEXT,
       shared        INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL,
@@ -68,6 +69,14 @@ export function migrateMemory(): void {
     CREATE INDEX IF NOT EXISTS idx_mv_upn    ON memory_vectors(upn);
     CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
   `)
+
+  // v23: pre-existing DBs may still have `ON DELETE CASCADE` on
+  // memory_entries.session_id / procedural_memories.session_id, which
+  // would make user logout cascade-wipe their memories. Rewrite to
+  // SET NULL before the FTS triggers below get attached so the
+  // table-rebuild does not orphan the FTS5 shadow rows. No-op once
+  // the tables are already on the new schema.
+  migrateSessionFkSetNull(db)
 
   // FTS5 for memory_entries — create then integrity-check and rebuild if corrupt.
   try {

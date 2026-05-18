@@ -2,7 +2,7 @@
  * Notification persistence.
  */
 
-import { getDb } from "./connection.js"
+import { getDb, migrateSessionFkSetNull } from "./connection.js"
 
 export interface DbNotification {
   id: string
@@ -21,7 +21,8 @@ export interface DbNotification {
 }
 
 export function migrateNotifications(): void {
-  getDb().exec(`
+  const db = getDb()
+  db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (
       id         TEXT PRIMARY KEY,
       type       TEXT NOT NULL,
@@ -30,7 +31,7 @@ export function migrateNotifications(): void {
       run_id     TEXT REFERENCES runs(id)     ON DELETE CASCADE,
       step_id    TEXT,
       owner_upn  TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
-      session_id TEXT REFERENCES sessions(sid) ON DELETE CASCADE,
+      session_id TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       actions    TEXT NOT NULL DEFAULT '[]',
       read       INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
@@ -40,6 +41,9 @@ export function migrateNotifications(): void {
     CREATE INDEX IF NOT EXISTS idx_notifications_session  ON notifications(session_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);
   `)
+  // Existing DBs may still have ON DELETE CASCADE on session_id from
+  // pre-v23 — rewrite if so. No-op when already on the new schema.
+  migrateSessionFkSetNull(db)
 }
 
 export function saveNotification(n: DbNotification): void {
