@@ -1,5 +1,5 @@
 import type { Message, Tool } from "@mia/agent"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MessageRole } from "@mia/agent"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MIA_DATA_PERSONA_SECTION, MessageRole } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
@@ -44,6 +44,19 @@ export async function buildSystemMessages(opts: {
     content: `${basePrompt}\n${envBlock}`,
     section: "system_anchor",
   })
+
+  // Section 1a: MIA data persona — HARD RULES on column verification /
+  // read-only / aggregate naming, MyMI SME context, banker/controller
+  // anchors, data tool hierarchy, insight discipline, monetary number
+  // formatting. ~5 KB. Injected only when the goal looks DB / warehouse /
+  // sync / chart-shaped; generic engineering tasks skip it entirely.
+  if (decision.includeDataPersona) {
+    systemMessages.push({
+      role: MessageRole.System,
+      content: MIA_DATA_PERSONA_SECTION,
+      section: "system_anchor",
+    })
+  }
 
   // Section 1b: ABI sync SME — injected ONLY when the goal is sync-related.
   // Keeping this out of the default system prompt saves 3-5K tokens per call

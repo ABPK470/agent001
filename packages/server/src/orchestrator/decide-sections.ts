@@ -44,6 +44,14 @@ export interface SectionDecision {
   /** Append the memory-XML-tag guidance trailer. Only useful when a tier is present. */
   includeMemoryGuidance: boolean
   /**
+   * Inject the MIA data persona block (HARD RULES on column verification,
+   * MyMI SME context, banker/controller anchors, data tool hierarchy,
+   * insight discipline, monetary formatting). Fires whenever the goal is
+   * DB-shaped, chart-shaped, or sync-shaped. Generic engineering / coding
+   * tasks skip it — they get the generic operating manual only.
+   */
+  includeDataPersona:    boolean
+  /**
    * Optional debug payload. Additive — kept here so tests and the run
    * trace can assert on / log *why* a gate fired. Not consumed by the
    * prompt assembler.
@@ -152,6 +160,7 @@ export function decideSections(opts: {
     includeBigTableEtl:    isDbLike,
     includeChartCatalogue: isVisual,
     includeMemoryGuidance: hasMemory,
+    includeDataPersona:    isDbLike || isVisual || db.sync,
     dbScore:               db.score,
     triggers: {
       operational: db.operational,

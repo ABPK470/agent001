@@ -126,3 +126,15 @@ export const ABI_SYNC_SECTION = loadPrompt("abi-sync.md")
  * "hi" / non-DB requests don't pay its ~2 KB cost.
  */
 export const BIG_TABLE_ETL_SECTION = loadPrompt("big-table-etl.md")
+
+/**
+ * MIA data-persona block — HARD RULES on column verification / read-only /
+ * aggregate-name discipline, MyMI SME context, banker / controller anchors,
+ * data tool hierarchy, insight discipline, monetary number formatting.
+ *
+ * Injected only when the goal is data-, warehouse-, sync- or chart-shaped
+ * (see `includeDataPersona` in `decideSections`). On generic engineering
+ * / coding / shell tasks this block (~5 KB) is skipped entirely, leaving
+ * the model with the generic operating manual in DEFAULT_SYSTEM_PROMPT.
+ */
+export const MIA_DATA_PERSONA_SECTION = loadPrompt("mia-data-persona.md")
