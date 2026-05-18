@@ -238,25 +238,54 @@ export function markRunCancelled(runId: string): void {
 
 // ── Audit queries ────────────────────────────────────────────────
 
+export type AuditScopeType = "run" | "admin"
+
 export interface DbAudit {
   id?: number
-  run_id: string
+  run_id: string | null
+  scope_type: AuditScopeType
+  scope_id: string | null
   actor: string
   action: string
   detail: string
   timestamp: string
 }
 
-export function saveAudit(entry: Omit<DbAudit, "id">): void {
+export function saveAudit(
+  entry: Omit<DbAudit, "id" | "scope_type" | "scope_id"> & {
+    scope_type?: AuditScopeType
+    scope_id?: string | null
+  },
+): void {
+  const scopeType: AuditScopeType = entry.scope_type ?? (entry.run_id ? "run" : "admin")
+  const scopeId = entry.scope_id ?? (scopeType === "run" ? entry.run_id : "platform")
   getDb().prepare(`
-    INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
-    VALUES (@run_id, @actor, @action, @detail, @timestamp)
-  `).run(entry)
+    INSERT INTO audit_log (run_id, scope_type, scope_id, actor, action, detail, timestamp)
+    VALUES (@run_id, @scope_type, @scope_id, @actor, @action, @detail, @timestamp)
+  `).run({
+    ...entry,
+    scope_type: scopeType,
+    scope_id: scopeId,
+  })
+}
+
+export function saveAdminAudit(
+  entry: Omit<DbAudit, "id" | "run_id" | "scope_type"> & { scope_id?: string | null },
+): void {
+  saveAudit({
+    run_id: null,
+    actor: entry.actor,
+    action: entry.action,
+    detail: entry.detail,
+    timestamp: entry.timestamp,
+    scope_type: "admin",
+    scope_id: entry.scope_id ?? "platform",
+  })
 }
 
 export function getAuditLog(runId: string): DbAudit[] {
   return getDb()
-    .prepare("SELECT * FROM audit_log WHERE run_id = ? ORDER BY timestamp")
+    .prepare("SELECT * FROM audit_log WHERE scope_type = 'run' AND run_id = ? ORDER BY timestamp")
     .all(runId) as DbAudit[]
 }
 

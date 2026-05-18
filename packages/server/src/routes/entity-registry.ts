@@ -52,12 +52,12 @@ function resolveTenant(req: FastifyRequest): string {
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {
-    db.saveAudit({
-      run_id:    "__admin__",
+    db.saveAdminAudit({
       actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),
       timestamp: new Date().toISOString(),
+      scope_id:  "entity-registry",
     })
   } catch (e) {
     console.warn("[entity-registry] audit_log write failed:", e instanceof Error ? e.message : e)

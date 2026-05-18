@@ -88,12 +88,12 @@ function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {
-    db.saveAudit({
-      run_id:    "__admin__",
+    db.saveAdminAudit({
       actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),
       timestamp: new Date().toISOString(),
+      scope_id:  "sync-environments",
     })
   } catch (e) {
     console.warn("[sync-envs] audit_log write failed:", e instanceof Error ? e.message : e)

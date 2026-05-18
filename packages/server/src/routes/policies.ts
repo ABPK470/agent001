@@ -17,16 +17,15 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db/index.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
-  // Admin governance changes have no run context — log them under the
-  // `__admin__` sentinel run-id so existing audit_log queries still work
-  // (they're keyed on run_id) but they're cleanly separable.
+  // Admin governance changes are not agent runs; persist them as
+  // admin-scoped audit entries instead of faking a run row.
   try {
-    db.saveAudit({
-      run_id:    "__admin__",
+    db.saveAdminAudit({
       actor:     req.session.upn,
       action,
       detail:    JSON.stringify(detail),
       timestamp: new Date().toISOString(),
+      scope_id:  "policies",
     })
   } catch (e) {
     console.warn("[policies] audit_log write failed:", e instanceof Error ? e.message : e)

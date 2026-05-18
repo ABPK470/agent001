@@ -15,7 +15,7 @@ export { _migrate } from "./connection.js"
 export {
     dbRunToWire, findStaleRuns, getAuditLog, getCheckpoint, getLogs, getRun, getTokenUsage, getTraceEntries, getUsageTotals, listRuns,
     listRunsWithUsage,
-    listRunsWithUsageForUser, listTokenUsage, markRunCancelled, markRunCrashed, normaliseUnknownRunStatuses, saveAudit, saveCheckpoint, saveLog, saveRun, saveTokenUsage, saveTraceEntry, type DbAudit, type DbCheckpoint, type DbLog, type DbRun,
+    listRunsWithUsageForUser, listTokenUsage, markRunCancelled, markRunCrashed, normaliseUnknownRunStatuses, saveAdminAudit, saveAudit, saveCheckpoint, saveLog, saveRun, saveTokenUsage, saveTraceEntry, type AuditScopeType, type DbAudit, type DbCheckpoint, type DbLog, type DbRun,
     type DbRunWithUsage, type DbTokenUsage, type DbTraceEntry, type RunWireExtras, type UsageTotals
 } from "./runs.js"
 

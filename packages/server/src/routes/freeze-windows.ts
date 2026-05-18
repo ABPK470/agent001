@@ -7,20 +7,19 @@
  *
  * Mutations also push the updated set into the agent's in-process
  * registry so the sync gate sees the new state without a server restart.
- * Every mutation writes an audit_log entry under run_id `__admin__`.
+ * Every mutation writes an admin-scoped audit_log entry.
  */
 
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import { getDb } from "../db/connection.js"
 import {
     deleteFreezeWindow,
     FreezeWindowValidationError,
     listFreezeWindowsForTenant,
+    saveAdminAudit,
     upsertFreezeWindow,
-} from "../db/freeze-windows.js"
+} from "../db/index.js"
 
 const DEFAULT_TENANT_ID = "_default"
-const ADMIN_RUN_ID      = "__admin__"
 
 function resolveTenant(req: FastifyRequest): string {
   const q = (req.query as Record<string, string> | undefined)?.["tenant"]
@@ -30,16 +29,13 @@ function resolveTenant(req: FastifyRequest): string {
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {
-    getDb().prepare(
-      `INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(
-      ADMIN_RUN_ID,
-      req.session?.upn ?? "unknown",
+    saveAdminAudit({
+      actor: req.session?.upn ?? "unknown",
       action,
-      JSON.stringify(detail),
-      new Date().toISOString(),
-    )
+      detail: JSON.stringify(detail),
+      timestamp: new Date().toISOString(),
+      scope_id: "freeze-windows",
+    })
   } catch (e) {
     console.warn("[freeze-windows] audit_log write failed:", e instanceof Error ? e.message : e)
   }

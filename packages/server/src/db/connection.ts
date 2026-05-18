@@ -45,7 +45,7 @@ export function _setDb(db: Database.Database): void {
 // other tables are re-created from scratch with the declarative schema
 // below. Use sparingly — this WILL drop data; only safe in dev.
 
-export const SCHEMA_VERSION = 21
+export const SCHEMA_VERSION = 22
 const SEED_VERSION = SCHEMA_VERSION
 // v19: introduce real `users` table; identity is no longer self-declared.
 //      upn becomes NOT NULL FK on every per-user table. Triggers a one-time
@@ -63,7 +63,55 @@ const SEED_VERSION = SCHEMA_VERSION
 //      `notification_routes`, `notification_log`,
 //      `approval_policies`, `proposer_schedule`. All additive — no
 //      hard reset required.
+// v22: redesign `audit_log` so admin actions are first-class audit
+//      entries instead of fake sentinel runs. `audit_log.run_id`
+//      becomes nullable; add `scope_type` + `scope_id`; migrate
+//      historical `__admin__` rows and remove sentinel bootstrap rows.
 const HARD_RESET_THRESHOLD = 19
+
+function migrateAuditLogScopes(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(audit_log)").all() as Array<{ name: string; notnull: number }>
+  if (columns.length === 0) return
+  const hasScopeType = columns.some((c) => c.name === "scope_type")
+  const runIdColumn = columns.find((c) => c.name === "run_id")
+  if (hasScopeType && runIdColumn?.notnull === 0) return
+
+  db.pragma("foreign_keys = OFF")
+  db.exec(`
+    CREATE TABLE audit_log_v22 (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id     TEXT REFERENCES runs(id) ON DELETE CASCADE,
+      scope_type TEXT NOT NULL DEFAULT 'run'
+        CHECK (scope_type IN ('run','admin')),
+      scope_id   TEXT,
+      actor      TEXT NOT NULL,
+      action     TEXT NOT NULL,
+      detail     TEXT NOT NULL DEFAULT '{}',
+      timestamp  TEXT NOT NULL
+    );
+
+    INSERT INTO audit_log_v22 (id, run_id, scope_type, scope_id, actor, action, detail, timestamp)
+    SELECT
+      id,
+      CASE WHEN run_id = '__admin__' THEN NULL ELSE run_id END,
+      CASE WHEN run_id = '__admin__' THEN 'admin' ELSE 'run' END,
+      CASE WHEN run_id = '__admin__' THEN 'platform' ELSE run_id END,
+      actor,
+      action,
+      detail,
+      timestamp
+    FROM audit_log;
+
+    DROP TABLE audit_log;
+    ALTER TABLE audit_log_v22 RENAME TO audit_log;
+    CREATE INDEX IF NOT EXISTS idx_audit_run   ON audit_log(run_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_scope ON audit_log(scope_type, scope_id, timestamp DESC);
+  `)
+  db.prepare("DELETE FROM runs WHERE id = '__admin__'").run()
+  db.prepare("DELETE FROM sessions WHERE sid = '__system__'").run()
+  db.prepare("DELETE FROM users WHERE upn = '__system__'").run()
+  db.pragma("foreign_keys = ON")
+}
 
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {
@@ -215,14 +263,17 @@ export function _migrate(db: Database.Database): void {
 
     -- ── Run-owned children (all CASCADE on run deletion) ─────────
     CREATE TABLE IF NOT EXISTS audit_log (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      run_id    TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-      actor     TEXT NOT NULL,
-      action    TEXT NOT NULL,
-      detail    TEXT NOT NULL DEFAULT '{}',
-      timestamp TEXT NOT NULL
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id     TEXT REFERENCES runs(id) ON DELETE CASCADE,
+      scope_type TEXT NOT NULL DEFAULT 'run'
+        CHECK (scope_type IN ('run','admin')),
+      scope_id   TEXT,
+      actor      TEXT NOT NULL,
+      action     TEXT NOT NULL,
+      detail     TEXT NOT NULL DEFAULT '{}',
+      timestamp  TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_log(run_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_run   ON audit_log(run_id);
 
     CREATE TABLE IF NOT EXISTS checkpoints (
       run_id       TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
@@ -800,36 +851,11 @@ export function _migrate(db: Database.Database): void {
     );
   `)
 
-  // ── Sentinel "__admin__" run row ───────────────────────────────
-  // The `audit_log` table FKs `run_id → runs(id) ON DELETE CASCADE`.
-  // Admin-only routes (policies, sync-environments, entity-registry, …)
-  // are not tied to an actual agent run and use the literal "__admin__"
-  // as their audit `run_id`. Without a matching row in `runs` every
-  // such audit write fails the FK constraint and only emits a
-  // console.warn. Insert the sentinel once at boot so admin actions
-  // are actually persisted to audit_log.
-  //
-  // `runs` further FKs `upn → users` and `session_id → sessions`, both
-  // NOT NULL, so we also need a system user + session. All sentinels
-  // share the literal id `__system__` / `__admin__` and are idempotent.
-  db.prepare(`
-    INSERT OR IGNORE INTO users (upn, username, display_name, is_admin, source)
-    VALUES ('__system__', '__system__', 'System', 1, 'local')
-  `).run()
-  db.prepare(`
-    INSERT OR IGNORE INTO sessions (sid, upn) VALUES ('__system__', '__system__')
-  `).run()
-  db.prepare(`
-    INSERT OR IGNORE INTO runs (
-      id, goal, status, answer, step_count, error,
-      parent_run_id, agent_id, session_id, upn, display_name,
-      created_at, completed_at
-    ) VALUES (
-      '__admin__', 'platform admin actions', 'completed', NULL, 0, NULL,
-      NULL, NULL, '__system__', '__system__', 'System',
-      datetime('now'), datetime('now')
-    )
-  `).run()
+  // Historical builds forced admin actions into a fake `__admin__` run to
+  // satisfy the `audit_log.run_id -> runs.id` foreign key. Migrate that
+  // shape away on boot so admin audit stops polluting the run namespace.
+  migrateAuditLogScopes(db)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_scope ON audit_log(scope_type, scope_id, timestamp DESC);`)
 
   // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
   // Idempotent: only inserts strategies that don't already exist. We
