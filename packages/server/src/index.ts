@@ -69,6 +69,7 @@ import {
     recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db/index.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
+import { touchSession } from "./db/sessions.js"
 import { tryBuildSignerFromEnv } from "./evidence/signer.js"
 import { buildLlmClient } from "./llm/registry.js"
 import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
@@ -541,13 +542,6 @@ async function buildApp(opts: AppOpts) {
       done()
       return
     }
-    // Heartbeat fires every 30 s from every open tab — logging it
-    // floods the console and writing it to api_requests would grow the
-    // table without bound for zero observability value. Skip entirely.
-    if (req.url === "/api/auth/heartbeat") {
-      done()
-      return
-    }
     const duration = Date.now() - ((req as any)._startTime ?? Date.now())
     const entry = {
       method: req.method,
@@ -616,9 +610,26 @@ async function buildApp(opts: AppOpts) {
       sid:     req.session.sid,
       isAdmin: req.session.isAdmin,
     })
-    // Heartbeat every 25s — keeps intermediaries from idle-closing the stream.
+
+    // ── Liveness ────────────────────────────────────────────────
+    // The SSE stream lifecycle IS the online signal. Touch the session
+    // immediately on open and every 25 s while connected; when the
+    // client disconnects we stop touching, and `last_seen_at` ages out
+    // within the 60 s "online" window. No polling endpoint required.
+    // Anonymous SSE connections (no real cookie session) carry an
+    // `anon:<random>` sid that has no row in `sessions`, so skip them.
+    const sid = req.session.sid
+    const isRealSession = typeof sid === "string" && !sid.startsWith("anon:")
+    if (isRealSession) {
+      try { touchSession(sid) } catch { /* observability only */ }
+    }
+    // Heartbeat every 25s — keeps intermediaries from idle-closing the
+    // stream AND doubles as the liveness ping for the session row.
     const heartbeat = setInterval(() => {
       try { reply.raw.write(`: ping\n\n`) } catch { /* dropped */ }
+      if (isRealSession) {
+        try { touchSession(sid) } catch { /* observability only */ }
+      }
     }, 25_000)
     req.raw.on("close", () => { clearInterval(heartbeat); dispose() })
   })

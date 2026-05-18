@@ -13,6 +13,12 @@
  * the SPA never reads or threads sid. Every per-user effect dependency
  * collapses to `[me?.upn]` — that's the structural guarantee we paid
  * for in commits 1-4.
+ *
+ * Liveness ("online" indicator in the Active Users widget) is NOT
+ * driven from here. It is a side-effect of the SSE event stream
+ * (`/api/events/stream`): while that connection is open the server
+ * keeps `sessions.last_seen_at` fresh; when it closes the row ages
+ * out within the 60 s online window. No polling endpoint exists.
  */
 
 import { useCallback, useEffect, useState } from "react"
@@ -21,24 +27,6 @@ export interface Me {
   upn: string
   displayName: string
   isAdmin: boolean
-}
-
-// Heartbeat interval. The server treats a session as "online" if it has
-// been touched within the last 60s (see listUsersWithStats). 30s gives
-// us one redundant tick inside that window so a single dropped fetch
-// does not flip the user to offline.
-const HEARTBEAT_INTERVAL_MS = 30_000
-
-/**
- * Fire a single heartbeat — POST /api/auth/heartbeat. Best-effort: any
- * failure is silently swallowed (network blip, 401 after logout, …);
- * the next tick will retry, and a stable 401 means the user is logged
- * out anyway and will be redirected by the next whoami refresh.
- */
-async function sendHeartbeat(): Promise<void> {
-  try {
-    await fetch("/api/auth/heartbeat", { method: "POST", credentials: "include" })
-  } catch { /* swallow — caller never observes failure */ }
 }
 
 export function useMe(): {
@@ -68,43 +56,6 @@ export function useMe(): {
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
-
-  // Foreground heartbeat. The server stopped touching last_seen_at on
-  // every request (it was bumping it from background SSE / polls so
-  // every open tab looked "online" forever); now liveness is driven
-  // exclusively by this ping. We only beat while:
-  //   - the user is logged in (me != null), AND
-  //   - the document is visible (i.e. this tab/window is the one the
-  //     user is actually looking at).
-  // Switch between two tabs logged in as different users → only the
-  // focused tab beats → only that account shows as online. Matches the
-  // physical reality of "one human, one foreground at a time".
-  useEffect(() => {
-    if (!me) return
-    let cancelled = false
-
-    const beatIfVisible = (): void => {
-      if (cancelled) return
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        void sendHeartbeat()
-      }
-    }
-
-    // Beat immediately on mount / after login so the user appears online
-    // without waiting for the first 30s tick.
-    beatIfVisible()
-    const interval = window.setInterval(beatIfVisible, HEARTBEAT_INTERVAL_MS)
-    // Also beat the moment the tab regains focus — short-circuits the
-    // up-to-30s wait when the user alt-tabs back from another window.
-    const onVisibilityChange = (): void => beatIfVisible()
-    document.addEventListener("visibilitychange", onVisibilityChange)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-    }
-  }, [me])
 
   const logout = useCallback(async () => {
     try {
