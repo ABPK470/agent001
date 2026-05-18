@@ -16,14 +16,16 @@ const OS_LABELS: Record<string, string> = {
   win32: "Windows",
 }
 
-export function buildEnvironmentContext(): string {
+export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
+  const isAdmin = opts?.isAdmin ?? false
   const os = OS_LABELS[platform()] ?? platform()
   const shell = platform() === "win32" ? "cmd.exe / PowerShell" : "/bin/sh (POSIX)"
   const lines = [
     "\nEnvironment:",
     `  OS: ${os} (${arch()})`,
     `  Shell: ${shell}`,
-    `  Home: ${homedir()}`,
+    // Home directory is the real server path — only expose to admin.
+    ...(isAdmin ? [`  Home: ${homedir()}`] : []),
     `  Node: ${process.version}`,
   ]
   if (platform() === "darwin") {

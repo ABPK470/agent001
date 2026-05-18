@@ -50,6 +50,14 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
     return () => observer.disconnect()
   }, [])
 
+  // RGL's onLayoutChange MUST be wired — without it, RGL's internal
+  // `setLayout` effect runs in an infinite loop because the parent's
+  // `layouts` prop never catches up to RGL's internal state. The trick
+  // for preserving user-intended sizes is in the store's `updateLayouts`
+  // reducer: it discards RGL bookkeeping emissions where an item came
+  // through smaller than its WIDGET_DEFAULTS minimum (typical of RGL's
+  // default 1×1 generator during a synchronize pass), keeping the prior
+  // stored size instead of clamping the bad value upward.
   const handleLayoutChange = useCallback(
     (layout: LayoutItem[]) => {
       updateLayouts(activeViewId, layout)
@@ -62,14 +70,23 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const { widgets, layouts } = activeView
   const rawLayouts = layouts["lg"] ?? []
 
-  // Enforce current WIDGET_DEFAULTS minW/minH on every layout item — overrides
-  // stale values persisted from older sessions.
+  // Enforce current WIDGET_DEFAULTS minW/minH/w/h on every layout item —
+  // overrides stale values persisted from older sessions. Also clamps the
+  // stored w/h so a widget saved narrower than its minimum renders at the
+  // correct size immediately (react-grid-layout treats minW/minH as drag
+  // constraints only, not render constraints).
   const gridLayouts = rawLayouts.map((item) => {
     const widget = widgets.find((w) => w.id === item.i)
     if (!widget) return item
     const defaults = WIDGET_DEFAULTS[widget.type]
     if (!defaults) return item
-    return { ...item, minW: defaults.minW, minH: defaults.minH }
+    return {
+      ...item,
+      minW: defaults.minW,
+      minH: defaults.minH,
+      w: Math.max(item.w, defaults.minW),
+      h: Math.max(item.h, defaults.minH),
+    }
   })
 
   // Dynamic row height: fill the entire container vertically

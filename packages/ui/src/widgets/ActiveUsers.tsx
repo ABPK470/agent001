@@ -14,7 +14,8 @@
  */
 
 import type { ReactNode } from "react"
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useStore } from "../store"
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -58,8 +59,15 @@ interface HistoryState { rows: HistoryRow[]; total: number; offset: number; load
 type SortKey = "name" | "upn" | "sessions" | "runs24h" | "failed24h" | "tokens24h" | "llmCalls24h" | "totalRuns" | "lastModel" | "firstSeen" | "lastSeen" | "status"
 type SortDir = "asc" | "desc"
 
-const REFRESH_MS = 5000
 const PAGE_SIZE = 50
+
+// Event types whose arrival means the user/run aggregates in this widget
+// may have changed. Used to gate the SSE-driven refresh — we ignore the
+// firehose of step/trace/token events and only react to lifecycle changes.
+const REFRESH_EVENT_PREFIXES = ["run.", "session.", "user.", "notification."] as const
+function isRefreshEvent(type: unknown): boolean {
+  return typeof type === "string" && REFRESH_EVENT_PREFIXES.some((p) => type.startsWith(p))
+}
 
 // ── Sorting helpers ────────────────────────────────────────────
 
@@ -129,14 +137,6 @@ export function ActiveUsers(): ReactNode {
     }
   }, [])
 
-  useEffect(() => {
-    let alive = true
-    const tick = () => { if (alive) void refresh() }
-    tick()
-    const interval = setInterval(tick, REFRESH_MS)
-    return () => { alive = false; clearInterval(interval) }
-  }, [refresh])
-
   // ── Run history (paginated) ──────────────────────────────────
 
   const loadHistory = useCallback(async (identifier: string, offset = 0) => {
@@ -170,6 +170,33 @@ export function ActiveUsers(): ReactNode {
       return next
     })
   }, [history, loadHistory])
+
+  // Refs mirror the latest expanded/history values so the SSE-driven effect
+  // below can read them without listing them as dependencies. Putting
+  // `history` (or the `loadHistory` callback, which closes over setHistory)
+  // in the deps array would cause: event → loadHistory → setHistory →
+  // history identity changes → effect re-runs → fetch — an unbounded loop
+  // that exhausts the browser socket pool (ERR_INSUFFICIENT_RESOURCES).
+  const expandedRef = useRef<string | null>(null)
+  const historyRef = useRef(history)
+  const loadHistoryRef = useRef(loadHistory)
+  useEffect(() => { expandedRef.current = expanded }, [expanded])
+  useEffect(() => { historyRef.current = history }, [history])
+  useEffect(() => { loadHistoryRef.current = loadHistory }, [loadHistory])
+
+  // SSE-driven refresh: count the lifecycle events we care about and re-run
+  // the fetch whenever that count changes. No polling — the only periodic
+  // refresh in this widget used to be a 5s setInterval; it has been removed.
+  const refreshTick = useStore((s) => s.sseEventLog.filter((e) => isRefreshEvent(e.type)).length)
+
+  useEffect(() => {
+    void refresh()
+    const exp = expandedRef.current
+    if (exp) {
+      const offset = historyRef.current[exp]?.offset ?? 0
+      void loadHistoryRef.current(exp, offset)
+    }
+  }, [refresh, refreshTick])
 
   // ── Derived data ─────────────────────────────────────────────
 

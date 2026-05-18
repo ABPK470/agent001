@@ -130,6 +130,8 @@ export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
     completionTokens:        extras.completionTokens,
     llmCalls:                extras.llmCalls,
     pendingWorkspaceChanges: extras.pendingWorkspaceChanges,
+    upn:                     row.upn ?? null,
+    displayName:             row.display_name ?? null,
   }
 }
 

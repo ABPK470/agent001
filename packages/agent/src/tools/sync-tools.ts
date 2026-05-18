@@ -6,10 +6,8 @@
  *   sync_execute     : execute a previously-computed plan with safety rails
  */
 
-import { getEnvironments } from "../sync/index.js"
-import { executeSync, previewSync } from "../sync/index.js"
-import { loadPlan } from "../sync/index.js"
 import type { EntityType } from "../sync/index.js"
+import { executeSync, getEnvironments, loadPlan, previewSync } from "../sync/index.js"
 import type { Tool } from "../types.js"
 import { getPool } from "./mssql/index.js"
 
@@ -221,7 +219,7 @@ export const listEnvironmentsTool: Tool = {
     if (envs.length === 0) return "No environments configured."
     const lines = ["Configured ABI environments:"]
     for (const e of envs) {
-      lines.push(`  • ${e.name} — ${e.displayName} (${e.role}, ring ${e.ringOrder}${e.linkedServerName ? `, linkedServer=${e.linkedServerName}` : ""})`)
+      lines.push(`  • ${e.name} — ${e.displayName} (${e.role}, ring ${e.ringOrder})`)
     }
     return lines.join("\n")
   },

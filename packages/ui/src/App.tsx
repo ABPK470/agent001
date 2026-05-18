@@ -9,7 +9,7 @@ import { UsageModal } from "./components/UsageModal"
 import { WelcomeFlow } from "./components/WelcomeFlow"
 import { WidgetCatalog } from "./components/WidgetCatalog"
 import { WidgetModal } from "./components/WidgetModal"
-import { restoreDashboardState, startDashboardSync } from "./dashboardSync"
+import { flushDashboardSave, restoreDashboardState, startDashboardSync } from "./dashboardSync"
 import { AppPhase } from "./enums"
 import { useIsMobile } from "./hooks/useIsMobile"
 import { useMe } from "./hooks/useMe"
@@ -90,6 +90,8 @@ export function App() {
     || visibleWidgetTypes.has("step-timeline")
     || visibleWidgetTypes.has("debug-inspector")
     || visibleWidgetTypes.has("tool-stats")
+    || visibleWidgetTypes.has("term-chat")
+    || visibleWidgetTypes.has("agent-chat")
   const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
   const shouldHydrateRecentEvents = visibleWidgetTypes.has("live-logs")
 
@@ -136,6 +138,10 @@ export function App() {
   }, [me, meLoading, popOut, phase])
 
   const handleSwitchUser = useCallback(() => {
+    // Flush any pending debounced layout save before the logout animation
+    // starts — otherwise changes made within the 2-second debounce window
+    // would be silently dropped when the session ends.
+    flushDashboardSave()
     // Cover the shell with the outro animation; the actual logout fires
     // when the animation hits its done frame, so the dashboard stays
     // visible underneath the dissolving mosaic the whole time.

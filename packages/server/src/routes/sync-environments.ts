@@ -14,7 +14,7 @@
  * What's editable: every hosted-mode permission field on
  * {@link SyncEnvironment} — `defaultAccessMode`, `allowedOperations`,
  * `denyDml`, `denyDdl`, `approvalRequiredOperations`, `syncAllowlist`.
- * Identity fields (`role`, `linkedServerName`, `ringOrder`, etc.) are
+ * Identity fields (`role`, `ringOrder`, etc.) are
  * out of scope here — those still live in the JSON config so the
  * topology stays version-controlled.
  */

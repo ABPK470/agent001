@@ -752,9 +752,42 @@ export const useStore = create<AppState>()(
         }
       }),
       updateLayouts: (viewId, layouts) => set((s) => ({
-        views: s.views.map((v) =>
-          v.id === viewId ? { ...v, layouts: { ...v.layouts, lg: layouts } } : v,
-        ),
+        views: s.views.map((v) => {
+          if (v.id !== viewId) return v
+          // RGL's onLayoutChange fires for many reasons besides a real user
+          // gesture: mount, child sync, breakpoint/width changes,
+          // compaction. During its `synchronizeLayoutWithChildren` pass it
+          // can briefly emit items at the default 1×1 size — smaller than
+          // the widget's configured minW/minH. If we blindly accepted those
+          // and clamped them to the minimum, we would permanently shrink
+          // user-sized widgets to their floor on every restore. So: when an
+          // incoming item is smaller than its widget's configured minimum,
+          // treat it as a bookkeeping emission and KEEP the previously
+          // stored w/h instead of overwriting. Real user resizes always
+          // produce w ≥ minW (RGL enforces that on the resize handle) and
+          // pass through unchanged. We still re-inject the current
+          // minW/minH so layouts saved before this guard pick them up.
+          const prevById = new Map(
+            (v.layouts["lg"] ?? []).map((item) => [item.i, item]),
+          )
+          const normalized = layouts.map((item) => {
+            const widget = v.widgets.find((w) => w.id === item.i)
+            if (!widget) return item
+            const defaults = WIDGET_DEFAULTS[widget.type]
+            if (!defaults) return item
+            const prev = prevById.get(item.i)
+            const undersized =
+              item.w < defaults.minW || item.h < defaults.minH
+            return {
+              ...item,
+              minW: defaults.minW,
+              minH: defaults.minH,
+              w: undersized && prev ? prev.w : Math.max(item.w, defaults.minW),
+              h: undersized && prev ? prev.h : Math.max(item.h, defaults.minH),
+            }
+          })
+          return { ...v, layouts: { ...v.layouts, lg: normalized } }
+        }),
       })),
 
       // Agent selection

@@ -436,9 +436,7 @@ export function isIdentifier(name: unknown): name is string {
 /**
  * Schema-qualified table reference: `schema.name`, both parts validated as
  * identifiers. Three-part names (server.db.schema.table) are NOT accepted
- * here — those route through the cross-env OPENQUERY path which the
- * orchestrator constructs from `Environment.linkedServerName` + the
- * two-part name stored here.
+ * here.
  */
 export function isSchemaQualifiedTable(value: unknown): value is string {
   if (typeof value !== "string") return false

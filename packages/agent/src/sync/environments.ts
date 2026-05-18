@@ -3,27 +3,21 @@
  * for ABI sync.
  *
  * An environment is a named MSSQL connection (from MSSQL_DATABASES) that has
- * been tagged with a role (`source` / `target` / `both`), an optional
- * linked-server identifier (used for cross-server reads/writes), a display
- * colour, and a per-env sync allowlist.
+ * been tagged with a role (`source` / `target` / `both`), a display colour,
+ * and a per-env sync allowlist.
  *
  * Loading priority:
  *   1. `deploy/mssql/sync-environments.json` if present — explicit config that
- *      maps each MSSQL_DATABASES connection to a sync env, pinning a
- *      `core.LinkedService.name` for the linked-service identifier.
+ *      maps each MSSQL_DATABASES connection to a sync env.
  *   2. Else fall back to synthesising one entry per configured MSSQL connection
  *      with role `both`.
- *
- * At load time, `linkedServerName` is resolved automatically by querying
- * `core.LinkedService.properties.serverName` from the first available DB.
- * No need to maintain it in the config file.
  */
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
 import { EnvAccessMode, EnvRole } from "../domain/enums/sync.js"
-import { getMssqlConfig, getPool } from "../tools/index.js"
+import { getMssqlConfig } from "../tools/index.js"
 
 export type { EnvAccessMode, EnvRole }
 
@@ -49,12 +43,6 @@ export interface SyncEnvironment {
   /** Tailwind-friendly accent colour token e.g. "emerald", "amber". */
   color: string
   role: EnvRole
-  /**
-   * SQL Server linked-server identifier other environments use to read FROM
-   * this one e.g. `MYMI_PROD`. Required for cross-server diff queries.
-   * Auto-resolved from core.LinkedService.properties.serverName at startup.
-   */
-  linkedServerName: string | null
   /** Lower numbers deploy/sync first (0 = dev, 1 = uat, 2 = prod). */
   ringOrder: number
   /**
@@ -68,12 +56,6 @@ export interface SyncEnvironment {
    * authenticated users. Cross-checked against `mia_sid` cookie identity.
    */
   syncAllowlist: string[]
-  /**
-   * Optional core.LinkedService.name pinned by config — when set, the runtime
-   * can resolve src/dest server+db pairs by reading that linked-service row.
-   */
-  linkedServiceName?: string | null
-
   // ── Hosted-mode access control ────────────────────────────────
   /**
    * Default access mode for this environment. UAT and PROD default to
@@ -161,11 +143,9 @@ export function withPermissionDefaults(
     displayName:        e.displayName ?? e.name,
     color:              e.color ?? "slate",
     role:               (e.role ?? EnvRole.Both),
-    linkedServerName:   e.linkedServerName ?? null,
     ringOrder:          typeof e.ringOrder === "number" ? e.ringOrder : 0,
     agentServiceBaseUrl:e.agentServiceBaseUrl ?? null,
     syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
-    linkedServiceName:  e.linkedServiceName ?? null,
     defaultAccessMode,
     allowedOperations,
     denyDml,
@@ -179,7 +159,6 @@ const DEFAULT_CONFIG_PATH = "deploy/mssql/sync-environments.json"
 /**
  * Initialise environments. Reads `deploy/mssql/sync-environments.json` if
  * present; otherwise synthesises one entry per configured MSSQL connection.
- * Then resolves `linkedServerName` from `core.LinkedService` automatically.
  */
 export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
   const configPath = resolve(projectRoot, relPath)
@@ -195,11 +174,9 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
         displayName: e.displayName ?? e.name,
         color: e.color ?? "slate",
         role: (e.role ?? EnvRole.Both),
-        linkedServerName: e.linkedServerName ?? null,
         ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
         agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
         syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
-        linkedServiceName: e.linkedServiceName ?? null,
         defaultAccessMode: e.defaultAccessMode,
         allowedOperations: e.allowedOperations,
         denyDml: e.denyDml,
@@ -222,10 +199,8 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
       displayName: c.name,
       color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
       role: EnvRole.Both,
-      linkedServerName: null,
       ringOrder: i,
       syncAllowlist: [],
-      linkedServiceName: null,
     }))
     setEnvironments(envs)
     if (envs.length) {
@@ -233,44 +208,5 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
     }
   }
 
-  // Resolve linkedServerName from core.LinkedService in one shot.
-  await resolveLinkedServerNames(envs)
-
   return envs.map((e) => `${e.name}[${e.role}]`).join(", ")
-}
-
-/**
- * For each env that has a `linkedServiceName` but no `linkedServerName`,
- * query `core.LinkedService` to fill in the server name. Uses the first
- * available env as the DB connection. Non-fatal on failure.
- */
-async function resolveLinkedServerNames(envs: SyncEnvironment[]): Promise<void> {
-  const needs = envs.filter((e) => e.linkedServiceName && !e.linkedServerName)
-  if (needs.length === 0) return
-  // Use the first env's own connection to query core.LinkedService.
-  const connName = envs[0]?.name
-  if (!connName) return
-  try {
-    const { pool } = await getPool(connName)
-    const result = await pool.request().query(`
-      SELECT name, properties
-      FROM core.LinkedService
-      WHERE name IN (${needs.map((e) => `N'${(e.linkedServiceName ?? "").replace(/'/g, "''")}'`).join(",")})
-        AND validTo IS NULL
-    `)
-    const byName = new Map<string, string>()
-    for (const row of result.recordset as Array<{ name: string; properties: string }>) {
-      try {
-        const props = JSON.parse(row.properties)
-        if (props?.serverName) byName.set(row.name, String(props.serverName))
-      } catch { /* ignore malformed JSON */ }
-    }
-    for (const e of needs) {
-      const ls = byName.get(e.linkedServiceName ?? "")
-      if (ls) e.linkedServerName = ls
-    }
-    if (byName.size) console.log(`Resolved linked-server names from core.LinkedService: ${[...byName.entries()].map(([k, v]) => `${k}→${v}`).join(", ")}`)
-  } catch (e) {
-    console.warn(`Could not resolve linked-server names from core.LinkedService: ${e instanceof Error ? e.message : e}`)
-  }
 }

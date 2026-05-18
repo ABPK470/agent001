@@ -63,6 +63,10 @@ export interface Run {
   completionTokens: number
   llmCalls: number
   pendingWorkspaceChanges?: number
+  /** Owner UPN — present when the server returns all runs (e.g. admin scope). */
+  upn?: string | null
+  /** Owner display name — present alongside upn for admin-scope responses. */
+  displayName?: string | null
   trace?: TraceEntry[]
   streamingAnswer?: string
   coherentStream?: string
@@ -400,10 +404,8 @@ export interface SyncEnvironment {
   displayName: string
   color: string
   role: "source" | "target" | "both"
-  linkedServerName: string | null
   ringOrder: number
   syncAllowlist: string[]
-  linkedServiceName?: string | null
 }
 
 export interface SyncRecipeTable {

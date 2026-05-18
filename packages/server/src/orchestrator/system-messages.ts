@@ -20,8 +20,17 @@ export async function buildSystemMessages(opts: {
   perTier: { working: string; episodic: string; semantic: string }
   runId: string
   attachmentIds?: string[]
+  /**
+   * Whether the originating session is an admin. Controls which
+   * environment details are injected into the system prompt:
+   *  - true  → full environment (home dir, workspace path, source tree)
+   *  - false → sanitised environment (OS/shell/node only; no paths)
+   * Defaults to false to be conservative.
+   */
+  isAdmin?: boolean
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
+  const isAdmin = opts.isAdmin ?? false
 
   const decision = decideSections({ goal, memory: perTier })
 
@@ -29,7 +38,7 @@ export async function buildSystemMessages(opts: {
 
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
-  const envBlock = buildEnvironmentContext()
+  const envBlock = buildEnvironmentContext({ isAdmin })
   systemMessages.push({
     role: MessageRole.System,
     content: `${basePrompt}\n${envBlock}`,
@@ -89,15 +98,17 @@ export async function buildSystemMessages(opts: {
 
   // Section 3: system_runtime — workspace / sandbox context (droppable).
   // Hosted runs get a sandbox-only summary that never leaks the real
-  // application source tree. Developer runs keep the existing shallow
-  // workspace tree dump for tool-call grounding.
+  // application source tree. Developer runs with admin role keep the
+  // shallow workspace tree dump for tool-call grounding. Non-admin runs
+  // in developer mode receive no workspace path — the source tree layout
+  // is internal implementation detail and must not leak to regular users.
   if (runWorkspace.profile === "hosted") {
     systemMessages.push({
       role:    MessageRole.System,
       content: buildHostedRuntimeContext({ sandboxRoot: runWorkspace.executionRoot }),
       section: "system_runtime",
     })
-  } else if (runWorkspace.executionRoot) {
+  } else if (isAdmin && runWorkspace.executionRoot) {
     const wsContext = await getWorkspaceContext(runWorkspace.executionRoot)
     systemMessages.push({
       role: MessageRole.System,
