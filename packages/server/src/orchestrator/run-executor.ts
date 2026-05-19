@@ -86,7 +86,8 @@ export async function executeRunImpl(
   let lastMessages: Message[] = []
   let lastIteration = 0
   const baseWorkspace = ctx.workspace ?? process.cwd()
-  const runWorkspace = await prepareRunWorkspace({ runId, sourceRoot: baseWorkspace, goal, resume: !!resume })
+  const preActiveRun = ctx.activeRuns.get(runId)
+  const runWorkspace = await prepareRunWorkspace({ runId, sourceRoot: baseWorkspace, goal, resume: !!resume, role: preActiveRun?.role ?? PolicyRole.Admin })
   const activeRun = ctx.activeRuns.get(runId)
   if (activeRun) activeRun.workspace = runWorkspace
 
@@ -444,10 +445,14 @@ export async function executeRunImpl(
     // The role is captured at startRun/resumeRun (see orchestrator.ts) and
     // stashed on ActiveRun because the originating session ALS is no longer
     // in scope by the time queued work resumes.
+    const ctxRole = activeRun?.role ?? PolicyRole.Admin
     const policyCtx: HostedPolicyContext = {
       runId,
-      runMode:     runWorkspace.profile === "hosted" ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
-      role:        activeRun?.role ?? PolicyRole.Admin,
+      // Role drives policy default. HostedUser → default-deny + selector
+      // rules; Admin → default-allow + audit. The deployment env flag
+      // (AGENT_HOSTED_MODE) no longer affects this.
+      runMode:     ctxRole === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
+      role:        ctxRole,
       sandboxRoot: runWorkspace.executionRoot,
       actorUpn:    activeRun?.ownerUpn ?? null,
       sessionId:   activeRun?.sessionId ?? null,

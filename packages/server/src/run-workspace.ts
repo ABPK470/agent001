@@ -1,9 +1,9 @@
+import { PolicyRole } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
-import { RunProfile } from "./enums/run-workspace.js"
-import { RunTaskType } from "./enums/run-workspace.js"
 import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
+import { RunProfile, RunTaskType } from "./enums/run-workspace.js"
 
 export { RunTaskType }
 
@@ -92,14 +92,25 @@ export async function prepareRunWorkspace(params: {
   goal: string
   resume: boolean
   profile?: RunProfile
+  role?: PolicyRole
 }): Promise<RunWorkspaceContext> {
   const sourceRoot = resolve(params.sourceRoot)
   const taskType = classifyRunTaskType(params.goal)
-  const profile = params.profile ?? getRunProfile()
 
-  // Hosted profile is non-negotiable: every run lives in an empty sandbox
-  // outside the source tree, even on resume. We never copy source bytes in.
-  if (profile === RunProfile.Hosted) {
+  // Role is the security gate, not the deployment env flag.
+  //
+  //   role=HostedUser → always isolated empty sandbox + Hosted profile,
+  //                     regardless of AGENT_HOSTED_MODE. Non-admin users
+  //                     never see the application source tree.
+  //   role=Admin      → always execute against the real source tree with
+  //                     Developer profile, even on hosted deployments.
+  //                     Admins are deliberately never sandboxed so they
+  //                     keep full operational access.
+  //
+  // `params.profile` and `getRunProfile()` are kept only to feed the
+  // legacy code-gen isolation path (admin codegen runs still get a copy).
+  const role = params.role ?? PolicyRole.Admin
+  if (role === PolicyRole.HostedUser) {
     const sandboxRoot = resolve(getRunWorkspaceRoot(), `${params.runId}-${randomUUID().slice(0, 8)}`)
     await mkdir(sandboxRoot, { recursive: true })
     return {
@@ -108,9 +119,13 @@ export async function prepareRunWorkspace(params: {
       executionRoot: sandboxRoot,
       taskType,
       isolated:      true,
-      profile,
+      profile:       RunProfile.Hosted,
     }
   }
+
+  // Admin path: ignore AGENT_HOSTED_MODE entirely and treat the run as
+  // Developer so the admin keeps direct access to the source tree.
+  const profile = RunProfile.Developer
 
   if (!shouldUseIsolatedWorkspace(params.goal, params.resume)) {
     return {

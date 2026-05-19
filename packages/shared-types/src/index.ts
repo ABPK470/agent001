@@ -352,6 +352,7 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "operation-log",
   "mymi-db",
   "run-history",
+  "operator-env",
 ])
 
 export interface ViewConfig {

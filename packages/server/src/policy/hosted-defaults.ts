@@ -85,6 +85,16 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
         selectors: { role: PolicyRole.HostedUser, tool: "write_file", scope: "app_workspace" },
       },
     },
+    {
+      name:       "hosted_deny_workspace_listing",
+      effect:     PolicyEffect.Deny,
+      condition:  "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 50,
+        reason:   "hosted users may not list the application workspace",
+        selectors: { role: PolicyRole.HostedUser, tool: "list_directory", scope: "app_workspace" },
+      },
+    },
 
     // ── Shell ───────────────────────────────────────────────────
     {
