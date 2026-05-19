@@ -31,6 +31,22 @@ const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 
+// Roll-out animation — staggered-start L→R sweeps. Every band sweeps
+// left-to-right at the same speed, but they don't all start at once:
+// the BOTTOM band starts first, each band above it starts a fixed
+// stagger later. The leading edge therefore forms a diagonal that
+// originates at the bottom-left and runs up-right, so the bottom-right
+// corner is the first part of the screen to be fully populated, then
+// each row above completes in turn.
+//
+// Already-revealed cells keep evolving via ambient drift, so the
+// bottom of the screen visibly thickens while the upper rows are
+// still mid-sweep.
+const BAND_ROWS = 3                  // visual thickness of one band
+const BAND_SWEEP_MS = 700            // time for one band to sweep L→R
+const BAND_STAGGER_MIN_MS = 70       // minimum gap between band starts
+const REVEAL_TOTAL_TARGET_MS = 2300  // soft cap on full reveal
+
 function readInk(): string {
   if (typeof document === "undefined") return `rgba(120,120,120,${INK_OPACITY})`
   const raw = getComputedStyle(document.documentElement).getPropertyValue("--text").trim()
@@ -85,8 +101,10 @@ function glyphFor(v: number): string {
   return PALETTE[idx]!
 }
 
-export function IntroAsciiField(): JSX.Element {
+export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -100,7 +118,12 @@ export function IntroAsciiField(): JSX.Element {
     let ink = readInk()
     let cols = 0
     let rows = 0
+    let bands = 0
     let cells = new Uint8Array(0)   // last-painted palette index per cell
+    let painted = new Uint8Array(0) // 1 once a cell has been revealed
+    let bandStagger = BAND_STAGGER_MIN_MS
+    let firstActiveAnimBand = 0     // lowest k still mid-sweep
+    let revealed = false
     let rafId = 0
     let lastFrame = 0
     let startTs = 0
@@ -110,6 +133,15 @@ export function IntroAsciiField(): JSX.Element {
       const y = r * LINE_H
       ctx!.clearRect(x, y, CHAR_W, LINE_H)
       if (ch !== " ") ctx!.fillText(ch, x, y)
+    }
+
+    // band index k in animation order → canvas band index (top-to-bottom)
+    // k=0 is the BOTTOM canvas band; k=bands-1 is the TOP canvas band.
+    function canvasBandOf(k: number): number { return bands - 1 - k }
+
+    function cellRevealMs(k: number, c: number): number {
+      const sweep = cols > 1 ? (c / (cols - 1)) * BAND_SWEEP_MS : 0
+      return k * bandStagger + sweep
     }
 
     function repaintAll(t: number) {
@@ -126,7 +158,7 @@ export function IntroAsciiField(): JSX.Element {
       }
     }
 
-    function resize() {
+    function resize(initial: boolean) {
       const w = window.innerWidth
       const h = window.innerHeight
       canvas!.width = Math.floor(w * dpr)
@@ -140,9 +172,32 @@ export function IntroAsciiField(): JSX.Element {
 
       cols = Math.ceil(w / CHAR_W) + 1
       rows = Math.ceil(h / LINE_H) + 1
+      bands = Math.ceil(rows / BAND_ROWS)
       cells = new Uint8Array(cols * rows)
-      const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
-      repaintAll(t)
+      painted = new Uint8Array(cols * rows)
+      firstActiveAnimBand = 0
+      // Compress the stagger on tall screens so total reveal lands near
+      // the target, but never below the minimum — keeps the diagonal
+      // leading edge clearly visible.
+      bandStagger = Math.max(
+        BAND_STAGGER_MIN_MS,
+        bands > 1 ? (REVEAL_TOTAL_TARGET_MS - BAND_SWEEP_MS) / (bands - 1) : BAND_STAGGER_MIN_MS
+      )
+
+      if (!initial || reduced) {
+        // After first sizing (or with reduced motion) snap to fully
+        // revealed — don't replay the wave on every viewport change.
+        const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
+        repaintAll(t)
+        painted.fill(1)
+        firstActiveAnimBand = bands
+        if (!revealed) {
+          revealed = true
+          onReadyRef.current?.()
+        }
+      } else {
+        ctx!.clearRect(0, 0, w, h)
+      }
     }
 
     function tick(now: number) {
@@ -152,13 +207,59 @@ export function IntroAsciiField(): JSX.Element {
       lastFrame = now
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
-      const total = cols * rows
-      const updates = Math.max(48, Math.floor(total * UPDATE_FRACTION))
+
+      // Staggered-start sweeps — walk only the bands currently in flight
+      // in animation order (k=0 is the bottom band; k=bands-1 is the
+      // top). Every band sweeps at the same speed; bottom starts first.
+      if (!revealed) {
+        const elapsed = now - startTs
+        const lastStartedK = Math.min(bands - 1, Math.floor(elapsed / bandStagger))
+        ctx!.fillStyle = ink
+        let advanceFirst = true
+        for (let k = firstActiveAnimBand; k <= lastStartedK; k++) {
+          const canvasBand = canvasBandOf(k)
+          const rowStart = canvasBand * BAND_ROWS
+          const rowEnd = Math.min(rows, rowStart + BAND_ROWS)
+          let bandDone = true
+          for (let c = 0; c < cols; c++) {
+            if (elapsed < cellRevealMs(k, c)) { bandDone = false; break }
+            for (let r = rowStart; r < rowEnd; r++) {
+              const idx = r * cols + c
+              if (painted[idx]) continue
+              const v = vnoise(c, r, t)
+              const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
+              cells[idx] = palIdx
+              painted[idx] = 1
+              const ch = PALETTE[palIdx]!
+              if (ch !== " ") ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
+            }
+          }
+          if (bandDone && advanceFirst && k === firstActiveAnimBand) {
+            firstActiveAnimBand = k + 1
+          } else {
+            advanceFirst = false
+          }
+        }
+        if (firstActiveAnimBand >= bands) {
+          revealed = true
+          onReadyRef.current?.()
+        }
+      }
+
+      // Ambient drift on already-revealed cells. We restrict it to the
+      // canvas region [bottomFilledRow..rows-1] so it only affects the
+      // stacked-up portion at the bottom while upper bands keep arriving.
+      const filledBands = firstActiveAnimBand
+      const bottomFilledRow = revealed ? 0 : Math.max(0, rows - filledBands * BAND_ROWS)
+      const liveRows = rows - bottomFilledRow
+      if (liveRows <= 0) return
+      const updates = Math.max(48, Math.floor(cols * liveRows * UPDATE_FRACTION))
       ctx!.fillStyle = ink
       for (let i = 0; i < updates; i++) {
-        const idx = (Math.random() * total) | 0
-        const r = (idx / cols) | 0
-        const c = idx - r * cols
+        const r = bottomFilledRow + ((Math.random() * liveRows) | 0)
+        const c = (Math.random() * cols) | 0
+        const idx = r * cols + c
+        if (!painted[idx]) continue
         const v = vnoise(c, r, t)
         const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
         if (palIdx === cells[idx]) continue
@@ -170,21 +271,35 @@ export function IntroAsciiField(): JSX.Element {
     function onThemeChange() {
       ink = readInk()
       const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
-      repaintAll(t)
+      // Re-ink only cells that have already been revealed so the wave
+      // stays intact even if the user toggles theme mid-roll.
+      ctx!.fillStyle = ink
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c
+          if (!painted[idx]) continue
+          const palIdx = cells[idx]
+          const ch = PALETTE[palIdx]!
+          paintCellAt(c, r, ch)
+        }
+      }
+      // Suppress unused-variable warning — t reserved for future use.
+      void t
     }
 
     startTs = performance.now()
-    window.addEventListener("resize", resize)
+    const onResize = () => resize(false)
+    window.addEventListener("resize", onResize)
     const themeObserver = new MutationObserver(onThemeChange)
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] })
     // System theme (when site follows `prefers-color-scheme` indirectly)
     const sysMql = window.matchMedia?.("(prefers-color-scheme: dark)")
     sysMql?.addEventListener?.("change", onThemeChange)
-    resize()
-    if (!reduced) rafId = requestAnimationFrame(tick)
+    resize(true)
+    rafId = requestAnimationFrame(tick)
 
     return () => {
-      window.removeEventListener("resize", resize)
+      window.removeEventListener("resize", onResize)
       themeObserver.disconnect()
       sysMql?.removeEventListener?.("change", onThemeChange)
       if (rafId) cancelAnimationFrame(rafId)

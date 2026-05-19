@@ -301,6 +301,15 @@ export function IntroConversation({
   // in sequence: wordmark → bot greeting → input bar.
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [inputReady, setInputReady] = useState(false)
+  // Resolved when the ambient ASCII field finishes rolling out from left
+  // to right. We hold the opening "who am I talking to?" until then so
+  // the screen reads as: wordmark → field arrives → bot greets.
+  const asciiReadyRef = useRef<{ promise: Promise<void>; resolve: () => void }>()
+  if (!asciiReadyRef.current) {
+    let resolve: () => void = () => {}
+    const promise = new Promise<void>((r) => { resolve = r })
+    asciiReadyRef.current = { promise, resolve }
+  }
   const inputRef  = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -318,7 +327,10 @@ export function IntroConversation({
     const wordmarkDoneMs =
       WM_REVEAL_DELAY_MS + WORDMARK.length * WM_LETTER_STEP_MS + WM_SCRAMBLE_DUR_MS + 200
     const run = async () => {
-      await new Promise((r) => window.setTimeout(r, wordmarkDoneMs))
+      await Promise.all([
+        new Promise((r) => window.setTimeout(r, wordmarkDoneMs)),
+        asciiReadyRef.current!.promise,
+      ])
       if (cancelled) return
       await botReply("who am I talking to?", "Loading", 600)
       if (cancelled) return
@@ -366,6 +378,15 @@ export function IntroConversation({
     if (!value) return
 
     if (step === "username") {
+      // Mirror server-side rule from auth/users.ts so we never advance
+      // to the password step with an invalid handle. The bot echoes the
+      // exact same wording the server would return.
+      if (!/^[a-z0-9._-]{2,64}$/.test(value)) {
+        push("user", value)
+        setDraft("")
+        await botReply("username must be 2-64 chars, [a-z0-9._-] — try again.", "Thinking", 300)
+        return
+      }
       push("user", value)
       setUsername(value)
       setDraft("")
@@ -376,6 +397,21 @@ export function IntroConversation({
     }
 
     if (step === "password") {
+      // Chat-philosophy escape hatch: type `back` or `/back` (any
+      // casing) to rewind to the username step without ever submitting
+      // the password to the server. Keeps the conversation linear
+      // without needing buttons or a back arrow that would break the
+      // "native chat" feel.
+      const lower = value.toLowerCase()
+      if (lower === "back" || lower === "/back") {
+        push("user", value)
+        setDraft("")
+        setError(null)
+        setUsername("")
+        await botReply("ok — what handle?", "Thinking", 300)
+        setStep("username")
+        return
+      }
       push("user", "•".repeat(value.length))
       setDraft("")
       setSubmitting(true)
@@ -449,7 +485,7 @@ export function IntroConversation({
     >
       {/* Generative ASCII texture — ambient life behind the conversation.
           Fades out during the morph so it doesn't bleed into the platform. */}
-      <IntroAsciiField />
+      <IntroAsciiField onReady={() => asciiReadyRef.current?.resolve()} />
 
       {/* Platform-shaped header — bg fades in from transparent → bg-canvas
           during the morph. Matches Toolbar's h-14 px-3 sm:px-6. */}
@@ -521,7 +557,7 @@ export function IntroConversation({
                       // entry morph every bubble decays (encrypt-out) in
                       // sync with the chrome reveal.
                       return (
-                        <div key={i} className="text-[15px] text-text leading-relaxed">
+                        <div key={i} className="text-[15px] text-text leading-relaxed font-medium">
                           {entering
                             ? <DecayText text={m.text} active={entering} />
                             : isLast
@@ -534,7 +570,7 @@ export function IntroConversation({
                         when the shimmer fades in/out between phases. */}
                     <div className="intro3-activity-slot py-1.5 pr-2">
                       {botTyping ? (
-                        <span className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block text-text-muted">
+                        <span className="activity-shimmer-tight text-[13px] leading-6 font-medium inline-block text-text-muted">
                           <CrystalText text={shimmerLabel} />
                         </span>
                       ) : null}
@@ -556,27 +592,64 @@ export function IntroConversation({
                   className="intro3-input mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <input
-                      ref={inputRef}
-                      type={step === "password" ? "password" : "text"}
-                      value={draft}
-                      onChange={(e) => { setDraft(e.target.value); if (error) setError(null) }}
-                      placeholder={
-                        step === "done"
-                          ? ""
-                          : step === "password"
-                            ? "password"
-                            : "your handle"
+                    {/* Slash-command suggester. When the user starts a
+                        line with `/` we (a) flip the field to plain
+                        text (so it's no longer dot-masked) and (b)
+                        show a ghost completion of the only command we
+                        currently expose, `/back`. Tab or → at the end of
+                        the input accepts the suggestion. */}
+                    {(() => {
+                      const slashStarted = step === "password" && draft.startsWith("/")
+                      const suggestion = "/back"
+                      const ghostRest = slashStarted && suggestion.startsWith(draft) && draft !== suggestion
+                        ? suggestion.slice(draft.length)
+                        : ""
+                      const showAsPassword = step === "password" && !slashStarted
+                      const acceptGhost = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (!ghostRest) return
+                        const atEnd = e.currentTarget.selectionStart === draft.length
+                          && e.currentTarget.selectionEnd === draft.length
+                        if (e.key === "Tab" || (e.key === "ArrowRight" && atEnd)) {
+                          e.preventDefault()
+                          setDraft(suggestion)
+                        }
                       }
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      autoComplete={step === "password" ? "current-password" : "username"}
-                      autoFocus
-                      disabled={inputDisabled || step === "done"}
-                      aria-label={step}
-                      className="flex-1 min-w-0 bg-transparent text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed disabled:opacity-30"
-                    />
+                      return (
+                        <div className="relative flex-1 min-w-0">
+                          {ghostRest && (
+                            <div
+                              aria-hidden="true"
+                              className="pointer-events-none absolute inset-0 flex items-center text-[15px] leading-relaxed text-text-faint whitespace-pre font-sans"
+                            >
+                              <span className="invisible">{draft}</span>{ghostRest}
+                              <span className="ml-2 text-[11px] uppercase tracking-wider opacity-60">tab</span>
+                            </div>
+                          )}
+                          <input
+                            ref={inputRef}
+                            type={showAsPassword ? "password" : "text"}
+                            value={draft}
+                            onChange={(e) => { setDraft(e.target.value); if (error) setError(null) }}
+                            onKeyDown={acceptGhost}
+                            placeholder={
+                              step === "done"
+                                ? ""
+                                : step === "password"
+                                  ? "password  —  type / for shortcuts"
+                                  : "your handle"
+                            }
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            autoComplete={showAsPassword ? "current-password" : "off"}
+                            autoFocus
+                            disabled={inputDisabled || step === "done"}
+                            aria-label={step}
+                            className="relative w-full bg-transparent text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed disabled:opacity-30"
+                          />
+                        </div>
+                      )
+                    })()}
                     <button
                       type="submit"
                       disabled={!canSend}
