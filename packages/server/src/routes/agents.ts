@@ -91,6 +91,21 @@ export function registerAgentRoutes(
 
     const { name, description, systemPrompt } = req.body
 
+    // The default ("Universal") agent's system prompt is file-managed:
+    // it always reflects packages/agent/prompts/default-system.md, is
+    // re-synced from that file on every server startup, and the runtime
+    // ignores any stored value for agentId="default". Allowing an API
+    // edit here would silently disagree with both the file and the
+    // runtime — refuse explicitly and direct the operator to the file.
+    if (req.params.id === "default" && systemPrompt !== undefined && systemPrompt.trim() !== existing.system_prompt.trim()) {
+      reply.code(400)
+      return {
+        error: "The default agent's system prompt is file-managed and cannot be edited via API. " +
+               "Edit packages/agent/prompts/default-system.md and restart the server. " +
+               "To run with a custom prompt, POST /api/agents to create a new agent.",
+      }
+    }
+
     db.saveAgentDefinition({
       ...existing,
       name: name?.trim() ?? existing.name,
@@ -137,10 +152,13 @@ export function registerAgentRoutes(
 
     // Tool whitelisting per agent has been removed; agents always get the
     // full registry. The system prompt steers tool usage.
+    //
+    // resolveAgentSystemPrompt returns the file content for agentId="default"
+    // (file-managed) and the stored prompt for any custom agent.
     const runId = orchestrator.startRun(goal, {
       agentId: agent.id,
       tools: getAllTools(),
-      systemPrompt: agent.system_prompt,
+      systemPrompt: db.resolveAgentSystemPrompt(agent),
     })
 
     reply.code(201)

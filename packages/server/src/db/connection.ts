@@ -8,6 +8,7 @@
 
 import { BUNDLED_SCD2_STRATEGIES, DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
 import Database from "better-sqlite3"
+import { createHash } from "node:crypto"
 import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -1101,16 +1102,55 @@ export function _migrate(db: Database.Database): void {
     )
   }
 
-  // Seed default agent (no `tools` column anymore)
+  // Seed default agent (no `tools` column anymore).
+  //
+  // CONTRACT: the default ("Universal") agent's `system_prompt` column is
+  // NOT a source of truth — it is a display-only mirror of the live file
+  // `packages/agent/prompts/default-system.md` (DEFAULT_SYSTEM_PROMPT).
+  //
+  // History: this column used to be operator-editable via PUT /api/agents/:id
+  // and was only bumped on schema-version changes via an `isKnownOldSeedPrompt`
+  // legacy-string check. The result was that any operator edit, or any file
+  // change without a SCHEMA_VERSION bump, made the DB row diverge from the
+  // file forever — and because run-executor reads from the DB row, the live
+  // prompt file became dead code for all existing installs.
+  //
+  // The fix has three layers (defense in depth):
+  //   1. (here)         Always overwrite this row on every startup.
+  //   2. (routes/agents.ts)   Reject PUT to "default" that changes systemPrompt.
+  //   3. (run-executor.ts)    Ignore the stored value at runtime — always use
+  //                           DEFAULT_SYSTEM_PROMPT when agentId === "default".
+  // Custom agents (any non-"default" id) keep DB persistence — that is the
+  // entire point of letting operators fork a prompt.
+  const seededDefaultSha = createHash("sha1").update(DEFAULT_SYSTEM_PROMPT).digest("hex").slice(0, 8)
+  const previousDefault = db.prepare(
+    "SELECT system_prompt FROM agent_definitions WHERE id = 'default'",
+  ).get() as { system_prompt: string } | undefined
   db.prepare(`
-    INSERT OR IGNORE INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
+    INSERT INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      system_prompt = excluded.system_prompt,
+      name          = excluded.name,
+      description   = excluded.description,
+      updated_at    = datetime('now')
   `).run(
     "default",
     "Universal Agent",
     "General-purpose agent with all tools. Handles any task.",
     DEFAULT_SYSTEM_PROMPT,
   )
+  if (previousDefault && previousDefault.system_prompt !== DEFAULT_SYSTEM_PROMPT) {
+    const previousSha = createHash("sha1").update(previousDefault.system_prompt).digest("hex").slice(0, 8)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[seed] default agent system_prompt re-synced from file: ${previousSha} → ${seededDefaultSha} ` +
+      `(${DEFAULT_SYSTEM_PROMPT.length} bytes). Source: packages/agent/prompts/default-system.md`,
+    )
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(`[seed] default agent system_prompt verified (sha=${seededDefaultSha}, ${DEFAULT_SYSTEM_PROMPT.length} bytes)`)
+  }
 
   // Seed default policies
   const seedPolicies: { name: string; effect: PolicyEffect; condition: string; parameters: string }[] = [
@@ -1124,24 +1164,11 @@ export function _migrate(db: Database.Database): void {
   `)
   for (const p of seedPolicies) insertPolicy.run(p)
 
-  // Bump system_prompt on the default agent if the seed version advanced
-  // and the operator hasn't customised it. Tools column no longer exists,
-  // so this is now a single-column update path.
+  // NOTE: the system_prompt re-sync for the "default" agent above runs on
+  // EVERY startup (unconditional). The version-gated bump below is kept ONLY
+  // for the seed_version bookkeeping — there is nothing left for it to do for
+  // the default prompt, and it never touched custom agents.
   if (currentSeedVersion < SEED_VERSION) {
-    const existing = db.prepare(
-      "SELECT system_prompt FROM agent_definitions WHERE id = 'default'"
-    ).get() as { system_prompt: string } | undefined
-    if (existing && isKnownOldSeedPrompt(existing.system_prompt)) {
-      db.prepare(
-        "UPDATE agent_definitions SET system_prompt = ?, updated_at = datetime('now') WHERE id = 'default'"
-      ).run(DEFAULT_SYSTEM_PROMPT)
-    }
     setMetaValue("seed_version", String(SEED_VERSION))
   }
-}
-
-function isKnownOldSeedPrompt(prompt: string): boolean {
-  if (prompt.includes("Break it down into steps")) return true
-  if (prompt.includes("You are an efficient AI agent that uses tools")) return true
-  return false
 }

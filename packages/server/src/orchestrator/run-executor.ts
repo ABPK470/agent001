@@ -49,6 +49,7 @@ import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from 
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { getAllTools } from "../tools.js"
+import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
@@ -126,7 +127,21 @@ export async function executeRunImpl(
     ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
   })
 
-  const trackedTools = tools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot))
+  // Goal-shape tool gating. When the goal is clearly not DB- or sync-shaped
+  // (decideSections scores 0 on those axes), drop the DB-discovery and sync
+  // tools from the registry advertised to the LLM for this run. Without this,
+  // their tool schemas alone steer the model into proactive catalog dumps
+  // even on trivial conversational turns. See `filterToolsByGoal` for the
+  // full policy. The decision is logged once for observability.
+  const _toolDecision = decideSections({ goal })
+  const _toolFilter   = filterToolsByGoal(tools, _toolDecision)
+  if (!_toolFilter.passThrough) {
+    // eslint-disable-next-line no-console
+    console.log(`[tools] run=${runId} dropped ${_toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${_toolFilter.tools.length}): ${_toolFilter.dropped.join(", ")}`)
+  }
+  const effectiveTools = _toolFilter.tools
+
+  const trackedTools = effectiveTools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot))
   const governedTools = trackedTools.map(governRuntimeTool)
 
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
@@ -145,7 +160,9 @@ export async function executeRunImpl(
       const def = db.getAgentDefinition(aId)
       if (!def) return null
       const agentTools = getAllTools().map(governRuntimeTool)
-      return { id: def.id, name: def.name, systemPrompt: def.system_prompt, tools: agentTools }
+      // resolveAgentSystemPrompt enforces the file-managed contract for the
+      // default agent — a child delegation never sees a stale stored value.
+      return { id: def.id, name: def.name, systemPrompt: db.resolveAgentSystemPrompt(def), tools: agentTools }
     },
     onChildTrace: (entry) => {
       boundSaveTrace(runId, entry)

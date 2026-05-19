@@ -53,7 +53,24 @@ export function formatPromptSummary(graph: CatalogGraph): string {
     `Total rows: ~${(s.totalRows / 1e6).toFixed(0)}M.`,
   ]
   if (lineageViews.length > 0) {
-    lines.push(`Lineage maps available: ${lineageViews.join(", ")} — use search_catalog(lineage='view') to explore.`)
+    // Only the hand-curated lineage entries (lineage.json) are worth naming
+    // in the prompt — they carry business context the agent can't rediscover
+    // (dim joins, business-area tags, filters). Auto-derived entries are just
+    // "every view has a parsed SQL definition" — that's discovery work,
+    // not prompt-worthy. Dumping all of them was inflating every DB-shaped
+    // prompt by tens of KB with names like `audit.DailyChequeBalances` that
+    // the model can find on demand via search_catalog / explore_mssql_schema.
+    const curated = lineageViews.filter((v) => {
+      const l = graph.getLineage(v)
+      return l != null && !l.description.startsWith("Auto-discovered:")
+    })
+    const autoCount = lineageViews.length - curated.length
+    if (curated.length > 0) {
+      lines.push(`Curated lineage maps (${curated.length} hand-authored with business context): ${curated.join(", ")} — use search_catalog(lineage='view') for the full map.`)
+      if (autoCount > 0) lines.push(`(+${autoCount} auto-derived view lineages, discover on demand via search_catalog.)`)
+    } else {
+      lines.push(`Lineage: ${autoCount} views have auto-derived source maps — use search_catalog(lineage='<view>') to fetch a specific one.`)
+    }
   }
   const conceptList = graph.listConcepts()
   if (conceptList.length > 0) {

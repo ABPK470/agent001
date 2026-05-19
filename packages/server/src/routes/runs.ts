@@ -153,7 +153,7 @@ export function registerRunRoutes(
       const runId = orchestrator.startRun(goal, {
         agentId: agent.id,
         tools: getAllTools(),
-        systemPrompt: agent.system_prompt,
+        systemPrompt: db.resolveAgentSystemPrompt(agent),
         attachmentIds: resolvedAttachmentIds,
       })
       reply.code(201)
@@ -208,7 +208,7 @@ export function registerRunRoutes(
       const runId = orchestrator.startRun(original.goal, {
         agentId: agent.id,
         tools: getAllTools(),
-        systemPrompt: agent.system_prompt,
+        systemPrompt: db.resolveAgentSystemPrompt(agent),
       })
       reply.code(201)
       return { runId, agentId: agent.id }

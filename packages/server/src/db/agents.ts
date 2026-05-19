@@ -2,6 +2,7 @@
  * LLM configuration & agent definition persistence.
  */
 
+import { DEFAULT_SYSTEM_PROMPT } from "@mia/agent"
 import { getDb } from "./connection.js"
 import { LlmProvider } from "../enums/llm.js"
 
@@ -64,4 +65,25 @@ export function saveAgentDefinition(agent: DbAgentDefinition): void {
 
 export function deleteAgentDefinition(id: string): void {
   getDb().prepare("DELETE FROM agent_definitions WHERE id = ?").run(id)
+}
+
+/**
+ * Runtime-effective system prompt for an agent definition.
+ *
+ * The "default" (Universal) agent is FILE-MANAGED: its prompt always comes
+ * from `packages/agent/prompts/default-system.md` (DEFAULT_SYSTEM_PROMPT)
+ * regardless of what is stored in the DB. The stored row is a display-only
+ * mirror that gets re-synced on every server startup
+ * (see `db/connection.ts` seed).
+ *
+ * Custom agents (any non-"default" id) ARE persisted — that is the whole
+ * point of letting an operator fork a prompt — and their stored prompt is
+ * returned verbatim.
+ *
+ * Use this helper at every API/orchestrator boundary that passes a stored
+ * agent prompt into a run, so a stale or out-of-band-edited DB row can
+ * never reach the LLM for the default agent.
+ */
+export function resolveAgentSystemPrompt(def: { id: string; system_prompt: string }): string {
+  return def.id === "default" ? DEFAULT_SYSTEM_PROMPT : def.system_prompt
 }

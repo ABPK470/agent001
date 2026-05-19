@@ -23,8 +23,24 @@ export function handleStats(catalog: CatalogGraph): string {
     }
   }
   if (lineageViews.length > 0) {
-    lines.push("", `Lineage maps available: ${lineageViews.join(", ")}`)
-    lines.push("  Use search_catalog(lineage='view') to explore.")
+    // Only enumerate hand-curated lineage entries (lineage.json) — those
+    // carry business context (dim joins, business-area tags, filters) the
+    // agent cannot rediscover from a view definition. Auto-derived entries
+    // are just "every VIEW has a parsed SQL"; listing their names is
+    // discovery work, not catalog summary, and the names persist in
+    // working memory long after the model has moved on.
+    const curated = lineageViews.filter((v) => {
+      const l = catalog.getLineage(v)
+      return l != null && !l.description.startsWith("Auto-discovered:")
+    })
+    const autoCount = lineageViews.length - curated.length
+    lines.push("")
+    if (curated.length > 0) {
+      lines.push(`Curated lineage maps (${curated.length} hand-authored): ${curated.join(", ")}`)
+      if (autoCount > 0) lines.push(`  (+${autoCount} auto-derived view lineages — fetch a specific one with search_catalog(lineage='<view>').)`)
+    } else {
+      lines.push(`Lineage: ${autoCount} auto-derived view source maps — fetch a specific one with search_catalog(lineage='<view>').`)
+    }
   }
   return lines.join("\n")
 }

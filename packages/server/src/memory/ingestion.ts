@@ -155,13 +155,23 @@ export function ingestRunTurns(run: {
   //    Storing it here would pollute working memory with previous goal texts,
   //    which get retrieved by semantic similarity into future runs' system prompts.)
 
-  // 2. Store significant tool calls and results
+  // 2. Store significant tool calls and results.
+  //
+  // Tool result bodies are capped before they enter working memory.
+  // Without a cap, an unbounded tool output (e.g. a catalog listing or
+  // a search_catalog stats blob) lives in the conversation's working
+  // memory forever, getting re-shipped on every subsequent retrieval
+  // for the rest of the session — long after the model has moved on
+  // and is no longer referencing it. The cap is generous (~6KB ≈ the
+  // first useful page of any tool result); anything beyond that is
+  // discoverable on demand via a fresh tool call, not via memory.
+  const MAX_TOOL_RESULT_MEMORY_BYTES = 6000
   for (const t of run.trace) {
     if (t.kind === "tool-call" && t.tool && t.text) {
       ingestTurn({
         tier: MemoryTier.Working,
         role: MemoryRole.Tool,
-        content: `[Tool: ${t.tool}] ${t.text}`,
+        content: `[Tool: ${t.tool}] ${truncateAtBoundary(t.text, MAX_TOOL_RESULT_MEMORY_BYTES, "\u2026 [truncated for memory]")}`,
         metadata: { type: "tool-call", tool: t.tool },
         source: MemorySource.Tool,
         confidence: 0.6,
@@ -173,7 +183,7 @@ export function ingestRunTurns(run: {
       ingestTurn({
         tier: MemoryTier.Working,
         role: MemoryRole.Tool,
-        content: t.text,
+        content: truncateAtBoundary(t.text, MAX_TOOL_RESULT_MEMORY_BYTES, "\u2026 [truncated for memory]"),
         metadata: { type: "tool-result" },
         source: MemorySource.Tool,
         confidence: 0.6,

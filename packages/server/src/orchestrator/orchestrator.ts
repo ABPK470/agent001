@@ -215,7 +215,7 @@ export class AgentOrchestrator {
     let systemPrompt: string | undefined
     if (originalRun.agent_id) {
       const agentDef = db.getAgentDefinition(originalRun.agent_id)
-      if (agentDef) systemPrompt = agentDef.system_prompt
+      if (agentDef) systemPrompt = db.resolveAgentSystemPrompt(agentDef)
     }
     // Visitor allowlist on resume too — safety net even if agentDef requests
     // tools the visitor isn't allowed to use.

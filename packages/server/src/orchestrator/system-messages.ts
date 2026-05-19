@@ -8,6 +8,24 @@ import { decideSections } from "./decide-sections.js"
 // ── System message construction ───────────────────────────────────
 
 /**
+ * `isAdmin` policy (read this before adding any new admin-conditional path):
+ *
+ * `isAdmin` exists ONLY to gate **path and environment-detail leakage** that
+ * a non-admin user has no business seeing — concretely:
+ *   - the host home directory (`buildEnvironmentContext`)
+ *   - the real application workspace tree (developer-mode workspace dump)
+ *
+ * It MUST NOT gate prompt quality, tool eagerness, tool-output verbosity,
+ * memory richness, gating heuristics, or any other behavior axis. Every
+ * user — admin or not — receives the same engineering effort, the same
+ * goal-aware gating, the same tool budget, the same answer quality.
+ *
+ * If a new "should admin get a different X?" question arises, the answer
+ * is almost always "no — make the heuristic role-independent and let
+ * `isAdmin` keep doing its narrow security job."
+ */
+
+/**
  * Build the structured multi-message system prompt.
  * Each section gets its own system message with a budget section tag,
  * enabling intelligent truncation when approaching token limits.
@@ -33,6 +51,26 @@ export async function buildSystemMessages(opts: {
   const isAdmin = opts.isAdmin ?? false
 
   const decision = decideSections({ goal, memory: perTier })
+
+  // Observability: surface the per-run section decision exactly once, so any
+  // future "why was the persona injected?" / "why is the prompt so big?"
+  // question is a 30-second log read, not a code archaeology session.
+  // Format is deliberately compact and stable (key=val) so grep/awk work.
+  const goalPreview = goal.length > 60 ? `${goal.slice(0, 60).replace(/\n/g, " ")}\u2026` : goal.replace(/\n/g, " ")
+  // eslint-disable-next-line no-console
+  console.log(
+    `[sections] run=${opts.runId} goal="${goalPreview}" ` +
+    `dbScore=${decision.dbScore ?? 0} ` +
+    `persona=${decision.includeDataPersona ? 1 : 0} ` +
+    `sync=${decision.includeAbiSync ? 1 : 0} ` +
+    `chart=${decision.includeChartCatalogue ? 1 : 0} ` +
+    `etl=${decision.includeBigTableEtl ? 1 : 0} ` +
+    `mssqlKnow=${decision.includeMssqlKnowledge ? decision.mssqlKnowledgeMode : "off"} ` +
+    `mssqlCat=${decision.includeMssqlCatalog ? 1 : 0} ` +
+    `mssqlGuide=${decision.includeMssqlGuidance ? 1 : 0} ` +
+    `memGuide=${decision.includeMemoryGuidance ? 1 : 0} ` +
+    `admin=${isAdmin ? 1 : 0}`,
+  )
 
   const systemMessages: Message[] = []
 
@@ -96,8 +134,10 @@ export async function buildSystemMessages(opts: {
   // Section 2: system_runtime — tool capabilities (droppable). The tool
   // context is goal-aware: heavy MSSQL knowledge / catalog / orchestration
   // prose is gated behind the same DB-intent heuristic as the chart block.
+  // `mssqlKnowledgeMode` lets borderline DB goals get a header-only body.
   const toolCtx = buildToolContext(allTools, {
     includeMssqlKnowledge: decision.includeMssqlKnowledge,
+    mssqlKnowledgeMode:    decision.mssqlKnowledgeMode,
     includeMssqlCatalog:   decision.includeMssqlCatalog,
     includeMssqlGuidance:  decision.includeMssqlGuidance,
   })

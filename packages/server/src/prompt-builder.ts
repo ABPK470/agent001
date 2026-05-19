@@ -37,6 +37,26 @@ export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
 }
 
 /**
+ * Extract a compact header from a per-connection knowledge body.
+ *
+ * Used when `mssqlKnowledgeMode === "header"`: keeps the agent oriented
+ * (it learns the schema namespaces exist, sees the lead-in paragraph)
+ * without paying for the full 5-15 KB prose body on borderline goals.
+ *
+ * Heuristic: take the first non-blank paragraph (up to the first blank
+ * line), then a one-line tail telling the agent how to discover more.
+ * Capped at ~700 bytes either way.
+ */
+function extractKnowledgeHeader(body: string): string {
+  const HEADER_BYTE_CAP = 700
+  const firstPara = body.split(/\n\s*\n/, 1)[0]?.trim() ?? ""
+  const truncated = firstPara.length > HEADER_BYTE_CAP
+    ? firstPara.slice(0, HEADER_BYTE_CAP).replace(/\s+\S*$/, "") + "\u2026"
+    : firstPara
+  return `${truncated}\n[full knowledge body omitted — call search_catalog / inspect_definition / explore_mssql_schema for specifics]`
+}
+
+/**
  * Build capability context for tools that need ambient awareness in the prompt.
  * Tool definitions alone tell the LLM *how* to call a tool, but not *when* or *why*.
  * This injects discoverable capability summaries so the LLM knows what resources exist.
@@ -49,6 +69,13 @@ export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
 export interface BuildToolContextOptions {
   /** Include the MSSQL knowledge body (large — typically the biggest single win). */
   includeMssqlKnowledge?: boolean
+  /**
+   * Granularity for the knowledge body when `includeMssqlKnowledge` is true.
+   *  - "full"   — full per-connection knowledge file (default).
+   *  - "header" — first paragraph + namespace summary + discovery-tools hint
+   *               (~600B). Used for borderline DB-intent goals.
+   */
+  mssqlKnowledgeMode?:    "full" | "header"
   /** Include the live schema-catalog summary (medium). */
   includeMssqlCatalog?:   boolean
   /** Include the verbose "RULES / EFFICIENCY ANALYSIS" guidance (large). */
@@ -57,6 +84,7 @@ export interface BuildToolContextOptions {
 
 export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions): string {
   const includeMssqlKnowledge = opts?.includeMssqlKnowledge ?? true
+  const mssqlKnowledgeMode    = opts?.mssqlKnowledgeMode    ?? "full"
   const includeMssqlCatalog   = opts?.includeMssqlCatalog   ?? true
   const includeMssqlGuidance  = opts?.includeMssqlGuidance  ?? true
 
@@ -104,10 +132,10 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     // it covers. This is the single biggest per-call token win — see
     // /memories/session/plan.md (Phase 1).
     //
-    // TODO(prompt-diet): split mymi-knowledge into a tiny always-on header
-    // (≤500B: schema namespaces, common joins, key tables) plus an
-    // on-demand `get_database_knowledge` tool that returns the relevant
-    // section by topic. Today the entire body ships whenever isDbLike fires.
+    // `mssqlKnowledgeMode` (set by decideSections from the goal score)
+    // chooses full body vs header-only. Header mode keeps the agent
+    // oriented (it learns the schema namespaces exist) without paying
+    // 5-15 KB per call for goals that only marginally touch the DB.
     if (includeMssqlKnowledge && cfgs.some((c) => c.knowledge)) {
       const groups = new Map<string, string[]>()  // body → [env names]
       for (const c of cfgs) {
@@ -118,13 +146,19 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
       }
       const knowledgeBlocks: string[] = []
       for (const [body, envs] of groups) {
+        const renderedBody = mssqlKnowledgeMode === "header"
+          ? extractKnowledgeHeader(body)
+          : body
         knowledgeBlocks.push(
           cfgs.length === 1 || (groups.size === 1 && envs.length === cfgs.length)
-            ? body
-            : `[${envs.join(", ")}]\n${body}`,
+            ? renderedBody
+            : `[${envs.join(", ")}]\n${renderedBody}`,
         )
       }
-      sections.push("", "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:", ...knowledgeBlocks)
+      const header = mssqlKnowledgeMode === "header"
+        ? "DATABASE KNOWLEDGE (header only — goal looks marginally DB-shaped; full body omitted for prompt economy. Call search_catalog / explore_mssql_schema / inspect_definition for details):"
+        : "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:"
+      sections.push("", header, ...knowledgeBlocks)
     }
 
     // Inject live catalog summary if available

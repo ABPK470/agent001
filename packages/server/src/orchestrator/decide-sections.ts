@@ -30,6 +30,19 @@ export interface SectionDecision {
   includeBigTableEtl:    boolean
   /** Include the per-connection knowledge body (the largest single block). */
   includeMssqlKnowledge: boolean
+  /**
+   * Granularity for the knowledge body when `includeMssqlKnowledge` is true.
+   *
+   *  - "full"   — full body (`mymi-knowledge.md` per connection). Used when
+   *               the goal is strongly DB-shaped (score ≥ 4) or sync, where
+   *               column-level accuracy actually matters this turn.
+   *  - "header" — first paragraph + namespace summary only (~600B), with a
+   *               note telling the agent the rest is available via the
+   *               discovery tools. Used for borderline DB goals (score 2-3)
+   *               where mentioning the warehouse is plausible but a 5-15 KB
+   *               prose dump is overkill.
+   */
+  mssqlKnowledgeMode:    "full" | "header"
   /** Include the live schema-catalog summary. */
   includeMssqlCatalog:   boolean
   /**
@@ -156,6 +169,11 @@ export function decideSections(opts: {
     includeAbiSync:        db.sync,
     includeMssqlGuidance:  isDbLike,
     includeMssqlKnowledge: isDbLike,
+    // Strong DB intent (score ≥ 4) or any sync goal → full knowledge body;
+    // borderline DB intent → header-only. Single-signal hits (score 2-3:
+    // e.g. just "join" or just "schema" in the goal) shouldn't ship the
+    // full warehouse manual.
+    mssqlKnowledgeMode:    (db.score >= 4 || db.sync) ? "full" : "header",
     includeMssqlCatalog:   isDbLike,
     includeBigTableEtl:    isDbLike,
     includeChartCatalogue: isVisual,
@@ -170,4 +188,82 @@ export function decideSections(opts: {
       sync:        db.sync,
     },
   }
+}
+
+// ── Tool-eagerness gating ──────────────────────────────────────────
+//
+// Mirror of `decideSections`, but for the **tool list** sent to the LLM.
+//
+// Until now there were two parallel concerns: which *prose sections* to
+// inject (handled by `decideSections`) and which *tools* to advertise
+// (handled by nothing — every run got the full registry). The second
+// concern is what produced the trace where a trivial "Hi" still saw the
+// agent reach for `search_catalog(stats=true)`: when MSSQL and sync
+// tools sit in the registry, their descriptions appear in the LLM tool
+// schema, which steers behavior independently of the system prompt.
+//
+// Policy: when the goal is clearly not DB- or sync-shaped, drop the
+// DB-discovery and sync tools from the registry for this run. The agent
+// keeps the full generic toolset (files, shell, internet, ask_user,
+// fetch_url, …) and can never trip into a 50 KB catalog dump for a
+// greeting. If the user pivots mid-conversation to a DB question, that
+// is a new run (or a resume after explicit re-classification) — the
+// per-run gate is the right granularity.
+//
+// Conservative: gate fires only when `decideSections` says no DB content
+// at all (dbScore < 2 AND no sync). Borderline goals keep all tools.
+
+const DB_DISCOVERY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "search_catalog",
+  "explore_mssql_schema",
+  "discover_relationships",
+  "profile_data",
+  "inspect_definition",
+  "query_mssql",
+  "export_query_to_file",
+])
+
+const SYNC_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "list_environments",
+  "sync_preview",
+  "sync_execute",
+  "compare_catalogs",
+])
+
+export interface ToolFilterResult<T extends { name: string }> {
+  /** Final tool list to advertise to the LLM. */
+  tools:   T[]
+  /** Names dropped for this run. Used for the observability log line. */
+  dropped: string[]
+  /** True when no filtering occurred (borderline / DB-shaped / sync goals). */
+  passThrough: boolean
+}
+
+/**
+ * Filter a tool list based on the same goal classification used for
+ * section gating. See the block comment above for policy.
+ *
+ * Generic over the Tool shape so server-side governed/wrapped tools
+ * (which add fields beyond {name, description}) can be filtered without
+ * losing their identity.
+ */
+export function filterToolsByGoal<T extends { name: string }>(
+  tools: T[],
+  decision: SectionDecision,
+): ToolFilterResult<T> {
+  const score = decision.dbScore ?? 0
+  const isDbLike = score >= 2
+  const isSync   = !!decision.triggers?.sync
+  if (isDbLike || isSync) {
+    return { tools, dropped: [], passThrough: true }
+  }
+  const dropped: string[] = []
+  const kept = tools.filter((t) => {
+    if (DB_DISCOVERY_TOOL_NAMES.has(t.name) || SYNC_TOOL_NAMES.has(t.name)) {
+      dropped.push(t.name)
+      return false
+    }
+    return true
+  })
+  return { tools: kept, dropped, passThrough: false }
 }

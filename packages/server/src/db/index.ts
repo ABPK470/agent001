@@ -28,7 +28,7 @@ export {
 
 // LLM config & agent definitions
 export {
-    deleteAgentDefinition, getAgentDefinition, getLlmConfig, listAgentDefinitions, saveAgentDefinition, saveLlmConfig,
+    deleteAgentDefinition, getAgentDefinition, getLlmConfig, listAgentDefinitions, resolveAgentSystemPrompt, saveAgentDefinition, saveLlmConfig,
     type DbAgentDefinition, type DbLlmConfig, type LlmProvider
 } from "./agents.js"
 
