@@ -1,0 +1,517 @@
+import { ExternalLink, Send, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { App } from "../App"
+import { Logo } from "./Logo"
+import { introBasePath, loginOrRegister } from "./introShared"
+
+interface Msg { role: "bot" | "user"; text: string; streamed?: boolean }
+
+// ── MI:A wordmark decoder ─────────────────────────────────────────────
+// Same scramble alphabet & timings as WelcomeIntro so the brand
+// reveal feels native to the rest of the app.
+const SCRAMBLE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*<>?/+="
+const WORDMARK = "MI:A"
+const WM_REVEAL_DELAY_MS  = 220
+const WM_LETTER_STEP_MS   = 110
+const WM_SCRAMBLE_DUR_MS  = 90
+const WM_SCRAMBLE_TICK_MS = 50
+function wmRandomGlyph(seed: number): string {
+  const i = Math.abs((seed * 9301 + 49297) % SCRAMBLE_ALPHABET.length)
+  return SCRAMBLE_ALPHABET[i]!
+}
+type WmCellState = "hidden" | "scrambling" | "locked"
+interface WmCell { state: WmCellState; glyph: string }
+
+function MiaWordmark() {
+  const [cells, setCells] = useState<WmCell[]>(
+    () => WORDMARK.split("").map(() => ({ state: "hidden", glyph: "" })),
+  )
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setCells(WORDMARK.split("").map((ch) => ({ state: "locked", glyph: ch })))
+      return
+    }
+    const startedAt = performance.now()
+    let raf = 0
+    let lastTick = 0
+    const total = WM_REVEAL_DELAY_MS + WORDMARK.length * WM_LETTER_STEP_MS + WM_SCRAMBLE_DUR_MS + 100
+    const tick = (now: number) => {
+      const elapsed = now - startedAt
+      if (elapsed > total) return
+      if (now - lastTick < WM_SCRAMBLE_TICK_MS) { raf = requestAnimationFrame(tick); return }
+      lastTick = now
+      setCells((prev) => {
+        const next = prev.slice()
+        for (let i = 0; i < WORDMARK.length; i++) {
+          const revealAt = WM_REVEAL_DELAY_MS + i * WM_LETTER_STEP_MS
+          const lockAt = revealAt + WM_SCRAMBLE_DUR_MS
+          if (elapsed < revealAt) continue
+          if (elapsed >= lockAt) {
+            if (next[i]!.state !== "locked") next[i] = { state: "locked", glyph: WORDMARK[i]! }
+          } else {
+            next[i] = { state: "scrambling", glyph: wmRandomGlyph(Math.floor(now) + i * 17) }
+          }
+        }
+        return next
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  return (
+    <span className="intro3-wordmark" aria-label="MI:A">
+      {cells.map((cell, i) => (
+        <span
+          key={i}
+          className={`intro3-wm-letter${cell.state === "scrambling" ? " intro3-wm-scramble" : ""}`}
+        >
+          {cell.state === "hidden" ? "\u00A0" : cell.glyph}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// ── Streaming text — character-by-character LLM-style reveal. ─────────
+function StreamingText({
+  text,
+  onDone,
+  speedMs = 22,
+}: { text: string; onDone?: () => void; speedMs?: number }) {
+  const [n, setN] = useState(0)
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { onDoneRef.current = onDone })
+  useEffect(() => { setN(0) }, [text])
+  useEffect(() => {
+    if (n >= text.length) { onDoneRef.current?.(); return }
+    const t = window.setTimeout(() => setN((v) => v + 1), speedMs)
+    return () => window.clearTimeout(t)
+  }, [n, text, speedMs])
+  return (
+    <>
+      {text.slice(0, n)}
+      {n < text.length && <span className="intro3-caret" aria-hidden="true">▍</span>}
+    </>
+  )
+}
+
+// ── Decay text — outro scramble. Letters R→L go locked → scrambling
+//    → hidden (encrypted-then-gone), mirroring WelcomeIntro's outro. ──
+const DECAY_LEAD_MS     = 240
+const DECAY_STEP_MS     = 35
+const DECAY_SCRAMBLE_MS = 110
+const DECAY_TICK_MS     = 45
+type DecayCellState = "locked" | "scrambling" | "hidden"
+interface DecayCell { state: DecayCellState; glyph: string }
+
+function DecayText({ text, active }: { text: string; active: boolean }) {
+  const [cells, setCells] = useState<DecayCell[]>(
+    () => text.split("").map((ch) => ({ state: "locked", glyph: ch })),
+  )
+
+  // Reset whenever the source text changes while not yet active.
+  useEffect(() => {
+    if (!active) setCells(text.split("").map((ch) => ({ state: "locked", glyph: ch })))
+  }, [text, active])
+
+  useEffect(() => {
+    if (!active) return
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setCells(text.split("").map(() => ({ state: "hidden", glyph: "" })))
+      return
+    }
+    // Wait for the bubble chrome (bg, border, shadow) to fade out
+    // BEFORE the letters start to scramble away. Otherwise the text
+    // looks like it abandons a still-visible empty bubble shell.
+    const startedAt = performance.now() + DECAY_LEAD_MS
+    const total = DECAY_LEAD_MS + text.length * DECAY_STEP_MS + DECAY_SCRAMBLE_MS + 100
+    let raf = 0
+    let lastTick = 0
+    const tick = (now: number) => {
+      const elapsed = now - startedAt
+      if (elapsed > total) return
+      if (now - lastTick < DECAY_TICK_MS) { raf = requestAnimationFrame(tick); return }
+      lastTick = now
+      setCells((prev) => {
+        const next = prev.slice()
+        // R→L: rightmost letter disappears first.
+        for (let i = text.length - 1; i >= 0; i--) {
+          const ri = text.length - 1 - i
+          const startAt = ri * DECAY_STEP_MS
+          const goneAt = startAt + DECAY_SCRAMBLE_MS
+          if (elapsed < startAt) continue
+          if (elapsed >= goneAt) {
+            if (next[i]!.state !== "hidden") next[i] = { state: "hidden", glyph: "" }
+          } else {
+            next[i] = { state: "scrambling", glyph: wmRandomGlyph(Math.floor(now) + i * 17) }
+          }
+        }
+        return next
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [active, text])
+
+  return (
+    <span className="intro3-decay">
+      {cells.map((cell, i) => (
+        <span
+          key={i}
+          className={`intro3-decay-cell${cell.state === "scrambling" ? " intro3-decay-cell--scramble" : ""}${cell.state === "hidden" ? " intro3-decay-cell--hidden" : ""}`}
+        >
+          {cell.state === "hidden" ? "" : cell.glyph || "\u00A0"}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/**
+ * /intro3 — "a conversation, not a form".
+ *
+ * The screen opens already mid-chat: the bot has asked "who am I
+ * talking to?". You answer. Bot: "prove it." You answer. Bot:
+ * "come in." — and the same chat surface morphs into the platform's
+ * default term-chat widget.
+ *
+ * Visual seamlessness contract:
+ *   - The bare login screen shows ONLY the chat surface (no platform
+ *     header, no widget chrome). The widget chrome and platform
+ *     header are revealed by the entry morph, not shown up-front.
+ *   - The input bar sits centered & narrow during login; on entry it
+ *     slides down and expands to its full TermChat-bottom-docked
+ *     position.
+ *   - A pixel-art logo sits in the top-left corner from page-load,
+ *     with the "MI:A" wordmark rolling out beside it. The wordmark
+ *     rolls back in (collapses) during the entry morph because the
+ *     real platform Toolbar shows only the logo glyph.
+ *   - Bubble shapes, fonts, paddings, the bg-panel widget shell, the
+ *     drag-handle label and controls are 1:1 with WidgetFrame +
+ *     TermChat populated state.
+ */
+export function IntroConversation({ onEntered, onEnteringStart }: {
+  onEntered?: () => void
+  onEnteringStart?: () => void
+} = {}) {
+  const [step, setStep]             = useState<"username" | "password" | "done">("username")
+  const [username, setUsername]     = useState("")
+  const [draft, setDraft]           = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [entering, setEntering]     = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [botTyping, setBotTyping]   = useState(false)
+  const [shimmerLabel, setShimmerLabel] = useState<string>("Loading")
+  // The first bot message is not seeded — it's spoken (shimmer + stream)
+  // only after the MI:A wordmark finishes decoding so the screen unfolds
+  // in sequence: wordmark → bot greeting → input bar.
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [inputReady, setInputReady] = useState(false)
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const t = document.title
+    document.title = "MI:A"
+    return () => { document.title = t }
+  }, [])
+
+  // Sequence the opening: wait for the wordmark to lock in, then have
+  // the bot greet, then reveal the input bar. Keeps the entry feel
+  // ordered rather than everything popping in simultaneously.
+  useEffect(() => {
+    let cancelled = false
+    const wordmarkDoneMs =
+      WM_REVEAL_DELAY_MS + WORDMARK.length * WM_LETTER_STEP_MS + WM_SCRAMBLE_DUR_MS + 200
+    const run = async () => {
+      await new Promise((r) => window.setTimeout(r, wordmarkDoneMs))
+      if (cancelled) return
+      await botReply("who am I talking to?", "Loading", 600)
+      if (cancelled) return
+      setInputReady(true)
+    }
+    void run()
+    return () => { cancelled = true }
+    // Intentionally empty deps — runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (entering || step === "done" || !inputReady) return
+    if (submitting || botTyping) return
+    const raf = window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
+    return () => window.cancelAnimationFrame(raf)
+  }, [step, entering, inputReady, submitting, botTyping, error])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [msgs, botTyping])
+
+  function push(role: Msg["role"], text: string) {
+    setMsgs((prev) => [...prev, { role, text }])
+  }
+
+  async function botReply(text: string, shimmer: string, delay = 650): Promise<void> {
+    setShimmerLabel(shimmer)
+    setBotTyping(true)
+    await new Promise((r) => window.setTimeout(r, delay))
+    setBotTyping(false)
+    // Tiny gap so the shimmer is fully gone before the streaming bubble
+    // appears — avoids the visual collision the user flagged.
+    await new Promise((r) => window.setTimeout(r, 120))
+    push("bot", text)
+    const streamDuration = Math.max(220, text.length * 22 + 80)
+    await new Promise<void>((r) => window.setTimeout(r, streamDuration))
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (submitting || entering) return
+    const value = draft.trim()
+    if (!value) return
+
+    if (step === "username") {
+      push("user", value)
+      setUsername(value)
+      setDraft("")
+      setError(null)
+      await botReply("prove it.", "Thinking")
+      setStep("password")
+      return
+    }
+
+    if (step === "password") {
+      push("user", "•".repeat(value.length))
+      setDraft("")
+      setSubmitting(true)
+      setError(null)
+      try {
+        await loginOrRegister(username, value)
+        await botReply("come in.", "Verifying", 500)
+        setStep("done")
+        // After the "come in." stream finishes, the morph starts.
+        // onEnteringStart fires immediately so the route can mount
+        // <App/> underneath and let it paint while the morph plays;
+        // onEntered fires once the morph + decay finish so the route
+        // can unmount the intro overlay over an already-rendered App.
+        window.setTimeout(() => {
+          if (onEnteringStart) onEnteringStart()
+          setEntering(true)
+        }, 150)
+        window.setTimeout(() => {
+          if (onEntered) onEntered()
+          else window.location.assign(introBasePath())
+        }, 1700)
+      } catch (err) {
+        setSubmitting(false)
+        const msg = err instanceof Error ? err.message : "sign-in failed"
+        setError(msg)
+        await botReply(`${msg} — try again.`, "Thinking", 400)
+      }
+    }
+  }
+
+  const inputDisabled = submitting || entering || botTyping
+  const canSend = draft.trim().length > 0 && !inputDisabled
+
+  return (
+    <div
+      className={`intro3-root${entering ? " intro3-root--entering" : ""}`}
+      aria-label="mia-entry conversation"
+    >
+      {/* Platform-shaped header — bg fades in from transparent → bg-canvas
+          during the morph. Matches Toolbar's h-14 px-3 sm:px-6. */}
+      <header className="intro3-header flex items-center px-3 sm:px-6 h-14 shrink-0 select-none gap-2 sm:gap-4">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Logo size={30} online />
+          <MiaWordmark />
+        </div>
+      </header>
+
+      {/* Canvas-shaped stage — padding fades 0 → p-2 during morph. */}
+      <main className="intro3-stage flex-1 min-h-0 overflow-hidden">
+        {/* Widget shell — rounded-xl + bg-panel fade in during morph. */}
+        <div className="intro3-widget flex flex-col h-full overflow-hidden">
+          {/* Drag handle — height fades 0 → h-8 during morph. 1:1 with
+              WidgetFrame's drag handle for type=term-chat. */}
+          <div className="intro3-handle widget-drag-handle flex items-center justify-between px-3 shrink-0 select-none">
+            <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+              Chat
+            </span>
+            <div className="widget-controls flex items-center gap-1">
+              <button
+                type="button"
+                className="text-text-muted hover:text-text p-1 rounded transition-colors"
+                tabIndex={-1}
+                aria-hidden="true"
+              >
+                <ExternalLink size={18} />
+              </button>
+              <button
+                type="button"
+                className="text-text-muted hover:text-error p-1 rounded transition-colors"
+                tabIndex={-1}
+                aria-hidden="true"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Widget content — 1:1 with TermChat surface. */}
+          <div className="widget-content flex-1 overflow-hidden p-0">
+            <div className="relative flex flex-col h-full bg-transparent text-text font-sans">
+              {/* Scroll area — same px/py/max-width as TermChat.
+                  intro3-scroll-area gets the top fade-out mask. */}
+              <div
+                ref={scrollRef}
+                className="intro3-scroll-area flex-1 overflow-y-auto px-6 py-5 min-h-0"
+              >
+                <div className="intro3-scroll-inner w-[90%] max-w-[1400px] min-h-full mx-auto flex flex-col">
+                  <div className="w-full max-w-[1200px] mx-auto space-y-4">
+                    {msgs.map((m, i) => {
+                      const isLast = i === msgs.length - 1
+                      if (m.role === "user") {
+                        return (
+                          <div key={i} className="flex justify-end">
+                            <div
+                              className="intro3-bubble-user max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                              style={{ boxShadow: "var(--shadow-bubble)" }}
+                            >
+                              {entering
+                                ? <DecayText text={m.text} active={entering} />
+                                : m.text}
+                            </div>
+                          </div>
+                        )
+                      }
+                      // Bot: stream the latest, lock prior ones. On the
+                      // entry morph every bubble decays (encrypt-out) in
+                      // sync with the chrome reveal.
+                      return (
+                        <div key={i} className="text-[15px] text-text leading-relaxed">
+                          {entering
+                            ? <DecayText text={m.text} active={entering} />
+                            : isLast
+                              ? <StreamingText text={m.text} />
+                              : m.text}
+                        </div>
+                      )
+                    })}
+                    {/* Constant-height slot so the chat doesn't jump
+                        when the shimmer fades in/out between phases. */}
+                    <div className="intro3-activity-slot py-1.5 pr-2">
+                      {botTyping ? (
+                        <span className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block text-text-muted">
+                          {shimmerLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input pad — hidden until the opening bot greeting is
+                  done streaming, then fades/slides in. During the entry
+                  morph it slides down + expands to its full TermChat-
+                  bottom-docked position. */}
+              <div className={`intro3-input-pad${inputReady ? " intro3-input-pad--visible" : ""}`}>
+                <form
+                  onSubmit={handleSubmit}
+                  className="intro3-input mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={inputRef}
+                      type={step === "password" ? "password" : "text"}
+                      value={draft}
+                      onChange={(e) => { setDraft(e.target.value); if (error) setError(null) }}
+                      placeholder={
+                        step === "done"
+                          ? ""
+                          : step === "password"
+                            ? "password"
+                            : "your handle"
+                      }
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete={step === "password" ? "current-password" : "username"}
+                      autoFocus
+                      disabled={inputDisabled || step === "done"}
+                      aria-label={step}
+                      className="flex-1 min-w-0 bg-transparent text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed disabled:opacity-30"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!canSend}
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
+                      title="Send"
+                      aria-label="Send"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// ── Route-level wrapper ──────────────────────────────────────────────
+// Swaps from the IntroConversation morph into the full <App/> in place
+// (no page reload), eliminating the visible reload-blip the user
+// flagged. The intro morph already converges visually onto the
+// platform chrome, so the swap is invisible.
+export function IntroConversationRoute() {
+  // Four-stage hand-off so there is NO visible reload-blip and the
+  // intro chrome never "vanishes" abruptly:
+  //   1. "intro"     — only the conversation is rendered
+  //   2. "layered"   — login succeeded; <App/> mounts UNDERNEATH at
+  //                    full size, paints while the intro overlay stays
+  //                    on top finishing its morph
+  //   3. "fading"    — morph done; the intro overlay cross-fades to
+  //                    transparent over the now-painted <App/>
+  //   4. "platform"  — fade done; intro overlay unmounted
+  const [phase, setPhase] = useState<"intro" | "layered" | "fading" | "platform">("intro")
+  const introMounted = phase !== "platform"
+  const showApp      = phase !== "intro"
+  return (
+    <div className="intro3-route-root" style={{ position: "relative", width: "100%", height: "100vh" }}>
+      {showApp ? (
+        <div
+          className="intro3-route-app"
+          style={{ position: "absolute", inset: 0, zIndex: 0 }}
+        >
+          <App />
+        </div>
+      ) : null}
+      {introMounted ? (
+        <div
+          className={`intro3-route-overlay${phase === "fading" ? " intro3-route-overlay--fading" : ""}`}
+          style={{ position: "absolute", inset: 0, zIndex: 1 }}
+          onTransitionEnd={(e) => {
+            if (phase === "fading" && e.propertyName === "opacity") setPhase("platform")
+          }}
+        >
+          <IntroConversation
+            onEnteringStart={() => {
+              try { window.history.replaceState(null, "", introBasePath()) } catch { /* ignore */ }
+              setPhase("layered")
+            }}
+            onEntered={() => { setPhase("fading") }}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}

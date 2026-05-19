@@ -1845,6 +1845,7 @@ function TermChatInputBar({
                   value={input}
                   onChange={(e) => onChange(e.target.value)}
                   onKeyDown={onKeyDown}
+                  autoFocus
                   placeholder={
                       pendingInput
                           ? "Respond in the prompt above ↑"

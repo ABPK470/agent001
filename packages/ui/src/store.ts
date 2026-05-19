@@ -293,12 +293,26 @@ const DEFAULT_ENV_SYNC_FORM: EnvSyncFormState = {
 
 const DEFAULT_VIEW_ID = "default"
 
+/**
+ * Default view seed.
+ *
+ * Surgical change for /intro3 → app continuity: a single full-canvas
+ * term-chat widget is pre-seeded so the app's first paint after login
+ * shows the same chat surface the login screen morphed into.
+ *
+ * Revert: replace `widgets`/`layouts` with `[]`/`{}` to restore the
+ * original empty-canvas default. Existing users with saved layouts
+ * are unaffected — only fresh users hit this seed.
+ */
 function makeDefaultView(): ViewConfig {
+  const widgetId = "default-term-chat"
   return {
     id: DEFAULT_VIEW_ID,
     name: "Main",
-    widgets: [],
-    layouts: {},
+    widgets: [{ id: widgetId, type: "term-chat" }],
+    layouts: {
+      lg: [{ i: widgetId, x: 0, y: 0, w: 12, h: 12, minW: 2, minH: 2 }],
+    },
   }
 }
 
