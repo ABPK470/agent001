@@ -272,6 +272,7 @@ export function IntroConversation({
   onEntered,
   onEnteringStart,
   onLoginSuccess,
+  onLogin,
   enterTrigger = false,
   morphMode = "chat",
   morphTarget,
@@ -282,6 +283,11 @@ export function IntroConversation({
    *  begins. Parent uses this to mount the platform underneath and
    *  measure the target landing rect for the input bar. */
   onLoginSuccess?: () => void
+  /** Optional override for the auth call. When unset, falls back to the
+   *  default `loginOrRegister` from `introShared` (same contract). The
+   *  embedded-in-App.tsx case passes its own version so the parent's
+   *  refreshMe() / phase logic stay in charge. */
+  onLogin?: (username: string, password: string) => Promise<void>
   /** Parent flips to true once App is painted + target measured. When
    *  this becomes true the intro triggers its entering morph. */
   enterTrigger?: boolean
@@ -417,7 +423,7 @@ export function IntroConversation({
       setSubmitting(true)
       setError(null)
       try {
-        await loginOrRegister(username, value)
+        await (onLogin ?? loginOrRegister)(username, value)
         await botReply("come in.", "Verifying", 500)
         setStep("done")
         // After "come in.": if the parent wants to drive the morph

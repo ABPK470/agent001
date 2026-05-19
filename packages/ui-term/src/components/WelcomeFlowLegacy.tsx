@@ -225,7 +225,7 @@ function WaveCanvas({ visible }: { visible: boolean }) {
 
 /* ═══════════════════════════════════════════════════════════════════════ */
 
-export interface WelcomeFlowProps {
+export interface WelcomeFlowLegacyProps {
   onSubmit: (username: string, password: string) => Promise<void>
   onDone: () => void
   mode?: "intro" | "outro" | "reveal"
@@ -233,7 +233,7 @@ export interface WelcomeFlowProps {
 
 type Step = "login" | "submitting" | "morphing" | "dissolving" | "done"
 
-export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowProps) {
+export function WelcomeFlowLegacy({ onSubmit, onDone, mode = "intro" }: WelcomeFlowLegacyProps) {
   const isOutro = mode === "outro"
   const isReveal = mode === "reveal"
 

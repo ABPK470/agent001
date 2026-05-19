@@ -31,21 +31,17 @@ const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 
-// Roll-out animation — staggered-start L→R sweeps. Every band sweeps
-// left-to-right at the same speed, but they don't all start at once:
-// the BOTTOM band starts first, each band above it starts a fixed
-// stagger later. The leading edge therefore forms a diagonal that
-// originates at the bottom-left and runs up-right, so the bottom-right
-// corner is the first part of the screen to be fully populated, then
-// each row above completes in turn.
-//
-// Already-revealed cells keep evolving via ambient drift, so the
-// bottom of the screen visibly thickens while the upper rows are
-// still mid-sweep.
-const BAND_ROWS = 3                  // visual thickness of one band
-const BAND_SWEEP_MS = 700            // time for one band to sweep L→R
-const BAND_STAGGER_MIN_MS = 70       // minimum gap between band starts
-const REVEAL_TOTAL_TARGET_MS = 2300  // soft cap on full reveal
+// Roll-out animation — non-directional "materialize". Every cell has
+// its own stable reveal time computed from a per-cell hash blended
+// with a soft center-outward bias. There is no sweep direction — the
+// field appears everywhere at once with focus gently pulling outward
+// from the screen center, and per-cell jitter keeps it from looking
+// like a clean radial wave. Already-revealed cells immediately join
+// the ambient noise drift so the surface feels alive from the first
+// frame, not after a hard wavefront passes.
+const REVEAL_DURATION_MS = 900       // time from first to last cell appearing
+const CENTER_BIAS = 0.30             // 0 = pure random, 1 = pure radial
+const REVEAL_SOFT_EDGE_MS = 120      // per-cell fade-in window (alpha ramp)
 
 function readInk(): string {
   if (typeof document === "undefined") return `rgba(120,120,120,${INK_OPACITY})`
@@ -118,11 +114,9 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
     let ink = readInk()
     let cols = 0
     let rows = 0
-    let bands = 0
     let cells = new Uint8Array(0)   // last-painted palette index per cell
     let painted = new Uint8Array(0) // 1 once a cell has been revealed
-    let bandStagger = BAND_STAGGER_MIN_MS
-    let firstActiveAnimBand = 0     // lowest k still mid-sweep
+    let revealTimes = new Float32Array(0) // per-cell reveal ms from start
     let revealed = false
     let rafId = 0
     let lastFrame = 0
@@ -135,13 +129,20 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       if (ch !== " ") ctx!.fillText(ch, x, y)
     }
 
-    // band index k in animation order → canvas band index (top-to-bottom)
-    // k=0 is the BOTTOM canvas band; k=bands-1 is the TOP canvas band.
-    function canvasBandOf(k: number): number { return bands - 1 - k }
-
-    function cellRevealMs(k: number, c: number): number {
-      const sweep = cols > 1 ? (c / (cols - 1)) * BAND_SWEEP_MS : 0
-      return k * bandStagger + sweep
+    function computeRevealTimes() {
+      const cx = cols / 2
+      const cy = rows / 2
+      const radialNorm = Math.sqrt(cx * cx + cy * cy) || 1
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const dx = c - cx
+          const dy = r - cy
+          const radial = Math.sqrt(dx * dx + dy * dy) / radialNorm  // 0..~1
+          const jitter = hash2(c, r)                                 // [0,1)
+          const u = CENTER_BIAS * radial + (1 - CENTER_BIAS) * jitter
+          revealTimes[r * cols + c] = u * REVEAL_DURATION_MS
+        }
+      }
     }
 
     function repaintAll(t: number) {
@@ -172,17 +173,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
 
       cols = Math.ceil(w / CHAR_W) + 1
       rows = Math.ceil(h / LINE_H) + 1
-      bands = Math.ceil(rows / BAND_ROWS)
       cells = new Uint8Array(cols * rows)
       painted = new Uint8Array(cols * rows)
-      firstActiveAnimBand = 0
-      // Compress the stagger on tall screens so total reveal lands near
-      // the target, but never below the minimum — keeps the diagonal
-      // leading edge clearly visible.
-      bandStagger = Math.max(
-        BAND_STAGGER_MIN_MS,
-        bands > 1 ? (REVEAL_TOTAL_TARGET_MS - BAND_SWEEP_MS) / (bands - 1) : BAND_STAGGER_MIN_MS
-      )
+      revealTimes = new Float32Array(cols * rows)
+      computeRevealTimes()
 
       if (!initial || reduced) {
         // After first sizing (or with reduced motion) snap to fully
@@ -190,7 +184,6 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
         const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
         repaintAll(t)
         painted.fill(1)
-        firstActiveAnimBand = bands
         if (!revealed) {
           revealed = true
           onReadyRef.current?.()
@@ -208,55 +201,62 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
 
-      // Staggered-start sweeps — walk only the bands currently in flight
-      // in animation order (k=0 is the bottom band; k=bands-1 is the
-      // top). Every band sweeps at the same speed; bottom starts first.
+      // Per-cell materialize. While the field is rolling out we walk
+      // every cell once per frame and reveal any whose per-cell time
+      // has elapsed. Newly-revealed cells get a short alpha ramp so
+      // they fade in instead of popping — that's what kills the
+      // "wavefront" look the directional sweep had.
       if (!revealed) {
         const elapsed = now - startTs
-        const lastStartedK = Math.min(bands - 1, Math.floor(elapsed / bandStagger))
+        let anyPending = false
         ctx!.fillStyle = ink
-        let advanceFirst = true
-        for (let k = firstActiveAnimBand; k <= lastStartedK; k++) {
-          const canvasBand = canvasBandOf(k)
-          const rowStart = canvasBand * BAND_ROWS
-          const rowEnd = Math.min(rows, rowStart + BAND_ROWS)
-          let bandDone = true
+        for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            if (elapsed < cellRevealMs(k, c)) { bandDone = false; break }
-            for (let r = rowStart; r < rowEnd; r++) {
-              const idx = r * cols + c
-              if (painted[idx]) continue
-              const v = vnoise(c, r, t)
-              const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
-              cells[idx] = palIdx
-              painted[idx] = 1
-              const ch = PALETTE[palIdx]!
-              if (ch !== " ") ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
+            const idx = r * cols + c
+            if (painted[idx]) continue
+            const rt = revealTimes[idx]!
+            if (elapsed < rt) { anyPending = true; continue }
+            const v = vnoise(c, r, t)
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
+            cells[idx] = palIdx
+            painted[idx] = 1
+            const ch = PALETTE[palIdx]!
+            if (ch !== " ") {
+              // Soft per-cell fade-in (one-shot — subsequent ambient
+              // updates use full ink). Cheap because each cell only
+              // gets one of these paints in its lifetime.
+              const age = elapsed - rt
+              const alpha = age >= REVEAL_SOFT_EDGE_MS
+                ? 1
+                : Math.max(0, age / REVEAL_SOFT_EDGE_MS)
+              if (alpha < 1) {
+                ctx!.globalAlpha = alpha
+                ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
+                ctx!.globalAlpha = 1
+              } else {
+                ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
+              }
             }
           }
-          if (bandDone && advanceFirst && k === firstActiveAnimBand) {
-            firstActiveAnimBand = k + 1
-          } else {
-            advanceFirst = false
-          }
         }
-        if (firstActiveAnimBand >= bands) {
+        // After REVEAL_DURATION_MS + the soft edge, everything that
+        // was going to land has landed (some cells with mid-jitter
+        // landed earlier; we just need the last ones to finish their
+        // fade-in before switching off the per-cell pass).
+        if (!anyPending && elapsed >= REVEAL_DURATION_MS + REVEAL_SOFT_EDGE_MS) {
           revealed = true
           onReadyRef.current?.()
         }
       }
 
-      // Ambient drift on already-revealed cells. We restrict it to the
-      // canvas region [bottomFilledRow..rows-1] so it only affects the
-      // stacked-up portion at the bottom while upper bands keep arriving.
-      const filledBands = firstActiveAnimBand
-      const bottomFilledRow = revealed ? 0 : Math.max(0, rows - filledBands * BAND_ROWS)
-      const liveRows = rows - bottomFilledRow
-      if (liveRows <= 0) return
-      const updates = Math.max(48, Math.floor(cols * liveRows * UPDATE_FRACTION))
+      // Ambient drift on already-revealed cells. During reveal this
+      // hits whatever is already painted (which is scattered across
+      // the whole screen, not stuck to one edge), so the field feels
+      // alive from the very first frame.
+      const updates = Math.max(48, Math.floor(cols * rows * UPDATE_FRACTION))
       ctx!.fillStyle = ink
       for (let i = 0; i < updates; i++) {
-        const r = bottomFilledRow + ((Math.random() * liveRows) | 0)
+        const r = (Math.random() * rows) | 0
         const c = (Math.random() * cols) | 0
         const idx = r * cols + c
         if (!painted[idx]) continue

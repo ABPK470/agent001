@@ -27,7 +27,9 @@ import { RunPicker } from "./components/RunPicker"
 import { StatusBar } from "./components/StatusBar"
 import { StreamPane, type StreamPaneHandle } from "./components/StreamPane"
 import { VisualPane } from "./components/VisualPane"
-import { WelcomeFlow } from "./components/WelcomeFlow"
+// ui-term still uses the legacy WelcomeFlow (intro/outro/reveal mosaic
+// animation). The new conversational login lives in packages/ui only.
+import { WelcomeFlowLegacy as WelcomeFlow } from "./components/WelcomeFlowLegacy"
 import { isMeta, useGlobalKeybinds } from "./keybinds"
 import { useStore } from "./store"
 import { setUiShell, urlForShell } from "./uiPref"
