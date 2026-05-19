@@ -1,6 +1,7 @@
 import { ExternalLink, Send, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { App } from "../App"
+import { useStore } from "../store"
 import { Logo } from "./Logo"
 import { introBasePath, loginOrRegister } from "./introShared"
 
@@ -194,9 +195,33 @@ function DecayText({ text, active }: { text: string; active: boolean }) {
  *     drag-handle label and controls are 1:1 with WidgetFrame +
  *     TermChat populated state.
  */
-export function IntroConversation({ onEntered, onEnteringStart }: {
+export type IntroMorphMode = "empty" | "chat" | "nochat"
+export interface IntroMorphTarget {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+export function IntroConversation({
+  onEntered,
+  onEnteringStart,
+  onLoginSuccess,
+  enterTrigger = false,
+  morphMode = "chat",
+  morphTarget,
+}: {
   onEntered?: () => void
   onEnteringStart?: () => void
+  /** Fired right after "come in." finishes streaming, BEFORE the morph
+   *  begins. Parent uses this to mount the platform underneath and
+   *  measure the target landing rect for the input bar. */
+  onLoginSuccess?: () => void
+  /** Parent flips to true once App is painted + target measured. When
+   *  this becomes true the intro triggers its entering morph. */
+  enterTrigger?: boolean
+  morphMode?: IntroMorphMode
+  morphTarget?: IntroMorphTarget
 } = {}) {
   const [step, setStep]             = useState<"username" | "password" | "done">("username")
   const [username, setUsername]     = useState("")
@@ -294,19 +319,23 @@ export function IntroConversation({ onEntered, onEnteringStart }: {
         await loginOrRegister(username, value)
         await botReply("come in.", "Verifying", 500)
         setStep("done")
-        // After the "come in." stream finishes, the morph starts.
-        // onEnteringStart fires immediately so the route can mount
-        // <App/> underneath and let it paint while the morph plays;
-        // onEntered fires once the morph + decay finish so the route
-        // can unmount the intro overlay over an already-rendered App.
-        window.setTimeout(() => {
-          if (onEnteringStart) onEnteringStart()
-          setEntering(true)
-        }, 150)
-        window.setTimeout(() => {
-          if (onEntered) onEntered()
-          else window.location.assign(introBasePath())
-        }, 1700)
+        // After "come in.": if the parent wants to drive the morph
+        // (onLoginSuccess provided), hand control over so it can mount
+        // <App/> underneath, measure the input-bar landing rect, then
+        // flip enterTrigger=true. Otherwise fall back to self-trigger
+        // (legacy full-page-reload path).
+        if (onLoginSuccess) {
+          onLoginSuccess()
+        } else {
+          window.setTimeout(() => {
+            if (onEnteringStart) onEnteringStart()
+            setEntering(true)
+          }, 150)
+          window.setTimeout(() => {
+            if (onEntered) onEntered()
+            else window.location.assign(introBasePath())
+          }, 1700)
+        }
       } catch (err) {
         setSubmitting(false)
         const msg = err instanceof Error ? err.message : "sign-in failed"
@@ -319,9 +348,38 @@ export function IntroConversation({ onEntered, onEnteringStart }: {
   const inputDisabled = submitting || entering || botTyping
   const canSend = draft.trim().length > 0 && !inputDisabled
 
+  // Parent-driven morph trigger: when enterTrigger flips true we kick
+  // off the entering animation and schedule the "morph done" hand-off.
+  useEffect(() => {
+    if (!enterTrigger || entering) return
+    if (onEnteringStart) onEnteringStart()
+    setEntering(true)
+    const morphMs = 1550
+    const t = window.setTimeout(() => onEntered?.(), morphMs)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enterTrigger])
+
+  // Build inline style for the input bar so it lands on the platform's
+  // actual TermChat input rect (pixel-perfect) for both "empty" and
+  // "chat" modes. Mode "nochat" has no target — the CSS class handles
+  // a fade-up dissolve instead.
+  const inputPadStyle: React.CSSProperties | undefined =
+    entering && (morphMode === "empty" || morphMode === "chat") && morphTarget
+      ? {
+          position: "fixed",
+          left:   morphTarget.left,
+          top:    morphTarget.top,
+          width:  morphTarget.width,
+          height: morphTarget.height,
+          padding: 0,
+          justifyContent: "flex-start",
+        }
+      : undefined
+
   return (
     <div
-      className={`intro3-root${entering ? " intro3-root--entering" : ""}`}
+      className={`intro3-root intro3-mode-${morphMode}${entering ? " intro3-root--entering" : ""}`}
       aria-label="mia-entry conversation"
     >
       {/* Platform-shaped header — bg fades in from transparent → bg-canvas
@@ -420,7 +478,10 @@ export function IntroConversation({ onEntered, onEnteringStart }: {
                   done streaming, then fades/slides in. During the entry
                   morph it slides down + expands to its full TermChat-
                   bottom-docked position. */}
-              <div className={`intro3-input-pad${inputReady ? " intro3-input-pad--visible" : ""}`}>
+              <div
+                className={`intro3-input-pad${inputReady ? " intro3-input-pad--visible" : ""}`}
+                style={inputPadStyle}
+              >
                 <form
                   onSubmit={handleSubmit}
                   className="intro3-input mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors"
@@ -468,23 +529,57 @@ export function IntroConversation({ onEntered, onEnteringStart }: {
 }
 
 // ── Route-level wrapper ──────────────────────────────────────────────
-// Swaps from the IntroConversation morph into the full <App/> in place
-// (no page reload), eliminating the visible reload-blip the user
-// flagged. The intro morph already converges visually onto the
-// platform chrome, so the swap is invisible.
+// Hand-off from intro → platform is driven in stages so:
+//   • no visible page-reload blip (App is mounted in-place)
+//   • the input bar lands EXACTLY where the platform's own input bar
+//     sits (mode="empty"  → centered TermChat welcome bar;
+//             mode="chat" → bottom-docked TermChat input;
+//             mode="nochat" → no landing target → input fades up)
+//   • the morph timing waits for App to actually paint, so the
+//     destination rect is real before we animate to it
 export function IntroConversationRoute() {
-  // Four-stage hand-off so there is NO visible reload-blip and the
-  // intro chrome never "vanishes" abruptly:
-  //   1. "intro"     — only the conversation is rendered
-  //   2. "layered"   — login succeeded; <App/> mounts UNDERNEATH at
-  //                    full size, paints while the intro overlay stays
-  //                    on top finishing its morph
-  //   3. "fading"    — morph done; the intro overlay cross-fades to
-  //                    transparent over the now-painted <App/>
-  //   4. "platform"  — fade done; intro overlay unmounted
   const [phase, setPhase] = useState<"intro" | "layered" | "fading" | "platform">("intro")
+  const [enterTrigger, setEnterTrigger] = useState(false)
+  const [morphMode, setMorphMode] = useState<IntroMorphMode>("chat")
+  const [morphTarget, setMorphTarget] = useState<IntroMorphTarget | undefined>(undefined)
+
   const introMounted = phase !== "platform"
   const showApp      = phase !== "intro"
+
+  // Decide morph mode from current store state (active view's widgets
+  // + run history). Called once, the instant login succeeds.
+  function detectMode(): IntroMorphMode {
+    try {
+      const s = useStore.getState()
+      const view = s.views.find((v) => v.id === s.activeViewId) ?? s.views[0]
+      const hasTermChat = !!view?.widgets?.some((w) => w.type === "term-chat")
+      if (!hasTermChat) return "nochat"
+      return (s.runs?.length ?? 0) === 0 ? "empty" : "chat"
+    } catch {
+      return "chat"
+    }
+  }
+
+  // After App mounts (layered phase), wait for paint, then measure
+  // the platform's TermChat input bar and trigger the entering morph.
+  function measureAndTrigger(mode: IntroMorphMode) {
+    // Two rAFs + a small settle gives App's Suspense / Grid time to
+    // place its children at their final coordinates.
+    const measure = () => {
+      if (mode === "empty" || mode === "chat") {
+        const el = document.querySelector<HTMLElement>('[data-intro-target="termchat-input"]')
+        if (el) {
+          const r = el.getBoundingClientRect()
+          setMorphTarget({ left: r.left, top: r.top, width: r.width, height: r.height })
+        }
+      }
+      setEnterTrigger(true)
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.setTimeout(measure, 120)
+    }))
+  }
+
   return (
     <div className="intro3-route-root" style={{ position: "relative", width: "100%", height: "100vh" }}>
       {showApp ? (
@@ -504,10 +599,17 @@ export function IntroConversationRoute() {
           }}
         >
           <IntroConversation
-            onEnteringStart={() => {
+            morphMode={morphMode}
+            morphTarget={morphTarget}
+            enterTrigger={enterTrigger}
+            onLoginSuccess={() => {
               try { window.history.replaceState(null, "", introBasePath()) } catch { /* ignore */ }
+              const mode = detectMode()
+              setMorphMode(mode)
               setPhase("layered")
+              measureAndTrigger(mode)
             }}
+            onEnteringStart={() => { /* phase already "layered" by onLoginSuccess */ }}
             onEntered={() => { setPhase("fading") }}
           />
         </div>

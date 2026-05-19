@@ -1826,6 +1826,7 @@ function TermChatInputBar({
   const attachDisabled = isRunning || !!pendingInput
   return (
       <div
+          data-intro-target="termchat-input"
           className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}
       >
           <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />

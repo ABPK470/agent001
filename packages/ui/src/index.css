@@ -1265,9 +1265,38 @@ textarea.input {
   pointer-events: auto;
   transform: translateY(0);
 }
+/* Morph: when --entering, the inline style switches the pad to
+   position:fixed at the measured target rect. Animate left/top/
+   width/height so it glides onto the platform's input bar. */
+.intro3-root--entering .intro3-input-pad {
+  transition:
+    left   800ms cubic-bezier(0.4, 0, 0.2, 1),
+    top    800ms cubic-bezier(0.4, 0, 0.2, 1),
+    width  800ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 800ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Mode "nochat" — there is no destination input bar on the platform,
+   so the intro bar dissolves upward as part of the cross-fade. */
+.intro3-mode-nochat.intro3-root--entering .intro3-input-pad {
+  opacity: 0;
+  transform: translateY(-32px);
+  transition:
+    opacity   520ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
 .intro3-input {
   width: 90%;
   max-width: 1400px;
+}
+/* When morphing to a measured rect the .intro3-input wrapper must
+   fill the pad (which is sized to that rect), not its idle 90%. */
+.intro3-root--entering.intro3-mode-empty .intro3-input,
+.intro3-root--entering.intro3-mode-chat  .intro3-input {
+  width: 100%;
+  max-width: 100%;
+  transition: width 800ms cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Streaming-text caret */
