@@ -3304,7 +3304,9 @@ export function MapPanel({
         agentId: agent.id, val: 5, x: -60, y: (idx - (agents.length - 1) / 2) * 50,
       })
 
-      for (const toolId of agent.tools) {
+      // Defensive: older server builds (or partial responses) may omit
+      // `tools`; treat missing as empty so the Map tab never crashes.
+      for (const toolId of agent.tools ?? []) {
         const toolNodeId = `tool:${toolId}`
         if (!toolNodeIds.has(toolNodeId)) {
           const toolIdx = toolNodeIds.size
@@ -3782,7 +3784,7 @@ export function MapPanel({
       if (!agent) return null
       return {
         title: agent.name, lines: [
-          { label: "Tools", value: String(agent.tools.length) },
+          { label: "Tools", value: String((agent.tools ?? []).length) },
           ...(run?.agentId === agentId ? [{ label: "Status", value: run.status }] : []),
         ],
       }

@@ -82,11 +82,44 @@ export function fmtLineage(l: ViewLineage): string {
   const lines = [
     `LINEAGE MAP: ${l.view}`,
     l.description,
+  ]
+
+  // Drift banner: the curated lineage may come from sys.extended_properties
+  // (live DB, north-star) or lineage.json (transitional). Either source can
+  // contain references that don't match the live catalog (a typo in a parent
+  // name, a renamed dim table). The load-time validator prunes those and
+  // attaches a `validation` record; we surface it here, and steer the
+  // refresh hint to the right place based on provenance.
+  const v = l.validation
+  const refreshHint = l.provenance === "extended-properties"
+    ? `refresh the extended properties on ${l.view} (or on the affected source views)`
+    : `refresh deploy/mssql/lineage.json`
+  if (v?.viewMissing) {
+    lines.push(
+      "",
+      `⚠ STALE LINEAGE: '${l.view}' is referenced as a curated lineage view but no longer exists in the live catalog.`,
+      `   All sources/dims/columns hidden. Confirm whether the view was renamed or dropped, then ${refreshHint}.`,
+    )
+    return lines.join("\n")
+  }
+  if (v && (v.droppedSources.length > 0 || v.droppedDims.length > 0 || v.droppedColumns.length > 0)) {
+    const parts: string[] = []
+    if (v.droppedSources.length > 0) parts.push(`${v.droppedSources.length} source(s): ${v.droppedSources.slice(0, 5).join(", ")}${v.droppedSources.length > 5 ? ", …" : ""}`)
+    if (v.droppedDims.length > 0)    parts.push(`${v.droppedDims.length} dim(s): ${v.droppedDims.join(", ")}`)
+    if (v.droppedColumns.length > 0) parts.push(`${v.droppedColumns.length} column(s): ${v.droppedColumns.slice(0, 8).join(", ")}${v.droppedColumns.length > 8 ? ", …" : ""}`)
+    lines.push(
+      "",
+      `⚠ PARTIAL LINEAGE — hidden because they no longer exist in the live catalog (${refreshHint}):`,
+      ...parts.map((p) => `   • ${p}`),
+    )
+  }
+
+  lines.push(
     "",
     `Output columns (${l.outputColumns.length}): ${l.outputColumns.join(", ")}`,
     "",
     `Dimension Joins (${l.dimJoins.length}):`,
-  ]
+  )
   for (const d of l.dimJoins) {
     lines.push(`  ${d.column} → ${d.dimTable} (${d.dimRows}) — ${d.note}`)
   }

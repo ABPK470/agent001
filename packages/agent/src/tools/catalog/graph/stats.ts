@@ -53,20 +53,47 @@ export function formatPromptSummary(graph: CatalogGraph): string {
     `Total rows: ~${(s.totalRows / 1e6).toFixed(0)}M.`,
   ]
   if (lineageViews.length > 0) {
-    // Only the hand-curated lineage entries (lineage.json) are worth naming
-    // in the prompt — they carry business context the agent can't rediscover
-    // (dim joins, business-area tags, filters). Auto-derived entries are just
-    // "every view has a parsed SQL definition" — that's discovery work,
-    // not prompt-worthy. Dumping all of them was inflating every DB-shaped
-    // prompt by tens of KB with names like `audit.DailyChequeBalances` that
-    // the model can find on demand via search_catalog / explore_mssql_schema.
-    const curated = lineageViews.filter((v) => {
-      const l = graph.getLineage(v)
-      return l != null && !l.description.startsWith("Auto-discovered:")
-    })
-    const autoCount = lineageViews.length - curated.length
-    if (curated.length > 0) {
-      lines.push(`Curated lineage maps (${curated.length} hand-authored with business context): ${curated.join(", ")} — use search_catalog(lineage='view') for the full map.`)
+    // Only the hand-curated lineage entries are worth naming in the prompt
+    // — they carry business context the agent can't rediscover (dim joins,
+    // business-area tags, filters). Auto-derived entries are just "every
+    // view has a parsed SQL definition" — that's discovery work, not
+    // prompt-worthy. Curation can come from two sources:
+    //   - extended-properties: DBA-authored, lives in sys.extended_properties
+    //     on the live DB (north-star — co-located with the schema, cannot
+    //     silently drift). See lineage-extended-properties.ts.
+    //   - lineage.json: hand-curated JSON file, transitional fallback.
+    // Drift annotations come from lineage-validator.ts which re-checks every
+    // curated entry against the live catalog on load; the refresh-hint text
+    // is driven from provenance so the agent (and the human reading the
+    // trace) is told WHERE to fix a stale entry.
+    const curatedEntries = lineageViews
+      .map((v) => graph.getLineage(v))
+      .filter((l): l is NonNullable<typeof l> => l != null && l.provenance !== "auto")
+    const autoCount = lineageViews.length - curatedEntries.length
+    if (curatedEntries.length > 0) {
+      const annotated = curatedEntries.map((l) => {
+        const v = l.validation
+        if (!v) return l.view
+        if (v.viewMissing) return `${l.view} [STALE: view missing]`
+        const drift = v.droppedSources.length + v.droppedDims.length + v.droppedColumns.length
+        return drift > 0 ? `${l.view} [partial: ${drift} stale]` : l.view
+      })
+      const fromExt = curatedEntries.filter((l) => l.provenance === "extended-properties").length
+      const fromJson = curatedEntries.filter((l) => l.provenance === "lineage.json").length
+      const stale = curatedEntries.filter((l) => {
+        const v = l.validation
+        return v != null && (v.viewMissing || v.droppedSources.length + v.droppedDims.length + v.droppedColumns.length > 0)
+      })
+      const driftHints: string[] = []
+      if (stale.some((l) => l.provenance === "extended-properties")) driftHints.push("refresh extended properties on the affected views")
+      if (stale.some((l) => l.provenance === "lineage.json"))         driftHints.push("refresh deploy/mssql/lineage.json")
+      const driftNote = driftHints.length > 0
+        ? ` (${stale.length} partially stale — ${driftHints.join("; ")})`
+        : ""
+      const provenanceBreakdown = fromJson > 0
+        ? `${fromExt} from DB extended properties, ${fromJson} from lineage.json (pending migration)`
+        : `${fromExt} from DB extended properties`
+      lines.push(`Curated lineage maps (${curatedEntries.length} hand-authored — ${provenanceBreakdown})${driftNote}: ${annotated.join(", ")} — use search_catalog(lineage='view') for the full map.`)
       if (autoCount > 0) lines.push(`(+${autoCount} auto-derived view lineages, discover on demand via search_catalog.)`)
     } else {
       lines.push(`Lineage: ${autoCount} views have auto-derived source maps — use search_catalog(lineage='<view>') to fetch a specific one.`)

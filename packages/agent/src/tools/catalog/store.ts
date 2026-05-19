@@ -1,5 +1,6 @@
 import { currentRuntime } from "../../agent-runtime.js"
 import { CatalogGraph } from "./graph/index.js"
+import { validateCuratedLineage } from "./lineage-validator.js"
 import type { CatalogBuildOptions, CatalogSnapshot, ViewLineage } from "./types.js"
 
 // ── Global catalog store (per connection, with disk cache) ───────
@@ -55,7 +56,21 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
       const { resolve } = await import("node:path")
       const raw = await fsNode.readFile(resolve(lineagePath), "utf-8")
       const lineages: ViewLineage[] = JSON.parse(raw)
-      catalog.mergeLineage(lineages)
+      // Validate (see lineage-validator.ts) and merge with precedence:
+      // skip JSON entries that the live DB has already supplied via
+      // extended properties (those were merged inside CatalogGraph.build).
+      const { validated } = validateCuratedLineage(lineages, catalog, conn)
+      const toMerge: ViewLineage[] = []
+      for (const entry of validated) {
+        const existing = catalog.getLineage(entry.view)
+        if (existing && existing.provenance === "extended-properties") {
+          // eslint-disable-next-line no-console
+          console.warn(`[lineage:redundant-json] ${entry.view} curated via extended properties — JSON entry ignored.`)
+          continue
+        }
+        toMerge.push({ ...entry, provenance: "lineage.json" })
+      }
+      catalog.mergeLineage(toMerge)
     } catch { /* non-fatal: lineage file may have been deleted */ }
   }
 
@@ -116,7 +131,26 @@ export async function loadLineage(
   const resolved = resolve(filePath)
   const raw = await fs.readFile(resolved, "utf-8")
   const lineages: ViewLineage[] = JSON.parse(raw)
-  catalog.mergeLineage(lineages)
+  // Validate curated lineage against the live catalog before it reaches the
+  // agent — lineage.json has no automatic refresh and drifts silently as
+  // schema evolves. validateCuratedLineage prunes stale fields, demotes
+  // entries whose view is gone, and stamps a drift report on each.
+  const { validated } = validateCuratedLineage(lineages, catalog, connection)
+  // Precedence: an extended-property entry already loaded from the live DB
+  // is the source of truth (DBA-authored, co-located with the schema).
+  // Skip JSON entries that would overwrite one, and log so the DBA knows
+  // the JSON entry is now redundant and can be removed from lineage.json.
+  const toMerge: ViewLineage[] = []
+  for (const entry of validated) {
+    const existing = catalog.getLineage(entry.view)
+    if (existing && existing.provenance === "extended-properties") {
+      // eslint-disable-next-line no-console
+      console.warn(`[lineage:redundant-json] ${entry.view} is now curated via SQL extended properties on the live DB — remove from ${filePath} to avoid double maintenance.`)
+      continue
+    }
+    toMerge.push({ ...entry, provenance: "lineage.json" })
+  }
+  catalog.mergeLineage(toMerge)
 
   // Re-persist the snapshot so lineage is cached with structural data
   const cachePath = currentRuntime().catalog.defaultCachePath

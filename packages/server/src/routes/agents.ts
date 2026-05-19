@@ -174,6 +174,12 @@ function formatAgent(a: db.DbAgentDefinition) {
     name: a.name,
     description: a.description,
     systemPrompt: a.system_prompt,
+    // Tools are not yet stored per-agent in the DB — every agent currently
+    // receives the full registry at run time (see getAllTools usage above).
+    // We still surface the effective tool list so the UI's AgentDefinition
+    // contract (tools: string[]) is honoured and downstream consumers (IOE
+    // map, agent panels) don't crash on `undefined.length`/`for..of`.
+    tools: getAllTools().map((t) => t.name),
     createdAt: a.created_at,
     updatedAt: a.updated_at,
   }

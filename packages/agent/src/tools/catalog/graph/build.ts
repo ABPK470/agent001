@@ -16,6 +16,7 @@
 import { getPool } from "../../mssql/index.js"
 import { buildAutoLineage, type ViewDepRow } from "../auto-lineage.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
+import { loadLineageFromExtendedProperties } from "../lineage-extended-properties.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"
 import type {
     CatalogColumn,
@@ -35,7 +36,10 @@ export interface CatalogLoadResult {
   implicitEdges: ImplicitEdge[]
   viewSourceRows: Map<string, number>
   sysCatalog: SysEntry[]
+  /** Mechanically derived from sys.sql_expression_dependencies. provenance="auto". */
   autoLineage: ViewLineage[]
+  /** Loaded from sys.extended_properties (lineage_dim_joins, lineage_feeds, MS_Description). provenance="extended-properties". */
+  extendedPropertyLineage: ViewLineage[]
 }
 
 export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoadResult> {
@@ -144,8 +148,19 @@ export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoa
     }
   } catch { /* non-fatal */ }
 
+  // Step 7b: Load lineage curation from SQL Server extended properties
+  // (the north-star source — see lineage-extended-properties.ts). These
+  // entries take precedence over both auto-lineage and the lineage.json
+  // file in mergeLineage downstream (file path skips views already
+  // covered here). Non-fatal: if the query fails or no properties
+  // exist yet (greenfield DB), returns [] and we fall back to file/auto.
+  let extendedPropertyLineage: ViewLineage[] = []
+  try {
+    extendedPropertyLineage = await loadLineageFromExtendedProperties(pool, connection ?? "default")
+  } catch { /* non-fatal */ }
+
   // Step 8: Await sys catalog
   const sysCatalog = await sysCatalogPromise
 
-  return { tables, nameIndex, columnIndex, adjacency, implicitEdges, viewSourceRows, sysCatalog, autoLineage }
+  return { tables, nameIndex, columnIndex, adjacency, implicitEdges, viewSourceRows, sysCatalog, autoLineage, extendedPropertyLineage }
 }

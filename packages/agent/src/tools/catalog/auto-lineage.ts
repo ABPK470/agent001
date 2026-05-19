@@ -107,8 +107,9 @@ export function buildAutoLineage(
       view: viewKey,
       description: `Auto-discovered: reads from ${parts.join(" + ")}.`,
       outputColumns: view.columns.map((c) => c.name),
-      dimJoins: [],   // never guessed — only set from hand-curated lineage.json
+      dimJoins: [],   // never guessed — only set from hand-curated lineage.json or extended properties
       sources,
+      provenance: "auto",
     })
   }
 

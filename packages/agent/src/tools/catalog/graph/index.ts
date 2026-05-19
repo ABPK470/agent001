@@ -1,11 +1,8 @@
 import { buildConceptGraph } from "../concepts.js"
 import { tokenize } from "../helpers.js"
+import { validateCuratedLineage } from "../lineage-validator.js"
 import { findConceptPath as findConceptPathModule, findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
-import { loadCatalogFromDb } from "./build.js"
-import { loadCatalogFromSnapshot } from "./snapshot.js"
-import { computeStats, formatPromptSummary } from "./stats.js"
-import { buildSysCatalog, buildSysIndex } from "./sys-catalog.js"
 import type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -20,6 +17,10 @@ import type {
     SysEntry,
     ViewLineage,
 } from "../types.js"
+import { loadCatalogFromDb } from "./build.js"
+import { loadCatalogFromSnapshot } from "./snapshot.js"
+import { computeStats, formatPromptSummary } from "./stats.js"
+import { buildSysCatalog, buildSysIndex } from "./sys-catalog.js"
 
 // ── CatalogGraph ─────────────────────────────────────────────────
 
@@ -112,8 +113,23 @@ export class CatalogGraph {
       r.tables, r.nameIndex, r.columnIndex, r.adjacency, r.implicitEdges,
       undefined, undefined, r.viewSourceRows, r.sysCatalog,
     )
-    // Auto-lineage merged first; hand-curated loadLineage() runs after build() and overwrites these.
-    if (r.autoLineage.length > 0) graph.mergeLineage(r.autoLineage)
+    // Lineage precedence (lowest → highest): auto < extended-properties < lineage.json (loaded later by loadLineage()).
+    // mergeLineage is naive last-write-wins, so we apply in order. Extended
+    // properties enrich/override auto entries for the same view; lineage.json
+    // (loaded after build() at startup) can still override either, but the
+    // file loader logs a warning when it does so the DBA knows the JSON entry
+    // is now redundant and should be migrated/removed.
+    if (r.autoLineage.length > 0)             graph.mergeLineage(r.autoLineage)
+    if (r.extendedPropertyLineage.length > 0) {
+      // Validate against the live catalog (a DBA can typo a parent name or
+      // list a renamed dim table in lineage_dim_joins). The validator
+      // attaches the same `validation` drift report used for lineage.json.
+      const { validated } = validateCuratedLineage(r.extendedPropertyLineage, graph, connection ?? "default")
+      // Re-stamp provenance — validateCuratedLineage rebuilds the entry but
+      // doesn't know the original source.
+      for (const v of validated) v.provenance = "extended-properties"
+      graph.mergeLineage(validated)
+    }
     return graph
   }
 
