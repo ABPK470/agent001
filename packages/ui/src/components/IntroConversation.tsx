@@ -2,6 +2,7 @@ import { ExternalLink, Send, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { App } from "../App"
 import { useStore } from "../store"
+import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField } from "./IntroAsciiField"
 import { Logo } from "./Logo"
 import { introBasePath, loginOrRegister } from "./introShared"
 
@@ -77,24 +78,88 @@ function MiaWordmark() {
 }
 
 // ── Streaming text — character-by-character LLM-style reveal. ─────────
+// Each newly-revealed char briefly cycles through the ASCII field's
+// glyph palette before settling, so the text reads as crystallising
+// out of the background field rather than typing onto it.
+const SETTLE_MS = 140
+const SETTLE_TICK_MS = 40
 function StreamingText({
   text,
   onDone,
   speedMs = 22,
 }: { text: string; onDone?: () => void; speedMs?: number }) {
   const [n, setN] = useState(0)
+  const [tick, setTick] = useState(0)
+  const revealedAtRef = useRef<number[]>([])
   const onDoneRef = useRef(onDone)
   useEffect(() => { onDoneRef.current = onDone })
-  useEffect(() => { setN(0) }, [text])
+  useEffect(() => { setN(0); revealedAtRef.current = [] }, [text])
   useEffect(() => {
     if (n >= text.length) { onDoneRef.current?.(); return }
-    const t = window.setTimeout(() => setN((v) => v + 1), speedMs)
+    const t = window.setTimeout(() => {
+      revealedAtRef.current[n] = performance.now()
+      setN((v) => v + 1)
+    }, speedMs)
     return () => window.clearTimeout(t)
   }, [n, text, speedMs])
+  // Drive the per-frame settle animation while any recently-revealed
+  // char is still scrambling. Bails out as soon as all settled.
+  useEffect(() => {
+    const now = performance.now()
+    const stillScrambling = revealedAtRef.current
+      .slice(0, n)
+      .some((ts) => ts && now - ts < SETTLE_MS)
+    if (!stillScrambling) return
+    const id = window.setInterval(() => setTick((v) => v + 1), SETTLE_TICK_MS)
+    return () => window.clearInterval(id)
+  }, [n, tick])
+  const now = performance.now()
   return (
     <>
-      {text.slice(0, n)}
+      {text.slice(0, n).split("").map((ch, i) => {
+        const at = revealedAtRef.current[i]
+        const age = at ? now - at : SETTLE_MS
+        if (age < SETTLE_MS && ch !== " " && ch !== "\n") {
+          const g = ASCII_SCRAMBLE_GLYPHS
+          const r = (Math.random() * g.length) | 0
+          return <span key={i} className="intro3-crystal-cell">{g[r]}</span>
+        }
+        return <span key={i}>{ch}</span>
+      })}
       {n < text.length && <span className="intro3-caret" aria-hidden="true">▍</span>}
+    </>
+  )
+}
+
+// ── Crystal label — continuously coalescing text, used for the
+//    activity labels (Loading / Thinking / Verifying). One or two
+//    letters at a time momentarily flip to an ASCII glyph, so the
+//    label always feels like it's forming out of the field. ────────
+function CrystalText({ text }: { text: string }) {
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((v) => v + 1), 110)
+    return () => window.clearInterval(id)
+  }, [])
+  // Deterministic per-tick pick of which indices scramble; tied to
+  // tick so rerenders during a single tick are stable. The rotation
+  // formula must not lock any single position (in particular position
+  // 0 — `tick*N % len` would always pick 0). Using `tick + i*offset`
+  // guarantees every position visits the scramble set over time.
+  const scrambleSet = new Set<number>()
+  const slots = Math.max(1, Math.floor(text.length * 0.18))
+  for (let i = 0; i < slots; i++) {
+    const idx = ((tick + i * 3) % text.length + text.length) % text.length
+    scrambleSet.add(idx)
+  }
+  return (
+    <>
+      {text.split("").map((ch, i) => {
+        if (ch === " " || !scrambleSet.has(i)) return <span key={i}>{ch}</span>
+        const g = ASCII_SCRAMBLE_GLYPHS
+        const r = ((tick + i) * 9301 + 49297) % g.length
+        return <span key={i} className="intro3-crystal-cell">{g[r]}</span>
+      })}
     </>
   )
 }
@@ -382,6 +447,10 @@ export function IntroConversation({
       className={`intro3-root intro3-mode-${morphMode}${entering ? " intro3-root--entering" : ""}`}
       aria-label="mia-entry conversation"
     >
+      {/* Generative ASCII texture — ambient life behind the conversation.
+          Fades out during the morph so it doesn't bleed into the platform. */}
+      <IntroAsciiField />
+
       {/* Platform-shaped header — bg fades in from transparent → bg-canvas
           during the morph. Matches Toolbar's h-14 px-3 sm:px-6. */}
       <header className="intro3-header flex items-center px-3 sm:px-6 h-14 shrink-0 select-none gap-2 sm:gap-4">
@@ -466,7 +535,7 @@ export function IntroConversation({
                     <div className="intro3-activity-slot py-1.5 pr-2">
                       {botTyping ? (
                         <span className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block text-text-muted">
-                          {shimmerLabel}
+                          <CrystalText text={shimmerLabel} />
                         </span>
                       ) : null}
                     </div>
