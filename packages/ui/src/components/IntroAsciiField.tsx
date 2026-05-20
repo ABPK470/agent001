@@ -1,15 +1,16 @@
 /**
  * IntroAsciiField — generative ASCII texture behind the /intro3 stage.
  *
- * The field is 3-D value noise (z axis = time, so it morphs in place
- * with no global drift) sampled through DOMAIN WARPING: the (x, y)
- * coordinates fed into the noise are themselves perturbed by a second,
- * slower, lower-frequency noise. The result is curling tendrils and
- * organic pockets that fold and unfold — reads as smoke, aurora, or
- * ink in water rather than a regular noise field or a sonar ping.
+ * Each cell's glyph is sampled from a slowly-drifting 2-D value-noise
+ * field, so the surface forms organic blobs / horizontal bands instead
+ * of pure white noise. Per frame a small fraction of cells repaint
+ * themselves from the *current* noise — so as `t` drifts, visible
+ * structure morphs in place.
  *
  * Glyph alphabet is a safe ASCII subset (`. · - = : ; + * # / \ |`),
- * weighted by field value: low → spaces, high → dense glyphs.
+ * weighted by noise value: low → spaces, high → dense glyphs. This is
+ * what makes it read like a Codex-style ambient field rather than TV
+ * static.
  *
  * Pointer-events:none, respects prefers-reduced-motion, DPR-aware.
  */
@@ -19,37 +20,16 @@ import { useEffect, useRef } from "react"
 // Discrete ASCII palette ordered sparse → dense. Cell glyph is picked
 // by noise bucket; the same noise value always maps to the same glyph
 // so motion comes from the noise field drifting, not from re-randomising
-// per cell. One leading space keeps a little breathing room in valleys
-// without making the surface look empty.
-const PALETTE = [" ", "·", ".", "-", ":", ";", "=", "+", "*", "#"]
+// per cell.
+const PALETTE = [" ", " ", " ", "·", ".", "-", ":", ";", "=", "+", "*", "#"]
 
 const CHAR_W = 9
 const LINE_H = 14
 const FONT_PX = 12
 const TARGET_FPS = 18
-const UPDATE_FRACTION = 0.060       // ~6% of cells repaint per frame
-const NOISE_T_PER_SEC = 1.10        // how fast the noise field morphs (z-axis lattice)
-const NOISE_SX = 0.10               // horizontal noise frequency (per cell)
-const NOISE_SY = 0.14               // vertical noise frequency (per cell)
-const INK_OPACITY = 0.22            // applied to var(--text), works in both themes
-
-// ── Domain warping (pattern: smoke / aurora) ────────────────────────
-// The (x, y) sample position is offset by a second, slower, lower-
-// frequency noise before being fed into the main noise. This bends
-// what would be regular blobs into curling tendrils and folded pockets
-// that drift and reform — no center, no rings, no flow direction.
-const WARP_STRENGTH = 6.0           // how far (in cells) the sample is pushed by the warp
-const WARP_FREQ = 0.045             // spatial frequency of the warp field (lower = bigger swirls)
-const WARP_T_PER_SEC = 0.45         // how fast the warp itself evolves (slower than main noise)
-
-// Density curve applied to raw noise before bucketing into the palette.
-// 1.0 = linear (full surface), 2.0 = v² (very sparse), in between =
-// somewhere full but still breathy. 1.35 reads as a dense organic field
-// where peaks are obvious but the canvas is mostly populated.
-const DENSITY_EXP = 1.35
-function densityCurve(v: number): number {
-  return Math.pow(v, DENSITY_EXP)
-}
+const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
+const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
+const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
 
 // Roll-out animation — non-directional "materialize". Every cell has
 // its own stable reveal time computed from a per-cell hash blended
@@ -81,62 +61,39 @@ function readInk(): string {
   return `rgba(120,120,120,${INK_OPACITY})`
 }
 
-// 2-D integer hash → [0,1). Stable, no allocations. Used by reveal-time
-// jitter (not by the noise field itself, which uses hash3).
+// 2-D integer hash → [0,1). Stable, no allocations.
 function hash2(x: number, y: number): number {
   let h = (x * 374761393 + y * 668265263) | 0
   h = ((h ^ (h >>> 13)) * 1274126177) | 0
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
 }
 
-// 3-D integer hash → [0,1). The z axis is time-as-lattice-coordinate,
-// which is what lets the field morph in place instead of scrolling.
-function hash3(x: number, y: number, z: number): number {
-  let h = (x * 374761393 + y * 668265263 + z * 1442695040) | 0
-  h = ((h ^ (h >>> 13)) * 1274126177) | 0
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295
-}
-
-// 3-D value noise with cosine-smoothed trilinear interp. Sampling
-// position (sx, sy) is FIXED per cell — only the z slice (tz) advances
-// with time. As tz crosses each integer the field smoothly blends to
-// a fresh independent noise frame, so blobs grow/dissolve/reshape in
-// place with no global flow direction.
+// Value noise with cosine-smoothed bilinear interp + a horizontal band
+// bias so the field has visible "weather" running across the screen.
 function vnoise(x: number, y: number, t: number): number {
-  const sx = x * NOISE_SX
-  const sy = y * NOISE_SY
-  const tz = t                       // t is already scaled by NOISE_T_PER_SEC by the caller
+  const sx = x * 0.085 + t * 0.85
+  const sy = y * 0.125 - t * 0.35
   const x0 = Math.floor(sx)
   const y0 = Math.floor(sy)
-  const z0 = Math.floor(tz)
   const fx = sx - x0
   const fy = sy - y0
-  const fz = tz - z0
+  const a = hash2(x0, y0)
+  const b = hash2(x0 + 1, y0)
+  const c = hash2(x0, y0 + 1)
+  const d = hash2(x0 + 1, y0 + 1)
   const ux = fx * fx * (3 - 2 * fx)
   const uy = fy * fy * (3 - 2 * fy)
-  const uz = fz * fz * (3 - 2 * fz)
-  const c000 = hash3(x0,     y0,     z0)
-  const c100 = hash3(x0 + 1, y0,     z0)
-  const c010 = hash3(x0,     y0 + 1, z0)
-  const c110 = hash3(x0 + 1, y0 + 1, z0)
-  const c001 = hash3(x0,     y0,     z0 + 1)
-  const c101 = hash3(x0 + 1, y0,     z0 + 1)
-  const c011 = hash3(x0,     y0 + 1, z0 + 1)
-  const c111 = hash3(x0 + 1, y0 + 1, z0 + 1)
-  const x00 = c000 * (1 - ux) + c100 * ux
-  const x10 = c010 * (1 - ux) + c110 * ux
-  const x01 = c001 * (1 - ux) + c101 * ux
-  const x11 = c011 * (1 - ux) + c111 * ux
-  const y0v = x00 * (1 - uy) + x10 * uy
-  const y1v = x01 * (1 - uy) + x11 * uy
-  const v = y0v * (1 - uz) + y1v * uz
-  return Math.max(0, Math.min(0.999, v))
+  const base = (a * (1 - ux) + b * ux) * (1 - uy) + (c * (1 - ux) + d * ux) * uy
+  // Horizontal band bias — slow vertical sine modulated by time.
+  const band = 0.10 * Math.sin(y * 0.09 + t * 0.6)
+  return Math.max(0, Math.min(0.999, base + band))
 }
 
 function glyphFor(v: number): string {
-  // Map noise → palette index via densityCurve. Lower DENSITY_EXP biases
-  // the surface fuller; higher biases it sparser.
-  const idx = Math.min(PALETTE.length - 1, Math.floor(densityCurve(v) * PALETTE.length))
+  // Map noise → palette index. Bias toward the sparse end so most of
+  // the canvas reads as breathing space, dense glyphs concentrate in
+  // crests.
+  const idx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
   return PALETTE[idx]!
 }
 
@@ -172,21 +129,6 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       if (ch !== " ") ctx!.fillText(ch, x, y)
     }
 
-    // Domain-warped sample: offset the (c, r) lookup by a second,
-    // slower noise so the field develops curling tendrils instead of
-    // round blobs. tNoise is the z-axis time already scaled by
-    // NOISE_T_PER_SEC; tSec is real elapsed seconds, used (slower) by
-    // the warp layer so the swirls evolve at their own pace.
-    function field(c: number, r: number, tNoise: number, tSec: number): number {
-      const wt = tSec * WARP_T_PER_SEC
-      // Two independent warp samples (offset lattice positions) give us
-      // dx and dy. Centered on 0 so the warp pushes in all directions.
-      const wx = (vnoise(c * (WARP_FREQ / NOISE_SX), r * (WARP_FREQ / NOISE_SY), wt) - 0.5) * 2
-      const wy = (vnoise((c + 137) * (WARP_FREQ / NOISE_SX), (r + 311) * (WARP_FREQ / NOISE_SY), wt + 4.7) - 0.5) * 2
-      const v = vnoise(c + wx * WARP_STRENGTH, r + wy * WARP_STRENGTH, tNoise)
-      return v
-    }
-
     function computeRevealTimes() {
       const cx = cols / 2
       const cy = rows / 2
@@ -206,11 +148,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
     function repaintAll(t: number) {
       ctx!.clearRect(0, 0, canvas!.width / dpr, canvas!.height / dpr)
       ctx!.fillStyle = ink
-      const tSec = t / NOISE_T_PER_SEC
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const v = field(c, r, t, tSec)
-          const idx = Math.min(PALETTE.length - 1, Math.floor(densityCurve(v) * PALETTE.length))
+          const v = vnoise(c, r, t)
+          const idx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
           cells[r * cols + c] = idx
           const ch = PALETTE[idx]!
           if (ch !== " ") ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
@@ -259,7 +200,6 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       lastFrame = now
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
-      const tSec = (now - startTs) / 1000
 
       // Per-cell materialize. While the field is rolling out we walk
       // every cell once per frame and reveal any whose per-cell time
@@ -276,8 +216,8 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
             if (painted[idx]) continue
             const rt = revealTimes[idx]!
             if (elapsed < rt) { anyPending = true; continue }
-            const v = field(c, r, t, tSec)
-            const palIdx = Math.min(PALETTE.length - 1, Math.floor(densityCurve(v) * PALETTE.length))
+            const v = vnoise(c, r, t)
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
             cells[idx] = palIdx
             painted[idx] = 1
             const ch = PALETTE[palIdx]!
@@ -320,8 +260,8 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
         const c = (Math.random() * cols) | 0
         const idx = r * cols + c
         if (!painted[idx]) continue
-        const v = field(c, r, t, tSec)
-        const palIdx = Math.min(PALETTE.length - 1, Math.floor(densityCurve(v) * PALETTE.length))
+        const v = vnoise(c, r, t)
+        const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
         if (palIdx === cells[idx]) continue
         cells[idx] = palIdx
         paintCellAt(c, r, PALETTE[palIdx]!)
