@@ -204,7 +204,7 @@ export function findStaleRuns(): DbRun[] {
 export function markRunCrashed(runId: string): void {
   getDb().prepare(
     "UPDATE runs SET status = ?, error = 'Server restarted \u2014 run interrupted', completed_at = datetime('now') WHERE id = ?"
-  ).run(RunStatus.Failed, runId)
+  ).run(RunStatus.Crashed, runId)
 }
 
 /** Boot-time hygiene: any row whose status is NOT a known RunStatus

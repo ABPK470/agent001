@@ -119,7 +119,7 @@ export function RunHistory() {
                 <Square size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
+            {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && (
               <button
                 className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
@@ -133,7 +133,7 @@ export function RunHistory() {
                 <RotateCcw size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && (
+            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && (
               <button
                 className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
                 onClick={(e) => {
@@ -147,7 +147,7 @@ export function RunHistory() {
                 <Play size={14} strokeWidth={2.25} />
               </button>
             )}
-            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled) && !rolledBackIds.has(run.id) && (              <button
+            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && !rolledBackIds.has(run.id) && (              <button
                 className="p-1.5 text-warning/80 hover:text-warning hover:bg-warning/10 rounded-md ring-1 ring-border hover:ring-warning/30 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()

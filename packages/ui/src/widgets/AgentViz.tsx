@@ -206,7 +206,7 @@ export function AgentViz() {
   // When switching to reflect, auto-select the most recent completed run
   useEffect(() => {
     if (mode === VizMode.Reflect && !reflectRunId) {
-      const completed = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed)
+      const completed = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed || r.status === RunStatus.Crashed)
       if (completed.length > 0) setReflectRunId(completed[0].id)
     }
   }, [mode, reflectRunId, runs])

@@ -206,6 +206,27 @@ export class AgentOrchestrator {
     const resumeSession = getCurrentSession()
     const resumeRole: PolicyRole = !resumeSession ? PolicyRole.Admin : resumeSession.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [], ownerUpn: resumeSession?.upn ?? null, sessionId: resumeSession?.sid ?? null })
+
+    // Persist the resumed-run row BEFORE broadcasting or writing trace
+    // entries. trace_entries.run_id has a hard FK to runs(id), so the
+    // saveTrace below would fail with SQLITE_CONSTRAINT_FOREIGNKEY
+    // otherwise (mirrors the same ordering invariant in startRun).
+    db.saveRun({
+      id:            newRunId,
+      goal:          originalRun.goal,
+      status:        RunStatus.Pending,
+      answer:        null,
+      step_count:    0,
+      error:         null,
+      parent_run_id: runId,
+      agent_id:      originalRun.agent_id ?? null,
+      created_at:    new Date().toISOString(),
+      completed_at:  null,
+      session_id:    resumeSession?.sid ?? null,
+      upn:           resumeSession?.upn ?? null,
+      display_name:  resumeSession?.displayName ?? null,
+    })
+
     broadcast({ type: EventType.RunQueued, data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
     saveTrace(this.activeRuns, newRunId, { kind: TrajectoryEventKind.Goal, text: originalRun.goal })
 

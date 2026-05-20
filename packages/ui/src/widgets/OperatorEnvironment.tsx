@@ -189,6 +189,11 @@ export function OperatorEnvironment() {
   const isRunning = activeRun?.status === RunStatus.Running
   const isFailed = activeRun?.status === RunStatus.Failed
   const isCancelled = activeRun?.status === RunStatus.Cancelled
+  // Crashed = the server died mid-run (recovery.ts marks any Running/Pending/
+  // Planning rows as Crashed on boot). It's terminal, so the loop is
+  // guaranteed not to be alive. Treat it exactly like Failed/Cancelled —
+  // user-controlled RESUME (if a checkpoint exists) or RE-RUN.
+  const isCrashed = activeRun?.status === RunStatus.Crashed
   const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
 
   const currentIteration = useMemo(() => {
@@ -644,8 +649,8 @@ export function OperatorEnvironment() {
             )}
             <div className="flex items-center gap-1 flex-wrap justify-end">
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
-              {(isFailed || isCancelled) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
-              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && (
+              {(isFailed || isCancelled || isCrashed) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled || isCrashed) && (
                 <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
               )}
               {pendingWorkspaceChanges > 0 && (
@@ -655,7 +660,7 @@ export function OperatorEnvironment() {
                   onClick={handleApplyWorkspace}
                 />
               )}
-              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && !rolledBack && (
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled || isCrashed) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (

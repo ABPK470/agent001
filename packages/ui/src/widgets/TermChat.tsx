@@ -2087,7 +2087,7 @@ export function TermChat() {
   // Build message list: each "run" is a (user msg, assistant response) pair
   // Show all non-active terminal runs + the active one at the end
   const displayRuns = useMemo(() => {
-    const TERMINAL = new Set<string>([RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled])
+    const TERMINAL = new Set<string>([RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled, RunStatus.Crashed])
     const completed = runs
       .filter((r) => r.id !== activeRunId && TERMINAL.has(r.status))
       .slice()
