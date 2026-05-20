@@ -1,16 +1,33 @@
 /**
- * IntroAsciiField — generative ASCII texture behind the /intro3 stage.
+ * IntroAsciiField — visual representation of an AI agentic system,
+ * ready to be plugged into any substrate.
  *
- * Each cell's glyph is sampled from a slowly-drifting 2-D value-noise
- * field, so the surface forms organic blobs / horizontal bands instead
- * of pure white noise. Per frame a small fraction of cells repaint
- * themselves from the *current* noise — so as `t` drifts, visible
- * structure morphs in place.
+ * Three layers, read from back to front:
  *
- * Glyph alphabet is a safe ASCII subset (`. · - = : ; + * # / \ |`),
- * weighted by noise value: low → spaces, high → dense glyphs. This is
- * what makes it read like a Codex-style ambient field rather than TV
- * static.
+ *   1. SUBSTRATE — a quiet, near-static lattice of low-density ASCII
+ *      marks sampled from a sparse 2-D value-noise field. Density is
+ *      capped so the substrate alone never climbs past `·` / `.` —
+ *      it reads as a calm field of points, the kind of thing an agent
+ *      could be *plugged into* rather than weather drifting past. It's
+ *      content-neutral on purpose; it can stand in for any underlying
+ *      system the agent attaches to.
+ *
+ *   2. ATTENTION FOCI — a small number of slowly-orbiting "attention"
+ *      points that locally densify the substrate (additive boost with
+ *      gaussian falloff). Visually these read as wandering bright
+ *      concentrations climbing the same glyph palette into `+ * #` —
+ *      the agent's attention roaming the substrate, probing, evaluating.
+ *      Each focus has its own lissajous orbit so they never sync, and a
+ *      slow heartbeat in strength so each one feels independently alive.
+ *      As a focus moves on, the cells it vacated decay back to substrate
+ *      density at the ambient repaint rate, leaving a soft glyph wake —
+ *      a visible trace of where the agent has been looking.
+ *
+ *   3. SYNAPSES — when two foci pass close enough, a dotted bridge of
+ *      `·` glyphs stitches them together. Self-fades as the foci drift
+ *      apart. Reads as the system's attentions recognising each other
+ *      and briefly binding — the "ready to plug into anything,
+ *      including each other" aspect of the metaphor.
  *
  * Pointer-events:none, respects prefers-reduced-motion, DPR-aware.
  */
@@ -68,11 +85,30 @@ function hash2(x: number, y: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
 }
 
-// Value noise with cosine-smoothed bilinear interp + a horizontal band
-// bias so the field has visible "weather" running across the screen.
+// Value noise with cosine-smoothed bilinear interp.
+//
+// SUBSTRATE design choice: the substrate is intentionally quiet — a
+// near-static sparse field, not drifting weather. Two knobs do this:
+//
+//   1. SUBSTRATE_DRIFT is small (0.05 vs the original 0.85), so the
+//      base value at any cell barely changes second-to-second; it
+//      shimmers, it doesn't flow.
+//   2. SUBSTRATE_AMP caps the substrate's contribution at ~0.55 of
+//      the [0,1) range, which through the `v*v` quantiser in the
+//      glyph mapper translates to a maximum substrate glyph of `·`
+//      / `.`. Denser glyphs (`+ * #`) only appear where a focus's
+//      gaussian boost is climbing.
+//
+// Net effect: the substrate reads as a quiet lattice of low-density
+// marks (the "system the agent is plugged into"), and the foci +
+// synapses are the only visible motion (the "agentic" part). No
+// horizontal weather band — that was meteorology, not computation.
+const SUBSTRATE_DRIFT = 0.05
+const SUBSTRATE_AMP   = 0.55
+
 function vnoise(x: number, y: number, t: number): number {
-  const sx = x * 0.085 + t * 0.85
-  const sy = y * 0.125 - t * 0.35
+  const sx = x * 0.085 + t * SUBSTRATE_DRIFT
+  const sy = y * 0.125 - t * SUBSTRATE_DRIFT * 0.4
   const x0 = Math.floor(sx)
   const y0 = Math.floor(sy)
   const fx = sx - x0
@@ -84,17 +120,66 @@ function vnoise(x: number, y: number, t: number): number {
   const ux = fx * fx * (3 - 2 * fx)
   const uy = fy * fy * (3 - 2 * fy)
   const base = (a * (1 - ux) + b * ux) * (1 - uy) + (c * (1 - ux) + d * ux) * uy
-  // Horizontal band bias — slow vertical sine modulated by time.
-  const band = 0.10 * Math.sin(y * 0.09 + t * 0.6)
-  return Math.max(0, Math.min(0.999, base + band))
+  return Math.max(0, Math.min(0.999, base * SUBSTRATE_AMP + focusBoost(x, y, t)))
 }
 
-function glyphFor(v: number): string {
-  // Map noise → palette index. Bias toward the sparse end so most of
-  // the canvas reads as breathing space, dense glyphs concentrate in
-  // crests.
-  const idx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
-  return PALETTE[idx]!
+// ── Attention foci ─────────────────────────────────────────────────
+// A small constellation of wandering "attention" points. Each focus
+// traces an independent lissajous orbit across the visible field and
+// applies a gaussian density boost to nearby cells, so the substrate
+// reads as: "something is looking around in here." Each focus also
+// pulses softly (heartbeat) so it feels alive rather than mechanical.
+//
+// Sized to look intentional but not obvious — viewers should sense
+// purposeful motion before they can count the foci.
+const FOCI: ReadonlyArray<{
+  ax: number; ay: number      // orbit amplitude (fraction of visible field, 0..0.5)
+  wx: number; wy: number      // orbit angular velocity
+  px: number; py: number      // orbit phase offset
+  ph: number                  // heartbeat phase
+  baseStrength: number        // peak additive boost
+  sigma: number               // gaussian falloff radius (in cells)
+}> = [
+  { ax: 0.36, ay: 0.28, wx: 0.21, wy: 0.27, px: 0.0,  py: 1.7, ph: 0.0, baseStrength: 0.55, sigma: 11 },
+  { ax: 0.30, ay: 0.34, wx: 0.17, wy: 0.23, px: 2.1,  py: 0.4, ph: 1.9, baseStrength: 0.48, sigma: 13 },
+  { ax: 0.42, ay: 0.22, wx: 0.25, wy: 0.19, px: 4.3,  py: 3.0, ph: 3.4, baseStrength: 0.52, sigma: 10 },
+]
+const HEARTBEAT_HZ = 0.40       // ~2.5 s heartbeat per focus
+const HEARTBEAT_AMP = 0.18      // ±18% strength modulation
+
+// ── Synapses ───────────────────────────────────────────────────────
+// When two foci pass close enough, a faint dotted trail is drawn
+// between them. Reads as: the agentic system's attentions briefly
+// recognising and binding to each other — which is also a metaphor
+// for "ready to plug into anything." The trail is non-persistent;
+// the ambient drift loop naturally overwrites it as foci move apart.
+const SYNAPSE_MAX_DIST = 28     // cells. Engagement range.
+const SYNAPSE_STEP_CELLS = 2    // glyph every N cells along the line
+const SYNAPSE_MAX_ALPHA = 0.55  // multiplied by INK_OPACITY when drawn
+
+// Field dimensions are owned by the component; foci need them to map
+// normalised orbit coords to cell coords. Set on resize.
+let fldCols = 0
+let fldRows = 0
+
+function focusBoost(c: number, r: number, t: number): number {
+  if (fldCols === 0 || fldRows === 0) return 0
+  const cx = fldCols * 0.5
+  const cy = fldRows * 0.5
+  let boost = 0
+  for (let i = 0; i < FOCI.length; i++) {
+    const f = FOCI[i]!
+    const fx = cx + Math.sin(t * f.wx + f.px) * (f.ax * fldCols)
+    const fy = cy + Math.sin(t * f.wy + f.py) * (f.ay * fldRows)
+    const dx = c - fx
+    const dy = r - fy
+    const d2 = dx * dx + dy * dy
+    const s2 = f.sigma * f.sigma
+    if (d2 > s2 * 6) continue   // outside 2.45σ → negligible, skip
+    const heartbeat = 1 + HEARTBEAT_AMP * Math.sin(t * (Math.PI * 2 * HEARTBEAT_HZ) + f.ph)
+    boost += f.baseStrength * heartbeat * Math.exp(-d2 / s2)
+  }
+  return boost
 }
 
 export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX.Element {
@@ -173,6 +258,8 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
 
       cols = Math.ceil(w / CHAR_W) + 1
       rows = Math.ceil(h / LINE_H) + 1
+      fldCols = cols
+      fldRows = rows
       cells = new Uint8Array(cols * rows)
       painted = new Uint8Array(cols * rows)
       revealTimes = new Float32Array(cols * rows)
@@ -265,6 +352,57 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
         if (palIdx === cells[idx]) continue
         cells[idx] = palIdx
         paintCellAt(c, r, PALETTE[palIdx]!)
+      }
+
+      // Synapse pass — when two attention foci pass close to each
+      // other, stitch a faint trail of `·` glyphs between them. This
+      // reads as the two attentions briefly recognising and binding to
+      // each other — "ready to plug into anything, including each
+      // other." The trail isn't persistent; the ambient drift loop
+      // above will overwrite these cells as it churns through, so the
+      // synapse fades naturally as the foci drift apart.
+      if (revealed) drawSynapses(t)
+    }
+
+    function drawSynapses(t: number) {
+      const cx = fldCols * 0.5
+      const cy = fldRows * 0.5
+      // Compute focus positions once per frame.
+      const fxs: number[] = []
+      const fys: number[] = []
+      for (let i = 0; i < FOCI.length; i++) {
+        const f = FOCI[i]!
+        fxs.push(cx + Math.sin(t * f.wx + f.px) * (f.ax * fldCols))
+        fys.push(cy + Math.sin(t * f.wy + f.py) * (f.ay * fldRows))
+      }
+      for (let i = 0; i < FOCI.length; i++) {
+        for (let j = i + 1; j < FOCI.length; j++) {
+          const dx = fxs[j]! - fxs[i]!
+          const dy = fys[j]! - fys[i]!
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          // Engage only when reasonably close (in cell units). Both
+          // foci have similar sigmas so a fixed cell threshold works.
+          if (dist > SYNAPSE_MAX_DIST || dist < 4) continue
+          // Proximity → alpha. Closer = brighter, but cap so it stays
+          // ambient, never punchy.
+          const closeness = 1 - (dist - 4) / (SYNAPSE_MAX_DIST - 4)
+          const alpha = Math.min(SYNAPSE_MAX_ALPHA, closeness * SYNAPSE_MAX_ALPHA)
+          // Step every few cells along the line and drop a `·` glyph.
+          // Don't update `cells[]` — these are transient overdraws
+          // that the ambient drift loop will replace next time it
+          // touches the same cell, giving us a self-fading synapse.
+          const steps = Math.max(2, Math.floor(dist / SYNAPSE_STEP_CELLS))
+          ctx!.globalAlpha = alpha
+          ctx!.fillStyle = ink
+          for (let s = 1; s < steps; s++) {
+            const u = s / steps
+            const cc = Math.round(fxs[i]! + dx * u)
+            const rr = Math.round(fys[i]! + dy * u)
+            if (cc < 0 || cc >= fldCols || rr < 0 || rr >= fldRows) continue
+            ctx!.fillText("·", cc * CHAR_W, rr * LINE_H)
+          }
+          ctx!.globalAlpha = 1
+        }
       }
     }
 
