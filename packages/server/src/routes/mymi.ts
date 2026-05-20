@@ -299,7 +299,7 @@ export function registerMymiRoutes(app: FastifyInstance): void {
       }
       const qualifiedName = `${schema}.${table}`
 
-      // 1. catalog.lineageMap — loaded from lineage.json at startup
+      // 1. catalog.lineageMap — loaded from publish-views-curation.json at startup
       const catalog = getCatalog(connName(req.query))
       if (catalog) {
         const entry = catalog.lineageMap.get(qualifiedName)

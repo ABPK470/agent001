@@ -68,10 +68,10 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
           console.warn(`[lineage:redundant-json] ${entry.view} curated via extended properties — JSON entry ignored.`)
           continue
         }
-        toMerge.push({ ...entry, provenance: "lineage.json" })
+        toMerge.push({ ...entry, provenance: "curation-file" })
       }
       catalog.mergeLineage(toMerge)
-    } catch { /* non-fatal: lineage file may have been deleted */ }
+    } catch { /* non-fatal: curation file may have been deleted */ }
   }
 
   // Persist to cache for next startup
@@ -132,23 +132,23 @@ export async function loadLineage(
   const raw = await fs.readFile(resolved, "utf-8")
   const lineages: ViewLineage[] = JSON.parse(raw)
   // Validate curated lineage against the live catalog before it reaches the
-  // agent — lineage.json has no automatic refresh and drifts silently as
+  // agent — the curation file has no automatic refresh and drifts silently as
   // schema evolves. validateCuratedLineage prunes stale fields, demotes
   // entries whose view is gone, and stamps a drift report on each.
   const { validated } = validateCuratedLineage(lineages, catalog, connection)
   // Precedence: an extended-property entry already loaded from the live DB
   // is the source of truth (DBA-authored, co-located with the schema).
   // Skip JSON entries that would overwrite one, and log so the DBA knows
-  // the JSON entry is now redundant and can be removed from lineage.json.
+  // the JSON entry is now redundant and can be removed from the curation file.
   const toMerge: ViewLineage[] = []
   for (const entry of validated) {
     const existing = catalog.getLineage(entry.view)
     if (existing && existing.provenance === "extended-properties") {
       // eslint-disable-next-line no-console
-      console.warn(`[lineage:redundant-json] ${entry.view} is now curated via SQL extended properties on the live DB — remove from ${filePath} to avoid double maintenance.`)
+      console.warn(`[lineage:redundant-curation] ${entry.view} is now curated via SQL extended properties on the live DB — remove from ${filePath} to avoid double maintenance.`)
       continue
     }
-    toMerge.push({ ...entry, provenance: "lineage.json" })
+    toMerge.push({ ...entry, provenance: "curation-file" })
   }
   catalog.mergeLineage(toMerge)
 

@@ -47,7 +47,7 @@
  *
  * ── Precedence ─────────────────────────────────────────────────────
  *
- * extended-properties > lineage.json > auto-lineage
+ * extended-properties > curation-file > auto-lineage
  *
  * Entries derived here are stamped `provenance: "extended-properties"`
  * and win against same-keyed entries from the JSON file (the file

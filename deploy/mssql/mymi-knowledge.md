@@ -585,7 +585,7 @@ milliseconds) and requires no configuration.
 - Dimension joins — auto-detected from `pk*` column naming (`pkClient` → `dim.Client`, etc.)
 - Source grouping by schema
 
-**Hand-curated additions** (in `deploy/mssql/lineage.json`) add richer context for the two most
+**Hand-curated additions** (in `deploy/mssql/publish-views-curation.json`) add richer context for the two most
 critical views: business area groupings (RBB, UNO, CPA, Africa, IMEX, etc.), filter conditions
 per source, and narrative descriptions. These always overwrite the auto-discovered entries.
 

@@ -85,7 +85,7 @@ export function fmtLineage(l: ViewLineage): string {
   ]
 
   // Drift banner: the curated lineage may come from sys.extended_properties
-  // (live DB, north-star) or lineage.json (transitional). Either source can
+  // (live DB, north-star) or publish-views-curation.json (transitional). Either source can
   // contain references that don't match the live catalog (a typo in a parent
   // name, a renamed dim table). The load-time validator prunes those and
   // attaches a `validation` record; we surface it here, and steer the
@@ -93,7 +93,7 @@ export function fmtLineage(l: ViewLineage): string {
   const v = l.validation
   const refreshHint = l.provenance === "extended-properties"
     ? `refresh the extended properties on ${l.view} (or on the affected source views)`
-    : `refresh deploy/mssql/lineage.json`
+    : `refresh deploy/mssql/publish-views-curation.json`
   if (v?.viewMissing) {
     lines.push(
       "",

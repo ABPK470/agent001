@@ -103,7 +103,7 @@ export interface ViewLineage {
   sources: LineageSource[]        // all contributing tables/views
   /**
    * Where this lineage entry came from. Used by the catalog merge pipeline
-   * to enforce precedence (extended-properties > lineage.json > auto) and
+   * to enforce precedence (extended-properties > curation-file > auto) and
    * by the prompt summary to honestly tell the agent the mix of sources.
    *
    * - "extended-properties": derived at catalog-build time from
@@ -111,17 +111,17 @@ export interface ViewLineage {
    *   lineage-extended-properties.ts for the convention). This is the
    *   north-star source — curation lives next to the schema and cannot
    *   silently drift away from it.
-   * - "lineage.json": hand-curated JSON file. Transitional fallback,
+   * - "curation-file": hand-curated JSON file (deploy/mssql/publish-views-curation.json). Transitional fallback,
    *   subject to drift, validated by lineage-validator.ts.
    * - "auto": mechanically derived from sys.sql_expression_dependencies.
    *   Cheap, always fresh, but only knows tables/views — no business
    *   context, no filters, no dim joins.
    */
-  provenance?: "extended-properties" | "lineage.json" | "auto"
+  provenance?: "extended-properties" | "curation-file" | "auto"
   /**
    * Drift report attached at load time by validateCuratedLineage().
    *
-   * Hand-curated lineage.json has no automatic refresh mechanism — the live
+   * Hand-curated curation file (deploy/mssql/publish-views-curation.json) has no automatic refresh mechanism — the live
    * schema can drift (sources renamed/dropped, columns removed) without the
    * file being updated. We therefore validate every curated entry against
    * the live CatalogGraph at load time, prune fields that no longer exist,

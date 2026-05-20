@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Emit `sp_addextendedproperty` T-SQL that migrates the curation in
- * `deploy/mssql/lineage.json` into SQL Server EXTENDED_PROPERTIES on the
+ * `deploy/mssql/publish-views-curation.json` into SQL Server EXTENDED_PROPERTIES on the
  * live database — the north-star source for lineage curation (see
  * packages/agent/src/tools/catalog/lineage-extended-properties.ts for the
  * full contract).
@@ -11,7 +11,7 @@
  * a non-prod environment first, and verify the catalog rebuild picks up
  * the new properties (boot log: `[lineage:extprop] connection='…'
  * assembled N lineage entries`). Once a view is migrated, its entry can
- * be removed from lineage.json — the agent's catalog-build pipeline
+ * be removed from the curation file — the agent's catalog-build pipeline
  * already prefers extended-properties over the JSON file and warns on
  * redundancy.
  *
@@ -23,9 +23,9 @@
  *                                          parent view that source feeds)
  *
  * Usage:
- *   node scripts/lineage-to-extended-properties.mjs                # prints SQL to stdout
- *   node scripts/lineage-to-extended-properties.mjs > migrate.sql  # save for review
- *   node scripts/lineage-to-extended-properties.mjs --view publish.Revenue
+ *   node scripts/publish-views-curation-to-extended-properties.mjs                # prints SQL to stdout
+ *   node scripts/publish-views-curation-to-extended-properties.mjs > migrate.sql  # save for review
+ *   node scripts/publish-views-curation-to-extended-properties.mjs --view publish.Revenue
  *                                                   # emit only one parent's SQL
  *
  * NOTE: this script does NOT connect to a database. It only reads the
@@ -35,12 +35,12 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-const LINEAGE_PATH = resolve(process.cwd(), "deploy/mssql/lineage.json")
+const CURATION_PATH = resolve(process.cwd(), "deploy/mssql/publish-views-curation.json")
 
 const args = process.argv.slice(2)
 const viewFilter = args.includes("--view") ? args[args.indexOf("--view") + 1] : null
 
-const lineages = JSON.parse(readFileSync(LINEAGE_PATH, "utf-8"))
+const lineages = JSON.parse(readFileSync(CURATION_PATH, "utf-8"))
 
 /**
  * Split "schema.object" → ["schema", "object"]. Returns null if the input

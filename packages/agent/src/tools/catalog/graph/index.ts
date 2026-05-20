@@ -113,9 +113,9 @@ export class CatalogGraph {
       r.tables, r.nameIndex, r.columnIndex, r.adjacency, r.implicitEdges,
       undefined, undefined, r.viewSourceRows, r.sysCatalog,
     )
-    // Lineage precedence (lowest → highest): auto < extended-properties < lineage.json (loaded later by loadLineage()).
+    // Lineage precedence (lowest → highest): auto < extended-properties < curation-file (loaded later by loadLineage()).
     // mergeLineage is naive last-write-wins, so we apply in order. Extended
-    // properties enrich/override auto entries for the same view; lineage.json
+    // properties enrich/override auto entries for the same view; the curation file
     // (loaded after build() at startup) can still override either, but the
     // file loader logs a warning when it does so the DBA knows the JSON entry
     // is now redundant and should be migrated/removed.
@@ -123,7 +123,7 @@ export class CatalogGraph {
     if (r.extendedPropertyLineage.length > 0) {
       // Validate against the live catalog (a DBA can typo a parent name or
       // list a renamed dim table in lineage_dim_joins). The validator
-      // attaches the same `validation` drift report used for lineage.json.
+      // attaches the same `validation` drift report used for the curation file.
       const { validated } = validateCuratedLineage(r.extendedPropertyLineage, graph, connection ?? "default")
       // Re-stamp provenance — validateCuratedLineage rebuilds the entry but
       // doesn't know the original source.

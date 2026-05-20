@@ -4,7 +4,7 @@ import type { ViewLineage } from "./types.js"
 /**
  * Validate hand-curated lineage entries against the live CatalogGraph.
  *
- * Why this exists: `deploy/mssql/lineage.json` is a hand-curated artifact
+ * Why this exists: `deploy/mssql/publish-views-curation.json` is a hand-curated artifact
  * with no automatic refresh — the live database schema can drift (views
  * renamed/dropped, sources removed, columns renamed) and the file stays
  * stale until a human notices. Shipping stale curation to the agent makes
@@ -21,7 +21,7 @@ import type { ViewLineage } from "./types.js"
  *      stub with a clear staleness marker.
  *   5. The drift report is attached to the entry as `validation` so
  *      formatPromptSummary / handleStats / handleLineage can honestly
- *      surface "(N stale fields hidden — refresh deploy/mssql/lineage.json)".
+ *      surface "(N stale fields hidden — refresh deploy/mssql/publish-views-curation.json)".
  *
  * Forward-looking note: the long-term fix is to derive these fields from
  * SQL `EXTENDED_PROPERTIES` on each view so curation lives next to the
@@ -64,7 +64,7 @@ export function validateCuratedLineage(
       summary.demotedEntries.push(entry.view)
       validated.push({
         view: entry.view,
-        description: `[STALE — view not found in live catalog; refresh deploy/mssql/lineage.json] ${entry.description}`,
+        description: `[STALE — view not found in live catalog; refresh deploy/mssql/publish-views-curation.json] ${entry.description}`,
         outputColumns: [],
         dimJoins: [],
         sources: [],
@@ -146,7 +146,7 @@ export function validateCuratedLineage(
         `${summary.partiallyStaleEntries} partially stale, ` +
         `${summary.demotedEntries.length} demoted ` +
         `(${summary.totalDroppedSources} sources, ${summary.totalDroppedDims} dims, ` +
-        `${summary.totalDroppedColumns} cols pruned) — refresh deploy/mssql/lineage.json`,
+        `${summary.totalDroppedColumns} cols pruned) — refresh deploy/mssql/publish-views-curation.json`,
     )
   }
 

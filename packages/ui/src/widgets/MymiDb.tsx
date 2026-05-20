@@ -7,7 +7,7 @@
  *  - Object list with relative size fill bars, row counts, column counts
  *  - Detail panel with 4 tabs: Preview | Columns | Relations | Lineage
  *  - FK relation graph (text-based, inbound + outbound)
- *  - Data lineage from lineage.json / core.vDatasetLineage
+ *  - Data lineage from publish-views-curation.json / core.vDatasetLineage
  */
 
 import {
@@ -28,11 +28,11 @@ import {
     Search,
     Table2,
     X
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api";
-import { Listbox, type ListboxOption } from "../components/Listbox";
-import { useContainerSize } from "../hooks/useContainerSize";
+} from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { api } from "../api"
+import { Listbox, type ListboxOption } from "../components/Listbox"
+import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Types ────────────────────────────────────────────────────────
 

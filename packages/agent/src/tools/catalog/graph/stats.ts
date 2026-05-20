@@ -61,7 +61,7 @@ export function formatPromptSummary(graph: CatalogGraph): string {
     //   - extended-properties: DBA-authored, lives in sys.extended_properties
     //     on the live DB (north-star — co-located with the schema, cannot
     //     silently drift). See lineage-extended-properties.ts.
-    //   - lineage.json: hand-curated JSON file, transitional fallback.
+    //   - curation-file: hand-curated JSON file (deploy/mssql/publish-views-curation.json), transitional fallback.
     // Drift annotations come from lineage-validator.ts which re-checks every
     // curated entry against the live catalog on load; the refresh-hint text
     // is driven from provenance so the agent (and the human reading the
@@ -79,19 +79,19 @@ export function formatPromptSummary(graph: CatalogGraph): string {
         return drift > 0 ? `${l.view} [partial: ${drift} stale]` : l.view
       })
       const fromExt = curatedEntries.filter((l) => l.provenance === "extended-properties").length
-      const fromJson = curatedEntries.filter((l) => l.provenance === "lineage.json").length
+      const fromJson = curatedEntries.filter((l) => l.provenance === "curation-file").length
       const stale = curatedEntries.filter((l) => {
         const v = l.validation
         return v != null && (v.viewMissing || v.droppedSources.length + v.droppedDims.length + v.droppedColumns.length > 0)
       })
       const driftHints: string[] = []
       if (stale.some((l) => l.provenance === "extended-properties")) driftHints.push("refresh extended properties on the affected views")
-      if (stale.some((l) => l.provenance === "lineage.json"))         driftHints.push("refresh deploy/mssql/lineage.json")
+      if (stale.some((l) => l.provenance === "curation-file"))      driftHints.push("refresh deploy/mssql/publish-views-curation.json")
       const driftNote = driftHints.length > 0
         ? ` (${stale.length} partially stale — ${driftHints.join("; ")})`
         : ""
       const provenanceBreakdown = fromJson > 0
-        ? `${fromExt} from DB extended properties, ${fromJson} from lineage.json (pending migration)`
+        ? `${fromExt} from DB extended properties, ${fromJson} from publish-views-curation.json (pending migration)`
         : `${fromExt} from DB extended properties`
       lines.push(`Curated lineage maps (${curatedEntries.length} hand-authored — ${provenanceBreakdown})${driftNote}: ${annotated.join(", ")} — use search_catalog(lineage='view') for the full map.`)
       if (autoCount > 0) lines.push(`(+${autoCount} auto-derived view lineages, discover on demand via search_catalog.)`)

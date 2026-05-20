@@ -150,7 +150,7 @@ export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoa
 
   // Step 7b: Load lineage curation from SQL Server extended properties
   // (the north-star source — see lineage-extended-properties.ts). These
-  // entries take precedence over both auto-lineage and the lineage.json
+  // entries take precedence over both auto-lineage and the curation file
   // file in mergeLineage downstream (file path skips views already
   // covered here). Non-fatal: if the query fails or no properties
   // exist yet (greenfield DB), returns [] and we fall back to file/auto.

@@ -22,8 +22,8 @@ function extractBusinessArea(qualifiedName: string): string {
 
 /**
  * Group a source by its schema. Generic — works for any DWH schema layout.
- * Curated lineage.json entries replace auto entries for the same view key,
- * so these generic group names only surface for views not in lineage.json.
+ * Curated curation-file entries replace auto entries for the same view key,
+ * so these generic group names only surface for views not in publish-views-curation.json.
  */
 function extractGroup(qualifiedName: string): string {
   const schema = qualifiedName.includes(".") ? qualifiedName.split(".")[0] : "other"
@@ -58,17 +58,17 @@ export interface ViewDepRow {
  * Produces one ViewLineage per view that has any direct dependency:
  *
  *   • outputColumns: all columns the view exposes (from catalog)
- *   • dimJoins:      always empty — no guessing; hand-curated lineage.json wins
+ *   • dimJoins:      always empty — no guessing; hand-curated curation file wins
  *   • sources:       every table/view the view directly depends on
  *                    (true, from sys.sql_expression_dependencies)
  *
- * After build(), hand-curated lineage.json entries are loaded via loadLineage()
+ * After build(), hand-curated curation entries (deploy/mssql/publish-views-curation.json) are loaded via loadLineage()
  * which calls mergeLineage() — that overwrites auto entries for the same view keys,
  * so curation always wins for the views that have it.
  *
  * dimJoins are intentionally NOT auto-detected here. The old naming-convention
  * approach (pkClient → dim.Client) was guesswork. Actual dim joins are only known
- * by reading the view's SQL definition (viewDefinition field) or from lineage.json.
+ * by reading the view's SQL definition (viewDefinition field) or from the curation file.
  */
 export function buildAutoLineage(
   tables: Map<string, CatalogTable>,
@@ -107,7 +107,7 @@ export function buildAutoLineage(
       view: viewKey,
       description: `Auto-discovered: reads from ${parts.join(" + ")}.`,
       outputColumns: view.columns.map((c) => c.name),
-      dimJoins: [],   // never guessed — only set from hand-curated lineage.json or extended properties
+      dimJoins: [],   // never guessed — only set from the hand-curated curation file or extended properties
       sources,
       provenance: "auto",
     })
