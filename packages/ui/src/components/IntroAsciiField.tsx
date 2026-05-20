@@ -43,20 +43,12 @@ const TARGET_FPS = 18
 const INK_OPACITY = 0.22             // applied to var(--text), works in both themes
 
 // --- Virtual camera + scene (world units; wave amp ≈ 0.55 world units) ---
-const RIBBON_COUNT = 130             // number of depth slices
+const RIBBON_COUNT = 110             // number of depth slices
 const CAM_HEIGHT = 2.4               // camera height above the mean water plane
 const FOCAL_FRAC = 0.85              // focal length as fraction of screen height
 const HORIZON_FRAC = 0.22            // horizon line position (fraction of screen height from top)
-// Ribbons are parameterized by SCREEN baseline (not world depth) via a
-// power curve: baselineY = horizonY + u^BASELINE_POWER · (bottomY − horizonY).
-//   1.0 = perfectly even spacing on screen (no horizon convergence)
-//   2.0 = strong horizon clustering, even foreground gaps
-//   3.0+ = ribbons crammed at the horizon, sparse foreground
-// 1.8 gives clear vanishing-point convergence at the horizon AND keeps
-// foreground ribbons close enough to read as a continuous surface
-// (no big black bands). worldZ is derived from baselineY — see render.
-const BASELINE_POWER = 1.8
-const BASELINE_MIN_PX = 0.5          // floor so the i=0 ribbon doesn't project to z = +∞
+const Z_NEAR = 1.15                  // nearest ribbon depth
+const Z_FAR = 42                     // farthest ribbon depth (sets vanishing-point convergence)
 const WAVE_AMP_WORLD = 0.55          // wave height amplitude in world units
 const WAVE_SPEED = 0.45              // surface drift speed (seconds → phase units)
 
@@ -161,42 +153,27 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}) {
 
       const focal = screenH * FOCAL_FRAC
       const horizonY = screenH * HORIZON_FRAC
-      const bottomY = screenH
-      const groundSpanPx = bottomY - horizonY
       const cx = screenW / 2
 
       // Skyline starts "below the screen" — every nearest-ribbon dot
       // wins on the first comparison.
       skyline.fill(screenH + 1)
 
-      // Front-to-back: i = N-1 (nearest, bottom of screen) down to 0
-      // (farthest, near horizon).
-      //
-      // Ribbons are spaced by SCREEN baseline rather than world depth:
-      //   baselineOffset = u^BASELINE_POWER · groundSpanPx
-      //   worldZ = focal · CAM_HEIGHT / baselineOffset    (inverse projection)
-      // The power curve packs ribbons at the horizon (low u) while keeping
-      // foreground rows close enough to fill the screen — fixes the big
-      // black gaps you'd get from linear-in-z spacing where 1/z² makes
-      // foreground gaps explode.
-      for (let i = RIBBON_COUNT - 1; i >= 0; i--) {
+      // Front-to-back: i = 0 (nearest) up to N-1 (farthest).
+      // Ribbons are linearly spaced in WORLD depth, so 1/z compression
+      // makes their projected baselines cluster near the horizon — the
+      // same convergence you see in the reference image.
+      for (let i = 0; i < RIBBON_COUNT; i++) {
         // Reveal gate: ribbons not yet at their reveal time are skipped.
         if (!revealed && revealCutoffMs < ribbonRevealMs[i]!) continue
 
-        const u = i / (RIBBON_COUNT - 1)                 // 0 = nearest, 1 = farthest
-        const baselineOffset = Math.max(
-          BASELINE_MIN_PX,
-          Math.pow(u, BASELINE_POWER) * groundSpanPx,
-        )
-        const baselineY = horizonY + baselineOffset
-        const z = focal * CAM_HEIGHT / baselineOffset    // derived world depth
-        const projScale = focal / z                       // px-per-world-unit at this depth
+        const depthU = i / (RIBBON_COUNT - 1)            // 0 = near, 1 = far
+        const z = Z_NEAR + depthU * (Z_FAR - Z_NEAR)
 
-        // Glyph weight: heavy near (large u, bottom of screen) →
-        // sparse far (u → 0, horizon). Palette is ordered NEAR→FAR.
+        // Glyph weight: heavy near (index 0) → sparse far.
         const gIdx = Math.min(
           RIBBON_GLYPHS.length - 1,
-          Math.floor((1 - u) * RIBBON_GLYPHS.length),
+          Math.floor(depthU * RIBBON_GLYPHS.length),
         )
         const glyph = RIBBON_GLYPHS[gIdx]!
 
@@ -209,9 +186,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}) {
           // sx = cx + worldX · focal / z.
           const worldX = (sx - cx) * z / focal
           const waveY = surface(worldX, z, tz) * WAVE_AMP_WORLD
-          // Forward-project: sy = horizonY + focal·(CAM_HEIGHT − waveY)/z
-          //                     = baselineY − projScale·waveY
-          const sy = baselineY - projScale * waveY
+          // Forward-project to screen. Camera at height CAM_HEIGHT looking
+          // along +z; world-y axis points UP, screen-y axis points DOWN,
+          // so (CAM_HEIGHT − waveY) goes through focal/z and adds to horizonY.
+          const sy = horizonY + focal * (CAM_HEIGHT - waveY) / z
           if (sy < skyline[b]!) {
             skyline[b] = sy
             // textBaseline=top → nudge by half the font height so the
