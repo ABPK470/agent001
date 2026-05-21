@@ -227,4 +227,19 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
     const query = "SELECT TOP 5 pkClient FROM persistedView.[publish.Revenue] ORDER BY pkClient"
     expect(validateQuery(query, RO)).toMatch(/full scan/i)
   })
+
+  it("blocks repeated scalar probes against the same staged temp table", () => {
+    const batch = [
+      "SET NOCOUNT ON;",
+      "SELECT pkClient, pkProduct, RevenueZARMTD INTO #revLines_a3f91c08 FROM publish.Revenue WHERE pkMonth BETWEEN 202501 AND 202512;",
+      "SELECT",
+      "  base.pkClient,",
+      "  (SELECT COUNT(*) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS ProductCount,",
+      "  (SELECT SUM(r.RevenueZARMTD) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS RevenueZAR",
+      "FROM #revLines_a3f91c08 base;",
+      "DROP TABLE #revLines_a3f91c08;",
+    ].join("\n")
+    expect(validateQuery(batch, RO)).toMatch(/repeated scalar subqueries/i)
+    expect(validateQuery(batch, RO)).toMatch(/aggregate the staged #temp once per business key/i)
+  })
 })

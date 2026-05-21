@@ -29,6 +29,24 @@ describe("SQL quality analysis", () => {
     expect(analysis.tempScalarSubqueryCount).toBe(1)
     expect(analysis.stagePatternLikely).toBe(true)
   })
+
+  it("blocks repeated temp scalar probes as a structural stage-3 defect", () => {
+    const query = [
+      "SELECT pkClient, pkProduct, RevenueZARMTD INTO #revLines_a3f91c08 FROM publish.Revenue WHERE pkMonth BETWEEN 202501 AND 202512;",
+      "SELECT",
+      "  base.pkClient,",
+      "  (SELECT COUNT(*) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS ProductCount,",
+      "  (SELECT SUM(r.RevenueZARMTD) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS RevenueZAR",
+      "FROM #revLines_a3f91c08 base;",
+      "DROP TABLE #revLines_a3f91c08;",
+    ].join("\n")
+
+    const validation = validateQueryDetailed(query, false)
+
+    expect(validation.ok).toBe(false)
+    expect(validation.code).toBe("temp_scalar_subquery_overused")
+    expect(validation.analysis.tempScalarSubqueryCount).toBe(2)
+  })
 })
 
 describe("SQL quality trace emission", () => {

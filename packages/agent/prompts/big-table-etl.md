@@ -39,18 +39,42 @@ FROM dim.Date WITH (NOLOCK)
 WHERE [Year] = 2025;
 
 -- 2. STAGE 1 — top-N keys only. ONE touch.
-SELECT TOP 5 r.pkClient, SUM(r.RevenueZARMTD) AS RevenueZAR
+-- Prefer a one-to-one persisted publish mirror only when that exact mirror exists.
+-- If `persistedView.[publish.Revenue]` is absent, aggregate inside each
+-- branch view first, UNION the branch-local aggregates, then rank clients.
+-- `publish.MappingTransactionalBankingRules` and `publish.MappingUNOTranspose`
+-- below are NOT placeholders: they are real revenue-source branches from the
+-- curated `publish.Revenue` lineage. This is an illustrative skeleton showing
+-- the branch-local pattern; callers must include the required revenue branches
+-- for the business question instead of assuming these two are the whole view.
+SELECT TOP 5 x.pkClient, SUM(x.RevenueZAR) AS RevenueZAR
 INTO #topClients_a3f91c08
-FROM persistedView.[publish.Revenue] r WITH (NOLOCK)
-JOIN #range_a3f91c08 rg ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo
-WHERE r.pkClient IS NOT NULL
-GROUP BY r.pkClient
-ORDER BY SUM(r.RevenueZARMTD) DESC;
+FROM (
+        SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
+        FROM publish.MappingTransactionalBankingRules WITH (NOLOCK)
+        WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
+                                            AND (SELECT pkMonthTo   FROM #range_a3f91c08)
+            AND pkClient IS NOT NULL
+        GROUP BY pkClient
+
+        UNION ALL
+
+        SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
+        FROM publish.MappingUNOTranspose WITH (NOLOCK)
+        WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
+                                            AND (SELECT pkMonthTo   FROM #range_a3f91c08)
+            AND pkClient IS NOT NULL
+        GROUP BY pkClient
+
+        -- repeat for the required revenue branches
+) x
+GROUP BY x.pkClient
+ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;
 
 -- 3. STAGE 2 — detail rows for those 5 keys ONLY. SECOND and LAST touch.
 SELECT r.pkClient, r.pkProduct, r.pkAccount, r.pkMonth, r.RevenueZARMTD
 INTO #revLines_a3f91c08
-FROM persistedView.[publish.Revenue] r WITH (NOLOCK)
+FROM publish.Revenue r WITH (NOLOCK)
 JOIN #range_a3f91c08 rg ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo
 WHERE r.pkClient IN (SELECT pkClient FROM #topClients_a3f91c08);
 

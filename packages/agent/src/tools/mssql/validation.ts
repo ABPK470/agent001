@@ -201,6 +201,7 @@ export type QueryValidationCode =
   | "dangerous_operation"
   | "aggregate_semantic_mismatch"
   | "temp_table_integrity"
+  | "temp_scalar_subquery_overused"
   | "write_disabled"
   | "non_temp_mutation"
   | "large_object_overused"
@@ -231,6 +232,18 @@ function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
 function countTempScalarSubqueries(query: string): number {
   const stripped = stripForScan(query)
   return stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+#\w+[\s\S]*?\)/gi)?.length ?? 0
+}
+
+function countTempScalarSubqueriesByTemp(query: string): Map<string, number> {
+  const stripped = stripForScan(query)
+  const counts = new Map<string, number>()
+  const matches = stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+(#[A-Za-z_][\w]*)[\s\S]*?\)/gi) ?? []
+  for (const match of matches) {
+    const temp = /FROM\s+(#[A-Za-z_][\w]*)/i.exec(match)?.[1]
+    if (!temp) continue
+    counts.set(temp, (counts.get(temp) ?? 0) + 1)
+  }
+  return counts
 }
 
 export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalysis {
@@ -437,6 +450,30 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
 
   const tempBatchError = validateTempTableBatch(query)
   if (tempBatchError) return { ok: false, error: tempBatchError, code: "temp_table_integrity", analysis }
+
+  const tempScalarCounts = countTempScalarSubqueriesByTemp(query)
+  const repeatedTempScalarProbes = Array.from(tempScalarCounts.entries()).filter(([, count]) => count > 1)
+  if (repeatedTempScalarProbes.length > 0) {
+    const list = repeatedTempScalarProbes.map(([name, count]) => `${name} (${count} scalar probes)`).join(", ")
+    return {
+      ok: false,
+      error: [
+        `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
+        ``,
+        `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
+        `Required fix: aggregate the staged #temp once per business key (usually pkClient), produce all needed metrics in that grouped result, then JOIN that small aggregate once.`,
+        ``,
+        `Bad shape:`,
+        `  SELECT ..., (SELECT COUNT(*) FROM #revLines_x WHERE ...), (SELECT SUM(...) FROM #revLines_x WHERE ...)`,
+        ``,
+        `Good shape:`,
+        `  WITH revAgg AS (SELECT pkClient, COUNT(*) AS ..., SUM(...) AS ... FROM #revLines_x GROUP BY pkClient)`,
+        `  SELECT ... FROM base LEFT JOIN revAgg ON revAgg.pkClient = base.pkClient`,
+      ].join("\n"),
+      code: "temp_scalar_subquery_overused",
+      analysis,
+    }
+  }
 
   if (!writeEnabled) {
     // Two valid shapes when write is disabled:
