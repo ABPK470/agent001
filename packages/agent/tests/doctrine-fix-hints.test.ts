@@ -99,4 +99,28 @@ describe("doctrine fixHints", () => {
     // And every registered doctrine is reachable from the registry.
     expect(MSSQL_DOCTRINES.length).toBeGreaterThanOrEqual(5)
   })
+
+  it("hint texts name concrete tools the agent should use (Gap 3)", () => {
+    // The hint is the agent's prompt-to-fix; vague refactor advice without
+    // a tool name leaves it guessing. Each block hint must reference at
+    // least one existing tool so the next step is unambiguous.
+    expect(DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch).toContain("profile_data")
+    expect(DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch).toContain("note")
+    expect(DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch).toContain("column_semantics")
+
+    expect(DOCTRINE_FIX_HINTS.temp_table_integrity).toContain("export_query_to_file")
+
+    expect(DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused).toContain("discover_relationships")
+  })
+
+  it("doctrine summaries point at the same tools (See also: appendix)", () => {
+    // Summaries are read at planning time; hints are read at failure time.
+    // Both surfaces must agree on which tools resolve the doctrine, otherwise
+    // the agent gets one signal in the system prompt and a different one
+    // from the validator.
+    const byId = new Map(MSSQL_DOCTRINES.map((d) => [d.id, d]))
+    expect(byId.get("mssql.aggregate-naming")?.summary()).toContain("profile_data")
+    expect(byId.get("mssql.temp-naming")?.summary()).toContain("export_query_to_file")
+    expect(byId.get("mssql.temp-scalar-subquery")?.summary()).toContain("discover_relationships")
+  })
 })

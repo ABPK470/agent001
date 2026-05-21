@@ -14,6 +14,8 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Change the aggregate function to match the alias (or vice-versa).",
     "The function name is the implementation; the output alias is the contract with the reader. They MUST agree.",
     "Common cases: `SUM(...) AS Avg…` → use `AVG(...)`. `SUM(...MTD)` over multiple months → use `AVG(...)` or pick a single `pkMonth` row.",
+    "If you are unsure whether a column is summable, call `profile_data table=<schema.Table> columns=[<column>]` first — it reports distribution and distinct-cardinality clues that distinguish snapshot/MTD columns from period-additive ones.",
+    "Once confirmed, save the finding with `note subject=<schema.Table.Column> claim=\"<summable | snapshot | MTD> — <one-line rule>\" category=column_semantics` so the next turn does not re-derive it.",
   ].join(" "),
 
   temp_table_integrity: [
@@ -21,20 +23,123 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Create every #temp in the same single batch that reads it: in a pooled connection a #temp from a prior call may not exist.",
     "If a previous call already failed, do not assume staged temps survived — restart the batch from CREATE.",
     "Send the whole micro-ETL as ONE query_mssql call (one batch). Never split CREATE / INSERT / SELECT across multiple tool calls.",
+    "If the staged set is too large to keep alive across a single batch, materialize it instead with `export_query_to_file` and read it back with a follow-up SELECT — that is the supported cross-batch handoff, not a #temp.",
   ].join(" "),
 
   temp_scalar_subquery_overused: [
     "Aggregate the staged #temp ONCE per business key (usually pkClient), produce all needed metrics in that single grouped result, then JOIN that small aggregate once.",
     "Bad shape:  SELECT ..., (SELECT COUNT(*) FROM #revLines_x WHERE ...), (SELECT SUM(...) FROM #revLines_x WHERE ...)",
     "Good shape: WITH revAgg AS (SELECT pkClient, COUNT(*) AS Lines, SUM(...) AS Revenue FROM #revLines_x GROUP BY pkClient) SELECT ... FROM base LEFT JOIN revAgg ON revAgg.pkClient = base.pkClient",
+    "If you don't yet know which key joins the #temp to the outer table, call `discover_relationships between=[#yourTemp, <sourceTable>]` (or the equivalent for the underlying base tables) — it returns FK candidates and key cardinality so you can pick the right GROUP BY.",
   ].join(" "),
 
   large_object_overused: [
     "Refactor to the two-stage pattern: Stage 1 narrows keys into a #temp (one touch of the big view), Stage 2 fetches detail rows for those keys (second and last touch).",
-    "Derive every remaining metric from the #temp \u2014 never re-query the big view a third time.",
+    "Derive every remaining metric from the #temp — never re-query the big view a third time.",
+    "When the second stage still needs to fan out across many tables, prefer `export_query_to_file` for the stage-1 keys and join from the exported file rather than re-touching the big view.",
   ].join(" "),
 }
 
 export function getDoctrineFixHint(code: string): string | null {
   return DOCTRINE_FIX_HINTS[code] ?? null
 }
+
+// ── Doctrine lesson templates (Gap 2) ────────────────────────────
+//
+// Each block-emitting doctrine MAY define a lesson template — a pure function
+// that converts the (query, analysis) context of the block into a
+// `NoteLessonPayload`. The mssql tool call site fires the lesson at the
+// agent-runtime memory writer, which routes it to ingestAgentNote on the
+// server. The net effect is that a doctrine block writes one durable
+// "do not repeat this mistake" entry into working memory, without the LLM
+// having to make a separate `note` tool call.
+//
+// Lesson templates are intentionally simple. They return null when they
+// cannot produce a useful subject/claim from the available context (e.g.
+// the query is too short to extract a recognizable table or alias). Null
+// means "no auto-note this time" — the doctrine block still fires, the
+// fix hint is still shown; only the durable memory write is skipped.
+//
+// Subjects use `doctrine:<rule-id>:<short-locator>` so multiple blocks of
+// the same rule on different artifacts produce distinct memory entries
+// (dedup within a session is a feature; collapsing across distinct
+// artifacts would be a bug).
+
+export interface NoteLessonPayload {
+  subject: string
+  claim: string
+  evidence?: string
+  category: "schema_fact" | "column_semantics" | "performance" | "observation"
+}
+
+export interface LessonContext {
+  query: string
+  /** Subset of analysis used by templates. Optional so callers can pass {}. */
+  detail?: string
+}
+
+export type DoctrineLessonTemplate = (ctx: LessonContext) => NoteLessonPayload | null
+
+/**
+ * Truncate a string to `max` chars (whole-codepoint-safe, with ellipsis).
+ * Used so a long offending SELECT doesn't blow the lesson body.
+ */
+function shorten(text: string, max: number): string {
+  const t = text.replace(/\s+/g, " ").trim()
+  if (t.length <= max) return t
+  return t.slice(0, Math.max(0, max - 1)) + "…"
+}
+
+export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTemplate>> = {
+  aggregate_semantic_mismatch: (ctx) => {
+    // The detail field carries the validator's single-line snippet of the
+    // offending aggregate (e.g. "SUM(RevenueZARMTD) AS AvgRev"). We use it
+    // as the subject locator so two distinct mismatches in the same run
+    // don't collapse into a single memory entry.
+    const snippet = ctx.detail ? shorten(ctx.detail, 80) : null
+    if (!snippet) return null
+    return {
+      subject: `doctrine:aggregate-semantic-mismatch:${snippet}`,
+      claim:
+        "Aggregate function and output alias must agree. " +
+        "Confirm column summability with `profile_data` before choosing SUM vs AVG; " +
+        "for *MTD / *YTD / *Snapshot / *Spot columns the answer is almost always AVG (or single-row), not SUM.",
+      evidence: `Blocked shape: ${snippet}`,
+      category: "column_semantics",
+    }
+  },
+
+  temp_table_integrity: (ctx) => {
+    // For temp-table integrity the validator emits a sentence naming the
+    // offending #temp(s). We pass that through as the detail so the lesson
+    // pins the actual identifier. If unavailable, fall back to a query
+    // fingerprint so two different batches with the same class of bug get
+    // distinct entries.
+    const locator = ctx.detail ? shorten(ctx.detail, 100) : shorten(ctx.query, 60)
+    return {
+      subject: `doctrine:temp-table-integrity:${locator}`,
+      claim:
+        "Send the whole #temp micro-ETL as ONE query_mssql call. " +
+        "Reuse one 8-hex suffix across every CREATE/INSERT/SELECT/DROP. " +
+        "If state must survive across batches, use `export_query_to_file` and read the file back — not a #temp.",
+      category: "observation",
+    }
+  },
+
+  temp_scalar_subquery_overused: (ctx) => {
+    const locator = ctx.detail ? shorten(ctx.detail, 100) : shorten(ctx.query, 60)
+    return {
+      subject: `doctrine:temp-scalar-subquery:${locator}`,
+      claim:
+        "Aggregate the staged #temp ONCE per business key (usually pkClient) and join the small grouped result. " +
+        "Use `discover_relationships` to confirm the join key before grouping.",
+      evidence: ctx.detail ? `Blocked locator: ${ctx.detail}` : undefined,
+      category: "performance",
+    }
+  },
+}
+
+export function getDoctrineLessonTemplate(code: string): DoctrineLessonTemplate | null {
+  return DOCTRINE_LESSON_TEMPLATES[code] ?? null
+}
+

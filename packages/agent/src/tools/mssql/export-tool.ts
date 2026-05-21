@@ -17,6 +17,7 @@
 import sql from "mssql"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { currentRuntime } from "../../agent-runtime.js"
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
 import type { Tool } from "../../types.js"
 import { safePathResolved } from "../filesystem-security.js"
@@ -152,6 +153,14 @@ export const exportQueryToFileTool: Tool = {
         database: args.database ? String(args.database).trim() : null,
         validation,
       })
+      const lesson = validation.lesson
+      if (lesson) {
+        try {
+          currentRuntime().memory.writeNote?.(lesson)
+        } catch {
+          // Auto-note failures must not mask the block.
+        }
+      }
       return validation.error ?? "Query blocked"
     }
 

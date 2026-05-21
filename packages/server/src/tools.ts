@@ -9,6 +9,7 @@
 import {
   appendFileTool,
   askUserTool,
+  bindNoteTool,
   browserAutoLoginTool,
   browserCheckTool,
   browserHumanHandoffTool,
@@ -26,6 +27,7 @@ import {
   listEnvironmentsTool,
   mssqlSchemaTool,
   mssqlTool,
+  noteTool,
   profileDataTool,
   promoteAttachmentTool,
   readAttachmentTool,
@@ -45,6 +47,7 @@ import {
   type Tool,
 } from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
+import { ingestAgentNote } from "./memory/index.js"
 
 export { thinkTool }
 
@@ -70,6 +73,7 @@ const ALL_TOOLS: Tool[] = [
   askUserTool,
   getChartSpecsTool,
   thinkTool,
+  noteTool,
   mssqlTool,
   mssqlSchemaTool,
   exportQueryToFileTool,
@@ -204,6 +208,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_directory",
   "search_files",
   "think",
+  "note",
   "fetch_url",
   "ask_user",
   "search_catalog",
@@ -263,6 +268,14 @@ export interface PerRunToolContext {
    * doesn't need to know about pendingInputs or SSE plumbing.
    */
   askUserResolve: (question: string, options: string[] | undefined, sensitive: boolean) => Promise<string>
+  /**
+   * Run-scoped identifiers needed by the `note` tool factory so agent-authored
+   * memory writes carry correct tenant + session provenance. May be null when
+   * the run is anonymous or pre-session (rare; the note will still be stored
+   * but won't be retrievable via session-scoped working-memory queries).
+   */
+  sessionId: string | null
+  upn: string | null
 }
 
 export type PerRunToolFactory = (ctx: PerRunToolContext) => Tool[]
@@ -294,6 +307,26 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
         },
       },
       { timeoutMs: 0 },
+    ),
+  ],
+  // note — agent-authored memory write. Closes over run ids + tenant so the
+  // server's ingestAgentNote stamps the entry with correct provenance.
+  // Governance is left at defaults; ingestion is a quick DB write.
+  (ctx) => [
+    ctx.govern(
+      bindNoteTool(async (payload) => {
+        const res = ingestAgentNote({
+          subject: payload.subject,
+          claim: payload.claim,
+          evidence: payload.evidence,
+          category: payload.category,
+          sessionId: ctx.sessionId,
+          runId: ctx.runId,
+          upn: ctx.upn,
+        })
+        if (res.ok) return { ok: true, noteId: res.id }
+        return { ok: false, reason: res.reason }
+      }),
     ),
   ],
 ]

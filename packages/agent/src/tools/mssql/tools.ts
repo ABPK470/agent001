@@ -1,4 +1,5 @@
 import sql from "mssql"
+import { currentRuntime } from "../../agent-runtime.js"
 import type { Tool } from "../../types.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
 import { decorateMssqlError } from "./error-hints.js"
@@ -81,6 +82,18 @@ export const mssqlTool: Tool = {
         database: args.database ? String(args.database).trim() : null,
         validation,
       })
+      // Gap 2: route the doctrine lesson (if any) to the per-run memory
+      // writer so the rationale survives beyond this turn. Fire-and-forget
+      // because the writer is synchronous and a failure (null hook, dedup
+      // rejection) must not mask the original block error.
+      const lesson = validation.lesson
+      if (lesson) {
+        try {
+          currentRuntime().memory.writeNote?.(lesson)
+        } catch {
+          // Memory write failures must never block the validator response.
+        }
+      }
       return validation.error ?? "Query blocked"
     }
 

@@ -44,7 +44,7 @@ import { BusProtocol } from "../enums/bus.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../event-broadcaster.js"
-import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory/index.js"
+import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, retrieveContext } from "../memory/index.js"
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { composePerRunTools, getAllTools } from "../tools.js"
@@ -120,6 +120,25 @@ export async function executeRunImpl(
   runtime.browserCheck.cwd = runWorkspace.executionRoot
   runtime.filesystem.basePath = runWorkspace.executionRoot
   runtime.searchFiles.basePath = runWorkspace.executionRoot
+  // Gap 2: bind the memory writer hook so doctrine lessons (and any other
+  // agent-side auto-notes) get persisted with this run's session/upn
+  // provenance. The hook is a fire-and-forget sync wrapper; ingestAgentNote
+  // does the heavy lifting.
+  runtime.memory.writeNote = (payload) => {
+    try {
+      ingestAgentNote({
+        subject: payload.subject,
+        claim: payload.claim,
+        evidence: payload.evidence,
+        category: payload.category,
+        sessionId: activeRun?.sessionId ?? null,
+        runId,
+        upn: activeRun?.ownerUpn ?? null,
+      })
+    } catch {
+      // The writer is a side channel; never let it break a run.
+    }
+  }
 
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
@@ -274,6 +293,10 @@ export async function executeRunImpl(
         ctx.pendingInputs.set(runId, { resolve })
       })
     },
+    // Plumbed to per-run factories that need tenant/session provenance
+    // (currently the `note` tool — see PER_RUN_FACTORIES in tools.ts).
+    sessionId: activeRun?.sessionId ?? null,
+    upn: activeRun?.ownerUpn ?? null,
   })
 
   // Wrap sync tools to emit global SSE events so the Sync widget can react

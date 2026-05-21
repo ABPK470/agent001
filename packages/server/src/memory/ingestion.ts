@@ -29,16 +29,24 @@ export function ingestTurn(opts: {
   upn?: string | null
   /** Cross-user shared row (admin-curated). Defaults to false. */
   shared?: boolean
+  /**
+   * Override the default salience floor. Use a value below SALIENCE_THRESHOLD
+   * to permit terse-but-valuable entries (e.g. agent-authored notes whose value
+   * is in the subject identifier, not prose length). Pass 0 to disable the
+   * floor entirely. Defaults to SALIENCE_THRESHOLD.
+   */
+  minSalience?: number
 }): MemoryEntry | null {
   const salience = computeSalience(opts.content, opts.role)
+  const floor = opts.minSalience ?? SALIENCE_THRESHOLD
 
-  if (salience < SALIENCE_THRESHOLD && opts.role !== "system") {
+  if (salience < floor && opts.role !== "system") {
     broadcast({
       type: EventType.MemoryFiltered,
       data: {
         reason: MemoryIngestionExclusionReason.LowSalience,
         salience,
-        threshold: SALIENCE_THRESHOLD,
+        threshold: floor,
         tier: opts.tier,
         role: opts.role,
         contentPreview: opts.content.slice(0, 80),
@@ -340,3 +348,93 @@ export function flagRunMemory(runId: string, note?: string): boolean {
   ).run(updated, now, row.id)
   return true
 }
+
+// ── Agent-authored notes (Gap 1) ─────────────────────────────────
+//
+// `ingestAgentNote` is the write-side of the otherwise read-only memory system
+// exposed to the agent. It is called by the per-run wrapper of the `note` tool
+// (see packages/server/src/tools.ts PER_RUN_FACTORIES).
+//
+// Design choices:
+// - tier=working, role=summary: notes are session-hot but treated as canonical
+//   like episodic summaries (the summary role exempts them from salience-based
+//   rejection in ingestTurn).
+// - confidence=0.85 when evidence is provided, else 0.75. Higher than tool
+//   results (0.6) — the agent has made a deliberate statement — but capped
+//   below system-derived episodic success (0.7 baseline can rise via
+//   consolidation). Cross-session consolidation will promote recurring notes
+//   to semantic tier with the existing pipeline.
+// - Dedup is delegated to ingestTurn (Jaccard ≥0.86), so repeating the same
+//   `(subject, claim)` in a session naturally collapses to one entry.
+
+export interface AgentNoteInput {
+  subject: string
+  claim: string
+  evidence?: string
+  category?: string
+  sessionId?: string | null
+  runId?: string | null
+  upn?: string | null
+}
+
+export type AgentNoteResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: "low_salience" | "duplicate" | "invalid_input" }
+
+/**
+ * Persist an agent-authored fact to working memory. Returns the new entry id
+ * on success; otherwise a structured reason. Designed to be called from
+ * tool-execution paths (the `note` tool, doctrine auto-notes) so the result
+ * surfaces cleanly back to the LLM.
+ */
+export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
+  const subject = input.subject.trim()
+  const claim = input.claim.trim()
+  if (!subject || !claim) {
+    return { ok: false, reason: "invalid_input" }
+  }
+
+  const category = input.category && input.category.trim() ? input.category.trim() : "observation"
+
+  // Compose the content. Format is chosen so that FTS5 indexes the subject
+  // verbatim (it appears as a discrete token) and downstream readers can
+  // grep `[note:` to filter agent notes apart from regular working entries.
+  const evidenceTail = input.evidence && input.evidence.trim()
+    ? `\n  ev: ${input.evidence.trim()}`
+    : ""
+  const content = `[note:${category}] ${subject} — ${claim}${evidenceTail}`
+
+  const entry = ingestTurn({
+    tier: MemoryTier.Working,
+    // 'summary' role is exempt from the salience floor in ingestTurn, so even
+    // a terse but valuable note ("pk = pkClient") is not rejected.
+    role: MemoryRole.Summary,
+    content,
+    metadata: {
+      type: "agent_note",
+      category,
+      subject,
+    },
+    source: MemorySource.Agent,
+    confidence: evidenceTail ? 0.85 : 0.75,
+    sessionId: input.sessionId ?? null,
+    runId: input.runId ?? null,
+    upn: input.upn ?? null,
+    // Notes derive value from their subject (a qualified name) rather than
+    // prose length, so a short "join_path: A↔B on pkClient" should not be
+    // rejected by the generic salience heuristic. Floor at 0.05 keeps truly
+    // empty/garbage entries out.
+    minSalience: 0.05,
+  })
+
+  if (!entry) {
+    // ingestTurn returns null only after broadcasting MemoryFiltered; the
+    // reasons are LowSalience or Duplicate. We can't observe which here
+    // without re-running the predicates, but the most common reason for a
+    // summary-role rejection is duplicate (the salience floor doesn't apply
+    // to summary role per the predicate in ingestTurn).
+    return { ok: false, reason: "duplicate" }
+  }
+  return { ok: true, id: entry.id }
+}
+

@@ -13,13 +13,14 @@ import type { DoctrineModule } from "./types.js"
 export const aggregateNamingDoctrine: DoctrineModule = {
   id: "mssql.aggregate-naming",
   version: "1.0.0",
-  summaryBudgetBytes: 480,
+  summaryBudgetBytes: 560,
   summary(): string {
     return [
       "Aggregate ↔ alias agreement (enforced):",
       "- The aggregate function and the output column alias MUST agree (SUM→Total/Sum, AVG→Avg/Mean, COUNT→Count).",
       "- SUM(x) AS Avg… or AVG(x) AS Total… is BLOCKED — it silently produces N× the real value.",
       "- For columns named Average/Avg/Spot/EOM/Latest/Snapshot/MTD/YTD, verify the math: usually AVG or latest-row, not SUM.",
+      "- See also: `profile_data` to confirm whether a column is summable; `note` (category=column_semantics) to record the answer.",
     ].join("\n")
   },
   enforce(query: string) {

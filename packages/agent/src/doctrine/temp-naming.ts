@@ -12,7 +12,7 @@ import type { DoctrineModule } from "./types.js"
 export const tempNamingDoctrine: DoctrineModule = {
   id: "mssql.temp-naming",
   version: "1.0.0",
-  summaryBudgetBytes: 480,
+  summaryBudgetBytes: 560,
   summary(): string {
     return [
       "Local #temp naming (enforced):",
@@ -20,6 +20,7 @@ export const tempNamingDoctrine: DoctrineModule = {
       "- Exactly one suffix is reused across the whole batch.",
       "- Every referenced #temp must be created in the same batch; DROP each at the end.",
       "- Global ##temp is forbidden. Tool blocks on suffix drift, missing creates, or mixed suffixes.",
+      "- See also: `export_query_to_file` for cross-batch handoffs that a single-batch #temp cannot serve.",
     ].join("\n")
   },
   enforce(query: string) {

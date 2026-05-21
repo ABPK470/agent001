@@ -286,6 +286,15 @@ export function buildMemoryGuidance(): string {
     "      Do NOT use schema='core' here — that scans only the 39 metadata-schema views,",
     "      not the 4262 dataset entries (which span many schemas).",
     "      Do NOT delegate this — it would require 4000+ child iterations.",
+    "",
+    "  WRITING TO MEMORY — the `note` tool:",
+    "    When you DISCOVER or CONFIRM a fact about the schema or data that future",
+    "    turns would need (a join key, a column's aggregation semantics, a grain,",
+    "    a date range, a known-good filter), call `note` with subject = the",
+    "    qualified name (e.g. 'publish.Revenue.RevenueZARMTD') and claim = the",
+    "    fact in one sentence. These notes are saved to working memory and",
+    "    retrieved into your next turn, so you don't re-discover the same fact.",
+    "    Call `note` ONCE per discovery — duplicates are dropped automatically.",
   ].join("\n")
 }
 

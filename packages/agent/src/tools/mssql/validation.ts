@@ -1,6 +1,6 @@
 // ── Query validation ─────────────────────────────────────────────
 
-import { DOCTRINE_FIX_HINTS } from "../../doctrine/fix-hints.js"
+import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
@@ -219,6 +219,13 @@ export interface QueryValidationDiagnostics {
   readonly error: string | null
   readonly code: QueryValidationCode | null
   readonly analysis: MssqlQueryQualityAnalysis
+  /**
+   * Optional auto-note payload (Gap 2). When a doctrine block fires AND a
+   * lesson template exists for its code, the validator emits the lesson so
+   * the calling tool can route it to the agent's memory writer. Pure data;
+   * the validator has no side effects.
+   */
+  readonly lesson?: import("../../doctrine/fix-hints.js").NoteLessonPayload | null
 }
 
 function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
@@ -450,6 +457,10 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       error: withFixHint(head, "aggregate_semantic_mismatch"),
       code: "aggregate_semantic_mismatch",
       analysis,
+      lesson: getDoctrineLessonTemplate("aggregate_semantic_mismatch")?.({
+        query,
+        detail: issue.snippet,
+      }) ?? null,
     }
   }
 
@@ -460,6 +471,10 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       error: withFixHint(tempBatchError, "temp_table_integrity"),
       code: "temp_table_integrity",
       analysis,
+      lesson: getDoctrineLessonTemplate("temp_table_integrity")?.({
+        query,
+        detail: tempBatchError.split("\n")[0],
+      }) ?? null,
     }
   }
 
@@ -477,6 +492,10 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       error: withFixHint(head, "temp_scalar_subquery_overused"),
       code: "temp_scalar_subquery_overused",
       analysis,
+      lesson: getDoctrineLessonTemplate("temp_scalar_subquery_overused")?.({
+        query,
+        detail: list,
+      }) ?? null,
     }
   }
 

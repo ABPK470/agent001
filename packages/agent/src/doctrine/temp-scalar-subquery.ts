@@ -33,6 +33,7 @@ export const tempScalarSubqueryDoctrine: DoctrineModule = {
       "- A single #temp may be probed with a scalar subquery (SELECT … FROM #t WHERE …) at most ONCE per outer query.",
       "- Multiple metrics from the same staged #temp MUST be derived in one GROUP BY pkClient pass, then joined.",
       "- The tool BLOCKS queries with ≥2 scalar subqueries against the same staged #temp.",
+      "- See also: `discover_relationships` to pick the right GROUP BY key; `profile_data` to size the staged set before fan-out.",
     ].join("\n")
   },
   enforce(query: string) {

@@ -219,6 +219,22 @@ export interface AskUserState {
   resolver: AskUserResolver | null
 }
 
+/**
+ * Per-run memory writer hook (Gap 2). The server binds this at run start so
+ * agent-side code (validator-driven auto-notes, tool-execution lessons) can
+ * route durable memory writes to ingestAgentNote without depending on the
+ * server package. When `writeNote` is null (root runtime, tests, CLI) the
+ * lesson is silently dropped — the doctrine block still fires.
+ */
+export interface MemoryState {
+  writeNote: ((payload: {
+    subject: string
+    claim: string
+    evidence?: string
+    category?: string
+  }) => void) | null
+}
+
 export interface CatalogState {
   /** Expensive caches — shared across runtimes. */
   instances: Map<string, CatalogGraph>
@@ -326,6 +342,8 @@ export class AgentRuntime {
   readonly filesystem: FilesystemState
   readonly searchFiles: SearchFilesState
   readonly askUser: AskUserState
+  /** Per-run memory writer hook (Gap 2). Null until the server binds it. */
+  readonly memory: MemoryState
   /** Shared with parent (caches are expensive — never duplicated). */
   readonly catalog: CatalogState
   /** Shared with parent (server installs sinks once at boot). */
@@ -388,6 +406,10 @@ export class AgentRuntime {
       this.catalog = parent.catalog
       this.sync = parent.sync
       this.attachments = parent.attachments
+      // Memory writer is per-run — child runs start unbound; the server
+      // re-binds for each top-level run (sub-runs share working memory by
+      // session id, so deferring writes to the parent's writer is fine).
+      this.memory = { writeNote: parent.memory.writeNote }
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null }
@@ -408,6 +430,7 @@ export class AgentRuntime {
         dbProjectRoot: null,
       }
       this.attachments = { service: null }
+      this.memory = { writeNote: null }
     }
   }
 

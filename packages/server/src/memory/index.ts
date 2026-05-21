@@ -35,7 +35,7 @@ export type {
 } from "./types.js"
 
 export { consolidate } from "./consolidation.js"
-export { flagRunMemory, ingestRunTurns, ingestTurn } from "./ingestion.js"
+export { flagRunMemory, ingestAgentNote, ingestRunTurns, ingestTurn } from "./ingestion.js"
 export { clearAllMemories, deleteMemory, getMemory, getMemoryStats, listMemories, prune } from "./maintenance.js"
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
