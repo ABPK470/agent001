@@ -11,6 +11,11 @@ export { _setDb, getDb, getDbPath } from "./connection.js"
 // Internal migration export for testing
 export { _migrate } from "./connection.js"
 
+// Inter-agent bus messages
+export {
+    findReplyTo, insertAgentMessage, listAgentMessages, type AgentMessageRow, type InsertMessageInput
+} from "./agent-messages.js"
+
 // Runs, audit, checkpoints, logs, traces, token usage
 export {
     dbRunToWire, findStaleRuns, getAuditLog, getCheckpoint, getLogs, getRun, getTokenUsage, getTraceEntries, getUsageTotals, listRuns,

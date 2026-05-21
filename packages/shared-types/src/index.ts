@@ -136,6 +136,36 @@ export interface AuditEntry {
   timestamp: string
 }
 
+// ── Inter-agent bus message (Phase B) ────────────────────────────
+
+/**
+ * Snapshot of an inter-agent bus message as observed by the UI.
+ * Mirrors the SSE payload emitted by `AgentBus.emitSse` and the row
+ * shape from `agent_messages`. The `protocol` field is a free string
+ * here (rather than the closed enum) so the UI can tolerate forward
+ * compatibility — unknown protocols just render as their string.
+ */
+export interface BusMessage {
+  /** Server-assigned message id; stable for reply_to / wait_for_response. */
+  id: string
+  /** Root run id (the run tree this message belongs to). */
+  runId: string
+  /** Free-form domain channel — e.g. "research-results". */
+  topic: string
+  /** Coordination intent: status | result | help | question | answer | broadcast. */
+  protocol: string
+  /** Run id of the publisher (a child run within the same root). */
+  fromRunId: string
+  /** Display name of the publishing agent. */
+  fromAgent: string
+  /** Message body. */
+  content: string
+  /** id of the message this is replying to, when protocol === "answer". */
+  replyTo: string | null
+  /** Wall-clock time the message was persisted (ms epoch). */
+  timestamp: number
+}
+
 // ── Log ──────────────────────────────────────────────────────────
 
 export interface LogEntry {
@@ -294,6 +324,7 @@ export type TraceEntry =
   // Debug/inspector entries
   | { kind: "system-prompt"; text: string }
   | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }
+  | { kind: "tools-filtered"; dropped: string[]; kept: number; dbScore: number; syncTrigger: boolean; reason: string }
   | { kind: "nudge"; tag: string; message: string; iteration: number }
   | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
   | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }

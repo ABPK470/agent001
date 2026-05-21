@@ -131,8 +131,6 @@ agent001/                          ← npm workspaces monorepo root
 │   │   ├── agent.ts               ← THE agent loop (~40 lines of core logic)
 │   │   ├── governance.ts          ← THE integration layer — wraps tools with engine services
 │   │   ├── retry.ts               ← tool retry with exponential backoff + jitter
-│   │   ├── cli.ts                 ← standalone entry point — governed/raw modes, REPL + one-shot
-│   │   ├── logger.ts              ← colored console output for CLI mode
 │   │   ├── lib.ts                 ← barrel export — public API for @mia/agent
 │   │   ├── engine/                ← governance infrastructure (10 files, flat)
 │   │   │   ├── index.ts           ← barrel re-export for engine/
@@ -283,21 +281,20 @@ Open the browser. You see a dashboard with draggable widgets — chat, trace, gr
 - **Trajectory Replay**: Full debugging tool — replay events, test mutations, compare runs
 - **Notification Bell**: Top-right corner — alerts for run completion, failures, approvals, with action buttons (Review, Resume, Rollback)
 
-### Starting the Agent (Standalone CLI)
+### Starting the Agent
+
+The agent is **server-driven only**. The standalone CLI was retired — there is
+no `npm start -w packages/agent`, no `AGENT_MODE`, no governed/raw modes, and
+no REPL. All runs go through the Fastify server (`packages/server`) which
+drives `governTool` directly.
 
 ```bash
-# Governed mode (default) — full audit + policies + tracking
-# Default backend is local Ollama; point at any OpenAI-compatible endpoint via env vars.
-MODEL=llama3 LLM_BASE_URL=http://localhost:11434/v1 npm start -w packages/agent
-
-# One-shot mode (non-interactive)
-npm start -w packages/agent -- "Summarize the README"
-
-# Raw mode — bare agent loop, no governance
-AGENT_MODE=raw npm start -w packages/agent
+# Start the server (governed runs only — the only entry point)
+npm run dev -w packages/server
+# Then submit goals via the UI (`packages/ui`) or HTTP API.
 ```
 
-### What You See (CLI — Governed Mode)
+### What You See (Server Run)
 
 ```
 🧠 Using OpenAI-compatible endpoint (llama3 @ http://localhost:11434/v1)
@@ -399,24 +396,13 @@ The entire agentic AI pattern in one loop:
 - Tool execution errors are also caught and added as messages — the LLM learns from failures
 - `AgentConfig.verbose` controls whether `logger.ts` functions are called
 
-### `src/cli.ts` — The Entry Point
+### `src/cli.ts` — REMOVED
 
-Two modes, controlled by `AGENT_MODE` env var:
-
-| Mode | Env | What It Does |
-|------|-----|-------------|
-| `governed` (default) | `AGENT_MODE=governed` or unset | Creates engine services → wraps tools → runs agent → prints governance report |
-| `raw` | `AGENT_MODE=raw` | Creates bare Agent → runs directly → no audit, no policies |
-
-Both modes support:
-- **One-shot**: Pass goal as CLI argument → run once → exit
-- **REPL**: No argument → interactive prompt loop → `exit` to quit
-
-**Key functions in this file**:
-- `createLLMClient()` — reads `LLM_BASE_URL` (default `http://localhost:11434/v1`), `LLM_API_KEY` (default `"local"`), and `MODEL` (default `"llama3"`); always returns an `OpenAICompatibleClient`. Production deployments use the server’s LLM registry (Copilot Chat / Databricks) instead.
-- `allTools()` — returns the array of 8 tools (fetch, read, write, list, shell, think, browser-check, delegate)
-- `setupDefaultPolicies()` — hook with commented-out examples showing how to add rules
-- `main()` — the actual entrypoint: create client → check mode → run/repl
+The standalone CLI entry point was removed when the CLI capability was
+retired. The agent is now driven exclusively by the server orchestrator
+(`packages/server/src/orchestrator/run-executor.ts`), which uses `governTool`
+directly to wrap each tool. There is no `runGoverned`, no `runRaw`, no
+`printGovernanceReport`, no REPL, and no `AGENT_MODE` env var.
 
 ### `src/logger.ts` — Pretty Console Output
 
@@ -555,18 +541,10 @@ Two tools for multi-agent delegation:
    Return result to agent
    ```
 
-3. **Runs the governed agent** (`runGoverned(goal, llm, tools, services)`):
-   - Creates an `AgentRun` (the agent session becomes a tracked run)
-   - Wraps all tools with `governTool()`
-   - Creates a standard `Agent` with the wrapped tools (the agent doesn't know it's governed)
-   - Runs the agent
-   - Collects results: run, audit trail, per-tool stats
-   - Returns a `GovernedResult`
-
-4. **Prints the report** (`printGovernanceReport(result)`):
-   - Run ID, status, step count
-   - Full audit trail with timestamps
-   - Per-tool statistics (calls, avg duration, failures)
+3. **Server-driven execution**: The orchestrator (`packages/server`) wraps tools
+   with `governTool` directly and runs the agent end-to-end. The retired CLI
+   helpers (`runGoverned`, `printGovernanceReport`) are no longer part of the
+   public API.
 
 #### The Key Insight — The Decorator Pattern
 
@@ -605,7 +583,7 @@ Non-transient errors (validation, permission, logic) fail immediately with no re
 The public API for `@mia/agent`. This is what the server package imports. Re-exports everything consumers need:
 
 - **Core**: `Agent`, `Message`, `Tool`, `LLMClient`, `ToolCall`, `AgentConfig`
-- **Governance**: `createEngineServices()`, `governTool()`, `runGoverned()`, `printGovernanceReport()`, `GovernToolOptions`, `GovernedResult`
+- **Governance**: `createEngineServices()`, `governTool()`, `GovernToolOptions`, `GovernedResult`
 - **Engine**: all models, enums, events, errors, interfaces, services, adapters
 - **Retry**: `withToolRetry()`, `ToolRetryPolicy`, `isRetryableError()`
 - **LLM clients**: `OpenAICompatibleClient`, `DatabricksClient`
@@ -1125,7 +1103,7 @@ The server's `AgentOrchestrator` is the orchestration layer:
 
 ```
 Server (orchestrator.ts)
-  ├─ imports: createRun, governTool, runGovernedMode from @mia/agent
+  ├─ imports: createRun, governTool from @mia/agent
   ├─ adds: SQLite persistence, SSE broadcast, checkpoint/resume
   └─ exposes: REST API (/api/runs, /api/agents, etc.)
 ```
@@ -1149,9 +1127,8 @@ UI (store.ts)
 The agent's governance layer uses in-memory adapters (`MemoryRunRepository`, `MemoryAuditRepository`, etc.) for the engine's domain model. But the server adds SQLite persistence on top:
 
 **In-memory (agent package):**
-- A CLI `runGovernedMode()` session — one process, one run
-- Audit trail + stats collected during session, printed at end
-- Process exits → data gone (that's OK — it was already displayed)
+- The engine's domain model (runs, steps, audit, events) lives in memory inside one Node process.
+- The server is the only consumer; on every state transition it mirrors the in-memory run into SQLite.
 
 **Persistent (server package):**
 - SQLite stores runs, checkpoints, audit logs, token usage, notifications
@@ -1165,7 +1142,8 @@ The agent package stays dependency-free. The server adds durability without chan
 <a id="execution-flow"></a>
 ## Complete Execution Flow — Governed Mode
 
-Two primary entry paths: the web dashboard (primary) and CLI (secondary).
+The only entry path is the web dashboard / HTTP API. The standalone CLI was
+retired; there is no "CLI flow" anymore.
 
 ### Web Dashboard Flow
 
@@ -1228,96 +1206,6 @@ UI Zustand store handles these:
   → NotificationPanel: shows new notifications
   → AgentViz widget: animates graph nodes + particles
   → CommandCenter widget: updates DAG + usage bars
-```
-
-### CLI Flow
-
-When a user runs from the command line:
-
-#### 1. Startup (cli.ts)
-
-```
-main()
-  → createLLMClient()          // reads API key from env, creates client
-  → mode = "governed"
-  → goal = "List all .ts files"
-  → runGovernedMode(llm, goal)
-    → allTools()               // [fetchUrl, readFile, writeFile, listDir, shell, think]
-    → createEngineServices()   // creates Memory*: runRepo, auditRepo, recordRepo, eventBus
-    → runGoverned(goal, llm, tools, services)
-```
-
-#### 2. Governance Setup (governance.ts)
-
-```
-runGoverned():
-  → actor = "ai-agent"
-  → createRun("agent-session", { goal })         ← AgentRun created (Pending)
-  → startPlanning(run)                            ← Pending → Planning
-  → startRunning(run, [])                         ← Planning → Running
-  → runRepo.save(run)
-  → eventBus.publish(runStarted)
-  → auditService.log("agent.started", { goal, tools })
-  → state = { run, actor, stepCounter: 0 }
-  → governedTools = tools.map(t => governTool(t, services, state))
-  → agent = new Agent(llm, governedTools, config)
-  → agent.run(goal)
-```
-
-### 3. Agent Loop (agent.ts)
-
-```
-agent.run("List all .ts files"):
-  → messages = [{ system: prompt }, { user: "List all .ts files" }]
-  → iteration 0:
-    → llm.chat(messages, tools)
-    → LLM returns: { content: "I'll list the directory", toolCalls: [{ name: "run_command", args: { command: "find . -name '*.ts'" } }] }
-    → messages.push({ assistant, toolCalls: [...] })
-    → for call of toolCalls:
-      → tool = this.tools.get("run_command")       ← this is the GOVERNED version
-      → result = await tool.execute({ command: "find . -name '*.ts'" })
-```
-
-### 4. Governance Intercept (governance.ts → governTool wrapper)
-
-```
-governedTool.execute({ command: "find . -name '*.ts'" }):
-  → createToolStep("run_command", args, state)    ← Step object created (Pending)
-  → run.steps.push(step)
-  → policyEvaluator.evaluatePreStep(run, step)   ← checks rules → null (allowed)
-  → startStep(step)                                ← Pending → Running
-  → eventBus.publish(stepStarted)
-  → auditService.log("tool.invoked", { tool: "run_command", args })
-  → startTime = performance.now()
-  → result = await originalTool.execute(args)      ← ACTUAL shell execution happens here
-  → durationMs = 45
-  → completeStep(step, { result, durationMs })     ← Running → Completed
-  → eventBus.publish(stepCompleted)
-  → learner.record({ action: "run_command", success: true, durationMs: 45 })
-  → auditService.log("tool.completed", { tool: "run_command", durationMs: 45 })
-  → runRepo.save(run)
-  → return result                                   ← back to agent loop
-```
-
-### 5. Completion
-
-```
-agent.run() continues:
-  → messages.push({ tool, content: "src/types.ts\nsrc/agent.ts\n..." })
-  → iteration 1:
-    → llm.chat(messages, tools)
-    → LLM returns: { content: "Here are the TypeScript files:\n...", toolCalls: [] }
-    → no tool calls → answer = content
-    → return answer
-
-runGoverned() continues:
-  → completeRun(run)                                ← Running → Completed
-  → eventBus.publish(runCompleted)
-  → auditService.log("agent.completed", { iterations: 1 })
-  → collect stats per tool
-  → return GovernedResult { answer, run, auditTrail, stats }
-
-printGovernanceReport(result)                       ← formats and prints to console
 ```
 
 ---
@@ -2107,7 +1995,6 @@ The `TrajectoryReplay` widget provides three tabs:
 |-----------|---------|---------------|-----------------|
 | `governance.ts` | Wraps tools with in-memory engine | Wraps tools as Temporal activities | **Rewrite this file** |
 | `agent.ts` | Unchanged | Unchanged | **Zero** |
-| `cli.ts` | Unchanged | Unchanged | **Zero** |
 | `types.ts` | Unchanged | Unchanged | **Zero** |
 | All tools | Unchanged | Unchanged | **Zero** |
 | LLM clients | Unchanged | Unchanged | **Zero** |

@@ -326,6 +326,11 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
     reason: "Audit log actor field — display-only, not used as a tenancy/key column.",
   },
   {
+    file: "routes/freeze-windows.ts",
+    match: "req.session?.upn ?? \"unknown\"",
+    reason: "Audit log actor field — display-only, not used as a tenancy/key column. Sibling of routes/policies.ts and routes/sync-environments.ts.",
+  },
+  {
     file: "routes/sync.ts",
     match: "req.session?.upn ?? req.session?.displayName ?? \"anonymous\"",
     reason: "Audit log actor display string only. Real isolation uses actorUpn (which stays null) on the same call sites.",

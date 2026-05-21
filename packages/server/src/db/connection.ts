@@ -46,7 +46,7 @@ export function _setDb(db: Database.Database): void {
 // other tables are re-created from scratch with the declarative schema
 // below. Use sparingly — this WILL drop data; only safe in dev.
 
-export const SCHEMA_VERSION = 22
+export const SCHEMA_VERSION = 23
 const SEED_VERSION = SCHEMA_VERSION
 // v19: introduce real `users` table; identity is no longer self-declared.
 //      upn becomes NOT NULL FK on every per-user table. Triggers a one-time
@@ -68,6 +68,12 @@ const SEED_VERSION = SCHEMA_VERSION
 //      entries instead of fake sentinel runs. `audit_log.run_id`
 //      becomes nullable; add `scope_type` + `scope_id`; migrate
 //      historical `__admin__` rows and remove sentinel bootstrap rows.
+// v23: introduce `agent_messages` table for the inter-agent bus.
+//      Persistence-backed AgentBus replaces the in-memory ring buffer
+//      so siblings spawned later in the run tree see prior coordination,
+//      the IOE BusFeed editor can replay after reconnect, and Help/
+//      Question protocol messages survive client disconnects. Additive
+//      table + indexes only; no hard reset.
 const HARD_RESET_THRESHOLD = 19
 
 function tableSessionFkIsCascade(db: Database.Database, table: string): boolean {
@@ -78,6 +84,19 @@ function tableSessionFkIsCascade(db: Database.Database, table: string): boolean 
     table: string; from: string; on_delete: string
   }>
   return rows.some((r) => r.table === "sessions" && r.from === "session_id" && r.on_delete === "CASCADE")
+}
+
+/** Detect runs tables built before `'crashed'` was added to the status
+ *  CHECK constraint. Inspects the stored CREATE TABLE SQL from
+ *  sqlite_master rather than parsing it — looking for the literal token
+ *  `'crashed'` is sufficient because the only place it could appear is
+ *  inside the status CHECK clause. */
+function runsTableMissingCrashedStatus(db: Database.Database): boolean {
+  const row = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'",
+  ).get() as { sql?: string } | undefined
+  if (!row?.sql) return false
+  return !row.sql.includes("'crashed'")
 }
 
 /**
@@ -102,7 +121,7 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
         id             TEXT PRIMARY KEY,
         goal           TEXT NOT NULL,
         status         TEXT NOT NULL DEFAULT 'pending'
-          CHECK (status IN ('pending','planning','running','waiting_for_approval','completed','failed','cancelled')),
+          CHECK (status IN ('pending','planning','running','waiting_for_approval','completed','failed','cancelled','crashed')),
         answer         TEXT,
         step_count     INTEGER NOT NULL DEFAULT 0,
         error          TEXT,
@@ -238,6 +257,13 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
   for (const table of Object.keys(ddl)) {
     if (!tableExists(table)) continue
     if (tableSessionFkIsCascade(db, table)) work.push(table)
+  }
+  // Also rebuild `runs` if its status CHECK constraint predates the
+  // addition of 'crashed' (v23-era schema). Idempotent — the rebuild
+  // produces a runs table whose stored SQL contains 'crashed', so
+  // subsequent boots short-circuit here.
+  if (tableExists("runs") && !work.includes("runs") && runsTableMissingCrashedStatus(db)) {
+    work.push("runs")
   }
   if (work.length === 0) return
 
@@ -451,7 +477,7 @@ export function _migrate(db: Database.Database): void {
       id             TEXT PRIMARY KEY,
       goal           TEXT NOT NULL,
       status         TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending','planning','running','waiting_for_approval','completed','failed','cancelled')),
+        CHECK (status IN ('pending','planning','running','waiting_for_approval','completed','failed','cancelled','crashed')),
       answer         TEXT,
       step_count     INTEGER NOT NULL DEFAULT 0,
       error          TEXT,
@@ -516,6 +542,36 @@ export function _migrate(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_trace_run ON trace_entries(run_id, seq);
+
+    -- ── Inter-agent bus messages ─────────────────────────────────
+    -- Persisted so siblings spawned later in the same run tree see the
+    -- full history (wildcard subscribe), so the IOE BusFeed editor can
+    -- replay coordination after reconnect, and so audit/forensics can
+    -- reconstruct multi-agent decisions. Lifecycle is tied to the root
+    -- run: ON DELETE CASCADE wipes messages when the run is purged.
+    --
+    -- protocol is a closed enum (see packages/server/src/enums/bus.ts).
+    -- reply_to links Answer messages to their originating Question so
+    -- the wait_for_response tool can resolve the right reply. The
+    -- self-referential FK uses ON DELETE SET NULL because the parent
+    -- message and its replies share the same root_run_id and CASCADE
+    -- already collects them at the root level.
+    CREATE TABLE IF NOT EXISTS agent_messages (
+      id            TEXT PRIMARY KEY,
+      root_run_id   TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      from_run_id   TEXT NOT NULL,
+      from_agent    TEXT NOT NULL,
+      protocol      TEXT NOT NULL
+        CHECK (protocol IN ('status','result','help','question','answer','broadcast')),
+      topic         TEXT NOT NULL,
+      content       TEXT NOT NULL,
+      reply_to      TEXT REFERENCES agent_messages(id) ON DELETE SET NULL,
+      created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_root
+      ON agent_messages(root_run_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_reply
+      ON agent_messages(reply_to);
 
     -- ── Layouts (UI widget arrangements; not user-scoped) ────────
     CREATE TABLE IF NOT EXISTS layouts (

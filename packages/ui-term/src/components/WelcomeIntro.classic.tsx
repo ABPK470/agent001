@@ -42,7 +42,7 @@ const COLS = 36
 const ROWS = 20
 
 // ── Streamed wordmark configuration ──────────────────────────────────────
-const WORD = "agentMyMI"
+const WORD = "MI:A"
 // const WORD = "agent001"
 const SCRAMBLE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*<>?/+="
 

@@ -1,13 +1,5 @@
 /**
- * AgentRuntime — the per-agent container for state that previously lived
- * as module-level globals in tool and sync files.
- *
- * One pattern, used everywhere
- * ----------------------------
- * Every tool that used to keep configuration in a `let` or a `const _state`
- * record now reads from `AgentRuntime.current()`. There is no other
- * mechanism for tool state — no module globals, no singletons, no
- * thread-locals.
+ * AgentRuntime — the per-agent container for state
  *
  * Two tiers of state
  * ------------------
@@ -69,18 +61,18 @@ import { IngestionMode } from "./domain/enums/runtime.js"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRecipeBundle,
-    SyncRunSink,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRecipeBundle,
+  SyncRunSink,
 } from "./sync/index.js"
 import type {
-    AskUserResolver,
-    BrowserCheckExecutor,
-    BrowserSession,
-    CatalogGraph,
-    ShellExecutor,
+  AskUserResolver,
+  BrowserCheckExecutor,
+  BrowserSession,
+  CatalogGraph,
+  ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────

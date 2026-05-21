@@ -6,7 +6,7 @@ import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOutput } from "../../components/CodeBlock"
 import { EditorTab, RunStatus } from "../../enums"
-import type { AgentDefinition, Run, Step, TraceEntry } from "../../types"
+import type { AgentDefinition, BusMessage, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
 import {
     C,
@@ -63,6 +63,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "goal": return `${p}GOAL  ${e.text}`
     case "system-prompt": return `${p}SYSTEM PROMPT\n${p}${e.text}`
     case "tools-resolved": return `${p}TOOLS  ${e.tools.length}: ${e.tools.map(t => t.name).join(", ")}`
+    case "tools-filtered": return `${p}FILTERED  ${e.dropped.length} dropped, ${e.kept} kept (dbScore=${e.dbScore}, sync=${e.syncTrigger}) — ${e.dropped.join(", ")}`
     case "iteration": return `${p}ITERATION ${e.current}/${e.max}`
     case "tool-call": return `${p}TOOL CALL  ${e.tool}  ${e.argsSummary}\n${p}${e.argsFormatted}`
     case "tool-result": return `${p}TOOL RESULT\n${p}${e.text}`
@@ -252,22 +253,32 @@ export function EditorTabs({
   onChange,
   trace,
   stepCount,
+  busCount,
+  helpUnread,
+  isAdmin = false,
 }: {
   current: EditorTab
   onChange: (tab: EditorTab) => void
   trace: TraceEntry[]
   stepCount?: number
+  busCount?: number
+  helpUnread?: number
+  /** Phase E.5: the Bus tab exposes inter-agent message internals — admin-only. */
+  isAdmin?: boolean
 }) {
   const llmCallCount = useMemo(() => {
     // Show total meaningful events count — covers both chat and planner modes
     return trace.length
   }, [trace])
 
-  const tabs: Array<{ id: EditorTab; label: string; count?: number }> = [
+  const tabs: Array<{ id: EditorTab; label: string; count?: number; alert?: boolean }> = [
     { id: EditorTab.LlmCalls, label: "Trace", count: llmCallCount },
     { id: EditorTab.ToolTimeline, label: "Tool Timeline", count: stepCount },
     { id: EditorTab.Map, label: "Map" },
   ]
+  if (isAdmin) {
+    tabs.push({ id: EditorTab.Bus, label: "Bus", count: busCount, alert: !!helpUnread && helpUnread > 0 })
+  }
 
   return (
     <>
@@ -285,7 +296,13 @@ export function EditorTabs({
         >
           {tab.label}
           {tab.count != null && tab.count > 0 && (
-            <span className="text-[13px] px-1 rounded" style={{ background: C.elevated, color: C.dim }}>
+            <span
+              className="text-[13px] px-1 rounded"
+              style={{
+                background: tab.alert ? "#7f1d1d" : C.elevated,
+                color: tab.alert ? "#fecaca" : C.dim,
+              }}
+            >
               {tab.count}
             </span>
           )}
@@ -1680,6 +1697,30 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
     )
   }
 
+  if (e.kind === "tools-filtered") {
+    return (
+      <div>
+        <TreeRow onClick={() => setOpen(!open)} open={open}
+          label={`FILTERED · ${e.dropped.length} dropped`} labelColor={C.warning}
+          detail={!open ? `${e.kept} kept · ${e.reason}` : undefined}
+        />
+        {open && (
+          <div className="ml-5 space-y-0.5 py-0.5" style={{ color: C.muted }}>
+            <div>kept: {e.kept}</div>
+            <div>dbScore: {e.dbScore} · syncTrigger: {String(e.syncTrigger)}</div>
+            <div>reason: {e.reason}</div>
+            <div>dropped:</div>
+            <div className="ml-3">
+              {e.dropped.map((n: string, i: number) => (
+                <div key={i} style={{ color: C.dim }}>• {n}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (e.kind === "planner-decision") {
     return (
       <div>
@@ -2969,6 +3010,65 @@ import ForceGraph2D from "react-force-graph-2d"
 
 const AGENT_COLORS = [C.accent, "#D17877", "#F49D6C", "#EA6248", C.success, C.plum, "var(--color-info)", "#B8A9C9"]
 
+/**
+ * Theme-aware CSS-variable resolver for canvas rendering.
+ *
+ * The IOE design tokens in `C` are CSS custom-property strings like
+ * `var(--color-canvas)`. The HTML/CSS engine resolves them automatically
+ * for inline styles, but the 2D Canvas API does NOT — passing a `var(...)`
+ * string to `ctx.fillStyle` is silently invalid and falls back to the
+ * default `#000000`. That bug is what made the Map tab render every node
+ * as solid black on a black background regardless of theme.
+ *
+ * This hook returns:
+ *   - `RC`: the `C` token bag with each value pre-resolved to its current
+ *     computed color string (so `RC.elevated` is e.g. `#1c1932` in dark mode
+ *     and `#f4f1ec` in light mode).
+ *   - `resolve(color)`: a per-color resolver for arbitrary strings that may
+ *     embed `var(--…)` references (e.g. `node.color`, `vLink.color`,
+ *     concatenated alpha suffixes like `RC.coral + "30"`).
+ *
+ * Both refresh whenever the active theme changes (via `data-theme` mutation
+ * or system `prefers-color-scheme` flip), so canvas paints stay in sync.
+ */
+function useResolvedThemeColors(): {
+  RC: Record<keyof typeof C, string>
+  resolve: (color: string | undefined) => string
+} {
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    const bump = () => setVersion((v) => v + 1)
+    const obs = new MutationObserver(bump)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] })
+    const mql = window.matchMedia?.("(prefers-color-scheme: dark)")
+    mql?.addEventListener?.("change", bump)
+    return () => {
+      obs.disconnect()
+      mql?.removeEventListener?.("change", bump)
+    }
+  }, [])
+  return useMemo(() => {
+    const cache = new Map<string, string>()
+    const resolve = (color: string | undefined): string => {
+      if (!color) return "#000"
+      if (!color.includes("var(--")) return color
+      const cached = cache.get(color)
+      if (cached) return cached
+      const out = color.replace(/var\((--[^,)]+)(?:,\s*([^)]+))?\)/g, (_m, name: string, fb?: string) => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+        return v || (fb?.trim() ?? "")
+      })
+      cache.set(color, out)
+      return out
+    }
+    const RC = {} as Record<keyof typeof C, string>
+    for (const k of Object.keys(C) as Array<keyof typeof C>) RC[k] = resolve(C[k])
+    // Touch version so the memo recomputes when the theme flips.
+    void version
+    return { RC, resolve }
+  }, [version])
+}
+
 const MAP_TOOL_LABELS: Record<string, string> = {
   read_file: "Read",
   write_file: "Write",
@@ -3028,6 +3128,9 @@ export function MapPanel({
   const animPhaseRef = useRef(0)
   const rafRef = useRef<number>(0)
   const autoFitTimerRef = useRef<number | null>(null)
+  // Resolve CSS-variable design tokens to concrete color strings the canvas
+  // 2D API can actually render. Without this every node draws as `#000`.
+  const { RC, resolve: resolveColor } = useResolvedThemeColors()
 
   const isRunning = run?.status === "running"
   const activeAgentId = run?.agentId ?? null
@@ -3538,11 +3641,14 @@ export function MapPanel({
     const x = node.x ?? 0
     const y = node.y ?? 0
     const r = node.type === "agent" || node.type === "planner-child" ? 10 : node.type === "delegate" || node.type === "planstep" ? 8 : 7
+    // Resolve any `var(--…)` references in the per-node color (agents pick
+    // from `AGENT_COLORS`, some entries of which are CSS vars).
+    const nodeColor = resolveColor(node.color)
 
     if (node.type === "delegate") {
       const isDone = node.delegateStatus === "done" || node.delegateStatus === "error"
-      const fillColor = node.delegateStatus === "error" ? C.coral + "30" : isDone ? C.success + "25" : "#342F57cc"
-      const strokeColor = node.delegateStatus === "error" ? C.coral + "aa" : isDone ? C.success + "66" : node.color + "bb"
+      const fillColor = node.delegateStatus === "error" ? RC.coral + "30" : isDone ? RC.success + "25" : "#342F57cc"
+      const strokeColor = node.delegateStatus === "error" ? RC.coral + "aa" : isDone ? RC.success + "66" : nodeColor + "bb"
       ctx.save()
       ctx.translate(x, y)
       ctx.rotate(Math.PI / 4)
@@ -3553,7 +3659,7 @@ export function MapPanel({
       ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4)
       ctx.restore()
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = isDone ? (node.delegateStatus === "error" ? C.coral + "88" : C.muted) : node.color
+      ctx.fillStyle = isDone ? (node.delegateStatus === "error" ? RC.coral + "88" : RC.muted) : nodeColor
       ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 3)
       return
@@ -3570,14 +3676,14 @@ export function MapPanel({
         const arcLen = Math.PI * 0.8
         ctx.beginPath()
         ctx.arc(x, y, Math.max(w, h) + 3, t, t + arcLen)
-        ctx.strokeStyle = C.accent + "88"
+        ctx.strokeStyle = RC.accent + "88"
         ctx.lineWidth = 1.8
         ctx.lineCap = "butt"
         ctx.stroke()
       }
       // Determine fill and stroke based on state
-      const fillColor = node.delegateStatus === "error" ? C.coral + "20" : isDone ? C.success + "18" : isActive ? "#342F57cc" : "#342F5744"
-      const strokeColor = node.delegateStatus === "error" ? C.coral + "88" : isDone ? C.success + "55" : isActive ? node.color + "bb" : node.color + "25"
+      const fillColor = node.delegateStatus === "error" ? RC.coral + "20" : isDone ? RC.success + "18" : isActive ? "#342F57cc" : "#342F5744"
+      const strokeColor = node.delegateStatus === "error" ? RC.coral + "88" : isDone ? RC.success + "55" : isActive ? nodeColor + "bb" : nodeColor + "25"
       ctx.beginPath()
       ctx.moveTo(x - w + rad, y - h)
       ctx.lineTo(x + w - rad, y - h)
@@ -3596,7 +3702,7 @@ export function MapPanel({
       ctx.stroke()
       // Label color reflects state
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = node.delegateStatus === "error" ? C.coral + "cc" : isDone ? C.success + "bb" : isPending ? node.color + "40" : node.color
+      ctx.fillStyle = node.delegateStatus === "error" ? RC.coral + "cc" : isDone ? RC.success + "bb" : isPending ? nodeColor + "40" : nodeColor
       ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + h + 3)
       return
@@ -3612,17 +3718,17 @@ export function MapPanel({
         const arcLen = Math.PI * 0.8
         ctx.beginPath()
         ctx.arc(x, y, r + 3, t, t + arcLen)
-        ctx.strokeStyle = C.accent + "88"
+        ctx.strokeStyle = RC.accent + "88"
         ctx.lineWidth = 1.8
         ctx.lineCap = "butt"
         ctx.stroke()
         // Glow
-        ctx.fillStyle = C.accent + "10"
+        ctx.fillStyle = RC.accent + "10"
         ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.fill()
       }
       // Circle body — color indicates state
-      const fillColor = node.delegateStatus === "error" ? C.coral + "25" : isDone ? C.success + "1c" : isActive ? "#342F57cc" : "#342F5744"
-      const strokeColor = node.delegateStatus === "error" ? C.coral + "99" : isDone ? C.success + "55" : isActive ? C.accent + "aa" : node.color + "25"
+      const fillColor = node.delegateStatus === "error" ? RC.coral + "25" : isDone ? RC.success + "1c" : isActive ? "#342F57cc" : "#342F5744"
+      const strokeColor = node.delegateStatus === "error" ? RC.coral + "99" : isDone ? RC.success + "55" : isActive ? RC.accent + "aa" : nodeColor + "25"
       ctx.fillStyle = fillColor
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
       ctx.strokeStyle = strokeColor
@@ -3630,7 +3736,7 @@ export function MapPanel({
       // Label — color reflects state
       const lbl = node.label.length > 20 ? node.label.slice(0, 18) + "…" : node.label
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = node.delegateStatus === "error" ? C.coral + "cc" : isDone ? C.success + "bb" : isPending ? node.color + "40" : C.text + "dd"
+      ctx.fillStyle = node.delegateStatus === "error" ? RC.coral + "cc" : isDone ? RC.success + "bb" : isPending ? nodeColor + "40" : RC.text + "dd"
       ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(lbl, x, y + r + 3)
       return
@@ -3640,15 +3746,15 @@ export function MapPanel({
       const isActive = node.agentId === activeAgentId
       const dimmed = hasRunContext && !isActive
       if (isActive && hasRunContext) {
-        ctx.fillStyle = node.color + (isRunning ? "18" : "0c")
+        ctx.fillStyle = nodeColor + (isRunning ? "18" : "0c")
         ctx.beginPath(); ctx.arc(x, y, r * 1.5, 0, Math.PI * 2); ctx.fill()
       }
-      ctx.fillStyle = dimmed ? C.base + "aa" : "#342F57cc"
+      ctx.fillStyle = dimmed ? RC.base + "aa" : RC.elevated
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
-      ctx.strokeStyle = dimmed ? C.dim + "30" : node.color + (isActive && hasRunContext ? "aa" : "60")
+      ctx.strokeStyle = dimmed ? RC.dim + "30" : nodeColor + (isActive && hasRunContext ? "aa" : "60")
       ctx.lineWidth = isActive && hasRunContext ? 1.2 : dimmed ? 0.5 : 0.8; ctx.stroke()
       ctx.font = `${Math.max(4, 13 / globalScale)}px sans-serif`
-      ctx.fillStyle = dimmed ? C.muted + "40" : isActive && hasRunContext ? C.text : C.text + "bb"
+      ctx.fillStyle = dimmed ? RC.muted + "40" : isActive && hasRunContext ? RC.text : RC.text + "bb"
       ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 3)
     } else {
@@ -3657,7 +3763,7 @@ export function MapPanel({
       const active = stats?.lastStatus === "running"
       const wasUsed = involvedToolIds.has(node.toolId ?? "")
       const dimmed = hasRunContext && !wasUsed
-      const toolColor = active ? C.accent : stats?.lastStatus === "error" ? C.coral : stats?.lastStatus === "done" ? C.success : C.dim
+      const toolColor = active ? RC.accent : stats?.lastStatus === "error" ? RC.coral : stats?.lastStatus === "done" ? RC.success : RC.dim
 
       // Progress spinner ring for active tools
       if (active) {
@@ -3665,18 +3771,18 @@ export function MapPanel({
         const arcLen = Math.PI * 0.8
         ctx.beginPath()
         ctx.arc(x, y, r + 3, t, t + arcLen)
-        ctx.strokeStyle = C.accent + "88"
+        ctx.strokeStyle = RC.accent + "88"
         ctx.lineWidth = 1.8
         ctx.lineCap = "butt"
         ctx.stroke()
         // Glow behind the node
-        ctx.fillStyle = C.accent + "12"
+        ctx.fillStyle = RC.accent + "12"
         ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill()
       }
 
-      ctx.fillStyle = dimmed ? C.base + "88" : C.elevated
+      ctx.fillStyle = dimmed ? RC.base + "88" : RC.elevated
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
-      ctx.strokeStyle = dimmed ? C.dim + "20" : toolColor + (active ? "cc" : wasUsed ? "88" : "60")
+      ctx.strokeStyle = dimmed ? RC.dim + "20" : toolColor + (active ? "cc" : wasUsed ? "88" : "60")
       ctx.lineWidth = active ? 1.8 : dimmed ? 0.5 : 0.8; ctx.stroke()
       if (stats && stats.calls > 0) {
         ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
@@ -3685,11 +3791,11 @@ export function MapPanel({
         ctx.fillText(stats.calls > 99 ? "99+" : String(stats.calls), x, y + 0.5)
       }
       ctx.font = `${Math.max(4, 12 / globalScale)}px sans-serif`
-      ctx.fillStyle = dimmed ? C.muted + "30" : stats && stats.calls > 0 ? C.text : C.muted
+      ctx.fillStyle = dimmed ? RC.muted + "30" : stats && stats.calls > 0 ? RC.text : RC.muted
       ctx.textAlign = "center"; ctx.textBaseline = "top"
       ctx.fillText(node.label, x, y + r + 2)
     }
-  }, [activeAgentId, hasRunContext, isRunning, toolStats, involvedToolIds])
+  }, [activeAgentId, hasRunContext, isRunning, toolStats, involvedToolIds, RC, resolveColor])
 
   // Node hit area
   const paintNodeArea = useCallback((node: NodeObject<MapNode>, color: string, ctx: CanvasRenderingContext2D) => {
@@ -3708,6 +3814,7 @@ export function MapPanel({
   // Custom link renderer
   const paintLink = useCallback((link: LinkObject<MapNode, MapLink>, ctx: CanvasRenderingContext2D) => {
     const vLink = link as unknown as MapLink
+    const linkColor = resolveColor(vLink.color)
     const src = link.source as NodeObject<MapNode>
     const tgt = link.target as NodeObject<MapNode>
     if (!src || !tgt || src.x == null || tgt.x == null) return
@@ -3731,7 +3838,7 @@ export function MapPanel({
       ctx.beginPath()
       ctx.moveTo(startX, startY)
       ctx.lineTo(endX, endY)
-      ctx.strokeStyle = vLink.color
+      ctx.strokeStyle = linkColor
       ctx.lineWidth = 1.6
       ctx.stroke()
 
@@ -3742,7 +3849,7 @@ export function MapPanel({
       ctx.lineTo(endX - ux * arrowLen + uy * arrowW, endY - uy * arrowLen - ux * arrowW)
       ctx.lineTo(endX - ux * arrowLen - uy * arrowW, endY - uy * arrowLen + ux * arrowW)
       ctx.closePath()
-      ctx.fillStyle = vLink.color
+      ctx.fillStyle = linkColor
       ctx.fill()
       return
     }
@@ -3767,13 +3874,13 @@ export function MapPanel({
       ctx.setLineDash([4, 4])
       ctx.lineDashOffset = -(animPhaseRef.current * 0.04) % 8
       ctx.beginPath(); ctx.moveTo(src.x, src.y!); ctx.quadraticCurveTo(cx, cy, tgt.x, tgt.y!)
-      ctx.strokeStyle = vLink.color + alpha; ctx.lineWidth = 2; ctx.stroke()
+      ctx.strokeStyle = linkColor + alpha; ctx.lineWidth = 2; ctx.stroke()
       ctx.restore()
     } else {
       ctx.beginPath(); ctx.moveTo(src.x, src.y!); ctx.quadraticCurveTo(cx, cy, tgt.x, tgt.y!)
-      ctx.strokeStyle = vLink.color + alpha; ctx.lineWidth = highlight ? 1.2 : 0.5; ctx.stroke()
+      ctx.strokeStyle = linkColor + alpha; ctx.lineWidth = highlight ? 1.2 : 0.5; ctx.stroke()
     }
-  }, [planDag, activeAgentId, hasRunContext, involvedToolIds, activeToolSet])
+  }, [planDag, activeAgentId, hasRunContext, involvedToolIds, activeToolSet, resolveColor])
 
   // Detail panel for selected node
   const detailInfo = useMemo((): { title: string; lines: Array<{ label: string; value: string }>; invocations?: Array<{ args: string; result: string; status: "ok" | "error" }> } | null => {
@@ -3987,6 +4094,156 @@ export function MapPanel({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BusFeedPanel — inter-agent bus message feed (Phase B.4)
+// ═══════════════════════════════════════════════════════════════════
+
+const PROTOCOL_COLOR: Record<string, string> = {
+  status:    "#60a5fa", // blue
+  result:    "#34d399", // green
+  help:      "#f87171", // red
+  question:  "#fbbf24", // amber
+  answer:    "#a78bfa", // purple
+  broadcast: "#94a3b8", // slate
+}
+
+function ProtocolBadge({ protocol }: { protocol: string }) {
+  const color = PROTOCOL_COLOR[protocol] ?? C.muted
+  return (
+    <span
+      className="text-[10px] uppercase tracking-wide font-mono px-1.5 py-0.5 rounded"
+      style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}
+    >
+      {protocol}
+    </span>
+  )
+}
+
+export function BusFeedPanel({
+  messages,
+  helpUnread,
+  onAck,
+}: {
+  messages: BusMessage[]
+  helpUnread: number
+  onAck: () => void
+}) {
+  const [topicFilter, setTopicFilter] = useState<string>("")
+  const [protocolFilter, setProtocolFilter] = useState<string>("")
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to newest message when feed grows.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [messages.length])
+
+  // Acknowledge unread Help count when the panel mounts (i.e. user
+  // opened the Bus tab). One-shot ack — re-renders are no-ops because
+  // helpUnread is then 0.
+  useEffect(() => {
+    if (helpUnread > 0) onAck()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const topics = useMemo(() => {
+    const seen = new Set<string>()
+    for (const m of messages) seen.add(m.topic)
+    return Array.from(seen).sort()
+  }, [messages])
+
+  const filtered = useMemo(() => {
+    return messages.filter((m) =>
+      (!topicFilter || m.topic === topicFilter) &&
+      (!protocolFilter || m.protocol === protocolFilter),
+    )
+  }, [messages, topicFilter, protocolFilter])
+
+  // Map id → message so reply_to can hyperlink to the original question.
+  const byId = useMemo(() => {
+    const map = new Map<string, BusMessage>()
+    for (const m of messages) map.set(m.id, m)
+    return map
+  }, [messages])
+
+  if (messages.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm" style={{ color: C.dim }}>
+        No bus messages yet. Multi-agent runs publish here as they coordinate.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 px-3 py-2 text-[12px]" style={{ borderBottom: `1px solid ${C.border}`, background: C.elevated }}>
+        <span style={{ color: C.dim }}>Filter:</span>
+        <select
+          value={topicFilter}
+          onChange={(e) => setTopicFilter(e.target.value)}
+          className="px-2 py-0.5 text-[12px] rounded"
+          style={{ background: C.base, color: C.text, border: `1px solid ${C.border}` }}
+        >
+          <option value="">all topics</option>
+          {topics.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select
+          value={protocolFilter}
+          onChange={(e) => setProtocolFilter(e.target.value)}
+          className="px-2 py-0.5 text-[12px] rounded"
+          style={{ background: C.base, color: C.text, border: `1px solid ${C.border}` }}
+        >
+          <option value="">all protocols</option>
+          {Object.keys(PROTOCOL_COLOR).map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <span className="ml-auto" style={{ color: C.dim }}>{filtered.length} / {messages.length}</span>
+      </div>
+
+      {/* Help banner — shows when there are unacked Help messages and the
+          tab is open: mounting acks them, but recently-acked Help messages
+          are still visible so we surface a soft callout. */}
+      {messages.some((m) => m.protocol === "help") && (
+        <div className="px-3 py-2 text-[12px]" style={{ background: "#7f1d1d22", color: "#fca5a5", borderBottom: `1px solid ${C.border}` }}>
+          ⚠ This run tree contains Help-protocol messages — agents are asking for human intervention.
+        </div>
+      )}
+
+      {/* Message list */}
+      <div ref={scrollRef} className="flex-1 overflow-auto px-3 py-2">
+        {filtered.map((m) => {
+          const replyTarget = m.replyTo ? byId.get(m.replyTo) : null
+          const time = new Date(m.timestamp).toLocaleTimeString()
+          return (
+            <div key={m.id} className="mb-2 text-[13px] leading-snug">
+              <div className="flex items-center gap-2 mb-0.5">
+                <ProtocolBadge protocol={m.protocol} />
+                <span className="font-medium" style={{ color: C.text }}>{m.fromAgent}</span>
+                <span style={{ color: C.dim }}>→</span>
+                <span style={{ color: C.muted }} className="font-mono text-[12px]">{m.topic}</span>
+                <span className="ml-auto text-[11px]" style={{ color: C.dim }}>{time}</span>
+              </div>
+              {replyTarget && (
+                <div className="ml-1 pl-2 mb-0.5 text-[11px]" style={{ color: C.dim, borderLeft: `2px solid ${C.border}` }}>
+                  ↪ replying to [{replyTarget.fromAgent}]: {replyTarget.content.slice(0, 80)}
+                  {replyTarget.content.length > 80 ? "…" : ""}
+                </div>
+              )}
+              <div className="ml-1 pl-2 whitespace-pre-wrap break-words" style={{ color: C.text, borderLeft: `2px solid ${PROTOCOL_COLOR[m.protocol] ?? C.border}55` }}>
+                {m.content}
+              </div>
+              <div className="ml-1 pl-2 mt-0.5 font-mono text-[10px]" style={{ color: C.dim }}>
+                id={m.id.slice(0, 8)}{m.replyTo ? `  reply_to=${m.replyTo.slice(0, 8)}` : ""}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

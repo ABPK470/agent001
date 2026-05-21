@@ -27,7 +27,6 @@ These are the public face of the package and the few cross-cutting primitives.
 |-------------------|--------------------------------------------------------------------------------------------------------------------------------------|
 | `agent.ts`        | The `Agent` class. Owns the loop. Public entry point.                                                                                |
 | `lib.ts`          | Barrel export — what other packages import.                                                                                          |
-| `cli.ts`          | A thin CLI wrapper for running an agent locally.                                                                                     |
 | `types.ts`        | The vocabulary: `Tool`, `Message`, `LLMClient`, `LLMResponse`, `AgentConfig`, `TokenUsage`. Everything else speaks in these types.  |
 | `constants.ts`    | Magic numbers in one place (limits, defaults).                                                                                       |
 | `logger.ts`       | A trivial logger, not a framework.                                                                                                   |
@@ -164,14 +163,14 @@ This is the layer between "agent runs" and "we trust the result". It wraps tool 
 
 | File                  | Responsibility                                                                                       |
 |-----------------------|------------------------------------------------------------------------------------------------------|
-| `governance.ts`       | `runGoverned(...)`, `governTool(...)`, `createEngineServices(...)`. The public API.                  |
+| `governance.ts`       | `governTool(...)`, `createEngineServices(...)`. The public API.                                       |
 | `governance-types.ts` | The vocabulary: `RunState`, `GovernedResult`, `EngineServices`.                                      |
 | `governance-report.ts`| Pretty-printed run summary (token usage, tool outcomes, policy events).                              |
 | `govern-tool.ts`      | Wraps a single tool call: enforce policy, audit it, count it against the run's quotas.               |
 | `quality-proxy.ts`    | Cheap heuristics to estimate "did this tool call produce something useful?"                           |
 | `code-quality.ts` + `code-quality/` | If the agent wrote code, run static checks (length, branching, patterns).                  |
 
-Governance doesn't replace the loop — it sits above it. You can use the `Agent` class without governance for ad-hoc runs, or wrap it with `runGoverned` for production where you need audit trails.
+Governance doesn't replace the loop — it sits above it. The server orchestrator wraps each tool with `governTool` so production runs always get audit trails and policy enforcement; the bare `Agent` class is still usable for ad-hoc, in-process runs (e.g. tests).
 
 ---
 
@@ -239,7 +238,7 @@ You asked whether the system is a mix of styles with no true path. Here is the h
 
 Almost everything is a `.ts` file that exports a few named functions and types. No DI container. No service locator. No repository pattern. No event sourcing. Functions take their dependencies as parameters; if a function needs a logger it gets one as an argument; if it needs an LLM it gets one as an argument.
 
-This is the **functional core, imperative shell** style. The "shell" is `Agent`, the loop, and `runGoverned`. The "core" is everything they call.
+This is the **functional core, imperative shell** style. The "shell" is `Agent` and the loop, driven by the server orchestrator. The "core" is everything they call.
 
 ## Where there ARE classes, there's a reason
 

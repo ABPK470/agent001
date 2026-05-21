@@ -7,7 +7,6 @@
 
 export * from "./govern.js"
 export * from "./types.js"
-export * from "./report.js"
 export * from "./govern-tool.js"
 export * from "./compute-quality-proxy.js"
 export * from "./code-quality/index.js"

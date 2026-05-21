@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -43,7 +44,7 @@ import {
     type LlmConfig,
     type UsageData
 } from "./ioe/constants"
-import { EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
+import { BusFeedPanel, EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
     ComparePanel,
@@ -78,6 +79,10 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 export function OperatorEnvironment() {
+  // ── Auth / role (Phase E.5 — gates admin-only UI surfaces) ───
+  const { me } = useMe()
+  const isAdmin = me?.isAdmin ?? false
+
   // ── Store ─────────────────────────────────────────────────────
   const connected = useStore((s) => s.connected)
   const runs = useStore((s) => s.runs) ?? []
@@ -88,6 +93,9 @@ export function OperatorEnvironment() {
   const logs = useStore((s) => s.logs)
   const audit = useStore((s) => s.audit)
   const trace = useStore((s) => s.trace)
+  const busMessages = useStore((s) => s.busMessages)
+  const helpUnread = useStore((s) => s.helpUnread)
+  const ackBusHelp = useStore((s) => s.ackBusHelp)
   const liveUsage = useStore((s) => s.liveUsage)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
@@ -461,6 +469,12 @@ export function OperatorEnvironment() {
     if (tab === EditorTab.LlmCalls) return <LlmCallsPanel trace={trace} />
     if (tab === EditorTab.Map)
       return <MapPanel trace={trace} run={activeRun} agents={agents} />
+    if (tab === EditorTab.Bus) {
+      // Phase E.5: bus feed is admin-only. Non-admin selects fall back
+      // to the trace panel (the default tab they would otherwise see).
+      if (!isAdmin) return <LlmCallsPanel trace={trace} />
+      return <BusFeedPanel messages={busMessages} helpUnread={helpUnread} onAck={ackBusHelp} />
+    }
     // Fallback for old persisted "trace" → show tool-timeline
     return <ToolTimelinePanel steps={steps} />
   }
@@ -733,6 +747,9 @@ export function OperatorEnvironment() {
                   onChange={setEditorTab}
                   trace={trace}
                   stepCount={steps.length}
+                  busCount={busMessages.length}
+                  helpUnread={helpUnread}
+                  isAdmin={isAdmin}
                 />
                 <div className="flex-1" />
                 {editorTab === EditorTab.LlmCalls && trace.length > 0 && (
@@ -772,6 +789,9 @@ export function OperatorEnvironment() {
                       onChange={setEditorRightTab}
                       trace={trace}
                       stepCount={steps.length}
+                      busCount={busMessages.length}
+                      helpUnread={helpUnread}
+                      isAdmin={isAdmin}
                     />
                     <div className="flex-1" />
                     {editorRightTab === EditorTab.LlmCalls && trace.length > 0 && (

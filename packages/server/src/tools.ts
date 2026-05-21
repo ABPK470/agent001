@@ -7,40 +7,42 @@
  */
 
 import {
-    appendFileTool,
-    askUserTool,
-    browserAutoLoginTool,
-    browserCheckTool,
-    browserHumanHandoffTool,
-    browseWebTool,
-    compareCatalogsTool,
-    createDelegateTools,
-    discoverRelationshipsTool,
-    exportQueryToFileTool,
-    fetchUrlTool,
-    getChartSpecsTool,
-    importAttachmentTool,
-    inspectDefinitionTool,
-    listAttachmentsTool,
-    listDirectoryTool,
-    listEnvironmentsTool,
-    mssqlSchemaTool,
-    mssqlTool,
-    profileDataTool,
-    promoteAttachmentTool,
-    readAttachmentTool,
-    readFileTool,
-    replaceInFileTool,
-    searchCatalogTool,
-    searchFilesTool,
-    shellTool,
-    syncExecuteTool,
-    syncPreviewTool,
-    thinkTool,
-    webSearchTool,
-    writeFileTool,
-    type LLMClient,
-    type Tool,
+  appendFileTool,
+  askUserTool,
+  browserAutoLoginTool,
+  browserCheckTool,
+  browserHumanHandoffTool,
+  browseWebTool,
+  compareCatalogsTool,
+  createDelegateTools,
+  discoverRelationshipsTool,
+  exportQueryToFileTool,
+  fetchUrlTool,
+  getChartSpecsTool,
+  importAttachmentTool,
+  inspectDefinitionTool,
+  listAttachmentsTool,
+  listDirectoryTool,
+  listEnvironmentsTool,
+  mssqlSchemaTool,
+  mssqlTool,
+  profileDataTool,
+  promoteAttachmentTool,
+  readAttachmentTool,
+  readFileTool,
+  replaceInFileTool,
+  searchCatalogTool,
+  searchFilesTool,
+  shellTool,
+  syncExecuteTool,
+  syncPreviewTool,
+  thinkTool,
+  webSearchTool,
+  writeFileTool,
+  type DelegateContext,
+  type GovernToolOptions,
+  type LLMClient,
+  type Tool,
 } from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 
@@ -67,6 +69,7 @@ const ALL_TOOLS: Tool[] = [
   webSearchTool,
   askUserTool,
   getChartSpecsTool,
+  thinkTool,
   mssqlTool,
   mssqlSchemaTool,
   exportQueryToFileTool,
@@ -86,10 +89,9 @@ const ALL_TOOLS: Tool[] = [
   promoteAttachmentTool,
 ]
 
+// Single source of truth: every static tool lives in ALL_TOOLS. The toolMap is
+// a name-keyed view used by agent definitions and runtime resolution.
 const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
-// thinkTool is not in ALL_TOOLS (won't appear in listings) but stays resolvable
-// so existing agent definitions that reference it don't crash.
-toolMap.set(thinkTool.name, thinkTool)
 
 const catalogLlm: LLMClient = {
   async chat() {
@@ -231,4 +233,76 @@ export function filterToolsForVisitor(tools: Tool[]): Tool[] {
 /** Returns true if the named tool is in the visitor allowlist. */
 export function isVisitorTool(name: string): boolean {
   return VISITOR_TOOL_NAMES.has(name)
+}
+
+// ── Per-run tool registry ────────────────────────────────────────
+// Static tools (above) live in ALL_TOOLS and are stateless. A second class
+// of tools must be constructed fresh per run because they close over run-
+// scoped state: delegation (parent run-id, depth, child usage tracking),
+// inter-agent bus (run-id + agent name), and ask_user (the pending-input
+// resolver tied to this run's controller). Rather than re-concatenating
+// these in run-executor every time we add a category, declare them once
+// here as a list of factories and let `composePerRunTools` assemble the
+// final array. This is the single source of truth for "what tools exist
+// at runtime"; see `listRuntimeCatalogTools` for the catalog-mode mirror.
+
+export interface PerRunToolContext {
+  runId: string
+  agentName: string
+  bus: AgentBus
+  delegateCtx: DelegateContext
+  /**
+   * Wraps a tool with run-scoped governance. The caller binds services,
+   * state, and the abort signal at construction; the factory only chooses
+   * per-tool overrides like timeoutMs.
+   */
+  govern: (tool: Tool, opts?: Pick<GovernToolOptions, "timeoutMs">) => Tool
+  /**
+   * Resolves an ask_user prompt by recording the question, broadcasting
+   * UserInputRequired, and waiting for the user's response. The factory
+   * doesn't need to know about pendingInputs or SSE plumbing.
+   */
+  askUserResolve: (question: string, options: string[] | undefined, sensitive: boolean) => Promise<string>
+}
+
+export type PerRunToolFactory = (ctx: PerRunToolContext) => Tool[]
+
+/**
+ * Ordered list of factories that produce per-run tools. Each factory is
+ * pure: given a context it returns Tool[]. Adding a new category of run-
+ * scoped tools means appending here, not editing run-executor.
+ */
+export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
+  // delegate / delegate_parallel — needs full DelegateContext (LLM, parent
+  // tools, depth, child trace/usage hooks, queue slot acquirer).
+  (ctx) => createDelegateTools(ctx.delegateCtx),
+  // bus tools (send_message, check_messages, etc.) — needs the run-id and
+  // the agent's display name so messages are attributed correctly.
+  (ctx) => createBusTools(ctx.bus, ctx.runId, ctx.agentName),
+  // ask_user — governance applied with timeoutMs:0 because the tool blocks
+  // until a human responds; the default racer would kill it.
+  (ctx) => [
+    ctx.govern(
+      {
+        ...askUserTool,
+        execute: async (args) => {
+          const question = String(args["question"] ?? "")
+          if (!question) return "Error: 'question' is required"
+          const options = Array.isArray(args["options"]) ? args["options"].map(String) : undefined
+          const sensitive = Boolean(args["sensitive"])
+          return ctx.askUserResolve(question, options, sensitive)
+        },
+      },
+      { timeoutMs: 0 },
+    ),
+  ],
+]
+
+/**
+ * Compose the final tool list for a run. `governedStaticTools` are the
+ * registry tools after effect-wrapping and governance; this function
+ * appends the output of every per-run factory in order.
+ */
+export function composePerRunTools(governedStaticTools: Tool[], ctx: PerRunToolContext): Tool[] {
+  return [...governedStaticTools, ...PER_RUN_FACTORIES.flatMap((f) => f(ctx))]
 }

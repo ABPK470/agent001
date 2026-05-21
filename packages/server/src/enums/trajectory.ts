@@ -30,6 +30,7 @@ export const TrajectoryEventKind = {
   DelegationParallelEnd:       "delegation-parallel-end",
   SystemPrompt:                "system-prompt",
   ToolsResolved:               "tools-resolved",
+  ToolsFiltered:               "tools-filtered",
   LlmRequest:                  "llm-request",
   LlmResponse:                 "llm-response",
   PlannerValidationRemediated: "planner-validation-remediated",

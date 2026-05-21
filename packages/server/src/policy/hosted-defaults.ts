@@ -17,7 +17,18 @@
  *   - MSSQL DML/DDL are denied on UAT and PROD; DEV is left to operator
  *     policy so the deployment can opt in explicitly.
  *   - Outbound network tools require explicit approval.
+ *
+ * Disclosure-policy linkage (Phase E.4): the `hosted_deny_workspace_*`
+ * rules below are the HARD rail for the soft prose in the prompt's
+ * `<information_disclosure>` section. They implement the
+ * {@link DisclosureCategory.Internals} and {@link DisclosureCategory.SystemPrompt}
+ * categories — by denying `read_file` / `list_directory` against the
+ * application workspace, a hosted user cannot exfiltrate `packages/`,
+ * `deploy/`, prompt files, policy config, or other internals even if
+ * the model tries to comply with a probing request.
  */
+
+import { DisclosureCategory } from "./disclosure-categories.js"
 
 import {
   isPolicyDbOperation,
@@ -71,7 +82,7 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition:  "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
-        reason:   "hosted users may not access the application workspace",
+        reason:   `hosted users may not access the application workspace (disclosure: ${DisclosureCategory.Internals})`,
         selectors: { role: PolicyRole.HostedUser, tool: "read_file", scope: "app_workspace" },
       },
     },
@@ -81,7 +92,7 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition:  "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
-        reason:   "hosted users may not write to the application workspace",
+        reason:   `hosted users may not write to the application workspace (disclosure: ${DisclosureCategory.Internals})`,
         selectors: { role: PolicyRole.HostedUser, tool: "write_file", scope: "app_workspace" },
       },
     },
@@ -91,7 +102,7 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       condition:  "selectors",
       parameters: {
         priority: DEFAULT_PRIORITY + 50,
-        reason:   "hosted users may not list the application workspace",
+        reason:   `hosted users may not list the application workspace (disclosure: ${DisclosureCategory.Internals})`,
         selectors: { role: PolicyRole.HostedUser, tool: "list_directory", scope: "app_workspace" },
       },
     },

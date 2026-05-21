@@ -47,6 +47,22 @@ export interface ResolvedAgent {
   tools: Tool[]
 }
 
+/**
+ * Info passed to `DelegateContext.onChildIteration` on every iteration
+ * boundary of every spawned child. Used by the orchestrator to publish
+ * automatic Status messages to the bus on the child's behalf (Phase B.3).
+ */
+export interface ChildIterationInfo {
+  childRunId: string
+  childAgentName: string
+  iteration: number
+  maxIterations: number
+  /** First ~200 chars of the model's thinking content for this iteration, or null. */
+  content: string | null
+  /** Tool names the child intends to call this iteration (may be empty). */
+  toolNames: string[]
+}
+
 export interface DelegateContext {
   /** LLM client shared across the delegation tree. */
   llm: LLMClient
@@ -66,6 +82,28 @@ export interface DelegateContext {
   onChildUsage?: (usage: TokenUsage, llmCalls: number) => void
   /** Extra tools to inject into every child (e.g., bus messaging tools). */
   extraChildTools?: Tool[]
+  /**
+   * Per-child tool factory. Preferred over `extraChildTools` when each
+   * child needs tools bound to its OWN identity (e.g. bus tools that
+   * should publish as `childAgentName` from `childRunId`, not as the
+   * parent). When set, this is invoked once per spawned child and the
+   * returned tools override any same-named entries from `extraChildTools`.
+   *
+   * Phase B.3: this is how the orchestrator gives each child its own
+   * `send_message` / `check_messages` / `wait_for_response` bound to a
+   * unique child run id so bus messages can be attributed correctly.
+   */
+  buildChildTools?: (childRunId: string, childAgentName: string) => Tool[]
+  /**
+   * Hook fired on every child iteration boundary (per `Agent.onThinking`).
+   * The orchestrator uses this to auto-publish a `Status` bus message so
+   * siblings, parent, and the UI BusFeed see liveness and progress
+   * without relying on the model to remember to call `send_message`.
+   *
+   * Throttle policy is decided by the implementer (e.g. every Nth
+   * iteration); the agent loop fires the hook every iteration.
+   */
+  onChildIteration?: (info: ChildIterationInfo) => void
   /** Optional: acquire a concurrency slot before running a child. */
   acquireSlot?: (childRunId: string) => Promise<() => void>
   /**

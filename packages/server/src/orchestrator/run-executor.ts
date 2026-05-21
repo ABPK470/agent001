@@ -1,10 +1,8 @@
 import {
     Agent,
     AgentRuntime,
-    askUserTool,
     cancelRun,
     completeRun,
-    createDelegateTools,
     createRun,
     detectInternalFailure,
     EventType,
@@ -42,13 +40,14 @@ import { AgentBus, createBusTools } from "../agent-bus.js"
 import * as db from "../db/index.js"
 import { resetEffectSeq } from "../effects/index.js"
 import { AuditActor } from "../enums/audit.js"
+import { BusProtocol } from "../enums/bus.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../event-broadcaster.js"
 import { consolidate, extractProcedural, ingestRunTurns, retrieveContext } from "../memory/index.js"
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
-import { getAllTools } from "../tools.js"
+import { composePerRunTools, getAllTools } from "../tools.js"
 import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
@@ -133,11 +132,25 @@ export async function executeRunImpl(
   // their tool schemas alone steer the model into proactive catalog dumps
   // even on trivial conversational turns. See `filterToolsByGoal` for the
   // full policy. The decision is logged once for observability.
+  // Sequence ref for debug-seq on broadcast events. Hoisted so it can be used
+  // for early trace emissions (e.g. tools-filtered) before the run loop starts.
+  const debugSeqRef = { value: 0 }
+
   const _toolDecision = decideSections({ goal })
   const _toolFilter   = filterToolsByGoal(tools, _toolDecision)
   if (!_toolFilter.passThrough) {
     // eslint-disable-next-line no-console
     console.log(`[tools] run=${runId} dropped ${_toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${_toolFilter.tools.length}): ${_toolFilter.dropped.join(", ")}`)
+    const filteredEntry = {
+      kind: TrajectoryEventKind.ToolsFiltered,
+      dropped: _toolFilter.dropped,
+      kept: _toolFilter.tools.length,
+      dbScore: _toolDecision.dbScore ?? 0,
+      syncTrigger: !!_toolDecision.triggers?.sync,
+      reason: `goal classified non-DB (dbScore=${_toolDecision.dbScore ?? 0}, sync=${!!_toolDecision.triggers?.sync})`,
+    } as const
+    boundSaveTrace(runId, filteredEntry)
+    broadcastTrace(runId, debugSeqRef.value++, filteredEntry)
   }
   const effectiveTools = _toolFilter.tools
 
@@ -146,7 +159,16 @@ export async function executeRunImpl(
 
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const agentName = agentId ? (db.getAgentDefinition(agentId)?.name ?? "Agent") : "Universal Agent"
-  const busTools = createBusTools(bus, runId, agentName)
+  // Parent's bus tools are added to `allTools` by `composePerRunTools`
+  // below (see tools.ts factory list). Children get their OWN bus tools
+  // via `delegateCtx.buildChildTools` so messages are attributed to the
+  // child run id, not the parent's.
+
+  // Phase B.3: throttle auto-Status to once per N iterations per child to
+  // avoid drowning the bus on long runs. Per-child counter so siblings
+  // running at different speeds don't share the throttle window.
+  const STATUS_THROTTLE = 5
+  const lastStatusIter = new Map<string, number>()
 
   const delegateCtx: DelegateContext = {
     llm: ctx.llm,
@@ -154,7 +176,35 @@ export async function executeRunImpl(
     depth: 0,
     maxDepth: maxDelegationDepth,
     signal: controller.signal,
-    extraChildTools: busTools,
+    // Per-child bus tools so each child publishes as ITSELF, not the parent.
+    // This is the load-bearing fix for B.3 — without it, every send_message
+    // from a delegated child would be persisted with the parent's runId /
+    // agentName and siblings would not be able to address each other.
+    buildChildTools: (childRunId, childAgentName) => createBusTools(bus, childRunId, childAgentName),
+    // Auto-Status: every Nth iteration of every child publishes a Status
+    // message so siblings, the parent, and the BusFeed UI see liveness
+    // without relying on the model to remember to call send_message.
+    onChildIteration: (info) => {
+      const last = lastStatusIter.get(info.childRunId) ?? 0
+      // Always publish on iteration 1, then every STATUS_THROTTLE iterations.
+      if (info.iteration !== 1 && info.iteration - last < STATUS_THROTTLE) return
+      lastStatusIter.set(info.childRunId, info.iteration)
+      const previewBits: string[] = []
+      if (info.toolNames.length > 0) previewBits.push(`tools=[${info.toolNames.join(",")}]`)
+      if (info.content) previewBits.push(info.content.replace(/\s+/g, " ").trim())
+      const preview = previewBits.join(" ").slice(0, 240)
+      try {
+        bus.publish({
+          topic: `${runId}-status`,
+          fromRunId: info.childRunId,
+          fromAgent: info.childAgentName,
+          content: `iteration ${info.iteration}/${info.maxIterations}${preview ? ": " + preview : ""}`,
+          protocol: BusProtocol.Status,
+        })
+      } catch {
+        // Bus publish must never break the agent loop — swallow failures here.
+      }
+    },
     acquireSlot: (childRunId: string) => ctx.queue.acquire(childRunId, RunPriority.High, controller.signal),
     resolveAgent: (aId: string): ResolvedAgent | null => {
       const def = db.getAgentDefinition(aId)
@@ -204,28 +254,27 @@ export async function executeRunImpl(
       }
     })(),
   }
-  const delegateTools = createDelegateTools(delegateCtx)
 
-  const runAskUserTool: Tool = {
-    ...askUserTool,
-    execute: async (args) => {
-      const question = String(args.question ?? "")
-      if (!question) return "Error: 'question' is required"
-      const options = Array.isArray(args.options) ? args.options.map(String) : undefined
-      const sensitive = Boolean(args.sensitive)
+  // ── Per-run tool composition ──────────────────────────────────────
+  // The static tools (governedTools above) are already effect-wrapped and
+  // governance-wrapped. The remaining categories — delegate, bus, ask_user
+  // — need run-scoped state and are produced by factories registered in
+  // `composePerRunTools`. See packages/server/src/tools.ts for the factory
+  // list; adding a new category goes there, not here.
+  const allToolsBase = composePerRunTools(governedTools, {
+    runId,
+    agentName,
+    bus,
+    delegateCtx,
+    govern: (tool, opts) => governTool(tool, services, state, { signal: controller.signal, ...(opts ?? {}) }),
+    askUserResolve: (question, options, sensitive) => {
       boundSaveTrace(runId, { kind: TrajectoryEventKind.UserInputRequest, question, options, sensitive })
       broadcast({ type: EventType.UserInputRequired, data: { runId, question, options: options ?? [], sensitive } })
-      const response = await new Promise<string>((resolve) => {
+      return new Promise<string>((resolve) => {
         ctx.pendingInputs.set(runId, { resolve })
       })
-      return response
     },
-  }
-
-  // ask_user needs full step tracking (shows in Tool Timeline) but no timeout —
-  // it blocks until the user responds, so timeoutMs: 0 disables the timeout racer.
-  const governedAskUser = governTool(runAskUserTool, services, state, { signal: controller.signal, timeoutMs: 0 })
-  const allToolsBase = [...governedTools, ...delegateTools, ...busTools, governedAskUser]
+  })
 
   // Wrap sync tools to emit global SSE events so the Sync widget can react
   // to agent-triggered previews and executes without needing to go through
@@ -338,6 +387,34 @@ export async function executeRunImpl(
     // Workspace path and home directory are injected only for admin sessions.
     // The role is captured at startRun/resumeRun before the session ALS expires.
     isAdmin: (activeRun?.role ?? PolicyRole.HostedUser) === PolicyRole.Admin,
+    // Bus-coordination prompt block triggers when this run is delegated
+    // (parent run id present) OR when the run tree's bus already has
+    // history (e.g. a sibling has been publishing while we queued).
+    // The digest is the most recent ~6 messages, formatted compactly so
+    // the agent can scan it at a glance.
+    hasSiblings: !!resume?.parentRunId || bus.history().length > 0,
+    siblingProgressDigest: (() => {
+      // Hard caps so this section cannot blow up under a chatty bus:
+      //   - last 6 messages only (oldest fall off)
+      //   - each line truncated to 240 chars
+      // <sibling_progress> rides in `system_runtime` which is already
+      // droppable under token pressure (see DROP_PRIORITY in
+      // packages/agent/src/types.ts), so this is the second line of
+      // defence, not the primary one.
+      const recent = bus.history().slice(-6)
+      if (recent.length === 0) return ""
+      return recent
+        .map((m) => {
+          const line = `- [${m.fromAgent}] (${m.protocol}, ${m.topic}): ${m.content}`
+          return line.length > 240 ? line.slice(0, 237) + "..." : line
+        })
+        .join("\n")
+    })(),
+    // Conventional topic for sibling chatter under this parent. Matches
+    // the topic used by the auto-Status hook so a child's Status/Question/
+    // Answer/Broadcast all flow through one channel siblings can subscribe
+    // to. Phase B.3.
+    coordinationTopic: `${runId}-status`,
   })
   const effectivePrompt = systemMessages.map((m) => m.content).join("\n\n")
 
@@ -346,7 +423,6 @@ export async function executeRunImpl(
   // they see only CHILD_SYSTEM_PROMPT and have no knowledge of the database or domain tools.
   delegateCtx.parentSystemPrompt = effectivePrompt
 
-  const debugSeqRef = { value: 0 }
   const systemPromptEntry = { kind: TrajectoryEventKind.SystemPrompt, text: effectivePrompt ?? "(no system prompt)" }
   boundSaveTrace(runId, systemPromptEntry)
   broadcastTrace(runId, debugSeqRef.value++, systemPromptEntry)

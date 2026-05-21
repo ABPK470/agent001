@@ -201,6 +201,10 @@ export const EventType = {
   MessageFailed: "message.failed",
   ConversationMessage: "conversation.message",
 
+  // Inter-agent bus (sibling / parent coordination during a run tree)
+  AgentBusMessage: "agent.bus.message",
+  AgentHelpRequested: "agent.help.requested",
+
   // Cross-cutting
   Audit: "audit",
   Notification: "notification",

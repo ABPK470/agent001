@@ -52,11 +52,27 @@ export async function spawnChildForPlan(
     )
   }
 
+  // Per-child run id — used to attribute bus messages and queue slots
+  // to the actual publisher rather than the parent. See spawn-child.ts
+  // for the same pattern.
+  const childRunId = `plan-${step.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const childAgentName = `Planner:${step.name}`
+
+  // Inject extra tools — per-child factory takes priority over a flat
+  // `extraChildTools` list (Phase B.3).
+  const builtPerChild = ctx.buildChildTools ? ctx.buildChildTools(childRunId, childAgentName) : []
+  const builtPerChildNames = new Set(builtPerChild.map(t => t.name))
   if (ctx.extraChildTools) {
     const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
     childTools = [
-      ...childTools.filter(t => !extraNames.has(t.name)),
-      ...ctx.extraChildTools,
+      ...childTools.filter(t => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
+      ...ctx.extraChildTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
+    ]
+  } else if (builtPerChild.length > 0) {
+    childTools = [
+      ...childTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
     ]
   }
 
@@ -85,7 +101,7 @@ export async function spawnChildForPlan(
 
   let releaseSlot: (() => void) | undefined
   if (ctx.acquireSlot) {
-    const childRunId = `plan-${step.name}-${Date.now()}`
+    // Reuse the same childRunId we generated above so queue + bus see one entity.
     releaseSlot = await ctx.acquireSlot(childRunId)
   }
 
@@ -157,6 +173,16 @@ export async function spawnChildForPlan(
       for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
       pendingPlannerLlmEvents = []
       ctx.onChildUsage?.(child.usage, child.llmCalls)
+      // Phase B.3: notify the orchestrator on every iteration so it can
+      // auto-publish a Status to the bus on this child's behalf.
+      ctx.onChildIteration?.({
+        childRunId,
+        childAgentName,
+        iteration: iteration + 1,
+        maxIterations: maxIter,
+        content: _content ? _content.slice(0, 200) : null,
+        toolNames: _toolCalls.map((c) => c.name),
+      })
     },
     onStep: () => {
       ctx.onChildUsage?.(child.usage, child.llmCalls)

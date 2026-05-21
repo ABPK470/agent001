@@ -154,7 +154,10 @@ describe("Stale runs", () => {
     markRunCrashed("r1")
 
     const row = testDb.prepare("SELECT * FROM runs WHERE id = ?").get("r1") as Record<string, unknown>
-    expect(row.status).toBe("failed")
+    // 'crashed' is a first-class terminal status distinct from 'failed' so
+    // the UI can label server-restart interruptions separately from
+    // agent-level errors. See packages/shared-enums/src/run.ts.
+    expect(row.status).toBe("crashed")
     expect(row.error).toContain("Server restarted")
     expect(row.completed_at).not.toBeNull()
   })

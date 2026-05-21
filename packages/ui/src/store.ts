@@ -11,6 +11,7 @@ import { api } from "./api"
 import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
     AuditEntry,
+    BusMessage,
     LayoutItem,
     LogEntry,
     Notification,
@@ -158,6 +159,17 @@ interface AppState {
   audit: AuditEntry[]
   addAudit: (entry: AuditEntry) => void
   setAudit: (entries: AuditEntry[]) => void
+
+  // Inter-agent bus messages (active run only). Mirrors AgentBusMessage
+  // SSE — every message published anywhere in the run tree appears here
+  // chronologically. `helpUnread` is the count of Help-protocol messages
+  // that arrived since the user last opened the BusFeed; cleared by
+  // ackBusHelp().
+  busMessages: BusMessage[]
+  helpUnread: number
+  addBusMessage: (msg: BusMessage) => void
+  setBusMessages: (msgs: BusMessage[]) => void
+  ackBusHelp: () => void
 
   // Live usage for current run (updated via WS)
   liveUsage: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number }
@@ -505,6 +517,8 @@ function eventType(type: string): string {
   if (type.startsWith("delegation.")) return "agent"
   if (type.startsWith("planner.")) return "agent"
   if (type === "agent.thinking") return "agent"
+  if (type === "agent.bus.message") return "agent"
+  if (type === "agent.help.requested") return "agent"
   if (type === "answer.chunk") return "agent"
   if (type === "api.request") return "api"
   return "system"
@@ -652,6 +666,18 @@ function formatLogEntryInner(
     // Thinking
     case "agent.thinking":
       return { type: t, message: (data["content"] as string) ?? "", timestamp }
+    case "agent.bus.message": {
+      const from = (data["fromAgent"] as string) ?? "?"
+      const proto = (data["protocol"] as string) ?? "broadcast"
+      const topic = (data["topic"] as string) ?? "?"
+      const content = ((data["content"] as string) ?? "").slice(0, 120)
+      return { type: t, message: `[bus ${proto}] ${from} → ${topic}: ${content}`, timestamp }
+    }
+    case "agent.help.requested": {
+      const from = (data["fromAgent"] as string) ?? "?"
+      const content = ((data["content"] as string) ?? "").slice(0, 120)
+      return { type: t, error: true, message: `[HELP] ${from}: ${content}`, timestamp }
+    }
     case "answer.chunk":
       return null
 
@@ -949,6 +975,15 @@ export const useStore = create<AppState>()(
       addAudit: (entry) => set((s) => ({ audit: [...s.audit, entry] })),
       setAudit: (audit) => set({ audit }),
 
+      busMessages: [],
+      helpUnread: 0,
+      addBusMessage: (msg) => set((s) => ({
+        busMessages: [...s.busMessages, msg].slice(-500),
+        helpUnread: msg.protocol === "help" ? s.helpUnread + 1 : s.helpUnread,
+      })),
+      setBusMessages: (msgs) => set({ busMessages: msgs.slice(-500) }),
+      ackBusHelp: () => set({ helpUnread: 0 }),
+
       // Live usage
       liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 },
       resetLiveUsage: () => set({ liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 } }),
@@ -1071,6 +1106,8 @@ export const useStore = create<AppState>()(
             store.setTrace([])
             store.setSteps([])
             store.setAudit([])
+            store.setBusMessages([])
+            set({ helpUnread: 0 })
             store.resetLiveUsage()
             store.clearStreamingAnswer()
             store.addTrace({ kind: "goal", text: data["goal"] as string })
@@ -1395,6 +1432,39 @@ export const useStore = create<AppState>()(
               const runId = (data["runId"] as string) ?? get().activeRunId
               if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
             }
+            break
+          }
+
+          case "agent.bus.message": {
+            // Inter-agent bus message — append to live BusFeed. Help
+            // protocol additionally fires `agent.help.requested`, which
+            // bumps the unread counter; do NOT bump it from here or it
+            // would double-count.
+            const msg: BusMessage = {
+              id: data["messageId"] as string,
+              runId: data["runId"] as string,
+              topic: data["topic"] as string,
+              protocol: data["protocol"] as string,
+              fromRunId: data["fromRunId"] as string,
+              fromAgent: data["fromAgent"] as string,
+              content: data["content"] as string,
+              replyTo: (data["replyTo"] as string | null) ?? null,
+              timestamp: (data["timestamp"] as number) ?? Date.parse(timestamp),
+            }
+            // Avoid double-add when agent.help.requested arrives right after.
+            // We dedupe by id.
+            set((s) => s.busMessages.some((m) => m.id === msg.id)
+              ? s
+              : { busMessages: [...s.busMessages, msg].slice(-500) })
+            break
+          }
+
+          case "agent.help.requested": {
+            // Same payload as agent.bus.message but routed to a
+            // dedicated event so the UI can highlight it. Bump the
+            // help-unread badge; the message itself was already added
+            // by the agent.bus.message case (which fires first).
+            set((s) => ({ helpUnread: s.helpUnread + 1 }))
             break
           }
 

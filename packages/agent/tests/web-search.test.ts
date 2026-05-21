@@ -18,6 +18,15 @@ vi.mock("../src/tools/browse-web/session.js", () => ({
   closeAllBrowserSessions: vi.fn(),
 }))
 
+// Mock the ddg-lite cheap path so it never returns real results from a
+// network fetch. The dispatch logic always tries `fetchDuckDuckGoLite`
+// first when engine is "auto" or "ddg" (and pushes "ddg-lite" onto
+// `attempted`); these tests exercise the browser-adapter fall-through,
+// so we make the cheap path return [] deterministically.
+vi.mock("../src/tools/web-search/ddg-fetch.js", () => ({
+  fetchDuckDuckGoLite: vi.fn().mockResolvedValue([]),
+}))
+
 import { CaptchaBlockedError } from "../src/tools/web-search/types.js"
 
 describe("web_search runWebSearch", () => {
@@ -48,7 +57,7 @@ describe("web_search runWebSearch", () => {
 
     expect(out.engine).toBe("ddg")
     expect(out.results.length).toBe(1)
-    expect(out.attempted).toEqual(["ddg"])
+    expect(out.attempted).toEqual(["ddg-lite", "ddg"])
     expect(ddgSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -73,7 +82,7 @@ describe("web_search runWebSearch", () => {
     const out = await runWebSearch({ query: "test", engine: "auto" })
 
     expect(out.engine).toBe("bing")
-    expect(out.attempted).toEqual(["ddg", "bing"])
+    expect(out.attempted).toEqual(["ddg-lite", "ddg", "bing"])
     expect(googleSpy).not.toHaveBeenCalled()
     expect(out.results[0]?.title).toBe("B")
   })
@@ -96,7 +105,7 @@ describe("web_search runWebSearch", () => {
     expect(out.engine).toBe("none")
     expect(out.captcha).toBe(true)
     expect(out.results.length).toBe(0)
-    expect(out.attempted).toEqual(["ddg", "bing", "google"])
+    expect(out.attempted).toEqual(["ddg-lite", "ddg", "bing", "google"])
   })
 
   it("rejects unknown engine", async () => {
