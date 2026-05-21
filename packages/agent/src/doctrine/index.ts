@@ -5,6 +5,7 @@ import { aggregateNamingDoctrine } from "./aggregate-naming.js"
 import { bigViewBudgetDoctrine } from "./big-view-budget.js"
 import { revenueBalancesPolicyDoctrine } from "./revenue-balances-policy.js"
 import { tempNamingDoctrine } from "./temp-naming.js"
+import { tempScalarSubqueryDoctrine } from "./temp-scalar-subquery.js"
 import { DOCTRINE_BLOCK_BUDGET_BYTES, type DoctrineDiagnostic, type DoctrineModule } from "./types.js"
 
 export { buildResolvedFacts, RESOLVED_FACTS_BUDGET_BYTES, type LargeObjectFact, type ResolvedFactsInput } from "./resolved-facts.js"
@@ -14,6 +15,7 @@ export type { DoctrineDiagnostic, DoctrineModule }
 /** Ordered list of MSSQL doctrines. Order is the prompt-assembly order. */
 export const MSSQL_DOCTRINES: readonly DoctrineModule[] = [
   tempNamingDoctrine,
+  tempScalarSubqueryDoctrine,
   bigViewBudgetDoctrine,
   aggregateNamingDoctrine,
   revenueBalancesPolicyDoctrine,
@@ -51,6 +53,8 @@ export function enforceDoctrines(query: string): DoctrineDiagnostic[] {
   }
   return out
 }
+
+export { DOCTRINE_FIX_HINTS, getDoctrineFixHint } from "./fix-hints.js"
 
 /**
  * Snapshot of all doctrine ids → versions in registry order. Used by

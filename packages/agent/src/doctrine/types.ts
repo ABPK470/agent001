@@ -17,10 +17,16 @@
 export interface DoctrineDiagnostic {
   /** Stable code that callers (validator, telemetry) can route on. */
   readonly code: string
-  /** Short, agent-facing message. */
+  /** Short, agent-facing message describing what was wrong. */
   readonly message: string
   /** "warn" surfaces in traces; "block" should be promoted by the validator. */
   readonly severity: "warn" | "block"
+  /**
+   * Canonical, doctrine-owned refactor hint shown to the agent on block.
+   * Centralised here (not in the validator) so the rule, the prompt text,
+   * and the failure-time advice all live in one module.
+   */
+  readonly fixHint?: string
 }
 
 export interface DoctrineModule {
@@ -35,4 +41,4 @@ export interface DoctrineModule {
 }
 
 /** Total byte budget for the assembled doctrine block in the system prompt. */
-export const DOCTRINE_BLOCK_BUDGET_BYTES = 2048
+export const DOCTRINE_BLOCK_BUDGET_BYTES = 2560

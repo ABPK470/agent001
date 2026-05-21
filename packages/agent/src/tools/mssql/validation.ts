@@ -1,6 +1,13 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { DOCTRINE_FIX_HINTS } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
+
+/** Appends a doctrine-owned fixHint to an error string, when one is registered. */
+function withFixHint(error: string, code: string): string {
+  const hint = DOCTRINE_FIX_HINTS[code]
+  return hint ? `${error}\n\nFix: ${hint}` : error
+}
 
 const READ_ONLY_PATTERN = /^\s*(SELECT|WITH|EXPLAIN|SET\s+SHOWPLAN|SP_HELP|SP_COLUMNS|SP_TABLES)\b/i
 
@@ -234,7 +241,7 @@ function countTempScalarSubqueries(query: string): number {
   return stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+#\w+[\s\S]*?\)/gi)?.length ?? 0
 }
 
-function countTempScalarSubqueriesByTemp(query: string): Map<string, number> {
+export function countTempScalarSubqueriesByTemp(query: string): Map<string, number> {
   const stripped = stripForScan(query)
   const counts = new Map<string, number>()
   const matches = stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+(#[A-Za-z_][\w]*)[\s\S]*?\)/gi) ?? []
@@ -431,45 +438,43 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
   // findAggregateSemanticIssues() for the full taxonomy and rationale.
   for (const issue of findAggregateSemanticIssues(query)) {
     if (issue.severity !== AggregateSeverity.Block) continue
+    const head = [
+      `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
+      ``,
+      `    ${issue.snippet}`,
+      ``,
+      issue.message,
+    ].join("\n")
     return {
       ok: false,
-      error: [
-        `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
-        ``,
-        `    ${issue.snippet}`,
-        ``,
-        issue.message,
-        ``,
-        `Fix: change the aggregate function to match the alias (or vice-versa). The function name `,
-        `is the implementation; the output alias is the contract with the reader. They MUST agree.`,
-      ].join("\n"),
+      error: withFixHint(head, "aggregate_semantic_mismatch"),
       code: "aggregate_semantic_mismatch",
       analysis,
     }
   }
 
   const tempBatchError = validateTempTableBatch(query)
-  if (tempBatchError) return { ok: false, error: tempBatchError, code: "temp_table_integrity", analysis }
+  if (tempBatchError) {
+    return {
+      ok: false,
+      error: withFixHint(tempBatchError, "temp_table_integrity"),
+      code: "temp_table_integrity",
+      analysis,
+    }
+  }
 
   const tempScalarCounts = countTempScalarSubqueriesByTemp(query)
   const repeatedTempScalarProbes = Array.from(tempScalarCounts.entries()).filter(([, count]) => count > 1)
   if (repeatedTempScalarProbes.length > 0) {
     const list = repeatedTempScalarProbes.map(([name, count]) => `${name} (${count} scalar probes)`).join(", ")
+    const head = [
+      `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
+      ``,
+      `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
+    ].join("\n")
     return {
       ok: false,
-      error: [
-        `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
-        ``,
-        `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
-        `Required fix: aggregate the staged #temp once per business key (usually pkClient), produce all needed metrics in that grouped result, then JOIN that small aggregate once.`,
-        ``,
-        `Bad shape:`,
-        `  SELECT ..., (SELECT COUNT(*) FROM #revLines_x WHERE ...), (SELECT SUM(...) FROM #revLines_x WHERE ...)`,
-        ``,
-        `Good shape:`,
-        `  WITH revAgg AS (SELECT pkClient, COUNT(*) AS ..., SUM(...) AS ... FROM #revLines_x GROUP BY pkClient)`,
-        `  SELECT ... FROM base LEFT JOIN revAgg ON revAgg.pkClient = base.pkClient`,
-      ].join("\n"),
+      error: withFixHint(head, "temp_scalar_subquery_overused"),
       code: "temp_scalar_subquery_overused",
       analysis,
     }

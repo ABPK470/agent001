@@ -7,6 +7,7 @@
 
 import { AggregateSeverity } from "../domain/enums/sql-guard.js"
 import { findAggregateSemanticIssues } from "../tools/mssql/validation.js"
+import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 
 export const aggregateNamingDoctrine: DoctrineModule = {
@@ -27,7 +28,14 @@ export const aggregateNamingDoctrine: DoctrineModule = {
       .map((issue) => ({
         code: "aggregate_semantic_mismatch",
         severity: "block" as const,
-        message: `Line ${issue.line}: ${issue.message}`,
+        message: [
+          `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
+          ``,
+          `    ${issue.snippet}`,
+          ``,
+          issue.message,
+        ].join("\n"),
+        fixHint: DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch,
       }))
   },
 }

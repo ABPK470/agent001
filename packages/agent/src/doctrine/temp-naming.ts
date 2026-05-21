@@ -6,6 +6,7 @@
 // with what the validator actually blocks.
 
 import { validateTempTableBatch } from "../tools/mssql/validation.js"
+import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 
 export const tempNamingDoctrine: DoctrineModule = {
@@ -24,6 +25,16 @@ export const tempNamingDoctrine: DoctrineModule = {
   enforce(query: string) {
     const err = validateTempTableBatch(query)
     if (!err) return []
-    return [{ code: "temp_table_integrity", severity: "block" as const, message: err }]
+    // The validator helper already produces a per-variant message that
+    // preserves the substrings tests pin to (malformed #temp suffix,
+    // referenced without being created, inconsistent #temp suffixes).
+    // The fixHint is the canonical refactor — one paragraph, always the
+    // same shape, regardless of which sub-variant tripped.
+    return [{
+      code: "temp_table_integrity",
+      severity: "block" as const,
+      message: err,
+      fixHint: DOCTRINE_FIX_HINTS.temp_table_integrity,
+    }]
   },
 }
