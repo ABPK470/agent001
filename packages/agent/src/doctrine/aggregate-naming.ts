@@ -1,0 +1,33 @@
+// Doctrine: aggregate-function ↔ output-alias semantic agreement.
+//
+// SUM(x) AS Avg…, AVG(x) AS Total…, COUNT(x) AS Avg…, etc. are blocked
+// because the function and the alias disagree on what the number means.
+// Validator already implements the structural check in
+// findAggregateSemanticIssues(); this module is the citable rule body.
+
+import { AggregateSeverity } from "../domain/enums/sql-guard.js"
+import { findAggregateSemanticIssues } from "../tools/mssql/validation.js"
+import type { DoctrineModule } from "./types.js"
+
+export const aggregateNamingDoctrine: DoctrineModule = {
+  id: "mssql.aggregate-naming",
+  version: "1.0.0",
+  summaryBudgetBytes: 480,
+  summary(): string {
+    return [
+      "Aggregate ↔ alias agreement (enforced):",
+      "- The aggregate function and the output column alias MUST agree (SUM→Total/Sum, AVG→Avg/Mean, COUNT→Count).",
+      "- SUM(x) AS Avg… or AVG(x) AS Total… is BLOCKED — it silently produces N× the real value.",
+      "- For columns named Average/Avg/Spot/EOM/Latest/Snapshot/MTD/YTD, verify the math: usually AVG or latest-row, not SUM.",
+    ].join("\n")
+  },
+  enforce(query: string) {
+    return findAggregateSemanticIssues(query)
+      .filter((issue) => issue.severity === AggregateSeverity.Block)
+      .map((issue) => ({
+        code: "aggregate_semantic_mismatch",
+        severity: "block" as const,
+        message: `Line ${issue.line}: ${issue.message}`,
+      }))
+  },
+}

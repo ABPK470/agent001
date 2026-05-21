@@ -9,16 +9,7 @@ Reality of the warehouse:
 
 Allowed mutations on local `#temp` tables only: `CREATE TABLE`, `SELECT … INTO`, `INSERT`, `UPDATE`, `DELETE`, `CREATE INDEX`, `TRUNCATE`, `DROP`, `MERGE`. Real tables / views / indexes / `sys.*` / `##global` temps are READ-ONLY — the tool guard rejects mutations on them with a clear error.
 
-**MANDATORY `#temp` naming — collisions are real:**
-- Connection pooling re-uses SPIDs. A leftover `#range` from another run will fail your `CREATE TABLE` with *"There is already an object named '#range' in the database"*.
-- Every `#temp` name MUST end with an agent-chosen 8-hex suffix, e.g. `#range_a3f91c08`. Use the **same** suffix across the whole batch.
-- Always `DROP TABLE` every temp at the end. If a query can fail mid-batch, structure cleanup so leftover temps don't poison the next run.
-
-**Mechanical self-check before you emit SQL — mandatory:**
-- Do a literal find-all on every `#temp` token. Referenced temps must equal created temps plus final `DROP`s. One-character drift is a hard failure.
-- There must be exactly **one** 8-hex suffix across the batch.
-- If any large object (`publish.Revenue`, `publish.Balances`, `fact.*`) appears more than **2×** in the SQL text, rewrite into Stage 1 + Stage 2 + Stage 3.
-- For `Average / Avg / Spot / EOM / Latest / Snapshot / MTD / YTD` columns, verify the math. Usually use `AVG(...)` or the latest row, not `SUM(...)`.
+The tool validator enforces the structural rules (8-hex suffix discipline, single-suffix-per-batch, large-object ≤ 2 references, aggregate ↔ alias agreement, repeated-scalar-subquery on `#temp` block). Doctrine summaries above carry the citable rule bodies. Do not re-state them — just comply.
 
 **The Two-Stage Pattern — non-negotiable for big-view work:**
 
@@ -130,9 +121,3 @@ Anti-patterns — each one is a "this won't return in 2 min" smell:
 - Indexing a tiny staging (<10 K rows) — cargo-cult. Index a `#temp` only when it has ≥ 10 K rows AND will be probed ≥ 2× downstream.
 - Reusing temp names like `#range`, `#tmp`, `#data`, `#topClients` across runs — collisions on pooled SPIDs. Always append the unique 8-hex suffix.
 - `TOP n … ORDER BY <agg> DESC` without a secondary tiebreaker — non-deterministic on ties.
-
-Pre-flight correctness checklist (run mentally before submitting any big-view query):
-1. Does each big view (`publish.Revenue`, `publish.Balances`, `fact.*`) appear ≤ 2× across the whole batch? If not, redesign Stage 2.
-2. Are aggregates type- and semantically-correct? (`SUM(CAST(bit AS int))`, `AVG(<MonthlyAverage>)` not `SUM`, deterministic `ORDER BY` on `TOP N`.)
-3. Does every `#temp` carry the unique 8-hex suffix, and is every one `DROP`ped at the end?
-4. Did I resolve date keys via `dim.Date`, not the big view?

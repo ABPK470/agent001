@@ -39,6 +39,7 @@ export interface PromptBudgetModelProfile {
 export interface PromptBudgetCaps {
   readonly totalChars: number
   readonly systemChars: number
+  readonly systemLawChars: number
   readonly systemAnchorChars: number
   readonly systemRuntimeChars: number
   readonly memoryChars: number
@@ -115,6 +116,7 @@ export const BASE_SECTION_SPECS: readonly SectionSpec[] = [
 ]
 
 export const SECTION_ORDER: readonly PromptBudgetSection[] = [
+  "system_law",
   "system_anchor",
   "system_runtime",
   "memory_working",
@@ -130,6 +132,7 @@ export interface SectionBehavior {
 }
 
 export const SECTION_BEHAVIOR: Record<PromptBudgetSection, SectionBehavior> = {
+  system_law: { dropAllowed: false, newestFirst: false },
   system_anchor: { dropAllowed: false, newestFirst: false },
   system_runtime: { dropAllowed: true, newestFirst: true },
   memory_working: { dropAllowed: true, newestFirst: true },

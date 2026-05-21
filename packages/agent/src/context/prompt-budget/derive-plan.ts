@@ -107,6 +107,10 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
 
   const systemAnchorChars = clamp(Math.floor(normalizedBase.system * 0.75), 512, normalizedBase.system)
   const systemRuntimeChars = Math.max(0, normalizedBase.system - systemAnchorChars)
+  // system_law sits OUTSIDE the system pool: a small dedicated allocation for
+  // catalog-resolved facts + doctrine SSoT. Keeping it separate ensures it
+  // cannot be squeezed by long persona/ETL prose under budget pressure.
+  const systemLawChars = clamp(Math.floor(normalizedBase.system * 0.10), 256, 4_096)
 
   // Split memory budget: working 45%, episodic 30%, semantic 25%
   const memoryTotal = normalizedBase.memory
@@ -128,6 +132,7 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
     caps: {
       totalChars,
       systemChars: normalizedBase.system,
+      systemLawChars,
       systemAnchorChars,
       systemRuntimeChars,
       memoryChars: normalizedBase.memory,

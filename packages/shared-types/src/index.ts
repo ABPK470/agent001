@@ -256,6 +256,34 @@ export type TraceEntry =
     error: string | null
     sqlPreview: string
     sqlLength: number
+    /**
+     * Active doctrine module versions at trace-emission time. Lets downstream
+     * tooling correlate a run with the exact policy bodies in force. Optional
+     * for backwards compatibility with traces emitted before the registry shipped.
+     */
+    doctrineVersions?: Record<string, string>
+  }
+  | {
+    /**
+     * Phase 6 telemetry: per-iteration prompt budget allocation snapshot.
+     * Emitted once per agent iteration when the budget actually constrained
+     * the prompt (drops, truncations, or hard cap reached). Lets the
+     * dashboard track p95 prompt size and flag section-over-injection.
+     */
+    kind: "planner-prompt-budget"
+    iteration: number
+    model: string | null
+    totalBeforeChars: number
+    totalAfterChars: number
+    totalChars: number
+    constrained: boolean
+    droppedSections: string[]
+    /** Per-section bytes after allocation. Keys are PromptBudgetSection strings. */
+    sectionAfterChars: Record<string, number>
+    /** Per-section message count after allocation. */
+    sectionAfterMessages: Record<string, number>
+    /** Per-section messages truncated (content-only truncation, not drop). */
+    sectionTruncatedMessages: Record<string, number>
   }
   | { kind: "direct_loop_fallback"; source: DirectLoopFallbackSource; reason: string }
   | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }

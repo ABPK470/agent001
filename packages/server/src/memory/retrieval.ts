@@ -3,6 +3,7 @@ import { getDb } from "../db/index.js"
 import { MemoryRole, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { searchProcedures } from "./procedural.js"
+import { currentPolicyVersion, provenanceMultiplier } from "./provenance.js"
 import { rowToEntry } from "./schema.js"
 import {
     activationBonus, confidenceDecay,
@@ -68,6 +69,44 @@ export async function retrieveContext(
 
   // Also search procedural memories (kept for activation tracking, not injected into prompt)
   const procedures = searchProcedures(goal, 3, opts?.upn ?? null, opts?.sessionId)
+
+  // Phase 5: demote (don't delete) entries whose provenance no longer
+  // matches the current environment. A row stamped with a stale
+  // doctrine policy version, an out-of-date schema fingerprint, or
+  // simply too old, must not crowd out fresh, in-policy knowledge. The
+  // multiplier is bounded above 0 so audit history is preserved.
+  const policyVersion = currentPolicyVersion()
+  const currentSchema = (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint ?? null
+  let demotedCount = 0
+  for (const r of allResults) {
+    const { multiplier, reasons } = provenanceMultiplier(
+      r.entry.metadata,
+      r.entry.createdAt,
+      policyVersion,
+      currentSchema,
+      now,
+    )
+    if (multiplier < 1) {
+      r.combined *= multiplier
+      demotedCount++
+      // Tag the reason on the result so downstream tooling can surface it.
+      ;(r as UnifiedSearchResult & { demoted?: { multiplier: number; reasons: string[] } }).demoted = {
+        multiplier,
+        reasons,
+      }
+    }
+  }
+  if (demotedCount > 0) {
+    broadcast({
+      type: EventType.MemoryFiltered,
+      data: {
+        reason: "provenance_demoted",
+        demotedCount,
+        total: allResults.length,
+        runId: opts?.runId ?? null,
+      } as Record<string, unknown>,
+    })
+  }
 
   // Sort all results by combined score descending
   allResults.sort((a, b) => b.combined - a.combined)

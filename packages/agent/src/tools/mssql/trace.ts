@@ -1,4 +1,5 @@
 import { PlannerTraceKind } from "@mia/agent"
+import { MSSQL_DOCTRINES } from "../../doctrine/index.js"
 import { emitCurrentToolTrace } from "../../loop/tool-execution/trace-context.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 
@@ -8,6 +9,13 @@ function previewSql(query: string): string {
   return query.length > SQL_PREVIEW_MAX_CHARS
     ? query.slice(0, SQL_PREVIEW_MAX_CHARS) + `… [+${query.length - SQL_PREVIEW_MAX_CHARS} chars]`
     : query
+}
+
+/** Snapshot of all active doctrine module versions, recomputed per emit. */
+function currentDoctrineVersions(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const d of MSSQL_DOCTRINES) out[d.id] = d.version
+  return out
 }
 
 export function emitMssqlQualityTrace(input: {
@@ -48,5 +56,6 @@ export function emitMssqlQualityTrace(input: {
     error: input.error ?? null,
     sqlPreview: previewSql(input.query),
     sqlLength: input.query.length,
+    doctrineVersions: currentDoctrineVersions(),
   })
 }

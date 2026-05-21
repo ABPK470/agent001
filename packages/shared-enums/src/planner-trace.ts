@@ -21,6 +21,7 @@ export const PlannerTraceKind = {
   ValidationWarnings:         "planner-validation-warnings",
   ValidationRemediated:       "planner-validation-remediated",
   SqlQuality:                 "planner-sql-quality",
+  PromptBudget:               "planner-prompt-budget",
   RuntimeCompiled:            "planner-runtime-compiled",
   OutputRootForced:           "planner-output-root-forced",
   Generating:                 "planner-generating",

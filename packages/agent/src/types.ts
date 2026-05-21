@@ -22,7 +22,8 @@ import { MessageRole } from "./domain/enums/message.js"
  * or oldest-first (history) when the context window fills up.
  */
 export type PromptBudgetSection =
-  | "system_anchor"     // Base prompt + env — NEVER dropped
+  | "system_law"       // Catalog-resolved facts + doctrine SSoT — NEVER dropped, NEVER demoted
+  | "system_anchor"     // Base prompt + env — NEVER dropped (first only; subsequent demoted)
   | "system_runtime"    // Capabilities, workspace context — droppable
   | "memory_working"    // Recent turns — droppable
   | "memory_episodic"   // Session summaries — droppable
@@ -32,6 +33,7 @@ export type PromptBudgetSection =
 
 /** Sections that must never be dropped during truncation. */
 export const NEVER_DROP_SECTIONS: ReadonlySet<PromptBudgetSection> = new Set([
+  "system_law",
   "system_anchor",
   "user",
 ])
@@ -53,12 +55,13 @@ export const DROP_PRIORITY: readonly PromptBudgetSection[] = [
  * Matches agenc-core allocation with minor adjustments.
  */
 export const SECTION_WEIGHTS: Readonly<Record<PromptBudgetSection, number>> = {
+  system_law: 0.02,
   system_anchor: 0.20,
   system_runtime: 0.10,
   memory_working: 0.10,
   memory_episodic: 0.06,
   memory_semantic: 0.12,
-  history: 0.32,
+  history: 0.30,
   user: 0.10,
 }
 

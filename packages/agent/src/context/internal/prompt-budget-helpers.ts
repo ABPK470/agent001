@@ -5,9 +5,9 @@
  * @module
  */
 
-import { SECTION_ORDER, type PromptBudgetCaps } from "../prompt-budget-types.js"
-import type { Message, PromptBudgetSection } from "../../types.js"
 import { MessageRole } from "../../domain/enums/message.js"
+import type { Message, PromptBudgetSection } from "../../types.js"
+import { SECTION_ORDER, type PromptBudgetCaps } from "../prompt-budget-types.js"
 
 // ── Working entry ─────────────────────────────────────────────────
 
@@ -36,6 +36,7 @@ export function estimateMessageChars(message: Message): number {
 
 export function getSectionCap(caps: PromptBudgetCaps, section: PromptBudgetSection): number {
   switch (section) {
+    case "system_law": return caps.systemLawChars
     case "system_anchor": return caps.systemAnchorChars
     case "system_runtime": return caps.systemRuntimeChars
     case "memory_working": return caps.memoryWorkingChars
@@ -104,6 +105,9 @@ export function resolveSections(messages: readonly Message[]): PromptBudgetSecti
   return messages.map((msg, index) => {
     // If the message already has a section tag, use it
     if (msg.section) {
+      // system_law is the never-droppable, never-demoted tier. All law-tagged
+      // messages survive even when the first-anchor demotion would have struck.
+      if (msg.section === "system_law") return "system_law"
       if (msg.section === "system_anchor") {
         if (!anchorAssigned) {
           anchorAssigned = true

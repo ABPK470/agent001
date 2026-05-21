@@ -62,6 +62,7 @@ export interface IterationPrepInput {
   config: {
     verbose: boolean
     onNudge: AgentConfig["onNudge"]
+    onPlannerTrace?: AgentConfig["onPlannerTrace"]
   }
 }
 
@@ -110,6 +111,33 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
         (diag.constrained ? " [constrained]" : ""),
       iteration: i,
     })
+    // Phase 6: emit a structured planner-prompt-budget trace once per
+    // iteration when the budget materially affected the prompt. This is
+    // what the dashboard widget consumes to track p95 prompt size and
+    // per-section drops.
+    if (config.onPlannerTrace && diag.constrained) {
+      const sectionAfterChars: Record<string, number> = {}
+      const sectionAfterMessages: Record<string, number> = {}
+      const sectionTruncatedMessages: Record<string, number> = {}
+      for (const [section, stats] of Object.entries(diag.sections)) {
+        sectionAfterChars[section] = stats.afterChars
+        sectionAfterMessages[section] = stats.afterMessages
+        sectionTruncatedMessages[section] = stats.truncatedMessages
+      }
+      config.onPlannerTrace({
+        kind: "planner-prompt-budget",
+        iteration: i,
+        model: modelHint ?? null,
+        totalBeforeChars: diag.totalBeforeChars,
+        totalAfterChars: diag.totalAfterChars,
+        totalChars: diag.caps.totalChars,
+        constrained: diag.constrained,
+        droppedSections: [...diag.droppedSections],
+        sectionAfterChars,
+        sectionAfterMessages,
+        sectionTruncatedMessages,
+      })
+    }
   }
 
   // ── Tool contract guidance ──

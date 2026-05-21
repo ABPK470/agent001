@@ -54,6 +54,7 @@ export type {
 // ── Clusters (one barrel per cluster) ───────────────────────────────
 export * from "../context/index.js"
 export * from "../delegation/index.js"
+export * from "../doctrine/index.js"
 export * from "../domain/index.js"
 export * from "../governance/index.js"
 export * from "../llm/index.js"

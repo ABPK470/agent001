@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { getDb } from "../db/index.js"
 import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
+import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import type { MemoryEntry } from "./types.js"
 import { embedEntry } from "./vectors.js"
@@ -75,7 +76,7 @@ export function ingestTurn(opts: {
     tier: opts.tier,
     role: opts.role,
     content: opts.content,
-    metadata: opts.metadata ?? {},
+    metadata: stampProvenance(opts.metadata),
     source: opts.source ?? MemorySource.Agent,
     confidence: opts.confidence ?? 0.5,
     salience,

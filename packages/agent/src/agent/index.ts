@@ -17,9 +17,6 @@
  */
 
 import { AgentRuntime, getDefaultAgentRuntime } from "../agent-runtime.js"
-import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent-helpers.js"
-import { prepareIterationContext } from "./iteration-prepare.js"
-import { executeToolCallsBranch } from "./iteration-tool-round.js"
 import { LLMCallPhase } from "../domain/enums/llm.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
@@ -28,6 +25,9 @@ import { attemptPlannerRouting } from "../planner-routing/index.js"
 import type { PlannerContext, VerifierDecision } from "../planner/index.js"
 import type { ToolCallRecord } from "../tools/_helpers/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
+import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent-helpers.js"
+import { prepareIterationContext } from "./iteration-prepare.js"
+import { executeToolCallsBranch } from "./iteration-tool-round.js"
 
 // Re-export compactMessages for tests (context-compaction.test.ts)
 export { compactMessages } from "../context/index.js"
@@ -195,7 +195,11 @@ export class Agent {
       const { contractMessages, chatToolsForLLM } = prepareIterationContext({
         messages, iteration: i, state, toolList: this.toolList,
         modelHint: this.llm.modelHint,
-        config: { verbose: this.config.verbose, onNudge: this.config.onNudge },
+        config: {
+          verbose: this.config.verbose,
+          onNudge: this.config.onNudge,
+          onPlannerTrace: this.config.onPlannerTrace,
+        },
       })
 
       // ── LLM call ──

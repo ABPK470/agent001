@@ -53,8 +53,10 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i)            // warns about SUM(Average…)
     expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i)                   // names the per-row anti-pattern
     expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i)      // TOP n needs a tiebreaker
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/find-all on every `#temp` token/i)
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/more than \*\*2×\*\*/i)
+    // Note: the structural anti-pattern statements (find-all on every #temp,
+    // ≤ 2× large-object touches) moved into the doctrine SSoT
+    // (packages/agent/src/doctrine/) — see doctrine-registry tests. The prompt
+    // file no longer re-states them; the validator enforces them as hard blocks.
     expect(BIG_TABLE_ETL_SECTION).toMatch(/persistedView\.\[publish\.Revenue\]/i)
     expect(BIG_TABLE_ETL_SECTION).toMatch(/Repeated scalar subqueries against the same `#detail` temp/i)
   })
