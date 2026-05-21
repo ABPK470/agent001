@@ -27,6 +27,13 @@ describe("doctrine fixHints", () => {
         "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
         "FROM #t_a3f91c08 t",
       ].join("\n"),
+      publish_view_topn_without_branch_aggregation: [
+        "SELECT TOP 5 r.pkClient, SUM(r.RevenueZARMTD) AS TotalRevenueZAR",
+        "FROM publish.Revenue r WITH (NOLOCK)",
+        "WHERE r.pkMonth BETWEEN 202501 AND 202501",
+        "GROUP BY r.pkClient",
+        "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;",
+      ].join("\n"),
     }
     const emittedCodes = new Set<string>()
     for (const [code, q] of Object.entries(queries)) {
@@ -111,6 +118,10 @@ describe("doctrine fixHints", () => {
     expect(DOCTRINE_FIX_HINTS.temp_table_integrity).toContain("export_query_to_file")
 
     expect(DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused).toContain("discover_relationships")
+
+    expect(DOCTRINE_FIX_HINTS.publish_view_topn_without_branch_aggregation).toContain("search_catalog")
+    expect(DOCTRINE_FIX_HINTS.publish_view_topn_without_branch_aggregation).toContain("UNION ALL")
+    expect(DOCTRINE_FIX_HINTS.avg_of_coalesce_zero).toMatch(/AVG\s*\(/)
   })
 
   it("doctrine summaries point at the same tools (See also: appendix)", () => {

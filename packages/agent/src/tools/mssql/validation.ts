@@ -209,6 +209,8 @@ export type QueryValidationCode =
   | "aggregate_semantic_mismatch"
   | "temp_table_integrity"
   | "temp_scalar_subquery_overused"
+  | "publish_view_topn_without_branch_aggregation"
+  | "avg_of_coalesce_zero"
   | "write_disabled"
   | "non_temp_mutation"
   | "large_object_overused"
@@ -243,21 +245,203 @@ function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
   return { refs, created, suffixes, malformedSuffixes, missingCreations }
 }
 
+/**
+ * Walks a SQL string and returns every parenthesised SELECT subquery whose
+ * FROM clause references a local #temp table, classified as scalar or not.
+ *
+ * "Scalar" here means the anti-pattern we actually care about: a subquery
+ * that returns ONE value (aggregate or TOP 1, single output column) embedded
+ * in a SELECT-list expression — typically `SELECT ..., (SELECT SUM(x) FROM
+ * #temp WHERE corr), (SELECT COUNT(*) FROM #temp WHERE corr), ...`. That
+ * shape forces N re-scans of the staged data.
+ *
+ * Disqualified (these are LEGITIMATE shapes that older heuristic flagged):
+ *   • `IN (SELECT ... FROM #temp)`       — set predicate
+ *   • `EXISTS (SELECT ... FROM #temp)`   — set predicate
+ *   • `ANY/SOME/ALL (SELECT …)`          — set predicate
+ *   • `FROM (SELECT ... FROM #temp) x`   — derived table
+ *   • `JOIN (SELECT ...) x ON …`         — derived table
+ *   • `OUTER/CROSS APPLY (SELECT …)`     — apply operator
+ *   • `WITH name AS (SELECT ... FROM #temp …)` — CTE body
+ *   • Subquery body without aggregate / TOP 1 (returns a set, not a scalar)
+ *   • Subquery body with multiple top-level select-list columns
+ *
+ * Uses a real paren walker (not a non-greedy regex) so nested parens in
+ * aggregate calls don't confuse the boundaries.
+ */
+interface TempSubqueryFinding {
+  readonly temp: string
+  readonly scalar: boolean
+}
+
+function findTempSubqueries(query: string): TempSubqueryFinding[] {
+  const text = stripForScan(query)
+  const findings: TempSubqueryFinding[] = []
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "(") continue
+    // Look ahead past whitespace for SELECT
+    let j = i + 1
+    while (j < text.length && /\s/.test(text[j])) j++
+    if (!/^select\b/i.test(text.slice(j, j + 7))) continue
+
+    // Find matching close paren
+    let depth = 1
+    let k = i + 1
+    while (k < text.length && depth > 0) {
+      const c = text[k]
+      if (c === "(") depth++
+      else if (c === ")") depth--
+      if (depth === 0) break
+      k++
+    }
+    if (depth !== 0) continue
+    const body = text.slice(i + 1, k)
+
+    // Must reference a #temp in its FROM clause
+    const tempMatch = /\bFROM\s+(#[A-Za-z_][\w]*)/i.exec(body)
+    if (!tempMatch) continue
+    const temp = tempMatch[1]
+
+    // Classify by the token immediately preceding the opening paren
+    const before = text.slice(Math.max(0, i - 40), i)
+    const lastTokenMatch = /([A-Za-z_][\w]*)\s*$/.exec(before)
+    const lastToken = lastTokenMatch?.[1]?.toUpperCase() ?? ""
+    const isSetOrDerived = /^(IN|EXISTS|ANY|SOME|ALL|FROM|JOIN|AS|APPLY|UNION|INTERSECT|EXCEPT)$/.test(lastToken)
+
+    // Body shape: scalar requires aggregate or TOP 1, AND a single select-list column
+    const selectListMatch = /\bSELECT\s+(?:DISTINCT\s+|TOP\s+\d+\s+)?([\s\S]*?)\s+FROM\b/i.exec(body)
+    const selectList = selectListMatch?.[1] ?? ""
+    const hasAgg = /\b(SUM|AVG|MIN|MAX|COUNT|STRING_AGG|STDEV|VAR)\s*\(/i.test(selectList)
+    const hasTop1 = /\bTOP\s+1\b/i.test(body)
+    const singleColumn = selectList.length > 0 && countTopLevelCommas(selectList) === 0
+
+    const scalar = !isSetOrDerived && singleColumn && (hasAgg || hasTop1)
+    findings.push({ temp, scalar })
+
+    i = k // skip past this subquery
+  }
+
+  return findings
+}
+
+function countTopLevelCommas(expr: string): number {
+  let depth = 0
+  let count = 0
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i]
+    if (c === "(") depth++
+    else if (c === ")") depth--
+    else if (c === "," && depth === 0) count++
+  }
+  return count
+}
+
 function countTempScalarSubqueries(query: string): number {
-  const stripped = stripForScan(query)
-  return stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+#\w+[\s\S]*?\)/gi)?.length ?? 0
+  return findTempSubqueries(query).filter((f) => f.scalar).length
 }
 
 export function countTempScalarSubqueriesByTemp(query: string): Map<string, number> {
-  const stripped = stripForScan(query)
   const counts = new Map<string, number>()
-  const matches = stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+(#[A-Za-z_][\w]*)[\s\S]*?\)/gi) ?? []
-  for (const match of matches) {
-    const temp = /FROM\s+(#[A-Za-z_][\w]*)/i.exec(match)?.[1]
-    if (!temp) continue
-    counts.set(temp, (counts.get(temp) ?? 0) + 1)
+  for (const finding of findTempSubqueries(query)) {
+    if (!finding.scalar) continue
+    counts.set(finding.temp, (counts.get(finding.temp) ?? 0) + 1)
   }
   return counts
+}
+
+// ── Branch-aggregation guard for publish.Revenue / publish.Balances ────
+//
+// publish.Revenue is a UNION ALL over ~59 source-mapping views; publish.Balances
+// over ~10. Any single statement that asks SQL Server to:
+//   1. Touch publish.Revenue (or publish.Balances) directly in the outer FROM,
+//   2. GROUP BY a high-cardinality dim key (pkClient, pkAccount, …), and
+//   3. Pick a TOP N
+// forces the engine to expand every UNION branch, materialise the lot, group
+// globally and sort globally. There is no branch-local index that can help —
+// the sort happens on the union output. This is the canonical "Stage-1 done
+// the slow way" pattern that times out in production (observed in 2026-05-21
+// trace: ~7 LLM iterations, run cancelled).
+//
+// The correct shape is documented in `revenue-balances-policy` doctrine and in
+// the system prompt's "When no `persistedView.[publish.Revenue]` mirror exists"
+// section: aggregate inside each source-mapping branch first, UNION ALL the
+// branch-local aggregates, THEN rank.
+//
+// This detector blocks the slow shape and points at the fix.
+export interface PublishViewTopnOffender {
+  readonly object: string  // "publish.Revenue" | "publish.Balances"
+  readonly groupKey: string  // the high-card key found in GROUP BY (e.g. "pkClient")
+}
+
+export function detectPublishViewTopnWithoutBranchAggregation(
+  query: string,
+): PublishViewTopnOffender | null {
+  const stripped = stripForScan(query)
+  // Naive statement split — `stripForScan` already removed string literals and
+  // comments, so semicolons here are real statement boundaries.
+  const statements = stripped.split(/;\s*/)
+  for (const stmt of statements) {
+    if (!stmt.trim()) continue
+    const hasTop = /\bTOP\s+\d+\b/i.test(stmt)
+    if (!hasTop) continue
+    // GROUP BY clause must mention a high-cardinality key for this to be a
+    // problem. pkMonth / pkDate grouping is cheap (small dimension cardinality)
+    // and not what we want to block.
+    const groupByMatch = /\bGROUP\s+BY\b([\s\S]*?)(?:\bORDER\s+BY\b|\bHAVING\b|\bOPTION\b|$)/i.exec(stmt)
+    if (!groupByMatch) continue
+    const groupBody = groupByMatch[1]
+    const highCardMatch = /\b(pkClient|pkAccount|pkClient_ReceiverBank|pkClient_SenderBank)\b/i.exec(groupBody)
+    if (!highCardMatch) continue
+    const groupKey = highCardMatch[1]
+    // Outer FROM must reference publish.Revenue or publish.Balances directly.
+    // Per-branch UNION patterns use `FROM publish.<MappingBranch>`, NOT the
+    // unioned views themselves — those won't match this regex.
+    const fromMatch = /\bFROM\s+(?:\[?publish\]?\.\[?(Revenue|Balances)\]?)\b/i.exec(stmt)
+    if (!fromMatch) continue
+    // Escape valve: a JOIN to a #temp table on the same high-card key is
+    // exactly the narrowing pattern we WANT to encourage. The temp's small
+    // pkClient set is pushed down to each UNION branch by the optimizer.
+    // Only block when there's no such narrowing join.
+    const narrowingJoin = new RegExp(
+      `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${groupKey}\\b\\s*=`,
+      "i",
+    ).test(stmt)
+    if (narrowingJoin) continue
+    return { object: `publish.${fromMatch[1]}`, groupKey }
+  }
+  return null
+}
+
+// ── AVG-of-zero-coalesce statistical guard ──────────────────────────
+//
+// `AVG(COALESCE(col, 0))` or `AVG(ISNULL(col, 0))` is almost never what a
+// controller wants: it treats a missing observation as an observed zero,
+// dragging the average down. Trace 2026-05-21 had the agent emit
+// `AVG(COALESCE(bl.AverageCreditBalanceZARMTD, 0))` across 6 balance columns —
+// every reported "average balance" would have been silently understated for
+// any client missing a month.
+//
+// The correct shape is `AVG(col)` (T-SQL `AVG` already ignores NULLs) or, if
+// the model is "missing month = real zero", an explicit denominator —
+// `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)`. The latter makes the
+// assumption visible.
+export interface AvgOfCoalesceZeroOffender {
+  readonly snippet: string  // the offending expression, trimmed for display
+}
+
+export function detectAvgOfCoalesceZero(query: string): AvgOfCoalesceZeroOffender[] {
+  const stripped = stripForScan(query)
+  const offenders: AvgOfCoalesceZeroOffender[] = []
+  // AVG ( {COALESCE|ISNULL} ( <expr>, 0 ) )  — `<expr>` may contain qualified
+  // column names and dots/brackets but no commas (the 2-arg form is what bites).
+  const re = /\bAVG\s*\(\s*(?:COALESCE|ISNULL)\s*\(\s*[^,()]+,\s*0\s*\)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    const snippet = m[0].replace(/\s+/g, " ").trim()
+    if (!offenders.some((o) => o.snippet === snippet)) offenders.push({ snippet })
+  }
+  return offenders
 }
 
 export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalysis {
@@ -495,6 +679,49 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       lesson: getDoctrineLessonTemplate("temp_scalar_subquery_overused")?.({
         query,
         detail: list,
+      }) ?? null,
+    }
+  }
+
+  // Block direct top-N + GROUP BY pkClient/pkAccount against publish.Revenue
+  // or publish.Balances (the 59-branch UNION shape that always times out).
+  // The fix is per-branch aggregation — see doctrine `mssql.revenue-balances-policy`.
+  const publishTopnOffender = detectPublishViewTopnWithoutBranchAggregation(query)
+  if (publishTopnOffender) {
+    const head = [
+      `Query blocked — direct TOP-N + GROUP BY ${publishTopnOffender.groupKey} against ${publishTopnOffender.object}.`,
+      ``,
+      `${publishTopnOffender.object} is a UNION ALL over many source-mapping views (Revenue ≈59 branches, Balances ≈10). A single GROUP BY ${publishTopnOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on this view.`,
+    ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "publish_view_topn_without_branch_aggregation"),
+      code: "publish_view_topn_without_branch_aggregation",
+      analysis,
+      lesson: getDoctrineLessonTemplate("publish_view_topn_without_branch_aggregation")?.({
+        query,
+        detail: `${publishTopnOffender.object} GROUP BY ${publishTopnOffender.groupKey}`,
+      }) ?? null,
+    }
+  }
+
+  // Block AVG(COALESCE/ISNULL(col, 0)) — silently understates true average.
+  const avgCoalesceOffenders = detectAvgOfCoalesceZero(query)
+  if (avgCoalesceOffenders.length > 0) {
+    const list = avgCoalesceOffenders.map((o) => o.snippet).join("; ")
+    const head = [
+      `Query blocked — statistical mistake: ${list}.`,
+      ``,
+      `Wrapping NULL in COALESCE(..., 0) inside AVG treats a missing observation as an observed zero — it drags the reported average down and the controller has no way to detect it from the result. T-SQL AVG already skips NULLs.`,
+    ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "avg_of_coalesce_zero"),
+      code: "avg_of_coalesce_zero",
+      analysis,
+      lesson: getDoctrineLessonTemplate("avg_of_coalesce_zero")?.({
+        query,
+        detail: avgCoalesceOffenders[0].snippet,
       }) ?? null,
     }
   }

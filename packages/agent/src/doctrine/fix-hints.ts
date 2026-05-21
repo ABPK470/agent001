@@ -38,6 +38,20 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Derive every remaining metric from the #temp — never re-query the big view a third time.",
     "When the second stage still needs to fan out across many tables, prefer `export_query_to_file` for the stage-1 keys and join from the exported file rather than re-touching the big view.",
   ].join(" "),
+
+  publish_view_topn_without_branch_aggregation: [
+    "Do branch-local aggregation. Aggregate inside each required source-mapping branch first, UNION ALL the small per-branch results, then re-aggregate and rank.",
+    "Skeleton:  SELECT TOP 5 x.pkClient, SUM(x.RevenueZAR) AS RevenueZAR INTO #topClients_<suffix> FROM ( SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR FROM publish.MappingBranchA WITH (NOLOCK) WHERE pkMonth BETWEEN @from AND @to GROUP BY pkClient UNION ALL SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR FROM publish.MappingBranchB WITH (NOLOCK) WHERE pkMonth BETWEEN @from AND @to GROUP BY pkClient /* repeat per required branch */ ) x GROUP BY x.pkClient ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;",
+    "Branch names come from curated lineage: call `search_catalog lineage=publish.Revenue` (or `lineage=publish.Balances`) to get the exact branch list — do NOT guess branch names.",
+    "Only after #topClients exists, do Stage 2: `SELECT … INTO #revLines FROM publish.Revenue WHERE pkClient IN (SELECT pkClient FROM #topClients_<suffix>)`. That second touch is fine — it has a tiny IN-list.",
+    "Escape valve: if you already have a small #temp narrowing the pkClient set, joining to it (`JOIN #scope s ON s.pkClient = r.pkClient`) lets the optimizer push the small set into each UNION branch — that pattern is allowed.",
+  ].join(" "),
+
+  avg_of_coalesce_zero: [
+    "Drop the COALESCE/ISNULL inside AVG: T-SQL `AVG(col)` already skips NULLs, so `AVG(col)` returns the true mean of observed values.",
+    "If you genuinely want to treat missing months as observed zeros, make the assumption explicit: compute `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)` with a stated denominator.",
+    "Default behaviour for balance / revenue averages over a date range: AVG of non-null observations. Document the period and the row count alongside the figure.",
+  ].join(" "),
 }
 
 export function getDoctrineFixHint(code: string): string | null {
@@ -135,6 +149,32 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Use `discover_relationships` to confirm the join key before grouping.",
       evidence: ctx.detail ? `Blocked locator: ${ctx.detail}` : undefined,
       category: "performance",
+    }
+  },
+
+  publish_view_topn_without_branch_aggregation: (ctx) => {
+    const locator = ctx.detail ? shorten(ctx.detail, 100) : shorten(ctx.query, 60)
+    return {
+      subject: `doctrine:publish-view-topn-branch-agg:${locator}`,
+      claim:
+        "publish.Revenue / publish.Balances cannot be ranked with a direct TOP-N + GROUP BY pkClient — that scans every UNION branch and times out. " +
+        "Always aggregate per source-mapping branch first, UNION ALL the branch-local aggregates, then rank. " +
+        "Get branch names from `search_catalog lineage=publish.Revenue`.",
+      evidence: ctx.detail ? `Blocked locator: ${ctx.detail}` : undefined,
+      category: "performance",
+    }
+  },
+
+  avg_of_coalesce_zero: (ctx) => {
+    const snippet = ctx.detail ? shorten(ctx.detail, 80) : null
+    if (!snippet) return null
+    return {
+      subject: `doctrine:avg-of-coalesce-zero:${snippet}`,
+      claim:
+        "Never wrap NULL in COALESCE(..., 0) inside AVG — it understates the true average by counting missing observations as observed zeros. " +
+        "Use AVG(col) directly (AVG already skips NULLs), or compute an explicit weighted average with a stated denominator.",
+      evidence: `Blocked shape: ${snippet}`,
+      category: "column_semantics",
     }
   },
 }

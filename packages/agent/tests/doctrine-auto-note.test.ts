@@ -25,9 +25,11 @@ import { mssqlTool } from "../src/tools/mssql/tools.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
 describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
-  it("covers the three doctrines that have wired block branches", () => {
+  it("covers the doctrines that have wired block branches", () => {
     expect(Object.keys(DOCTRINE_LESSON_TEMPLATES).sort()).toEqual([
       "aggregate_semantic_mismatch",
+      "avg_of_coalesce_zero",
+      "publish_view_topn_without_branch_aggregation",
       "temp_scalar_subquery_overused",
       "temp_table_integrity",
     ])
