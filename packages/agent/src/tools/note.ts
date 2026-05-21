@@ -49,15 +49,16 @@ export const noteTool: Tool = {
   name: "note",
   description:
     "Save a durable, structured fact to working memory so future turns see it. " +
-    "Use when you DISCOVER or CONFIRM something about the schema, data, or query " +
-    "shape that would otherwise be lost between turns: a join key, a column's " +
-    "semantics (e.g. 'MTD column — non-summable'), a row-count, a grain, a date " +
-    "range, a performance gotcha. " +
+    "RARELY NEEDED — the validator auto-persists doctrine lessons when it blocks or " +
+    "warns a query, and the post-execution heuristics (dim-join NULL, profile-first, " +
+    "lineage coverage, universe mismatch) surface their own banners. Use this tool " +
+    "ONLY for facts that the automatic machinery cannot infer — e.g. a column's " +
+    "semantic meaning confirmed against an external spec, or a business rule learned " +
+    "from the user in this conversation. Do NOT use it to restate what a tool result " +
+    "already showed or what the validator already flagged. " +
     "Subject should be a stable identifier (qualified-name like 'publish.Revenue.RevenueZARMTD' " +
     "or 'join:publish.Revenue↔publish.Balance'). Claim is the fact. Evidence is " +
-    "optional supporting detail (which tool confirmed it, brief result). " +
-    "Notes from this conversation are automatically retrieved into your next " +
-    "turn's context — call this once per discovery, not repeatedly for the same fact.",
+    "optional supporting detail.",
   parameters: {
     type: "object",
     properties: {

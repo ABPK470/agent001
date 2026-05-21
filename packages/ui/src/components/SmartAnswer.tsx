@@ -209,11 +209,15 @@ function parseBlocks(text: string): Block[] {
         i++
       }
       const isSeparator = (row: string) => /^\|[\s\-|:]+\|$/.test(row.trim())
+      // Split on unescaped `|` only; cells may contain `\|` (escaped by formatter).
       const parseRow = (row: string) =>
-        row.split("|").slice(1, -1).map((c) => c.trim())
+        row.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, "|"))
       const dataLines = tableLines.filter((l) => !isSeparator(l))
       if (dataLines.length >= 2) {
-        blocks.push({ type: "table", headers: parseRow(dataLines[0]), rows: dataLines.slice(1).map(parseRow) })
+        const headers = parseRow(dataLines[0])
+        // Drop rows whose cell count doesn't match the header.
+        const rows = dataLines.slice(1).map(parseRow).filter((r) => r.length === headers.length)
+        blocks.push({ type: "table", headers, rows })
       } else if (dataLines.length === 1) {
         blocks.push({ type: "paragraph", lines: [dataLines[0]] })
       }

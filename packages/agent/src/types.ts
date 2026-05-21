@@ -301,6 +301,16 @@ export interface AgentConfig {
   completionValidator?: () => Promise<string | null>
 
   /**
+   * Answer-stability completion override (Phase 4 of trace-2026-05-21 plan).
+   * When true (default), if two consecutive no-tool-call iterations produce
+   * structurally-identical final answers (same table row count, same section
+   * header count, same length, AND the answer contains a conclusion
+   * keyword), the loop accepts the answer and bypasses downstream guards.
+   * Set to false to disable.
+   */
+  enableAnswerStabilityGuard?: boolean
+
+  /**
    * Per-agent runtime container (Phase 2). Owns state that previously lived
    * in tool-module globals (mssql pool, shell cwd, browse-web sessions, sync
    * registries, etc.). When omitted, the agent uses a process-wide default

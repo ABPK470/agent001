@@ -61,18 +61,18 @@ import { IngestionMode } from "./domain/enums/runtime.js"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-  SyncEnvironment,
-  SyncEventSink,
-  SyncPlan,
-  SyncRecipeBundle,
-  SyncRunSink,
+    SyncEnvironment,
+    SyncEventSink,
+    SyncPlan,
+    SyncRecipeBundle,
+    SyncRunSink,
 } from "./sync/index.js"
 import type {
-  AskUserResolver,
-  BrowserCheckExecutor,
-  BrowserSession,
-  CatalogGraph,
-  ShellExecutor,
+    AskUserResolver,
+    BrowserCheckExecutor,
+    BrowserSession,
+    CatalogGraph,
+    ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -89,6 +89,14 @@ export interface MssqlState {
   databases: Map<string, MssqlEntry>
   /** Override which named connection serves `connection: "default"`. */
   defaultConnection: string | null
+  /**
+   * Per-run set of schema-qualified table names that the agent has called
+   * `profile_data` on. Used by the validator to soft-warn when a query
+   * touches a known-big view without a preceding profile call (Phase 3).
+   * Lowercased schema.table; never shared with parent (sub-agents have
+   * their own discipline).
+   */
+  profileDataCalled: Set<string>
 }
 
 export interface BrowseWebState {
@@ -374,6 +382,7 @@ export class AgentRuntime {
       this.mssql = {
         databases: parent.mssql.databases,
         defaultConnection: parent.mssql.defaultConnection,
+        profileDataCalled: new Set<string>(),
       }
       this.shell = {
         cwd: parent.shell.cwd,
@@ -412,7 +421,7 @@ export class AgentRuntime {
       this.memory = { writeNote: parent.memory.writeNote }
     } else {
       // Root: fresh defaults everywhere.
-      this.mssql = { databases: new Map(), defaultConnection: null }
+      this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
       this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null, contextProvider: null, credentialProvider: null, handoffProvider: null }
       this.shell = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
       this.browserCheck = { cwd: process.cwd(), executor: null }

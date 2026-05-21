@@ -9,12 +9,12 @@ import { VerifierOutcome } from "@mia/agent"
  */
 
 
-import type { AgentLoopState } from "../state.js"
-import { checkCoherentVerification } from "./check-coherent.js"
-import type { PlannerContext } from "../../planner/index.js"
-import type { VerifierDecision } from "../../planner/index.js"
-import type { AgentConfig, Message, Tool } from "../../types.js"
 import { MessageRole } from "../../domain/enums/message.js"
+import type { PlannerContext, VerifierDecision } from "../../planner/index.js"
+import type { AgentConfig, Message, Tool } from "../../types.js"
+import type { AgentLoopState } from "../state.js"
+import { checkAnswerStability } from "./answer-stability-guard.js"
+import { checkCoherentVerification } from "./check-coherent.js"
 
 /** Result from a completion guard check. */
 export interface CompletionGuardResult {
@@ -38,6 +38,7 @@ export interface CompletionGuardContext {
     enablePlanner: boolean
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
     completionValidator: AgentConfig["completionValidator"]
+    enableAnswerStabilityGuard?: boolean
     verbose: boolean
   }
   /** Callback to run coherent verification. */
@@ -55,6 +56,13 @@ export interface CompletionGuardContext {
 export async function runCompletionGuards(
   ctx: CompletionGuardContext,
 ): Promise<CompletionGuardResult | null> {
+  // Phase 4: answer-stability override. If the model has converged on a
+  // structurally-identical final answer twice in a row, accept it without
+  // running the rest of the guard chain — downstream guards would otherwise
+  // re-nudge for verification/grounding and burn iterations re-rendering
+  // the same markdown. The function records the current signature on state.
+  if (checkAnswerStability(ctx)) return null
+
   return (
     (await checkCoherentVerification(ctx))
     ?? checkEarlyExit(ctx)

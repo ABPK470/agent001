@@ -6,8 +6,8 @@
  * iterations lives here.
  */
 
-import { ToolFailureCircuitBreaker } from "../recovery/index.js"
 import type { CoherentSolutionBundle, Plan, VerifierDecision } from "../planner/index.js"
+import { ToolFailureCircuitBreaker } from "../recovery/index.js"
 import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tools/_helpers/index.js"
 
 /** Active coherent-generation execution context. */
@@ -91,6 +91,14 @@ export interface AgentLoopState {
    * without any write in between.
    */
   cumulativeReadFileHistory: Map<string, number>
+
+  /**
+   * Structural signature of the last assistant message that had no tool
+   * calls and looked like a real final answer (table + header + conclusion).
+   * Used by the answer-stability completion override to detect that the
+   * model has converged and stop downstream guards from re-nudging.
+   */
+  lastAnswerSignature?: import("./completion-guards/answer-stability-guard.js").AnswerSignature
 }
 
 const INITIAL_FULL_COMPACTION_OFFSET = -8
@@ -133,5 +141,6 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     coherentExecution: null,
     recentTruncatedQueries: [],
     cumulativeReadFileHistory: new Map(),
+    lastAnswerSignature: undefined,
   }
 }

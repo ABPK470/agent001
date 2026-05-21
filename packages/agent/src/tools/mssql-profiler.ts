@@ -7,6 +7,7 @@
  */
 
 import sql from "mssql"
+import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
 import { getPool } from "./mssql/index.js"
 
@@ -230,6 +231,16 @@ export const profileDataTool: Tool = {
       return sections.join("\n")
     } catch (err) {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
+    } finally {
+      // Phase 3: record that this table has been profiled this run, so the
+      // big-view-without-profile-data nudge in the validator can stand down.
+      // Done in `finally` because partial profile results (e.g. row count
+      // succeeded, then one column failed) still constitute "profiled".
+      try {
+        currentRuntime().mssql.profileDataCalled.add(`${schema}.${table}`.toLowerCase())
+      } catch {
+        // Runtime may not be installed (tests) — silent.
+      }
     }
   },
 }

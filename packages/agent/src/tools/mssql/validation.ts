@@ -1,5 +1,6 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { currentRuntime } from "../../agent-runtime.js"
 import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import { getCatalog } from "../catalog/store.js"
@@ -652,6 +653,182 @@ export function detectInventedColumns(
   return offenders
 }
 
+// ── Lineage branch-coverage advisor (Phase 2) ────────────────────
+//
+// Doctrine: `publish.Revenue` is a UNION ALL over ~59 source-mapping views
+// (branches). A query that ranks clients from a #temp built from only 3
+// of those branches, then reports back against the full `publish.Revenue`
+// view, produces a ranking-universe ≠ reporting-universe mismatch — observed
+// in trace 2026-05-21T20-32-25 where stage-1 used 3 branches and stage-2
+// pulled from the full view, yielding an ~11× revenue understatement on the
+// top client. Soft-warn (not block): branch sub-sampling is sometimes
+// intentional — but it must be explicit.
+//
+// Escape comment (case-insensitive substring match): `-- sampled K of N`,
+// `-- branches:` followed by an explicit list, or `-- branch-sample`.
+
+interface LineageCatalogLike {
+  getLineageParents(qualifiedName: string): Array<{ view: string; businessArea?: string }>
+  getLineage(qualifiedName: string): { sources: ReadonlyArray<{ qualifiedName: string }> } | null
+}
+
+export interface BranchCoverageGap {
+  /** Parent view that the referenced branches roll up to, e.g. "publish.Revenue". */
+  parent: string
+  /** Branches the query actually references (qualified names). */
+  referenced: string[]
+  /** Total branch count for the parent according to lineage. */
+  totalBranches: number
+}
+
+function defaultLineageAccessor(): LineageCatalogLike | null {
+  try {
+    return (getCatalog() as unknown as LineageCatalogLike | null) ?? null
+  } catch {
+    return null
+  }
+}
+
+const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|branch-sample)/i
+
+/**
+ * Detect lineage branch-coverage gaps: queries that reference ≥2 mapping
+ * branches of the same parent view but cover fewer than its full set,
+ * without an explicit `-- sampled K of N` annotation.
+ *
+ * Conservative: a single-branch reference is treated as intentional; gaps
+ * are only reported when the model has clearly started branch-by-branch
+ * staging but stopped short of full coverage.
+ */
+export function detectLineageBranchCoverage(
+  query: string,
+  accessor: () => LineageCatalogLike | null = defaultLineageAccessor,
+): BranchCoverageGap[] {
+  if (BRANCH_SAMPLE_COMMENT.test(query)) return []
+
+  const catalog = accessor()
+  if (!catalog) return []
+
+  const stripped = stripForScan(query).replace(/\bWITH\s*\([^)]*\)/gi, " ")
+
+  // Extract every schema.table reference in FROM/JOIN positions.
+  const tableRefRe = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?/gi
+  const referencedBranches = new Set<string>()
+  let m: RegExpExecArray | null
+  while ((m = tableRefRe.exec(stripped)) !== null) {
+    referencedBranches.add(`${m[1]}.${m[2]}`)
+  }
+
+  // Group referenced tables by lineage parent.
+  const parentMap = new Map<string, Set<string>>()
+  for (const qn of referencedBranches) {
+    const parents = catalog.getLineageParents(qn)
+    for (const p of parents) {
+      let set = parentMap.get(p.view)
+      if (!set) {
+        set = new Set<string>()
+        parentMap.set(p.view, set)
+      }
+      set.add(qn)
+    }
+  }
+
+  const gaps: BranchCoverageGap[] = []
+  for (const [parent, refs] of parentMap.entries()) {
+    if (refs.size < 2) continue // single-branch is treated as intentional
+    const lineage = catalog.getLineage(parent)
+    if (!lineage) continue
+    const total = lineage.sources.length
+    if (refs.size >= total) continue // full coverage
+    gaps.push({
+      parent,
+      referenced: [...refs].sort(),
+      totalBranches: total,
+    })
+  }
+  return gaps.sort((a, b) => a.parent.localeCompare(b.parent))
+}
+
+// ── Big-view-without-profile_data nudge (Phase 3) ────────────────
+//
+// Doctrine: queries against the canonical big views (publish.Revenue,
+// publish.Balances, fact.UnoTranspose) should be preceded by a
+// `profile_data` call on the same view in the current run. The trace
+// 2026-05-21 showed `profile_data` used once in 17 iterations against
+// publish.* — the model treats it as optional. Soft-warn (not block):
+// downstream stages of an already-profiled run won't re-touch the
+// profile.
+//
+// Only fires on the *first* touch of a given view per run; the validator
+// is stateless, so the per-run "already profiled" set is passed in by
+// the caller (tools.ts). The detector returns the qnames that triggered.
+
+const BIG_VIEWS_REQUIRING_PROFILE = new Set([
+  "publish.revenue",
+  "publish.balances",
+  "fact.unotranspose",
+])
+
+export function detectBigViewWithoutProfile(
+  query: string,
+  profiledTables: ReadonlySet<string> | null,
+): string[] {
+  const refs = referencedLargeObjects(query)
+  const triggers: string[] = []
+  for (const ref of refs) {
+    if (!BIG_VIEWS_REQUIRING_PROFILE.has(ref)) continue
+    if (profiledTables && profiledTables.has(ref)) continue
+    triggers.push(ref)
+  }
+  return triggers
+}
+
+function liveProfiledTables(): ReadonlySet<string> | null {
+  try {
+    return currentRuntime().mssql.profileDataCalled
+  } catch {
+    return null
+  }
+}
+
+// ── Cross-source reconciliation guard (Phase 5) ──────────────────
+//
+// Trace 2026-05-21 showed the agent ranking from a `#temp` derived from a
+// 3-branch subset, then joining `publish.Revenue` (which covers all 59
+// branches) to "enrich" the aggregate — silently mixing two universes.
+// The reported SUM was correct for the SQL but wrong for the user's
+// intent.
+//
+// Soft-warn (not block) when:
+//   - query references both a `#temp` table AND a big view from
+//     BIG_VIEWS_REQUIRING_PROFILE, AND
+//   - the SELECT list contains an aggregate (SUM/COUNT/AVG/MIN/MAX), AND
+//   - the escape comment `-- universes intentional` is absent.
+//
+// The advisory is informational; aggregating across mixed universes is
+// sometimes the right thing. The escape comment makes intent explicit.
+
+const UNIVERSES_INTENTIONAL_COMMENT = /--\s*universes\s+intentional/i
+const TEMP_TABLE_REF = /(?:^|\s)#\w+/
+const AGGREGATE_IN_SELECT = /\b(?:sum|count|avg|min|max)\s*\(/i
+
+export interface RankingReportingMismatch {
+  readonly tempTouched: boolean
+  readonly bigViews: string[]
+}
+
+export function detectRankingVsReportingMismatch(query: string): RankingReportingMismatch | null {
+  if (UNIVERSES_INTENTIONAL_COMMENT.test(query)) return null
+  const stripped = query
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+  if (!TEMP_TABLE_REF.test(stripped)) return null
+  if (!AGGREGATE_IN_SELECT.test(stripped)) return null
+  const bigViews = referencedLargeObjects(query).filter((r) => BIG_VIEWS_REQUIRING_PROFILE.has(r))
+  if (bigViews.length === 0) return null
+  return { tempTouched: true, bigViews }
+}
+
 export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalysis {
   const largeObjectRefs = Array.from(countReferencedLargeObjects(query).entries())
     .map(([name, count]) => ({ name, count }))
@@ -1250,9 +1427,34 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
  * subtle hints. Bug-equivalence with a controller spotting it on review is
  * the bar.
  */
-export function getQueryWarnings(query: string): string | null {
+export interface QueryWarningOptions {
+  lineageAccessor?: () => LineageCatalogLike | null
+  /** Per-run set of lowercased schema.table names already profiled. */
+  profiledTables?: ReadonlySet<string> | null
+}
+
+export function getQueryWarnings(
+  query: string,
+  options: QueryWarningOptions | (() => LineageCatalogLike | null) = {},
+): string | null {
+  // Back-compat: a bare lineage accessor function is still accepted.
+  const opts: QueryWarningOptions = typeof options === "function"
+    ? { lineageAccessor: options }
+    : options
+  const lineageAccessor = opts.lineageAccessor ?? defaultLineageAccessor
+  const profiledTables = opts.profiledTables ?? liveProfiledTables()
+
   const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
-  if (warns.length === 0) return null
+  const branchGaps = detectLineageBranchCoverage(query, lineageAccessor)
+  const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
+  const mixedUniverses = detectRankingVsReportingMismatch(query)
+  if (
+    warns.length === 0
+    && branchGaps.length === 0
+    && profileTriggers.length === 0
+    && !mixedUniverses
+  ) return null
+
   const lines = [
     `⚠ SQL CORRECTNESS WARNING — review BEFORE trusting the numbers below:`,
     ``,
@@ -1262,7 +1464,27 @@ export function getQueryWarnings(query: string): string | null {
     lines.push(`    ${w.message}`)
     lines.push(``)
   }
-  lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+  for (const gap of branchGaps) {
+    lines.push(`  • lineage coverage: ${gap.parent} has ${gap.totalBranches} source branches; this query references only ${gap.referenced.length} of them`)
+    lines.push(`    Referenced: ${gap.referenced.join(", ")}`)
+    lines.push(`    If the ranking and the final reporting both pull from ${gap.parent}, the unreferenced branches will inflate the reporting metric vs the ranking metric.`)
+    lines.push(`    Fix: either rank from the full ${gap.parent} (use the branch-aggregation pattern from the doctrine), or add an explicit \`-- sampled K of N\` comment to confirm the sub-sample is intentional.`)
+    lines.push(``)
+  }
+  for (const view of profileTriggers) {
+    lines.push(`  • profile-first: ${view} is a canonical big view and has not been profiled in this run`)
+    lines.push(`    Call \`profile_data table='${view}'\` (with a narrow \`columns\` list) BEFORE the analytical pass so you know its row count, NULL rates, and key cardinality. Skip this step and the next query may run for minutes or return a misleading row.`)
+    lines.push(``)
+  }
+  if (mixedUniverses) {
+    lines.push(`  • universe mismatch: this query aggregates across a #temp table AND ${mixedUniverses.bigViews.join(", ")}`)
+    lines.push(`    The #temp was likely derived from a sub-set (specific branches, months, or clients). Joining ${mixedUniverses.bigViews.join("/")} unfiltered then SUM/COUNT will report the BIG-view universe, not the #temp universe — even though rows appear filtered.`)
+    lines.push(`    Fix: either (a) derive the aggregate from a single source, (b) filter ${mixedUniverses.bigViews[0]} by the same predicates that built the #temp, or (c) add \`-- universes intentional\` to acknowledge the cross-universe aggregate.`)
+    lines.push(``)
+  }
+  if (warns.length > 0) {
+    lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+  }
   lines.push(`---`)
   return lines.join("\n")
 }

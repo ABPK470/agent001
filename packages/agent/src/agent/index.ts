@@ -54,6 +54,7 @@ export class Agent {
     plannerDelegateFn: AgentConfig["plannerDelegateFn"]
     toolKillManager: AgentConfig["toolKillManager"]
     completionValidator: AgentConfig["completionValidator"]
+    enableAnswerStabilityGuard: boolean
     deferRecoveryHintsUntilCompletionAttempt: AgentConfig["deferRecoveryHintsUntilCompletionAttempt"]
   }
 
@@ -96,6 +97,7 @@ export class Agent {
       plannerDelegateFn: config.plannerDelegateFn,
       toolKillManager: config.toolKillManager,
       completionValidator: config.completionValidator,
+      enableAnswerStabilityGuard: config.enableAnswerStabilityGuard ?? true,
       deferRecoveryHintsUntilCompletionAttempt: config.deferRecoveryHintsUntilCompletionAttempt,
     }
   }

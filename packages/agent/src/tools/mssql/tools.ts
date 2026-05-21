@@ -2,6 +2,7 @@ import sql from "mssql"
 import { currentRuntime } from "../../agent-runtime.js"
 import type { Tool } from "../../types.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
+import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
 import { emitMssqlQualityTrace } from "./trace.js"
@@ -136,7 +137,14 @@ export const mssqlTool: Tool = {
         })
         const body = formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
         const warn = getQueryWarnings(query)
-        return warn ? `${warn}\n${body}` : body
+        // Phase 6: dim-join NULL rot heuristic. Scan the first recordset's
+        // *Name/*Description columns; if ≥ 50% of rows are NULL, prepend a
+        // join-key warning so the agent re-verifies the join before trusting
+        // the row labels.
+        const firstSet = (result.recordsets[0] ?? []) as ReadonlyArray<Record<string, unknown>>
+        const dimBanner = renderDimJoinNullBanner(detectDimJoinNullRot(firstSet))
+        const banners = [dimBanner, warn].filter((s): s is string => !!s).join("\n")
+        return banners ? `${banners}\n${body}` : body
       } finally {
         killSignal?.removeEventListener("abort", onKill)
       }
