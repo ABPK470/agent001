@@ -310,6 +310,38 @@ export class CatalogGraph {
   promptSummary(): string {
     return formatPromptSummary(this)
   }
+
+  /**
+   * Stable short fingerprint of the schema shape (qualifiedName + column
+   * names). Used by the memory provenance layer to demote entries whose
+   * stored schema no longer matches the live one. Pure: same set of
+   * tables/columns produces the same fingerprint regardless of build
+   * order, builtAt, or row counts.
+   *
+   * Format: `sha1:<hex16>` — 16-char prefix is enough for collision-free
+   * comparison across a single workspace's lifetime; never used for
+   * cryptographic purposes.
+   */
+  schemaFingerprint(): string {
+    const sorted = [...this.tables.values()]
+      .map((t) => {
+        const cols = t.columns.map((c) => c.name).sort().join(",")
+        return `${t.qualifiedName}(${cols})`
+      })
+      .sort()
+      .join("\n")
+    // Lightweight non-crypto hash (FNV-1a 32-bit, doubled into 16 hex chars).
+    // Avoids pulling node:crypto into the catalog hot path.
+    let h1 = 0x811c9dc5
+    let h2 = 0x9dc5811c
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted.charCodeAt(i)
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0
+      h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0
+    }
+    const hex = (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0"))
+    return `sha1:${hex}`
+  }
 }
 
 // Re-export CatalogBuildOptions so store.ts doesn't need to import from types directly

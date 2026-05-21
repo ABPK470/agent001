@@ -1,9 +1,10 @@
 import type { Message, Tool } from "@mia/agent"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MIA_DATA_PERSONA_SECTION, MessageRole } from "@mia/agent"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, getCatalog, getCatalogSchemaFingerprint, MessageRole, MIA_DATA_PERSONA_SECTION } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
 import { decideSections } from "./decide-sections.js"
+import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
 // ── System message construction ───────────────────────────────────
 
@@ -201,6 +202,33 @@ export async function buildSystemMessages(opts: {
   )
 
   const systemMessages: Message[] = []
+
+  // Section 0: system_law — per-run, catalog-resolved facts (Phase 3).
+  // Empty when no catalog is loaded and no curated lineage matches; the
+  // section is never injected with prose rules — those live in
+  // MSSQL_DOCTRINES (packages/agent/src/doctrine/) and are surfaced
+  // through validator enforcement, not prompt repetition.
+  try {
+    const catalog = getCatalog()
+    const lineageMap = catalog?.lineageMap
+    const fingerprint = getCatalogSchemaFingerprint()
+    const block = buildResolvedFactsBlock({
+      goal,
+      catalog,
+      lineageMap: lineageMap ?? undefined,
+      schemaFingerprint: fingerprint,
+    })
+    if (block.length > 0) {
+      systemMessages.push({
+        role: MessageRole.System,
+        content: block,
+        section: "system_law",
+      })
+    }
+  } catch (err) {
+    // resolvedFacts must NEVER block a run. Log and continue.
+    console.warn(`[run ${opts.runId}] resolvedFacts assembly failed:`, (err as Error).message)
+  }
 
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT

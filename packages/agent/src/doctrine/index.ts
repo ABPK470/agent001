@@ -7,6 +7,7 @@ import { revenueBalancesPolicyDoctrine } from "./revenue-balances-policy.js"
 import { tempNamingDoctrine } from "./temp-naming.js"
 import { DOCTRINE_BLOCK_BUDGET_BYTES, type DoctrineDiagnostic, type DoctrineModule } from "./types.js"
 
+export { buildResolvedFacts, RESOLVED_FACTS_BUDGET_BYTES, type LargeObjectFact, type ResolvedFactsInput } from "./resolved-facts.js"
 export { DOCTRINE_BLOCK_BUDGET_BYTES }
 export type { DoctrineDiagnostic, DoctrineModule }
 

@@ -1,4 +1,4 @@
-import { EventType, RunStatus } from "@mia/agent"
+import { EventType, getCatalogSchemaFingerprint, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { getDb } from "../db/index.js"
 import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
@@ -76,7 +76,12 @@ export function ingestTurn(opts: {
     tier: opts.tier,
     role: opts.role,
     content: opts.content,
-    metadata: stampProvenance(opts.metadata),
+    metadata: stampProvenance(opts.metadata, {
+      // null when no catalog is loaded (e.g. boot-time service ingests);
+      // stampProvenance ignores undefined/empty values so legacy rows
+      // remain neutral at retrieval time.
+      schemaFingerprint: getCatalogSchemaFingerprint() ?? undefined,
+    }),
     source: opts.source ?? MemorySource.Agent,
     confidence: opts.confidence ?? 0.5,
     salience,

@@ -176,6 +176,13 @@ function summarize(e: SseEvent): string {
           if (tempScalarSubqueryCount > 0) notes.push(`temp-subq=${tempScalarSubqueryCount}`)
           return `${String(entry["phase"] ?? "checked")} · ${notes.join(" · ") || "ok"}`
         }
+        case "planner-prompt-budget": {
+          const before = Number(entry["totalBeforeChars"] ?? 0)
+          const after = Number(entry["totalAfterChars"] ?? 0)
+          const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+          const tail = dropped.length > 0 ? ` · dropped=${dropped.join(",")}` : ""
+          return `prompt-budget ${before.toLocaleString()} → ${after.toLocaleString()} chars${tail}`
+        }
         default: {
           // Fall through to generic candidates below.
         }

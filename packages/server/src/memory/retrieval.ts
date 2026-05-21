@@ -1,4 +1,4 @@
-import { EventType } from "@mia/agent"
+import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
 import { getDb } from "../db/index.js"
 import { MemoryRole, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
@@ -76,7 +76,9 @@ export async function retrieveContext(
   // simply too old, must not crowd out fresh, in-policy knowledge. The
   // multiplier is bounded above 0 so audit history is preserved.
   const policyVersion = currentPolicyVersion()
-  const currentSchema = (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint ?? null
+  const currentSchema = (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint
+    ?? getCatalogSchemaFingerprint()
+    ?? null
   let demotedCount = 0
   for (const r of allResults) {
     const { multiplier, reasons } = provenanceMultiplier(

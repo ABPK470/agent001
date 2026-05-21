@@ -573,6 +573,19 @@ function formatLogEntryInner(
         error: validationCode != null || entry["phase"] === "blocked",
       }
     }
+    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+      const before = Number(entry["totalBeforeChars"] ?? 0)
+      const after = Number(entry["totalAfterChars"] ?? 0)
+      const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+      const parts = [`${before.toLocaleString()} → ${after.toLocaleString()} chars`]
+      if (dropped.length > 0) parts.push(`dropped=${dropped.join(",")}`)
+      return {
+        type: t,
+        message: `Prompt budget · ${parts.join(" · ")}`,
+        timestamp,
+        error: false,
+      }
+    }
     return null
   }
 

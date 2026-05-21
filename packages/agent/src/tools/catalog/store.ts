@@ -115,6 +115,15 @@ export function getCatalogPromptSummary(connection = "default"): string {
 }
 
 /**
+ * Stable schema fingerprint of the named catalog, or `null` when no
+ * catalog has been built yet. Cheap, pure — safe to call on every
+ * memory write.
+ */
+export function getCatalogSchemaFingerprint(connection = "default"): string | null {
+  return getCatalog(connection)?.schemaFingerprint() ?? null
+}
+
+/**
  * Load lineage definitions from a JSON file and merge into the catalog.
  * Call this after buildCatalog() — lineage is curated, not auto-discovered.
  */

@@ -1,5 +1,5 @@
 export { CatalogGraph } from "./graph/index.js"
-export { buildCatalog, getCatalog, getCatalogConnectionNames, getCatalogPromptSummary, hasCatalog, loadLineage } from "./store.js"
+export { buildCatalog, getCatalog, getCatalogConnectionNames, getCatalogPromptSummary, getCatalogSchemaFingerprint, hasCatalog, loadLineage } from "./store.js"
 export type {
     CatalogBuildOptions,
     CatalogColumn,

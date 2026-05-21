@@ -337,6 +337,19 @@ function toTranscriptRow(e: SseEvent, state?: State): TranscriptRow | null {
       const blocked = typeof entry["validationCode"] === "string" || entry["phase"] === "blocked"
       return { id, runId, kind: blocked ? "tool-error" : "info", text, timestamp: ts }
     }
+    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+      const before = Number(entry["totalBeforeChars"] ?? 0)
+      const after = Number(entry["totalAfterChars"] ?? 0)
+      const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+      const tail = dropped.length > 0 ? ` · dropped=${dropped.join(",")}` : ""
+      return {
+        id,
+        runId,
+        kind: "info",
+        text: `Prompt budget · ${before.toLocaleString()} → ${after.toLocaleString()} chars${tail}`,
+        timestamp: ts,
+      }
+    }
   }
 
   switch (e.type) {
