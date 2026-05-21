@@ -17,9 +17,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
 import {
-    DOCTRINE_FIX_HINTS,
-    DOCTRINE_LESSON_TEMPLATES,
-    getDoctrineLessonTemplate,
+  DOCTRINE_FIX_HINTS,
+  DOCTRINE_LESSON_TEMPLATES,
+  getDoctrineLessonTemplate,
 } from "../src/doctrine/fix-hints.js"
 import { mssqlTool } from "../src/tools/mssql/tools.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
@@ -29,6 +29,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
     expect(Object.keys(DOCTRINE_LESSON_TEMPLATES).sort()).toEqual([
       "aggregate_semantic_mismatch",
       "avg_of_coalesce_zero",
+      "invented_column",
       "publish_view_topn_without_branch_aggregation",
       "temp_scalar_subquery_overused",
       "temp_table_integrity",

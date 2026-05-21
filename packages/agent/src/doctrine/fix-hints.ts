@@ -52,6 +52,12 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "If you genuinely want to treat missing months as observed zeros, make the assumption explicit: compute `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)` with a stated denominator.",
     "Default behaviour for balance / revenue averages over a date range: AVG of non-null observations. Document the period and the row count alongside the figure.",
   ].join(" "),
+
+  invented_column: [
+    "Stop. The column does not exist on the table you aliased — confirm column names via `search_catalog mode=column column=<name>` (or `mode=table table=<schema.table>`) BEFORE writing the next SQL.",
+    "Common failure mode: the model imagines display-name columns like `ClientName`, `BankerName`, `fullName` on transactional/fact views (publish.Revenue, publish.Balances, etc.). Those views carry foreign keys (pkClient, pkOfficer, …); the display name lives on the corresponding dimension table — join to dim.Client / dim.Officer to fetch it.",
+    "If the catalog is stale (the column was just added), call `refresh_catalog` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway.",
+  ].join(" "),
 }
 
 export function getDoctrineFixHint(code: string): string | null {
@@ -175,6 +181,18 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Use AVG(col) directly (AVG already skips NULLs), or compute an explicit weighted average with a stated denominator.",
       evidence: `Blocked shape: ${snippet}`,
       category: "column_semantics",
+    }
+  },
+
+  invented_column: (ctx) => {
+    const locator = ctx.detail ? shorten(ctx.detail, 100) : shorten(ctx.query, 60)
+    return {
+      subject: `doctrine:invented-column:${locator}`,
+      claim:
+        "Catalog-verify every qualified column reference before writing SQL — the validator blocks references whose column does not exist on the aliased table. " +
+        "Display names (ClientName, BankerName) live on dim.* tables; fact/publish views carry FKs only. Use `search_catalog` to confirm the column lives where you think it does.",
+      evidence: ctx.detail ? `Blocked reference: ${ctx.detail}` : undefined,
+      category: "schema_fact",
     }
   },
 }

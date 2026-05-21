@@ -2,6 +2,7 @@
 
 import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
+import { getCatalog } from "../catalog/store.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
 function withFixHint(error: string, code: string): string {
@@ -211,6 +212,7 @@ export type QueryValidationCode =
   | "temp_scalar_subquery_overused"
   | "publish_view_topn_without_branch_aggregation"
   | "avg_of_coalesce_zero"
+  | "invented_column"
   | "write_disabled"
   | "non_temp_mutation"
   | "large_object_overused"
@@ -440,6 +442,212 @@ export function detectAvgOfCoalesceZero(query: string): AvgOfCoalesceZeroOffende
   while ((m = re.exec(stripped)) !== null) {
     const snippet = m[0].replace(/\s+/g, " ").trim()
     if (!offenders.some((o) => o.snippet === snippet)) offenders.push({ snippet })
+  }
+  return offenders
+}
+
+// ── Invented-column guard ───────────────────────────────────────
+//
+// The 2026-05-21 cancelled run had the model emit `r.ClientName`,
+// `publish.Officer.fullName`, `rbb.RBBBanker` — none of which exist in the
+// live catalog. The agent had no way to know it was hallucinating, so it
+// burned a 60-second timeout per attempt and silently produced rows whose
+// "names" / "bankers" were just whatever the unionised mapping branch chose
+// to surface (which is usually NULL or an obscure code).
+//
+// This guard reads the live catalog (built at startup from sys.all_columns)
+// and rejects qualified column references whose column does NOT exist on
+// the table the alias points to. It is intentionally CONSERVATIVE: when
+// alias provenance is ambiguous (CTE, derived table, UNION), it skips the
+// whole statement rather than risk a false positive.
+//
+// Catalog access is sync (`getCatalog()` returns an in-memory snapshot).
+// When no catalog is loaded (early startup, unit tests, server-less mode),
+// the detector returns [] — it never blocks on absence of evidence.
+
+export interface InventedColumnOffender {
+  /** The qualified reference as it appears, e.g. "r.ClientName". */
+  readonly reference: string
+  /** The catalog table that was inspected, e.g. "publish.Revenue". */
+  readonly table: string
+  /** The column name that was not found. */
+  readonly column: string
+  /** Closest live column names on the same table, for the fix hint. */
+  readonly suggestions: readonly string[]
+}
+
+/** SQL keywords that must never be treated as an alias when seen left of `.col`. */
+const ALIAS_RESERVED = new Set([
+  "select", "from", "where", "join", "inner", "outer", "left", "right", "full",
+  "cross", "apply", "on", "as", "and", "or", "not", "in", "exists", "between",
+  "is", "null", "case", "when", "then", "else", "end", "by", "group", "order",
+  "having", "union", "intersect", "except", "with", "into", "values", "set",
+  "top", "distinct", "all", "any", "some", "over", "partition", "rows", "range",
+  "unbounded", "preceding", "following", "current", "row", "asc", "desc",
+  "option", "recompile", "maxdop", "nolock", "readonly", "tablock", "tablockx",
+  "holdlock", "updlock", "rowlock", "paglock", "index", "noexpand", "fastfirstrow",
+  // Common system schemas that should never be confused with aliases.
+  "sys", "information_schema", "dbo", "publish", "persistedview", "dim", "fact",
+  "ref", "ods", "stg", "tmp",
+])
+
+/** Bare table/column tokens that almost certainly aren't real columns. */
+const NON_COLUMN_TOKEN = new Set([
+  "asc", "desc", "as", "and", "or", "is", "null", "on", "in", "from", "join",
+])
+
+interface AliasBinding {
+  alias: string
+  qualifiedTable: string  // "schema.table" — guaranteed to exist in the catalog
+}
+
+interface CatalogLike {
+  getTable(qualifiedName: string): { columns: ReadonlyArray<{ name: string }> } | null
+}
+
+/** Default catalog accessor — uses the live runtime snapshot. */
+function defaultCatalogAccessor(): CatalogLike | null {
+  try {
+    return (getCatalog() as CatalogLike | null) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Editor distance for "did you mean" suggestions; small + cheap, no deps. */
+function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>, k = 3): string[] {
+  const t = target.toLowerCase()
+  const scored = columns.map((c) => {
+    const n = c.name.toLowerCase()
+    let d = 0
+    // Substring containment scores best, then shared-prefix length.
+    if (n === t) d = -100
+    else if (n.includes(t) || t.includes(n)) d = -50 + Math.abs(n.length - t.length)
+    else {
+      let prefix = 0
+      while (prefix < Math.min(n.length, t.length) && n[prefix] === t[prefix]) prefix++
+      d = Math.max(n.length, t.length) - prefix
+    }
+    return { name: c.name, d }
+  })
+  scored.sort((a, b) => a.d - b.d)
+  return scored.slice(0, k).map((s) => s.name)
+}
+
+/**
+ * Conservative column-existence guard. Returns the list of qualified
+ * column references whose column is provably absent from the catalog table
+ * the alias resolves to. Statements with CTEs, derived tables, set
+ * operators, or sys.* references are skipped (returned offenders only
+ * cover statements where alias provenance is unambiguous).
+ */
+export function detectInventedColumns(
+  query: string,
+  accessor: () => CatalogLike | null = defaultCatalogAccessor,
+): InventedColumnOffender[] {
+  const catalog = accessor()
+  if (!catalog) return []
+
+  const stripped = stripForScan(query)
+    // Strip MSSQL table hints — `WITH (NOLOCK)`, `WITH (INDEX=ix)` — they contain
+    // identifiers that must not be mistaken for column references.
+    .replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
+
+  const offenders: InventedColumnOffender[] = []
+  const seen = new Set<string>()
+
+  // Statement split — stripForScan already removed string literals/comments.
+  const statements = stripped.split(/;\s*/)
+  for (const stmt of statements) {
+    if (!stmt.trim()) continue
+
+    // Skip provenance-ambiguous shapes — safer to under-report than false-block.
+    if (/\bWITH\s+\[?\w+\]?\s+AS\s*\(/i.test(stmt)) continue         // CTE
+    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived FROM
+    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived JOIN
+    if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue   // set ops
+    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) continue       // system catalog
+    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) continue  // TVFs
+
+    // Build alias map from FROM/JOIN <schema>.<table> [AS] <alias>.
+    // Anchor on schema.table to avoid mis-parsing #temp / @var / single-name
+    // tables — we only validate against catalog-resolvable bases.
+    const aliasMap = new Map<string, AliasBinding>()
+    const fromJoinRe = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?(?:\s+(?:AS\s+)?\[?(\w+)\]?)?/gi
+    let fm: RegExpExecArray | null
+    while ((fm = fromJoinRe.exec(stmt)) !== null) {
+      const schema = fm[1]
+      const table = fm[2]
+      const aliasRaw = fm[3]
+      const qualified = `${schema}.${table}`
+      const catalogTable = catalog.getTable(qualified)
+      if (!catalogTable) continue   // Not in catalog → cannot validate; stay silent.
+
+      // Effective alias: explicit alias if given AND not a reserved keyword
+      // (otherwise it's our regex eating the next clause: `FROM x.y WHERE` →
+      // `aliasRaw=WHERE`). Fall back to bare table name.
+      const candidate = aliasRaw && !ALIAS_RESERVED.has(aliasRaw.toLowerCase())
+        ? aliasRaw
+        : table
+      aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
+    }
+
+    if (aliasMap.size === 0) continue
+
+    // Validate qualified column references.
+    //  - 2-part: `alias.col` (most common in the wild)
+    //  - 3-part: `schema.table.col`
+    // We require the trailing char NOT to be `(` (else it's a function call).
+    const refRe = /\b\[?(\w+)\]?\.\[?(\w+)\]?(?:\.\[?(\w+)\]?)?/g
+    let rm: RegExpExecArray | null
+    while ((rm = refRe.exec(stmt)) !== null) {
+      const a = rm[1]
+      const b = rm[2]
+      const c = rm[3]
+      // Trailing `(` → function call (e.g. `dbo.fnFoo(...)`, `r.ToString()`).
+      const after = stmt.charAt(rm.index + rm[0].length)
+      if (after === "(") continue
+
+      let table: string
+      let column: string
+      let referenceText: string
+      if (c) {
+        // 3-part `schema.table.col`
+        const qualified = `${a}.${b}`
+        const tbl = catalog.getTable(qualified)
+        if (!tbl) continue   // Unknown schema.table → can't claim "invented".
+        table = qualified
+        column = c
+        referenceText = `${a}.${b}.${c}`
+      } else {
+        // 2-part `alias.col`
+        const aliasLower = a.toLowerCase()
+        if (ALIAS_RESERVED.has(aliasLower)) continue
+        const binding = aliasMap.get(aliasLower)
+        if (!binding) continue   // Unknown alias → silent.
+        if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
+        // `alias.*` is whitespace by now; the regex won't match `*` anyway.
+        table = binding.qualifiedTable
+        column = b
+        referenceText = `${binding.alias}.${b}`
+      }
+
+      const catalogTable = catalog.getTable(table)
+      if (!catalogTable) continue
+      const colLower = column.toLowerCase()
+      const exists = catalogTable.columns.some((cc) => cc.name.toLowerCase() === colLower)
+      if (exists) continue
+
+      const key = `${table}::${colLower}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      offenders.push({
+        reference: referenceText,
+        table,
+        column,
+        suggestions: nearestColumns(column, catalogTable.columns),
+      })
+    }
   }
   return offenders
 }
@@ -722,6 +930,36 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       lesson: getDoctrineLessonTemplate("avg_of_coalesce_zero")?.({
         query,
         detail: avgCoalesceOffenders[0].snippet,
+      }) ?? null,
+    }
+  }
+
+  // Block references to columns that do not exist on the catalog table the
+  // alias resolves to. Only fires when (a) a live catalog is loaded and
+  // (b) the alias provenance is unambiguous (no CTE/derived/UNION). Catches
+  // hallucinated columns like `r.ClientName`, `publish.Officer.fullName`.
+  const inventedColumns = detectInventedColumns(query)
+  if (inventedColumns.length > 0) {
+    const lines = inventedColumns.slice(0, 5).map((o) => {
+      const hint = o.suggestions.length > 0 ? `  (closest live columns on ${o.table}: ${o.suggestions.join(", ")})` : ""
+      return `  - ${o.reference} → column "${o.column}" not in ${o.table}${hint}`
+    })
+    const more = inventedColumns.length > 5 ? `\n  …and ${inventedColumns.length - 5} more.` : ""
+    const head = [
+      `Query blocked — references columns that do not exist in the live catalog:`,
+      lines.join("\n") + more,
+      ``,
+      `The catalog is the live sys.all_columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`,
+    ].join("\n")
+    const first = inventedColumns[0]
+    return {
+      ok: false,
+      error: withFixHint(head, "invented_column"),
+      code: "invented_column",
+      analysis,
+      lesson: getDoctrineLessonTemplate("invented_column")?.({
+        query,
+        detail: `${first.table}.${first.column}`,
       }) ?? null,
     }
   }
