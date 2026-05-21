@@ -98,6 +98,14 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-validation-failed": return `${p}VALIDATION FAILED`
     case "planner-validation-remediated": return `${p}VALIDATION AUTO-REMEDIATED`
     case "planner-validation-warnings": return `${p}VALIDATION WARNINGS  ${e.warningCount}`
+    case "planner-sql-quality": {
+      const largeRefs = e.largeObjectRefs.map((ref) => `${ref.name}×${ref.count}`).join(", ") || "none"
+      const hints: string[] = []
+      if (e.missingPersistedMirrorCandidates.length) hints.push(`mirror=${e.missingPersistedMirrorCandidates.join(",")}`)
+      if (e.tempScalarSubqueryCount > 0) hints.push(`temp-subqueries=${e.tempScalarSubqueryCount}`)
+      if (e.validationCode) hints.push(`blocked=${e.validationCode}`)
+      return `${p}SQL QUALITY  ${e.phase}  ${e.toolMode}  large=${largeRefs}${hints.length ? `  ${hints.join(" · ")}` : ""}`
+    }
     case "planner-runtime-compiled":
       return `${p}RUNTIME COMPILED  steps=${e.executionSteps.length}  artifacts=${e.ownershipArtifacts.length}  entities=${e.runtimeEntities.length}\n` +
         e.executionSteps.map((step) => `${p}  ${step.stepName}: deps=${step.dependsOn.join(", ") || "none"}  next=${step.downstream.join(", ") || "none"}`).join("\n")
@@ -1004,6 +1012,34 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
             [{diagnostic.code}] {diagnostic.message}
           </div>
         ))}
+      </div>
+    )
+  }
+  if (e.kind === "planner-sql-quality") {
+    const missedMirror = e.missingPersistedMirrorCandidates.length
+      ? `mirror missing for ${e.missingPersistedMirrorCandidates.join(", ")}`
+      : "persisted mirror ok"
+    const largeRefs = e.largeObjectRefs.length
+      ? e.largeObjectRefs.map((ref) => `${ref.name}×${ref.count}`).join(" · ")
+      : "large refs none"
+    const warnings = [
+      e.validationCode ? `validation ${e.validationCode}` : null,
+      e.tempScalarSubqueryCount > 0 ? `temp scalar subqueries ${e.tempScalarSubqueryCount}` : null,
+      e.malformedTempSuffixes.length ? `bad temp suffix ${e.malformedTempSuffixes.join(", ")}` : null,
+      e.missingTempCreations.length ? `missing temp create ${e.missingTempCreations.join(", ")}` : null,
+      e.aggregateWarningCount > 0 ? `aggregate warnings ${e.aggregateWarningCount}` : null,
+    ].filter(Boolean).join(" · ")
+    return (
+      <div className="py-1 pl-2" style={{ borderLeft: `2px solid ${e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning}40` }}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-accent-hover)" }}>SQL</span>
+          <span className="text-[13px] font-mono" style={{ color: e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning }}>
+            {e.phase} · {e.toolMode} · {e.connection}
+          </span>
+        </div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>{largeRefs}</div>
+        <div className="text-[13px] mt-0.5 pl-2" style={{ color: missedMirror.startsWith("mirror missing") ? C.warning : C.dim }}>{missedMirror}</div>
+        {warnings && <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>{warnings}</div>}
       </div>
     )
   }
@@ -2121,6 +2157,11 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
 
   if (e.kind === "planner-validation-remediated") {
     return <FlatRow label="VALIDATION AUTO-REMEDIATED" labelColor={C.success} />
+  }
+
+  if (e.kind === "planner-sql-quality") {
+    const refSummary = e.largeObjectRefs.map((ref) => `${ref.name}×${ref.count}`).join(" · ") || "none"
+    return <FlatRow label={`SQL QUALITY · ${e.phase}`} labelColor={e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning} detail={refSummary} />
   }
 
   if (e.kind === "user-input-request") {

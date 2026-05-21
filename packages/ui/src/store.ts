@@ -308,7 +308,7 @@ const DEFAULT_VIEW_ID = "default"
 /**
  * Default view seed.
  *
- * Surgical change for /intro3 → app continuity: a single full-canvas
+ * Surgical change for login-flow → app continuity: a single full-canvas
  * term-chat widget is pre-seeded so the app's first paint after login
  * shows the same chat surface the login screen morphed into.
  *
@@ -516,6 +516,7 @@ function eventType(type: string): string {
   if (type.startsWith("tool_call.")) return "step"
   if (type.startsWith("delegation.")) return "agent"
   if (type.startsWith("planner.")) return "agent"
+  if (type === "debug.trace") return "agent"
   if (type === "agent.thinking") return "agent"
   if (type === "agent.bus.message") return "agent"
   if (type === "agent.help.requested") return "agent"
@@ -548,6 +549,32 @@ function formatLogEntryInner(
   timestamp: string,
 ): LogEntry | null {
   const t = eventType(type)
+
+  if (type === "debug.trace") {
+    const entry = data["entry"] as Record<string, unknown> | undefined
+    if ((entry?.["kind"] as string | undefined) === "planner-sql-quality") {
+      const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
+      const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
+        ? (entry["missingPersistedMirrorCandidates"] as string[])
+        : []
+      const tempScalarSubqueryCount = Number(entry["tempScalarSubqueryCount"] ?? 0)
+      const largeObjectRefs = Array.isArray(entry["largeObjectRefs"])
+        ? (entry["largeObjectRefs"] as Array<{ name?: string; count?: number }>).filter((ref) => Number(ref.count ?? 0) > 2)
+        : []
+      const notes: string[] = []
+      if (validationCode) notes.push(`blocked=${validationCode}`)
+      if (missingMirrors.length > 0) notes.push(`mirror=${missingMirrors.join(",")}`)
+      if (largeObjectRefs.length > 0) notes.push(largeObjectRefs.map((ref) => `${ref.name ?? "object"}×${Number(ref.count ?? 0)}`).join(", "))
+      if (tempScalarSubqueryCount > 0) notes.push(`temp-subq=${tempScalarSubqueryCount}`)
+      return {
+        type: t,
+        message: `SQL quality — ${String(entry["phase"] ?? "checked")}${notes.length ? ` · ${notes.join(" · ")}` : " · ok"}`,
+        timestamp,
+        error: validationCode != null || entry["phase"] === "blocked",
+      }
+    }
+    return null
+  }
 
   // ── Sync events ─────────────────────────────────────────────
   if (type.startsWith("sync.")) {

@@ -393,6 +393,7 @@ export function AgentChat() {
       if (e.kind === "planner-verification") return "Verifying"
       if (e.kind === "planner-retry") return `Retry #${e.attempt}`
       if (e.kind === "planner-escalation") return "Escalating"
+      if (e.kind === "planner-sql-quality") return e.phase === "blocked" ? "Blocking SQL query" : "Reviewing SQL query"
 
       // Coherent generation phases
       if (e.kind === "coherent-generation-repair-needed") return `Repairing — ${e.issueCount} issue${e.issueCount !== 1 ? "s" : ""}`

@@ -108,6 +108,35 @@ describe("auth routes — local registration", () => {
     } finally { await app.close() }
   })
 
+  it("accepts uppercase username input but canonicalizes the local-account key to lowercase", async () => {
+    const app = await buildApp()
+    try {
+      const reg = await app.inject({
+        method: "POST",
+        url:    "/api/auth/register",
+        payload: { username: "PKA", password: "hunter2pw", displayName: "PKA" },
+      })
+      expect(reg.statusCode).toBe(201)
+      expect(reg.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
+
+      const login = await app.inject({
+        method: "POST",
+        url:    "/api/auth/login",
+        payload: { username: "PKA", password: "hunter2pw" },
+      })
+      expect(login.statusCode).toBe(200)
+
+      const cookie = cookieFromSetCookie(login.headers["set-cookie"])
+      const who = await app.inject({
+        method: "GET",
+        url:    "/api/auth/whoami",
+        headers: { cookie },
+      })
+      expect(who.statusCode).toBe(200)
+      expect(who.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
+    } finally { await app.close() }
+  })
+
   it("rejects duplicate username with 409", async () => {
     const app = await buildApp()
     try {

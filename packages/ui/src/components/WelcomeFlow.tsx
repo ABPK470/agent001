@@ -1,9 +1,8 @@
 /**
  * WelcomeFlow — primary login surface for the `ui` package.
  *
- * mode="intro" renders the /intro3 conversational experience and
- * reproduces the same 3-phase hand-off the standalone IntroConversationRoute
- * uses:
+ * mode="intro" renders the conversational login experience and
+ * reproduces the same 3-phase hand-off as the old standalone intro route:
  *   1. intro    — overlay covers; user converses to authenticate
  *   2. layered  — App shell is already painted underneath (App.tsx
  *                 falls through to the real shell as soon as `me` is set);
@@ -54,10 +53,9 @@ export function WelcomeFlow(props: WelcomeFlowProps) {
  * measure → enterTrigger → onEntered → cross-fade) to `WelcomeFlowProps`'s
  * simpler `onSubmit` / `onDone` contract.
  *
- * This is the same 3-phase orchestration `IntroConversationRoute` uses
- * for /intro3 — kept identical so the login morph feels the same
- * whether the user lands on `/intro3` or on the default route. The only
- * structural difference: here we do NOT mount <App/> ourselves because
+ * This preserves the same 3-phase orchestration the old standalone
+ * intro route used. The structural difference: here we do NOT mount
+ * <App/> ourselves because
  * App.tsx is already rendering us as a `welcomeOverlay` *over* its own
  * shell body. As soon as `loginOrRegister`'s `refreshMe()` resolves,
  * App's body falls through from the blank `phase === Login && !me`
@@ -77,7 +75,7 @@ function IntroConversationLoginAdapter({
   const [morphTarget, setMorphTarget]   =
     useState<IntroMorphTarget | undefined>(undefined)
 
-  // Mirror IntroConversationRoute.detectMode — picks one of the three
+  // Mirror the old standalone route's detectMode — picks one of the three
   // landing "setups" based on what the dashboard will render underneath.
   function detectMode(): IntroMorphMode {
     try {

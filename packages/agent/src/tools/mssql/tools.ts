@@ -3,7 +3,8 @@ import type { Tool } from "../../types.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
 import { decorateMssqlError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
-import { getQueryWarnings, validateQuery } from "./validation.js"
+import { emitMssqlQualityTrace } from "./trace.js"
+import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
 // ── The tool ─────────────────────────────────────────────────────
 
@@ -70,8 +71,18 @@ export const mssqlTool: Tool = {
     }
 
     // Validate before executing
-    const error = validateQuery(query, writeEnabled)
-    if (error) return error
+    const validation = validateQueryDetailed(query, writeEnabled)
+    if (!validation.ok) {
+      emitMssqlQualityTrace({
+        toolMode: "query",
+        phase: "blocked",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation,
+      })
+      return validation.error ?? "Query blocked"
+    }
 
     try {
       // Optional database switch
@@ -95,9 +106,21 @@ export const mssqlTool: Tool = {
 
       // If a specific database is requested, prefix with USE
       const fullQuery = db ? `USE [${db}];\n${query}` : query
+      const startedAt = Date.now()
 
       try {
         const result = await request.query(fullQuery)
+        const rowCount = result.recordsets.reduce((sum, recordset) => sum + recordset.length, 0)
+        emitMssqlQualityTrace({
+          toolMode: "query",
+          phase: "executed",
+          query,
+          connection: connectionName,
+          database: db,
+          validation,
+          durationMs: Date.now() - startedAt,
+          rowCount,
+        })
         const body = formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
         const warn = getQueryWarnings(query)
         return warn ? `${warn}\n${body}` : body
@@ -106,6 +129,15 @@ export const mssqlTool: Tool = {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      emitMssqlQualityTrace({
+        toolMode: "query",
+        phase: "failed",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation,
+        error: msg,
+      })
       return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },

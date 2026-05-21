@@ -22,7 +22,8 @@ import type { Tool } from "../../types.js"
 import { safePathResolved } from "../filesystem-security.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
 import { decorateMssqlError } from "./error-hints.js"
-import { getQueryWarnings, validateQuery } from "./validation.js"
+import { emitMssqlQualityTrace } from "./trace.js"
+import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
 /** Maximum rows we'll write to a single file. Anything beyond this should be paginated. */
 const MAX_EXPORT_ROWS = 1_000_000
@@ -141,8 +142,18 @@ export const exportQueryToFileTool: Tool = {
     // Read-only validation. We deliberately ignore the "writeEnabled" override
     // here because exporting is fundamentally a read operation — even if the
     // connection allows writes we don't want this tool used for them.
-    const error = validateQuery(query, /* writeEnabled */ false && writeEnabled)
-    if (error) return error
+    const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled)
+    if (!validation.ok) {
+      emitMssqlQualityTrace({
+        toolMode: "export",
+        phase: "blocked",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation,
+      })
+      return validation.error ?? "Query blocked"
+    }
 
     // Resolve destination path safely under the workspace root.
     let target: string
@@ -173,6 +184,7 @@ export const exportQueryToFileTool: Tool = {
     }
 
     try {
+      const startedAt = Date.now()
       const result = await request.query(fullQuery)
       const recordsets = result.recordsets as sql.IRecordSet<unknown>[]
       // Use the first non-empty recordset.
@@ -253,9 +265,28 @@ export const exportQueryToFileTool: Tool = {
 
       const warn = getQueryWarnings(query)
       const body = `${summary}${previewLabel}\n${previewLines.join("\n")}`
+      emitMssqlQualityTrace({
+        toolMode: "export",
+        phase: "executed",
+        query,
+        connection: connectionName,
+        database: db,
+        validation,
+        durationMs: Date.now() - startedAt,
+        rowCount: totalRows,
+      })
       return warn ? `${warn}\n${body}` : body
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      emitMssqlQualityTrace({
+        toolMode: "export",
+        phase: "failed",
+        query,
+        connection: connectionName,
+        database: db,
+        validation,
+        error: msg,
+      })
       return `SQL Error: ${decorateMssqlError(msg)}`
     } finally {
       killSignal?.removeEventListener("abort", onKill)

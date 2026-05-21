@@ -1,12 +1,43 @@
 import { ExternalLink, Send, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { App } from "../App"
-import { useStore } from "../store"
 import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField } from "./IntroAsciiField"
 import { Logo } from "./Logo"
-import { introBasePath, loginOrRegister } from "./introShared"
 
 interface Msg { role: "bot" | "user"; text: string; streamed?: boolean }
+
+// Default auth call used when the parent doesn't pass `onLogin`. Tries
+// login, falls back to register on 401, treats 409 on register as the
+// "username exists, wrong password" case.
+async function loginOrRegister(username: string, password: string): Promise<void> {
+  const post = (url: string, body: Record<string, unknown>) =>
+    fetch(url, {
+      method:      "POST",
+      credentials: "include",
+      headers:     { "content-type": "application/json" },
+      body:        JSON.stringify(body),
+    })
+
+  const login = await post("/api/auth/login", { username, password })
+  if (login.ok) return
+  if (login.status === 401) {
+    const reg = await post("/api/auth/register", {
+      username, password, displayName: username,
+    })
+    if (reg.ok) return
+    if (reg.status === 409) throw new Error("wrong password")
+    const body = await reg.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? `sign-up failed (${reg.status})`)
+  }
+  const body = await login.json().catch(() => ({})) as { error?: string }
+  throw new Error(body.error ?? `sign-in failed (${login.status})`)
+}
+
+// Resolves Vite's BASE_URL to a normalised root path the standalone
+// post-login redirect path uses.
+function introBasePath(): string {
+  const normalized = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "")
+  return normalized || "/"
+}
 
 // ── MI:A wordmark decoder ─────────────────────────────────────────────
 // Same scramble alphabet & timings as WelcomeIntro so the brand
@@ -238,7 +269,8 @@ function DecayText({ text, active }: { text: string; active: boolean }) {
 }
 
 /**
- * /intro3 — "a conversation, not a form".
+ * Conversational login surface — the intro3-derived design that now
+ * powers the real login flow.
  *
  * The screen opens already mid-chat: the bot has asked "who am I
  * talking to?". You answer. Bot: "prove it." You answer. Bot:
@@ -284,7 +316,7 @@ export function IntroConversation({
    *  measure the target landing rect for the input bar. */
   onLoginSuccess?: () => void
   /** Optional override for the auth call. When unset, falls back to the
-   *  default `loginOrRegister` from `introShared` (same contract). The
+   *  module-local `loginOrRegister` (same contract). The
    *  embedded-in-App.tsx case passes its own version so the parent's
    *  refreshMe() / phase logic stay in charge. */
   onLogin?: (username: string, password: string) => Promise<void>
@@ -387,10 +419,10 @@ export function IntroConversation({
       // Mirror server-side rule from auth/users.ts so we never advance
       // to the password step with an invalid handle. The bot echoes the
       // exact same wording the server would return.
-      if (!/^[a-z0-9._-]{2,64}$/.test(value)) {
+      if (!/^[A-Za-z0-9._-]{2,64}$/.test(value)) {
         push("user", value)
         setDraft("")
-        await botReply("username must be 2-64 chars, [a-z0-9._-] — try again.", "Thinking", 300)
+        await botReply("username must be 2-64 chars, [A-Za-z0-9._-] — try again.", "Thinking", 300)
         return
       }
       push("user", value)
@@ -677,91 +709,3 @@ export function IntroConversation({
 }
 
 // ── Route-level wrapper ──────────────────────────────────────────────
-// Hand-off from intro → platform is driven in stages so:
-//   • no visible page-reload blip (App is mounted in-place)
-//   • the input bar lands EXACTLY where the platform's own input bar
-//     sits (mode="empty"  → centered TermChat welcome bar;
-//             mode="chat" → bottom-docked TermChat input;
-//             mode="nochat" → no landing target → input fades up)
-//   • the morph timing waits for App to actually paint, so the
-//     destination rect is real before we animate to it
-export function IntroConversationRoute() {
-  const [phase, setPhase] = useState<"intro" | "layered" | "fading" | "platform">("intro")
-  const [enterTrigger, setEnterTrigger] = useState(false)
-  const [morphMode, setMorphMode] = useState<IntroMorphMode>("chat")
-  const [morphTarget, setMorphTarget] = useState<IntroMorphTarget | undefined>(undefined)
-
-  const introMounted = phase !== "platform"
-  const showApp      = phase !== "intro"
-
-  // Decide morph mode from current store state (active view's widgets
-  // + run history). Called once, the instant login succeeds.
-  function detectMode(): IntroMorphMode {
-    try {
-      const s = useStore.getState()
-      const view = s.views.find((v) => v.id === s.activeViewId) ?? s.views[0]
-      const hasTermChat = !!view?.widgets?.some((w) => w.type === "term-chat")
-      if (!hasTermChat) return "nochat"
-      return (s.runs?.length ?? 0) === 0 ? "empty" : "chat"
-    } catch {
-      return "chat"
-    }
-  }
-
-  // After App mounts (layered phase), wait for paint, then measure
-  // the platform's TermChat input bar and trigger the entering morph.
-  function measureAndTrigger(mode: IntroMorphMode) {
-    // Two rAFs + a small settle gives App's Suspense / Grid time to
-    // place its children at their final coordinates.
-    const measure = () => {
-      if (mode === "empty" || mode === "chat") {
-        const el = document.querySelector<HTMLElement>('[data-intro-target="termchat-input"]')
-        if (el) {
-          const r = el.getBoundingClientRect()
-          setMorphTarget({ left: r.left, top: r.top, width: r.width, height: r.height })
-        }
-      }
-      setEnterTrigger(true)
-    }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window.setTimeout(measure, 120)
-    }))
-  }
-
-  return (
-    <div className="intro3-route-root" style={{ position: "relative", width: "100%", height: "100vh" }}>
-      {showApp ? (
-        <div
-          className="intro3-route-app"
-          style={{ position: "absolute", inset: 0, zIndex: 0 }}
-        >
-          <App />
-        </div>
-      ) : null}
-      {introMounted ? (
-        <div
-          className={`intro3-route-overlay${phase === "fading" ? " intro3-route-overlay--fading" : ""}`}
-          style={{ position: "absolute", inset: 0, zIndex: 1 }}
-          onTransitionEnd={(e) => {
-            if (phase === "fading" && e.propertyName === "opacity") setPhase("platform")
-          }}
-        >
-          <IntroConversation
-            morphMode={morphMode}
-            morphTarget={morphTarget}
-            enterTrigger={enterTrigger}
-            onLoginSuccess={() => {
-              try { window.history.replaceState(null, "", introBasePath()) } catch { /* ignore */ }
-              const mode = detectMode()
-              setMorphMode(mode)
-              setPhase("layered")
-              measureAndTrigger(mode)
-            }}
-            onEnteringStart={() => { /* phase already "layered" by onLoginSuccess */ }}
-            onEntered={() => { setPhase("fading") }}
-          />
-        </div>
-      ) : null}
-    </div>
-  )
-}

@@ -1,4 +1,4 @@
-import { ToolOutcomeSeverity, ToolControlDirective } from "@mia/agent"
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 /**
  * Per-tool-call execution logic extracted from Agent.run().
  *
@@ -17,6 +17,7 @@ import { ToolOutcomeSeverity, ToolControlDirective } from "@mia/agent"
 
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
 import { compactAtWriteTime } from "../../context/context-management/write-time-compact.js"
+import { MessageRole } from "../../domain/enums/message.js"
 import * as log from "../../logger.js"
 import type { ToolCallRecord } from "../../tools/_helpers/index.js"
 import {
@@ -39,7 +40,6 @@ import {
     type ToolExecContext,
     type ToolRoundResult,
 } from "./types.js"
-import { MessageRole } from "../../domain/enums/message.js"
 
 // Re-export public types/helpers for backwards compatibility.
 export { normalizeArtifactPath } from "./types.js"
@@ -190,7 +190,10 @@ export async function executeToolRound(
     }
 
     // Execute with kill manager racing
-    const { result: execResult, killed, killMessage } = await executeWithKillManager(call, tool, config)
+    const { result: execResult, killed, killMessage } = await executeWithKillManager(call, tool, {
+      ...config,
+      iteration: ctx.iteration,
+    })
 
     if (killed) {
       const msg = `[TOOL KILLED BY USER] ${killMessage}`

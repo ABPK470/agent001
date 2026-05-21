@@ -85,6 +85,8 @@ const LARGE_OBJECTS = new Set([
   // publish views — each is a UNION of 10–60 large fact tables
   "publish.revenue",
   "publish.balances",
+  "persistedview.publish.revenue",
+  "persistedview.publish.balances",
   "publish.clientprofitability",
   "publish.financialdisclosurerules",
   "publish.africasalescredittradesrules",
@@ -128,7 +130,7 @@ export function referencedLargeObjects(query: string): string[] {
     .replace(/\/\*[\s\S]*?\*\//g, "")
 
   const found: string[] = []
-  // Match schema.object in various bracket/quote forms
+  // Match schema.object in various bracket/quote forms.
   const re = /\[?(\w+)\]?\.\[?(\w+)\]?/g
   let m: RegExpExecArray | null
   while ((m = re.exec(stripped)) !== null) {
@@ -137,7 +139,204 @@ export function referencedLargeObjects(query: string): string[] {
       found.push(key)
     }
   }
+  // Match persistedView.[publish.Revenue] style 2-part references where the
+  // object name itself contains a dot.
+  const persistedBracketedRe = /\[?(persistedview)\]?\.\[?(publish\.(?:revenue|balances))\]?/gi
+  while ((m = persistedBracketedRe.exec(stripped)) !== null) {
+    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
+    if (LARGE_OBJECTS.has(key) && !found.includes(key)) found.push(key)
+  }
   return found
+}
+
+/** Returns per-object reference counts for known large objects. */
+export function countReferencedLargeObjects(query: string): Map<string, number> {
+  const stripped = query
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+
+  const counts = new Map<string, number>()
+  const re = /\[?(\w+)\]?\.\[?(\w+)\]?/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
+    if (!LARGE_OBJECTS.has(key)) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const persistedBracketedRe = /\[?(persistedview)\]?\.\[?(publish\.(?:revenue|balances))\]?/gi
+  while ((m = persistedBracketedRe.exec(stripped)) !== null) {
+    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
+    if (!LARGE_OBJECTS.has(key)) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+export interface TempTableBatchAnalysis {
+  readonly refs: readonly string[]
+  readonly created: readonly string[]
+  readonly suffixes: readonly string[]
+  readonly malformedSuffixes: readonly string[]
+  readonly missingCreations: readonly string[]
+}
+
+export interface MssqlQueryQualityAnalysis {
+  readonly largeObjectRefs: ReadonlyArray<{ name: string; count: number }>
+  readonly usesPersistedMirrors: readonly string[]
+  readonly missingPersistedMirrorCandidates: readonly string[]
+  readonly hasWhereClause: boolean
+  readonly unsafeScanReason: string | null
+  readonly tempTableRefs: number
+  readonly tempTablesCreated: number
+  readonly tempTableSuffixes: readonly string[]
+  readonly malformedTempSuffixes: readonly string[]
+  readonly missingTempCreations: readonly string[]
+  readonly aggregateWarningCount: number
+  readonly aggregateBlockCount: number
+  readonly tempScalarSubqueryCount: number
+  readonly stagePatternLikely: boolean
+}
+
+export type QueryValidationCode =
+  | "dangerous_operation"
+  | "aggregate_semantic_mismatch"
+  | "temp_table_integrity"
+  | "write_disabled"
+  | "non_temp_mutation"
+  | "large_object_overused"
+  | "unsafe_large_object_scan"
+
+export interface QueryValidationDiagnostics {
+  readonly ok: boolean
+  readonly error: string | null
+  readonly code: QueryValidationCode | null
+  readonly analysis: MssqlQueryQualityAnalysis
+}
+
+function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
+  const refs = extractLocalTempRefs(query)
+  const created = extractCreatedLocalTemps(query)
+  const malformedSuffixes = refs.filter((name) => /_[A-Fa-f0-9]+$/.test(name) && !/_([A-Fa-f0-9]{8})$/.test(name))
+  const missingCreations = created.length > 0
+    ? refs.filter((name) => !created.includes(name))
+    : []
+  const suffixes = Array.from(new Set(
+    refs
+      .map((name) => /_([A-Fa-f0-9]{8})$/.exec(name)?.[1]?.toLowerCase() ?? null)
+      .filter((suffix): suffix is string => suffix !== null),
+  ))
+  return { refs, created, suffixes, malformedSuffixes, missingCreations }
+}
+
+function countTempScalarSubqueries(query: string): number {
+  const stripped = stripForScan(query)
+  return stripped.match(/\(\s*SELECT[\s\S]*?FROM\s+#\w+[\s\S]*?\)/gi)?.length ?? 0
+}
+
+export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalysis {
+  const largeObjectRefs = Array.from(countReferencedLargeObjects(query).entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const temp = analyzeTempTableBatch(query)
+  const aggregateIssues = findAggregateSemanticIssues(query)
+  const usesPersistedMirrors = largeObjectRefs
+    .map((entry) => entry.name)
+    .filter((name) => name.startsWith("persistedview."))
+  const missingPersistedMirrorCandidates: string[] = []
+  if (largeObjectRefs.some((entry) => entry.name === "publish.revenue") && !usesPersistedMirrors.includes("persistedview.publish.revenue")) {
+    missingPersistedMirrorCandidates.push("publish.revenue")
+  }
+  if (largeObjectRefs.some((entry) => entry.name === "publish.balances") && !usesPersistedMirrors.includes("persistedview.publish.balances")) {
+    missingPersistedMirrorCandidates.push("publish.balances")
+  }
+  const hasWhere = hasWhereClause(query)
+  const unsafeScanReason = isUnsafeScan(query, largeObjectRefs.map((entry) => entry.name))
+  return {
+    largeObjectRefs,
+    usesPersistedMirrors,
+    missingPersistedMirrorCandidates,
+    hasWhereClause: hasWhere,
+    unsafeScanReason,
+    tempTableRefs: temp.refs.length,
+    tempTablesCreated: temp.created.length,
+    tempTableSuffixes: temp.suffixes,
+    malformedTempSuffixes: temp.malformedSuffixes,
+    missingTempCreations: temp.missingCreations,
+    aggregateWarningCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Warn).length,
+    aggregateBlockCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Block).length,
+    tempScalarSubqueryCount: countTempScalarSubqueries(query),
+    stagePatternLikely:
+      largeObjectRefs.length > 0 &&
+      largeObjectRefs.every((entry) => entry.count <= 2) &&
+      temp.created.length > 0,
+  }
+}
+
+function extractLocalTempRefs(query: string): string[] {
+  const stripped = stripForScan(query)
+  const refs: string[] = []
+  const re = /##?[A-Za-z_][\w]*/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    const name = m[0]
+    if (name.startsWith("##")) continue
+    if (!refs.includes(name)) refs.push(name)
+  }
+  return refs
+}
+
+function extractCreatedLocalTemps(query: string): string[] {
+  const stripped = stripForScan(query)
+  const created: string[] = []
+  const patterns = [
+    /\bCREATE\s+TABLE\s+(#[A-Za-z_][\w]*)/gi,
+    /\bSELECT\b[\s\S]*?\bINTO\s+(#[A-Za-z_][\w]*)\s+FROM\b/gi,
+  ]
+  for (const re of patterns) {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(stripped)) !== null) {
+      const name = m[1]
+      if (!created.includes(name)) created.push(name)
+    }
+  }
+  return created
+}
+
+export function validateTempTableBatch(query: string): string | null {
+  const temp = analyzeTempTableBatch(query)
+  if (temp.refs.length === 0) return null
+
+  const malformedSuffixTemps = temp.malformedSuffixes
+  if (malformedSuffixTemps.length > 0) {
+    return [
+      `Query blocked — malformed #temp suffix (expected 8 hex chars): ${malformedSuffixTemps.join(", ")}.`,
+      ``,
+      `Use names like \`#range_a3f91c08\` and reuse that exact 8-hex suffix across the whole batch.`,
+    ].join("\n")
+  }
+
+  if (temp.created.length > 0) {
+    if (temp.missingCreations.length > 0) {
+      return [
+        `Query blocked — local #temp table referenced without being created in the same batch: ${temp.missingCreations.join(", ")}.`,
+        ``,
+        `This usually means a typo or suffix drift (for example one reference says \`#balLines_ab12cd34\` and another says \`#balLines_ab12dc34\`).`,
+        `In pooled connections, assuming a #temp from a prior call still exists is unsafe. Create every #temp in the same batch that reads it, then DROP it at the end.`,
+      ].join("\n")
+    }
+  }
+
+  if (temp.suffixes.length > 1) {
+    return [
+      `Query blocked — inconsistent #temp suffixes in one batch: ${temp.suffixes.join(", ")}.`,
+      ``,
+      `Use exactly one 8-hex suffix across every local #temp in the batch so references cannot drift by one character.`,
+      `Pattern: pick one suffix once (for example \`a3f91c08\`) and reuse it literally in every #temp, index name and DROP statement.`,
+    ].join("\n")
+  }
+
+  return null
 }
 
 /**
@@ -192,12 +391,22 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
 }
 
 export function validateQuery(query: string, writeEnabled: boolean): string | null {
+  return validateQueryDetailed(query, writeEnabled).error
+}
+
+export function validateQueryDetailed(query: string, writeEnabled: boolean): QueryValidationDiagnostics {
+  const analysis = analyzeMssqlQueryQuality(query)
   // Always block dangerous operations regardless of write mode — must run BEFORE
   // the write-mode gate so that EXEC / OPENROWSET / DBCC produce the dangerous
   // error message instead of the generic "write disabled" one.
   for (const pattern of DANGEROUS_PATTERNS) {
     if (pattern.test(query)) {
-      return "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.)."
+      return {
+        ok: false,
+        error: "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.).",
+        code: "dangerous_operation",
+        analysis,
+      }
     }
   }
 
@@ -209,17 +418,25 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
   // findAggregateSemanticIssues() for the full taxonomy and rationale.
   for (const issue of findAggregateSemanticIssues(query)) {
     if (issue.severity !== AggregateSeverity.Block) continue
-    return [
-      `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
-      ``,
-      `    ${issue.snippet}`,
-      ``,
-      issue.message,
-      ``,
-      `Fix: change the aggregate function to match the alias (or vice-versa). The function name `,
-      `is the implementation; the output alias is the contract with the reader. They MUST agree.`,
-    ].join("\n")
+    return {
+      ok: false,
+      error: [
+        `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
+        ``,
+        `    ${issue.snippet}`,
+        ``,
+        issue.message,
+        ``,
+        `Fix: change the aggregate function to match the alias (or vice-versa). The function name `,
+        `is the implementation; the output alias is the contract with the reader. They MUST agree.`,
+      ].join("\n"),
+      code: "aggregate_semantic_mismatch",
+      analysis,
+    }
   }
+
+  const tempBatchError = validateTempTableBatch(query)
+  if (tempBatchError) return { ok: false, error: tempBatchError, code: "temp_table_integrity", analysis }
 
   if (!writeEnabled) {
     // Two valid shapes when write is disabled:
@@ -231,24 +448,50 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
     const isPureRead = READ_ONLY_PATTERN.test(query)
     const opensWithMutation = TMP_TABLE_OPENER.test(query)
     if (!isPureRead && !opensWithMutation) {
-      return "Write operations are disabled. Only SELECT/WITH queries are allowed " +
-             "(or DDL/DML targeting local #temp tables only)."
+      return {
+        ok: false,
+        error: "Write operations are disabled. Only SELECT/WITH queries are allowed (or DDL/DML targeting local #temp tables only).",
+        code: "write_disabled",
+        analysis,
+      }
     }
     if (opensWithMutation) {
       const offenders = findNonTmpMutations(query)
       if (offenders.length > 0) {
         const list = offenders.map((o) => `${o.label} ${o.target}`).join(", ")
-        return [
-          `Query blocked: write operation against non-temp object(s): ${list}.`,
-          ``,
-          `You may only CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / MERGE / SELECT INTO `,
-          `against LOCAL #temp tables (names starting with a single '#'). Existing schema-qualified `,
-          `tables, views, indexes and global ##temp tables are READ-ONLY.`,
-          ``,
-          `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
-          `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
-        ].join("\n")
+        return {
+          ok: false,
+          error: [
+            `Query blocked: write operation against non-temp object(s): ${list}.`,
+            ``,
+            `You may only CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / MERGE / SELECT INTO `,
+            `against LOCAL #temp tables (names starting with a single '#'). Existing schema-qualified `,
+            `tables, views, indexes and global ##temp tables are READ-ONLY.`,
+            ``,
+            `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
+            `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
+          ].join("\n"),
+          code: "non_temp_mutation",
+          analysis,
+        }
       }
+    }
+  }
+
+  const largeRefCounts = countReferencedLargeObjects(query)
+  const overusedLargeObjects = Array.from(largeRefCounts.entries()).filter(([, count]) => count > 2)
+  if (overusedLargeObjects.length > 0) {
+    const list = overusedLargeObjects.map(([name, count]) => `${name} (${count} references)`).join(", ")
+    return {
+      ok: false,
+      error: [
+        `Query blocked — large object referenced too many times in one batch: ${list}.`,
+        ``,
+        `Large publish views and their persisted mirrors still represent very large scans. Referencing one more than twice usually means the query will rescan the warehouse slice and miss the 2-minute budget.`,
+        `Required fix: Stage keys on the first touch, fetch detail rows on the second touch, then derive every remaining metric from #temp tables only.`,
+      ].join("\n"),
+      code: "large_object_overused",
+      analysis,
     }
   }
 
@@ -258,24 +501,29 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
   const scanReason = isUnsafeScan(query, largeRefs)
   if (scanReason) {
     const objects = largeRefs.join(", ")
-    return [
-      `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
-      ``,
-      `Large views like publish.Revenue are UNION views over 10–60 fact tables with 100M–2B rows each.`,
-      `An unfiltered query re-executes the entire view and will run for minutes / never complete.`,
-      ``,
-      `Required fix:`,
-      `1. First resolve the date/key range from a small lookup table:`,
-      `      SELECT MIN(pkDate) AS from, MAX(pkDate) AS to FROM dim.Date WITH (NOLOCK) WHERE calYear = 2025`,
-      `2. Then query the large view WITH a WHERE predicate that narrows the scan:`,
-      `      SELECT ... FROM ${largeRefs[0] ?? "publish.Revenue"} WITH (NOLOCK) WHERE pkMonth BETWEEN <from> AND <to> GROUP BY ...`,
-      `3. Add WITH (NOLOCK) for read-only analytical queries.`,
-      `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
-      `5. If checking what data exists: query sys.partitions or dim.Date — NOT the view itself.`,
-    ].join("\n")
+    return {
+      ok: false,
+      error: [
+        `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
+        ``,
+        `Large publish views are UNION views over 10–60 fact tables with 100M–2B rows each. Use the persisted mirror when available.`,
+        `An unfiltered query re-executes the entire view and will run for minutes / never complete.`,
+        ``,
+        `Required fix:`,
+        `1. First resolve the date/key range from a small lookup table:`,
+        `      SELECT MIN(pkMonth) AS fromPkMonth, MAX(pkMonth) AS toPkMonth FROM dim.Date WITH (NOLOCK) WHERE [Year] = 2025`,
+        `2. Then query the large view WITH a WHERE predicate that narrows the scan:`,
+        `      SELECT ... FROM persistedView.[publish.Revenue] WITH (NOLOCK) WHERE pkMonth BETWEEN <fromPkMonth> AND <toPkMonth> GROUP BY ...`,
+        `3. Add WITH (NOLOCK) for read-only analytical queries.`,
+        `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
+        `5. If checking what data exists: query sys.partitions or dim.Date — NOT the view itself.`,
+      ].join("\n"),
+      code: "unsafe_large_object_scan",
+      analysis,
+    }
   }
 
-  return null // valid
+  return { ok: true, error: null, code: null, analysis }
 }
 
 // ── Aggregate-semantic guard ─────────────────────────────────

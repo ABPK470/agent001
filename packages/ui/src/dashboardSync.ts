@@ -96,7 +96,7 @@ export async function restoreDashboardState(): Promise<void> {
       try { localStorage.removeItem("mia-dashboard") } catch { /* ignore */ }
       _suppressSave = true
       // Seed a default view containing the term-chat widget so the
-      // first paint matches /intro3's chat surface. Revert: replace
+      // first paint matches the login screen's chat surface. Revert: replace
       // widgets/layouts with [] / {} for the original empty canvas.
       const widgetId = "default-term-chat"
       useStore.setState({

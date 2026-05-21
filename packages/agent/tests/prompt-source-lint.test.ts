@@ -53,6 +53,10 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i)            // warns about SUM(Average…)
     expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i)                   // names the per-row anti-pattern
     expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i)      // TOP n needs a tiebreaker
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/find-all on every `#temp` token/i)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/more than \*\*2×\*\*/i)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/persistedView\.\[publish\.Revenue\]/i)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/Repeated scalar subqueries against the same `#detail` temp/i)
   })
 })
 

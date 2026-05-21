@@ -1,5 +1,5 @@
 /**
- * IntroAsciiField — generative ASCII texture behind the /intro3 stage.
+ * IntroAsciiField — generative ASCII texture behind the login stage.
  *
  * Each cell's glyph is sampled from a slowly-drifting 2-D value-noise
  * field, so the surface forms organic blobs / horizontal bands instead

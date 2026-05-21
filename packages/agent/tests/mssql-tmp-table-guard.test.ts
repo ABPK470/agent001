@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { findNonTmpMutations, validateQuery } from "../src/tools/mssql/validation.js"
+import { countReferencedLargeObjects, findNonTmpMutations, validateQuery, validateTempTableBatch } from "../src/tools/mssql/validation.js"
 
 const RO = false  // writeEnabled = false (read-only mode)
 
@@ -154,5 +154,77 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
 
   it("rejects garbage that is neither read nor a known mutation opener", () => {
     expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO)).toMatch(/Write operations are disabled/i)
+  })
+
+  it("blocks a temp-table typo that references an uncreated #temp", () => {
+    const batch = [
+      "SET NOCOUNT ON;",
+      "SELECT pkClient INTO #topClients_6b4c9a12 FROM dim.Client WHERE pkClient < 100;",
+      "SELECT pkClient INTO #balLines_6b4c9a12 FROM #topClients_6b4c9a12;",
+      "SELECT COUNT(*) AS c FROM #balLines_6bc49a12;",
+      "DROP TABLE #balLines_6b4c9a12;",
+      "DROP TABLE #topClients_6b4c9a12;",
+    ].join("\n")
+    expect(validateTempTableBatch(batch)).toMatch(/referenced without being created/i)
+    expect(validateQuery(batch, RO)).toMatch(/#balLines_6bc49a12/i)
+  })
+
+  it("blocks inconsistent temp suffixes across one batch", () => {
+    const batch = [
+      "CREATE TABLE #scope_a3f91c08 (pkClient int);",
+      "CREATE TABLE #detail_b4c9a120 (pkClient int);",
+      "DROP TABLE #detail_b4c9a120;",
+      "DROP TABLE #scope_a3f91c08;",
+    ].join("\n")
+    const result = validateTempTableBatch(batch)
+    expect(typeof result).toBe("string")
+    expect(result ?? "").toMatch(/inconsistent #temp suffixes/i)
+  })
+
+  it("blocks malformed temp suffixes that are not 8 hex chars", () => {
+    const batch = [
+      "CREATE TABLE #scope_a3f91c08 (pkClient int);",
+      "CREATE TABLE #detail_b4c9a12 (pkClient int);",
+      "DROP TABLE #detail_b4c9a12;",
+      "DROP TABLE #scope_a3f91c08;",
+    ].join("\n")
+    const result = validateTempTableBatch(batch)
+    expect(typeof result).toBe("string")
+    expect(result ?? "").toMatch(/malformed #temp suffix/i)
+  })
+
+  it("counts repeated references to large objects", () => {
+    const counts = countReferencedLargeObjects([
+      "SELECT * FROM publish.Revenue r1",
+      "JOIN publish.Revenue r2 ON r1.pkClient = r2.pkClient",
+      "JOIN publish.Revenue r3 ON r2.pkClient = r3.pkClient",
+    ].join("\n"))
+    expect(counts.get("publish.revenue")).toBe(3)
+  })
+
+  it("counts repeated references to persisted publish mirrors", () => {
+    const counts = countReferencedLargeObjects([
+      "SELECT * FROM persistedView.[publish.Revenue] r1",
+      "JOIN persistedView.[publish.Revenue] r2 ON r1.pkClient = r2.pkClient",
+      "JOIN persistedView.[publish.Revenue] r3 ON r2.pkClient = r3.pkClient",
+    ].join("\n"))
+    expect(counts.get("persistedview.publish.revenue")).toBe(3)
+  })
+
+  it("blocks referencing a large view more than twice in one batch", () => {
+    const batch = [
+      "SELECT TOP 10 a.pkClient",
+      "FROM publish.Revenue a WITH (NOLOCK)",
+      "JOIN publish.Revenue b WITH (NOLOCK) ON a.pkClient = b.pkClient",
+      "JOIN publish.Revenue c WITH (NOLOCK) ON b.pkClient = c.pkClient",
+      "WHERE a.pkMonth BETWEEN 202501 AND 202512",
+    ].join("\n")
+    expect(validateQuery(batch, RO)).toMatch(/referenced too many times/i)
+    expect(validateQuery(batch, RO)).toMatch(/publish\.Revenue/i)
+  })
+
+  it("blocks unfiltered persisted publish mirrors too", () => {
+    const query = "SELECT TOP 5 pkClient FROM persistedView.[publish.Revenue] ORDER BY pkClient"
+    expect(validateQuery(query, RO)).toMatch(/full scan/i)
   })
 })

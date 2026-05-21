@@ -8,11 +8,17 @@
 
 import { executeToolWithTimeout } from "../../tools/_helpers/index.js"
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../types.js"
+import { runWithToolTraceContext } from "./trace-context.js"
 
 export async function executeWithKillManager(
   call: { id: string; name: string; arguments: Record<string, unknown> },
   tool: Tool,
-  config: { signal: AgentConfig["signal"]; toolKillManager: AgentConfig["toolKillManager"] },
+  config: {
+    signal: AgentConfig["signal"]
+    toolKillManager: AgentConfig["toolKillManager"]
+    onPlannerTrace?: AgentConfig["onPlannerTrace"]
+    iteration: number
+  },
 ): Promise<{
   result: Awaited<ReturnType<typeof executeToolWithTimeout>>
   killed: boolean
@@ -25,9 +31,16 @@ export async function executeWithKillManager(
   // per-tool-call AsyncLocalStorage scopes (e.g. mssql kill signal) that work
   // correctly under concurrent runs. Falls back to a direct call otherwise.
   const runExecute = (a: Record<string, unknown>): Promise<string | ToolResultEnvelope> =>
-    killManager?.wrap
-      ? killManager.wrap(call.id, () => tool.execute(a))
-      : tool.execute(a)
+    runWithToolTraceContext({
+      toolCallId: call.id,
+      toolName: call.name,
+      iteration: config.iteration,
+      emit: config.onPlannerTrace,
+    }, () =>
+      killManager?.wrap
+        ? killManager.wrap(call.id, () => tool.execute(a))
+        : tool.execute(a),
+    )
 
   if (killPromise) {
     const raceResult = await Promise.race([

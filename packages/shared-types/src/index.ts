@@ -226,6 +226,37 @@ export type TraceEntry =
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
+  | {
+    kind: "planner-sql-quality"
+    toolCallId: string
+    toolName: string
+    iteration: number
+    toolMode: "query" | "export"
+    phase: "blocked" | "executed" | "failed"
+    connection: string
+    database: string | null
+    validationOk: boolean
+    validationCode: string | null
+    largeObjectRefs: Array<{ name: string; count: number }>
+    usesPersistedMirrors: string[]
+    missingPersistedMirrorCandidates: string[]
+    hasWhereClause: boolean
+    unsafeScanReason: string | null
+    tempTableRefs: number
+    tempTablesCreated: number
+    tempTableSuffixes: string[]
+    malformedTempSuffixes: string[]
+    missingTempCreations: string[]
+    aggregateWarningCount: number
+    aggregateBlockCount: number
+    tempScalarSubqueryCount: number
+    stagePatternLikely: boolean
+    durationMs: number | null
+    rowCount: number | null
+    error: string | null
+    sqlPreview: string
+    sqlLength: number
+  }
   | { kind: "direct_loop_fallback"; source: DirectLoopFallbackSource; reason: string }
   | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }

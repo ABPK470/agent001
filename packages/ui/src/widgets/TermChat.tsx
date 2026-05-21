@@ -382,6 +382,7 @@ function presentTenseLabel(tool: string, target?: string): string {
   }
   return target ? `${verb} ${target}` : verb
 }
+void presentTenseLabel
 
 // Coarse, high-level verb for the parent live shimmer ("Querying" rather
 // than "Querying ;WITH latest_month AS (\n SELECT MAX(...)). Per-tool
@@ -634,6 +635,23 @@ function summarizeThinking(raw: string): string {
 }
 void summarizeThinking
 
+function summarizeSqlQualityEntry(entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>): string {
+  const notes: string[] = []
+  if (entry.validationCode) notes.push(`blocked by ${entry.validationCode}`)
+  if (entry.missingPersistedMirrorCandidates.length > 0) {
+    notes.push(`missed persisted mirror for ${entry.missingPersistedMirrorCandidates.join(", ")}`)
+  }
+  const overusedRefs = entry.largeObjectRefs.filter((ref) => ref.count > 2)
+  if (overusedRefs.length > 0) {
+    notes.push(overusedRefs.map((ref) => `${ref.name} referenced ${ref.count}x`).join(", "))
+  }
+  if (entry.tempScalarSubqueryCount > 0) notes.push(`temp scalar subqueries ${entry.tempScalarSubqueryCount}`)
+  if (entry.malformedTempSuffixes.length > 0) notes.push(`bad temp suffix ${entry.malformedTempSuffixes.join(", ")}`)
+  if (entry.missingTempCreations.length > 0) notes.push(`missing temp create ${entry.missingTempCreations.join(", ")}`)
+  if (notes.length === 0) return entry.phase === "executed" ? "checked" : entry.phase
+  return notes.join(" · ")
+}
+
 function preserveToggleAnchor(button: HTMLButtonElement | null, toggle: () => void) {
   if (!button) {
     toggle()
@@ -835,6 +853,26 @@ function buildResponseParts(
         parts = setActivityPart(parts, `repair-${entry.attempt}`, "Repairing", "running", `attempt ${entry.attempt}`, true)
         parts = pushNarrativePart(parts, `narrative-repair-${index}`, `I found an issue and started repair attempt ${entry.attempt}.`, "error")
         break
+      case "planner-sql-quality": {
+        const summary = summarizeSqlQualityEntry(entry)
+        const status: "done" | "error" = entry.phase === "blocked" || !!entry.validationCode ? "error" : "done"
+        parts = parts.concat({
+          kind: "progress",
+          id: `sql-quality-${index}`,
+          label: "SQL review",
+          status,
+          detail: summary,
+        })
+        if (summary !== "checked") {
+          parts = pushNarrativePart(
+            parts,
+            `narrative-sql-quality-${index}`,
+            `I checked the SQL shape: ${summary}.`,
+            status === "error" ? "error" : "neutral",
+          )
+        }
+        break
+      }
       case "direct_loop_fallback":
         parts = settlePrimaryActivities(parts, "direct")
         parts = setActivityPart(parts, "direct", "Direct", "running", undefined, true)

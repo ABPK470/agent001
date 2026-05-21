@@ -302,6 +302,7 @@ export function App() {
           case "planner-decision": lines.push(`PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${Number(e.score).toFixed(2)}  route=${e.route ?? "-"}  coherence=${e.coherenceNeed ?? "-"}  coordination=${e.coordinationNeed ?? "-"}`); break
           case "planner-step-start": lines.push(`STEP  ${e.stepName}  ${e.stepType}`); break
           case "planner-step-end":   lines.push(`STEP END  ${e.stepName}  ${e.status}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}`); break
+          case "planner-sql-quality": lines.push(`SQL QUALITY  ${e.phase}  ${e.toolMode}  ${(e.largeObjectRefs as Array<{ name: string; count: number }> | undefined)?.map((ref) => `${ref.name}×${ref.count}`).join(" · ") ?? "no-large-refs"}${(e.missingPersistedMirrorCandidates as string[] | undefined)?.length ? `  mirror=${(e.missingPersistedMirrorCandidates as string[]).join(",")}` : ""}${(e.tempScalarSubqueryCount as number | undefined) ? `  temp-subq=${e.tempScalarSubqueryCount}` : ""}`); break
           case "planner-pipeline-start": lines.push(`PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`); break
           case "planner-pipeline-end":   lines.push(`PIPELINE END  ${e.status}  ${e.completedSteps}/${e.totalSteps} steps`); break
           case "delegation-start": lines.push(`DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}\n${p}${e.goal ?? ""}`); break

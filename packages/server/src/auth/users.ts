@@ -43,8 +43,8 @@ export interface SsoUpsertInput {
 export function registerLocalUser(input: RegisterInput): DbUser {
   const username = input.username.trim().toLowerCase()
   if (!username) throw new AuthError("username required", 400)
-  if (!/^[a-z0-9._-]{2,64}$/.test(username)) {
-    throw new AuthError("username must be 2-64 chars, [a-z0-9._-]", 400)
+  if (!/^[A-Za-z0-9._-]{2,64}$/.test(input.username.trim())) {
+    throw new AuthError("username must be 2-64 chars, [A-Za-z0-9._-]", 400)
   }
   if (!input.password || input.password.length < 4) {
     throw new AuthError("password must be at least 4 characters", 400)
