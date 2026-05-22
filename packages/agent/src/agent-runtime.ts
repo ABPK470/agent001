@@ -243,6 +243,59 @@ export interface MemoryState {
   }) => void) | null
 }
 
+/**
+ * Per-run org-wide knowledge cache for heavy MSSQL-tool outputs. The server
+ * binds these at run start; when null (root runtime, tests, CLI) tools fall
+ * straight through to live execution. See
+ * /memories/repo/tool-knowledge-cache.md.
+ *
+ * Fingerprint shape is opaque to the agent — it's just whatever the server's
+ * fingerprintFromCatalogTable returns and compares.
+ */
+export type ToolKnowledgeCachedTool = "profile_data" | "inspect_definition" | "discover_relationships"
+
+export interface ToolKnowledgeFingerprint {
+  cols: number
+  type: "T" | "V"
+  csum: string
+}
+
+export interface ToolKnowledgeLookupArgs {
+  tool: ToolKnowledgeCachedTool
+  qname: string
+  mode?: string
+  connection?: string
+  currentFingerprint: ToolKnowledgeFingerprint | null
+}
+
+export interface ToolKnowledgeHit {
+  hit: true
+  payload: string
+  ageMs: number
+  profiledAt: number
+}
+
+export interface ToolKnowledgeMiss {
+  hit: false
+  reason: "miss" | "stale" | "fingerprint"
+}
+
+export interface ToolKnowledgeSaveArgs {
+  tool: ToolKnowledgeCachedTool
+  qname: string
+  mode?: string
+  connection?: string
+  payload: string
+  fingerprint: ToolKnowledgeFingerprint
+}
+
+export interface ToolKnowledgeState {
+  lookup: ((args: ToolKnowledgeLookupArgs) => ToolKnowledgeHit | ToolKnowledgeMiss) | null
+  save: ((args: ToolKnowledgeSaveArgs) => void) | null
+  /** Render the standard [cached from ...] header given a hit. */
+  renderHeader: ((hit: ToolKnowledgeHit, opts: { tool: ToolKnowledgeCachedTool; mode?: string }) => string) | null
+}
+
 export interface CatalogState {
   /** Expensive caches — shared across runtimes. */
   instances: Map<string, CatalogGraph>
@@ -351,6 +404,8 @@ export class AgentRuntime {
   readonly askUser: AskUserState
   /** Per-run memory writer hook (Gap 2). Null until the server binds it. */
   readonly memory: MemoryState
+  /** Org-wide cache of heavy MSSQL-tool outputs. Null until server binds. */
+  readonly toolKnowledge: ToolKnowledgeState
   /** Shared with parent (caches are expensive — never duplicated). */
   readonly catalog: CatalogState
   /** Shared with parent (server installs sinks once at boot). */
@@ -418,6 +473,14 @@ export class AgentRuntime {
       // re-binds for each top-level run (sub-runs share working memory by
       // session id, so deferring writes to the parent's writer is fine).
       this.memory = { writeNote: parent.memory.writeNote }
+      // Tool-knowledge cache: copy callbacks into a fresh object so per-run
+      // mutations (e.g. tests installing stub callbacks) do not bleed back
+      // into the parent / root runtime.
+      this.toolKnowledge = {
+        lookup: parent.toolKnowledge.lookup,
+        save: parent.toolKnowledge.save,
+        renderHeader: parent.toolKnowledge.renderHeader,
+      }
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
@@ -439,6 +502,7 @@ export class AgentRuntime {
       }
       this.attachments = { service: null }
       this.memory = { writeNote: null }
+      this.toolKnowledge = { lookup: null, save: null, renderHeader: null }
     }
   }
 

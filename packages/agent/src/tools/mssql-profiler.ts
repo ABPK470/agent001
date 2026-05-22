@@ -9,9 +9,18 @@
 import sql from "mssql"
 import { currentRuntime } from "../agent-runtime.js"
 import type { Tool } from "../types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"
 import { getPool } from "./mssql/index.js"
 import { isLargeObject } from "./mssql/validation.js"
+
+function markProfileDataCalled(qname: string): void {
+  try {
+    currentRuntime().mssql.profileDataCalled.add(qname.toLowerCase())
+  } catch {
+    // Runtime may not be installed (tests) — silent.
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -323,6 +332,21 @@ export const profileDataTool: Tool = {
     const mode: "fast" | "deep" =
       String(args.mode || "fast").toLowerCase() === "deep" ? "deep" : "fast"
 
+    // ── Cache: serve fresh results without touching MSSQL ───────────
+    //
+    // The org-wide tool_knowledge cache is checked BEFORE the scan-guard
+    // and pool acquire: a cached deep profile is just as valid (and far
+    // faster) as a live one. A hit also satisfies the validator's "must
+    // profile big views before querying" rule because the agent receives
+    // the same shape of report it would have from a live call.
+    const qn = `${schema}.${table}`
+    const fp = fingerprintForQname(qn, connName)
+    const cached = tryServeFromCache("profile_data", qn, mode, connName, fp)
+    if (cached !== null) {
+      markProfileDataCalled(qn)
+      return cached
+    }
+
     // ── Scan-guard: refuse DEEP profiling of known-large UNION views ──
     //
     // Deep profile runs unfiltered COUNT_BIG(*) + per-column NULL/
@@ -335,7 +359,6 @@ export const profileDataTool: Tool = {
     // TOP-N sample that is skipped on large objects) — it never scans,
     // so the guard does NOT apply to fast mode and large objects are
     // welcome there.
-    const qn = `${schema}.${table}`
     if (mode === "deep" && isLargeObject(qn)) {
       // Pick the first lineage source (if any) as a concrete worked
       // example. Falls back to generic shape advice when this object
@@ -375,15 +398,17 @@ export const profileDataTool: Tool = {
 
     if (mode === "fast") {
       try {
-        return await runFastProfile(pool, schema, table, sampleCount, args.columns as string[] | undefined)
+        const out = await runFastProfile(pool, schema, table, sampleCount, args.columns as string[] | undefined)
+        // Cache only successful live runs. runFastProfile may return error
+        // strings (e.g. "No columns found ..."); avoid poisoning the cache.
+        if (typeof out === "string" && !out.startsWith("SQL Error:") && !out.startsWith("Error:") && !out.startsWith("No columns")) {
+          persistToCache("profile_data", qn, "fast", connName, out, fp)
+        }
+        return out
       } catch (err) {
         return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
       } finally {
-        try {
-          currentRuntime().mssql.profileDataCalled.add(`${schema}.${table}`.toLowerCase())
-        } catch {
-          // Runtime may not be installed (tests) — silent.
-        }
+        markProfileDataCalled(qn)
       }
     }
 
@@ -532,7 +557,9 @@ export const profileDataTool: Tool = {
         }
       }
 
-      return sections.join("\n")
+      const out = sections.join("\n")
+      persistToCache("profile_data", qn, "deep", connName, out, fp)
+      return out
     } catch (err) {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
     } finally {
@@ -540,11 +567,7 @@ export const profileDataTool: Tool = {
       // big-view-without-profile-data nudge in the validator can stand down.
       // Done in `finally` because partial profile results (e.g. row count
       // succeeded, then one column failed) still constitute "profiled".
-      try {
-        currentRuntime().mssql.profileDataCalled.add(`${schema}.${table}`.toLowerCase())
-      } catch {
-        // Runtime may not be installed (tests) — silent.
-      }
+      markProfileDataCalled(qn)
     }
   },
 }

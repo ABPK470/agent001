@@ -1,5 +1,5 @@
-import { getDb } from "../db/index.js"
 import { migrateSessionFkSetNull } from "../db/connection.js"
+import { getDb } from "../db/index.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Schema migration ─────────────────────────────────────────────
@@ -167,6 +167,32 @@ export function migrateMemory(): void {
       INSERT INTO procedural_fts(rowid, trigger)
       VALUES (new.rowid, new.trigger);
     END;
+  `)
+
+  // ── tool_knowledge: org-wide cache of heavy MSSQL-tool outputs ──
+  // Separate from memory_entries because these are objective ground-truth
+  // facts about DB objects (not user-scoped notes): cross-UPN by default,
+  // keyed by exact (tool, qname, mode, connection), invalidated by catalog
+  // fingerprint + TTL. See /memories/repo/tool-knowledge-cache.md.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tool_knowledge (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      tool            TEXT NOT NULL,
+      qname           TEXT NOT NULL,
+      mode            TEXT NOT NULL DEFAULT '',
+      connection      TEXT NOT NULL DEFAULT 'default',
+      payload_text    TEXT NOT NULL,
+      fingerprint     TEXT NOT NULL,
+      bytes           INTEGER NOT NULL,
+      created_by_upn  TEXT,
+      created_at      INTEGER NOT NULL,
+      last_hit_at     INTEGER,
+      hit_count       INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(tool, qname, mode, connection)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tk_lookup  ON tool_knowledge(tool, qname);
+    CREATE INDEX IF NOT EXISTS idx_tk_created ON tool_knowledge(created_at);
   `)
 }
 

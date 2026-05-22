@@ -40,5 +40,19 @@ export { clearAllMemories, deleteMemory, getMemory, getMemoryStats, listMemories
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
 export { migrateMemory } from "./schema.js"
+export {
+    fingerprintFromCatalogTable,
+    fingerprintsEqual,
+    lookupToolKnowledge,
+    pruneToolKnowledge,
+    renderCachedHeader,
+    saveToolKnowledge,
+    TOOL_KNOWLEDGE_TTL,
+    ttlForToolMode
+} from "./tool-knowledge.js"
+export type {
+    CachedTool, ToolKnowledgeFingerprint,
+    ToolKnowledgeHit, LookupOptions as ToolKnowledgeLookupOptions, ToolKnowledgeMiss, PruneOptions as ToolKnowledgePruneOptions, ToolKnowledgeResult, SaveOptions as ToolKnowledgeSaveOptions
+} from "./tool-knowledge.js"
 export { vectorSearch } from "./vectors.js"
 

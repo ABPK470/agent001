@@ -44,12 +44,13 @@ import { BusProtocol } from "../enums/bus.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../event-broadcaster.js"
-import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, retrieveContext } from "../memory/index.js"
+import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, lookupToolKnowledge, renderCachedHeader, retrieveContext, saveToolKnowledge } from "../memory/index.js"
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { composePerRunTools, getAllTools } from "../tools.js"
 import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
+import { loadKnownObjects } from "./known-objects.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
 import { loadPriorTurns } from "./prior-turns.js"
@@ -183,6 +184,15 @@ export async function executeRunImpl(
       // The writer is a side channel; never let it break a run.
     }
   }
+
+  // Bind the org-wide tool_knowledge cache. The agent's heavy MSSQL tools
+  // (profile_data etc.) consult `lookup` before hitting the database and
+  // `save` on successful live execution. Reads are NOT upn-filtered — these
+  // are objective facts about DB objects; `created_by_upn` is provenance
+  // only. See /memories/repo/tool-knowledge-cache.md.
+  runtime.toolKnowledge.lookup = (args) => lookupToolKnowledge(args)
+  runtime.toolKnowledge.save = (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null })
+  runtime.toolKnowledge.renderHeader = (hit, opts) => renderCachedHeader(hit, opts)
 
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
@@ -473,24 +483,42 @@ export async function executeRunImpl(
   })
   resetEffectSeq(runId)
 
+  // Prior turns from the same session, surfaced as a first-class
+  // `<prior_turns>` system anchor AND fed to the clarification
+  // detector so co-referential follow-ups ("plot it", "filter that")
+  // resolve to the previous turn's answer instead of triggering a
+  // "which of these did you mean?" question. We skip this for
+  // code-generation sandbox runs where the session is a different
+  // unit of work (one task per run) and for runs without a real sid.
+  // Hoisted so the result is reused by both <prior_turns> and the
+  // <known_objects> loader.
+  const priorTurnsForRun = (activeRun?.sessionId && activeRun?.ownerUpn && runWorkspace.taskType !== "code_generation")
+    ? loadPriorTurns({
+        sessionId:    activeRun.sessionId,
+        excludeRunId: runId,
+        upn:          activeRun.ownerUpn,
+        limit:        3,
+      })
+    : []
+
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,
     attachmentIds: activeRun?.attachmentIds ?? [],
-    // Prior turns from the same session, surfaced as a first-class
-    // `<prior_turns>` system anchor AND fed to the clarification
-    // detector so co-referential follow-ups ("plot it", "filter that")
-    // resolve to the previous turn's answer instead of triggering a
-    // "which of these did you mean?" question. We skip this for
-    // code-generation sandbox runs where the session is a different
-    // unit of work (one task per run) and for runs without a real sid.
-    priorTurns: (activeRun?.sessionId && activeRun?.ownerUpn && runWorkspace.taskType !== "code_generation")
-      ? loadPriorTurns({
-          sessionId:    activeRun.sessionId,
-          excludeRunId: runId,
-          upn:          activeRun.ownerUpn,
-          limit:        3,
-        })
-      : [],
+    priorTurns: priorTurnsForRun,
+    // <known_objects> directory — looks at the goal + prior turns,
+    // extracts qualified-name candidates, and surfaces matching cached
+    // entries from tool_knowledge so the model can prefer the cache
+    // path over re-running profile_data / inspect_definition /
+    // discover_relationships. Cache-only, never reads MSSQL; empty on
+    // first call / cold cache.
+    knownObjects: (() => {
+      try {
+        return loadKnownObjects({ goal, priorTurns: priorTurnsForRun })
+      } catch (err) {
+        console.warn(`[run ${runId}] knownObjects load failed:`, (err as Error).message)
+        return []
+      }
+    })(),
     // Per-run clarification state lives on the orchestrator. Passing it
     // here lets buildSystemMessages run the ambiguity detectors against
     // the goal + catalog + tenant, record what it emitted so the

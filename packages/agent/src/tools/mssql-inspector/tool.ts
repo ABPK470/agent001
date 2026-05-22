@@ -1,5 +1,6 @@
 import type sql from "mssql"
 import type { Tool } from "../../types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
 import { runObjectInspection } from "./handlers/definition.js"
 import { runDependsOn, runSearch } from "./handlers/dependency.js"
@@ -110,6 +111,18 @@ export const inspectDefinitionTool: Tool = {
   async execute(args) {
     const connName = args.connection ? String(args.connection).trim() : undefined
 
+    // Cache pre-flight for `object=` mode — the T-SQL body of a view / proc
+    // changes only on DDL, which the catalog fingerprint captures via
+    // column-shape changes. Dynamic modes (slow_queries, missing_indexes,
+    // index_usage, scan_duplicates, depends_on, search) are NOT cached:
+    // they either depend on live runtime stats or take ad-hoc scope.
+    if (args.object && typeof args.object === "string") {
+      const qn = args.object.trim()
+      const fp = fingerprintForQname(qn, connName)
+      const cached = tryServeFromCache("inspect_definition", qn, "definition", connName, fp)
+      if (cached !== null) return cached
+    }
+
     let p: sql.ConnectionPool
     try {
       const r = await getPool(connName)
@@ -132,7 +145,15 @@ export const inspectDefinitionTool: Tool = {
           object_types: typeof args.object_types === "string" ? args.object_types : undefined,
         })
       }
-      if (args.object) return runObjectInspection(p, String(args.object).trim())
+      if (args.object) {
+        const qn = String(args.object).trim()
+        const out = await runObjectInspection(p, qn)
+        if (typeof out === "string" && !out.startsWith("SQL Error:") && !out.startsWith("Error:")) {
+          const fp = fingerprintForQname(qn, connName)
+          persistToCache("inspect_definition", qn, "definition", connName, out, fp)
+        }
+        return out
+      }
 
       return "Error: Provide at least one parameter: object, depends_on, search, slow_queries, missing_indexes, index_usage, or scan_duplicates."
     } catch (err) {

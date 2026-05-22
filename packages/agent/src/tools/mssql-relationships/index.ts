@@ -9,6 +9,7 @@
 
 import sql from "mssql"
 import type { Tool } from "../../types.js"
+import { fingerprintForCatalogBuild, fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
 import {
   bfs,
@@ -71,6 +72,33 @@ export const discoverRelationshipsTool: Tool = {
   async execute(args) {
     const connName = args.connection ? String(args.connection).trim() : undefined
 
+    // ── Cache pre-flight (all four modes) ─────────────────────────
+    // Relationship topology changes only on DDL; pure data churn never
+    // affects the result. We cache by mode-specific cache key and use the
+    // catalog-shape fingerprint so schema changes invalidate cleanly.
+    if (args.table && typeof args.table === "string") {
+      const qn = String(args.table).trim()
+      const fp = fingerprintForQname(qn, connName)
+      const cached = tryServeFromCache("discover_relationships", qn, "fk", connName, fp)
+      if (cached !== null) return cached
+    } else if (Array.isArray(args.between) && (args.between as unknown[]).length === 2) {
+      const pair = (args.between as unknown[]).map((t) => String(t).trim().toLowerCase()).sort()
+      const key = `${pair[0]}|${pair[1]}`
+      const fp = fingerprintForCatalogBuild(connName)
+      const cached = tryServeFromCache("discover_relationships", key, "paths", connName, fp)
+      if (cached !== null) return cached
+    } else if (args.schema && typeof args.schema === "string") {
+      const schema = String(args.schema).trim()
+      const fp = fingerprintForCatalogBuild(connName)
+      const cached = tryServeFromCache("discover_relationships", schema, "schema", connName, fp)
+      if (cached !== null) return cached
+    } else if (args.column && typeof args.column === "string") {
+      const col = String(args.column).trim()
+      const fp = fingerprintForCatalogBuild(connName)
+      const cached = tryServeFromCache("discover_relationships", col, "column", connName, fp)
+      if (cached !== null) return cached
+    }
+
     let p: sql.ConnectionPool
     try {
       const result = await getPool(connName)
@@ -118,7 +146,16 @@ export const discoverRelationshipsTool: Tool = {
           `\nTotal: ${outgoing.length} outgoing, ${incoming.length} incoming FK relationships.`,
           `Tip: Use between=['${tableName}','other.Table'] to find indirect paths.`,
         )
-        return sections.join("\n")
+        const out = sections.join("\n")
+        persistToCache(
+          "discover_relationships",
+          tableName,
+          "fk",
+          connName,
+          out,
+          fingerprintForQname(tableName, connName),
+        )
+        return out
       }
 
       // Mode 2: Find paths between two tables
@@ -160,7 +197,17 @@ export const discoverRelationshipsTool: Tool = {
           sections.push(formatPath(paths[i]))
         }
         sections.push(`\n${paths.length} path${paths.length !== 1 ? "s" : ""} found.`)
-        return sections.join("\n")
+        const out = sections.join("\n")
+        const pair = [startTable, endTable].map((t) => t.toLowerCase()).sort()
+        persistToCache(
+          "discover_relationships",
+          `${pair[0]}|${pair[1]}`,
+          "paths",
+          connName,
+          out,
+          fingerprintForCatalogBuild(connName),
+        )
+        return out
       }
 
       // Mode 3: Schema-wide FK map
@@ -190,7 +237,16 @@ export const discoverRelationshipsTool: Tool = {
           const colPairs = cols.map((col) => `${col.parent_column} → ${col.referenced_column}`).join(", ")
           lines.push(`  ${c.parent_schema}.${c.parent_table} → ${c.referenced_schema}.${c.referenced_table}  [${colPairs}]  (${name})`)
         }
-        return lines.join("\n")
+        const out = lines.join("\n")
+        persistToCache(
+          "discover_relationships",
+          schema,
+          "schema",
+          connName,
+          out,
+          fingerprintForCatalogBuild(connName),
+        )
+        return out
       }
 
       // Mode 4: Implicit join candidates by column name
@@ -228,7 +284,16 @@ export const discoverRelationshipsTool: Tool = {
           `\nThese tables can potentially be JOINed on matching column names.`,
           `Verify data types match before joining. Use explore_mssql_schema(table='schema.Table') to confirm.`,
         )
-        return lines.join("\n")
+        const out = lines.join("\n")
+        persistToCache(
+          "discover_relationships",
+          colName,
+          "column",
+          connName,
+          out,
+          fingerprintForCatalogBuild(connName),
+        )
+        return out
       }
 
       return "Error: Provide at least one parameter: table, between, schema, or column."

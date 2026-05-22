@@ -6,6 +6,7 @@ import type { RunWorkspaceContext } from "../run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
+import { renderKnownObjectsBlock, type KnownObjectRow } from "./known-objects.js"
 import type { PriorTurn } from "./prior-turns.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
@@ -211,9 +212,16 @@ export async function buildSystemMessages(opts: {
    * anything) to ask.
    */
   priorTurns?: readonly PriorTurn[]
+  /**
+   * Pre-loaded cached profile / inspect / relationship entries surfaced
+   * to the model as `<known_objects>`. Populated by `loadKnownObjects` in
+   * run-executor; empty array (or omitted) skips the block.
+   */
+  knownObjects?: readonly KnownObjectRow[]
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
   const priorTurns = opts.priorTurns ?? []
+  const knownObjects = opts.knownObjects ?? []
   const isAdmin = opts.isAdmin ?? false
   const hasSiblings = opts.hasSiblings ?? false
   const siblingProgressDigest = opts.siblingProgressDigest ?? ""
@@ -239,6 +247,7 @@ export async function buildSystemMessages(opts: {
     `mssqlGuide=${decision.includeMssqlGuidance ? 1 : 0} ` +
     `memGuide=${decision.includeMemoryGuidance ? 1 : 0} ` +
     `priorTurns=${priorTurns.length} ` +
+    `knownObjects=${knownObjects.length} ` +
     `admin=${isAdmin ? 1 : 0}`,
   )
 
@@ -363,6 +372,24 @@ export async function buildSystemMessages(opts: {
       content: block,
       section: "system_anchor",
     })
+  }
+
+  // Section 1∇0b: <known_objects> — compact directory of tables/views
+  // already in the tool_knowledge cache (profile_data / inspect_definition
+  // / discover_relationships). Sits in `system_anchor` next to prior_turns
+  // because it primes the same kind of cross-turn continuity: the model
+  // should reach for what we already know before issuing a fresh probe.
+  // Caller passes [] when no cache exists (CLI / first call) and the
+  // block is silently skipped.
+  if (knownObjects.length > 0) {
+    const block = renderKnownObjectsBlock(knownObjects)
+    if (block.length > 0) {
+      systemMessages.push({
+        role: MessageRole.System,
+        content: block,
+        section: "system_anchor",
+      })
+    }
   }
 
   // Section 1∇0: Clarification discipline (≈1 KB). Always injected so the
