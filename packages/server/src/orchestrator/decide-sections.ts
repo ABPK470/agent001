@@ -82,6 +82,7 @@ export interface SectionDecision {
     tableHint:   boolean
     nonDb:       boolean
     sync:        boolean
+    bi:          boolean
   }
 }
 
@@ -109,16 +110,69 @@ const SYNC_SHAPE_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsy
 //
 // Scoring:
 //   +2  DB_OPERATIONAL_RE
-//   +2  DB_DOMAIN_RE
+//   +2  DB_DOMAIN_RE (per-tenant)
+//   +2  BI_DOMAIN_RE  (universal business-vocabulary anchor)
 //   +1  TABLE_DB_HINT_RE | DB_TABLE_HINT_RE
 //   +3  SYNC_RE
 //   −3  NON_DB_RE matches AND DB_OPERATIONAL_RE does NOT match
+//        (BI vocab does NOT cancel non-DB — `Monte Carlo portfolio
+//        simulation` matches `portfolio` but is still non-DB.)
 // isDbLike = score >= 2.
 
 // Universal SQL / discovery-tool tokens. NO customer-specific schema
 // or table names — those flow in via `DB_OPERATIONAL_SCHEMA_RE`,
 // rebuilt per-call from the live catalog.
 const DB_OPERATIONAL_CORE_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
+
+// ── Universal BI / business-question vocabulary ─────────────────────
+//
+// Captures the way users actually ASK warehouse questions — without any
+// SQL keyword. These are the archetypal BI patterns we should always
+// recognize as DB-shaped, regardless of tenant config:
+//
+//   - Metric nouns: revenue, sales, profit, margin, balance, exposure,
+//     volume, count, amount, transaction, order, invoice, payment
+//   - Entity nouns: product(s), customer(s), client(s), account(s),
+//     merchant(s), supplier(s), order(s), branch(es), region(s),
+//     segment(s), portfolio(s), book(s)
+//   - Aggregation phrasing: top N, bottom N, ranked, leaderboard,
+//     biggest, largest, smallest, highest, lowest, most/least <noun>,
+//     by month/quarter/year/region/product/customer
+//   - Time framing: YTD, MTD, QTD, fiscal, quarterly, monthly,
+//     year-over-year, YoY, MoM, QoQ, last (N) (days|weeks|months|years),
+//     since YYYY, in (Jan|Feb|...|January|...|Q1|Q2) (YYYY)?
+//
+// Anchors a goal as DB-shaped with +2 — same weight as the explicit
+// SQL/operational signal. Crucially, this fires even when neither the
+// hardcoded SQL vocab nor the per-tenant `domainRe` would catch the
+// question (production gap: "list top 3 products based on revenue for
+// April 2025" — 0 SQL keywords, untrained domain, but textbook BI).
+const BI_DOMAIN_RE = new RegExp(
+  [
+    // Metric nouns
+    "\\b(?:revenue|revenues|sales|profit|profits|margin|margins|gross|net",
+    "|balance|balances|exposure|exposures|volume|volumes|amount|amounts",
+    "|transaction|transactions|order|orders|invoice|invoices|payment|payments",
+    "|fees?|charges?|commission|commissions|deposit|deposits|loan|loans",
+    "|inventory|stock|holdings?|positions?|trades?|pnl|p&l)\\b",
+    // Entity nouns (singular and plural)
+    "|\\b(?:product|products|customer|customers|client|clients|account|accounts",
+    "|merchant|merchants|supplier|suppliers|vendor|vendors|branch|branches",
+    "|region|regions|country|countries|segment|segments|portfolio|portfolios",
+    "|banker|bankers|advisor|advisors|broker|brokers|book|books|desk|desks)\\b",
+    // Aggregation / ranking phrasing
+    "|\\btop\\s+\\d+\\b|\\bbottom\\s+\\d+\\b|\\branked?\\b|\\branking\\b|\\bleaderboard\\b",
+    "|\\b(?:biggest|largest|smallest|highest|lowest)\\b",
+    "|\\bby\\s+(?:month|quarter|year|region|country|product|customer|client|account|segment|branch|portfolio|banker)\\b",
+    // Time framing
+    "|\\b(?:ytd|mtd|qtd|yoy|mom|qoq|y\\/y|m\\/m|q\\/q)\\b",
+    "|\\b(?:fiscal|quarterly|monthly|annually|year[- ]over[- ]year|month[- ]over[- ]month)\\b",
+    "|\\blast\\s+\\d+\\s+(?:days?|weeks?|months?|quarters?|years?)\\b",
+    "|\\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+(?:19|20)\\d{2}\\b",
+    "|\\bQ[1-4]\\s+(?:19|20)\\d{2}\\b",
+  ].join(""),
+  "i",
+)
 
 // "Non-DB task type" cues only. NEVER add rendering verbs here.
 const NON_DB_RE = /\b(monte\s*carlo|simulation|mockup|mock-up|wireframe|prototype|sharpe\s+ratio|black.scholes|brownian|stochastic\s+process|geometric\s+brownian)\b/i
@@ -196,6 +250,8 @@ export interface DbScoreResult {
   tableHint:   boolean
   nonDb:       boolean
   sync:        boolean
+  /** True when the goal matches the universal BI/business vocabulary. */
+  bi:          boolean
 }
 
 /**
@@ -249,6 +305,12 @@ export function scoreDbLikelihood(
     || (dyn.operationalSchemaRe?.test(probe) ?? false)
   const domain      = dyn.domainRe?.test(probe) ?? false
   const tableHint   = (dyn.tableSchemaRe?.test(probe) ?? false) || (dyn.schemaTableRe?.test(probe) ?? false)
+  // Universal BI / business-vocabulary signal — catches archetypal
+  // warehouse questions phrased in business language ("top 3 products
+  // by revenue for April 2025") that contain ZERO SQL keywords. Goal-
+  // only, never context: a prior turn discussing "products" doesn't
+  // make THIS turn's "hi" a DB question.
+  const bi          = BI_DOMAIN_RE.test(goal)
   // Non-DB intent must come from the GOAL only — context might legitimately
   // mention a Monte-Carlo discussion from earlier without the current turn
   // being non-DB. Honouring explicit current intent here.
@@ -263,11 +325,15 @@ export function scoreDbLikelihood(
   if (operational)             score += 2
   if (domain)                  score += 2
   if (tableHint)               score += 1
+  if (bi)                      score += 2
   if (sync)                    score += 3
   if (priorDbToolCall)         score += 2
+  // NB: bi does NOT cancel nonDb — `Monte Carlo portfolio simulation`
+  // legitimately matches BI vocab (`portfolio`) but the simulation cue
+  // still wins. Operational SQL keywords remain the only nonDb cancel.
   if (nonDb && !operational)   score -= 3
 
-  return { score, operational, domain, tableHint, nonDb, sync }
+  return { score, operational, domain, tableHint, nonDb, sync, bi }
 }
 
 export function decideSections(opts: {
@@ -314,6 +380,7 @@ export function decideSections(opts: {
       tableHint:   db.tableHint,
       nonDb:       db.nonDb,
       sync:        db.sync,
+      bi:          db.bi,
     },
   }
 }

@@ -15,7 +15,7 @@
 import type { Tool } from "@mia/agent"
 import { setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { decideSections, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
+import { decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
 import { buildToolContext } from "../src/prompt-builder.js"
 import type { RunWorkspaceContext } from "../src/run-workspace.js"
@@ -219,6 +219,73 @@ describe("DB gating false-positives (must NOT trigger DB blocks)", () => {
     })
     expect(d.includeMssqlKnowledge).toBe(true)
     expect(d.includeMssqlGuidance ).toBe(true)
+  })
+})
+
+describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () => {
+  // Production gap (2026-05): a real user goal phrased purely in
+  // business language with ZERO SQL keywords and no per-tenant routing
+  // config matched none of the existing signals → dbScore=0 → DB
+  // discovery tools were filtered out → agent could not answer.
+  //
+  // The universal BI vocabulary signal must catch these patterns
+  // regardless of tenant config or per-catalog regex.
+  for (const goal of [
+    "list top 3 products based on revenue for April 2025", // the actual failing prod goal
+    "show me revenue by client for Q1 2025",
+    "which customers have the largest balance",
+    "monthly sales breakdown by product",
+    "top 10 invoices in May 2025",
+    "biggest merchants by transaction volume",
+    "YTD profit by region",
+    "rank bankers by revenue last 4 quarters",
+  ]) {
+    it(`fires DB gate for: ${goal}`, () => {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.dbScore, `dbScore for: ${goal}`).toBeGreaterThanOrEqual(2)
+      expect(d.triggers?.bi, `bi trigger for: ${goal}`).toBe(true)
+      expect(d.includeMssqlKnowledge, `mssql knowledge for: ${goal}`).toBe(true)
+      expect(d.includeMssqlCatalog,   `mssql catalog for: ${goal}`).toBe(true)
+    })
+
+    it(`keeps DB discovery tools for: ${goal}`, () => {
+      const d = decideSections({ goal, memory: emptyTier() })
+      const tools = [
+        { name: "query_mssql" },
+        { name: "search_catalog" },
+        { name: "explore_mssql_schema" },
+        { name: "discover_relationships" },
+        { name: "inspect_definition" },
+      ]
+      const res = filterToolsByGoal(tools, d)
+      expect(res.dropped, `dropped tools for: ${goal}`).toEqual([])
+      expect(res.passThrough, `passThrough for: ${goal}`).toBe(true)
+    })
+  }
+
+  it("BI vocab alone does NOT override a Monte Carlo simulation", () => {
+    // `Monte Carlo portfolio simulation` matches the `portfolio` BI noun,
+    // but the simulation cue (NON_DB) wins: 0 op + 2 bi − 3 nonDb = −1.
+    const d = decideSections({
+      goal: "Monte Carlo portfolio simulation with risk and volatility",
+      memory: emptyTier(),
+    })
+    expect(d.triggers?.bi).toBe(true)
+    expect(d.triggers?.nonDb).toBe(true)
+    expect(d.dbScore).toBeLessThan(2)
+    expect(d.includeMssqlKnowledge).toBe(false)
+  })
+
+  it("trivial greetings stay non-DB and drop DB tools", () => {
+    const d = decideSections({ goal: "hi", memory: emptyTier() })
+    expect(d.dbScore).toBeLessThan(2)
+    const res = filterToolsByGoal(
+      [{ name: "query_mssql" }, { name: "search_catalog" }, { name: "render_html" }],
+      d,
+    )
+    expect(res.dropped).toContain("query_mssql")
+    expect(res.dropped).toContain("search_catalog")
+    expect(res.tools.map((t) => t.name)).toEqual(["render_html"])
   })
 })
 
