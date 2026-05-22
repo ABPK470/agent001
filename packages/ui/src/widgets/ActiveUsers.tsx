@@ -340,7 +340,7 @@ export function ActiveUsers(): ReactNode {
               <SortTh k="lastModel"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden lg:table-cell"             label="Model" />
               <SortTh k="firstSeen"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="First Seen" />
               <SortTh k="lastSeen"   current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="Last Seen" />
-              <th className="py-2 px-3 w-6 hidden sm:table-cell" />
+              <th className="py-2 px-3 w-6 hidden sm:table-cell bg-surface" />
             </tr>
           </thead>
           <tbody>
@@ -455,7 +455,7 @@ function SortTh({ k, current, dir, onClick, label, className }: {
   const active = current === k
   return (
     <th
-      className={`py-2 px-3 font-semibold cursor-pointer select-none hover:text-text transition-colors ${active ? "text-text" : ""} ${className ?? ""}`}
+      className={`py-2 px-3 font-semibold cursor-pointer select-none hover:text-text transition-colors bg-surface ${active ? "text-text" : ""} ${className ?? ""}`}
       onClick={() => onClick(k)}
       title={label ? (active ? (dir === "asc" ? "Sort descending ↓" : "Sort ascending ↑") : `Sort by ${label}`) : undefined}
     >
@@ -554,7 +554,7 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
     const active = runSort === k
     return (
       <th
-        className={`py-2 px-3 text-[10px] uppercase tracking-wider font-semibold cursor-pointer select-none whitespace-nowrap transition-colors ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
+        className={`py-2 px-3 text-[10px] uppercase tracking-wider font-semibold cursor-pointer select-none whitespace-nowrap transition-colors bg-canvas ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
         onClick={() => onRunSort(k)}
       >
         {label}
@@ -570,7 +570,7 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
 
       {/* ── Sticky context banner ──────────────────────── */}
       <div
-        className="sticky top-[34px] z-[18] flex items-center gap-2.5 px-4 py-2.5 bg-surface border-b border-border-subtle rounded-t-md cursor-pointer select-none hover:bg-overlay-hover transition-colors"
+        className="sticky top-[34px] z-[18] flex items-center gap-2.5 px-4 py-2.5 bg-surface hover:bg-canvas border-b border-border-subtle rounded-t-md cursor-pointer select-none transition-colors"
         onClick={onCollapse}
         title="Click to collapse"
       >
@@ -683,17 +683,17 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
         {history && history.rows.length > 0 && (
           <div className="rounded-b-md">
           <table className={`w-full text-xs border-collapse ${history.loading ? "opacity-40" : ""}`}>
-            <thead className="sticky top-[70px] z-[16]">
+            <thead className="sticky top-[70px] z-[16] bg-canvas">
               <tr className="bg-canvas">
-                <th className="py-2 px-3 w-6" onClick={() => onRunSort("status")} />
-                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default">Run</th>
+                <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />
+                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default bg-canvas">Run</th>
                 <RSortTh k="started"  label="Started" />
                 <RSortTh k="duration" label="Duration" right />
                 <RSortTh k="steps"    label="Steps" right />
                 <RSortTh k="tokens"   label="Tokens" right />
                 <RSortTh k="llmCalls" label="LLM Calls" right />
                 <RSortTh k="model"    label="Model" />
-                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default">Goal</th>
+                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default bg-canvas">Goal</th>
               </tr>
             </thead>
             <tbody>

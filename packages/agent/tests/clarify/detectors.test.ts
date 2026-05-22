@@ -97,6 +97,65 @@ describe("schemaMatchDetector", () => {
     ])
     expect(schemaMatchDetector.detect(ctx({ goal: "show me data", catalog: cat }))).toEqual([])
   })
+
+  // Production regression — 22 May 2026. Goal "use publish.Revenue" fired
+  // TWO blocking findings ("publish" matched 1341 catalog objects;
+  // "revenue" matched 562) even though the user typed the fully-qualified
+  // table name. Root cause: tokenizer split on `.` and lost the fact that
+  // both halves came from the same disambiguating literal.
+  describe("qualified-name guard", () => {
+    it("suppresses BOTH halves when the user typed `schema.object` and it resolves", () => {
+      const cat = catalogFrom([
+        table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
+        // Lots of decoys so per-token matching WOULD fire if the guard
+        // were missing — the test would surface the bug directly.
+        table("core", "RevenueRaw", [col("amount", "decimal")]),
+        table("staging", "RevenueIn", [col("amount", "decimal")]),
+        table("publish", "Sales", [col("amount", "decimal")]),
+        table("publish", "Balances", [col("amount", "decimal")]),
+      ])
+      const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.Revenue", catalog: cat }))
+      expect(findings).toEqual([])
+    })
+
+    it("is case-insensitive on the qualified-name lookup", () => {
+      const cat = catalogFrom([
+        table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
+        table("core", "RevenueRaw", [col("amount", "decimal")]),
+        table("staging", "RevenueIn", [col("amount", "decimal")]),
+      ])
+      // Lowercase form — matches the trace exactly.
+      expect(schemaMatchDetector.detect(ctx({ goal: "list top 3 from publish.revenue for April 2025", catalog: cat }))).toEqual([])
+      // Mixed case still works.
+      expect(schemaMatchDetector.detect(ctx({ goal: "use PUBLISH.REVENUE today", catalog: cat }))).toEqual([])
+    })
+
+    it("does NOT suppress when the qualified literal does not resolve", () => {
+      // User typed `publish.WhoKnows` — that pair does NOT exist, so the
+      // ambiguous "publish" token (multiple matches) must still block.
+      const cat = catalogFrom([
+        table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
+        table("publish", "Sales", [col("amount", "decimal")]),
+        table("publish", "Balances", [col("amount", "decimal")]),
+      ])
+      const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.WhoKnows please", catalog: cat }))
+      // "publish" should still be flagged because it matches >=2 things
+      // and was NOT consumed by a resolvable qualified literal.
+      expect(findings.some((f) => f.subject === "publish")).toBe(true)
+    })
+
+    it("still suppresses unrelated tokens NOT touched by the qualified literal", () => {
+      // The literal consumes "publish" + "revenue"; other ambiguous tokens
+      // in the goal must still be evaluated normally.
+      const cat = catalogFrom([
+        table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
+        table("a", "Margin", [col("amount", "decimal")]),
+        table("b", "MarginRaw", [col("amount", "decimal")]),
+      ])
+      const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.Revenue for margin", catalog: cat }))
+      expect(findings.map((f) => f.subject)).toEqual(["margin"])
+    })
+  })
 })
 
 // ── term-undefined ───────────────────────────────────────────────

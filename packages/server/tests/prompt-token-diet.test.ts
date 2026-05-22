@@ -13,9 +13,9 @@
  */
 
 import type { Tool } from "@mia/agent"
-import { setMssqlConfigs } from "@mia/agent"
+import { resetTenantConfig, setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
+import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
 import { buildToolContext } from "../src/prompt-builder.js"
 import type { RunWorkspaceContext } from "../src/run-workspace.js"
@@ -30,6 +30,21 @@ const RW: RunWorkspaceContext = {
 }
 
 function emptyTier() { return { working: "", episodic: "", semantic: "" } }
+
+// Hermetic fixture: tenant config, MSSQL configs, and the dynamic gate
+// regex cache are all process-global singletons. Without an explicit
+// reset, any test that calls `setMssqlConfigs([...])` or seeds tenant
+// routingKeywords leaks state into every subsequent test in the file.
+// That cross-contamination is exactly how the May 2026 production gap
+// ("list top 3 products based on revenue for April 2025" → dbScore=0)
+// slipped through — fixture leakage made the classifier *look* like it
+// recognised business vocabulary when in fact it only recognised
+// schema-token regexes built from leaked catalog state.
+beforeEach(() => {
+  resetTenantConfig()
+  setMssqlConfigs([])
+  _resetDecideSectionsCache()
+})
 
 describe("decideSections", () => {
   it("turns OFF every gate for a casual / log-inspection goal", () => {
@@ -294,8 +309,24 @@ describe("scoreDbLikelihood telemetry", () => {
     const d = decideSections({ goal: "select top 10 from publish.Revenue grouped by pkClient", memory: emptyTier() })
     expect(d.dbScore).toBeGreaterThanOrEqual(2)
     expect(d.triggers?.operational).toBe(true)
-    expect(d.triggers?.domain     ).toBe(true)
+    // `domain` is per-tenant (built from tenant.routingKeywords.domain) and
+    // is null under the cold-start fixture this file enforces — so we
+    // assert it's false here. The universal BI signal carries the load
+    // for business vocabulary in the absence of tenant config.
+    expect(d.triggers?.domain     ).toBe(false)
+    expect(d.triggers?.bi         ).toBe(true)  // "Revenue" matches BI_DOMAIN_RE
     expect(d.triggers?.nonDb      ).toBe(false)
+  })
+
+  it("when tenant routingKeywords.domain is configured, the domain trigger fires", async () => {
+    // Locks the per-tenant routing path so we don't *only* test the
+    // universal BI fallback. This is the path that was leaking into
+    // every other test in this file before the hermetic fixture landed.
+    const { setTenantConfig } = await import("@mia/agent")
+    setTenantConfig({ routingKeywords: { schemas: [], domain: ["pkclient"], sync: [] } })
+    _resetDecideSectionsCache()
+    const d = decideSections({ goal: "select top 10 from publish.Revenue grouped by pkClient", memory: emptyTier() })
+    expect(d.triggers?.domain).toBe(true)
   })
 
   it("flags nonDb on a Monte Carlo goal", () => {

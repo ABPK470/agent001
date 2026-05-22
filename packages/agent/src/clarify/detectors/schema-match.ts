@@ -8,6 +8,8 @@
 // Pure function of (goal, catalog, messages). No I/O, no LLM.
 
 import { MessageRole } from "../../domain/enums/message.js"
+import { getTenantConfig } from "../../tenant/config.js"
+import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import { goalTokens } from "./stopwords.js"
@@ -21,8 +23,46 @@ import { goalTokens } from "./stopwords.js"
  * reference and the conversation already contains an assistant turn
  * (the referent IS that turn, not a catalog ambiguity). Min token
  * length raised to 4 so 2-3 char accidental matches stop firing.
+ *
+ * 1.2.0: qualified-name guard — when the goal contains a `schema.object`
+ * literal that resolves against the catalog (directly or via the
+ * deployment's mirrorSchema), BOTH halves are treated as disambiguated
+ * by the user themselves. Without this, a goal like "use publish.Revenue"
+ * fires two blocking findings ("publish" → 1341 candidates, "revenue" →
+ * 562) even though the user typed the fully-qualified name. The bug
+ * surfaced in production on 22 May 2026.
  */
-const VERSION = "1.1.0"
+const VERSION = "1.2.0"
+
+/** Catches `schema.object` references in goal text. Case-insensitive on
+ *  the catalog side via `CatalogGraph.getTable`. Underscores and digits
+ *  allowed in either half (matches SQL Server identifier rules). */
+const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/g
+
+/**
+ * Tokens already disambiguated by a qualified reference the user wrote
+ * themselves. Both halves of every resolvable `schema.object` reference
+ * in the goal are added — the schema half because the user picked it,
+ * the object half because the catalog confirms it pairs with that schema.
+ */
+function disambiguatedTokens(goal: string, catalog: CatalogGraph): Set<string> {
+  const out = new Set<string>()
+  const mirrorSchema = getTenantConfig().mirrorSchema
+  for (const m of goal.matchAll(QUALIFIED_NAME_RE)) {
+    const qname = m[0]
+    const schema = m[1]!.toLowerCase()
+    const object = m[2]!.toLowerCase()
+    const resolved = catalog.getTable(qname)
+      ?? (mirrorSchema && !schema.startsWith(`${mirrorSchema.toLowerCase()}.`)
+            ? catalog.getTable(`${mirrorSchema}.${qname}`)
+            : null)
+    if (resolved) {
+      out.add(schema)
+      out.add(object)
+    }
+  }
+  return out
+}
 
 /**
  * Hard upper bound on candidates listed in the finding. Past this many
@@ -72,10 +112,15 @@ export const schemaMatchDetector: Detector = {
     // archive.* table names. Fed from system-messages.ts which now
     // passes the prior-turns synthetic transcript via ctx.messages.
     if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return []
+    // Qualified-name guard: any `schema.object` the user already typed
+    // and that resolves against the live catalog (with mirrorSchema
+    // fallback) consumes BOTH halves — the user disambiguated themselves.
+    const consumed = disambiguatedTokens(ctx.goal, ctx.catalog)
     const out = []
     const seenTokens = new Set<string>()
     for (const token of goalTokens(ctx.goal)) {
       if (token.length < MIN_TOKEN_LEN) continue
+      if (consumed.has(token)) continue
       if (seenTokens.has(token)) continue
       seenTokens.add(token)
       const matches = ctx.catalog.nameIndex.get(token)

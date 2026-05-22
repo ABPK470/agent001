@@ -160,10 +160,13 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Warm off-white / paper aesthetic per design reference */
-  --canvas: #efeae0;
-  --panel: #f6f2ea;
-  --panel-2: #fbf8f1;
+  /* Warm off-white / paper aesthetic per design reference.
+     Palette lifted one step lighter (2026-05): canvas takes what used to
+     be --panel; each surface shifts up so the whole app reads lighter
+     while preserving contrast relationships between layers. */
+  --canvas: #f6f2ea;
+  --panel: #fbf8f1;
+  --panel-2: #ffffff;
   --panel-3: #ffffff;
 
   --overlay-1: rgba(0, 0, 0, 0.025);
@@ -204,7 +207,7 @@
   --info-soft: rgba(29, 78, 216, 0.10);
 
   --scrim: rgba(0, 0, 0, 0.40);
-  --bubble-user: #e8e2d3;
+  --bubble-user: #efeae0;
   --shadow-bubble: 0 2px 8px rgba(60, 50, 30, 0.06);
 
   --dt-int: #1d4ed8;
@@ -218,7 +221,7 @@
   --sa: #18181b;
   --sd: #c0bbac;
 
-  --bg: #efeae0;
+  --bg: #f6f2ea;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */

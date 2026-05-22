@@ -30,6 +30,16 @@ export class CatalogGraph {
   /** tableKey → implicit edges involving this table */
   readonly implicitJoinIndex: Map<string, ImplicitEdge[]>
   /**
+   * Lowercased qualified name → canonical (original-case) key.
+   * SQL identifiers are case-insensitive; the LLM and tool callers send
+   * `publish.revenue`, `Publish.Revenue`, `PUBLISH.REVENUE` interchangeably.
+   * Built once at construction so every `getTable` call is O(1) regardless
+   * of casing. Required: was the root cause of the May 2026 production
+   * "Table 'publish.revenue' not found" failure when the catalog stored
+   * the view as `publish.Revenue`.
+   */
+  private readonly tablesLower: Map<string, string>
+  /**
    * For every publish VIEW: sum of row_counts of the physical tables it directly references.
    * Built at catalog-build time from Q_VIEW_DEPS — zero runtime cost for the agent.
    * Key = "publish.ViewName", value = total source rows.
@@ -57,6 +67,8 @@ export class CatalogGraph {
     sysCatalog?: SysEntry[],
   ) {
     this.tables = tables
+    this.tablesLower = new Map()
+    for (const key of tables.keys()) this.tablesLower.set(key.toLowerCase(), key)
     this.nameIndex = nameIndex
     this.columnIndex = columnIndex
     this.adjacency = adjacency
@@ -171,9 +183,20 @@ export class CatalogGraph {
     return findFkPath(this.tables, this.adjacency, from, to, maxDepth)
   }
 
-  /** Get a specific table by qualified name ("schema.Table"). */
+  /**
+   * Get a specific table by qualified name ("schema.Table"), case-insensitive.
+   *
+   * SQL Server identifiers are case-insensitive by default; LLM tool
+   * arguments arrive in any case (`publish.revenue` vs `publish.Revenue`).
+   * This method tries the exact original-case key first (fast path), then
+   * falls back to the lowercased-key index. Returns `null` only when the
+   * name truly isn't in the catalog under ANY casing.
+   */
   getTable(qualifiedName: string): CatalogTable | null {
-    return this.tables.get(qualifiedName) ?? null
+    const direct = this.tables.get(qualifiedName)
+    if (direct) return direct
+    const canonical = this.tablesLower.get(qualifiedName.toLowerCase())
+    return canonical ? (this.tables.get(canonical) ?? null) : null
   }
 
   /**

@@ -1,5 +1,33 @@
-import type { CatalogGraph } from "../catalog/index.js"
+import { getTenantConfig } from "../../tenant/config.js"
+import type { CatalogGraph, CatalogTable } from "../catalog/index.js"
 import { fmtPath, fmtRow } from "./formatters.js"
+
+/**
+ * Resolve `qualifiedName` to a catalog table, applying the deployment's
+ * `mirrorSchema` doctrine when the bare name doesn't hit.
+ *
+ * Example: in deployments where `mirrorSchema = 'persistedView'`, the wide
+ * curated view `publish.Revenue` is also materialised as the 3-part name
+ * `persistedView.publish.Revenue`. The LLM and most users refer to the
+ * base name (`publish.revenue`); this helper bridges that gap so the
+ * lookup succeeds either way. Case-insensitive throughout.
+ *
+ * Returns the resolved table and the `resolvedVia` annotation so the
+ * caller can surface a short note to the LLM ("resolved via mirror…").
+ */
+function resolveTable(
+  catalog: CatalogGraph,
+  qualifiedName: string,
+): { table: CatalogTable; resolvedVia: "direct" | "mirror" } | null {
+  const direct = catalog.getTable(qualifiedName)
+  if (direct) return { table: direct, resolvedVia: "direct" }
+  const mirrorSchema = getTenantConfig().mirrorSchema
+  if (mirrorSchema && !qualifiedName.toLowerCase().startsWith(mirrorSchema.toLowerCase() + ".")) {
+    const mirrored = catalog.getTable(`${mirrorSchema}.${qualifiedName}`)
+    if (mirrored) return { table: mirrored, resolvedVia: "mirror" }
+  }
+  return null
+}
 
 export function handleStats(catalog: CatalogGraph): string {
   const s = catalog.stats()
@@ -25,16 +53,20 @@ export function handleStats(catalog: CatalogGraph): string {
 }
 
 export function handleTable(catalog: CatalogGraph, tableName: string): string {
-  const t = catalog.getTable(tableName)
-  if (!t) {
+  const resolved = resolveTable(catalog, tableName)
+  if (!resolved) {
     const hits = catalog.search(tableName.replace(".", " "), 3)
     if (hits.length > 0) {
       return `Table '${tableName}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName} (${h.table.type})`).join("\n")}`
     }
     return `Table '${tableName}' not found in catalog. Use search_catalog(search='keyword') to find it.`
   }
+  const t = resolved.table
+  const header = resolved.resolvedVia === "mirror"
+    ? `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""}) — resolved via mirror (input was '${tableName}')`
+    : `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`
   const lines = [
-    `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`,
+    header,
     "",
     "Columns:",
   ]
@@ -62,15 +94,19 @@ export function handleTable(catalog: CatalogGraph, tableName: string): string {
 }
 
 export function handleJoins(catalog: CatalogGraph, key: string): string {
-  const t = catalog.getTable(key)
-  if (!t) {
+  const resolved = resolveTable(catalog, key)
+  if (!resolved) {
     const hits = catalog.search(key.replace(".", " "), 3)
     if (hits.length > 0) {
       return `Table '${key}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName}`).join("\n")}`
     }
     return `Table '${key}' not found in catalog.`
   }
-  const lines = [`Join edges for ${t.qualifiedName}:`]
+  const t = resolved.table
+  const header = resolved.resolvedVia === "mirror"
+    ? `Join edges for ${t.qualifiedName} (resolved via mirror from '${key}'):`
+    : `Join edges for ${t.qualifiedName}:`
+  const lines = [header]
 
   if (t.fkOutgoing.length > 0) {
     lines.push("", "FK OUTGOING (this table references):")
@@ -86,11 +122,11 @@ export function handleJoins(catalog: CatalogGraph, key: string): string {
     if (t.fkIncoming.length > 15) lines.push(`  ... +${t.fkIncoming.length - 15} more`)
   }
 
-  const implicit = catalog.getImplicitJoins(key)
+  const implicit = catalog.getImplicitJoins(t.qualifiedName)
   if (implicit.length > 0) {
     lines.push("", `IMPLICIT JOINS (${implicit.length} shared columns with other tables):`)
     for (const edge of implicit) {
-      const others = edge.tables.filter((tk) => tk !== key).slice(0, 8)
+      const others = edge.tables.filter((tk) => tk !== t.qualifiedName).slice(0, 8)
       lines.push(`  ${edge.column} (${edge.dataType}) → ${others.join(", ")}${edge.tables.length > 9 ? ` (+${edge.tables.length - 9} more)` : ""}`)
     }
   }

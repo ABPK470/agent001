@@ -12,8 +12,8 @@
  * In the latter case add the new clean case here as well.
  */
 import { describe, expect, it } from "vitest"
-import { findAggregateSemanticIssues, getQueryWarnings, validateQuery } from "../src/tools/mssql/validation.js";
 import { AggregateSeverity } from "../src/domain/enums/sql-guard.js"
+import { findAggregateSemanticIssues, getQueryWarnings, validateQuery } from "../src/tools/mssql/validation.js"
 
 describe("aggregate-semantic guard — BLOCK (alias-function mismatch)", () => {
   it("blocks SUM(...) AS Avg…", () => {
@@ -94,8 +94,19 @@ describe("aggregate-semantic guard — clean queries pass", () => {
   })
 
   it("SUM(RevenueZARMTD) AS TotalRevenue is clean", () => {
-    const q = "SELECT SUM(r.RevenueZAR) AS TotalRevenueZAR FROM #scope r"
+    // RevenueZARMTD is a row-grain monthly-slice metric in this warehouse
+    // (one row per business key per pkMonth). SUMming within a pkMonth
+    // yields the correct period total — MTD/YTD/QTD/WTD are intentionally
+    // NOT in the pre-aggregation token list.
+    const q = "SELECT SUM(r.RevenueZARMTD) AS TotalRevenueZAR FROM #scope r"
     expect(findAggregateSemanticIssues(q)).toEqual([])
+  })
+
+  it("SUM(...YTD) / SUM(...QTD) / SUM(...WTD) are clean (period-slice metrics)", () => {
+    for (const col of ["RevenueZARYTD", "RevenueZARQTD", "RevenueZARWTD"]) {
+      const q = `SELECT SUM(r.${col}) AS TotalRevenueZAR FROM #scope r`
+      expect(findAggregateSemanticIssues(q), `${col} should be clean`).toEqual([])
+    }
   })
 
   it("MAX(SpotBalance) AS LatestSpotBalance is clean", () => {

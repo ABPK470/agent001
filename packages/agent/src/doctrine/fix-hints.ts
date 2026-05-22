@@ -13,9 +13,10 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
   aggregate_semantic_mismatch: [
     "Change the aggregate function to match the alias (or vice-versa).",
     "The function name is the implementation; the output alias is the contract with the reader. They MUST agree.",
-    "Common cases: `SUM(...) AS Avg…` → use `AVG(...)`. `SUM(...MTD)` over multiple months → use `AVG(...)` or pick a single `pkMonth` row.",
-    "If you are unsure whether a column is summable, call `profile_data table=<schema.Table> columns=[<column>]` first — it reports distribution and distinct-cardinality clues that distinguish snapshot/MTD columns from period-additive ones.",
-    "Once confirmed, save the finding with `note subject=<schema.Table.Column> claim=\"<summable | snapshot | MTD> — <one-line rule>\" category=column_semantics` so the next turn does not re-derive it.",
+    "Common cases: `SUM(...) AS Avg…` → use `AVG(...)`. `SUM(...Snapshot)` / `SUM(...EOM)` / `SUM(...Spot)` — these are point-in-time values: use `AVG(...)` or pick the `MAX(<dateKey>)` row.",
+    "NOTE: columns suffixed `…MTD / …YTD / …QTD / …WTD` ARE summable in this warehouse — they are row-grain period slices, not cumulative snapshots. SUM them within their period key (`pkMonth` / `pkYear` / …) normally.",
+    "If you are unsure whether a column is summable, call `profile_data table=<schema.Table> columns=[<column>]` first — it reports distribution and distinct-cardinality clues that distinguish snapshot columns from period-additive ones.",
+    "Once confirmed, save the finding with `note subject=<schema.Table.Column> claim=\"<summable | snapshot> — <one-line rule>\" category=column_semantics` so the next turn does not re-derive it.",
   ].join(" "),
 
   temp_table_integrity: [
@@ -123,7 +124,8 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
       claim:
         "Aggregate function and output alias must agree. " +
         "Confirm column summability with `profile_data` before choosing SUM vs AVG; " +
-        "for *MTD / *YTD / *Snapshot / *Spot columns the answer is almost always AVG (or single-row), not SUM.",
+        "for *Snapshot / *EOM / *Spot / *Latest columns the answer is almost always AVG (or single-row), not SUM. " +
+        "`*MTD / *YTD / *QTD / *WTD` columns ARE summable within their period key in this warehouse.",
       evidence: `Blocked shape: ${snippet}`,
       category: "column_semantics",
     }

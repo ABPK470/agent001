@@ -59,7 +59,7 @@ function numericValue(val: string): number {
 function isPkHeader(h: string): boolean { return /^pk|^fk|[Ii][Dd]$|_id$/i.test(h) }
 
 /** Returns true if the column header looks like a monetary / large financial value. */
-const MONEY_KEYWORDS = /revenue|amount|balance|profit|cost|fee|income|value|zar|usd|eur|gbp|total|sum|price|salary/i
+const MONEY_KEYWORDS = /revenue|amount|balance|profit|cost|fee|income|value|zar|usd|eur|gbp|total|sum|price|salary|spend|charge|premium|discount|margin|gross|net|tax|payment|debit|credit|expense|dividend|interest|principal|payout|deposit|withdraw|transfer|payable|receivable|exposure|limit|outstanding|arrears|loss|gain|cashflow|cash_flow|nav|gmv/i
 function isMoneyHeader(h: string): boolean { return !isPkHeader(h) && MONEY_KEYWORDS.test(h) }
 
 /** Format a raw numeric string that came from the database into a readable number.
@@ -75,8 +75,18 @@ function formatMoneyCell(raw: string): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** Format any large unformatted number string for display. */
-function formatNumericCell(raw: string, isMoney: boolean, isPk: boolean): string {
+/** Format any large unformatted number string for display.
+ *
+ *  Rules (in order):
+ *    1. PK/FK/ID columns → bare integer, no separators (those numbers ARE identifiers, not magnitudes).
+ *    2. Already-abbreviated values (12.3M, 4K, …) → pass through.
+ *    3. Money columns OR columns containing any decimal value → money formatting
+ *       (B/M abbreviation above 1M, otherwise comma-thousands + 2dp).
+ *    4. Pure-integer cells in a pure-integer column:
+ *       - ≥ 1000 → thousand-separator ("1,234,567") — these are real-world counts, not IDs.
+ *       - < 1000 → bare ("42").
+ */
+function formatNumericCell(raw: string, isMoney: boolean, isPk: boolean, hasDecimals: boolean): string {
   if (!raw || raw === "NULL") return raw
   // PK/FK/ID columns: strip everything non-digit and return bare integer — no separators, no abbreviation
   if (isPk) {
@@ -86,12 +96,16 @@ function formatNumericCell(raw: string, isMoney: boolean, isPk: boolean): string
   // If it already has letters (abbreviated) leave it; commas handled below via numericValue
   if (/[KMBkmb]/.test(raw)) return raw
   if (!isNumericCell(raw)) return raw
-  if (isMoney) return formatMoneyCell(raw)
+  // Money columns OR any decimal-bearing column → money-style formatting.
+  if (isMoney || hasDecimals) return formatMoneyCell(raw)
   const n = numericValue(raw)
   if (isNaN(n)) return raw
-  // Integers: show as plain number, no separators (IDs, counts, etc.)
-  if (Number.isInteger(n)) return Math.trunc(n).toString()
-  // Large decimals: add thousands separator (en-US commas)
+  // True integers ≥ 1000 → still want thousand separators ("1,234" not "1234").
+  if (Number.isInteger(n)) {
+    if (Math.abs(n) >= 1000) return n.toLocaleString("en-US")
+    return Math.trunc(n).toString()
+  }
+  // Mixed decimals on a non-money column — show comma-separated, up to 4dp.
   if (Math.abs(n) >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 4 })
   return raw
 }
@@ -155,6 +169,19 @@ export function DataTable({
   const moneyCols = useMemo(
     () => headers.map((h, ci) => !pkCols[ci] && numericCols[ci] && isMoneyHeader(h)),
     [headers, pkCols, numericCols],
+  )
+
+  // Detect "has any decimal value" columns — strong signal that the column represents
+  // a real-world magnitude (cash, ratio, rate, weight) rather than an identifier or count.
+  // Used to apply money-style formatting even when the header doesn't match a money keyword.
+  const decimalCols = useMemo(
+    () => headers.map((_, ci) =>
+      !pkCols[ci] && numericCols[ci] && rows.some((row) => {
+        const v = row[ci]
+        return !!v && v !== "NULL" && /\.\d/.test(v)
+      }),
+    ),
+    [headers, rows, pkCols, numericCols],
   )
 
   // Filter
@@ -351,7 +378,7 @@ export function DataTable({
                   {headers.map((_, ci) => {
                     const val = row[ci] ?? ""
                     const isNull = val === "NULL"
-                    const displayVal = formatNumericCell(val, moneyCols[ci], pkCols[ci])
+                    const displayVal = formatNumericCell(val, moneyCols[ci], pkCols[ci], decimalCols[ci])
                     return (
                       <td
                         key={ci}

@@ -18,9 +18,9 @@ export const aggregateNamingDoctrine: DoctrineModule = {
     return [
       "Aggregate ↔ alias agreement (enforced):",
       "- The aggregate function and the output column alias MUST agree (SUM→Total/Sum, AVG→Avg/Mean, COUNT→Count).",
-      "- SUM(x) AS Avg… or AVG(x) AS Total… is BLOCKED — it silently produces N× the real value.",
-      "- For columns named Average/Avg/Spot/EOM/Latest/Snapshot/MTD/YTD, verify the math: usually AVG or latest-row, not SUM.",
-      "- See also: `profile_data` to confirm whether a column is summable; `note` (category=column_semantics) to record the answer.",
+      "- SUM(x) AS Avg… or AVG(x) AS Total… is BLOCKED — silently returns N× the real value.",
+      "- Snapshot/pre-averaged cols (Average/Avg/Mean/Spot/EOM/Latest/Snapshot/AsOf): AVG, not SUM. MTD/YTD/QTD/WTD = row-grain period slices — SUM within their period key.",
+      "- Confirm with `profile_data`; record with `note` (category=column_semantics).",
     ].join("\n")
   },
   enforce(query: string) {

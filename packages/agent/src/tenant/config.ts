@@ -110,9 +110,17 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
   mirrorSchema: null,
   routingKeywords: { schemas: [], domain: [], sync: [] },
   preAggregationTokens: [
+    // Snapshot / point-in-time / pre-averaged columns whose row values
+    // CANNOT be SUMmed without double-counting. Tenant-overridable.
+    //
+    // INTENTIONALLY NOT INCLUDED: MTD / YTD / QTD / WTD. In this and
+    // similar MyMI-style warehouses, those suffixes denote row-grain
+    // *period-slice* metrics (one row per business key per period;
+    // SUM across rows for a single pkMonth/pkYear is the correct
+    // period total). A tenant whose `…MTD` columns are instead a
+    // cumulative running total should override this list at startup.
     "Average", "Avg", "Mean", "Median",
     "Spot", "EOM", "Eod", "Latest", "Snapshot", "EndOf", "AsOf", "StartOf",
-    "MTD", "YTD", "QTD", "WTD",
   ],
   aliasFamilies: [
     { prefix: "Sum", aggregate: "SUM" },
