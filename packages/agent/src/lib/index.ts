@@ -52,6 +52,7 @@ export type {
 } from "../types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
+export * from "../clarify/index.js"
 export * from "../context/index.js"
 export * from "../delegation/index.js"
 export * from "../doctrine/index.js"

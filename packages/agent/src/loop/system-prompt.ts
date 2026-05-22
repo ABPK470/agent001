@@ -138,3 +138,13 @@ export const BIG_TABLE_ETL_SECTION = loadPrompt("big-table-etl.md")
  * the model with the generic operating manual in DEFAULT_SYSTEM_PROMPT.
  */
 export const MIA_DATA_PERSONA_SECTION = loadPrompt("mia-data-persona.md")
+
+/**
+ * Clarification-discipline rules — when a `<must_clarify>` system block is
+ * present, the agent MUST call ask_user for each 🛑 BLOCK finding before
+ * acting on a particular interpretation; when `<resolved_clarifications>`
+ * is present, those answers are authoritative and must not be re-asked.
+ * Compact (~1 KB) and ALWAYS injected — clarification quality is not a
+ * domain feature, it is a baseline trust requirement.
+ */
+export const CLARIFICATION_DISCIPLINE_SECTION = loadPrompt("clarification-discipline.md")

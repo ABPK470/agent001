@@ -3,6 +3,7 @@ import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
+import type { ClarificationsRegistry } from "./clarifications-state.js"
 export type { RunPriority } from "../queue.js"
 
 // ── Run-level state ───────────────────────────────────────────────
@@ -83,4 +84,12 @@ export interface OrchestratorRunCtx {
   completedRunWorkspaces: Map<string, RunWorkspaceContext>
   completedRunDiffs: Map<string, WorkspaceDiff>
   messageRouter: MessageRouter | null
+  /**
+   * Per-run clarification state. The system-messages renderer records
+   * emitted findings; askUserResolve matches incoming questions against
+   * those findings; respondToRun stores the user's answer as a
+   * ResolvedClarification so the next round's detector context can
+   * suppress re-asking the same subject.
+   */
+  clarifications: ClarificationsRegistry
 }

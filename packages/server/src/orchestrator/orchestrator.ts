@@ -22,6 +22,7 @@ import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
 import { cleanupExpiredCache } from "../tool-cache.js"
 import { filterToolsForVisitor, getAllTools } from "../tools.js"
+import { ClarificationsRegistry } from "./clarifications-state.js"
 import { createNotification, saveTrace } from "./persistence.js"
 import { recoverStaleRunsImpl } from "./recovery.js"
 import { executeRunImpl } from "./run-executor.js"
@@ -35,6 +36,7 @@ export class AgentOrchestrator {
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
   private readonly pendingKills = new Map<string, { resolve: (message: string) => void; perToolCtrl: AbortController }>()
+  private readonly clarifications = new ClarificationsRegistry()
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
@@ -261,6 +263,19 @@ export class AgentOrchestrator {
     if (!pending) return false
     pending.resolve(response)
     this.pendingInputs.delete(runId)
+    // Resolve any pending clarification finding this answer corresponds to.
+    // Round number is best-effort — we use the active run's traceSeq as a
+    // coarse proxy because the orchestrator does not track LLM-round number
+    // here. Detector context only consults presence/absence, not the value.
+    const round = this.activeRuns.get(runId)?.traceSeq ?? 0
+    const resolvedClarification = this.clarifications.resolvePending(runId, response, round)
+    if (resolvedClarification) {
+      saveTrace(this.activeRuns, runId, {
+        kind: TrajectoryEventKind.ClarificationResolved,
+        findingId: resolvedClarification.findingId,
+        subject: resolvedClarification.subject,
+      } as unknown as Record<string, unknown>)
+    }
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.UserInputResponse, text: response })
     broadcast({ type: EventType.UserInputResponse, data: { runId } })
     return true
@@ -319,6 +334,7 @@ export class AgentOrchestrator {
       completedRunWorkspaces: this.completedRunWorkspaces,
       completedRunDiffs: this.completedRunDiffs,
       messageRouter: this.messageRouter,
+      clarifications: this.clarifications,
     }
   }
 

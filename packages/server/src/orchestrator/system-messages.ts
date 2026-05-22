@@ -1,8 +1,10 @@
-import type { Message, Tool } from "@mia/agent"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, getCatalog, getCatalogSchemaFingerprint, MessageRole, MIA_DATA_PERSONA_SECTION, renderPromptVars } from "@mia/agent"
+import type { LLMClient, Message, Tool } from "@mia/agent"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOGUE_SECTION, CLARIFICATION_DISCIPLINE_SECTION, DEFAULT_SYSTEM_PROMPT, detectAmbiguities, getCatalog, getCatalogSchemaFingerprint, getTenantConfig, MessageRole, MIA_DATA_PERSONA_SECTION, renderPromptVars, runLlmPlanner, shouldInvokePlanner } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
+import { buildClarificationBlock } from "./clarification-block.js"
+import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
@@ -165,6 +167,31 @@ export async function buildSystemMessages(opts: {
    */
   coordinationTopic?: string
   /**
+   * Per-run clarification registry. When supplied, buildSystemMessages
+   * runs the ambiguity detectors (and the LLM planner when detectors
+   * are silent) over the goal + catalog + tenant, records the emitted
+   * findings in the registry so a later ask_user question can be
+   * matched back to them, and injects a <must_clarify> /
+   * <resolved_clarifications> system message. Optional so the existing
+   * test surface (which calls buildSystemMessages without an
+   * orchestrator) keeps working.
+   */
+  clarifications?: ClarificationsRegistry
+  /**
+   * LLM client used by the clarification planner fallback when the
+   * deterministic detectors find nothing. Omit to skip the planner.
+   */
+  llmForClarification?: LLMClient
+  /**
+   * Optional sink for clarification trace events (detected + planner-invoked).
+   * Receives one call per emitted finding plus one call when the LLM planner
+   * is invoked. No-op when omitted.
+   */
+  onClarificationTrace?: (event:
+    | { kind: "detected"; finding: import("@mia/agent").AmbiguityFinding }
+    | { kind: "planner-invoked"; findingsCount: number }
+  ) => void
+  /**
    * Whether the originating session is an admin. Controls which
    * environment details are injected into the system prompt:
    *  - true  → full environment (home dir, workspace path, source tree)
@@ -230,6 +257,54 @@ export async function buildSystemMessages(opts: {
     console.warn(`[run ${opts.runId}] resolvedFacts assembly failed:`, (err as Error).message)
   }
 
+  // Section 0b: <must_clarify> / <resolved_clarifications> — surface
+  // ambiguities the agent should resolve via ask_user before answering.
+  // Detectors are deterministic & cheap; the LLM planner only fires when
+  // detectors find nothing AND the goal looks substantive (length, no
+  // resolved findings yet, low round number). Failures are logged and
+  // never block the run — clarification is a quality rail, not a gate.
+  if (opts.clarifications) {
+    try {
+      const catalog = getCatalog()
+      const tenant = getTenantConfig()
+      const resolved = opts.clarifications.getResolved(opts.runId)
+      const ctx = {
+        goal, catalog, tenant,
+        messages: [] as readonly Message[],
+        resolved,
+        round: 0,
+      }
+      let findings = detectAmbiguities(ctx)
+      if (findings.length === 0 && opts.llmForClarification && shouldInvokePlanner(ctx, findings)) {
+        findings = await runLlmPlanner(ctx, opts.llmForClarification)
+        opts.onClarificationTrace?.({ kind: "planner-invoked", findingsCount: findings.length })
+      }
+      if (findings.length > 0) {
+        opts.clarifications.recordEmitted(opts.runId, 0, findings)
+        for (const f of findings) opts.onClarificationTrace?.({ kind: "detected", finding: f })
+        const block = buildClarificationBlock({ findings, resolved })
+        if (block.length > 0) {
+          systemMessages.push({
+            role: MessageRole.System,
+            content: block,
+            section: "system_law",
+          })
+        }
+      } else if (resolved.length > 0) {
+        const block = buildClarificationBlock({ findings: [], resolved })
+        if (block.length > 0) {
+          systemMessages.push({
+            role: MessageRole.System,
+            content: block,
+            section: "system_law",
+          })
+        }
+      }
+    } catch (err) {
+      console.warn(`[run ${opts.runId}] clarification block failed:`, (err as Error).message)
+    }
+  }
+
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
   const promptVars = buildPromptVars()
@@ -237,6 +312,16 @@ export async function buildSystemMessages(opts: {
   systemMessages.push({
     role: MessageRole.System,
     content: `${renderPromptVars(basePrompt, promptVars)}\n${envBlock}`,
+    section: "system_anchor",
+  })
+
+  // Section 1∇0: Clarification discipline (≈1 KB). Always injected so the
+  // model has the rules in scope whether or not a <must_clarify> block
+  // appears this round — the rules also govern future rounds after
+  // detectors fire.
+  systemMessages.push({
+    role: MessageRole.System,
+    content: CLARIFICATION_DISCIPLINE_SECTION,
     section: "system_anchor",
   })
 

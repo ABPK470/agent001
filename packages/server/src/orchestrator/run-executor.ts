@@ -289,6 +289,11 @@ export async function executeRunImpl(
     askUserResolve: (question, options, sensitive) => {
       boundSaveTrace(runId, { kind: TrajectoryEventKind.UserInputRequest, question, options, sensitive })
       broadcast({ type: EventType.UserInputRequired, data: { runId, question, options: options ?? [], sensitive } })
+      // If this question fuzzy-matches a clarification finding we recently
+      // emitted to the agent, stash it as pending so respondToRun() can
+      // record the answer as a ResolvedClarification.
+      const match = ctx.clarifications.matchQuestion(runId, question)
+      if (match) ctx.clarifications.setPending(runId, match, question)
       return new Promise<string>((resolve) => {
         ctx.pendingInputs.set(runId, { resolve })
       })
@@ -407,6 +412,31 @@ export async function executeRunImpl(
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,
     attachmentIds: activeRun?.attachmentIds ?? [],
+    // Per-run clarification state lives on the orchestrator. Passing it
+    // here lets buildSystemMessages run the ambiguity detectors against
+    // the goal + catalog + tenant, record what it emitted so the
+    // matching ask_user question can be tied back to a finding, and
+    // surface any prior resolved clarifications.
+    clarifications: ctx.clarifications,
+    llmForClarification: ctx.llm,
+    onClarificationTrace: (event) => {
+      if (event.kind === "detected") {
+        boundSaveTrace(runId, {
+          kind: TrajectoryEventKind.ClarificationDetected,
+          findingId: event.finding.id,
+          ambiguityKind: event.finding.kind,
+          severity: event.finding.severity,
+          subject: event.finding.subject,
+          source: event.finding.source,
+          suggestedQuestion: event.finding.suggestedQuestion,
+        } as unknown as Record<string, unknown>)
+      } else {
+        boundSaveTrace(runId, {
+          kind: TrajectoryEventKind.ClarificationLlmPlannerInvoked,
+          findingsCount: event.findingsCount,
+        } as unknown as Record<string, unknown>)
+      }
+    },
     // Workspace path and home directory are injected only for admin sessions.
     // The role is captured at startRun/resumeRun before the session ALS expires.
     isAdmin: (activeRun?.role ?? PolicyRole.HostedUser) === PolicyRole.Admin,
