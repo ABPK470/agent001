@@ -63,6 +63,7 @@ describe("buildResolvedFactsBlock", () => {
     const out = buildResolvedFactsBlock({
       goal: "compute total publish.Revenue",
       catalog: cat,
+      mirrorSchema: "persistedView",
     })
     expect(out).toContain("publish.revenue")
     expect(out).toContain("persistedView mirror EXISTS")
@@ -73,6 +74,7 @@ describe("buildResolvedFactsBlock", () => {
     const out = buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: cat,
+      mirrorSchema: "persistedView",
     })
     expect(out).toContain("no persistedView mirror")
   })

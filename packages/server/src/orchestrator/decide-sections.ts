@@ -15,7 +15,13 @@
  * classifier; deliberately not LLM-based — the cost of a misroute
  * (one extra discovery call) is far less than always shipping every
  * block.
+ *
+ * Customer-specific schema and domain tokens come from the live
+ * catalog (`listSchemas()`) and the tenant config
+ * (`routingKeywords.domain`, `routingKeywords.sync`). The code here
+ * contains zero deployment-specific identifiers.
  */
+import { defaultCatalogAccessor, getTenantConfig, listSchemas } from "@mia/agent"
 
 export interface SectionDecision {
   /** Inject the ABI-sync SME block. */
@@ -79,7 +85,7 @@ export interface SectionDecision {
   }
 }
 
-const SYNC_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\buspSync|\bmymi\b|\bpipelineActivity\b|\bgateMetadata\b|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
+const SYNC_SHAPE_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
 
 // ── DB gate — two-signal scorer ────────────────────────────────────
 //
@@ -89,11 +95,11 @@ const SYNC_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.pre
 //     fires, we are very confident this is a DB task regardless of any
 //     other cue (it cancels the NON_DB down-score).
 //
-//   DB_DOMAIN_RE — banking / DWH domain vocabulary. In THIS product these
-//     terms almost always refer to the data warehouse (the user's chief
-//     concern was that "visualize revenue by client" must trigger DB
-//     blocks even though it has zero SQL syntax). Domain alone is
-//     sufficient to fire the gate.
+//   DB_DOMAIN_RE — domain vocabulary supplied by the tenant config
+//     (`routingKeywords.domain`). Empty by default; populating it
+//     lets a deployment fire the gate on its own business terms
+//     (e.g. "revenue" for a finance tenant, "stock" for retail).
+//     Domain alone is sufficient to fire the gate.
 //
 //   NON_DB_RE — narrowly scoped to "this is not a data-warehouse task at
 //     all" cues (Monte Carlo, mockup, Sharpe ratio, etc.). DESIGN RULE:
@@ -108,22 +114,80 @@ const SYNC_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.pre
 //   +3  SYNC_RE
 //   −3  NON_DB_RE matches AND DB_OPERATIONAL_RE does NOT match
 // isDbLike = score >= 2.
-const DB_OPERATIONAL_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|fact\.|dim\.|publish\.|core\.|gate\.|persistedView|agent\.PipelineRun|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
 
-const DB_DOMAIN_RE = /\b(client(s)?|customer(s)?|banker(s)?|revenue|balances?|merchant(s)?|risk|rwa|impairment|trading|markets?|sales\s+credits?|africa(flex|brains)|FrontArena|UnoTranspose|IMEX|country(ies)?|branch(es)?|cost\s+cent(re|er)|counterparty|facility|book\s+group|segment|breakdown)\b/i
+// Universal SQL / discovery-tool tokens. NO customer-specific schema
+// or table names — those flow in via `DB_OPERATIONAL_SCHEMA_RE`,
+// rebuilt per-call from the live catalog.
+const DB_OPERATIONAL_CORE_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
 
 // "Non-DB task type" cues only. NEVER add rendering verbs here.
 const NON_DB_RE = /\b(monte\s*carlo|simulation|mockup|mock-up|wireframe|prototype|sharpe\s+ratio|black.scholes|brownian|stochastic\s+process|geometric\s+brownian)\b/i
 
-// "table" only counts as a DB signal when it co-occurs with a clearly
-// DB-shaped qualifier in the same goal. This catches "table in the
-// fact schema", "list tables", "describe table dim.X" — without
-// catching "render the table you just did" or "recreate the table".
-const TABLE_DB_HINT_RE = /\b(table(s)?)\b[^.\n]{0,80}\b(in\s+(the\s+)?(database|schema|db)|schema|sql|database|db|join|column|row|query|publish|fact|dim|core|gate|persistedView|archive)\b/i
-const DB_TABLE_HINT_RE = /\b(database|schema|sql|join|column|row|query|publish|fact|dim|core|gate|persistedView|archive)\b[^.\n]{0,80}\b(table(s)?)\b/i
-
 // "Visual" intent — any of these usually benefits from the chart catalogue.
 const CHART_RE = /\b(chart|charts|graph|graphs|graphed|plot|plots|plotted|visuali[sz]e|visuali[sz]ation|dashboard|kpi|kpis|trend(s)?|distribution|breakdown|histogram|heatmap|relationship\s+map|diagram|figure|render)\b/i
+
+/** Regex word-escape; keeps alphanumeric tokens safe to splice into a regex. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/**
+ * Build (and memoise) the four catalog/tenant-driven regexes that
+ * power the DB gate. Recomputed only when the underlying inputs
+ * (schemas, mirrorSchema, domain & sync keyword lists) change.
+ */
+interface DynamicGateRegexes {
+  operationalSchemaRe: RegExp | null
+  domainRe:            RegExp | null
+  tableSchemaRe:       RegExp | null
+  schemaTableRe:       RegExp | null
+  syncExtraRe:         RegExp | null
+}
+let _gateCache: { key: string; re: DynamicGateRegexes } | null = null
+function buildGateRegexes(): DynamicGateRegexes {
+  const tenant = getTenantConfig()
+  const catalog = defaultCatalogAccessor()
+  const schemas = catalog ? listSchemas({ accessor: () => catalog }) : []
+  const schemaTokens: string[] = []
+  for (const s of schemas) schemaTokens.push(s)
+  if (tenant.mirrorSchema) schemaTokens.push(tenant.mirrorSchema.toLowerCase())
+  const domain = (tenant.routingKeywords?.domain ?? []).map((s) => s.toLowerCase())
+  const sync = (tenant.routingKeywords?.sync ?? []).map((s) => s.toLowerCase())
+
+  const key = JSON.stringify([schemaTokens, domain, sync])
+  if (_gateCache && _gateCache.key === key) return _gateCache.re
+
+  const schemaAlt = schemaTokens.length > 0
+    ? schemaTokens.map(escapeRe).join("|")
+    : null
+  const operationalSchemaRe = schemaAlt
+    ? new RegExp(`\\b(?:${schemaAlt})\\.`, "i")
+    : null
+  const tableSchemaRe = schemaAlt
+    ? new RegExp(`\\b(?:table(?:s)?)\\b[^.\\n]{0,80}\\b(?:in\\s+(?:the\\s+)?(?:database|schema|db)|schema|sql|database|db|join|column|row|query|${schemaAlt})\\b`, "i")
+    : /\b(?:table(?:s)?)\b[^.\n]{0,80}\b(?:in\s+(?:the\s+)?(?:database|schema|db)|schema|sql|database|db|join|column|row|query)\b/i
+  const schemaTableRe = schemaAlt
+    ? new RegExp(`\\b(?:database|schema|sql|join|column|row|query|${schemaAlt})\\b[^.\\n]{0,80}\\b(?:table(?:s)?)\\b`, "i")
+    : /\b(?:database|schema|sql|join|column|row|query)\b[^.\n]{0,80}\b(?:table(?:s)?)\b/i
+  const domainRe = domain.length > 0
+    ? new RegExp(`\\b(?:${domain.map(escapeRe).join("|")})\\b`, "i")
+    : null
+  const syncExtraRe = sync.length > 0
+    ? new RegExp(`\\b(?:${sync.map(escapeRe).join("|")})\\b`, "i")
+    : null
+
+  const re: DynamicGateRegexes = {
+    operationalSchemaRe,
+    domainRe,
+    tableSchemaRe,
+    schemaTableRe,
+    syncExtraRe,
+  }
+  _gateCache = { key, re }
+  return re
+}
+/** Test-only reset hook so regex memoisation cannot leak across tests. */
+export function _resetDecideSectionsCache(): void { _gateCache = null }
 
 export interface DbScoreResult {
   score:       number
@@ -136,11 +200,13 @@ export interface DbScoreResult {
 
 /** Compute the DB-likelihood score for a goal. Exported for telemetry / tests. */
 export function scoreDbLikelihood(goal: string): DbScoreResult {
-  const operational = DB_OPERATIONAL_RE.test(goal)
-  const domain      = DB_DOMAIN_RE.test(goal)
-  const tableHint   = TABLE_DB_HINT_RE.test(goal) || DB_TABLE_HINT_RE.test(goal)
+  const dyn = buildGateRegexes()
+  const operational = DB_OPERATIONAL_CORE_RE.test(goal)
+    || (dyn.operationalSchemaRe?.test(goal) ?? false)
+  const domain      = dyn.domainRe?.test(goal) ?? false
+  const tableHint   = dyn.tableSchemaRe.test(goal) || dyn.schemaTableRe.test(goal)
   const nonDb       = NON_DB_RE.test(goal)
-  const sync        = SYNC_RE.test(goal)
+  const sync        = SYNC_SHAPE_RE.test(goal) || (dyn.syncExtraRe?.test(goal) ?? false)
 
   let score = 0
   if (operational)             score += 2

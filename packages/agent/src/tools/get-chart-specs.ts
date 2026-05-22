@@ -13,6 +13,7 @@
  * renderer-compatible payload.
  */
 
+import { renderPromptVars } from "../loop/prompt-vars.js"
 import { CHART_CATALOGUE_SECTION } from "../loop/system-prompt.js"
 import type { Tool } from "../types.js"
 
@@ -30,6 +31,6 @@ export const getChartSpecsTool: Tool = {
   },
 
   async execute() {
-    return CHART_CATALOGUE_SECTION
+    return renderPromptVars(CHART_CATALOGUE_SECTION)
   },
 }

@@ -23,16 +23,22 @@
  */
 
 import type { CatalogGraph, ViewLineage } from "@mia/agent"
-import { buildResolvedFacts, type LargeObjectFact } from "@mia/agent"
+import {
+    buildResolvedFacts,
+    getTenantConfig,
+    listLargeObjects,
+    persistedMirrorOf,
+    type LargeObjectFact,
+} from "@mia/agent"
 
-/** Object names always worth surfacing when mentioned. Curated, short. */
-const ALWAYS_TRACKED: readonly string[] = [
-  "publish.revenue",
-  "publish.balances",
-  "fact.unotranspose",
-  "dim.client",
-  "dim.account",
-]
+/**
+ * Maximum number of catalog-derived large objects to include in the
+ * resolvedFacts block even when the goal doesn't mention them. Acts as
+ * the universal replacement for the prior ALWAYS_TRACKED hardcoding —
+ * the top-N largest objects (by rowCount / viewSourceRows) are always
+ * worth surfacing.
+ */
+const ALWAYS_TRACKED_TOPN = 5
 
 /** Quick regex: `schema.Object` with optional bracket/quote noise. */
 const OBJECT_TOKEN = /\b\[?(\w+)\]?\.\[?(\w+)\]?\b/g
@@ -57,19 +63,33 @@ export function buildResolvedFactsBlock(input: {
   catalog: CatalogGraph | null
   lineageMap?: ReadonlyMap<string, ViewLineage>
   schemaFingerprint?: string | null
+  /**
+   * Tenant mirror-schema override. When omitted, falls back to the
+   * tenant config; when explicitly null, mirror detection is disabled.
+   */
+  mirrorSchema?: string | null
 }): string {
   const { goal, catalog } = input
+  const mirrorSchema = input.mirrorSchema !== undefined
+    ? input.mirrorSchema
+    : getTenantConfig().mirrorSchema
   const lineageMap = input.lineageMap ?? new Map<string, ViewLineage>()
   // Lineage map keys are case-preserved ("publish.Revenue"); we work in
   // lowercase, so build a lowercase index once.
   const lineageByLower = new Map<string, ViewLineage>()
   for (const [k, v] of lineageMap) lineageByLower.set(k.toLowerCase(), v)
 
-  // Union: ALWAYS_TRACKED ∪ goal-mentioned tokens that live in catalog
-  // or have a curated lineage entry. Stripping unknown tokens keeps the
-  // block honest — we never claim a fact about a table that isn't there.
+  // Union: top-N largest objects (catalog-derived) ∪ goal-mentioned tokens
+  // that live in catalog or have a curated lineage entry. Stripping unknown
+  // tokens keeps the block honest — we never claim a fact about a table that
+  // isn't there.
   const goalTokens = extractObjectTokens(goal)
-  const candidates = new Set<string>(ALWAYS_TRACKED)
+  const candidates = new Set<string>()
+  if (catalog) {
+    // listLargeObjects() returns lowercased qualifiedNames already.
+    const top = [...listLargeObjects({ accessor: () => catalog })].slice(0, ALWAYS_TRACKED_TOPN)
+    for (const name of top) candidates.add(name)
+  }
   for (const tok of goalTokens) candidates.add(tok)
 
   const largeObjects: LargeObjectFact[] = []
@@ -82,7 +102,7 @@ export function buildResolvedFactsBlock(input: {
     // doesn't exist.
     if (!isGoalMentioned && !inCatalog && !inLineage) continue
 
-    const hasPersistedMirror = catalog ? hasMirror(catalog, name) : false
+    const hasPersistedMirror = catalog ? hasMirror(catalog, name, mirrorSchema) : false
     const lineage = lineageByLower.get(name)
     const branchCount = lineage?.sources.length
     largeObjects.push({
@@ -113,16 +133,19 @@ function buildLineageKey(lowerName: string): string {
 }
 
 /**
- * Does the live catalog contain a `persistedView.<schema>.<object>`
- * mirror for the given lowercased `schema.object` token? Convention is
- * documented in `deploy/mssql/mymi-knowledge.md`.
+ * Does the live catalog contain a `<mirrorSchema>.<schema>.<object>`
+ * mirror for the given lowercased `schema.object` token? Mirror schema
+ * comes from tenant config; when unset, no object is ever flagged as
+ * having a mirror. Convention is documented per-deployment.
  */
-function hasMirror(catalog: CatalogGraph, lowerName: string): boolean {
-  // Try both "persistedview.publish.revenue" and the curated bracketed
-  // form. CatalogGraph keys are lowercased qualifiedNames.
-  const probe = `persistedview.${lowerName}`
-  for (const key of catalog.tables.keys()) {
-    if (key.toLowerCase() === probe) return true
-  }
-  return false
+function hasMirror(
+  catalog: CatalogGraph,
+  lowerName: string,
+  mirrorSchema: string | null,
+): boolean {
+  if (!mirrorSchema) return false
+  return persistedMirrorOf(lowerName, {
+    mirrorSchema,
+    accessor: () => catalog,
+  }) !== null
 }

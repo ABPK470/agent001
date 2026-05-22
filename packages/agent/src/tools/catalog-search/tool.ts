@@ -1,16 +1,16 @@
 import type { Tool } from "../../types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
-    handleColumn,
-    handleConceptPath,
-    handleConcepts,
-    handleJoins,
-    handleLineage,
-    handlePath,
-    handleSearch,
-    handleStats,
-    handleSys,
-    handleTable,
+  handleColumn,
+  handleConceptPath,
+  handleConcepts,
+  handleJoins,
+  handleLineage,
+  handlePath,
+  handleSearch,
+  handleStats,
+  handleSys,
+  handleTable,
 } from "./handlers.js"
 
 export const searchCatalogTool: Tool = {
@@ -21,17 +21,17 @@ export const searchCatalogTool: Tool = {
     "FK relationships, and implicit join edges (shared column names). It is pre-computed and cached on disk; searches " +
     "are instant (no SQL queries). ALWAYS use this BEFORE explore_mssql_schema or query_mssql. " +
     "Modes: " +
-    "(1) search='revenue' — keyword search across all table and column names (also searches sys.* DMV catalog). " +
-    "(2) table='publish.Revenue' — get full detail for a specific table. " +
-    "(3) column='clientId' — find every table that has this column. " +
-    "(4) joins='dim.Client' — show ALL join edges (FK + implicit) for a table. " +
-    "(5) path=['dim.Client','fact.X'] — find FK join paths between two tables. " +
-    "(6) lineage='publish.Revenue' — show full lineage map: all source views, dimension joins, business areas. " +
+    "(1) search='<keyword>' — keyword search across all table and column names (also searches sys.* DMV catalog). " +
+    "(2) table='<schema>.<Table>' — get full detail for a specific table. " +
+    "(3) column='<columnName>' — find every table that has this column. " +
+    "(4) joins='<schema>.<Table>' — show ALL join edges (FK + implicit) for a table. " +
+    "(5) path=['<schemaA>.<TableA>','<schemaB>.<TableB>'] — find FK join paths between two tables. " +
+    "(6) lineage='<schema>.<View>' — show full lineage map: all source views, dimension joins, business areas. " +
     "(7) stats=true — catalog summary. " +
     "(8) refresh=true — rebuild from live database and update cache. " +
-    "(9) concepts='fact.CommissionAllocation' — show which business concepts this table contributes to (semantic tags from lineage). " +
-    "(10) concept_path=['tableA','tableB'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships. " +
-    "(11) sys='tombstone' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
+    "(9) concepts='<schema>.<Table>' — show which business concepts this table contributes to (semantic tags from lineage). " +
+    "(10) concept_path=['<tableA>','<tableB>'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships. " +
+    "(11) sys='<sysKeyword>' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
     "Use sys= for: columnstore internals, index fragmentation, query performance, wait statistics, locking, " +
     "memory, partitioning, HA/Always On, server config. sys= returns the right DMV + example query — " +
     "then call query_mssql to run it.",
@@ -39,10 +39,10 @@ export const searchCatalogTool: Tool = {
     type: "object",
     properties: {
       search: { type: "string", description: "Keyword search across all table names and column names." },
-      schema: { type: "string", description: "Filter search results to a specific schema, e.g. 'fact', 'publish', 'core'. Use with search= to scope results." },
-      table: { type: "string", description: "Get full details for a specific table. Schema-qualified: 'publish.Revenue', 'dim.Client'." },
+      schema: { type: "string", description: "Filter search results to a specific schema. Use with search= to scope results." },
+      table: { type: "string", description: "Get full details for a specific table. Schema-qualified: '<schema>.<Table>'." },
       column: { type: "string", description: "Find all tables that have a column with this exact name." },
-      joins: { type: "string", description: "Show ALL join edges for a table — FK relationships and implicit joins. Schema-qualified: 'dim.Client'." },
+      joins: { type: "string", description: "Show ALL join edges for a table — FK relationships and implicit joins. Schema-qualified." },
       path: {
         type: "array",
         items: { type: "string" },
@@ -51,7 +51,7 @@ export const searchCatalogTool: Tool = {
       stats: { type: "boolean", description: "Return high-level catalog summary: schema count, table/view count, largest tables." },
       lineage: {
         type: "string",
-        description: "Show the full lineage map for a critical view. Schema-qualified: 'publish.Revenue'.",
+        description: "Show the full lineage map for a critical view. Schema-qualified.",
       },
       concept_path: {
         type: "array",

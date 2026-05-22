@@ -9,6 +9,7 @@
 
 import sql from "mssql"
 import type { Tool } from "../../types.js"
+import { getPool } from "../mssql/index.js"
 import {
   bfs,
   buildAdjacency,
@@ -19,7 +20,6 @@ import {
   IMPLICIT_JOINS,
   type FkEdge,
 } from "./queries.js"
-import { getPool } from "../mssql/index.js"
 
 // ── The tool ─────────────────────────────────────────────────────
 export const discoverRelationshipsTool: Tool = {
@@ -39,14 +39,14 @@ export const discoverRelationshipsTool: Tool = {
         type: "string",
         description:
           "Show all foreign key relationships involving this table (both incoming and outgoing). " +
-          "Use schema-qualified name: 'core.Dataset', 'dim.Client', 'fact.AfricaFlex'.",
+          "Use schema-qualified name: '<schema>.<Table>'.",
       },
       between: {
         type: "array",
         items: { type: "string" },
         description:
           "Find FK join paths between two tables. Provide exactly two schema-qualified table names. " +
-          "E.g. ['dim.Client', 'fact.AfricaFlexDailyBalances']. Returns up to 5 shortest paths.",
+          "Two schema-qualified table names. Returns up to 5 shortest paths.",
       },
       schema: {
         type: "string",
@@ -85,7 +85,7 @@ export const discoverRelationshipsTool: Tool = {
         const tableName = String(args.table)
         const parts = tableName.split(".")
         if (parts.length !== 2) {
-          return "Error: table must be schema-qualified (e.g. 'core.Dataset'). Use explore_mssql_schema(search='name') to find the full name."
+          return "Error: table must be schema-qualified (e.g. '<schema>.<Table>'). Use explore_mssql_schema(search='name') to find the full name."
         }
         const request = p.request()
         request.input("schema", sql.NVarChar, parts[0])
@@ -130,7 +130,7 @@ export const discoverRelationshipsTool: Tool = {
         const [startTable, endTable] = tables.map((t) => String(t).trim())
         for (const t of [startTable, endTable]) {
           if (!t.includes(".")) {
-            return `Error: '${t}' must be schema-qualified (e.g. 'dim.Client').`
+            return `Error: '${t}' must be schema-qualified (e.g. '<schema>.<Table>').`
           }
         }
 

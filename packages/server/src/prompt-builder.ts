@@ -5,7 +5,17 @@
  * and reusable independently of the run lifecycle.
  */
 
-import { getCatalogPromptSummary, getDefaultMssqlConnectionName, getMssqlConfig, type Tool } from "@mia/agent"
+import {
+    getCatalog,
+    getCatalogPromptSummary,
+    getDefaultMssqlConnectionName,
+    getMssqlConfig,
+    getTenantConfig,
+    listExpensiveUnionViews,
+    topNTables,
+    topNUnionViews,
+    type Tool,
+} from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
 
 // ── Environment detection ────────────────────────────────────────
@@ -82,12 +92,90 @@ export interface BuildToolContextOptions {
   includeMssqlGuidance?:  boolean
 }
 
+/**
+ * Concrete example tokens derived from the live catalog so the static
+ * guidance text never names a customer-specific table. When the catalog
+ * has no qualifying object, each placeholder degrades to generic shape
+ * language. Cheap to recompute per prompt build.
+ */
+interface CatalogExamples {
+  exampleWideView:     string
+  schemaList:          string
+  dbSizeHint:          string
+  mirrorAdvice:        string
+  mirrorInspectAdvice: string
+  dimensionAdvice:     string
+}
+
+function catalogExamples(): CatalogExamples {
+  const catalog = getCatalog(getDefaultMssqlConnectionName() ?? "default")
+  const tenant  = getTenantConfig()
+
+  // Best wide-union view to use as a worked lineage example.
+  let exampleWideView = "<wide-union-view>"
+  const wideViews = catalog ? [...listExpensiveUnionViews({ accessor: () => catalog })] : []
+  if (wideViews.length > 0) {
+    wideViews.sort((a, b) => b[1] - a[1])
+    exampleWideView = wideViews[0]![0]
+  } else if (catalog) {
+    const v = topNUnionViews(1, { accessor: () => catalog })[0]
+    if (v) exampleWideView = v.table.qualifiedName
+  }
+
+  // List of schemas the agent might bump into when scoping list-of-name
+  // queries — rendered as a short, prefix-sample of catalog schemas.
+  let schemaList = "<various schemas>"
+  if (catalog) {
+    const schemas = new Set<string>()
+    for (const [, t] of catalog.tables) schemas.add(t.schema)
+    const sample = [...schemas].slice(0, 4).map((s) => `${s}.*`)
+    if (sample.length > 0) schemaList = sample.join(", ")
+  }
+
+  // Approximate DB size from the largest table's row count.
+  let dbSizeHint = "very large"
+  if (catalog) {
+    const top = topNTables(1, { accessor: () => catalog })[0]
+    if (top?.rowCount != null) {
+      const n = top.rowCount
+      dbSizeHint = n >= 1e9 ? "multi-TB" : n >= 1e8 ? "100s of GB" : n >= 1e6 ? "GB-scale" : "moderate"
+    }
+  }
+
+  // Mirror-schema advice depends on tenant.mirrorSchema being set.
+  const mirrorAdvice = tenant.mirrorSchema
+    ? `  • prefer ${tenant.mirrorSchema}.X over the source view when it exists — same data, pre-materialized.`
+    : "  • prefer pre-materialized mirrors over expensive views when the catalog exposes them."
+  const mirrorInspectAdvice = tenant.mirrorSchema
+    ? `    For ${tenant.mirrorSchema} objects use 3-part form: inspect_definition(object='${tenant.mirrorSchema}.<schema>.<view>')`
+    : "    For mirrored objects use the curated 3-part form when one is defined."
+
+  // Pick the two largest dimension-style tables (heuristic: rowCount-ranked
+  // tables in schemas with negative routing weight or named like dim/lookup).
+  let dimensionAdvice = "  • Before any JOIN to a high-cardinality dimension: confirm cardinality with profile_data first."
+  if (catalog) {
+    const top = topNTables(10, { accessor: () => catalog })
+    const dims = top.filter((t) => /^(dim|lookup|ref|master)/i.test(t.schema)).slice(0, 2)
+    if (dims.length >= 2) {
+      dimensionAdvice = `  • Before any JOIN to ${dims[0]!.qualifiedName} or ${dims[1]!.qualifiedName}: confirm cardinality with profile_data first.`
+    } else if (dims.length === 1) {
+      dimensionAdvice = `  • Before any JOIN to ${dims[0]!.qualifiedName}: confirm cardinality with profile_data first.`
+    }
+  }
+
+  return { exampleWideView, schemaList, dbSizeHint, mirrorAdvice, mirrorInspectAdvice, dimensionAdvice }
+}
+
 export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions): string {
   const includeMssqlKnowledge = opts?.includeMssqlKnowledge ?? true
   const mssqlKnowledgeMode    = opts?.mssqlKnowledgeMode    ?? "full"
   const includeMssqlCatalog   = opts?.includeMssqlCatalog   ?? true
   const includeMssqlGuidance  = opts?.includeMssqlGuidance  ?? true
 
+  // Catalog-derived example placeholders so guidance text never names a
+  // customer-specific table. All placeholders fall back to generic shape
+  // language when the catalog has no qualifying object.
+  const ex = catalogExamples()
   const sections: string[] = []
 
   const hasMssql = tools.some((t) =>
@@ -173,10 +261,10 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
       sections.push(
         "",
         "SCALE CONTEXT:",
-        "  • ~2TB database. ALWAYS use TOP + date filter on fact/ext/archive tables.",
+        `  • ~${ex.dbSizeHint} database. ALWAYS use TOP + date filter on large fact/archive tables.`,
         "  • NEVER SELECT * or COUNT(*) without a WHERE clause on large tables.",
-        "  • prefer persistedView.X over publish.X when it exists — same data, pre-materialized.",
-        "  • Before any JOIN to dim.Client or dim.Account: confirm cardinality with profile_data first.",
+        ex.mirrorAdvice,
+        ex.dimensionAdvice,
         "  • Multi-large-object joins: see the BIG-TABLE / MICRO-ETL section above for the canonical #temp staging pattern. Single-shot multi-join SELECTs against billion-row tables time out.",
         "",
         "T-SQL DIALECT:",
@@ -185,11 +273,11 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         "  • MIN/MAX/SUM/AVG fail on bit columns — wrap as SUM(CAST(col AS int)).",
         "",
         "DATA TOOLS — use in this order:",
-        "  0. search_catalog  ★ START HERE. Keyword search over 97K columns + FK graph. Zero SQL queries.",
+        "  0. search_catalog  ★ START HERE. Keyword search over the column index + FK graph. Zero SQL queries.",
         "                       Modes: search, table, column, joins, path, lineage, stats, refresh.",
-        "                       search_catalog(search='keyword', schema='fact') → scope results to one schema.",
-        "                       search_catalog(lineage='publish.Revenue') → full source dependency map.",
-        "                       search_catalog(stats=true) → largest publish VIEWS ranked by source-table rows (pre-computed at startup).",
+        "                       search_catalog(search='keyword', schema='<schema>') → scope results to one schema.",
+        `                       search_catalog(lineage='${ex.exampleWideView}') → full source dependency map.`,
+        "                       search_catalog(stats=true) → largest UNION views ranked by source-table rows (pre-computed at startup).",
         "                         Use this as the entry point when asked to find large views or duplicate joins.",
         "  1. explore_mssql_schema  — exact columns. ONLY after search_catalog identified the table.",
         "  2. inspect_definition    — T-SQL source, detects duplicate joins, traces dependencies.",
@@ -204,22 +292,22 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         "  • Fix errors immediately — read the SQL error, don't retry the same broken query.",
         "",
         "EFFICIENCY ANALYSIS — when asked about slow pipelines, duplicate joins, or unexpected runtimes:",
-        "  • To find which publish views are largest / have duplicate joins:",
-        "      1. search_catalog(stats=true) → 'Largest publish VIEWS' section gives the ranked list",
-        "      2. inspect_definition(object='publish.X') IN PARALLEL on each — any table in FROM/JOIN twice = duplicate join",
+        "  • To find which views are largest / have duplicate joins:",
+        "      1. search_catalog(stats=true) → 'Largest VIEWS' section gives the ranked list",
+        "      2. inspect_definition(object='<schema>.X') IN PARALLEL on each — any table in FROM/JOIN twice = duplicate join",
         "      'Largest tables' in stats output = physical tables, not views. Ignore for this task.",
         "  • COUNTING duplicate joins across many objects (e.g. 'how many of N datasets have duplicate joins?'):",
         "      PREFERRED — let the tool source the names itself in ONE call:",
-        "        inspect_definition(scan_duplicates=true, names_query=\"SELECT name FROM core.Dataset\")",
+        "        inspect_definition(scan_duplicates=true, names_query=\"SELECT name FROM <metadata.Table>\")",
         "      Alternatives: names='schema.A,schema.B,...' (when you already have a small list),",
         "      or schema='X' (ONLY when the user truly means 'objects defined in schema X').",
         "      WARNING — scope mismatch is the #1 failure mode here:",
-        "        schema='core' scans only objects DEFINED in the core schema (~39 metadata views).",
-        "        It is NOT the same as 'all rows of core.Dataset.name' — those names span MANY",
-        "        schemas (archive.*, publish.*, fact.*, etc.). When the user references a list",
+        "        schema='<metaSchema>' scans only objects DEFINED in that schema (typically a handful of metadata views).",
+        "        It is NOT the same as 'all rows of <metaSchema>.Dataset.name' — those names span MANY",
+        `        schemas (${ex.schemaList}). When the user references a list`,
         "        stored in a table, you MUST use names_query=, NEVER schema=.",
         "  • inspect_definition(object='schema.view') → T-SQL source for a specific known view.",
-        "    For persistedView objects use 3-part form: inspect_definition(object='persistedView.fact.Revenue')",
+        ex.mirrorInspectAdvice,
         "  • inspect_definition(depends_on='view') → full dependency chain.",
         "  • inspect_definition(slow_queries=true) → most expensive live queries.",
         "  • inspect_definition(missing_indexes=true) → SQL Server's own index recommendations.",
@@ -291,7 +379,7 @@ export function buildMemoryGuidance(): string {
     "    When you DISCOVER or CONFIRM a fact about the schema or data that future",
     "    turns would need (a join key, a column's aggregation semantics, a grain,",
     "    a date range, a known-good filter), call `note` with subject = the",
-    "    qualified name (e.g. 'publish.Revenue.RevenueZARMTD') and claim = the",
+    "    qualified name (e.g. '<schema>.<Table>.<Column>') and claim = the",
     "    fact in one sentence. These notes are saved to working memory and",
     "    retrieved into your next turn, so you don't re-discover the same fact.",
     "    Call `note` ONCE per discovery — duplicates are dropped automatically.",

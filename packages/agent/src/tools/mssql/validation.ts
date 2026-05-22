@@ -3,6 +3,21 @@
 import { currentRuntime } from "../../agent-runtime.js"
 import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
+import { getTenantConfig } from "../../tenant/config.js"
+import {
+  _resetCatalogQueriesCache,
+  calendarDimensionTable,
+  canonicalQualifiedName,
+  isLargeObject as catalogIsLargeObject,
+  dateGrainColumn,
+  highCardinalityKeyColumns,
+  isExpensiveUnionView,
+  listLargeObjects,
+  listSchemas,
+  persistedMirrorOf,
+  primaryKeyColumns,
+  unionBranchCount,
+} from "../catalog/queries.js"
 import { getCatalog } from "../catalog/store.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
@@ -83,99 +98,72 @@ export function findNonTmpMutations(query: string): { target: string; label: str
 
 // ── Scan-guard: tables/views known to be large ──────────────────
 //
-// Any table or view in this list will be checked for the absence of
-// a WHERE clause before the query is executed. An unfiltered query
-// against these objects will time out or run for minutes — it must be
-// blocked at the tool level regardless of what the LLM produces.
+// "Large" is derived entirely from the live catalog (rowCount from
+// sys.dm_db_partition_stats for tables, viewSourceRows — sum of
+// referenced physical-table row-counts — for views). Threshold is
+// configurable via `tenantConfig.largeObjectRows`; default 10M.
 //
-// Format: lowercased "schema.object" strings.
-// Covers both the base view and its persistedView mirror.
-const LARGE_OBJECTS = new Set([
-  // publish views — each is a UNION of 10–60 large fact tables
-  "publish.revenue",
-  "publish.balances",
-  "persistedview.publish.revenue",
-  "persistedview.publish.balances",
-  "publish.clientprofitability",
-  "publish.financialdisclosurerules",
-  "publish.africasalescredittradesrules",
-  "publish.rwa",
-  "publish.impairment",
-  // large fact tables
-  "fact.unotranspose",
-  "fact.imexcommissionsdealbalance",
-  "fact.africaflexdailybalances",
-  "fact.financialdisclosuredaily",
-  "fact.financialdisclosuredailysap",
-  "fact.backdatedtransactions",
-  "fact.counterpartystructures",
-  "fact.acmaccountfacilitymapping",
-  "fact.acmfacility",
-  "fact.pnlrevenuemtd",
-  "fact.africafrontarena",
-  "fact.merchantservices",
-  // large dim tables
-  "dim.account",
-  "dim.client",
-  // large ext tables
-  "ext.ghanadailyaccountsall",
-  "ext.botswana dailyaccountsall",
-  "ext.zambiadailyaccountsall",
-  "ext.africaflexdailybalanceskenyacasa",
-  // large log/agent tables
-  "log.detail",
-  "agent.activityrun",
-  "agent.activityrunarchive",
-])
+// There is NO hardcoded customer-name fallback. When the catalog isn't
+// loaded yet (early startup, unit tests with no fixture), the guard is
+// silent — `isUnsafeScan` still catches unfiltered shapes structurally,
+// and the agent's own discipline (search_catalog before query_mssql)
+// surfaces the size before any scan.
+
+/** Re-export — kept for test cache invalidation. */
+export function _resetLargeObjectCache(): void {
+  _resetCatalogQueriesCache()
+}
 
 /**
- * Returns the set of large schema.object names referenced in the query (lowercased).
- * Handles: schema.table, [schema].[table], schema.[table], "schema"."table"
+ * Predicate: is the given schema-qualified name a known-large object?
+ * Delegates to the catalog facade so the threshold and shape rules stay
+ * defined in one place. Returns false when no catalog is loaded.
  */
-export function referencedLargeObjects(query: string): string[] {
-  // Strip comments first
+export function isLargeObject(
+  qualifiedName: string,
+  accessor?: () => unknown,
+): boolean {
+  return catalogIsLargeObject(qualifiedName, {
+    threshold: getTenantConfig().largeObjectRows,
+    accessor: accessor as never,
+  })
+}
+
+/**
+ * Match every schema.object reference (including 3-part `<mirrorSchema>.<schema>.<object>`
+ * forms) in the query text. Strips comments first. The set of "large"
+ * objects comes from the catalog at call time, so adding a new fact
+ * table or growing a view past the threshold takes effect immediately.
+ */
+function* iterateObjectRefs(query: string): IterableIterator<string> {
   const stripped = query
     .replace(/--[^\r\n]*/g, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-
-  const found: string[] = []
-  // Match schema.object in various bracket/quote forms.
-  const re = /\[?(\w+)\]?\.\[?(\w+)\]?/g
+  // 2-part: [schema].[name] / schema.name (`name` may itself contain a dot
+  // when bracketed — e.g. mirrorSchema.[publish.Revenue]).
+  const re = /\[?(\w+)\]?\.\[?([\w]+(?:\.\w+)?)\]?/g
   let m: RegExpExecArray | null
   while ((m = re.exec(stripped)) !== null) {
-    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
-    if (LARGE_OBJECTS.has(key) && !found.includes(key)) {
-      found.push(key)
-    }
+    yield `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
   }
-  // Match persistedView.[publish.Revenue] style 2-part references where the
-  // object name itself contains a dot.
-  const persistedBracketedRe = /\[?(persistedview)\]?\.\[?(publish\.(?:revenue|balances))\]?/gi
-  while ((m = persistedBracketedRe.exec(stripped)) !== null) {
-    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
-    if (LARGE_OBJECTS.has(key) && !found.includes(key)) found.push(key)
+}
+
+/** Lowercased schema.object names in `query` that the catalog classifies as large. */
+export function referencedLargeObjects(query: string): string[] {
+  const large = listLargeObjects({ threshold: getTenantConfig().largeObjectRows })
+  const found: string[] = []
+  for (const key of iterateObjectRefs(query)) {
+    if (large.has(key) && !found.includes(key)) found.push(key)
   }
   return found
 }
 
-/** Returns per-object reference counts for known large objects. */
+/** Per-object reference counts (lowercased) of catalog-large objects in `query`. */
 export function countReferencedLargeObjects(query: string): Map<string, number> {
-  const stripped = query
-    .replace(/--[^\r\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-
+  const large = listLargeObjects({ threshold: getTenantConfig().largeObjectRows })
   const counts = new Map<string, number>()
-  const re = /\[?(\w+)\]?\.\[?(\w+)\]?/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(stripped)) !== null) {
-    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
-    if (!LARGE_OBJECTS.has(key)) continue
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  const persistedBracketedRe = /\[?(persistedview)\]?\.\[?(publish\.(?:revenue|balances))\]?/gi
-  while ((m = persistedBracketedRe.exec(stripped)) !== null) {
-    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
-    if (!LARGE_OBJECTS.has(key)) continue
+  for (const key of iterateObjectRefs(query)) {
+    if (!large.has(key)) continue
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   return counts
@@ -353,68 +341,110 @@ export function countTempScalarSubqueriesByTemp(query: string): Map<string, numb
   return counts
 }
 
-// ── Branch-aggregation guard for publish.Revenue / publish.Balances ────
+// ── Branch-aggregation guard for wide UNION views ───────────────
 //
-// publish.Revenue is a UNION ALL over ~59 source-mapping views; publish.Balances
-// over ~10. Any single statement that asks SQL Server to:
-//   1. Touch publish.Revenue (or publish.Balances) directly in the outer FROM,
-//   2. GROUP BY a high-cardinality dim key (pkClient, pkAccount, …), and
-//   3. Pick a TOP N
-// forces the engine to expand every UNION branch, materialise the lot, group
-// globally and sort globally. There is no branch-local index that can help —
-// the sort happens on the union output. This is the canonical "Stage-1 done
-// the slow way" pattern that times out in production (observed in 2026-05-21
-// trace: ~7 LLM iterations, run cancelled).
+// Any TABLE/VIEW the catalog classifies as an "expensive UNION view"
+// (≥ tenantConfig.unionBranchThreshold UNION ALL branches) cannot be the
+// outer FROM of a `TOP N … GROUP BY <high-cardinality-key>` statement —
+// the engine has to expand every branch, materialise the full union,
+// then group and sort globally. No branch-local index can help and the
+// statement times out.
 //
-// The correct shape is documented in `revenue-balances-policy` doctrine and in
-// the system prompt's "When no `persistedView.[publish.Revenue]` mirror exists"
-// section: aggregate inside each source-mapping branch first, UNION ALL the
-// branch-local aggregates, THEN rank.
+// The correct shape is per-branch pre-aggregation under a derived
+// table, then UNION ALL of the branch results, then the outer TOP/GROUP.
+// The fix is documented in the wide-union-view-policy doctrine.
 //
-// This detector blocks the slow shape and points at the fix.
-export interface PublishViewTopnOffender {
-  readonly object: string  // "publish.Revenue" | "publish.Balances"
-  readonly groupKey: string  // the high-card key found in GROUP BY (e.g. "pkClient")
+// What counts as "high-cardinality": the live catalog's PK columns plus
+// FK-out columns whose target is a centrally-referenced dimension (≥3
+// incoming FKs). No name list — pkClient/pkAccount/cust_id/whatever the
+// deployment calls them is discovered from PK/FK metadata.
+export interface WideUnionViewTopnOffender {
+  /** The wide UNION view at the outer FROM, e.g. "publish.Revenue". */
+  readonly object: string
+  /** The high-card key found in GROUP BY (the column NAME as written). */
+  readonly groupKey: string
+  /** Branches the catalog reports for `object`. */
+  readonly branchCount: number
 }
 
-export function detectPublishViewTopnWithoutBranchAggregation(
+/**
+ * Extract every `FROM <schema>.<table>` reference in the outer query
+ * statement (i.e. not inside a parenthesised derived table). Returns the
+ * normalised lowercased `schema.table` keys in source order.
+ *
+ * We approximate "outer" by tracking paren depth: anything opened with
+ * `(` that contains a SELECT is a subquery and is skipped. This is
+ * good enough for the branch-aggregation guard — false-positives on
+ * deeply-nested derived tables only suppress a (correctly-applied)
+ * block, never invent one.
+ */
+function outerFromTargets(stmt: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  const re = /[()]|\bFROM\s+\[?(\w+)\]?\.\[?([\w]+(?:\.\w+)?)\]?/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stmt)) !== null) {
+    const token = m[0][0]
+    if (token === "(") { depth++; continue }
+    if (token === ")") { depth = Math.max(0, depth - 1); continue }
+    if (depth === 0 && m[1] && m[2]) out.push(`${m[1].toLowerCase()}.${m[2].toLowerCase()}`)
+  }
+  return out
+}
+
+export function detectWideUnionViewTopnWithoutBranchAggregation(
   query: string,
-): PublishViewTopnOffender | null {
+): WideUnionViewTopnOffender | null {
+  const tc = getTenantConfig()
   const stripped = stripForScan(query)
   // Naive statement split — `stripForScan` already removed string literals and
   // comments, so semicolons here are real statement boundaries.
-  const statements = stripped.split(/;\s*/)
-  for (const stmt of statements) {
+  for (const stmt of stripped.split(/;\s*/)) {
     if (!stmt.trim()) continue
-    const hasTop = /\bTOP\s+\d+\b/i.test(stmt)
-    if (!hasTop) continue
-    // GROUP BY clause must mention a high-cardinality key for this to be a
-    // problem. pkMonth / pkDate grouping is cheap (small dimension cardinality)
-    // and not what we want to block.
+    if (!/\bTOP\s+\d+\b/i.test(stmt)) continue
     const groupByMatch = /\bGROUP\s+BY\b([\s\S]*?)(?:\bORDER\s+BY\b|\bHAVING\b|\bOPTION\b|$)/i.exec(stmt)
     if (!groupByMatch) continue
     const groupBody = groupByMatch[1]
-    const highCardMatch = /\b(pkClient|pkAccount|pkClient_ReceiverBank|pkClient_SenderBank)\b/i.exec(groupBody)
-    if (!highCardMatch) continue
-    const groupKey = highCardMatch[1]
-    // Outer FROM must reference publish.Revenue or publish.Balances directly.
-    // Per-branch UNION patterns use `FROM publish.<MappingBranch>`, NOT the
-    // unioned views themselves — those won't match this regex.
-    const fromMatch = /\bFROM\s+(?:\[?publish\]?\.\[?(Revenue|Balances)\]?)\b/i.exec(stmt)
-    if (!fromMatch) continue
-    // Escape valve: a JOIN to a #temp table on the same high-card key is
-    // exactly the narrowing pattern we WANT to encourage. The temp's small
-    // pkClient set is pushed down to each UNION branch by the optimizer.
-    // Only block when there's no such narrowing join.
-    const narrowingJoin = new RegExp(
-      `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${groupKey}\\b\\s*=`,
-      "i",
-    ).test(stmt)
-    if (narrowingJoin) continue
-    return { object: `publish.${fromMatch[1]}`, groupKey }
+
+    for (const fromTarget of outerFromTargets(stmt)) {
+      if (!isExpensiveUnionView(fromTarget, { threshold: tc.unionBranchThreshold })) continue
+      // Catalog says this FROM target is a wide UNION view. Check whether
+      // GROUP BY mentions any of its high-cardinality keys.
+      const highCardKeys = highCardinalityKeyColumns(fromTarget)
+      if (highCardKeys.length === 0) continue
+      let matchedKey: string | null = null
+      for (const key of highCardKeys) {
+        const keyRe = new RegExp(`\\b${escapeRegExp(key)}\\b`, "i")
+        if (keyRe.test(groupBody)) { matchedKey = key; break }
+      }
+      if (!matchedKey) continue
+
+      // Escape valve: a JOIN to a #temp on the same key is exactly the
+      // narrowing pattern we WANT (the temp's small key set pushes into
+      // each branch).
+      const narrowingJoin = new RegExp(
+        `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${escapeRegExp(matchedKey)}\\b\\s*=`,
+        "i",
+      ).test(stmt)
+      if (narrowingJoin) continue
+
+      return {
+        object: canonicalQualifiedName(fromTarget),
+        groupKey: matchedKey,
+        branchCount: unionBranchCount(fromTarget),
+      }
+    }
   }
   return null
 }
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/** @deprecated Renamed to `detectWideUnionViewTopnWithoutBranchAggregation`. */
+export const detectPublishViewTopnWithoutBranchAggregation = detectWideUnionViewTopnWithoutBranchAggregation
+export type PublishViewTopnOffender = WideUnionViewTopnOffender
 
 // ── AVG-of-zero-coalesce statistical guard ──────────────────────────
 //
@@ -478,7 +508,7 @@ export interface InventedColumnOffender {
 }
 
 /** SQL keywords that must never be treated as an alias when seen left of `.col`. */
-const ALIAS_RESERVED = new Set([
+const ALIAS_RESERVED_KEYWORDS = new Set([
   "select", "from", "where", "join", "inner", "outer", "left", "right", "full",
   "cross", "apply", "on", "as", "and", "or", "not", "in", "exists", "between",
   "is", "null", "case", "when", "then", "else", "end", "by", "group", "order",
@@ -487,10 +517,25 @@ const ALIAS_RESERVED = new Set([
   "unbounded", "preceding", "following", "current", "row", "asc", "desc",
   "option", "recompile", "maxdop", "nolock", "readonly", "tablock", "tablockx",
   "holdlock", "updlock", "rowlock", "paglock", "index", "noexpand", "fastfirstrow",
-  // Common system schemas that should never be confused with aliases.
-  "sys", "information_schema", "dbo", "publish", "persistedview", "dim", "fact",
-  "ref", "ods", "stg", "tmp",
+  // System schemas that are universal across MSSQL deployments.
+  "sys", "information_schema", "dbo",
 ])
+
+/**
+ * Full reserved-alias set = SQL keywords above + every live schema in the
+ * catalog + tenant-configured extras. Aliasing a schema name confuses the
+ * column-reference resolver, so we treat schemas the same as keywords.
+ *
+ * Recomputed on each call — the catalog query is O(1) (precomputed list)
+ * and the set construction is cheap; this avoids stale caches when the
+ * catalog or tenant config changes between calls.
+ */
+function reservedAliasSet(): Set<string> {
+  const out = new Set(ALIAS_RESERVED_KEYWORDS)
+  for (const s of listSchemas()) out.add(s)
+  for (const s of getTenantConfig().reservedAliases) out.add(s.toLowerCase())
+  return out
+}
 
 /** Bare table/column tokens that almost certainly aren't real columns. */
 const NON_COLUMN_TOKEN = new Set([
@@ -554,6 +599,7 @@ export function detectInventedColumns(
     // identifiers that must not be mistaken for column references.
     .replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
 
+  const reservedAliases = reservedAliasSet()
   const offenders: InventedColumnOffender[] = []
   const seen = new Set<string>()
 
@@ -587,7 +633,7 @@ export function detectInventedColumns(
       // Effective alias: explicit alias if given AND not a reserved keyword
       // (otherwise it's our regex eating the next clause: `FROM x.y WHERE` →
       // `aliasRaw=WHERE`). Fall back to bare table name.
-      const candidate = aliasRaw && !ALIAS_RESERVED.has(aliasRaw.toLowerCase())
+      const candidate = aliasRaw && !reservedAliases.has(aliasRaw.toLowerCase())
         ? aliasRaw
         : table
       aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
@@ -623,7 +669,7 @@ export function detectInventedColumns(
       } else {
         // 2-part `alias.col`
         const aliasLower = a.toLowerCase()
-        if (ALIAS_RESERVED.has(aliasLower)) continue
+        if (reservedAliases.has(aliasLower)) continue
         const binding = aliasMap.get(aliasLower)
         if (!binding) continue   // Unknown alias → silent.
         if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
@@ -749,38 +795,26 @@ export function detectLineageBranchCoverage(
   return gaps.sort((a, b) => a.parent.localeCompare(b.parent))
 }
 
-// ── Big-view-without-profile_data nudge (Phase 3) ────────────────
+// ── Big-view profile_data nudge — REMOVED 2026-05-21 ─────────────
 //
-// Doctrine: queries against the canonical big views (publish.Revenue,
-// publish.Balances, fact.UnoTranspose) should be preceded by a
-// `profile_data` call on the same view in the current run. The trace
-// 2026-05-21 showed `profile_data` used once in 17 iterations against
-// publish.* — the model treats it as optional. Soft-warn (not block):
-// downstream stages of an already-profiled run won't re-touch the
-// profile.
-//
-// Only fires on the *first* touch of a given view per run; the validator
-// is stateless, so the per-run "already profiled" set is passed in by
-// the caller (tools.ts). The detector returns the qnames that triggered.
+// Previous iteration of this module exported `detectBigViewWithoutProfile`
+// which warned the agent to call `profile_data` on every large view
+// before any analytical query. That advice was actively harmful:
+// profile_data runs unfiltered COUNT_BIG(*) + per-column NULL/DISTINCT/TOP-N
+// aggregates which scan every branch of a UNION view and time out at 60s.
+// The correct fix is to refuse the operation at the profile_data tool itself
+// (see `isLargeObject` guard in mssql-profiler.ts) and let the validator's
+// existing `isUnsafeScan` continue to handle unfiltered query_mssql scans.
 
-const BIG_VIEWS_REQUIRING_PROFILE = new Set([
-  "publish.revenue",
-  "publish.balances",
-  "fact.unotranspose",
-])
-
+/**
+ * @deprecated Always returns []. Profile-first guidance is now enforced
+ * by refusing profile_data on large objects, not by warning on query_mssql.
+ */
 export function detectBigViewWithoutProfile(
-  query: string,
-  profiledTables: ReadonlySet<string> | null,
+  _query: string,
+  _profiledTables: ReadonlySet<string> | null,
 ): string[] {
-  const refs = referencedLargeObjects(query)
-  const triggers: string[] = []
-  for (const ref of refs) {
-    if (!BIG_VIEWS_REQUIRING_PROFILE.has(ref)) continue
-    if (profiledTables && profiledTables.has(ref)) continue
-    triggers.push(ref)
-  }
-  return triggers
+  return []
 }
 
 function liveProfiledTables(): ReadonlySet<string> | null {
@@ -794,14 +828,14 @@ function liveProfiledTables(): ReadonlySet<string> | null {
 // ── Cross-source reconciliation guard (Phase 5) ──────────────────
 //
 // Trace 2026-05-21 showed the agent ranking from a `#temp` derived from a
-// 3-branch subset, then joining `publish.Revenue` (which covers all 59
-// branches) to "enrich" the aggregate — silently mixing two universes.
+// 3-branch subset, then joining a wide UNION view that covers all
+// branches to "enrich" the aggregate — silently mixing two universes.
 // The reported SUM was correct for the SQL but wrong for the user's
 // intent.
 //
 // Soft-warn (not block) when:
-//   - query references both a `#temp` table AND a big view from
-//     BIG_VIEWS_REQUIRING_PROFILE, AND
+//   - query references both a `#temp` table AND a wide-UNION view
+//     (per catalog), AND
 //   - the SELECT list contains an aggregate (SUM/COUNT/AVG/MIN/MAX), AND
 //   - the escape comment `-- universes intentional` is absent.
 //
@@ -824,7 +858,10 @@ export function detectRankingVsReportingMismatch(query: string): RankingReportin
     .replace(/\/\*[\s\S]*?\*\//g, "")
   if (!TEMP_TABLE_REF.test(stripped)) return null
   if (!AGGREGATE_IN_SELECT.test(stripped)) return null
-  const bigViews = referencedLargeObjects(query).filter((r) => BIG_VIEWS_REQUIRING_PROFILE.has(r))
+  const tc = getTenantConfig()
+  const bigViews = referencedLargeObjects(query).filter((r) =>
+    isExpensiveUnionView(r, { threshold: tc.unionBranchThreshold }),
+  )
   if (bigViews.length === 0) return null
   return { tempTouched: true, bigViews }
 }
@@ -835,16 +872,29 @@ export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalys
     .sort((a, b) => a.name.localeCompare(b.name))
   const temp = analyzeTempTableBatch(query)
   const aggregateIssues = findAggregateSemanticIssues(query)
-  const usesPersistedMirrors = largeObjectRefs
-    .map((entry) => entry.name)
-    .filter((name) => name.startsWith("persistedview."))
+
+  // Mirror analysis: "persisted mirror" is a tenant-configured naming
+  // convention (config.mirrorSchema). When set, any reference of shape
+  // `<mirrorSchema>.<x>` counts as "using the mirror", and any large
+  // base object whose mirror EXISTS in the catalog but isn't referenced
+  // becomes a `missingPersistedMirrorCandidates` entry.
+  const mirrorSchema = getTenantConfig().mirrorSchema
+  const usesPersistedMirrors = mirrorSchema
+    ? largeObjectRefs.map((e) => e.name).filter((n) => n.startsWith(`${mirrorSchema.toLowerCase()}.`))
+    : []
   const missingPersistedMirrorCandidates: string[] = []
-  if (largeObjectRefs.some((entry) => entry.name === "publish.revenue") && !usesPersistedMirrors.includes("persistedview.publish.revenue")) {
-    missingPersistedMirrorCandidates.push("publish.revenue")
+  if (mirrorSchema) {
+    for (const ref of largeObjectRefs) {
+      // Skip if the ref IS itself a mirror.
+      if (ref.name.startsWith(`${mirrorSchema.toLowerCase()}.`)) continue
+      // persistedMirrorOf does case-insensitive catalog lookup internally.
+      const mirror = persistedMirrorOf(ref.name, { mirrorSchema })
+      if (!mirror) continue
+      const mirrorKey = mirror.toLowerCase()
+      if (!usesPersistedMirrors.includes(mirrorKey)) missingPersistedMirrorCandidates.push(ref.name)
+    }
   }
-  if (largeObjectRefs.some((entry) => entry.name === "publish.balances") && !usesPersistedMirrors.includes("persistedview.publish.balances")) {
-    missingPersistedMirrorCandidates.push("publish.balances")
-  }
+
   const hasWhere = hasWhereClause(query)
   const unsafeScanReason = isUnsafeScan(query, largeObjectRefs.map((entry) => entry.name))
   return {
@@ -1068,15 +1118,16 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
     }
   }
 
-  // Block direct top-N + GROUP BY pkClient/pkAccount against publish.Revenue
-  // or publish.Balances (the 59-branch UNION shape that always times out).
-  // The fix is per-branch aggregation — see doctrine `mssql.revenue-balances-policy`.
-  const publishTopnOffender = detectPublishViewTopnWithoutBranchAggregation(query)
-  if (publishTopnOffender) {
+  // Block direct top-N + GROUP BY <high-card key> against any wide UNION view
+  // the catalog classifies as expensive (≥ tenantConfig.unionBranchThreshold
+  // branches). The fix is per-branch aggregation — see doctrine
+  // `mssql.wide-union-view-policy`.
+  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query)
+  if (wideUnionOffender) {
     const head = [
-      `Query blocked — direct TOP-N + GROUP BY ${publishTopnOffender.groupKey} against ${publishTopnOffender.object}.`,
+      `Query blocked — direct TOP-N + GROUP BY ${wideUnionOffender.groupKey} against ${wideUnionOffender.object}.`,
       ``,
-      `${publishTopnOffender.object} is a UNION ALL over many source-mapping views (Revenue ≈59 branches, Balances ≈10). A single GROUP BY ${publishTopnOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on this view.`,
+      `${wideUnionOffender.object} is a UNION ALL over ${wideUnionOffender.branchCount} source-mapping views (per live catalog). A single GROUP BY ${wideUnionOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on wide UNION views.`,
     ].join("\n")
     return {
       ok: false,
@@ -1085,7 +1136,7 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
       analysis,
       lesson: getDoctrineLessonTemplate("publish_view_topn_without_branch_aggregation")?.({
         query,
-        detail: `${publishTopnOffender.object} GROUP BY ${publishTopnOffender.groupKey}`,
+        detail: `${wideUnionOffender.object} GROUP BY ${wideUnionOffender.groupKey}`,
       }) ?? null,
     }
   }
@@ -1206,27 +1257,67 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
     const objects = largeRefs.join(", ")
     return {
       ok: false,
-      error: [
-        `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
-        ``,
-        `Large publish views are UNION views over 10–60 fact tables with 100M–2B rows each. Use the persisted mirror when available.`,
-        `An unfiltered query re-executes the entire view and will run for minutes / never complete.`,
-        ``,
-        `Required fix:`,
-        `1. First resolve the date/key range from a small lookup table:`,
-        `      SELECT MIN(pkMonth) AS fromPkMonth, MAX(pkMonth) AS toPkMonth FROM dim.Date WITH (NOLOCK) WHERE [Year] = 2025`,
-        `2. Then query the large view WITH a WHERE predicate that narrows the scan:`,
-        `      SELECT ... FROM persistedView.[publish.Revenue] WITH (NOLOCK) WHERE pkMonth BETWEEN <fromPkMonth> AND <toPkMonth> GROUP BY ...`,
-        `3. Add WITH (NOLOCK) for read-only analytical queries.`,
-        `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
-        `5. If checking what data exists: query sys.partitions or dim.Date — NOT the view itself.`,
-      ].join("\n"),
+      error: scanGuardErrorMessage(objects, scanReason, largeRefs),
       code: "unsafe_large_object_scan",
       analysis,
     }
   }
 
   return { ok: true, error: null, code: null, analysis }
+}
+
+/**
+ * Compose the scan-guard error so the fix-hint uses catalog-derived
+ * facts instead of hardcoded customer names: the FIRST large object the
+ * query touched picks the example mirror/calendar/date-key. When the
+ * catalog can't supply one, the hint falls back to generic shape advice.
+ */
+function scanGuardErrorMessage(objects: string, scanReason: string, largeRefs: string[]): string {
+  const tc = getTenantConfig()
+  const firstRef = largeRefs[0]
+  const firstTable = firstRef ? getCatalog()?.getTable(firstRef) : null
+  const firstQn = firstTable?.qualifiedName ?? firstRef ?? "<large-object>"
+
+  const mirror = firstTable && tc.mirrorSchema
+    ? persistedMirrorOf(firstTable.qualifiedName, { mirrorSchema: tc.mirrorSchema })
+    : null
+  const exampleObject = mirror ?? firstQn
+  const dateKey = firstTable ? dateGrainColumn(firstTable.qualifiedName) : null
+  const calendar = calendarDimensionTable()
+  const calendarKey = calendar ? primaryKeyColumns(calendar)[0] ?? null : null
+
+  const lines = [
+    `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
+    ``,
+    `Large warehouse views/tables are UNION views or partitioned facts spanning many tables. Use the persisted mirror when available.`,
+    `An unfiltered query re-executes the entire scan and will run for minutes / never complete.`,
+    ``,
+    `Required fix:`,
+  ]
+  if (calendar && calendarKey && dateKey) {
+    lines.push(
+      `1. First resolve the date/key range from the small calendar dimension:`,
+      `      SELECT MIN(${calendarKey}) AS fromKey, MAX(${calendarKey}) AS toKey FROM ${calendar} WITH (NOLOCK) WHERE <date-predicate>`,
+      `2. Then query the large object WITH a WHERE predicate that narrows the scan:`,
+      `      SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} BETWEEN <fromKey> AND <toKey> GROUP BY ...`,
+    )
+  } else if (dateKey) {
+    lines.push(
+      `1. Add a narrowing predicate on the time-grain column \`${dateKey}\` (the catalog's FK to your calendar dimension).`,
+      `2. Then query the large object: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} = <value> GROUP BY ...`,
+    )
+  } else {
+    lines.push(
+      `1. Identify a high-selectivity column on ${firstQn} (PK, FK to a small dim, or a date column) and add a WHERE predicate on it.`,
+      `2. Then query: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE <predicate> GROUP BY ...`,
+    )
+  }
+  lines.push(
+    `3. Add WITH (NOLOCK) for read-only analytical queries.`,
+    `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
+    `5. If checking what data exists: query sys.partitions or the calendar dim — NOT the view itself.`,
+  )
+  return lines.join("\n")
 }
 
 // ── Aggregate-semantic guard ─────────────────────────────────
@@ -1289,14 +1380,26 @@ const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
 
 // Source-column-name tokens that indicate the column IS ALREADY pre-aggregated.
 // Used by the soft-warn rule: SUM-ing one of these almost always returns the
-// wrong number (N× the true value).
-//
-// Camelcase-aware: matches either at a word boundary (`\bAverageCredit…`,
-// `EOMBalance`) OR right after a lowercase letter (`MonthlyAvg`, `dailySpot`).
-// We DO NOT require a trailing word boundary — `AverageCreditBalanceZARMTD`
-// must trigger on `Average`, even though `Average` is followed by `C`
-// (camelcase, no `\b` between them).
-const PREAGGREGATED_COL_RE = /(?:\b|(?<=[a-z]))(Average|Avg|Mean|Median|Spot|EOM|Eod|Latest|Snapshot|EndOf|AsOf|StartOf|MTD|YTD|QTD|WTD)/i
+// wrong number (N× the true value). Tokens come from tenant config
+// (`preAggregationTokens`); regex is rebuilt when the config or list reference
+// changes. Camelcase-aware: matches either at a word boundary
+// (`\bAverageCredit…`, `EOMBalance`) OR right after a lowercase letter
+// (`MonthlyAvg`, `dailySpot`). We DO NOT require a trailing word boundary —
+// `AverageCreditBalanceZARMTD` must trigger on `Average`.
+let preAggregatedColReCache: { tokensRef: object; re: RegExp } | null = null
+function preAggregatedColRe(): RegExp {
+  const tokens = getTenantConfig().preAggregationTokens
+  if (preAggregatedColReCache && preAggregatedColReCache.tokensRef === (tokens as unknown as object)) {
+    return preAggregatedColReCache.re
+  }
+  const alternation = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+  // Empty tenant config → regex that never matches.
+  const re = alternation.length > 0
+    ? new RegExp(`(?:\\b|(?<=[a-z]))(${alternation})`, "i")
+    : /a^/
+  preAggregatedColReCache = { tokensRef: tokens as unknown as object, re }
+  return re
+}
 
 /** Strip comments + string literals while preserving newline positions for line counts. */
 function stripForScan(query: string): string {
@@ -1395,7 +1498,7 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
 
     // ── WARN rule: SUM-like applied to a pre-aggregated column name ──
     if (fnFamily === AggregateFamily.Sum) {
-      const colMatch = PREAGGREGATED_COL_RE.exec(argText)
+      const colMatch = preAggregatedColRe().exec(argText)
       if (colMatch) {
         // Suppress the warning if the alias EXPLICITLY acknowledges that this is
         // a sum of pre-aggregated values — e.g. `SumOfMonthlyAverages`,

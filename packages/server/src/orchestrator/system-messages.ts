@@ -1,5 +1,5 @@
 import type { Message, Tool } from "@mia/agent"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, getCatalog, getCatalogSchemaFingerprint, MessageRole, MIA_DATA_PERSONA_SECTION } from "@mia/agent"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, getCatalog, getCatalogSchemaFingerprint, MessageRole, MIA_DATA_PERSONA_SECTION, renderPromptVars } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
@@ -232,10 +232,11 @@ export async function buildSystemMessages(opts: {
 
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+  const promptVars = buildPromptVars()
   const envBlock = buildEnvironmentContext({ isAdmin })
   systemMessages.push({
     role: MessageRole.System,
-    content: `${basePrompt}\n${envBlock}`,
+    content: `${renderPromptVars(basePrompt, promptVars)}\n${envBlock}`,
     section: "system_anchor",
   })
 
@@ -247,7 +248,7 @@ export async function buildSystemMessages(opts: {
   if (decision.includeDataPersona) {
     systemMessages.push({
       role: MessageRole.System,
-      content: MIA_DATA_PERSONA_SECTION,
+      content: renderPromptVars(MIA_DATA_PERSONA_SECTION, promptVars),
       section: "system_anchor",
     })
   }
@@ -258,7 +259,7 @@ export async function buildSystemMessages(opts: {
   if (decision.includeAbiSync) {
     systemMessages.push({
       role: MessageRole.System,
-      content: ABI_SYNC_SECTION,
+      content: renderPromptVars(ABI_SYNC_SECTION, promptVars),
       section: "system_anchor",
     })
   }
@@ -271,7 +272,7 @@ export async function buildSystemMessages(opts: {
   if (decision.includeChartCatalogue) {
     systemMessages.push({
       role: MessageRole.System,
-      content: CHART_CATALOGUE_SECTION,
+      content: renderPromptVars(CHART_CATALOGUE_SECTION, promptVars),
       section: "system_runtime",
     })
   }
@@ -282,7 +283,7 @@ export async function buildSystemMessages(opts: {
   if (decision.includeBigTableEtl) {
     systemMessages.push({
       role: MessageRole.System,
-      content: BIG_TABLE_ETL_SECTION,
+      content: renderPromptVars(BIG_TABLE_ETL_SECTION, promptVars),
       section: "system_anchor",
     })
   }

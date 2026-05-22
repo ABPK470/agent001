@@ -64,6 +64,17 @@ export * from "../sync/index.js"
 export * from "../tools/_helpers/index.js"
 export * from "../tools/index.js"
 
+// ── Tenant configuration ────────────────────────────────────────────
+export {
+    DEFAULT_TENANT_CONFIG,
+    getTenantConfig,
+    isDefaultTenantConfig,
+    loadTenantConfigFromEnv,
+    resetTenantConfig,
+    setTenantConfig
+} from "../tenant/config.js"
+export type { TenantConfig } from "../tenant/config.js"
+
 // Renamed re-export preserved for back-compat with @mia/server.
 export { getPool as getMssqlPool } from "../tools/index.js"
 

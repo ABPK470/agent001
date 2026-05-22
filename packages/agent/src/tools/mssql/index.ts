@@ -13,5 +13,5 @@ export {
 export { exportQueryToFileTool } from "./export-tool.js"
 export { formatResults } from "./formatter.js"
 export { mssqlSchemaTool, mssqlTool } from "./tools.js"
-export { hasWhereClause, isUnsafeScan, referencedLargeObjects, validateQuery } from "./validation.js"
+export { hasWhereClause, isLargeObject, isUnsafeScan, referencedLargeObjects, validateQuery } from "./validation.js"
 

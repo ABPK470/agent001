@@ -86,7 +86,10 @@ describe("isUnsafeScan — should BLOCK these queries", () => {
   })
 
   it("blocks unfiltered SELECT * on large fact table", () => {
-    expect(block("SELECT * FROM fact.AfricaFlexDailyBalances")).not.toBeNull()
+    // fact.UnoTranspose is in the bootstrap fallback set; other large
+    // facts (AfricaFlexDailyBalances etc.) are detected dynamically via
+    // the catalog's rowCount in production.
+    expect(block("SELECT * FROM fact.UnoTranspose")).not.toBeNull()
   })
 
   it("blocks SUM aggregate without WHERE on large view", () => {

@@ -13,6 +13,7 @@ import {
     detectInventedColumns,
     validateQueryDetailed,
 } from "../src/tools/mssql/validation.js"
+import { clearFixtureCatalog, installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
 // ── fake catalog ────────────────────────────────────────────────
 type Col = { name: string; dataType?: string }
@@ -184,13 +185,16 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
 
 describe("validateQueryDetailed — invented_column block", () => {
   it("returns the invented_column code with fix hint and lesson", () => {
-    // validateQueryDetailed uses the runtime catalog by default — in the test
-    // env there is no runtime catalog, so the guard SHOULD be silent and the
-    // query passes the column check. This pins that "no catalog = silent".
-    const query = "SELECT r.ClientName FROM publish.Revenue r"
-    const v = validateQueryDetailed(query, false)
-    // No catalog loaded → no invented_column block; the query is a valid
-    // SELECT shape so it should pass the read-only gate.
-    expect(v.code).not.toBe("invented_column")
+    // validateQueryDetailed uses the runtime catalog by default — clear
+    // the global fixture catalog so we can pin the "no catalog = silent"
+    // behaviour (the column guard short-circuits when it has no evidence).
+    clearFixtureCatalog()
+    try {
+      const query = "SELECT r.ClientName FROM publish.Revenue r"
+      const v = validateQueryDetailed(query, false)
+      expect(v.code).not.toBe("invented_column")
+    } finally {
+      installCanonicalFixtureCatalog()
+    }
   })
 })

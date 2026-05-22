@@ -1,3 +1,4 @@
+import { getTenantConfig } from "../../tenant/config.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ConceptNode, ImplicitEdge } from "./types.js"
 
@@ -88,15 +89,10 @@ export function searchCatalog(
     const colScore = colMatches.length * 10
     const rowBonus = table.rowCount ? Math.min(Math.log10(table.rowCount + 1) * 2, 20) : 0
 
-    // Schema tier boost: publish/persistedView are the curated BI layer — rank them first
-    const schema = table.schema.toLowerCase()
-    const schemaBoost =
-      schema === "publish" ? 50 :
-      schema === "persistedview" ? 45 :
-      (schema === "fact" || schema === "dim") ? 20 :
-      schema === "list" ? 5 :
-      (schema === "archive" || schema === "etl") ? -20 :
-      0
+    // Schema tier boost: per-deployment ranking lives in tenant config
+    // (`schemaRanking`). When unset, no per-schema bias is applied — search
+    // ranks purely on shape (rowCount, fanout, column richness, …).
+    const schemaBoost = schemaWeightFor(table.schema)
 
     // Structural signals — tables that are MORE connected/richer are more likely correct
     const viewBonus = table.type === "VIEW" ? 10 : 0
@@ -124,4 +120,31 @@ export function searchCatalog(
   // Sort: highest score first, then by row count descending
   hits.sort((a, b) => b.score - a.score || (b.table.rowCount ?? 0) - (a.table.rowCount ?? 0))
   return hits.slice(0, limit)
+}
+
+/**
+ * Resolve the schema-ranking weight from tenant config. Supports BOTH
+ * supported shapes:
+ *   - canonical: `ReadonlyArray<{ schema: string; weight: number }>`
+ *   - legacy object: `Record<string, number>` (kept for back-compat with
+ *     existing test fixtures and per-deployment JSON shorthand).
+ * Lookup is case-insensitive. Returns 0 when no match.
+ */
+function schemaWeightFor(schema: string): number {
+  const ranking = getTenantConfig().schemaRanking as
+    | ReadonlyArray<{ schema: string; weight: number }>
+    | Record<string, number>
+    | undefined
+  if (!ranking) return 0
+  const target = schema.toLowerCase()
+  if (Array.isArray(ranking)) {
+    for (const entry of ranking) {
+      if (entry?.schema?.toLowerCase() === target) return entry.weight ?? 0
+    }
+    return 0
+  }
+  for (const k of Object.keys(ranking)) {
+    if (k.toLowerCase() === target) return (ranking as Record<string, number>)[k] ?? 0
+  }
+  return 0
 }

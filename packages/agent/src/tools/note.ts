@@ -56,8 +56,8 @@ export const noteTool: Tool = {
     "semantic meaning confirmed against an external spec, or a business rule learned " +
     "from the user in this conversation. Do NOT use it to restate what a tool result " +
     "already showed or what the validator already flagged. " +
-    "Subject should be a stable identifier (qualified-name like 'publish.Revenue.RevenueZARMTD' " +
-    "or 'join:publish.Revenue↔publish.Balance'). Claim is the fact. Evidence is " +
+    "Subject should be a stable identifier (qualified-name like '<schema>.<Table>.<Column>' " +
+    "or 'join:<schema>.<Table>↔<schema>.<Table>'). Claim is the fact. Evidence is " +
     "optional supporting detail.",
   parameters: {
     type: "object",
