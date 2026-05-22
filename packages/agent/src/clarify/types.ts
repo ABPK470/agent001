@@ -32,6 +32,7 @@ import type { Message } from "../types.js"
  */
 export type AmbiguityKind =
   | "schema-match"        // noun in goal matches multiple catalog identifiers
+  | "canonical-ambiguity" // top-1 vs top-2 catalog scores within a hair on a metric goal
   | "term-undefined"      // capitalised business word with no catalog/tenant match
   | "metric-undefined"    // ranking language ("top", "biggest") without a metric
   | "grain-undefined"     // period word ("monthly") matches multiple grain cols

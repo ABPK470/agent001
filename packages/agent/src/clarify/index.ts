@@ -11,6 +11,7 @@
 // addresses the most urgent ambiguity first.
 
 import { runDetectors } from "./detector.js"
+import { canonicalAmbiguityDetector } from "./detectors/canonical-ambiguity.js"
 import { emptyResultDetector } from "./detectors/empty-result.js"
 import { grainUndefinedDetector } from "./detectors/grain-undefined.js"
 import { metricUndefinedDetector } from "./detectors/metric-undefined.js"
@@ -20,16 +21,16 @@ import { termUndefinedDetector } from "./detectors/term-undefined.js"
 import { timeRangeDetector } from "./detectors/time-range.js"
 import { writeConfirmationDetector } from "./detectors/write-confirmation.js"
 import type {
-    AmbiguityFinding,
-    ClarifyContext,
-    Detector,
-    ResolvedClarification,
+  AmbiguityFinding,
+  ClarifyContext,
+  Detector,
+  ResolvedClarification,
 } from "./types.js"
 
 export {
-    CLARIFY_BLOCK_BUDGET_BYTES,
-    makeFindingId,
-    slugSubject
+  CLARIFY_BLOCK_BUDGET_BYTES,
+  makeFindingId,
+  slugSubject
 } from "./types.js"
 
 export { runDetectors }
@@ -38,13 +39,13 @@ export { parsePlannerResponse, runLlmPlanner, shouldInvokePlanner } from "./llm-
 export type { LlmPlannerOptions } from "./llm-planner.js"
 
 export type {
-    AmbiguityFinding,
-    AmbiguityKind,
-    AmbiguitySeverity,
-    AmbiguitySource,
-    ClarifyContext,
-    Detector,
-    ResolvedClarification
+  AmbiguityFinding,
+  AmbiguityKind,
+  AmbiguitySeverity,
+  AmbiguitySource,
+  ClarifyContext,
+  Detector,
+  ResolvedClarification
 } from "./types.js"
 
 /**
@@ -57,6 +58,10 @@ export type {
 export const CLARIFY_DETECTORS: readonly Detector[] = [
   // block-severity (must be addressed before next data tool call)
   writeConfirmationDetector,
+  // canonical-ambiguity is warn-severity but registered early so the
+  // candidate gap is surfaced before any schema-match noise on the
+  // same noun (intentional: a 7% gap is the actual decision point).
+  canonicalAmbiguityDetector,
   schemaMatchDetector,
   termUndefinedDetector,
   // warn-severity (acknowledge in answer, do not necessarily block)
