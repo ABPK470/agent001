@@ -8,6 +8,7 @@
 
 import sql from "mssql"
 import { currentRuntime } from "../agent-runtime.js"
+import { getTenantConfig } from "../tenant/config.js"
 import type { Tool } from "../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"
@@ -49,6 +50,197 @@ function parseTableName(input: string): { schema: string; table: string } | null
   const table = strip(trimmed.slice(splitAt + 1))
   if (!schema || !table) return null
   return { schema, table }
+}
+
+// ── Mirror-freshness comparison (Plan v3 Phase 2) ────────────────
+//
+// Generic MSSQL primitive: compare a canonical object to its persisted
+// mirror (`<mirrorSchema>.<canonical-qname>`) without scanning either.
+// Two cheap DMV queries:
+//   1. sys.dm_db_partition_stats — row count per object (heap + clustered
+//      index pages). Sub-millisecond at any data size.
+//   2. STATS_DATE(object_id, stats_id) — last time statistics were
+//      refreshed (cheap proxy for "freshness" — actual data freshness
+//      depends on ETL but stats_date is the best generic signal).
+//
+// The recommendation is decided at the caller level (LLM-friendly enum)
+// from `deltaPct` and `freshHours`:
+//   - mirror missing                          → USE_CANONICAL
+//   - |deltaPct| ≤ MAX_DELTA_PCT and          → USE_MIRROR
+//     freshHours ≤ MAX_FRESH_HOURS
+//   - otherwise                                → INSUFFICIENT_DATA
+//   - mirror reports more rows than canonical → INSUFFICIENT_DATA
+//
+// No tenant data required beyond `mirrorSchema`. Works on any MSSQL DB
+// that uses the `<mirrorSchema>.<canonical-qname>` convention.
+
+const COMPARE_MIRROR_MAX_DELTA_PCT = 5
+const COMPARE_MIRROR_MAX_FRESH_HOURS = 24
+
+interface ObjectStats {
+  qname: string
+  rows: number | null         // null when the object doesn't exist
+  statsDate: Date | null
+  exists: boolean
+}
+
+async function fetchObjectStats(
+  pool: sql.ConnectionPool,
+  schema: string,
+  name: string,
+): Promise<ObjectStats> {
+  const qname = `${schema}.${name}`
+  const req = pool.request()
+  req.input("schema", sql.NVarChar, schema)
+  req.input("name", sql.NVarChar, name)
+  // OBJECT_ID handles bracketed identifiers; we pass the bracketed form
+  // to be safe against dotted names like persistedView.[publish.Revenue].
+  req.input("fullName", sql.NVarChar, `${escapeIdentifier(schema)}.${escapeIdentifier(name)}`)
+  const res = await req.query(`
+    DECLARE @oid INT = OBJECT_ID(@fullName);
+    SELECT
+      @oid AS object_id,
+      COALESCE((
+        SELECT SUM(row_count)
+        FROM sys.dm_db_partition_stats
+        WHERE object_id = @oid AND index_id IN (0, 1)
+      ), 0) AS row_count,
+      (
+        SELECT MAX(STATS_DATE(object_id, stats_id))
+        FROM sys.stats
+        WHERE object_id = @oid
+      ) AS stats_date
+  `)
+  const row = res.recordset[0] as { object_id: number | null; row_count: number; stats_date: Date | null }
+  if (row.object_id == null) {
+    return { qname, rows: null, statsDate: null, exists: false }
+  }
+  return {
+    qname,
+    rows: row.row_count,
+    statsDate: row.stats_date,
+    exists: true,
+  }
+}
+
+type MirrorRecommendation = "USE_MIRROR" | "USE_CANONICAL" | "INSUFFICIENT_DATA"
+
+export interface CompareMirrorResult {
+  canonical: { qname: string; rows: number | null; statsDate: string | null }
+  mirror: { qname: string; rows: number | null; statsDate: string | null }
+  deltaPct: number | null
+  freshHours: number | null
+  recommendation: MirrorRecommendation
+  reason: string
+}
+
+/**
+ * Pure decision function — exported for unit-testing without a live pool.
+ * Input is the two ObjectStats; output is the LLM-facing recommendation.
+ */
+export function decideMirrorRecommendation(
+  canonical: ObjectStats,
+  mirror: ObjectStats,
+  now: Date = new Date(),
+  maxDeltaPct: number = COMPARE_MIRROR_MAX_DELTA_PCT,
+  maxFreshHours: number = COMPARE_MIRROR_MAX_FRESH_HOURS,
+): CompareMirrorResult {
+  const base: CompareMirrorResult = {
+    canonical: {
+      qname: canonical.qname,
+      rows: canonical.rows,
+      statsDate: canonical.statsDate ? canonical.statsDate.toISOString() : null,
+    },
+    mirror: {
+      qname: mirror.qname,
+      rows: mirror.rows,
+      statsDate: mirror.statsDate ? mirror.statsDate.toISOString() : null,
+    },
+    deltaPct: null,
+    freshHours: null,
+    recommendation: "INSUFFICIENT_DATA",
+    reason: "",
+  }
+
+  if (!mirror.exists) {
+    return { ...base, recommendation: "USE_CANONICAL", reason: "mirror object does not exist" }
+  }
+  if (!canonical.exists) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: "canonical object does not exist" }
+  }
+  const cRows = canonical.rows ?? 0
+  const mRows = mirror.rows ?? 0
+  if (cRows === 0) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: "canonical has zero rows; cannot compute delta" }
+  }
+  const deltaPct = ((mRows - cRows) / cRows) * 100
+  base.deltaPct = Number(deltaPct.toFixed(2))
+
+  const freshHours = mirror.statsDate
+    ? (now.getTime() - mirror.statsDate.getTime()) / 3_600_000
+    : null
+  base.freshHours = freshHours != null ? Number(freshHours.toFixed(1)) : null
+
+  // Mirror reports MORE rows than canonical → suspicious (duplicate
+  // load, missing predicate, schema drift). Refuse to substitute.
+  if (mRows > cRows * (1 + maxDeltaPct / 100)) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: `mirror has ${base.deltaPct}% more rows than canonical` }
+  }
+  if (Math.abs(deltaPct) > maxDeltaPct) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: `row delta ${base.deltaPct}% exceeds ±${maxDeltaPct}% threshold` }
+  }
+  if (freshHours == null) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: "mirror has no STATS_DATE — freshness unknown" }
+  }
+  if (freshHours > maxFreshHours) {
+    return { ...base, recommendation: "INSUFFICIENT_DATA", reason: `mirror stats ${base.freshHours}h old, exceeds ${maxFreshHours}h threshold` }
+  }
+  return {
+    ...base,
+    recommendation: "USE_MIRROR",
+    reason: `mirror within ±${maxDeltaPct}% of canonical (${base.deltaPct}%) and fresh (${base.freshHours}h ≤ ${maxFreshHours}h)`,
+  }
+}
+
+function formatCompareMirror(result: CompareMirrorResult): string {
+  const fmtRows = (n: number | null) => n == null ? "(n/a)" : n.toLocaleString()
+  const fmtDate = (s: string | null) => s ?? "(none)"
+  const lines = [
+    `compare_mirror result:`,
+    `  canonical: ${result.canonical.qname}`,
+    `    rows=${fmtRows(result.canonical.rows)}  stats_date=${fmtDate(result.canonical.statsDate)}`,
+    `  mirror:    ${result.mirror.qname}`,
+    `    rows=${fmtRows(result.mirror.rows)}  stats_date=${fmtDate(result.mirror.statsDate)}`,
+    `  deltaPct:  ${result.deltaPct == null ? "(n/a)" : `${result.deltaPct}%`}`,
+    `  freshHours:${result.freshHours == null ? " (n/a)" : ` ${result.freshHours}h`}`,
+    `  recommendation: ${result.recommendation}`,
+    `  reason: ${result.reason}`,
+  ]
+  return lines.join("\n")
+}
+
+async function runCompareMirror(
+  pool: sql.ConnectionPool,
+  schema: string,
+  table: string,
+): Promise<string> {
+  const tenant = getTenantConfig()
+  const mirrorSchema = tenant.mirrorSchema
+  if (!mirrorSchema) {
+    return [
+      `Error: compareMirror requires tenant.mirrorSchema to be configured.`,
+      `This deployment has no mirror schema, so mirror substitution does not apply.`,
+      `Use profile_data with mode='fast' (the default) for a normal profile.`,
+    ].join("\n")
+  }
+  // The canonical input is the user-supplied schema.table. The mirror
+  // form follows the deployment convention `<mirrorSchema>.<canonical-qname>`
+  // — i.e. the mirror object's NAME is the full canonical qname.
+  const canonical = await fetchObjectStats(pool, schema, table)
+  const mirrorName = `${schema}.${table}`
+  const mirror = await fetchObjectStats(pool, mirrorSchema, mirrorName)
+  const result = decideMirrorRecommendation(canonical, mirror)
+  return formatCompareMirror(result)
 }
 
 // ── Fast profile ─────────────────────────────────────────────────
@@ -316,6 +508,16 @@ export const profileDataTool: Tool = {
         type: "string",
         description: "Named database connection to use. Omit for default.",
       },
+      compareMirror: {
+        type: "boolean",
+        description:
+          "When true, run a mirror-freshness comparison instead of a normal profile. " +
+          "Compares the canonical object to its '<mirrorSchema>.<canonical-qname>' mirror " +
+          "using two DMV queries (sys.dm_db_partition_stats + STATS_DATE). Returns rows, " +
+          "stats_date, deltaPct, freshHours, and a recommendation enum " +
+          "(USE_MIRROR | USE_CANONICAL | INSUFFICIENT_DATA). Requires tenant.mirrorSchema. " +
+          "Use BEFORE substituting the mirror in a query. Sub-second on any data size.",
+      },
     },
     required: ["table"],
   },
@@ -331,6 +533,26 @@ export const profileDataTool: Tool = {
     const connName = args.connection ? String(args.connection).trim() : undefined
     const mode: "fast" | "deep" =
       String(args.mode || "fast").toLowerCase() === "deep" ? "deep" : "fast"
+
+    // ── Mirror-freshness comparison (Plan v3 Phase 2) ──────────────
+    //
+    // Short-circuit: when compareMirror=true, bypass the normal profile
+    // path entirely. Two DMV queries, structured result, no caching
+    // (freshness is the whole point — stale answers defeat the purpose).
+    if (args.compareMirror === true) {
+      let pool: sql.ConnectionPool
+      try {
+        const result = await getPool(connName)
+        pool = result.pool
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
+      try {
+        return await runCompareMirror(pool, schema, table)
+      } catch (err) {
+        return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
+      }
+    }
 
     // ── Cache: serve fresh results without touching MSSQL ───────────
     //

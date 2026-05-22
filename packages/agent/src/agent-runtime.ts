@@ -61,18 +61,18 @@ import { IngestionMode } from "./domain/enums/runtime.js"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-  SyncEnvironment,
-  SyncEventSink,
-  SyncPlan,
-  SyncRecipeBundle,
-  SyncRunSink,
+    SyncEnvironment,
+    SyncEventSink,
+    SyncPlan,
+    SyncRecipeBundle,
+    SyncRunSink,
 } from "./sync/index.js"
 import type {
-  AskUserResolver,
-  BrowserCheckExecutor,
-  BrowserSession,
-  CatalogGraph,
-  ShellExecutor,
+    AskUserResolver,
+    BrowserCheckExecutor,
+    BrowserSession,
+    CatalogGraph,
+    ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -296,6 +296,43 @@ export interface ToolKnowledgeState {
   renderHeader: ((hit: ToolKnowledgeHit, opts: { tool: ToolKnowledgeCachedTool; mode?: string }) => string) | null
 }
 
+// ── Table verdicts (Plan v3 Phase 3-4) ───────────────────────────
+//
+// Verdicts are durable role classifications for MSSQL objects
+// ("publish.Revenue is canonical", "publish.RevenueESGRules is a subset"),
+// stored in the server's semantic memory tier. The agent's `search_catalog`
+// scorer reads them at rank time so prior runs' learnings influence
+// current ranking — closing the read-back loop in Gap 2.
+//
+// The runtime exposes a callback rather than a direct memory import so
+// the agent package stays free of server dependencies (matches the
+// `toolKnowledge` pattern above). The server binds `list` in
+// `run-executor.ts`; CLI / root path leaves it null so search_catalog
+// transparently falls back to structural-only ranking.
+
+export type TableVerdictRoleType =
+  | "canonical" | "subset" | "staging" | "archive" | "rules" | "unknown"
+
+export interface TableVerdictRecord {
+  qname: string
+  role: TableVerdictRoleType
+  evidence: string[]
+  confidence: number
+  createdAt: string
+}
+
+export interface TableVerdictsListArgs {
+  /** Restrict to these qualified names (case-insensitive). */
+  qnames: string[]
+  /** Logical MSSQL connection to scope to. Defaults to "default". */
+  connection?: string
+}
+
+export interface TableVerdictsState {
+  /** Returns the newest verdict per qname for the given filter. */
+  list: ((args: TableVerdictsListArgs) => TableVerdictRecord[]) | null
+}
+
 export interface CatalogState {
   /** Expensive caches — shared across runtimes. */
   instances: Map<string, CatalogGraph>
@@ -406,6 +443,12 @@ export class AgentRuntime {
   readonly memory: MemoryState
   /** Org-wide cache of heavy MSSQL-tool outputs. Null until server binds. */
   readonly toolKnowledge: ToolKnowledgeState
+  /**
+   * Per-run reader for durable table verdicts (semantic memory). Null
+   * until the server binds it. Read by search_catalog to apply
+   * memoryVerdictBonus at rank time. See /memories/session/plan.md Phase 4.
+   */
+  readonly tableVerdicts: TableVerdictsState
   /** Shared with parent (caches are expensive — never duplicated). */
   readonly catalog: CatalogState
   /** Shared with parent (server installs sinks once at boot). */
@@ -481,6 +524,10 @@ export class AgentRuntime {
         save: parent.toolKnowledge.save,
         renderHeader: parent.toolKnowledge.renderHeader,
       }
+      // Verdicts reader follows the same pattern as toolKnowledge — copy
+      // the callback by VALUE so per-run test stubs don't leak into the
+      // parent runtime.
+      this.tableVerdicts = { list: parent.tableVerdicts.list }
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
@@ -503,6 +550,7 @@ export class AgentRuntime {
       this.attachments = { service: null }
       this.memory = { writeNote: null }
       this.toolKnowledge = { lookup: null, save: null, renderHeader: null }
+      this.tableVerdicts = { list: null }
     }
   }
 

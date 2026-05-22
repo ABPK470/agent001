@@ -143,6 +143,7 @@ export class CatalogGraph {
     return searchCatalog(
       this.tables, this.nameIndex, this.columnIndex,
       this.implicitJoinIndex, query, limit,
+      this.viewSourceRows,
     )
   }
 

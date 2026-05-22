@@ -7,47 +7,49 @@
  */
 
 import {
-  appendFileTool,
-  askUserTool,
-  bindNoteTool,
-  browserAutoLoginTool,
-  browserCheckTool,
-  browserHumanHandoffTool,
-  browseWebTool,
-  compareCatalogsTool,
-  createDelegateTools,
-  discoverRelationshipsTool,
-  exportQueryToFileTool,
-  fetchUrlTool,
-  getChartSpecsTool,
-  importAttachmentTool,
-  inspectDefinitionTool,
-  listAttachmentsTool,
-  listDirectoryTool,
-  listEnvironmentsTool,
-  mssqlSchemaTool,
-  mssqlTool,
-  noteTool,
-  profileDataTool,
-  promoteAttachmentTool,
-  readAttachmentTool,
-  readFileTool,
-  replaceInFileTool,
-  searchCatalogTool,
-  searchFilesTool,
-  shellTool,
-  syncExecuteTool,
-  syncPreviewTool,
-  thinkTool,
-  webSearchTool,
-  writeFileTool,
-  type DelegateContext,
-  type GovernToolOptions,
-  type LLMClient,
-  type Tool,
+    appendFileTool,
+    askUserTool,
+    bindNoteTool,
+    bindRecordTableVerdictTool,
+    browserAutoLoginTool,
+    browserCheckTool,
+    browserHumanHandoffTool,
+    browseWebTool,
+    compareCatalogsTool,
+    createDelegateTools,
+    discoverRelationshipsTool,
+    exportQueryToFileTool,
+    fetchUrlTool,
+    getChartSpecsTool,
+    importAttachmentTool,
+    inspectDefinitionTool,
+    listAttachmentsTool,
+    listDirectoryTool,
+    listEnvironmentsTool,
+    mssqlSchemaTool,
+    mssqlTool,
+    noteTool,
+    profileDataTool,
+    promoteAttachmentTool,
+    readAttachmentTool,
+    readFileTool,
+    recordTableVerdictTool,
+    replaceInFileTool,
+    searchCatalogTool,
+    searchFilesTool,
+    shellTool,
+    syncExecuteTool,
+    syncPreviewTool,
+    thinkTool,
+    webSearchTool,
+    writeFileTool,
+    type DelegateContext,
+    type GovernToolOptions,
+    type LLMClient,
+    type Tool,
 } from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
-import { ingestAgentNote } from "./memory/index.js"
+import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
 
 export { thinkTool }
 
@@ -74,6 +76,7 @@ const ALL_TOOLS: Tool[] = [
   getChartSpecsTool,
   thinkTool,
   noteTool,
+  recordTableVerdictTool,
   mssqlTool,
   mssqlSchemaTool,
   exportQueryToFileTool,
@@ -209,6 +212,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "search_files",
   "think",
   "note",
+  "record_table_verdict",
   "fetch_url",
   "ask_user",
   "search_catalog",
@@ -326,6 +330,31 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
         })
         if (res.ok) return { ok: true, noteId: res.id }
         return { ok: false, reason: res.reason }
+      }),
+    ),
+  ],
+  // record_table_verdict — Plan v3 Phase 5. Persists a structured role
+  // classification (canonical / subset / staging / archive / rules /
+  // unknown) for an MSSQL object so future runs' search_catalog applies
+  // the matching memoryVerdictBonus (Phase 4). Called by the reflection
+  // turn the orchestrator injects after data-shaped goals complete.
+  (ctx) => [
+    ctx.govern(
+      bindRecordTableVerdictTool(async (payload) => {
+        try {
+          const v = recordTableVerdict({
+            qname: payload.qname,
+            role: payload.role,
+            evidence: payload.evidence,
+            observedFromGoal: payload.observedFromGoal,
+            sessionId: ctx.sessionId,
+            runId: ctx.runId,
+            upn: ctx.upn,
+          })
+          return { ok: true, verdictId: v.id }
+        } catch (err) {
+          return { ok: false, reason: (err as Error).message }
+        }
       }),
     ),
   ],

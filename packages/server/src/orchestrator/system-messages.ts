@@ -6,7 +6,7 @@ import type { RunWorkspaceContext } from "../run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
-import { renderKnownObjectsBlock, type KnownObjectRow } from "./known-objects.js"
+import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "./known-objects.js"
 import type { PriorTurn } from "./prior-turns.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
@@ -218,10 +218,19 @@ export async function buildSystemMessages(opts: {
    * run-executor; empty array (or omitted) skips the block.
    */
   knownObjects?: readonly KnownObjectRow[]
+  /**
+   * Optional verdict rows (Plan v3 Phase 4) appended to `<known_objects>`.
+   * Surfaces durable role classifications (canonical / subset / staging /
+   * archive / rules) for the top-K search_catalog candidates derived from
+   * the goal — gives the model structural priors it would otherwise have
+   * to re-discover.
+   */
+  knownVerdicts?: readonly CandidateVerdictRow[]
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
   const priorTurns = opts.priorTurns ?? []
   const knownObjects = opts.knownObjects ?? []
+  const knownVerdicts = opts.knownVerdicts ?? []
   const isAdmin = opts.isAdmin ?? false
   const hasSiblings = opts.hasSiblings ?? false
   const siblingProgressDigest = opts.siblingProgressDigest ?? ""
@@ -248,6 +257,7 @@ export async function buildSystemMessages(opts: {
     `memGuide=${decision.includeMemoryGuidance ? 1 : 0} ` +
     `priorTurns=${priorTurns.length} ` +
     `knownObjects=${knownObjects.length} ` +
+    `knownVerdicts=${knownVerdicts.length} ` +
     `admin=${isAdmin ? 1 : 0}`,
   )
 
@@ -381,8 +391,8 @@ export async function buildSystemMessages(opts: {
   // should reach for what we already know before issuing a fresh probe.
   // Caller passes [] when no cache exists (CLI / first call) and the
   // block is silently skipped.
-  if (knownObjects.length > 0) {
-    const block = renderKnownObjectsBlock(knownObjects)
+  if (knownObjects.length > 0 || knownVerdicts.length > 0) {
+    const block = renderKnownObjectsBlock(knownObjects, knownVerdicts)
     if (block.length > 0) {
       systemMessages.push({
         role: MessageRole.System,

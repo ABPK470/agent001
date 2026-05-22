@@ -1,39 +1,40 @@
 import {
-    Agent,
-    AgentRuntime,
-    cancelRun,
-    completeRun,
-    createRun,
-    detectInternalFailure,
-    EventType,
-    failRun,
-    fillRunReference,
-    governTool,
-    isPlatformUnconfiguredAnswer,
-    isUserSafeFailureAnswer,
-    mapFailureKindForPolish,
-    markPolishedFailure,
-    PolicyRole,
-    PolicyRunMode,
-    polishFailureForUser,
-    runCompleted,
-    runFailed,
-    runStarted,
-    runWithMssqlKillSignal,
-    runWithPolicyContext,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    SyncRunStatus,
-    synthesizeGenericFailureAnswer,
-    type DelegateContext,
-    type EngineServices,
-    type HostedPolicyContext,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager
+  Agent,
+  AgentRuntime,
+  cancelRun,
+  completeRun,
+  createRun,
+  detectInternalFailure,
+  EventType,
+  failRun,
+  fillRunReference,
+  getCatalog,
+  governTool,
+  isPlatformUnconfiguredAnswer,
+  isUserSafeFailureAnswer,
+  mapFailureKindForPolish,
+  markPolishedFailure,
+  PolicyRole,
+  PolicyRunMode,
+  polishFailureForUser,
+  runCompleted,
+  runFailed,
+  runStarted,
+  runWithMssqlKillSignal,
+  runWithPolicyContext,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  SyncRunStatus,
+  synthesizeGenericFailureAnswer,
+  type DelegateContext,
+  type EngineServices,
+  type HostedPolicyContext,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { AgentBus, createBusTools } from "../agent-bus.js"
@@ -44,16 +45,17 @@ import { BusProtocol } from "../enums/bus.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../event-broadcaster.js"
-import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, lookupToolKnowledge, renderCachedHeader, retrieveContext, saveToolKnowledge } from "../memory/index.js"
+import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, listTableVerdicts, lookupToolKnowledge, renderCachedHeader, retrieveContext, saveToolKnowledge } from "../memory/index.js"
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { composePerRunTools, getAllTools } from "../tools.js"
 import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
-import { loadKnownObjects } from "./known-objects.js"
+import { loadCandidateVerdicts, loadKnownObjects } from "./known-objects.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
 import { loadPriorTurns } from "./prior-turns.js"
+import { runReflectionTurn } from "./run-reflection.js"
 import { buildSystemMessages } from "./system-messages.js"
 import type { OrchestratorRunCtx } from "./types.js"
 import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"
@@ -193,6 +195,15 @@ export async function executeRunImpl(
   runtime.toolKnowledge.lookup = (args) => lookupToolKnowledge(args)
   runtime.toolKnowledge.save = (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null })
   runtime.toolKnowledge.renderHeader = (hit, opts) => renderCachedHeader(hit, opts)
+
+  // Bind the table-verdict reader (Plan v3 Phase 4). search_catalog calls
+  // this at rank time to apply memoryVerdictBonus from prior runs'
+  // judgments. Cross-UPN by default (verdicts are objective DB facts).
+  runtime.tableVerdicts.list = (args) => listTableVerdicts({
+    qnames: args.qnames,
+    connection: args.connection,
+    upn: activeRun?.ownerUpn ?? null,
+  })
 
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
@@ -519,6 +530,22 @@ export async function executeRunImpl(
         return []
       }
     })(),
+    // <known_objects> Phase 4 add-on: top-K search_catalog candidates'
+    // durable verdicts. Surfaces canonical/subset/staging/archive/rules
+    // classifications even when the goal text doesn't name them by
+    // qname — closing the read-back loop introduced in Plan v3.
+    knownVerdicts: (() => {
+      try {
+        return loadCandidateVerdicts({
+          goal,
+          catalog: getCatalog(),
+          upn: activeRun?.ownerUpn ?? null,
+        })
+      } catch (err) {
+        console.warn(`[run ${runId}] knownVerdicts load failed:`, (err as Error).message)
+        return []
+      }
+    })(),
     // Per-run clarification state lives on the orchestrator. Passing it
     // here lets buildSystemMessages run the ambiguity detectors against
     // the goal + catalog + tenant, record what it emitted so the
@@ -788,6 +815,40 @@ export async function executeRunImpl(
       db.saveLog({ run_id: runId, level: "run:error", message: "Cancelled", timestamp: new Date().toISOString() })
       createNotification({ type: EventType.RunCancelled, title: "Run cancelled", message: `"${goal.slice(0, 80)}" was cancelled after ${run.steps.length} steps.`, runId, actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }, { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId } }] })
       return
+    }
+
+    // Plan v3 Phase 5 — post-run reflection. Fires only on data-shaped
+    // goals (decideSections.includeDataPersona) AND when the answer
+    // looks like a normal completion (not failure-flavoured). A single
+    // LLM call with one tool (record_table_verdict) cap of 2 tool
+    // invocations. Best-effort; failures are logged and swallowed so
+    // they cannot affect the user-visible run outcome.
+    if (
+      _toolDecision.includeDataPersona
+      && !isPlatformUnconfiguredAnswer(answer)
+      && !detectInternalFailure(answer)
+    ) {
+      try {
+        const verdictTool = allTools.find((t) => t.name === "record_table_verdict")
+        if (verdictTool) {
+          const reflection = await runReflectionTurn({
+            runId,
+            goal,
+            answer,
+            steps: run.steps,
+            recordVerdictTool: verdictTool,
+            llm: ctx.llm,
+            signal: controller.signal,
+          })
+          // eslint-disable-next-line no-console
+          console.log(
+            `[reflection] run=${runId} outcome=${reflection.outcome} ` +
+            `recorded=${reflection.verdictsRecorded} ${reflection.detail}`,
+          )
+        }
+      } catch (err) {
+        console.warn(`[reflection] run=${runId} failed: ${(err as Error).message}`)
+      }
     }
 
     completeRun(run)

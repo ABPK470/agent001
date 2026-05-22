@@ -40,6 +40,8 @@ export { clearAllMemories, deleteMemory, getMemory, getMemoryStats, listMemories
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
 export { migrateMemory } from "./schema.js"
+export { listTableVerdicts, recordTableVerdict } from "./table-verdict.js"
+export type { ListTableVerdictsOptions, TableVerdict, TableVerdictInput, TableVerdictRole } from "./table-verdict.js"
 export {
     fingerprintFromCatalogTable,
     fingerprintsEqual,
