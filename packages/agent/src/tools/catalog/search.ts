@@ -1,6 +1,6 @@
 import { getTenantConfig } from "../../tenant/config.js"
 import { tokenize } from "./helpers.js"
-import type { CatalogSearchHit, CatalogTable, ConceptNode, ImplicitEdge } from "./types.js"
+import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"
 
 /**
  * Keyword search across table names and column names. Returns ranked results.
@@ -10,7 +10,6 @@ import type { CatalogSearchHit, CatalogTable, ConceptNode, ImplicitEdge } from "
  *   - Column-level matches: +10 per matched column
  *   - Schema tier boost: publish/persistedView highest, archive/etl negative
  *   - Structural signals: incoming FK references, column richness, implicit join connectivity
- *   - Concept-level matches: query tokens matching a concept name (+30 for view, +15 for tables)
  *   - Row count bonus (log scale, up to 20)
  */
 export function searchCatalog(
@@ -18,7 +17,6 @@ export function searchCatalog(
   nameIndex: Map<string, Set<string>>,
   columnIndex: Map<string, Set<string>>,
   implicitJoinIndex: Map<string, ImplicitEdge[]>,
-  conceptNodes: Map<string, ConceptNode>,
   query: string,
   limit: number,
 ): CatalogSearchHit[] {
@@ -62,24 +60,10 @@ export function searchCatalog(
     }
   }
 
-  // Concept-level matches: query tokens matching a concept name pull in all tables
-  // belonging to that concept, even those with no lexical match in name/columns.
-  // e.g. search("revenue") → fact.CommissionAllocation gets conceptBonus=15 even
-  // though neither "revenue" nor any variant appears in its name or column list.
+  // Concept-level matches removed with lineage subsystem. Per-token
+  // semantic bonuses (sourceView, contributing tables) are no longer
+  // applied; lexical scoring + structural signals carry ranking.
   const conceptBonusMap = new Map<string, number>()
-  for (const token of tokens) {
-    const cNode = conceptNodes.get(token)
-    if (cNode) {
-      // Source view IS the concept — strongest signal
-      if (!scores.has(cNode.sourceView)) scores.set(cNode.sourceView, { nameScore: 0, colMatches: [] })
-      conceptBonusMap.set(cNode.sourceView, (conceptBonusMap.get(cNode.sourceView) ?? 0) + 30)
-      // Contributing sources are semantically related to the concept
-      for (const tk of cNode.tables) {
-        if (!scores.has(tk)) scores.set(tk, { nameScore: 0, colMatches: [] })
-        conceptBonusMap.set(tk, (conceptBonusMap.get(tk) ?? 0) + 15)
-      }
-    }
-  }
 
   // Build ranked results
   const hits: CatalogSearchHit[] = []

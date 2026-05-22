@@ -76,119 +76,18 @@ export interface ImplicitEdge {
   tables: string[]                // all tables sharing this column+type
 }
 
-// ── Lineage types ────────────────────────────────────────────────
-
-/** A dimension key column → dimension table mapping. */
-export interface LineageDimJoin {
-  column: string                  // e.g. "pkClient"
-  dimTable: string                // e.g. "dim.Client"
-  dimRows: string                 // e.g. "~26M"
-  note: string                    // e.g. "ALWAYS filter — never full scan"
-}
-
-/** A single source feeding into a critical view. */
-export interface LineageSource {
-  qualifiedName: string           // e.g. "publish.MappingTransactionalBankingRules"
-  businessArea: string            // e.g. "Transactional Banking"
-  group: string                   // e.g. "Retail & Business Banking"
-  filter: string                  // e.g. "pkProduct IS NOT NULL AND Amount <> 0"
-}
-
-/** Full lineage map for a critical view (e.g. publish.Revenue). */
-export interface ViewLineage {
-  view: string                    // "publish.Revenue"
-  description: string             // "All client revenue across every business line"
-  outputColumns: string[]         // column names in the view's output
-  dimJoins: LineageDimJoin[]      // dimension key mappings
-  sources: LineageSource[]        // all contributing tables/views
-  /**
-   * Where this lineage entry came from. Used by the catalog merge pipeline
-   * to enforce precedence (extended-properties > curation-file > auto) and
-   * by the prompt summary to honestly tell the agent the mix of sources.
-   *
-   * - "extended-properties": derived at catalog-build time from
-   *   `sys.extended_properties` on the live database (see
-   *   lineage-extended-properties.ts for the convention). This is the
-   *   north-star source — curation lives next to the schema and cannot
-   *   silently drift away from it.
-   * - "curation-file": hand-curated JSON file (deploy/mssql/publish-views-curation.json). Transitional fallback,
-   *   subject to drift, validated by lineage-validator.ts.
-   * - "auto": mechanically derived from sys.sql_expression_dependencies.
-   *   Cheap, always fresh, but only knows tables/views — no business
-   *   context, no filters, no dim joins.
-   */
-  provenance?: "extended-properties" | "curation-file" | "auto"
-  /**
-   * Drift report attached at load time by validateCuratedLineage().
-   *
-   * Hand-curated curation file (deploy/mssql/publish-views-curation.json) has no automatic refresh mechanism — the live
-   * schema can drift (sources renamed/dropped, columns removed) without the
-   * file being updated. We therefore validate every curated entry against
-   * the live CatalogGraph at load time, prune fields that no longer exist,
-   * and stamp this `validation` record so the prompt can honestly tell the
-   * agent how stale the curation is.
-   *
-   * Only present on entries that were loaded from a curated source (auto-
-   * lineage skips validation — it is derived from the live catalog itself
-   * and cannot drift). Absent === entry was not validated (auto-derived,
-   * or pre-validation snapshot).
-   */
-  validation?: {
-    verifiedAt: string            // ISO timestamp
-    verifiedAgainst: string       // connection name validated against
-    viewMissing?: boolean         // true → the view itself no longer exists (entry demoted to stub)
-    droppedSources: string[]      // qualifiedNames silently removed because not in live catalog
-    droppedDims: string[]         // dim tables silently removed
-    droppedColumns: string[]      // outputColumns silently removed
-  }
-}
-
-/**
- * A business concept node — derived from view lineage, models semantic relationships.
- * Concept nodes bridge tables that share a business purpose even without FK connections.
- * e.g. fact.CommissionAllocation and publish.MappingTransactionalBanking both belong
- * to the concept "Revenue" because they are both sources feeding publish.Revenue.
- */
-export interface ConceptNode {
-  concept: string           // e.g. "Revenue" (derived from source view name)
-  sourceView: string        // e.g. "publish.Revenue" — the canonical aggregating view
-  description: string       // from ViewLineage.description
-  tables: string[]          // qualified names of all contributing source tables
-  businessGroups: string[]  // unique business group names from sources
-}
-
-/** Edge type in a concept-aware path. */
-export type ConceptPathEdge =
-  | { type: "fk"; fromColumn: string; toColumn: string }
-  | { type: "implicit"; column: string; dataType: string }
-  | { type: "concept"; concept: string; via: string }  // via = source view
-
-/** One step in a concept-aware path. */
-export interface ConceptPathStep {
-  from: string
-  edge: ConceptPathEdge
-  to: string
-}
-
-/** Result of a concept-aware path search. */
-export interface ConceptPathResult {
-  steps: ConceptPathStep[]
-  totalHops: number
-  conceptsUsed: string[]  // concept names traversed
-}
-
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
   /**
-   * Version 6: view definitions from sys.sql_modules stored in CatalogTable.viewDefinition.
-   * Previous: version 5 = dynamic sys catalog (all sys objects from live DB, no curated filter).
+   * Version 7: lineage and concept-graph subsystem removed; snapshot no
+   * longer carries `lineage` entries. Previous: 6 added `viewDefinition`;
+   * 5 added dynamic sys catalog; ≤4 are legacy shapes.
    */
-  version: 1 | 2 | 3 | 4 | 5 | 6
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7
   builtAt: string
   source: string
   tables: CatalogTable[]
   implicitEdges: ImplicitEdge[]
-  lineage?: ViewLineage[]
   viewSourceRows?: Array<{ name: string; sourceRows: number }>
   /** Added in version 4 — sys.* catalog entries from live DB columns (all objects, no filter). */
   sysCatalog?: SysEntry[]

@@ -24,7 +24,7 @@ import {
     topNUnionViews,
     unionBranchCount,
 } from "../src/tools/catalog/queries.js"
-import type { CatalogColumn, CatalogFK, CatalogTable, ViewLineage } from "../src/tools/catalog/types.js"
+import type { CatalogColumn, CatalogFK, CatalogTable } from "../src/tools/catalog/types.js"
 
 function col(name: string, dataType = "int", isPK = false): CatalogColumn {
   return { name, dataType, maxLength: null, nullable: false, isPK }
@@ -57,15 +57,14 @@ function table(
 
 function buildGraph(
   tables: CatalogTable[],
-  opts: { viewSourceRows?: Array<{ name: string; sourceRows: number }>; lineage?: ViewLineage[] } = {},
+  opts: { viewSourceRows?: Array<{ name: string; sourceRows: number }> } = {},
 ): CatalogGraph {
   return CatalogGraph.fromSnapshot({
-    version: 6,
+    version: 7,
     builtAt: new Date().toISOString(),
     source: "test",
     tables,
     implicitEdges: [],
-    lineage: opts.lineage ?? [],
     viewSourceRows: opts.viewSourceRows ?? [],
     sysCatalog: [],
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
@@ -154,26 +153,6 @@ describe("unionBranchCount / isUnionView / isExpensiveUnionView", () => {
     const g = buildGraph([table("a", "V", { type: "VIEW", viewDefinition: wideViewDef })])
     expect(unionBranchCount("a.V", { accessor: () => g })).toBe(8)
     expect(isUnionView("a.V", { accessor: () => g })).toBe(true)
-  })
-
-  it("prefers lineage.sources.length when present", () => {
-    const fakeLineage: ViewLineage = {
-      view: "a.V",
-      description: "",
-      outputColumns: [],
-      dimJoins: [],
-      sources: Array.from({ length: 20 }, (_, i) => ({
-        qualifiedName: `s.b${i}`,
-        businessArea: "",
-        description: "",
-        columns: [],
-      })),
-    } as unknown as ViewLineage
-    const g = buildGraph(
-      [table("a", "V", { type: "VIEW", viewDefinition: "SELECT * FROM s.b0" })],
-      { lineage: [fakeLineage] },
-    )
-    expect(unionBranchCount("a.V", { accessor: () => g })).toBe(20)
   })
 
   it("ignores UNION inside string literals or comments", () => {

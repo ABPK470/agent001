@@ -198,21 +198,73 @@ export interface DbScoreResult {
   sync:        boolean
 }
 
-/** Compute the DB-likelihood score for a goal. Exported for telemetry / tests. */
-export function scoreDbLikelihood(goal: string): DbScoreResult {
+/**
+ * Names of DB / sync tools whose presence in working memory (i.e. tool
+ * calls the agent already made in this session) is direct evidence the
+ * conversation is data-shaped. Used by `scoreDbLikelihood` to give
+ * follow-up turns a strong DB signal even when the latest user message
+ * is a short pronoun-only follow-up like "run it" or "show me the
+ * results". Without this, a single non-DB-keyword reply would cause
+ * `filterToolsByGoal` to drop the very tools the conversation has been
+ * relying on — the user reports this as a "huge gap".
+ *
+ * Kept in sync with `DB_DISCOVERY_TOOL_NAMES` + `SYNC_TOOL_NAMES`
+ * below; centralised here so the scorer never has to import them.
+ */
+const DB_TOOL_TRACE_RE = /\b(?:query_mssql|explore_mssql_schema|search_catalog|inspect_definition|discover_relationships|profile_data|export_query_to_file|compare_catalogs|sync_preview|sync_execute|list_environments)\b/i
+
+/** Cap on how much context text the scorer scans — keeps regex cost bounded. */
+const CONTEXT_SCAN_CAP = 8000
+
+/**
+ * Compute the DB-likelihood score for a goal.
+ *
+ * `context` (optional) lets callers feed in additional, conversation-
+ * level evidence: recent user/assistant messages, working memory, and
+ * episodic memory. When present, the classifier scans both `goal` and
+ * `context` for DB tokens so that:
+ *
+ *   - A follow-up turn whose user message has no DB keywords still
+ *     scores DB-like when the session is clearly mid-data-task.
+ *   - The presence of prior DB tool calls in working memory (matched by
+ *     `DB_TOOL_TRACE_RE`) is treated as a strong DB signal (+2).
+ *
+ * The current user `goal` always dominates: if the goal alone scores
+ * strongly DB-like, context can only add to that. If the goal scores
+ * non-DB (e.g. matches `NON_DB_RE`), the goal still down-scores even
+ * when context is DB-shaped — explicit user intent wins.
+ *
+ * Exported for telemetry / tests.
+ */
+export function scoreDbLikelihood(
+  goal: string,
+  context?: string,
+): DbScoreResult {
   const dyn = buildGateRegexes()
-  const operational = DB_OPERATIONAL_CORE_RE.test(goal)
-    || (dyn.operationalSchemaRe?.test(goal) ?? false)
-  const domain      = dyn.domainRe?.test(goal) ?? false
-  const tableHint   = dyn.tableSchemaRe.test(goal) || dyn.schemaTableRe.test(goal)
+  const ctx = (context ?? "").slice(0, CONTEXT_SCAN_CAP)
+  // Scan goal + context for positive DB signals.
+  const probe = ctx ? `${goal}\n${ctx}` : goal
+
+  const operational = DB_OPERATIONAL_CORE_RE.test(probe)
+    || (dyn.operationalSchemaRe?.test(probe) ?? false)
+  const domain      = dyn.domainRe?.test(probe) ?? false
+  const tableHint   = (dyn.tableSchemaRe?.test(probe) ?? false) || (dyn.schemaTableRe?.test(probe) ?? false)
+  // Non-DB intent must come from the GOAL only — context might legitimately
+  // mention a Monte-Carlo discussion from earlier without the current turn
+  // being non-DB. Honouring explicit current intent here.
   const nonDb       = NON_DB_RE.test(goal)
-  const sync        = SYNC_SHAPE_RE.test(goal) || (dyn.syncExtraRe?.test(goal) ?? false)
+  const sync        = SYNC_SHAPE_RE.test(probe) || (dyn.syncExtraRe?.test(probe) ?? false)
+  // Strong evidence: the agent already called DB tools in this session.
+  // Only counted when found in CONTEXT (not goal) — the goal mentioning
+  // a tool name is just a string, but working-memory trace is a fact.
+  const priorDbToolCall = ctx ? DB_TOOL_TRACE_RE.test(ctx) : false
 
   let score = 0
   if (operational)             score += 2
   if (domain)                  score += 2
   if (tableHint)               score += 1
   if (sync)                    score += 3
+  if (priorDbToolCall)         score += 2
   if (nonDb && !operational)   score -= 3
 
   return { score, operational, domain, tableHint, nonDb, sync }
@@ -221,9 +273,19 @@ export function scoreDbLikelihood(goal: string): DbScoreResult {
 export function decideSections(opts: {
   goal:    string
   memory?: { working?: string; episodic?: string; semantic?: string }
+  /**
+   * Conversation-level context (recent messages + memory) used to
+   * classify ambiguous follow-up turns. See `scoreDbLikelihood`.
+   * When omitted, falls back to scoring on `goal` alone (back-compat).
+   */
+  context?: string
 }): SectionDecision {
   const goal       = opts.goal ?? ""
-  const db         = scoreDbLikelihood(goal)
+  // Auto-derive context from `memory` when no explicit context is supplied,
+  // so existing callers that only pass `memory` still get the benefit.
+  const derived = opts.context
+    ?? [opts.memory?.working, opts.memory?.episodic].filter(Boolean).join("\n")
+  const db         = scoreDbLikelihood(goal, derived || undefined)
   const isDbLike   = db.score >= 2
   // Chart catalogue requires EXPLICIT visual intent. DB-shaped goals no
   // longer auto-include it — the model can call `get_chart_specs` if it

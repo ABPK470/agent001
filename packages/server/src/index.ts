@@ -26,7 +26,7 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
   EventType,
-  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
+  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
   setAttachmentService,
   setBasePath,
   setBrowserCheckCwd,
@@ -441,7 +441,6 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
     try {
       const maxAgeHours = Number(process.env.CATALOG_MAX_AGE_HOURS || 168)
       const baseCachePath = process.env.CATALOG_CACHE_PATH || "./data/catalog-cache.json"
-      const lineagePath = process.env.CURATION_FILE || process.env.LINEAGE_FILE || resolve(_projectRoot, "deploy/mssql/publish-views-curation.json")
 
       // Build catalog per configured connection so the Mymi DB explorer
       // (and any catalog-backed tool) works against the actual DB the user picks.
@@ -460,13 +459,6 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
           const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
           const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
           console.log(`Catalog [${conn}] ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs`)
-
-          try {
-            const count = await loadLineage(lineagePath, conn)
-            console.log(`Lineage maps loaded for [${conn}]: ${count} critical view(s)`)
-          } catch {
-            // Non-fatal — lineage file may not exist
-          }
         } catch (e) {
           console.warn(`Failed to build catalog for "${conn}":`, e instanceof Error ? e.message : e)
         }

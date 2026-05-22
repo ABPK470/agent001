@@ -6,10 +6,9 @@
  *   - surfaces ALWAYS_TRACKED objects when the catalog has them
  *   - reports persistedView mirror presence honestly
  *   - extracts goal-mentioned objects (case-insensitive, brackets tolerated)
- *   - threads branchCount from lineage when ≥ 2
  *   - never throws on a missing catalog
  */
-import type { CatalogColumn, CatalogTable, ViewLineage } from "@mia/agent"
+import type { CatalogColumn, CatalogTable } from "@mia/agent"
 import { CatalogGraph } from "@mia/agent"
 import { describe, expect, it } from "vitest"
 import { buildResolvedFactsBlock, extractObjectTokens } from "../src/orchestrator/resolved-facts-block.js"
@@ -29,14 +28,13 @@ function table(qualified: string, columns: string[]): CatalogTable {
   }
 }
 
-function graph(tables: CatalogTable[], lineage: ViewLineage[] = []): CatalogGraph {
+function graph(tables: CatalogTable[]): CatalogGraph {
   return CatalogGraph.fromSnapshot({
-    version: 6,
+    version: 7,
     builtAt: new Date().toISOString(),
     source: "test",
     tables,
     implicitEdges: [],
-    lineage,
     viewSourceRows: [],
     sysCatalog: [],
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
@@ -77,28 +75,6 @@ describe("buildResolvedFactsBlock", () => {
       mirrorSchema: "persistedView",
     })
     expect(out).toContain("no persistedView mirror")
-  })
-
-  it("includes branchCount from lineage when ≥ 2", () => {
-    const cat = graph([table("publish.Revenue", ["pkClient", "amount"])])
-    const lineage: ViewLineage[] = [{
-      view: "publish.Revenue",
-      description: "x",
-      outputColumns: [],
-      dimJoins: [],
-      sources: [
-        { qualifiedName: "publish.A", businessArea: "x", group: "y", filter: "" },
-        { qualifiedName: "publish.B", businessArea: "x", group: "y", filter: "" },
-        { qualifiedName: "publish.C", businessArea: "x", group: "y", filter: "" },
-      ],
-    }]
-    const cat2 = graph([table("publish.Revenue", ["pkClient"])], lineage)
-    const out = buildResolvedFactsBlock({
-      goal: "scan publish.Revenue",
-      catalog: cat2,
-      lineageMap: cat2.lineageMap,
-    })
-    expect(out).toContain("3 union branches")
   })
 
   it("skips ALWAYS_TRACKED objects that don't exist anywhere", () => {

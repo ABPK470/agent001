@@ -16,7 +16,7 @@
 import { currentRuntime } from "../../src/agent-runtime.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import { _resetCatalogQueriesCache } from "../../src/tools/catalog/queries.js"
-import type { CatalogFK, CatalogTable, ViewLineage } from "../../src/tools/catalog/types.js"
+import type { CatalogFK, CatalogTable } from "../../src/tools/catalog/types.js"
 
 function col(name: string, dataType = "int", isPK = false): { name: string; dataType: string; nullable: boolean; isPK: boolean; maxLength: number | null } {
   return { name, dataType, nullable: false, isPK, maxLength: null }
@@ -154,41 +154,15 @@ export function canonicalFixtureCatalog(): CatalogGraph {
     { name: "publish.Balances", sourceRows: balanceBranches.reduce((a, t) => a + (t.rowCount ?? 0), 0) },
   ]
 
-  // Lineage so getLineage(publish.Revenue) returns the branch list.
-  const lineage: ViewLineage[] = [
-    {
-      view: "publish.Revenue",
-      description: "All client revenue, unioned across source-mapping branches",
-      outputColumns: ["pkClient", "pkAccount", "pkMonth", "RevenueZARMTD"],
-      dimJoins: [],
-      sources: revenueBranches.map((t) => ({
-        qualifiedName: t.qualifiedName,
-        businessArea: "revenue",
-        description: "",
-        columns: [],
-      })) as ViewLineage["sources"],
-    },
-    {
-      view: "publish.Balances",
-      description: "All client balances, unioned across source-mapping branches",
-      outputColumns: ["pkAccount", "pkMonth", "AverageCreditBalanceZARMTD"],
-      dimJoins: [],
-      sources: balanceBranches.map((t) => ({
-        qualifiedName: t.qualifiedName,
-        businessArea: "balances",
-        description: "",
-        columns: [],
-      })) as ViewLineage["sources"],
-    },
-  ]
+  // Lineage so getUnionBranches(publish.Revenue) returns the branch list —
+  // derived purely from viewDefinition UNION ALL parsing now.
 
   return CatalogGraph.fromSnapshot({
-    version: 6,
+    version: 7,
     builtAt: new Date().toISOString(),
     source: "fixture",
     tables,
     implicitEdges: [],
-    lineage,
     viewSourceRows,
     sysCatalog: [],
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])

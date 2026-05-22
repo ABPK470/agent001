@@ -21,7 +21,7 @@ export {
     unionBranchCount
 } from "./queries.js"
 export type { CatalogAccessor } from "./queries.js"
-export { buildCatalog, getCatalog, getCatalogConnectionNames, getCatalogPromptSummary, getCatalogSchemaFingerprint, hasCatalog, loadLineage } from "./store.js"
+export { buildCatalog, getCatalog, getCatalogConnectionNames, getCatalogPromptSummary, getCatalogSchemaFingerprint, hasCatalog } from "./store.js"
 export type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -30,14 +30,7 @@ export type {
     CatalogSnapshot,
     CatalogStats,
     CatalogTable,
-    ConceptNode,
-    ConceptPathEdge,
-    ConceptPathResult,
-    ConceptPathStep,
     ImplicitEdge,
-    LineageDimJoin,
-    LineageSource,
-    SysEntry,
-    ViewLineage
+    SysEntry
 } from "./types.js"
 

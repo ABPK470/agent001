@@ -8,7 +8,6 @@
  * Inputs:
  *   - `goal` — the user's request text, scanned for known-large objects.
  *   - `catalog` — live CatalogGraph (or null when no catalog is built).
- *   - `lineageMap` — view → ViewLineage entries (branch counts).
  *
  * Design:
  *   - Detection is case-insensitive and tolerant of bracket/quote noise
@@ -22,7 +21,7 @@
  * @module
  */
 
-import type { CatalogGraph, ViewLineage } from "@mia/agent"
+import type { CatalogGraph } from "@mia/agent"
 import {
     buildResolvedFacts,
     getTenantConfig,
@@ -61,7 +60,6 @@ export function extractObjectTokens(text: string): string[] {
 export function buildResolvedFactsBlock(input: {
   goal: string
   catalog: CatalogGraph | null
-  lineageMap?: ReadonlyMap<string, ViewLineage>
   schemaFingerprint?: string | null
   /**
    * Tenant mirror-schema override. When omitted, falls back to the
@@ -73,16 +71,10 @@ export function buildResolvedFactsBlock(input: {
   const mirrorSchema = input.mirrorSchema !== undefined
     ? input.mirrorSchema
     : getTenantConfig().mirrorSchema
-  const lineageMap = input.lineageMap ?? new Map<string, ViewLineage>()
-  // Lineage map keys are case-preserved ("publish.Revenue"); we work in
-  // lowercase, so build a lowercase index once.
-  const lineageByLower = new Map<string, ViewLineage>()
-  for (const [k, v] of lineageMap) lineageByLower.set(k.toLowerCase(), v)
 
   // Union: top-N largest objects (catalog-derived) ∪ goal-mentioned tokens
-  // that live in catalog or have a curated lineage entry. Stripping unknown
-  // tokens keeps the block honest — we never claim a fact about a table that
-  // isn't there.
+  // that live in catalog. Stripping unknown tokens keeps the block honest —
+  // we never claim a fact about a table that isn't there.
   const goalTokens = extractObjectTokens(goal)
   const candidates = new Set<string>()
   if (catalog) {
@@ -95,20 +87,16 @@ export function buildResolvedFactsBlock(input: {
   const largeObjects: LargeObjectFact[] = []
   for (const name of candidates) {
     const isGoalMentioned = goalTokens.includes(name)
-    const inLineage = lineageByLower.has(name)
     const inCatalog = catalog?.tables.has(name) ?? false
     // Don't surface ALWAYS_TRACKED entries that aren't actually present
     // anywhere — that just adds noise for environments where the object
     // doesn't exist.
-    if (!isGoalMentioned && !inCatalog && !inLineage) continue
+    if (!isGoalMentioned && !inCatalog) continue
 
     const hasPersistedMirror = catalog ? hasMirror(catalog, name, mirrorSchema) : false
-    const lineage = lineageByLower.get(name)
-    const branchCount = lineage?.sources.length
     largeObjects.push({
       name,
       hasPersistedMirror,
-      ...(typeof branchCount === "number" && branchCount > 1 ? { branchCount } : {}),
     })
   }
 
@@ -118,18 +106,6 @@ export function buildResolvedFactsBlock(input: {
     largeObjects,
     ...(input.schemaFingerprint ? { schemaFingerprint: input.schemaFingerprint } : {}),
   })
-}
-
-/**
- * `publish.revenue` → `publish.Revenue` style lookup against the
- * case-preserving lineage map. We try the original casing first, then
- * fall back to a case-insensitive scan because curated lineage uses
- * mixed case.
- */
-function buildLineageKey(lowerName: string): string {
-  // The lineage map's key is the original "publish.Revenue" string;
-  // there are only a few entries, so a casing-tolerant lookup is fine.
-  return lowerName
 }
 
 /**

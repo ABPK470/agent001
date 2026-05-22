@@ -237,12 +237,10 @@ export async function buildSystemMessages(opts: {
   // through validator enforcement, not prompt repetition.
   try {
     const catalog = getCatalog()
-    const lineageMap = catalog?.lineageMap
     const fingerprint = getCatalogSchemaFingerprint()
     const block = buildResolvedFactsBlock({
       goal,
       catalog,
-      lineageMap: lineageMap ?? undefined,
       schemaFingerprint: fingerprint,
     })
     if (block.length > 0) {

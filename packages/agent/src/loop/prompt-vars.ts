@@ -112,12 +112,12 @@ export function buildPromptVars(connection = "default"): PromptVars {
     : null) ?? FALLBACK.keyColumnExample
   const calendar = calendarDimensionTable({ accessor: acc }) ?? FALLBACK.calendarDim
 
-  // Two example branches from wide view lineage.
-  const lineage = wideQn !== FALLBACK.wideUnionView
-    ? catalog.getLineage(wideQn)
-    : null
-  const branchExample  = lineage?.sources?.[0]?.qualifiedName ?? FALLBACK.branchExample
-  const branchExample2 = lineage?.sources?.[1]?.qualifiedName ?? FALLBACK.branchExample2
+  // Two example branches from wide view UNION definition.
+  const branches = wideQn !== FALLBACK.wideUnionView
+    ? catalog.getUnionBranches(wideQn)
+    : []
+  const branchExample  = branches[0] ?? FALLBACK.branchExample
+  const branchExample2 = branches[1] ?? FALLBACK.branchExample2
 
   const vars: PromptVars = {
     mirrorSchema:          tenant.mirrorSchema ?? FALLBACK.mirrorSchema,

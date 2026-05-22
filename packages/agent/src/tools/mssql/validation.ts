@@ -713,9 +713,9 @@ export function detectInventedColumns(
 // Escape comment (case-insensitive substring match): `-- sampled K of N`,
 // `-- branches:` followed by an explicit list, or `-- branch-sample`.
 
-interface LineageCatalogLike {
-  getLineageParents(qualifiedName: string): Array<{ view: string; businessArea?: string }>
-  getLineage(qualifiedName: string): { sources: ReadonlyArray<{ qualifiedName: string }> } | null
+interface BranchCatalogLike {
+  getUnionParents(qualifiedName: string): string[]
+  getUnionBranches(qualifiedName: string): string[]
 }
 
 export interface BranchCoverageGap {
@@ -727,9 +727,9 @@ export interface BranchCoverageGap {
   totalBranches: number
 }
 
-function defaultLineageAccessor(): LineageCatalogLike | null {
+function defaultBranchAccessor(): BranchCatalogLike | null {
   try {
-    return (getCatalog() as unknown as LineageCatalogLike | null) ?? null
+    return (getCatalog() as unknown as BranchCatalogLike | null) ?? null
   } catch {
     return null
   }
@@ -738,17 +738,18 @@ function defaultLineageAccessor(): LineageCatalogLike | null {
 const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|branch-sample)/i
 
 /**
- * Detect lineage branch-coverage gaps: queries that reference ≥2 mapping
- * branches of the same parent view but cover fewer than its full set,
- * without an explicit `-- sampled K of N` annotation.
+ * Detect view-UNION branch-coverage gaps: queries that reference ≥2 base
+ * tables that feed the same big UNION view, but cover fewer than the
+ * view's full branch set, without an explicit `-- sampled K of N`
+ * annotation.
  *
- * Conservative: a single-branch reference is treated as intentional; gaps
- * are only reported when the model has clearly started branch-by-branch
- * staging but stopped short of full coverage.
+ * Conservative: a single-branch reference is treated as intentional;
+ * gaps are only reported when the model has clearly started branch-by-
+ * branch staging but stopped short of full coverage.
  */
 export function detectLineageBranchCoverage(
   query: string,
-  accessor: () => LineageCatalogLike | null = defaultLineageAccessor,
+  accessor: () => BranchCatalogLike | null = defaultBranchAccessor,
 ): BranchCoverageGap[] {
   if (BRANCH_SAMPLE_COMMENT.test(query)) return []
 
@@ -765,15 +766,15 @@ export function detectLineageBranchCoverage(
     referencedBranches.add(`${m[1]}.${m[2]}`)
   }
 
-  // Group referenced tables by lineage parent.
+  // Group referenced tables by UNION parent view.
   const parentMap = new Map<string, Set<string>>()
   for (const qn of referencedBranches) {
-    const parents = catalog.getLineageParents(qn)
-    for (const p of parents) {
-      let set = parentMap.get(p.view)
+    const parents = catalog.getUnionParents(qn)
+    for (const parent of parents) {
+      let set = parentMap.get(parent)
       if (!set) {
         set = new Set<string>()
-        parentMap.set(p.view, set)
+        parentMap.set(parent, set)
       }
       set.add(qn)
     }
@@ -782,9 +783,9 @@ export function detectLineageBranchCoverage(
   const gaps: BranchCoverageGap[] = []
   for (const [parent, refs] of parentMap.entries()) {
     if (refs.size < 2) continue // single-branch is treated as intentional
-    const lineage = catalog.getLineage(parent)
-    if (!lineage) continue
-    const total = lineage.sources.length
+    const branches = catalog.getUnionBranches(parent)
+    const total = branches.length
+    if (total === 0) continue
     if (refs.size >= total) continue // full coverage
     gaps.push({
       parent,
@@ -1531,24 +1532,26 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
  * the bar.
  */
 export interface QueryWarningOptions {
-  lineageAccessor?: () => LineageCatalogLike | null
+  branchAccessor?: () => BranchCatalogLike | null
+  /** @deprecated alias for branchAccessor */
+  lineageAccessor?: () => BranchCatalogLike | null
   /** Per-run set of lowercased schema.table names already profiled. */
   profiledTables?: ReadonlySet<string> | null
 }
 
 export function getQueryWarnings(
   query: string,
-  options: QueryWarningOptions | (() => LineageCatalogLike | null) = {},
+  options: QueryWarningOptions | (() => BranchCatalogLike | null) = {},
 ): string | null {
-  // Back-compat: a bare lineage accessor function is still accepted.
+  // Back-compat: a bare accessor function is still accepted.
   const opts: QueryWarningOptions = typeof options === "function"
-    ? { lineageAccessor: options }
+    ? { branchAccessor: options }
     : options
-  const lineageAccessor = opts.lineageAccessor ?? defaultLineageAccessor
+  const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? defaultBranchAccessor
   const profiledTables = opts.profiledTables ?? liveProfiledTables()
 
   const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
-  const branchGaps = detectLineageBranchCoverage(query, lineageAccessor)
+  const branchGaps = detectLineageBranchCoverage(query, branchAccessor)
   const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
   const mixedUniverses = detectRankingVsReportingMismatch(query)
   if (

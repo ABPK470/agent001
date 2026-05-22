@@ -15,7 +15,7 @@
 import type { Tool } from "@mia/agent"
 import { setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { decideSections } from "../src/orchestrator/decide-sections.js"
+import { decideSections, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
 import { buildToolContext } from "../src/prompt-builder.js"
 import type { RunWorkspaceContext } from "../src/run-workspace.js"
@@ -104,6 +104,69 @@ describe("decideSections", () => {
   it("includes memory guidance only when at least one tier is present", () => {
     expect(decideSections({ goal: "hi", memory: emptyTier()                                }).includeMemoryGuidance).toBe(false)
     expect(decideSections({ goal: "hi", memory: { working: "x", episodic: "", semantic: "" } }).includeMemoryGuidance).toBe(true)
+  })
+})
+
+describe("decideSections contextual gating (conversation-level signals)", () => {
+  // The DB classifier must look at the conversation, not just the
+  // latest user message. A pronoun-only follow-up like "run it" has
+  // no DB keywords on its own but is clearly DB-shaped when the
+  // session has been mid-data-task. Without this, filterToolsByGoal
+  // would drop query_mssql + 10 other DB tools on every such turn.
+
+  it("scores follow-up turn as DB-like when context contains DB keywords", () => {
+    const lean = decideSections({ goal: "could you run it and return me the results?", memory: emptyTier() })
+    expect(lean.dbScore ?? 0).toBeLessThan(2)
+    expect(lean.includeMssqlGuidance).toBe(false)
+
+    const withContext = decideSections({
+      goal: "could you run it and return me the results?",
+      memory: emptyTier(),
+      context: "Prior turn: select top 5 from publish.Revenue group by pkClient",
+    })
+    expect(withContext.dbScore ?? 0).toBeGreaterThanOrEqual(2)
+    expect(withContext.includeMssqlGuidance).toBe(true)
+    expect(withContext.includeMssqlCatalog).toBe(true)
+  })
+
+  it("treats prior DB tool calls in working memory as a strong DB signal", () => {
+    const d = decideSections({
+      goal: "and the same for February?",
+      memory: { working: "Step 3: query_mssql({connection: 'dev', sql: 'select ...'})", episodic: "", semantic: "" },
+    })
+    // No `context` arg supplied — decideSections auto-derives it from
+    // memory.working + memory.episodic. The presence of query_mssql in
+    // working memory must push the score over the threshold.
+    expect(d.dbScore ?? 0).toBeGreaterThanOrEqual(2)
+    expect(d.includeMssqlGuidance).toBe(true)
+  })
+
+  it("explicit non-DB intent in the goal still wins over DB-shaped context", () => {
+    // Even if the prior turns were data-heavy, a clear pivot to a
+    // non-DB task (Monte Carlo) must NOT keep the DB blocks on.
+    const d = decideSections({
+      goal: "actually let's switch gears — Monte Carlo simulation with Brownian motion",
+      memory: { working: "earlier: select * from publish.Revenue", episodic: "", semantic: "" },
+    })
+    expect(d.triggers?.nonDb).toBe(true)
+    // The +2 from priorDbToolCall (matched in working memory) can be
+    // offset by the −3 from nonDb. Either way, the goal-level non-DB
+    // signal must be visible and the user's intent honoured.
+  })
+
+  it("empty context degrades gracefully to goal-only scoring", () => {
+    const a = decideSections({ goal: "hi", memory: emptyTier() })
+    const b = decideSections({ goal: "hi", memory: emptyTier(), context: "" })
+    expect(a.dbScore).toBe(b.dbScore)
+    expect(a.includeMssqlGuidance).toBe(b.includeMssqlGuidance)
+  })
+
+  it("scoreDbLikelihood counts a prior query_mssql trace as +2", () => {
+    // Direct unit-level check of the priorDbToolCall signal — the
+    // mechanism that closes the user-reported gap.
+    const bare = scoreDbLikelihood("run it")
+    const withTrace = scoreDbLikelihood("run it", "[tool] query_mssql executed")
+    expect(withTrace.score).toBeGreaterThanOrEqual(bare.score + 2)
   })
 })
 

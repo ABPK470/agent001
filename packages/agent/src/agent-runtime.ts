@@ -61,18 +61,18 @@ import { IngestionMode } from "./domain/enums/runtime.js"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRecipeBundle,
-    SyncRunSink,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRecipeBundle,
+  SyncRunSink,
 } from "./sync/index.js"
 import type {
-    AskUserResolver,
-    BrowserCheckExecutor,
-    BrowserSession,
-    CatalogGraph,
-    ShellExecutor,
+  AskUserResolver,
+  BrowserCheckExecutor,
+  BrowserSession,
+  CatalogGraph,
+  ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -247,7 +247,6 @@ export interface CatalogState {
   /** Expensive caches — shared across runtimes. */
   instances: Map<string, CatalogGraph>
   defaultCachePath: string | undefined
-  defaultLineagePath: string | undefined
 }
 
 export interface SyncState {
@@ -429,7 +428,7 @@ export class AgentRuntime {
       this.filesystem = { basePath: process.cwd() }
       this.searchFiles = { basePath: process.cwd(), excludeDirs: new Set() }
       this.askUser = { resolver: null }
-      this.catalog = { instances: new Map(), defaultCachePath: undefined, defaultLineagePath: undefined }
+      this.catalog = { instances: new Map(), defaultCachePath: undefined }
       this.sync = {
         eventSink: () => { /* default no-op */ },
         runSink: NOOP_RUN_SINK,

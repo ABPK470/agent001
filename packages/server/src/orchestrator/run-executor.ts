@@ -58,6 +58,49 @@ import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
+// ── Tool-gate classification context ──────────────────────────────
+//
+// The DB-likelihood classifier (`scoreDbLikelihood`) used by the tool
+// gate needs to see the conversation, not just the latest user turn.
+// Otherwise a short follow-up ("run it", "show me the results") with
+// no DB keywords scores 0 and drops query_mssql + 10 other DB tools —
+// even when the previous turns are unambiguously data-shaped.
+//
+// We assemble a bounded text blob from:
+//   • the last few user / assistant messages in this session
+//     (provides the in-conversation evidence)
+//   • working memory + episodic memory (provides cross-session
+//     evidence including prior DB tool calls, which scoreDbLikelihood
+//     treats as a strong DB signal)
+//
+// The blob is capped so regex scanning stays O(constant).
+const CLASSIFICATION_RECENT_MSGS = 6
+const CLASSIFICATION_PER_MSG_CAP = 600
+
+function buildClassificationContext(opts: {
+  resumeMessages?: readonly Message[]
+  working?: string
+  episodic?: string
+}): string {
+  const parts: string[] = []
+  const msgs = opts.resumeMessages ?? []
+  // Take the last N user/assistant messages. Tool messages are skipped
+  // here — their content (memory tier blob below) is the better signal.
+  const recent: string[] = []
+  for (let i = msgs.length - 1; i >= 0 && recent.length < CLASSIFICATION_RECENT_MSGS; i--) {
+    const m = msgs[i]
+    if (!m) continue
+    if (m.role !== "user" && m.role !== "assistant") continue
+    const text = typeof m.content === "string" ? m.content : ""
+    if (!text) continue
+    recent.push(text.slice(0, CLASSIFICATION_PER_MSG_CAP))
+  }
+  if (recent.length > 0) parts.push(recent.reverse().join("\n"))
+  if (opts.working)  parts.push(opts.working)
+  if (opts.episodic) parts.push(opts.episodic)
+  return parts.join("\n")
+}
+
 // ── Run executor ──────────────────────────────────────────────────
 
 export async function executeRunImpl(
@@ -151,11 +194,49 @@ export async function executeRunImpl(
   // their tool schemas alone steer the model into proactive catalog dumps
   // even on trivial conversational turns. See `filterToolsByGoal` for the
   // full policy. The decision is logged once for observability.
+  //
+  // CRITICAL: classification considers conversation context, not just the
+  // latest user message. A short follow-up like "run it" carries zero DB
+  // keywords on its own, but the prior turns / memory make it obvious the
+  // session is mid-data-task. Without this, every follow-up would drop
+  // the very tools the conversation has been using — the "huge gap" gone.
+  //
   // Sequence ref for debug-seq on broadcast events. Hoisted so it can be used
   // for early trace emissions (e.g. tools-filtered) before the run loop starts.
   const debugSeqRef = { value: 0 }
 
-  const _toolDecision = decideSections({ goal })
+  // Build the classification context from anything we already have in hand:
+  //   • last N user/assistant messages from `resume?.messages` (the actual
+  //     conversation transcript when this is a follow-up turn)
+  //   • working & episodic memory tiers retrieved below
+  // We retrieve memory up here (moved from later in the function) so the
+  // tool gate sees the same evidence the prompt assembler will see. The
+  // retrieval is pure — moving it is a no-op for everything downstream
+  // beyond the gate that needs it.
+  const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !resume)
+  let perTier: { working: string; episodic: string; semantic: string } = { working: "", episodic: "", semantic: "" }
+  if (shouldUseMemory) {
+    try {
+      const result = await retrieveContext(goal, {
+        sessionId: activeRun?.sessionId ?? agentId ?? "default",
+        runId,
+        upn: activeRun?.ownerUpn ?? null,
+      })
+      perTier = result.perTier
+    } catch (memErr) {
+      // FTS virtual-table corruption (SQLITE_CORRUPT_VTAB) or other memory errors
+      // must not crash the run — continue without injected context.
+      console.warn(`[run ${runId}] memory retrieval failed, running without context:`, (memErr as Error).message)
+    }
+  }
+
+  const classificationContext = buildClassificationContext({
+    resumeMessages: resume?.messages,
+    working: perTier.working,
+    episodic: perTier.episodic,
+  })
+
+  const _toolDecision = decideSections({ goal, memory: perTier, context: classificationContext })
   const _toolFilter   = filterToolsByGoal(tools, _toolDecision)
   if (!_toolFilter.passThrough) {
     // eslint-disable-next-line no-console
@@ -390,24 +471,6 @@ export async function executeRunImpl(
     return t
   })
   resetEffectSeq(runId)
-
-  // Build memory context
-  const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !resume)
-  let perTier: { working: string; episodic: string; semantic: string } = { working: "", episodic: "", semantic: "" }
-  if (shouldUseMemory) {
-    try {
-      const result = await retrieveContext(goal, {
-        sessionId: activeRun?.sessionId ?? agentId ?? "default",
-        runId,
-        upn: activeRun?.ownerUpn ?? null,
-      })
-      perTier = result.perTier
-    } catch (memErr) {
-      // FTS virtual-table corruption (SQLITE_CORRUPT_VTAB) or other memory errors
-      // must not crash the run — continue without injected context.
-      console.warn(`[run ${runId}] memory retrieval failed, running without context:`, (memErr as Error).message)
-    }
-  }
 
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,

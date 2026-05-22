@@ -2,17 +2,13 @@ import type { Tool } from "../../types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
   handleColumn,
-  handleConceptPath,
-  handleConcepts,
   handleJoins,
-  handleLineage,
   handlePath,
   handleSearch,
   handleStats,
   handleSys,
   handleTable,
 } from "./handlers.js"
-
 export const searchCatalogTool: Tool = {
   name: "search_catalog",
   description:
@@ -26,12 +22,9 @@ export const searchCatalogTool: Tool = {
     "(3) column='<columnName>' — find every table that has this column. " +
     "(4) joins='<schema>.<Table>' — show ALL join edges (FK + implicit) for a table. " +
     "(5) path=['<schemaA>.<TableA>','<schemaB>.<TableB>'] — find FK join paths between two tables. " +
-    "(6) lineage='<schema>.<View>' — show full lineage map: all source views, dimension joins, business areas. " +
-    "(7) stats=true — catalog summary. " +
-    "(8) refresh=true — rebuild from live database and update cache. " +
-    "(9) concepts='<schema>.<Table>' — show which business concepts this table contributes to (semantic tags from lineage). " +
-    "(10) concept_path=['<tableA>','<tableB>'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships. " +
-    "(11) sys='<sysKeyword>' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
+    "(6) stats=true — catalog summary. " +
+    "(7) refresh=true — rebuild from live database and update cache. " +
+    "(8) sys='<sysKeyword>' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
     "Use sys= for: columnstore internals, index fragmentation, query performance, wait statistics, locking, " +
     "memory, partitioning, HA/Always On, server config. sys= returns the right DMV + example query — " +
     "then call query_mssql to run it.",
@@ -49,19 +42,6 @@ export const searchCatalogTool: Tool = {
         description: "Find FK join paths between two tables. Provide exactly two schema-qualified names.",
       },
       stats: { type: "boolean", description: "Return high-level catalog summary: schema count, table/view count, largest tables." },
-      lineage: {
-        type: "string",
-        description: "Show the full lineage map for a critical view. Schema-qualified.",
-      },
-      concept_path: {
-        type: "array",
-        items: { type: "string" },
-        description: "Find concept-aware paths between two tables (FK + implicit + concept edges). Provide exactly two schema-qualified names.",
-      },
-      concepts: {
-        type: "string",
-        description: "Show which business concepts a table contributes to, derived from lineage maps.",
-      },
       refresh: { type: "boolean", description: "Rebuild the catalog from the live database and update the disk cache." },
       connection: { type: "string", description: "Named database connection. Omit for default." },
     },
@@ -93,17 +73,6 @@ export const searchCatalogTool: Tool = {
 
     if (args.stats) return handleStats(catalog)
     if (args.sys) return handleSys(catalog, String(args.sys).trim())
-    if (args.lineage) return handleLineage(catalog, String(args.lineage).trim())
-    if (args.concepts) return handleConcepts(catalog, String(args.concepts).trim())
-
-    if (args.concept_path) {
-      const tables = args.concept_path as string[]
-      if (!Array.isArray(tables) || tables.length !== 2) {
-        return "Error: 'concept_path' requires exactly two schema-qualified table names."
-      }
-      const [from, to] = tables.map((t) => String(t).trim())
-      return handleConceptPath(catalog, from, to)
-    }
 
     if (args.table) return handleTable(catalog, String(args.table).trim())
     if (args.joins) return handleJoins(catalog, String(args.joins).trim())
@@ -123,6 +92,6 @@ export const searchCatalogTool: Tool = {
       return handleSearch(catalog, String(args.search).trim(), schemaFilter)
     }
 
-    return "Error: Provide at least one parameter: search, table, column, joins, path, lineage, stats, or refresh."
+    return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."
   },
 }

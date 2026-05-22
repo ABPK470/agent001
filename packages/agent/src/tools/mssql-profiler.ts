@@ -341,7 +341,7 @@ export const profileDataTool: Tool = {
       // example. Falls back to generic shape advice when this object
       // has no lineage entry in the catalog.
       const catalog = getCatalog(connName ?? "default")
-      const firstBranch = catalog?.getLineage(qn)?.sources?.[0]?.qualifiedName
+      const firstBranch = catalog?.getUnionBranches(qn)?.[0]
       const branchAdvice = firstBranch
         ? `  1. Profile a single branch view instead — e.g. for ${qn} use one of\n     its source branches such as ${firstBranch}.\n     Discover the branches with: inspect_definition(name='${qn}').`
         : `  1. Profile a narrower object instead — discover this view's source branches\n     with inspect_definition(name='${qn}') and profile one branch at a time.`

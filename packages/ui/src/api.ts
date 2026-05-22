@@ -273,10 +273,6 @@ export const api = {
     json<{ columns: Array<{ name: string; type: string }>; rows: Record<string, unknown>[] }>(
       `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/preview?${new URLSearchParams({ ...(db ? { db } : {}), ...(limit ? { limit: String(limit) } : {}) }).toString()}`,
     ),
-  mymiLineage: (schema: string, table: string, db?: string) =>
-    json<Record<string, unknown>>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/lineage${db ? `?db=${encodeURIComponent(db)}` : ""}`,
-    ),
   mymiDataModel: (db?: string) =>
     json<{
       objects: Array<{ schema: string; name: string; isTable: boolean; rowCount: number; sizeMb: number; columnCount: number; fkOut: number; fkIn: number }>

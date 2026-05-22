@@ -160,17 +160,9 @@ function countUnionBranchesInDefinition(viewDefinition: string): number {
 function buildUnionIndex(catalog: CatalogGraph, threshold: number): Map<string, number> {
   const out = new Map<string, number>()
   for (const [, t] of catalog.tables) {
-    if (t.type !== "VIEW") continue
-    let branchCount: number | null = null
-    // Prefer curated lineage when present — it's the authoritative source
-    // (a DBA's reviewed mapping of view → contributing source views).
-    const lineage = catalog.getLineage(t.qualifiedName)
-    if (lineage && lineage.sources.length > 0) {
-      branchCount = lineage.sources.length
-    } else if (t.viewDefinition) {
-      branchCount = countUnionBranchesInDefinition(t.viewDefinition)
-    }
-    if (branchCount != null && branchCount >= threshold) {
+    if (t.type !== "VIEW" || !t.viewDefinition) continue
+    const branchCount = countUnionBranchesInDefinition(t.viewDefinition)
+    if (branchCount >= threshold) {
       out.set(t.qualifiedName.toLowerCase(), branchCount)
     }
   }
@@ -231,8 +223,7 @@ export function listLargeObjects(
  * Count the UNION ALL branches in a VIEW. Returns 1 for non-UNION views,
  * 0 for tables / unknown objects.
  *
- * Prefers curated lineage's source count when present; falls back to
- * parsing the VIEW's viewDefinition. Returns 0 if the object isn't a
+ * Parses the VIEW's viewDefinition. Returns 0 if the object isn't a
  * VIEW or we have no definition to inspect.
  */
 export function unionBranchCount(
@@ -244,8 +235,6 @@ export function unionBranchCount(
   if (!catalog) return 0
   const tbl = getTableCI(catalog, qualifiedName)
   if (!tbl || tbl.type !== "VIEW") return 0
-  const lineage = catalog.getLineage(tbl.qualifiedName)
-  if (lineage && lineage.sources.length > 0) return lineage.sources.length
   if (tbl.viewDefinition) return countUnionBranchesInDefinition(tbl.viewDefinition)
   return 0
 }
