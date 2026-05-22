@@ -18,8 +18,11 @@ import type { DoctrineModule } from "./types.js"
 
 export const wideUnionViewPolicyDoctrine: DoctrineModule = {
   id: "mssql.wide-union-view-policy",
-  version: "1.2.0",
-  summaryBudgetBytes: 900,
+  version: "1.3.0",
+  // 1024B (raised from 900B in v1.3.0 to fit the Plan v3 Phase 7
+  // compareMirror cross-reference; still well under the 2560B total
+  // doctrine-block budget).
+  summaryBudgetBytes: 1024,
   summary(): string {
     const wide = [...listExpensiveUnionViews()]
       .sort((a, b) => b[1] - a[1])
@@ -32,6 +35,7 @@ export const wideUnionViewPolicyDoctrine: DoctrineModule = {
       "Wide UNION view shape policy (enforced):",
       `- The live catalog classifies these views as wide UNIONs: ${examples}.`,
       "- Prefer the persisted mirror (when one exists in the catalog under the configured mirror schema).",
+      "- BEFORE substituting `<mirrorSchema>.X` for `X`, call `profile_data(compareMirror=true)` against the candidate; substitute only when the tool's recommendation is `USE_MIRROR`.",
       "- When no mirror exists, do branch-local aggregation: aggregate inside each required source branch first (`SELECT <keyCol>, SUM(<metric>) FROM <branch> WHERE … GROUP BY <keyCol>`), UNION ALL the per-branch results, then re-aggregate / rank.",
       "- The tool BLOCKS a direct `TOP N … FROM <wide-union-view> … GROUP BY <high-cardinality-key>` — that shape forces global expansion of every UNION branch and always times out.",
       "- Branch names come from curated lineage: `search_catalog lineage=<wide-union-view>`. Do NOT guess.",

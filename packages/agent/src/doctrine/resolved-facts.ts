@@ -21,6 +21,25 @@ export interface LargeObjectFact {
   readonly branchCount?: number
   /** Optional one-line note (e.g. "ranked client read"). */
   readonly note?: string
+  /**
+   * Plan v3 Phase 7 — structural rank of this object among siblings
+   * sharing its name prefix in the live catalog (1 = top). Lets the
+   * agent see at a glance whether this is the bare canonical or a
+   * suffixed subset.
+   */
+  readonly structuralRank?: number
+  /**
+   * Plan v3 Phase 7 — total source-row fan-in for a VIEW (sum across
+   * branches per `viewSourceRows`). Distinguishes a 270M-row wide UNION
+   * from a 12M-row sibling subset at glance time.
+   */
+  readonly fanInRows?: number
+  /**
+   * Plan v3 Phase 7 — durable role this object was given by a prior
+   * run's reflection turn (`canonical|subset|staging|archive|rules`).
+   * Empty when no verdict exists.
+   */
+  readonly verdictRole?: string
 }
 
 export interface ResolvedFactsInput {
@@ -44,6 +63,12 @@ export function buildResolvedFacts(input: ResolvedFactsInput): string {
       const parts: string[] = [o.name]
       parts.push(o.hasPersistedMirror ? "persistedView mirror EXISTS" : "no persistedView mirror")
       if (typeof o.branchCount === "number") parts.push(`${o.branchCount} union branches`)
+      if (typeof o.fanInRows === "number" && o.fanInRows > 0) {
+        const m = o.fanInRows / 1_000_000
+        parts.push(m >= 1 ? `${m.toFixed(0)}M source rows` : `${o.fanInRows} source rows`)
+      }
+      if (typeof o.structuralRank === "number") parts.push(`rank #${o.structuralRank} in sibling cluster`)
+      if (o.verdictRole) parts.push(`prior verdict: ${o.verdictRole}`)
       if (o.note) parts.push(o.note)
       lines.push(`- ${parts.join("; ")}`)
     }

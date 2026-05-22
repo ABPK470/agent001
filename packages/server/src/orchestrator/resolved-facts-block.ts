@@ -23,12 +23,13 @@
 
 import type { CatalogGraph } from "@mia/agent"
 import {
-    buildResolvedFacts,
-    getTenantConfig,
-    listLargeObjects,
-    persistedMirrorOf,
-    type LargeObjectFact,
+  buildResolvedFacts,
+  getTenantConfig,
+  listLargeObjects,
+  persistedMirrorOf,
+  type LargeObjectFact,
 } from "@mia/agent"
+import { listTableVerdicts } from "../memory/index.js"
 
 /**
  * Maximum number of catalog-derived large objects to include in the
@@ -85,6 +86,7 @@ export function buildResolvedFactsBlock(input: {
   for (const tok of goalTokens) candidates.add(tok)
 
   const largeObjects: LargeObjectFact[] = []
+  const inCatalogNames: string[] = []
   for (const name of candidates) {
     const isGoalMentioned = goalTokens.includes(name)
     const inCatalog = catalog?.tables.has(name) ?? false
@@ -92,12 +94,34 @@ export function buildResolvedFactsBlock(input: {
     // anywhere — that just adds noise for environments where the object
     // doesn't exist.
     if (!isGoalMentioned && !inCatalog) continue
+    if (inCatalog) inCatalogNames.push(name)
 
     const hasPersistedMirror = catalog ? hasMirror(catalog, name, mirrorSchema) : false
+    const fanInRows = catalog ? (catalog.viewSourceRows.get(name) ?? 0) : 0
+    const structuralRank = catalog ? structuralRankIn(catalog, name) : undefined
     largeObjects.push({
       name,
       hasPersistedMirror,
+      ...(fanInRows > 0 ? { fanInRows } : {}),
+      ...(typeof structuralRank === "number" ? { structuralRank } : {}),
     })
+  }
+
+  // Plan v3 Phase 7 — overlay durable verdicts from memory. Silent
+  // no-op when the memory DB is unavailable (tests, cold start).
+  if (largeObjects.length > 0) {
+    try {
+      const verdicts = listTableVerdicts({ qnames: largeObjects.map((o) => o.name) })
+      if (verdicts.length > 0) {
+        const byName = new Map(verdicts.map((v) => [v.qname.toLowerCase(), v.role]))
+        for (let i = 0; i < largeObjects.length; i++) {
+          const role = byName.get(largeObjects[i]!.name.toLowerCase())
+          if (role) largeObjects[i] = { ...largeObjects[i]!, verdictRole: role }
+        }
+      }
+    } catch {
+      // memory unavailable — proceed without verdicts.
+    }
   }
 
   if (largeObjects.length === 0 && !input.schemaFingerprint) return ""
@@ -106,6 +130,35 @@ export function buildResolvedFactsBlock(input: {
     largeObjects,
     ...(input.schemaFingerprint ? { schemaFingerprint: input.schemaFingerprint } : {}),
   })
+}
+
+/**
+ * Structural rank of `lowerName` among siblings sharing its lowercase
+ * name prefix in the live catalog. 1 = the bare canonical (no suffix),
+ * 2+ = suffixed sibling subsets ordered by name length (shortest first).
+ * Returns undefined when the catalog has no siblings to compare.
+ */
+function structuralRankIn(catalog: CatalogGraph, lowerName: string): number | undefined {
+  const target = catalog.tables.get(lowerName)
+  if (!target) return undefined
+  const targetSchema = target.schema.toLowerCase()
+  const targetBase = target.name.toLowerCase()
+  // Treat as siblings: tables/views in the same schema whose names share
+  // the shortest power-of-2 prefix with `target` (so `Revenue` /
+  // `RevenueESGRules` cluster while `Revenue` / `Sales` do not).
+  const minPrefixLen = Math.max(3, Math.floor(targetBase.length / 2))
+  const prefix = targetBase.slice(0, minPrefixLen)
+  const siblings: string[] = []
+  for (const [, t] of catalog.tables) {
+    if (t.schema.toLowerCase() !== targetSchema) continue
+    if (!t.name.toLowerCase().startsWith(prefix)) continue
+    siblings.push(t.name.toLowerCase())
+  }
+  if (siblings.length < 2) return undefined
+  // Rank: shortest name first (bare wins), tiebreak alphabetical.
+  siblings.sort((a, b) => a.length - b.length || a.localeCompare(b))
+  const idx = siblings.indexOf(targetBase)
+  return idx >= 0 ? idx + 1 : undefined
 }
 
 /**

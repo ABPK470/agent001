@@ -49,4 +49,48 @@ describe("resolvedFacts builder", () => {
     }))
     expect(() => buildResolvedFacts({ largeObjects: objects })).toThrow(/exceeds .*B budget/)
   })
+
+  // ── Plan v3 Phase 7 — per-candidate cross-references ────────────
+
+  it("renders fanInRows when provided (formatted in millions for large values)", () => {
+    const out = buildResolvedFacts({
+      largeObjects: [
+        { name: "publish.revenue", hasPersistedMirror: false, fanInRows: 270_000_000 },
+        { name: "publish.smallview", hasPersistedMirror: false, fanInRows: 500 },
+      ],
+    })
+    expect(out).toContain("270M source rows")
+    expect(out).toContain("500 source rows")
+  })
+
+  it("renders structuralRank when provided", () => {
+    const out = buildResolvedFacts({
+      largeObjects: [
+        { name: "publish.revenue", hasPersistedMirror: false, structuralRank: 1 },
+        { name: "publish.revenueesgrules", hasPersistedMirror: false, structuralRank: 2 },
+      ],
+    })
+    expect(out).toContain("rank #1 in sibling cluster")
+    expect(out).toContain("rank #2 in sibling cluster")
+  })
+
+  it("renders verdictRole when provided", () => {
+    const out = buildResolvedFacts({
+      largeObjects: [
+        { name: "publish.revenue", hasPersistedMirror: false, verdictRole: "canonical" },
+        { name: "publish.revenueesgrules", hasPersistedMirror: false, verdictRole: "subset" },
+      ],
+    })
+    expect(out).toContain("prior verdict: canonical")
+    expect(out).toContain("prior verdict: subset")
+  })
+
+  it("omits the new fields silently when not supplied (back-compat)", () => {
+    const out = buildResolvedFacts({
+      largeObjects: [{ name: "publish.revenue", hasPersistedMirror: false }],
+    })
+    expect(out).not.toContain("source rows")
+    expect(out).not.toContain("rank #")
+    expect(out).not.toContain("prior verdict")
+  })
 })
