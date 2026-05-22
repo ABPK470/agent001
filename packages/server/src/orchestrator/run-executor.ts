@@ -52,6 +52,7 @@ import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
+import { loadPriorTurns } from "./prior-turns.js"
 import { buildSystemMessages } from "./system-messages.js"
 import type { OrchestratorRunCtx } from "./types.js"
 import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"
@@ -475,6 +476,21 @@ export async function executeRunImpl(
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,
     attachmentIds: activeRun?.attachmentIds ?? [],
+    // Prior turns from the same session, surfaced as a first-class
+    // `<prior_turns>` system anchor AND fed to the clarification
+    // detector so co-referential follow-ups ("plot it", "filter that")
+    // resolve to the previous turn's answer instead of triggering a
+    // "which of these did you mean?" question. We skip this for
+    // code-generation sandbox runs where the session is a different
+    // unit of work (one task per run) and for runs without a real sid.
+    priorTurns: (activeRun?.sessionId && activeRun?.ownerUpn && runWorkspace.taskType !== "code_generation")
+      ? loadPriorTurns({
+          sessionId:    activeRun.sessionId,
+          excludeRunId: runId,
+          upn:          activeRun.ownerUpn,
+          limit:        3,
+        })
+      : [],
     // Per-run clarification state lives on the orchestrator. Passing it
     // here lets buildSystemMessages run the ambiguity detectors against
     // the goal + catalog + tenant, record what it emitted so the

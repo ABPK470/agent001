@@ -387,7 +387,17 @@ function CompactTable({
 }) {
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
-      <table className="w-full text-[12.5px] leading-6 border-collapse">
+      {/*
+        `w-auto min-w-full`: let the table choose its natural column widths
+        (so 10-column result sets don't get squished into the viewport) but
+        stretch to fill the wrapper when there are only a few short columns.
+        When natural width exceeds the wrapper, the outer `overflow-x-auto`
+        kicks in and the user can scroll horizontally to see every column.
+        With `w-full` (the old value) the table was always pinned at 100 %,
+        cells wrapped aggressively, and trailing columns got clipped — the
+        user reported this as "cut out, not acceptable".
+      */}
+      <table className="w-auto min-w-full text-[12.5px] leading-6 border-collapse">
         {/* <thead className="bg-overlay-hover/40"> */}
         <thead>
           <tr>

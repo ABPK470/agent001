@@ -6,6 +6,7 @@ import type { RunWorkspaceContext } from "../run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
+import type { PriorTurn } from "./prior-turns.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
 // ── System message construction ───────────────────────────────────
@@ -199,8 +200,20 @@ export async function buildSystemMessages(opts: {
    * Defaults to false to be conservative.
    */
   isAdmin?: boolean
+  /**
+   * Most-recent completed runs from the same session (newest-first), loaded
+   * by `loadPriorTurns` in run-executor. When non-empty, a first-class
+   * `<prior_turns>` `system_anchor` block is injected so the LLM resolves
+   * follow-up pronouns ("plot it", "filter that") against the actual
+   * previous-turn answer instead of asking the user to disambiguate. The
+   * same list is also fed to the clarification detector ctx so detectors
+   * + the LLM planner can see the conversation when deciding what (if
+   * anything) to ask.
+   */
+  priorTurns?: readonly PriorTurn[]
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
+  const priorTurns = opts.priorTurns ?? []
   const isAdmin = opts.isAdmin ?? false
   const hasSiblings = opts.hasSiblings ?? false
   const siblingProgressDigest = opts.siblingProgressDigest ?? ""
@@ -225,6 +238,7 @@ export async function buildSystemMessages(opts: {
     `mssqlCat=${decision.includeMssqlCatalog ? 1 : 0} ` +
     `mssqlGuide=${decision.includeMssqlGuidance ? 1 : 0} ` +
     `memGuide=${decision.includeMemoryGuidance ? 1 : 0} ` +
+    `priorTurns=${priorTurns.length} ` +
     `admin=${isAdmin ? 1 : 0}`,
   )
 
@@ -266,9 +280,25 @@ export async function buildSystemMessages(opts: {
       const catalog = getCatalog()
       const tenant = getTenantConfig()
       const resolved = opts.clarifications.getResolved(opts.runId)
+      // Feed the detector + LLM planner a synthetic chat trace built from
+      // the prior turns in this session. Hardcoding `messages: []` here was
+      // the source of every "which of these did you mean?" question that
+      // ignored the conversation — the detector had no idea the user was
+      // referring to the previous turn's answer.
+      const synthMessages: Message[] = []
+      // Newest-last so the assistant turn the user is most plausibly
+      // referencing ("plot it", "filter that") sits closest to the goal.
+      for (let i = priorTurns.length - 1; i >= 0; i--) {
+        const t = priorTurns[i]!
+        synthMessages.push({ role: MessageRole.User, content: t.goal })
+        synthMessages.push({
+          role: MessageRole.Assistant,
+          content: t.answer ?? "(no answer recorded)",
+        })
+      }
       const ctx = {
         goal, catalog, tenant,
-        messages: [] as readonly Message[],
+        messages: synthMessages as readonly Message[],
         resolved,
         round: 0,
       }
@@ -312,6 +342,28 @@ export async function buildSystemMessages(opts: {
     content: `${renderPromptVars(basePrompt, promptVars)}\n${envBlock}`,
     section: "system_anchor",
   })
+
+  // Section 1∇0a: <prior_turns> — the conversational anchor.
+  //
+  // Every UI follow-up is a fresh server-side run with `messages: []`, so
+  // without this block the model is functionally amnesiac across turns:
+  // pronoun-only follow-ups ("plot it", "filter that data") have no
+  // referent and the clarification detector + LLM planner invent
+  // unrelated catalog questions to ask. The runs table is the
+  // authoritative session timeline (loadPriorTurns reads it bypassing
+  // FTS), so we surface the last N completed top-level runs verbatim and
+  // tell the model explicitly that pronouns refer to Turn -1.
+  //
+  // Lives in `system_anchor` so the budget compactor cannot evict it on
+  // long runs — it IS the conversation context.
+  if (priorTurns.length > 0) {
+    const block = renderPriorTurnsBlock(priorTurns)
+    systemMessages.push({
+      role: MessageRole.System,
+      content: block,
+      section: "system_anchor",
+    })
+  }
 
   // Section 1∇0: Clarification discipline (≈1 KB). Always injected so the
   // model has the rules in scope whether or not a <must_clarify> block
@@ -598,4 +650,48 @@ function buildAttachmentManifest(ids: string[]): string {
     `  - id=${r.id}  name=${r.normalized_name}  type=${r.media_type}  size=${r.size_bytes}B  mode=${r.ingestion_mode}`,
   )
   return [header, ...lines].join("\n")
+}
+
+// ── Prior-turns block ─────────────────────────────────────────────
+
+/**
+ * Render the `<prior_turns>` system anchor. Newest turn first; each
+ * turn is captioned `Turn -1`, `Turn -2`, … so the directive at the
+ * bottom can reference them positionally. Answer text is already
+ * truncated by `loadPriorTurns` (PRIOR_TURN_ANSWER_MAX_CHARS).
+ *
+ * Failed turns are included (their answer is null → rendered as a short
+ * marker) because "what went wrong last time?" is a legitimate follow-up.
+ */
+function renderPriorTurnsBlock(turns: readonly PriorTurn[]): string {
+  const lines: string[] = [
+    "<prior_turns>",
+    "The user is mid-conversation. Earlier turns in THIS session (most recent first):",
+    "",
+  ]
+  turns.forEach((t, i) => {
+    const label = `Turn -${i + 1}`
+    const ts = t.ranAt ? ` (${t.ranAt})` : ""
+    const statusTag = t.status === "failed" ? " [FAILED]" : ""
+    lines.push(`${label}${ts}${statusTag}`)
+    lines.push(`  Goal: ${oneLine(t.goal)}`)
+    const answerBody = t.answer == null || t.answer.trim().length === 0
+      ? "(no answer recorded)"
+      : t.answer
+    lines.push("  Answer:")
+    for (const ln of answerBody.split("\n")) lines.push(`    ${ln}`)
+    lines.push("")
+  })
+  lines.push(
+    "When the user uses pronouns or anaphora (\"it\", \"this\", \"that\", \"those\",",
+    "\"the data\", \"the result\", \"the report\") they almost always refer to",
+    "Turn -1's answer. Do NOT ask the user what they mean \u2014 act on it.",
+    "</prior_turns>",
+  )
+  return lines.join("\n")
+}
+
+function oneLine(s: string): string {
+  const trimmed = s.replace(/\s+/g, " ").trim()
+  return trimmed.length > 400 ? trimmed.slice(0, 397) + "\u2026" : trimmed
 }

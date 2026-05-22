@@ -27,6 +27,23 @@ import { makeFindingId } from "./types.js"
 
 // ── Public surface ───────────────────────────────────────────────
 
+/** Tight co-reference / anaphora detector. Mirrors the one in
+ *  schema-match.ts on purpose — the planner uses the same rule to
+ *  decide whether the goal is a pronoun-shaped follow-up that should
+ *  NOT trigger a fresh clarification at all. */
+function looksCoreferential(goal: string): boolean {
+  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(goal)
+}
+
+function hasRecentAssistantTurn(messages: readonly Message[]): boolean {
+  for (const m of messages) {
+    if (m.role === MessageRole.Assistant && typeof m.content === "string" && m.content.trim().length > 0) {
+      return true
+    }
+  }
+  return false
+}
+
 export interface LlmPlannerOptions {
   /** How many catalog tables to list in the planner prompt. Default: 40. */
   readonly catalogSampleSize?: number
@@ -53,6 +70,13 @@ export function shouldInvokePlanner(
   if (ctx.resolved.length > 0) return false
   if (ctx.round > (opts.maxRound ?? 2)) return false
   if (ctx.goal.trim().length < 8) return false
+  // Co-reference guard: a pronoun-shaped follow-up ("plot it", "filter
+  // that") with a recent assistant turn in scope is referring to that
+  // turn's answer, not to a fresh ambiguity. Skipping the planner here
+  // saves an LLM call AND prevents the model from inventing unrelated
+  // catalog questions that re-block the conversation — the exact
+  // failure mode that motivated this guard.
+  if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return false
   return true
 }
 
@@ -123,6 +147,10 @@ function buildSystemPrompt(): string {
     "",
     "Rules:",
     "  • If the goal is unambiguous, return {\"findings\": []}.",
+    "  • If the user goal uses pronouns / anaphora ('it', 'this', 'that',",
+    "    'those results', 'the data', 'the report') AND a recent assistant",
+    "    turn appears in the conversation, the referent IS that turn — do",
+    "    NOT emit any clarification.",
     "  • Never invent table or column names not present in the catalog sample.",
     "  • At most 3 findings; prioritise the most user-blocking ambiguity.",
     "  • Use kind=\"term-undefined\" with severity=\"block\" when a business word",
@@ -139,12 +167,43 @@ function buildUserPrompt(ctx: ClarifyContext, sampleSize: number): string {
         .map((t) => `  • ${t.qualifiedName} (${t.type}, columns: ${t.columns.slice(0, 6).map((c) => c.name).join(", ")}${t.columns.length > 6 ? ", …" : ""})`)
         .join("\n")
     : "  (no catalog available)"
-  return [
+  const conversation = renderConversationPreamble(ctx.messages)
+  const parts: string[] = []
+  if (conversation) parts.push(conversation, "")
+  parts.push(
     `User goal: ${ctx.goal}`,
     "",
     `Catalog sample (first ${sampleSize} objects):`,
     sample,
-  ].join("\n")
+  )
+  return parts.join("\n")
+}
+
+/** Render the last few conversation turns as a compact preamble for the
+ *  planner. Cap total length so a chatty session can't blow up the
+ *  prompt. Returns the empty string when there are no usable messages
+ *  (so callers can omit the section entirely). */
+function renderConversationPreamble(messages: readonly Message[]): string {
+  if (messages.length === 0) return ""
+  const MAX_TOTAL_CHARS = 1500
+  const PER_MSG_CHARS = 400
+  const tail = messages.slice(-6)
+  const lines: string[] = ["Recent conversation (oldest first):"]
+  let used = 0
+  for (const m of tail) {
+    const text = typeof m.content === "string" ? m.content : ""
+    if (text.trim().length === 0) continue
+    const role =
+      m.role === MessageRole.User      ? "user"      :
+      m.role === MessageRole.Assistant ? "assistant" :
+      m.role === MessageRole.System    ? "system"    : "tool"
+    const trimmed = text.length > PER_MSG_CHARS ? text.slice(0, PER_MSG_CHARS - 1) + "…" : text
+    const line = `  [${role}] ${trimmed.replace(/\n+/g, " ⏎ ")}`
+    if (used + line.length > MAX_TOTAL_CHARS) break
+    lines.push(line)
+    used += line.length
+  }
+  return lines.length > 1 ? lines.join("\n") : ""
 }
 
 // ── Response parsing ─────────────────────────────────────────────
