@@ -105,6 +105,13 @@ export function summarizeCachedPayload(
  * pipe table. We pull column names + data types out of the table
  * (first 2 columns: COLUMN_NAME, DATA_TYPE) and append a "[PK]" /
  * "[FK→x]" marker if the table carries those columns.
+ *
+ * When the payload also carries a "Value ranges (surrogate keys, …):"
+ * section (emitted live by explore_mssql_schema for surrogate-shaped
+ * columns) we inline those ranges into the matching column entries
+ * as `pkMonth(int 1..612 [PK])`. This is the single most important
+ * signal for stopping the "treat surrogate key like YYYYMM" bug
+ * class — surface it where the LLM is reading.
  */
 function summarizeExploreSchema(payload: string): string {
   const lines = payload.split(/\r?\n/)
@@ -125,6 +132,8 @@ function summarizeExploreSchema(payload: string): string {
   const idxFk   = hdrCells.findIndex((c) => /^FK_REFERENCE$/i.test(c))
   if (idxName < 0 || idxType < 0) return rawFallback(payload)
 
+  const ranges = extractSurrogateRanges(payload)
+
   const cols: string[] = []
   // Skip separator row (dashes) — it has no useful content.
   for (let i = hdrIdx + 1; i < lines.length && cols.length < MAX_LINES_PER_SECTION; i++) {
@@ -137,7 +146,9 @@ function summarizeExploreSchema(payload: string): string {
     if (!name || !dt) continue
     const pk = idxPk >= 0 && /^(1|true|yes)$/i.test(cells[idxPk] ?? "") ? " [PK]" : ""
     const fk = idxFk >= 0 && cells[idxFk] && cells[idxFk] !== "NULL" ? ` [FK→${cells[idxFk]}]` : ""
-    cols.push(`${name}(${dt}${pk}${fk})`)
+    const range = ranges.get(name.toLowerCase())
+    const rangeStr = range ? ` ${range.min}..${range.max}` : ""
+    cols.push(`${name}(${dt}${rangeStr}${pk}${fk})`)
   }
   if (cols.length === 0) return rawFallback(payload)
   const more = countDataRows(lines, hdrIdx) > cols.length ? ", …" : ""
@@ -145,7 +156,13 @@ function summarizeExploreSchema(payload: string): string {
 }
 
 /**
- * profile_data(fast) → "fast: rows=N, type=T, indexes=N, cols(N): A(int), B(varchar), …"
+ * profile_data(fast) → "fast: rows=N, type=T, indexes=N, cols(N): A(int), pkMonth(int 1..612), B(varchar), …"
+ *
+ * Surrogate-shaped columns (pk*, fk*, *Id, *Key, …) carry an inline
+ * "min..max" hint when sys.stats coverage is available — the model
+ * needs that range to avoid filtering surrogate ints by business
+ * codes like YYYYMM. Non-surrogate numeric columns deliberately do
+ * NOT carry a range (it would imply a constraint that isn't real).
  */
 function summarizeProfileFast(payload: string): string {
   const rows = extractTotalRows(payload)
@@ -275,15 +292,79 @@ function extractCount(payload: string, re: RegExp): number | null {
  * payload's "Columns (N):" section. Format per emitter:
  *   "  ColName (data_type, nullable)"
  */
+/**
+ * Pluck up to MAX_LINES_PER_SECTION column entries from a profile
+ * payload's "Columns (N):" section. Format per emitter:
+ *   "  ColName (data_type, nullable)"
+ *   "    Min: X | Max: Y  (stats updated …)"   ← optional, surrogate-only
+ *
+ * The Min/Max line is emitted by profile_data for every column that has
+ * sys.stats coverage. We inline it into the compact column entry as
+ * `pkMonth(int 1..612)` ONLY for surrogate-shaped names — including
+ * a numeric range for an "Amount" or "Date" column would mislead the
+ * model into treating the range as a business constraint. The point
+ * of the range hint is the surrogate-vs-business-code disambiguation;
+ * keep it scoped to where that ambiguity exists.
+ */
 function extractProfileColumns(payload: string): string[] {
   const out: string[] = []
-  const re = /^ {2}(\S+) \((\w+),\s*(nullable|NOT NULL)\)/gm
+  // Match a column header line, optionally followed (on the next line)
+  // by its Min/Max line. The Min/Max group is optional so columns
+  // without stats still parse.
+  const re = /^ {2}(\S+) \((\w+),\s*(?:nullable|NOT NULL)\)(?:\r?\n {4}Min:\s*([^|\r\n]+?)\s*\|\s*Max:\s*([^\r\n(]+?)(?=\s*(?:\(|\r|\n|$)))?/gm
   let m: RegExpExecArray | null
   while ((m = re.exec(payload)) !== null) {
     if (out.length >= MAX_LINES_PER_SECTION) break
-    out.push(`${m[1]}(${m[2]})`)
+    const name = m[1]!
+    const dt = m[2]!
+    const minVal = m[3]?.trim()
+    const maxVal = m[4]?.trim()
+    if (minVal && maxVal && minVal !== "NULL" && maxVal !== "NULL" && isSurrogateLikeName(name)) {
+      out.push(`${name}(${dt} ${minVal}..${maxVal})`)
+    } else {
+      out.push(`${name}(${dt})`)
+    }
   }
   return out
+}
+
+/**
+ * Parse the optional "Value ranges (surrogate keys, …):" section
+ * that explore_mssql_schema appends to its payload. Each entry is
+ * `  ColName: <min>..<max>`. Returns a name→{min,max} map (lowercased
+ * keys for case-insensitive lookup by the column summarizer).
+ *
+ * This is the data path that lets `<known_objects>` carry per-column
+ * value ranges all the way from the live SQL to the model prompt.
+ */
+function extractSurrogateRanges(payload: string): Map<string, { min: string; max: string }> {
+  const out = new Map<string, { min: string; max: string }>()
+  const idx = payload.indexOf("Value ranges (surrogate keys")
+  if (idx < 0) return out
+  const tail = payload.slice(idx)
+  const re = /^ {2}([A-Za-z_][\w]*):\s*([^.\r\n][^.\r\n]*?)\.\.([^\r\n]+?)\s*$/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(tail)) !== null) {
+    out.set(m[1]!.toLowerCase(), { min: m[2]!.trim(), max: m[3]!.trim() })
+  }
+  return out
+}
+
+/**
+ * Surrogate-shape predicate — mirrors the same heuristic used by the
+ * live explore_mssql_schema emitter so the cached payload and the
+ * summarizer agree on which columns are surrogate-like. Keeping the
+ * rule narrow (name-only, no type check needed because the payload
+ * line already encodes the column's type) prevents accidentally
+ * tagging business-meaningful numeric columns.
+ */
+function isSurrogateLikeName(name: string): boolean {
+  const n = name.trim()
+  if (/^(pk|fk|sk)[A-Z_]/.test(n)) return true
+  if (/^(pk|fk|sk)$/i.test(n)) return true
+  if (/(Id|Key|Sk)$/.test(n) && n.length > 2) return true
+  if (/_(id|key|sk)$/i.test(n)) return true
+  return false
 }
 
 function rawFallback(payload: string): string {

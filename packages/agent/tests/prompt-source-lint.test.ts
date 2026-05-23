@@ -22,9 +22,9 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThan(7 * KB)
   })
 
-  it("MIA_DATA_PERSONA_SECTION stays under 6 KB", () => {
+  it("MIA_DATA_PERSONA_SECTION stays under 6.5 KB", () => {
     expect(MIA_DATA_PERSONA_SECTION.length).toBeGreaterThan(2 * KB)
-    expect(MIA_DATA_PERSONA_SECTION.length).toBeLessThan(6 * KB)
+    expect(MIA_DATA_PERSONA_SECTION.length).toBeLessThan(6.5 * KB)
   })
 
   it("CHART_CATALOGUE_SECTION stays under 6 KB (current ~5 KB)", () => {

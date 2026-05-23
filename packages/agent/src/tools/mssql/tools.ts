@@ -295,8 +295,72 @@ export const mssqlSchemaTool: Tool = {
 
           if (!result.recordset.length) return `No columns found for ${tableName}. Try with schema prefix (e.g. 'agent.${table}', 'core.${table}').`
           const label = schema ? `${schema}.${table}` : result.recordset[0].TABLE_SCHEMA + "." + table
-          const payload = `Columns for ${label}:\n` +
+          let payload = `Columns for ${label}:\n` +
             formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+
+          // ── Surrogate-key value ranges ──────────────────────────
+          //
+          // Root-cause fix: a recurring class of LLM bug is to treat
+          // a numeric surrogate key (e.g. dim.month.pkMonth) as if it
+          // encoded a meaningful business value (YYYYMM). The model
+          // sees `pkMonth (int, NOT NULL)` and writes
+          // `WHERE pkMonth = 202504`. The validator passes — int = int —
+          // but the table only carries pkMonth values in roughly [1..600],
+          // so the query silently returns zero rows.
+          //
+          // Closing this gap at the discovery layer: for columns whose
+          // names match the surrogate-key shape (pk*, fk*, *Id, *Key,
+          // *_id, *_key, *Sk, *_sk) we issue a best-effort lookup
+          // against sys.dm_db_stats_histogram and append a tight
+          // "Value ranges (surrogate keys):" section to the payload.
+          // The model then sees `pkMonth: 1..612` and cannot confuse
+          // the column with a YYYYMM filter. The section is cached
+          // alongside the columns block, so the prevention carries
+          // forward into <known_objects>.
+          //
+          // dm_db_stats_histogram requires VIEW DATABASE STATE; the
+          // try/catch silently degrades when the permission is absent
+          // or the table has no auto-stats yet.
+          const surrogateLikeNames = (result.recordset as Array<{ COLUMN_NAME: string; DATA_TYPE: string }>)
+            .filter((c) => isSurrogateLikeColumn(c.COLUMN_NAME) && isIntegerLikeType(c.DATA_TYPE))
+            .map((c) => c.COLUMN_NAME)
+          if (schema && surrogateLikeNames.length > 0) {
+            try {
+              const rangeReq = pool.request()
+                .input("schemaName", sql.NVarChar, schema)
+                .input("tableName", sql.NVarChar, table)
+              const rangeRes = await rangeReq.query(`
+                DECLARE @oid INT = OBJECT_ID(QUOTENAME(@schemaName) + '.' + QUOTENAME(@tableName));
+                IF @oid IS NULL
+                  SELECT TOP 0 CAST(NULL AS NVARCHAR(128)) AS column_name,
+                               CAST(NULL AS NVARCHAR(400)) AS min_val,
+                               CAST(NULL AS NVARCHAR(400)) AS max_val;
+                ELSE
+                  SELECT c.name AS column_name,
+                         MIN(CAST(h.range_high_key AS NVARCHAR(400))) AS min_val,
+                         MAX(CAST(h.range_high_key AS NVARCHAR(400))) AS max_val
+                  FROM sys.stats s
+                  CROSS APPLY sys.dm_db_stats_histogram(s.object_id, s.stats_id) h
+                  JOIN sys.stats_columns sc
+                    ON sc.object_id = s.object_id AND sc.stats_id = s.stats_id AND sc.stats_column_id = 1
+                  JOIN sys.columns c
+                    ON c.object_id = s.object_id AND c.column_id = sc.column_id
+                  WHERE s.object_id = @oid
+                  GROUP BY c.name
+              `)
+              const wantSet = new Set(surrogateLikeNames.map((n) => n.toLowerCase()))
+              const rows = (rangeRes.recordset as Array<{ column_name: string; min_val: string | null; max_val: string | null }>)
+                .filter((r) => wantSet.has(r.column_name.toLowerCase()) && r.min_val !== null && r.max_val !== null)
+              if (rows.length > 0) {
+                const lines = rows.map((r) => `  ${r.column_name}: ${r.min_val}..${r.max_val}`)
+                payload += `\n\nValue ranges (surrogate keys, from sys.stats histogram):\n` +
+                  lines.join("\n") +
+                  `\n  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value.`
+              }
+            } catch {
+              // Best-effort: missing VIEW DATABASE STATE or no auto-stats — silently skip.
+            }
+          }
           // Gap 1: persist the live result so the next call can short-circuit.
           // Only persist when we have a real schema-qualified qname AND a
           // fingerprint (the latter is a no-op when the catalog is unaware
@@ -365,4 +429,25 @@ export const mssqlSchemaTool: Tool = {
       return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },
+}
+
+// ── Surrogate-shape helpers (used by explore_mssql_schema) ───────
+//
+// A column is "surrogate-key-shaped" when its NAME signals a synthetic
+// identifier — i.e. its values don't encode any business attribute. We
+// keep this list intentionally narrow so non-surrogate columns (Amount,
+// Date, Year, MonthNo, …) never get range-decorated and the surrogate
+// hint section in the payload stays compact and unambiguous.
+function isSurrogateLikeColumn(name: string): boolean {
+  const n = name.trim()
+  if (/^(pk|fk|sk)[A-Z_]/.test(n)) return true        // pkMonth, fkClient, sk_account
+  if (/^(pk|fk|sk)$/i.test(n)) return true            // bare pk / fk / sk
+  if (/(Id|Key|Sk)$/.test(n) && n.length > 2) return true // CustomerId, AccountKey, BranchSk
+  if (/_(id|key|sk)$/i.test(n)) return true           // customer_id, account_key
+  return false
+}
+
+function isIntegerLikeType(dataType: string): boolean {
+  const t = dataType.trim().toLowerCase()
+  return t === "int" || t === "bigint" || t === "smallint" || t === "tinyint" || t === "numeric" || t === "decimal"
 }

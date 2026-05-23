@@ -37,6 +37,33 @@ describe("summarizeCachedPayload — explore_mssql_schema", () => {
     const out = summarizeCachedPayload("explore_mssql_schema", "columns", "Just a freeform note about something")
     expect(out.startsWith("[raw]")).toBe(true)
   })
+
+  it("inlines surrogate-key value ranges from the live tail section", () => {
+    // Root-cause-fix surface: the live explore_mssql_schema appends a
+    // "Value ranges (surrogate keys, …):" section for pk*/fk*/*Id/*Key
+    // columns. The summarizer must inline those ranges into the matching
+    // column entries — that is what stops the "pkMonth = 202504" bug.
+    const payload = [
+      "Columns for dim.Month:",
+      "COLUMN_NAME | DATA_TYPE | IS_NULLABLE | IS_PK | FK_REFERENCE",
+      "------------+-----------+-------------+-------+-------------",
+      "pkMonth     | int       | NO          | 1     | NULL",
+      "Year        | int       | NO          | 0     | NULL",
+      "MonthNo     | smallint  | NO          | 0     | NULL",
+      "",
+      "Value ranges (surrogate keys, from sys.stats histogram):",
+      "  pkMonth: 1..612",
+      "  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value.",
+    ].join("\n")
+    const out = summarizeCachedPayload("explore_mssql_schema", "columns", payload)
+    expect(out).toContain("pkMonth(int 1..612 [PK])")
+    // Year/MonthNo are NOT surrogate-shaped — they must NOT be range-decorated
+    // even though they're numeric, because a range hint on a business
+    // attribute would mislead the model into treating it as a constraint.
+    expect(out).toContain("Year(int)")
+    expect(out).toContain("MonthNo(smallint)")
+    expect(out).not.toMatch(/Year\(int\s+\d/)
+  })
 })
 
 describe("summarizeCachedPayload — profile_data fast", () => {
@@ -84,6 +111,37 @@ describe("summarizeCachedPayload — profile_data fast", () => {
     expect(out).toContain("type=view")
     expect(out).toContain("cols(2)")
     expect(out).not.toContain("indexes=")
+  })
+
+  it("inlines min..max for surrogate-shaped columns when sys.stats lines are present", () => {
+    // The profile_data fast emitter writes a "    Min: X | Max: Y …"
+    // line directly under every column header that has sys.stats
+    // coverage. The summarizer must surface that range for surrogate
+    // names only — surrogate keys are where the YYYYMM-confusion bug
+    // lives. Amount/Date columns deliberately get no range hint.
+    const payload = [
+      "Profile (FAST mode) for dim.Month:",
+      "  Type: TABLE",
+      "  Total rows: 612",
+      "",
+      "Columns (4):",
+      "  pkMonth (int, NOT NULL)",
+      "    Min: 1 | Max: 612  (stats updated 2025-09-01, 0 mods since)",
+      "  Year (int, NOT NULL)",
+      "    Min: 1970 | Max: 2030  (stats updated 2025-09-01, 0 mods since)",
+      "  MonthNo (smallint, NOT NULL)",
+      "    Min: 1 | Max: 12  (stats updated 2025-09-01, 0 mods since)",
+      "  MonthName (varchar, nullable)",
+    ].join("\n")
+    const out = summarizeCachedPayload("profile_data", "fast", payload)
+    expect(out).toContain("pkMonth(int 1..612)")
+    // Year and MonthNo are not surrogate-shaped — no range decoration,
+    // even though sys.stats coverage exists for them.
+    expect(out).toContain("Year(int)")
+    expect(out).toContain("MonthNo(smallint)")
+    expect(out).not.toMatch(/Year\(int\s+\d/)
+    expect(out).not.toMatch(/MonthNo\(smallint\s+\d/)
+    expect(out).toContain("MonthName(varchar)")
   })
 })
 
