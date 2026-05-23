@@ -956,10 +956,15 @@ export const useStore = create<AppState>()(
           updated[idx] = { ...current, ...run }
           return { runs: updated }
         }
-        // New run — always select it so the UI shows it immediately
+        // New run — insert it. Only auto-select if nothing is selected yet:
+        // events for background runs (e.g. started by another widget while
+        // the user is reading a different run) must NOT hijack the active
+        // selection. This used to be the root cause of "I started a run in
+        // termchat, switched to IOE, came back, and my run is gone" — a
+        // sync.run started by IOE silently became the new active run.
         return {
           runs: [run as Run, ...s.runs],
-          activeRunId: run.id,
+          activeRunId: s.activeRunId ?? run.id,
         }
       }),
 

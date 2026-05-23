@@ -191,38 +191,100 @@ void TOOL_PAST_TENSE
 // (`run`, `read`) and silently fell through to "used run_command" — that's
 // what produced the buggy "I used run_command `python3 ...`" lines.
 const TOOL_VERB: Record<string, string> = {
+  // Filesystem
   read_file: "read",
   write_file: "wrote",
+  append_file: "appended to",
   replace_in_file: "edited",
-  list_dir: "listed",
-  grep_search: "searched",
+  list_directory: "listed",
   search_files: "searched",
-  file_search: "found",
+  // Shell / commands
   run_command: "ran",
+  // Web / browser
   fetch_url: "fetched",
+  browse_web: "browsed",
+  web_search: "searched the web for",
   browser_check: "checked",
+  browser_auto_login: "auto-logged into",
+  browser_human_handoff: "handed off to user in",
+  // Delegation / planning
   delegate: "delegated to",
+  delegate_parallel: "delegated in parallel to",
   ask_user: "asked",
+  think: "thought about",
+  note: "noted",
+  // Catalog / metadata
   search_catalog: "searched catalog for",
+  compare_catalogs: "compared catalogs of",
+  inspect_definition: "inspected definition of",
+  discover_relationships: "mapped relationships for",
+  profile_data: "profiled",
+  // Database
   explore_mssql_schema: "inspected schema of",
   query_mssql: "queried",
+  export_query_to_file: "exported query to",
+  // Charts
+  get_chart_specs: "loaded chart specs for",
+  // Sync / environments
+  sync_preview: "previewed sync for",
+  sync_execute: "ran sync for",
+  list_environments: "listed environments",
+  // Attachments
+  list_attachments: "listed attachments",
+  read_attachment: "read attachment",
+  import_attachment: "imported attachment",
+  promote_attachment: "promoted attachment",
+  // Reflection / meta tools — normally hidden via HIDDEN_TOOLS, but if they
+  // ever leak into the visible thread they should at least read cleanly
+  // (instead of "used record_table_verdict something").
+  record_table_verdict: "recorded a verdict for",
 }
+
+// Tools whose calls we deliberately suppress from the user-visible thread.
+// These are orchestrator-internal: they run AFTER the user-facing answer
+// (reflection / verdict recording) or are otherwise noise that doesn't help
+// the user follow what the agent is doing. Hidden from individual tool rows,
+// from iteration-block headers, and from the live shimmer label.
+const HIDDEN_TOOLS = new Set<string>([
+  "record_table_verdict",
+])
 
 const VERB_DEFAULT_NOUN: Record<string, string> = {
   read: "files",
   wrote: "files",
+  "appended to": "a file",
   edited: "files",
   listed: "a directory",
   searched: "the codebase",
-  found: "files",
   ran: "a command",
   fetched: "a URL",
+  browsed: "the web",
+  "searched the web for": "something",
   checked: "the browser",
+  "auto-logged into": "the browser",
+  "handed off to user in": "the browser",
   "delegated to": "a subagent",
+  "delegated in parallel to": "subagents",
   asked: "a question",
+  "thought about": "the problem",
+  noted: "an observation",
   "searched catalog for": "tables",
+  "compared catalogs of": "two environments",
+  "inspected definition of": "an object",
+  "mapped relationships for": "a table",
+  profiled: "a table",
   "inspected schema of": "a table",
   queried: "the database",
+  "exported query to": "a file",
+  "loaded chart specs for": "a dataset",
+  "previewed sync for": "an environment",
+  "ran sync for": "an environment",
+  "listed environments": "",
+  "listed attachments": "",
+  "read attachment": "",
+  "imported attachment": "",
+  "promoted attachment": "",
+  "recorded a verdict for": "a table",
 }
 
 function basename(p: string): string {
@@ -300,7 +362,9 @@ function formatVerbPhrase(verb: string, targets: string[]): string {
     if (!unique.includes(t)) unique.push(t)
   }
   if (unique.length === 0) {
-    return `${verb} ${VERB_DEFAULT_NOUN[verb] ?? "something"}`
+    // Unknown verb with no extractable target — humanize cleanly
+    // (drop the placeholder "something" that used to appear here).
+    return VERB_DEFAULT_NOUN[verb] ? `${verb} ${VERB_DEFAULT_NOUN[verb]}` : verb
   }
   if (unique.length === 1) return `${verb} ${unique[0]}`
   if (unique.length === 2) return `${verb} ${unique[0]} and ${unique[1]}`
@@ -358,19 +422,39 @@ function buildIterationHeader(tools: Array<{ tool: string; target?: string }>): 
 const TOOL_PRESENT_TENSE: Record<string, string> = {
   read_file:           "Reading",
   write_file:          "Writing",
+  append_file:         "Appending to",
   replace_in_file:     "Editing",
-  list_dir:            "Listing",
-  grep_search:         "Searching",
+  list_directory:      "Listing",
   search_files:        "Searching",
-  file_search:         "Finding",
   run_command:         "Running",
   fetch_url:           "Fetching",
+  browse_web:          "Browsing",
+  web_search:          "Searching web for",
   browser_check:       "Checking browser",
+  browser_auto_login:  "Logging into",
+  browser_human_handoff: "Handing off to user in",
   delegate:            "Delegating to",
+  delegate_parallel:   "Delegating in parallel to",
   ask_user:            "Asking",
+  think:               "Thinking about",
+  note:                "Noting",
   search_catalog:      "Searching catalog for",
+  compare_catalogs:    "Comparing catalogs of",
+  inspect_definition:  "Inspecting definition of",
+  discover_relationships: "Mapping relationships for",
+  profile_data:        "Profiling",
   explore_mssql_schema:"Inspecting schema of",
   query_mssql:         "Querying",
+  export_query_to_file:"Exporting query to",
+  get_chart_specs:     "Loading chart specs for",
+  sync_preview:        "Previewing sync for",
+  sync_execute:        "Running sync for",
+  list_environments:   "Listing environments",
+  list_attachments:    "Listing attachments",
+  read_attachment:     "Reading attachment",
+  import_attachment:   "Importing attachment",
+  promote_attachment:  "Promoting attachment",
+  record_table_verdict:"Recording verdict for",
 }
 
 function presentTenseLabel(tool: string, target?: string): string {
@@ -395,15 +479,13 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   write_file:              "Writing",
   replace_in_file:         "Writing",
   append_file:             "Writing",
-  list_dir:                "Listing",
-  grep_search:             "Searching",
+  list_directory:          "Listing",
   search_files:            "Searching",
-  file_search:             "Searching",
   search_catalog:          "Searching",
   web_search:              "Searching",
   run_command:             "Executing",
   query_mssql:             "Executing",
-  export_query_to_file:    "Executing",
+  export_query_to_file:    "Exporting",
   explore_mssql_schema:    "Analyzing",
   inspect_definition:      "Analyzing",
   discover_relationships:  "Analyzing",
@@ -412,14 +494,22 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   fetch_url:               "Fetching",
   browse_web:              "Browsing",
   browser_check:           "Checking",
+  browser_auto_login:      "Logging in",
+  browser_human_handoff:   "Waiting for user",
   delegate:                "Delegating",
   delegate_parallel:       "Delegating",
   ask_user:                "Asking",
   think:                   "Thinking",
+  note:                    "Noting",
   get_chart_specs:         "Loading chart specs",
   sync_preview:            "Synchronizing",
   sync_execute:            "Synchronizing",
   list_environments:       "Synchronizing",
+  list_attachments:        "Reading attachments",
+  read_attachment:         "Reading attachments",
+  import_attachment:       "Importing attachment",
+  promote_attachment:      "Promoting attachment",
+  record_table_verdict:    "Reflecting",
 }
 
 function liveActivityVerb(tool: string): string {
@@ -603,6 +693,19 @@ function pushNarrativePart(
   return parts.concat({ kind: "narrative", id, text: trimmedText, tone })
 }
 
+// Guard against rendering fragmentary thinking previews that look like
+// jibberish in the chat (e.g. "The generic key search noisy target"
+// when the model emitted a clipped reasoning blurb). We require the
+// text to read as a complete-ish thought: end with sentence punctuation
+// AND be long enough to actually carry meaning. When the gate rejects,
+// the bottom shimmer takes over and the user sees a live activity hint
+// instead of a frozen-looking partial sentence.
+function looksLikeCompleteThought(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 40) return false
+  return /[.!?…"”'’)\]]$/.test(t)
+}
+
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -750,7 +853,7 @@ function buildResponseParts(
           if (next === "tool-call") { leadsToTool = true; break }
           if (next === "thinking" || next === "answer") break
         }
-        if (leadsToTool && entry.text.trim()) {
+        if (leadsToTool && entry.text.trim() && looksLikeCompleteThought(entry.text)) {
           parts = pushNarrativePart(parts, `narrative-thinking-${index}`, entry.text.trim())
         }
         break
@@ -878,6 +981,10 @@ function buildResponseParts(
         parts = setActivityPart(parts, "direct", "Direct", "running", undefined, true)
         break
       case "tool-call": {
+        // Hide orchestrator-internal / meta tools from the visible thread.
+        // They don't help the user follow what's happening and produce
+        // confusing headers like "Used record_table_verdict something".
+        if (HIDDEN_TOOLS.has(entry.tool)) break
         // Once tools start, the bare "Thinking" indicator is no longer
         // truthful — the real activity is the tool call below. Other
         // primary phases (Plan/Generation/Verification) terminate via
@@ -915,6 +1022,9 @@ function buildResponseParts(
       }
       case "tool-result": {
         if (!entry.invocationId) break
+        // No HIDDEN_TOOLS check needed here: tool-result doesn't carry
+        // the tool name, and patchToolStatus is a no-op for invocation
+        // ids we never pushed (because tool-call was filtered out).
         parts = patchToolStatus(parts, entry.invocationId, "done", entry.text)
         // Keep pendingTools mirror in sync so the next flush sees the
         // updated status (and hasRunning flips correctly).
@@ -2122,16 +2232,20 @@ export function TermChat() {
     shouldStickToBottomRef.current = isNearBottom(host)
   }, [])
 
-  // Build message list: each "run" is a (user msg, assistant response) pair
-  // Show all non-active terminal runs + the active one at the end
+  // Build message list: each "run" is a (user msg, assistant response) pair.
+  // Show every non-active run (terminal OR in-flight) as history, oldest
+  // first, with the active run pinned at the bottom so the input bar
+  // anchors to the most recent activity. Including in-flight runs here
+  // matters: if `activeRunId` ever drifts to a different run (another
+  // widget calling setActiveRun, an unrelated background SSE event, etc.)
+  // the run the user just started would otherwise vanish from view.
   const displayRuns = useMemo(() => {
-    const TERMINAL = new Set<string>([RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled, RunStatus.Crashed])
-    const completed = runs
-      .filter((r) => r.id !== activeRunId && TERMINAL.has(r.status))
+    const history = runs
+      .filter((r) => r.id !== activeRunId)
       .slice()
       .reverse()
-    if (activeRun) return [...completed, activeRun]
-    return completed
+    if (activeRun) return [...history, activeRun]
+    return history
   }, [runs, activeRunId, activeRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
