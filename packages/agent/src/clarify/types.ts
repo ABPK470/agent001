@@ -33,6 +33,7 @@ import type { Message } from "../types.js"
 export type AmbiguityKind =
   | "schema-match"        // noun in goal matches multiple catalog identifiers
   | "canonical-ambiguity" // top-1 vs top-2 catalog scores within a hair on a metric goal
+  | "anaphora-ungrounded" // goal refers anaphorically to prior data but no recallable tool payload exists
   | "term-undefined"      // capitalised business word with no catalog/tenant match
   | "metric-undefined"    // ranking language ("top", "biggest") without a metric
   | "grain-undefined"     // period word ("monthly") matches multiple grain cols
@@ -125,6 +126,17 @@ export interface ClarifyContext {
    * if known. Used by `write-confirmation` detector.
    */
   readonly lastSqlText?: string
+  /**
+   * Number of recallable tool-result payloads available to this turn
+   * (entries the orchestrator loaded into the `<prior_results>`
+   * system_anchor from the `tool_results` table). Used by the
+   * `anaphora-ungrounded` detector to decide whether an anaphoric goal
+   * ("it", "those", "that result") has any structured evidence behind it
+   * — zero means the agent would have to paraphrase prior prose, which
+   * is exactly the no-amnesia trap. Absent in non-server contexts (CLI,
+   * tests with no orchestrator); detector then no-ops.
+   */
+  readonly priorResultsCount?: number
 }
 
 export interface Detector {

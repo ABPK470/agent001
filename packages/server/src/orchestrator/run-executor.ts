@@ -54,9 +54,8 @@ import { wireEventBroadcasting } from "./event-wiring.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "./known-objects.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
-import { loadPriorTurns } from "./prior-turns.js"
 import { loadPriorResults } from "./prior-results-block.js"
-import { applyGroundingGuard } from "./grounding-guard.js"
+import { loadPriorTurns } from "./prior-turns.js"
 import { runReflectionTurn } from "./run-reflection.js"
 import { buildSystemMessages } from "./system-messages.js"
 import { persistToolResult } from "./tool-result-persister.js"
@@ -768,21 +767,6 @@ export async function executeRunImpl(
     let answer = await runWithPolicyContext(policyCtx, () =>
       agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
     )
-
-    // No-amnesia Phase E (flag-gated): if the final answer contains chart
-    // numbers that aren't backed by any tool payload this turn, prepend a
-    // user-visible "illustrative only" banner. Off by default — set
-    // FEATURE_GROUNDING_GUARD=1 to enable.
-    try {
-      answer = applyGroundingGuard({
-        goal,
-        answer,
-        toolNamesUsedThisRun: new Set(run.steps.map((s) => s.action)),
-        priorResults: priorResultsForRun,
-      })
-    } catch (e) {
-      console.warn(`[run ${runId}] grounding guard failed (ignored):`, (e as Error).message)
-    }
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
     // so the user has a concrete reference to forward to the platform admin.

@@ -137,18 +137,39 @@ describe("buildSystemMessages — clarification ctx is fed prior-turns transcrip
     // synthetic message trace built from priorTurns now puts a recent
     // assistant turn in the detector's view, the coreference guard
     // suppresses the finding, and no <must_clarify> block is emitted.
+    //
+    // We also supply ONE prior_results entry so the no-amnesia detector
+    // (`anaphora-ungrounded`) stays silent — its job is the disjoint case
+    // of "anaphora WITHOUT recallable evidence", which is covered by its
+    // own dedicated tests. Here the user's "this data" really does have
+    // structured backing, which is the realistic scenario the schema-match
+    // suppression was designed for.
     const registry = new ClarificationsRegistry()
     const msgs = await buildSystemMessages({
       goal: "ok, can you create a nice visualization for this data?",
       systemPrompt: undefined, allTools: [] as Tool[], runWorkspace: RW,
       perTier: emptyTier(), runId: "run-clarify",
       priorTurns: [TURN_T1],
+      priorResults: [{
+        id: 1,
+        run_id: "r1",
+        session_id: "s1",
+        tool_call_id: "tc-1",
+        tool_name: "query_mssql",
+        args_json: "{}",
+        result_json: JSON.stringify({ text: "Top 5 clients: A=10, B=9, C=8, D=7, E=6.", isError: false }),
+        row_count: 5,
+        bytes: 60,
+        truncated: 0,
+        goal_excerpt: TURN_T1.goal,
+        created_at: TURN_T1.ranAt ?? "2026-05-22T10:00:00Z",
+      }],
       clarifications: registry,
       // No llmForClarification → planner cannot run; we only test the
       // deterministic path which is the one that previously misfired.
     })
     const all = msgs.map((m) => String(m.content)).join("\n")
-    // The discipline section mentions the literal token "<must_clarify>" in
+    // The discipline section mentions the literal token "must_clarify" in
     // instructional prose; we look for the rendered block's distinctive
     // header instead so we test the actual emission, not the docs.
     expect(all).not.toContain("Before answering, you have ambiguities to resolve")

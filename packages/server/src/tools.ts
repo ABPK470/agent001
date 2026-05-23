@@ -31,10 +31,10 @@ import {
     mssqlTool,
     noteTool,
     profileDataTool,
-    recallPriorResultTool,
     promoteAttachmentTool,
     readAttachmentTool,
     readFileTool,
+    recallPriorResultTool,
     recordTableVerdictTool,
     replaceInFileTool,
     searchCatalogTool,
@@ -51,8 +51,8 @@ import {
     type Tool,
 } from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
-import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
 import { getToolResult, loadRecentToolResults } from "./db/tool-results.js"
+import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
 
 export { thinkTool }
 

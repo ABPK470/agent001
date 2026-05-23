@@ -1,15 +1,15 @@
 import type { LLMClient, Message, Tool } from "@mia/agent"
 import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOGUE_SECTION, CLARIFICATION_DISCIPLINE_SECTION, DEFAULT_SYSTEM_PROMPT, detectAmbiguities, getCatalog, getCatalogSchemaFingerprint, getTenantConfig, MessageRole, MIA_DATA_PERSONA_SECTION, renderPromptVars, runLlmPlanner, shouldInvokePlanner } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
+import type { DbToolResult } from "../db/tool-results.js"
 import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../prompt-builder.js"
 import type { RunWorkspaceContext } from "../run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
 import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "./known-objects.js"
-import type { PriorTurn } from "./prior-turns.js"
 import { renderPriorResultsBlock } from "./prior-results-block.js"
-import type { DbToolResult } from "../db/tool-results.js"
+import type { PriorTurn } from "./prior-turns.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
 // ── System message construction ───────────────────────────────────
@@ -331,6 +331,14 @@ export async function buildSystemMessages(opts: {
         messages: synthMessages as readonly Message[],
         resolved,
         round: 0,
+        // No-amnesia signal: how many structured tool payloads survived
+        // from earlier turns of this session and are present in
+        // <prior_results>. Drives the anaphora-ungrounded detector —
+        // when 0 and the goal is co-referential, the agent is otherwise
+        // free to paraphrase prior prose. Defined unconditionally so
+        // the detector knows it is running server-side (vs. CLI/tests
+        // where the field is absent and the detector no-ops).
+        priorResultsCount: priorResults.length,
       }
       let findings = detectAmbiguities(ctx)
       if (findings.length === 0 && opts.llmForClarification && shouldInvokePlanner(ctx, findings)) {
