@@ -114,7 +114,11 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
 
-  it("skips statements with a CTE (alias provenance is ambiguous)", () => {
+  it("ignores CTE alias refs in outer SELECT (CTE name has no schema → no provenance)", () => {
+    // The outer `ranked.ClientName` reference cannot be checked because
+    // `ranked` is a CTE name with no `schema.table` binding in fromJoinRe.
+    // The inner-CTE refs (`r.pkClient`, `r.RevenueZARMTD`) ARE checked and
+    // pass cleanly against publish.Revenue.
     const query = [
       "WITH ranked AS (",
       "  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS rev FROM publish.Revenue r GROUP BY r.pkClient",
@@ -122,6 +126,27 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
       "SELECT ranked.ClientName FROM ranked",
     ].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
+  })
+
+  it("REGRESSION 2026-05-23: CTE statements DO still validate base-table aliases in outer SELECT", () => {
+    // The May 2026 hallucination family (`r.VolumeUSDMTD`, `r.RevenueAmountCY`
+    // against publish.Revenue inside a `WITH top_clients AS (…) SELECT …`
+    // shape) slipped past the validator because the old CTE skip bailed on
+    // the entire statement. After removal, the outer `r.<invented>` against
+    // `publish.Revenue r` is caught at parse time.
+    const query = [
+      "WITH top_clients AS (",
+      "  SELECT TOP 50 r.pkClient, SUM(r.RevenueZARMTD) AS rev",
+      "  FROM publish.Revenue r WITH (NOLOCK)",
+      "  WHERE r.pkMonth = 202501",
+      "  GROUP BY r.pkClient",
+      ")",
+      "SELECT r.pkClient, r.RevenueUSDInvented",
+      "FROM publish.Revenue r WITH (NOLOCK)",
+      "JOIN top_clients tc ON tc.pkClient = r.pkClient",
+    ].join("\n")
+    const offenders = detectInventedColumns(query, accessor)
+    expect(offenders.some((o) => o.column === "RevenueUSDInvented")).toBe(true)
   })
 
   it("skips statements with a derived table in FROM", () => {

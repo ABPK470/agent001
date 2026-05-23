@@ -22,7 +22,7 @@ import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums
 import type { Tool } from "../../types.js"
 import { safePathResolved } from "../filesystem-security.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
-import { decorateMssqlError } from "./error-hints.js"
+import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
@@ -296,7 +296,10 @@ export const exportQueryToFileTool: Tool = {
         validation,
         error: msg,
       })
-      return `SQL Error: ${decorateMssqlError(msg)}`
+      // Fix #3 (2026-05-23): append catalog-derived column map on `Invalid
+      // column name 'X'` so the model gets concrete names instead of guessing.
+      const enriched = enrichInvalidColumnError(msg, query, connectionName)
+      return `SQL Error: ${decorateMssqlError(enriched)}`
     } finally {
       killSignal?.removeEventListener("abort", onKill)
     }

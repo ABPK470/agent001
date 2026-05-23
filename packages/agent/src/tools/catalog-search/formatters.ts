@@ -36,16 +36,22 @@ export function fmtTable(
 
   lines.push(`  ${t.qualifiedName} (${badges.join(", ")})`)
 
-  // Column names: PKs first, then all non-PK — show enough to judge the table's content
+  // Column names: PKs first, then all non-PK — show enough to judge the table's content.
+  // Cap raised from 15 to 40 because hallucinated column names (e.g. inventing
+  // `VolumeUSDMTD` when only `VolumeMTD` exists) were directly caused by the model
+  // not seeing the real currency/period variants hidden behind "(+N more)". 40 covers
+  // every typical curated fact/dim in this warehouse; the very wide audit views
+  // (>40 cols) still truncate, but those rarely participate in metric SELECTs.
+  const COLUMN_DISPLAY_CAP = 40
   const pks = t.columns.filter((c) => c.isPK)
   const nonPk = t.columns.filter((c) => !c.isPK)
-  const shown = [...pks, ...nonPk].slice(0, 15)
+  const shown = [...pks, ...nonPk].slice(0, COLUMN_DISPLAY_CAP)
   const colStr = shown.map((c) => {
     const flags: string[] = []
     if (c.isPK) flags.push("PK")
     return `${c.name}${flags.length ? " (" + flags.join(", ") + ")" : ""}`
   }).join(", ")
-  lines.push(`    Columns: ${colStr}${colCount > 15 ? ` (+${colCount - 15} more)` : ""}`)
+  lines.push(`    Columns: ${colStr}${colCount > COLUMN_DISPLAY_CAP ? ` (+${colCount - COLUMN_DISPLAY_CAP} more)` : ""}`)
 
   // Highlight matched columns if any
   if (matchedCols && matchedCols.length > 0) {
@@ -79,9 +85,12 @@ export function fmtSysEntry(entry: SysEntry): string {
   const lines: string[] = []
   lines.push(`  [SYS] ${entry.qualifiedName}`)
   if (entry.columns.length > 0) {
-    const shown = entry.columns.slice(0, 15)
+    // Match fmtTable cap so the model sees the real surface of a sys.* view
+    // instead of guessing a column name that fell off the end at 15.
+    const SYS_COLUMN_DISPLAY_CAP = 40
+    const shown = entry.columns.slice(0, SYS_COLUMN_DISPLAY_CAP)
     const colStr = shown.map((c) => `${c.name} (${c.dataType})`).join(", ")
-    lines.push(`    Columns: ${colStr}${entry.columns.length > 15 ? ` (+${entry.columns.length - 15} more)` : ""}`)
+    lines.push(`    Columns: ${colStr}${entry.columns.length > SYS_COLUMN_DISPLAY_CAP ? ` (+${entry.columns.length - SYS_COLUMN_DISPLAY_CAP} more)` : ""}`)
   }
   lines.push(`    ⇒ Query with: query_mssql({ query: "SELECT ... FROM ${entry.qualifiedName} ..." })`)
   return lines.join("\n")

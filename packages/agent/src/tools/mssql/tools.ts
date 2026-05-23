@@ -4,7 +4,7 @@ import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
-import { decorateMssqlError } from "./error-hints.js"
+import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
@@ -160,7 +160,11 @@ export const mssqlTool: Tool = {
         validation,
         error: msg,
       })
-      return `SQL Error: ${decorateMssqlError(msg)}`
+      // Fix #3 (2026-05-23): for `Invalid column name 'X'`, append the actual
+      // FROM/JOIN tables' columns ranked by similarity to X. Decoration runs
+      // *after* so the generic "stop guessing" lesson trails the concrete map.
+      const enriched = enrichInvalidColumnError(msg, query, connectionName)
+      return `SQL Error: ${decorateMssqlError(enriched)}`
     }
   },
 }

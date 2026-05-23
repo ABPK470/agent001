@@ -5,18 +5,18 @@ import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fi
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import { getTenantConfig } from "../../tenant/config.js"
 import {
-  _resetCatalogQueriesCache,
-  calendarDimensionTable,
-  canonicalQualifiedName,
-  isLargeObject as catalogIsLargeObject,
-  dateGrainColumn,
-  highCardinalityKeyColumns,
-  isExpensiveUnionView,
-  listLargeObjects,
-  listSchemas,
-  persistedMirrorOf,
-  primaryKeyColumns,
-  unionBranchCount,
+    _resetCatalogQueriesCache,
+    calendarDimensionTable,
+    canonicalQualifiedName,
+    isLargeObject as catalogIsLargeObject,
+    dateGrainColumn,
+    highCardinalityKeyColumns,
+    isExpensiveUnionView,
+    listLargeObjects,
+    listSchemas,
+    persistedMirrorOf,
+    primaryKeyColumns,
+    unionBranchCount,
 } from "../catalog/queries.js"
 import { getCatalog } from "../catalog/store.js"
 
@@ -609,7 +609,19 @@ export function detectInventedColumns(
     if (!stmt.trim()) continue
 
     // Skip provenance-ambiguous shapes — safer to under-report than false-block.
-    if (/\bWITH\s+\[?\w+\]?\s+AS\s*\(/i.test(stmt)) continue         // CTE
+    //
+    // Note (2026-05-23): the CTE skip (`WITH … AS (…)`) was REMOVED here.
+    // It was suppressing the check on every analytical query in the wild
+    // (the model almost always uses CTEs), so hallucinated columns like
+    // `r.VolumeUSDMTD` / `r.RevenueAmountCY` against `publish.Revenue` were
+    // sailing through to SQL Server. The remaining skips below stay because
+    // they materially change alias→table provenance; a CTE introduces a new
+    // *name* but every alias bound to a real `schema.table` in FROM/JOIN
+    // still resolves unambiguously (CTE aliases lack a schema prefix and
+    // therefore never enter `fromJoinRe`). The narrow residual risk is a
+    // CTE that re-uses the same alias letter as the outer query against a
+    // different base table — accepted in exchange for catching the entire
+    // hallucinated-column family at parse time instead of at SQL Server.
     if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived FROM
     if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived JOIN
     if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue   // set ops

@@ -706,6 +706,42 @@ function looksLikeCompleteThought(text: string): boolean {
   return /[.!?…"”'’)\]]$/.test(t)
 }
 
+// Mid-stream guard for `liveStreamingAnswer`. Returns the longest prefix
+// of `text` that ends at a sentence terminator (or paragraph break) so
+// the chat only ever shows complete sentences. Anything past the last
+// terminator is held back — that tail is incomplete and would otherwise
+// freeze on screen as a fragment between iterations.
+//
+// Terminator family kept in sync with `looksLikeCompleteThought` so the
+// live-stream gate and the post-iteration thinking gate agree on what
+// "a complete thought" looks like.
+//
+// Falls back to the last paragraph break (\n\n) when there is no
+// sentence terminator — useful when the model emits markdown chunks
+// (lists / code) that don't end in punctuation but ARE structurally
+// complete at the paragraph boundary. Returns "" when nothing is yet
+// complete; the caller suppresses the markdown part and the bottom
+// "Working / Executing / …" shimmer takes over.
+function truncateToLastCompleteSentence(text: string): string {
+  const t = text.replace(/\s+$/, "")
+  if (!t) return ""
+  // Scan for the last sentence terminator that is followed by whitespace
+  // or end-of-string — that is the boundary the model has actually
+  // closed. A terminator mid-word (e.g. "v1.2" or "Dr.") is excluded by
+  // the lookahead.
+  const re = /[.!?…"”'’)\]](?=\s|$)/g
+  let lastTerm = -1
+  let m: RegExpExecArray | null
+  while ((m = re.exec(t)) !== null) lastTerm = m.index
+  if (lastTerm >= 0) return t.slice(0, lastTerm + 1)
+  // No sentence terminator yet. If the buffer spans multiple paragraphs
+  // (e.g. a streamed markdown list), keep everything before the last
+  // paragraph break so the partial last paragraph is held back.
+  const lastBreak = text.lastIndexOf("\n\n")
+  if (lastBreak > 0) return text.slice(0, lastBreak).replace(/\s+$/, "")
+  return ""
+}
+
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -755,6 +791,71 @@ function summarizeSqlQualityEntry(entry: Extract<TraceEntry, { kind: "planner-sq
   return notes.join(" · ")
 }
 
+// Strip the noisy driver/wrapper prefixes off a raw SQL Server error so the
+// chat line reads as the actual server message, not a stack-frame label.
+// Caps length so a giant message (multi-line plan / parser dump) doesn't
+// dominate the conversation — full error remains on the tool-result row.
+function cleanSqlError(raw: string | null | undefined): string {
+  if (!raw) return ""
+  let s = raw.trim()
+  // Drop common driver prefixes like "RequestError: ", "Error: ",
+  // "[Microsoft][ODBC Driver 17 for SQL Server][SQL Server]"
+  s = s.replace(/^(RequestError|Error|TypeError|MssqlError):\s*/i, "")
+  s = s.replace(/^\[[^\]]+\](\[[^\]]+\])*\s*/g, "")
+  // Collapse whitespace and keep first line — server returns the salient
+  // line first; following lines are usually "Procedure …, Line …".
+  const firstLine = s.split(/\r?\n/)[0].trim()
+  const result = firstLine.length > 0 ? firstLine : s
+  return result.length > 240 ? result.slice(0, 240) + "…" : result
+}
+
+// Human-readable narrative for an SQL-quality trace event. Returns "" to
+// suppress narration entirely (e.g. clean `executed` with no notes).
+//
+// Phases (see `packages/agent/src/tools/mssql/tools.ts`):
+//   - `blocked`  → our own validator refused to send the SQL.
+//   - `executed` → sent and returned rows without server error.
+//   - `failed`   → sent, SQL Server itself returned an error at runtime.
+function describeSqlQualityForChat(
+  entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>,
+): { text: string; tone: "neutral" | "error" } {
+  const notes = summarizeSqlQualityEntry(entry)
+  if (entry.phase === "blocked") {
+    const reason = entry.validationCode
+      ? entry.validationCode
+      : notes !== "blocked"
+        ? notes
+        : "validator refused the query"
+    return { text: `I caught a problem in my own SQL before sending it (${reason}).`, tone: "error" }
+  }
+  if (entry.phase === "failed") {
+    const err = cleanSqlError(entry.error)
+    return {
+      text: err
+        ? `SQL Server rejected my query: ${err}`
+        : "SQL Server rejected my query (no error message returned).",
+      tone: "error",
+    }
+  }
+  // executed
+  if (notes && notes !== "checked") {
+    return { text: `Query ran. Quality notes: ${notes}.`, tone: "neutral" }
+  }
+  return { text: "", tone: "neutral" }
+}
+
+// Stable signature of an SQL-quality event for coalescing identical
+// consecutive retries into a single "× N" narrative line. Identical
+// signature == "this is the same failure we already narrated"; bump the
+// counter instead of stacking a duplicate line.
+function sqlQualitySignature(
+  entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>,
+): string {
+  if (entry.phase === "failed") return `failed::${cleanSqlError(entry.error)}`
+  if (entry.phase === "blocked") return `blocked::${entry.validationCode ?? summarizeSqlQualityEntry(entry)}`
+  return `executed::${summarizeSqlQualityEntry(entry)}`
+}
+
 function preserveToggleAnchor(button: HTMLButtonElement | null, toggle: () => void) {
   if (!button) {
     toggle()
@@ -797,6 +898,19 @@ function buildResponseParts(
   let pendingTools: ResponseToolPart[] = []
   let pendingTargets: Array<{ tool: string; target?: string }> = []
   let blockSeq = 0
+  // SQL-quality coalescing state. Consecutive sql-quality events that
+  // produce the same narrative signature (same blocker / same server
+  // error) are collapsed into one narrative line with a "(× N)" suffix
+  // — three retries of the same `Invalid column name 'pkMonth'` now
+  // read as one line, not three identical lines that look like the
+  // agent is stuck in a loop.
+  let lastSqlNarrative: {
+    sig: string
+    narrativeId: string
+    count: number
+    baseText: string
+    tone: "neutral" | "error"
+  } | null = null
 
   const flushIterationBlock = (boundaryIndex: number) => {
     if (pendingTools.length === 0) return
@@ -958,21 +1072,46 @@ function buildResponseParts(
         break
       case "planner-sql-quality": {
         const summary = summarizeSqlQualityEntry(entry)
-        const status: "done" | "error" = entry.phase === "blocked" || !!entry.validationCode ? "error" : "done"
+        const status: "done" | "error" = entry.phase === "blocked" || entry.phase === "failed" || !!entry.validationCode ? "error" : "done"
+        // Compact "SQL review" progress chip — short phase tag plus a
+        // hint of the cause so the chip itself carries signal even
+        // before the narrative line below.
+        const chipDetail =
+          entry.phase === "failed"
+            ? `failed: ${cleanSqlError(entry.error) || "server error"}`
+            : entry.phase === "blocked"
+              ? `blocked: ${entry.validationCode ?? summary}`
+              : summary
         parts = parts.concat({
           kind: "progress",
           id: `sql-quality-${index}`,
           label: "SQL review",
           status,
-          detail: summary,
+          detail: chipDetail,
         })
-        if (summary !== "checked") {
-          parts = pushNarrativePart(
-            parts,
-            `narrative-sql-quality-${index}`,
-            `I checked the SQL shape: ${summary}.`,
-            status === "error" ? "error" : "neutral",
+        const { text, tone } = describeSqlQualityForChat(entry)
+        if (!text) {
+          // executed cleanly with no notes — no chat narration needed.
+          lastSqlNarrative = null
+          break
+        }
+        const sig = sqlQualitySignature(entry)
+        if (lastSqlNarrative && lastSqlNarrative.sig === sig) {
+          // Same blocker / same server error as the immediately previous
+          // sql-quality narrative — bump the retry counter in place
+          // instead of stacking a duplicate line.
+          lastSqlNarrative.count += 1
+          const narrId = lastSqlNarrative.narrativeId
+          const updatedText = `${lastSqlNarrative.baseText} (× ${lastSqlNarrative.count})`
+          parts = parts.map((part) =>
+            part.kind === "narrative" && part.id === narrId
+              ? { ...part, text: updatedText }
+              : part,
           )
+        } else {
+          const narrativeId = `narrative-sql-quality-${index}`
+          parts = pushNarrativePart(parts, narrativeId, text, tone)
+          lastSqlNarrative = { sig, narrativeId, count: 1, baseText: text, tone }
         }
         break
       }
@@ -1077,12 +1216,36 @@ function buildResponseParts(
   // reveal cursor — the user sees the typewriter continue smoothly into
   // the final text instead of snapping it in at completion.
   if (liveStreamingAnswer) {
-    parts = parts.map((part) =>
-      part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)
-        ? { ...part, status: "done", shimmer: false }
-        : part,
-    )
-    parts.push({ kind: "markdown", id: `answer-${runId}`, text: stripFailureMarker(liveStreamingAnswer), streaming: true })
+    // ── Mid-stream fragment guard ────────────────────────────────
+    //
+    // `liveStreamingAnswer` is the raw accumulating token buffer for the
+    // current iteration's LLM response. It includes intermediate
+    // reasoning text — the model's "I'm going to look at X next" pre-
+    // tool narration — and gets cleared by `stream.reset` once tool
+    // calls arrive. Between bursts (network jitter, the model pausing,
+    // a tool taking a few seconds to return) the buffer often holds a
+    // truncated half-sentence like "I have attributes next product, fast"
+    // that sits frozen on screen for several seconds and reads as
+    // jibberish. Worse, while ANY text exists in the buffer we suppress
+    // the bottom "Executing / Planning / Thinking" shimmer (see
+    // `hasStreamingAnswer` below) — so the UI looks completely stalled.
+    //
+    // Fix: only render whole sentences. Anything after the last sentence
+    // terminator is held back until the model closes it. When the
+    // truncated string is empty, we don't push a markdown part at all —
+    // and the bottom shimmer carries the "we're still working" signal
+    // for the user. The held-back tail will appear the moment the model
+    // emits its terminator (or in the next iteration's complete-thinking
+    // entry, which has its own gate).
+    const display = truncateToLastCompleteSentence(stripFailureMarker(liveStreamingAnswer))
+    if (display) {
+      parts = parts.map((part) =>
+        part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)
+          ? { ...part, status: "done", shimmer: false }
+          : part,
+      )
+      parts.push({ kind: "markdown", id: `answer-${runId}`, text: display, streaming: true })
+    }
   } else if (finalAnswer) {
     // Pass streaming=true if the run is still active (rare race: completed
     // but render hasn't observed it yet), false otherwise. TypewriterAnswer
