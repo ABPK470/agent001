@@ -48,6 +48,7 @@ export interface ToolExecContext {
     signal: AgentConfig["signal"]
     toolKillManager: AgentConfig["toolKillManager"]
     onPlannerTrace?: AgentConfig["onPlannerTrace"]
+    onToolResult?: AgentConfig["onToolResult"]
     verbose: boolean
   }
   iteration: number

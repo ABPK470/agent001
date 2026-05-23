@@ -24,6 +24,12 @@ export {
     type DbRunWithUsage, type DbTokenUsage, type DbTraceEntry, type RunWireExtras, type UsageTotals
 } from "./runs.js"
 
+// Tool results (structured payloads for cross-turn grounding)
+export {
+    getToolResult, loadRecentToolResults, loadToolResultsForRun, saveToolResult,
+    type DbToolResult
+} from "./tool-results.js"
+
 // Layouts & policies
 export {
     deleteLayout, deletePolicyRule, deleteSyncEnvOverride, getLayout, getLayouts, getSyncEnvOverride, listPolicyRules,

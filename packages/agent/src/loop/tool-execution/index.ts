@@ -208,6 +208,17 @@ export async function executeToolRound(
       if (config.verbose) log.logToolError(execResult.result)
       messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: execResult.result, section: "history" })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: execResult.result, isError: true, outcome: execResult.outcome })
+      // No-amnesia hook: persist the result so a later turn can ground on it.
+      // Wrapped in try/catch — a persistence failure must never break the
+      // agent loop.
+      try {
+        config.onToolResult?.({
+          iteration: ctx.iteration, toolCallId: call.id, toolName: call.name,
+          args: call.arguments, result: execResult.result, isError: true,
+        })
+      } catch (e) {
+        log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)
+      }
       failuresThisRound++
       state.circuitBreaker.recordFailure(semanticKey, call.name)
       trackToolCallFailureState(true, semanticKey, state.toolLoopState)
@@ -226,6 +237,17 @@ export async function executeToolRound(
         name: call.name, args: call.arguments, result: enriched,
         isError: semanticFailure, outcome: execResult.outcome,
       })
+      // No-amnesia hook: persist the (enriched) result before continuing.
+      // We persist BOTH success and semantic-failure outcomes — knowing a
+      // prior tool failed is itself ground truth the next turn needs.
+      try {
+        config.onToolResult?.({
+          iteration: ctx.iteration, toolCallId: call.id, toolName: call.name,
+          args: call.arguments, result: enriched, isError: semanticFailure,
+        })
+      } catch (e) {
+        log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)
+      }
 
       if (semanticFailure) {
         failuresThisRound++

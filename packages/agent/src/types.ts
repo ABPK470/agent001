@@ -269,6 +269,20 @@ export interface AgentConfig {
   /** Called when the agent loop injects a system nudge/guard message. */
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /**
+   * Called once per tool call AFTER it finishes (success or failure), with the
+   * exact text the model sees as the tool result. Used by the server to
+   * persist structured payloads to `tool_results` for cross-turn grounding
+   * (no-amnesia memory). MUST NOT throw — wrap implementation in try/catch.
+   */
+  onToolResult?: (data: {
+    iteration: number
+    toolCallId: string
+    toolName: string
+    args: Record<string, unknown>
+    result: string
+    isError: boolean
+  }) => void
+  /**
    * When true, defer recovery-hint system nudges until the agent first attempts
    * completion (response with zero tool calls). This preserves an uninterrupted
    * implementation window for high-throughput coding tasks.

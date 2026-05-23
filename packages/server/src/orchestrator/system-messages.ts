@@ -8,6 +8,8 @@ import type { ClarificationsRegistry } from "./clarifications-state.js"
 import { decideSections } from "./decide-sections.js"
 import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "./known-objects.js"
 import type { PriorTurn } from "./prior-turns.js"
+import { renderPriorResultsBlock } from "./prior-results-block.js"
+import type { DbToolResult } from "../db/tool-results.js"
 import { buildResolvedFactsBlock } from "./resolved-facts-block.js"
 
 // ── System message construction ───────────────────────────────────
@@ -226,11 +228,20 @@ export async function buildSystemMessages(opts: {
    * to re-discover.
    */
   knownVerdicts?: readonly CandidateVerdictRow[]
+  /**
+   * Structured tool-call payloads from earlier turns in this session
+   * (no-amnesia Phase 9). When non-empty a `<prior_results>` system_anchor
+   * block is injected so the model can ground follow-up references on
+   * actual rows instead of the prose paraphrase in `<prior_turns>`.
+   * Loaded by `loadPriorResults` in run-executor.
+   */
+  priorResults?: readonly DbToolResult[]
 }): Promise<Message[]> {
   const { goal, systemPrompt, allTools, runWorkspace, perTier, attachmentIds } = opts
   const priorTurns = opts.priorTurns ?? []
   const knownObjects = opts.knownObjects ?? []
   const knownVerdicts = opts.knownVerdicts ?? []
+  const priorResults = opts.priorResults ?? []
   const isAdmin = opts.isAdmin ?? false
   const hasSiblings = opts.hasSiblings ?? false
   const siblingProgressDigest = opts.siblingProgressDigest ?? ""
@@ -382,6 +393,24 @@ export async function buildSystemMessages(opts: {
       content: block,
       section: "system_anchor",
     })
+  }
+
+  // Section 1∇0a-bis: <prior_results> — structured tool payloads from
+  // earlier turns in the same session. Sits adjacent to <prior_turns> so
+  // the model sees both: <prior_turns> for narrative ("what did I say last
+  // time?") and <prior_results> for ground truth ("what did the warehouse
+  // actually return?"). Doctrine in mia-data-persona.md forbids quoting
+  // numbers from prose — they must come from this block, recall_prior_result,
+  // or a fresh tool call.
+  if (priorResults.length > 0) {
+    const block = renderPriorResultsBlock(priorResults)
+    if (block.length > 0) {
+      systemMessages.push({
+        role: MessageRole.System,
+        content: block,
+        section: "system_anchor",
+      })
+    }
   }
 
   // Section 1∇0b: <known_objects> — compact directory of tables/views
@@ -703,7 +732,11 @@ function buildAttachmentManifest(ids: string[]): string {
 function renderPriorTurnsBlock(turns: readonly PriorTurn[]): string {
   const lines: string[] = [
     "<prior_turns>",
-    "The user is mid-conversation. Earlier turns in THIS session (most recent first):",
+    "Prior assistant NARRATIVE from earlier turns in THIS session (newest first).",
+    "This is the assistant's own paraphrase, NOT a data source. If you need",
+    "specific numbers, rows, or chart values, ground them on <prior_results>",
+    "(actual tool payloads) or call recall_prior_result(...). Quoting figures",
+    "out of this prose is a doctrine violation — re-run the tool instead.",
     "",
   ]
   turns.forEach((t, i) => {

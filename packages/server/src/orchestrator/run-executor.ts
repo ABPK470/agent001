@@ -55,8 +55,11 @@ import { loadCandidateVerdicts, loadKnownObjects } from "./known-objects.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { handlePlannerTrace } from "./planner-events.js"
 import { loadPriorTurns } from "./prior-turns.js"
+import { loadPriorResults } from "./prior-results-block.js"
+import { applyGroundingGuard } from "./grounding-guard.js"
 import { runReflectionTurn } from "./run-reflection.js"
 import { buildSystemMessages } from "./system-messages.js"
+import { persistToolResult } from "./tool-result-persister.js"
 import type { OrchestratorRunCtx } from "./types.js"
 import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"
 
@@ -512,10 +515,18 @@ export async function executeRunImpl(
       })
     : []
 
+  // No-amnesia (Phase 9): pull the structured tool payloads from prior turns
+  // in the same session so the model has actual rows to ground on, not just
+  // paraphrase. Cheap (single indexed query, capped result count).
+  const priorResultsForRun = (activeRun?.sessionId && runWorkspace.taskType !== "code_generation")
+    ? loadPriorResults({ sessionId: activeRun.sessionId, excludeRunId: runId })
+    : []
+
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,
     attachmentIds: activeRun?.attachmentIds ?? [],
     priorTurns: priorTurnsForRun,
+    priorResults: priorResultsForRun,
     // <known_objects> directory — looks at the goal + prior turns,
     // extracts qualified-name candidates, and surfaces matching cached
     // entries from tool_knowledge so the model can prefer the cache
@@ -674,6 +685,22 @@ export async function executeRunImpl(
       boundSaveTrace(runId, entry)
       broadcastTrace(runId, debugSeqRef.value++, entry)
     },
+    onToolResult: (data) => {
+      // No-amnesia hook (Phase 9): persist structured tool payloads so a
+      // later turn in the same session can ground on the actual rows
+      // instead of paraphrase. Filtered + capped inside the persister.
+      persistToolResult({
+        runId,
+        sessionId: activeRun?.sessionId ?? null,
+        goal,
+        iteration: data.iteration,
+        toolCallId: data.toolCallId,
+        toolName: data.toolName,
+        args: data.args,
+        result: data.result,
+        isError: data.isError,
+      })
+    },
     onLlmCall: (data) => {
       if (data.phase === "request") {
         const entry = { kind: TrajectoryEventKind.LlmRequest, iteration: data.iteration, messageCount: data.messages.length, toolCount: data.tools.length, messages: data.messages.map((m) => ({ role: m.role, content: m.content, toolCalls: m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [], toolCallId: m.toolCallId ?? null })) }
@@ -741,6 +768,21 @@ export async function executeRunImpl(
     let answer = await runWithPolicyContext(policyCtx, () =>
       agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
     )
+
+    // No-amnesia Phase E (flag-gated): if the final answer contains chart
+    // numbers that aren't backed by any tool payload this turn, prepend a
+    // user-visible "illustrative only" banner. Off by default — set
+    // FEATURE_GROUNDING_GUARD=1 to enable.
+    try {
+      answer = applyGroundingGuard({
+        goal,
+        answer,
+        toolNamesUsedThisRun: new Set(run.steps.map((s) => s.action)),
+        priorResults: priorResultsForRun,
+      })
+    } catch (e) {
+      console.warn(`[run ${runId}] grounding guard failed (ignored):`, (e as Error).message)
+    }
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
     // so the user has a concrete reference to forward to the platform admin.

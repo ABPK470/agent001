@@ -543,6 +543,41 @@ export function _migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_trace_run ON trace_entries(run_id, seq);
 
+    -- ── Structured tool-call results (no-amnesia grounding) ──────
+    -- The "I made up the chart numbers" trap: prior to this table the
+    -- only cross-turn record of what a tool produced was the model's
+    -- own prose paraphrase in runs.answer. That prose got re-injected
+    -- as <prior_turns>, the model treated its own paraphrase as
+    -- evidence, and confabulated quantified output. tool_results stores
+    -- the raw structured payload of every tool call so a later turn
+    -- (same session) can ground on actual rows instead of paraphrase.
+    --
+    -- result_json is JSON-text (SQLite has no native JSON column type).
+    -- Capped writers MUST enforce {row_count, bytes, truncated} so a
+    -- 10M-row export never lands here verbatim — see writer in
+    -- agent/src/agent/iteration-tool-round.ts.
+    --
+    -- session_id is denormalised for fast loader queries on the hot
+    -- path (<prior_results> rendered every turn). FK still points to
+    -- runs(id) for cascade-on-purge.
+    CREATE TABLE IF NOT EXISTS tool_results (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id        TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      session_id    TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+      tool_call_id  TEXT NOT NULL,
+      tool_name     TEXT NOT NULL,
+      args_json     TEXT NOT NULL DEFAULT '{}',
+      result_json   TEXT NOT NULL,
+      row_count     INTEGER,
+      bytes         INTEGER NOT NULL DEFAULT 0,
+      truncated     INTEGER NOT NULL DEFAULT 0,
+      goal_excerpt  TEXT,
+      created_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_results_run     ON tool_results(run_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_results_session ON tool_results(session_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_tool_results_tool    ON tool_results(tool_name);
+
     -- ── Inter-agent bus messages ─────────────────────────────────
     -- Persisted so siblings spawned later in the same run tree see the
     -- full history (wildcard subscribe), so the IOE BusFeed editor can

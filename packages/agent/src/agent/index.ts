@@ -47,6 +47,7 @@ export class Agent {
     onStep: AgentConfig["onStep"]
     onLlmCall: AgentConfig["onLlmCall"]
     onNudge: AgentConfig["onNudge"]
+    onToolResult: AgentConfig["onToolResult"]
     signal: AgentConfig["signal"]
     enablePlanner: boolean
     workspaceRoot: string
@@ -90,6 +91,7 @@ export class Agent {
       onStep: config.onStep,
       onLlmCall: config.onLlmCall,
       onNudge: config.onNudge,
+      onToolResult: config.onToolResult,
       signal: config.signal,
       enablePlanner: config.enablePlanner ?? false,
       workspaceRoot: config.workspaceRoot ?? ".",

@@ -10,6 +10,7 @@ import {
     appendFileTool,
     askUserTool,
     bindNoteTool,
+    bindRecallPriorResultTool,
     bindRecordTableVerdictTool,
     browserAutoLoginTool,
     browserCheckTool,
@@ -30,6 +31,7 @@ import {
     mssqlTool,
     noteTool,
     profileDataTool,
+    recallPriorResultTool,
     promoteAttachmentTool,
     readAttachmentTool,
     readFileTool,
@@ -50,6 +52,7 @@ import {
 } from "@mia/agent"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
+import { getToolResult, loadRecentToolResults } from "./db/tool-results.js"
 
 export { thinkTool }
 
@@ -76,6 +79,7 @@ const ALL_TOOLS: Tool[] = [
   getChartSpecsTool,
   thinkTool,
   noteTool,
+  recallPriorResultTool,
   recordTableVerdictTool,
   mssqlTool,
   mssqlSchemaTool,
@@ -358,7 +362,78 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
       }),
     ),
   ],
+  // recall_prior_result — no-amnesia Phase 9. Fetches the full payload of a
+  // tool call from an earlier turn in the same session. Backed by the
+  // tool_results table. Read-only, no governance needed beyond defaults.
+  (ctx) => [
+    ctx.govern(
+      bindRecallPriorResultTool(async (payload) => {
+        try {
+          // Path 1: explicit evidence-tag lookup.
+          if (payload.runId && payload.toolCallId) {
+            const row = getToolResult(payload.runId, payload.toolCallId)
+            if (!row) return { ok: false, reason: `no tool result for run=${payload.runId} tool_call=${payload.toolCallId}` }
+            return formatRecall(row, payload.full === true)
+          }
+          // Path 2: turn-relative lookup. Requires a session.
+          if (!ctx.sessionId) {
+            return { ok: false, reason: "no session bound to this run; pass runId + toolCallId from <prior_results> instead" }
+          }
+          const limit = Math.abs(payload.turn ?? -1)
+          const toolNames = payload.toolName ? [payload.toolName] : undefined
+          const rows = loadRecentToolResults({
+            sessionId: ctx.sessionId,
+            limit: Math.max(limit, 25),
+            ...(toolNames ? { toolNames } : {}),
+          })
+          // loadRecentToolResults returns newest-first; turn=-1 → rows[0], -2 → rows[1].
+          // Exclude the current run so the model never recalls its own in-flight call.
+          const filtered = rows.filter((r) => r.run_id !== ctx.runId)
+          const target = filtered[limit - 1]
+          if (!target) {
+            return { ok: false, reason: `no prior result at turn=${payload.turn ?? -1}${payload.toolName ? ` for tool ${payload.toolName}` : ""}` }
+          }
+          return formatRecall(target, payload.full === true)
+        } catch (err) {
+          return { ok: false, reason: (err as Error).message }
+        }
+      }),
+    ),
+  ],
 ]
+
+/** Maximum chars returned when `full=false`. Still much larger than the
+ *  per-result clip in <prior_results> (which is ~1500 chars). */
+const RECALL_DEFAULT_CAP = 8 * 1024
+/** Hard ceiling even when `full=true` — keeps a single tool result from
+ *  blowing the per-call token budget. */
+const RECALL_FULL_CAP = 48 * 1024
+
+function formatRecall(
+  row: import("./db/tool-results.js").DbToolResult,
+  full: boolean,
+): { ok: true; result: string; toolName: string; runId: string; toolCallId: string; rowCount: number | null; truncated: boolean } {
+  const text = extractStoredText(row.result_json)
+  const cap = full ? RECALL_FULL_CAP : RECALL_DEFAULT_CAP
+  const clipped = text.length > cap ? text.slice(0, cap) + "\n\n…[recall_prior_result clipped; re-run the original tool for the full payload]…" : text
+  return {
+    ok: true,
+    result: clipped,
+    toolName: row.tool_name,
+    runId: row.run_id,
+    toolCallId: row.tool_call_id,
+    rowCount: row.row_count,
+    truncated: row.truncated === 1 || text.length > cap,
+  }
+}
+
+function extractStoredText(json: string): string {
+  try {
+    const parsed = JSON.parse(json) as { text?: unknown }
+    if (typeof parsed.text === "string") return parsed.text
+  } catch { /* fall through */ }
+  return json
+}
 
 /**
  * Compose the final tool list for a run. `governedStaticTools` are the
