@@ -54,13 +54,17 @@ function seed(rows: Array<{ qname: string; tool: string; mode: string; bytes: nu
 const emptyTurns: readonly PriorTurn[] = []
 
 describe("loadKnownObjects — qname extraction", () => {
-  it("returns [] when goal has no schema.table candidates", () => {
+  it("falls back to the global tail when goal has no schema.table candidates (Gap 3)", () => {
+    // When the goal mentions no qnames (very common for follow-ups like
+    // "top 50 clients"), Gap 3 surfaces the freshest cached entries so
+    // the LLM still sees previously-touched objects.
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 }])
     const out = loadKnownObjects({ db: testDb, goal: "what's the weather today?", priorTurns: emptyTurns })
-    expect(out).toEqual([])
+    expect(out).toHaveLength(1)
+    expect(out[0]!.qname).toBe("publish.balances")
   })
 
-  it("returns [] when candidates exist but cache is empty", () => {
+  it("returns [] when no candidates AND cache is completely empty", () => {
     const out = loadKnownObjects({
       db: testDb,
       goal: "profile publish.Balances please",

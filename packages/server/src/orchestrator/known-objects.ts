@@ -58,6 +58,12 @@ function extractQnames(text: string): string[] {
  * set, newest first. Stale-by-TTL detection lives in
  * lookupToolKnowledge; here we just show what's on disk and let the LLM
  * decide whether to re-run.
+ *
+ * Gap 3: when the goal + prior turns mention no schema-qualified names
+ * (very common — "top 50 clients opportunities" has none), we fall back
+ * to a small global tail of the freshest cached qnames so the LLM still
+ * sees the org's recently-touched objects and can shortcut on them. The
+ * fallback is hard-capped so the block stays small.
  */
 export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[] {
   const limit = opts.limit ?? DEFAULT_LIMIT
@@ -67,19 +73,46 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
     for (const q of extractQnames(t.goal)) candidates.add(q)
     if (t.answer) for (const q of extractQnames(t.answer)) candidates.add(q)
   }
-  if (candidates.size === 0) return []
 
-  const placeholders = [...candidates].map(() => "?").join(",")
-  const sql = `
-    SELECT qname, tool, mode, bytes, created_at
-    FROM tool_knowledge
-    WHERE qname IN (${placeholders})
-    ORDER BY created_at DESC
-    LIMIT ?
-  `
   const db = opts.db ?? getDb()
   type Row = { qname: string; tool: string; mode: string; bytes: number; created_at: number }
-  const rows = db.prepare(sql).all(...candidates, limit) as Row[]
+
+  let rows: Row[] = []
+  if (candidates.size > 0) {
+    const placeholders = [...candidates].map(() => "?").join(",")
+    rows = db.prepare(`
+      SELECT qname, tool, mode, bytes, created_at
+      FROM tool_knowledge
+      WHERE qname IN (${placeholders})
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(...candidates, limit) as Row[]
+  }
+
+  // Gap 3 fallback / top-up: append the globally-freshest rows so the
+  // block is non-empty when the goal text doesn't name objects, and so
+  // repeatedly-used objects show up even when the goal pivots topic
+  // (e.g. revenue → clients still using publish.Revenue under the hood).
+  // Cap the top-up so the block stays small.
+  const FALLBACK_TOPUP = Math.max(1, Math.min(5, limit - rows.length))
+  if (FALLBACK_TOPUP > 0) {
+    const seenQnames = new Set(rows.map(r => r.qname))
+    const extra = db.prepare(`
+      SELECT qname, tool, mode, bytes, created_at
+      FROM tool_knowledge
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(FALLBACK_TOPUP * 2) as Row[]
+    for (const r of extra) {
+      if (seenQnames.has(r.qname)) continue
+      rows.push(r)
+      seenQnames.add(r.qname)
+      if (rows.length >= limit) break
+    }
+  }
+
+  if (rows.length === 0) return []
+
   const now = Date.now()
   // Dedupe by qname (newest wins because of ORDER BY).
   const seen = new Set<string>()

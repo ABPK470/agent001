@@ -1,9 +1,10 @@
+import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
 import { getDb } from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
+import { extractGoalClasses, renderClassTail } from "./goal-class.js"
 import { sanitizeFtsQuery } from "./scoring.js"
 import type { ProceduralMemory } from "./types.js"
-import { EventType } from "@mia/agent"
 
 // ── Procedural memory ────────────────────────────────────────────
 
@@ -88,7 +89,13 @@ export function storeProcedural(opts: {
 
   const proc: ProceduralMemory = {
     id: randomUUID(),
-    trigger: opts.trigger,
+    // Gap 5: append CamelCase class tags to the stored trigger so the
+    // FTS index covers them. A second goal sharing the SHAPE but no
+    // surface tokens (e.g. "top 50 clients by revenue" vs the recorded
+    // "list top 3 products based on revenue for April 2025") will still
+    // recall this recipe via class-tag overlap. UI inspectors can strip
+    // the `\n[goalclasses …]` tail when displaying the original goal.
+    trigger: opts.trigger + renderClassTail(extractGoalClasses(opts.trigger)),
     toolSequence: opts.toolSequence,
     successCount: 1,
     failureCount: 0,
@@ -168,7 +175,15 @@ export function extractProcedural(run: {
 }
 
 export function searchProcedures(goal: string, limit = 5, upn?: string | null, sessionId?: string | null): ProceduralMemory[] {
-  const ftsQuery = sanitizeFtsQuery(goal)
+  // Gap 5: include the goal's class tags in the FTS query so a new
+  // surface-different but shape-similar goal can recall an older
+  // recipe via class-tag overlap. The classes are deterministic
+  // CamelCase tokens (e.g. "rankbymetric timefiltered pivotbydim"),
+  // so adding them to the input is a pure OR-broadening — never a
+  // false-negative against the existing literal-token recall.
+  const classes = extractGoalClasses(goal)
+  const augmented = classes.length > 0 ? `${goal} ${classes.join(" ")}` : goal
+  const ftsQuery = sanitizeFtsQuery(augmented)
   if (!ftsQuery) return []
 
   // Tenant scope mirrors searchEntries: rows owned by the caller plus shared

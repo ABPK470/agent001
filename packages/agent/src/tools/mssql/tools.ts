@@ -1,6 +1,7 @@
 import sql from "mssql"
 import { currentRuntime } from "../../agent-runtime.js"
 import type { Tool } from "../../types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError } from "./error-hints.js"
@@ -228,6 +229,35 @@ export const mssqlSchemaTool: Tool = {
           const schema = parts.length > 1 ? parts[0] : null
           const table = parts.length > 1 ? parts[1] : parts[0]
 
+          // ── Gap 1: cache check before hitting MSSQL ───────────────
+          //
+          // explore_mssql_schema(table='schema.X') is the single most-
+          // repeated discovery call across runs (trace evidence: same
+          // table re-explored on every memory-recalled goal). When the
+          // table is schema-qualified we can build a catalog fingerprint
+          // and consult `tool_knowledge` exactly like profile_data does.
+          //
+          // Cross-serve: if our own cache misses, try the profile_data
+          // fast cache for the same qname — its payload includes the
+          // column list verbatim, so we can hand it back with a tiny
+          // banner. This makes the FIRST run's profile_data() also
+          // satisfy the SECOND run's explore_mssql_schema(). Tables
+          // explored without a schema prefix or not in the catalog
+          // fall through to the live path unchanged.
+          if (schema) {
+            const qn = `${schema}.${table}`
+            const fp = fingerprintForQname(qn, connectionName)
+            const own = tryServeFromCache("explore_mssql_schema", qn, "columns", connectionName, fp)
+            if (own !== null) return own
+            const cross = tryServeFromCache("profile_data", qn, "fast", connectionName, fp)
+            if (cross !== null) {
+              return [
+                `[explore_mssql_schema cross-served from profile_data(fast) cache — payload includes columns]`,
+                cross,
+              ].join("\n")
+            }
+          }
+
           request.input("table", sql.NVarChar, table)
           if (schema) {
             request.input("schema", sql.NVarChar, schema)
@@ -265,8 +295,18 @@ export const mssqlSchemaTool: Tool = {
 
           if (!result.recordset.length) return `No columns found for ${tableName}. Try with schema prefix (e.g. 'agent.${table}', 'core.${table}').`
           const label = schema ? `${schema}.${table}` : result.recordset[0].TABLE_SCHEMA + "." + table
-          return `Columns for ${label}:\n` +
+          const payload = `Columns for ${label}:\n` +
             formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+          // Gap 1: persist the live result so the next call can short-circuit.
+          // Only persist when we have a real schema-qualified qname AND a
+          // fingerprint (the latter is a no-op when the catalog is unaware
+          // of this object — correct, since we cannot validate freshness).
+          if (schema) {
+            const qn = `${schema}.${table}`
+            const fp = fingerprintForQname(qn, connectionName)
+            if (fp) persistToCache("explore_mssql_schema", qn, "columns", connectionName, payload, fp)
+          }
+          return payload
         }
 
         // Search for tables/views by name pattern

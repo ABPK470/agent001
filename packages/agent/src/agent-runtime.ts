@@ -252,7 +252,7 @@ export interface MemoryState {
  * Fingerprint shape is opaque to the agent — it's just whatever the server's
  * fingerprintFromCatalogTable returns and compares.
  */
-export type ToolKnowledgeCachedTool = "profile_data" | "inspect_definition" | "discover_relationships"
+export type ToolKnowledgeCachedTool = "profile_data" | "inspect_definition" | "discover_relationships" | "explore_mssql_schema"
 
 export interface ToolKnowledgeFingerprint {
   cols: number

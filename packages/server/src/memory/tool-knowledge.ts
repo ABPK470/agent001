@@ -12,7 +12,7 @@
 
 import { getDb } from "../db/index.js"
 
-export type CachedTool = "profile_data" | "inspect_definition" | "discover_relationships"
+export type CachedTool = "profile_data" | "inspect_definition" | "discover_relationships" | "explore_mssql_schema"
 
 export interface ToolKnowledgeFingerprint {
   /** Column count from catalog snapshot at write time. */
@@ -47,6 +47,10 @@ export const TOOL_KNOWLEDGE_TTL: Record<CachedTool, Record<string, number>> = {
   profile_data: { fast: 30 * DAY_MS, deep: 14 * DAY_MS, default: 30 * DAY_MS },
   inspect_definition: { default: 30 * DAY_MS },
   discover_relationships: { default: 60 * DAY_MS },
+  // explore_mssql_schema(table=…) returns INFORMATION_SCHEMA column metadata.
+  // Same shape as a profile_data fast "Columns" section, so reuse the 30d TTL.
+  // Catalog-fingerprint mismatch will refresh sooner whenever columns change.
+  explore_mssql_schema: { columns: 30 * DAY_MS, default: 30 * DAY_MS },
 }
 
 export function ttlForToolMode(tool: CachedTool, mode: string): number {

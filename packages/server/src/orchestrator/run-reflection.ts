@@ -95,8 +95,13 @@ Allowed roles (record only what evidence supports):
 - unknown: informational only (rarely useful — usually skip instead).
 
 STRICT RULES:
-1. Record a verdict ONLY if you have CONCRETE evidence from this run's tool output (row count, view definition fragment, profile_data finding, explicit user feedback). Hearsay = skip.
-2. Maximum 2 verdicts per run. Quality over quantity.
+1. Record a verdict when you have evidence from this run. Evidence includes:
+   • a successful query_mssql whose final answer was built FROM that object (=> canonical for the metric used);
+   • a profile_data / inspect_definition / explore_mssql_schema result that confirms shape (UNION view, single branch, row count >> sibling);
+   • explicit user feedback in the answer ("the right table is X");
+   • a tool result showing the object is empty / wrong shape / a subset of another (=> subset / staging / archive / rules).
+   Pure absence of mention is NOT evidence — skip those.
+2. Maximum 2 verdicts per run. Quality over quantity. Prefer ONE strong canonical verdict over several weak ones.
 3. If nothing is durable, reply exactly: no-update
 4. Do NOT speculate. Do NOT record verdicts for tables you didn't touch.
 5. Do NOT add commentary alongside tool calls — make the calls, or reply no-update. Nothing else.`

@@ -1,40 +1,40 @@
 import {
-  Agent,
-  AgentRuntime,
-  cancelRun,
-  completeRun,
-  createRun,
-  detectInternalFailure,
-  EventType,
-  failRun,
-  fillRunReference,
-  getCatalog,
-  governTool,
-  isPlatformUnconfiguredAnswer,
-  isUserSafeFailureAnswer,
-  mapFailureKindForPolish,
-  markPolishedFailure,
-  PolicyRole,
-  PolicyRunMode,
-  polishFailureForUser,
-  runCompleted,
-  runFailed,
-  runStarted,
-  runWithMssqlKillSignal,
-  runWithPolicyContext,
-  spawnChildForPlan,
-  startPlanning,
-  startRunning,
-  SyncRunStatus,
-  synthesizeGenericFailureAnswer,
-  type DelegateContext,
-  type EngineServices,
-  type HostedPolicyContext,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
-  type ToolKillManager
+    Agent,
+    AgentRuntime,
+    cancelRun,
+    completeRun,
+    createRun,
+    detectInternalFailure,
+    EventType,
+    failRun,
+    fillRunReference,
+    getCatalog,
+    governTool,
+    isPlatformUnconfiguredAnswer,
+    isUserSafeFailureAnswer,
+    mapFailureKindForPolish,
+    markPolishedFailure,
+    PolicyRole,
+    PolicyRunMode,
+    polishFailureForUser,
+    runCompleted,
+    runFailed,
+    runStarted,
+    runWithMssqlKillSignal,
+    runWithPolicyContext,
+    spawnChildForPlan,
+    startPlanning,
+    startRunning,
+    SyncRunStatus,
+    synthesizeGenericFailureAnswer,
+    type DelegateContext,
+    type EngineServices,
+    type HostedPolicyContext,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
+    type ToolKillManager
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { AgentBus, createBusTools } from "../agent-bus.js"
@@ -845,10 +845,53 @@ export async function executeRunImpl(
             `[reflection] run=${runId} outcome=${reflection.outcome} ` +
             `recorded=${reflection.verdictsRecorded} ${reflection.detail}`,
           )
+          // Gap 2: persist the reflection result so it's visible in
+          // trace_entries / SEE alongside iterations and tool calls.
+          // Without this, the only post-run visibility into whether the
+          // reflection fired (and what it decided) is the docker stdout
+          // log — which is unhelpful for diagnosing why verdicts aren't
+          // being written. The entry is purely observational; it does
+          // not change run status.
+          boundSaveTrace(runId, {
+            kind: "reflection",
+            outcome: reflection.outcome,
+            verdictsRecorded: reflection.verdictsRecorded,
+            toolResults: reflection.toolResults,
+            detail: reflection.detail,
+          })
+        } else {
+          boundSaveTrace(runId, {
+            kind: "reflection",
+            outcome: "skipped",
+            verdictsRecorded: 0,
+            toolResults: [],
+            detail: "record_table_verdict tool not bound to this run",
+          })
         }
       } catch (err) {
         console.warn(`[reflection] run=${runId} failed: ${(err as Error).message}`)
+        boundSaveTrace(runId, {
+          kind: "reflection",
+          outcome: "error",
+          verdictsRecorded: 0,
+          toolResults: [],
+          detail: `threw: ${(err as Error).message}`,
+        })
       }
+    } else {
+      // Gap 2: also record the gated-out case so we can tell the
+      // difference between "ran and produced no-update" and "never
+      // fired" when auditing trace_entries.
+      boundSaveTrace(runId, {
+        kind: "reflection",
+        outcome: "gated",
+        verdictsRecorded: 0,
+        toolResults: [],
+        detail:
+          `gate: includeDataPersona=${_toolDecision.includeDataPersona ? 1 : 0} ` +
+          `platformUnconfigured=${isPlatformUnconfiguredAnswer(answer) ? 1 : 0} ` +
+          `internalFailure=${detectInternalFailure(answer) ? 1 : 0}`,
+      })
     }
 
     completeRun(run)
