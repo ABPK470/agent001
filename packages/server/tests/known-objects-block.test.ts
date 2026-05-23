@@ -40,14 +40,14 @@ afterEach(() => {
   else process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
 })
 
-function seed(rows: Array<{ qname: string; tool: string; mode: string; bytes: number; ageMs: number }>): void {
+function seed(rows: Array<{ qname: string; tool: string; mode: string; bytes: number; ageMs: number; payload?: string }>): void {
   const stmt = testDb.prepare(`
     INSERT INTO tool_knowledge (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_at, hit_count)
-    VALUES (?, ?, ?, 'default', '...', '5|T|deadbeef', ?, ?, 0)
+    VALUES (?, ?, ?, 'default', ?, '5|T|deadbeef', ?, ?, 0)
   `)
   const now = Date.now()
   for (const r of rows) {
-    stmt.run(r.tool, r.qname, r.mode, r.bytes, now - r.ageMs)
+    stmt.run(r.tool, r.qname, r.mode, r.payload ?? "...", r.bytes, now - r.ageMs)
   }
 }
 
@@ -113,6 +113,34 @@ describe("loadKnownObjects — qname extraction", () => {
     expect(out[0]!.mode).toBe("deep")
     expect(out[0]!.ageHours).toBe(1)
   })
+
+  it("populates summary + priority='goal' when the qname comes from the goal text", () => {
+    const profilePayload = [
+      "Profile (FAST mode) for publish.balances:",
+      "  Type: TABLE",
+      "  Total rows: 1,000",
+      "",
+      "Columns (3):",
+      "  Id (int, NOT NULL)",
+      "  Amount (decimal, nullable)",
+      "  Date (datetime, NOT NULL)",
+    ].join("\n")
+    seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 500, ageMs: 3_600_000, payload: profilePayload }])
+    const out = loadKnownObjects({ db: testDb, goal: "show me publish.Balances", priorTurns: emptyTurns })
+    expect(out).toHaveLength(1)
+    expect(out[0]!.priority).toBe("goal")
+    expect(out[0]!.summary).toContain("rows=1,000")
+    expect(out[0]!.summary).toContain("Id(int)")
+  })
+
+  it("leaves summary='' and priority='fallback' for rows surfaced only via Gap-3 top-up", () => {
+    // Goal mentions nothing schema.table-shaped — fallback path kicks in.
+    seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 500, ageMs: 1000, payload: "Profile (FAST mode) for publish.balances:\n  Type: TABLE" }])
+    const out = loadKnownObjects({ db: testDb, goal: "what is happening today", priorTurns: emptyTurns })
+    expect(out).toHaveLength(1)
+    expect(out[0]!.priority).toBe("fallback")
+    expect(out[0]!.summary).toBe("")
+  })
 })
 
 describe("renderKnownObjectsBlock", () => {
@@ -120,27 +148,84 @@ describe("renderKnownObjectsBlock", () => {
     expect(renderKnownObjectsBlock([])).toBe("")
   })
 
-  it("renders a compact qname | tool | mode | age | bytes table", () => {
+  it("renders fallback rows as a compact qname | tool | mode | age | bytes table", () => {
     const block = renderKnownObjectsBlock([
-      { qname: "publish.balances", tool: "profile_data", mode: "fast", ageHours: 2, bytes: 1500 },
-      { qname: "dim.date", tool: "inspect_definition", mode: "definition", ageHours: 24, bytes: 800 },
+      { qname: "publish.balances", tool: "profile_data", mode: "fast", ageHours: 2, bytes: 1500, priority: "fallback", summary: "" },
+      { qname: "dim.date", tool: "inspect_definition", mode: "definition", ageHours: 24, bytes: 800, priority: "fallback", summary: "" },
     ])
     expect(block).toContain("<known_objects>")
     expect(block).toContain("</known_objects>")
     expect(block).toContain("publish.balances | profile_data | fast | 2h | 1500B")
     expect(block).toContain("dim.date | inspect_definition | definition | 24h | 800B")
+    expect(block).toContain("Directory (cache exists, summary not inlined)")
   })
 
-  it("caps the block at the size limit (no single qname can blow the budget)", () => {
-    const rows = Array.from({ length: 200 }, (_, i) => ({
+  it("renders goal rows with an inline header + summary (multi-line)", () => {
+    const block = renderKnownObjectsBlock([
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "fast",
+        ageHours: 3,
+        bytes: 1500,
+        priority: "goal",
+        summary: "fast: rows=1,000, type=table, indexes=2; cols(4): Id(int), Date(datetime), Amount(decimal), Status(varchar)",
+      },
+    ])
+    expect(block).toContain("publish.balances [profile_data/fast, 3h ago, 1500B]")
+    expect(block).toContain("fast: rows=1,000")
+    expect(block).toContain("Id(int)")
+    expect(block).toContain("treat that summary as AUTHORITATIVE")
+    // Goal rows must NOT appear in the fallback directory table.
+    expect(block).not.toContain("publish.balances | profile_data | fast")
+  })
+
+  it("caps the block at MAX_CHARS so a flood of fallback rows can't blow the budget", () => {
+    const rows = Array.from({ length: 400 }, (_, i) => ({
       qname: `huge.Table${i.toString().padStart(4, "0")}`,
       tool: "profile_data",
       mode: "fast",
       ageHours: i,
       bytes: 1000,
+      priority: "fallback" as const,
+      summary: "",
     }))
     const block = renderKnownObjectsBlock(rows)
-    expect(block.length).toBeLessThan(3000)
+    expect(block.length).toBeLessThan(4100)
     expect(block).toContain("</known_objects>")
+  })
+
+  it("priority-aware eviction: when budget is tight, goal rows render and fallback / verdicts drop first", () => {
+    // One real goal row plus a flood of fallback rows + a flood of verdicts.
+    // The goal row's header AND summary must survive; trailing fallback /
+    // verdict entries get evicted.
+    const goalRow = {
+      qname: "publish.revenue",
+      tool: "profile_data",
+      mode: "fast",
+      ageHours: 1,
+      bytes: 1200,
+      priority: "goal" as const,
+      summary: "fast: rows=1,234,567, type=table, indexes=3; cols(14): Id(int), CustomerId(int), Amount(decimal), Date(datetime)",
+    }
+    const fallbacks = Array.from({ length: 200 }, (_, i) => ({
+      qname: `noise.T${i}`,
+      tool: "profile_data",
+      mode: "fast",
+      ageHours: i,
+      bytes: 100,
+      priority: "fallback" as const,
+      summary: "",
+    }))
+    const verdicts = Array.from({ length: 100 }, (_, i) => ({
+      qname: `noise.V${i}`,
+      role: "canonical" as const,
+      evidence: ["seeded"],
+    }))
+    const block = renderKnownObjectsBlock([goalRow, ...fallbacks], verdicts)
+    expect(block).toContain("publish.revenue [profile_data/fast, 1h ago, 1200B]")
+    expect(block).toContain("fast: rows=1,234,567")
+    expect(block).toContain("Id(int)")
+    expect(block.length).toBeLessThan(4100)
   })
 })
