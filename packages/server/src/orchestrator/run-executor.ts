@@ -1,46 +1,49 @@
 import {
-    Agent,
-    AgentRuntime,
-    cancelRun,
-    completeRun,
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createRun,
-    detectInternalFailure,
-    EventType,
-    failRun,
-    fillRunReference,
-    getCatalog,
-    governTool,
-    isPlatformUnconfiguredAnswer,
-    isUserSafeFailureAnswer,
-    makeRunContext,
-    mapFailureKindForPolish,
-    markPolishedFailure,
-    PolicyRole,
-    PolicyRunMode,
-    polishFailureForUser,
-    runCompleted,
-    runFailed,
-    runStarted,
-    runWithPolicyContext,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    SyncRunStatus,
-    synthesizeGenericFailureAnswer,
-    type AgentHost,
-    type DelegateContext,
-    type EngineServices,
-    type HostedPolicyContext,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager
+  Agent,
+  AgentRuntime,
+  cancelRun,
+  completeRun,
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createRun,
+  detectInternalFailure,
+  EventType,
+  failRun,
+  fillRunReference,
+  getCatalog,
+  governTool,
+  isPlatformUnconfiguredAnswer,
+  isUserSafeFailureAnswer,
+  makeRunContext,
+  mapFailureKindForPolish,
+  markPolishedFailure,
+  PolicyRole,
+  PolicyRunMode,
+  polishFailureForUser,
+  runCompleted,
+  runFailed,
+  runStarted,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  SyncRunStatus,
+  synthesizeGenericFailureAnswer,
+  type AgentHost,
+  type DelegateContext,
+  type EngineServices,
+  type HostedPolicyContext,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { AgentBus, createBusTools } from "../agent-bus.js"
+import { createServerAttachmentService } from "../attachments/index.js"
+import { createServerBrowserCredentialProvider } from "../browser/credential-provider.js"
+import { createServerBrowserHandoffProvider } from "../browser/handoff-provider.js"
+import { createServerBrowserContextProvider } from "../browser/provider.js"
 import * as db from "../db/index.js"
 import { resetEffectSeq } from "../effects/index.js"
 import { AuditActor } from "../enums/audit.js"
@@ -168,7 +171,6 @@ export async function executeRunImpl(
     workspaceRoot: runWorkspace.executionRoot,
     signal: controller.signal,
   })
-  delegateCtx.parentRuntime = runtime
   const runContext = makeRunContext({
     signal: controller.signal,
     memory: {
@@ -190,6 +192,16 @@ export async function executeRunImpl(
     },
   })
 
+  const ctxRole = activeRun?.role ?? PolicyRole.Admin
+  const policyCtx: HostedPolicyContext = {
+    runId,
+    runMode: ctxRole === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
+    role: ctxRole,
+    sandboxRoot: runWorkspace.executionRoot,
+    actorUpn: activeRun?.ownerUpn ?? null,
+    sessionId: activeRun?.sessionId ?? null,
+  }
+
   // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
   // providers) but overrides workspace / sandbox roots with this run's
   // execution root so isolated sandboxes don't leak across runs. Tools that
@@ -197,7 +209,19 @@ export async function executeRunImpl(
   // cluster, search_files, ask_user, attachments, mssql export-tool) close
   // over this host explicitly via their `createXxxTool(host)` factories.
   const perRunHost = configureAgent({
-    ...ctx.bootHostDeps,
+    ...(ctx.bootHostDeps.browserCredentialReader ? { browserCredentialReader: ctx.bootHostDeps.browserCredentialReader } : {}),
+    ...(ctx.bootHostDeps.browserHandoffStore ? { browserHandoffStore: ctx.bootHostDeps.browserHandoffStore } : {}),
+    ...(ctx.bootHostDeps.shellClient ? { shellClient: ctx.bootHostDeps.shellClient } : {}),
+    ...(ctx.bootHostDeps.shellSandboxStrict !== undefined ? { shellSandboxStrict: ctx.bootHostDeps.shellSandboxStrict } : {}),
+    ...(ctx.bootHostDeps.browserCheckClient ? { browserCheckClient: ctx.bootHostDeps.browserCheckClient } : {}),
+    ...(ctx.bootHostDeps.mssqlDatabases ? { mssqlDatabases: ctx.bootHostDeps.mssqlDatabases } : {}),
+    ...(ctx.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: ctx.bootHostDeps.mssqlDefaultConnection } : {}),
+    ...(ctx.bootHostDeps.catalogInstances ? { catalogInstances: ctx.bootHostDeps.catalogInstances } : {}),
+    ...(ctx.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: ctx.bootHostDeps.catalogDefaultCachePath } : {}),
+    attachments: createServerAttachmentService(() => policyCtx),
+    browserContextReader: createServerBrowserContextProvider(activeRun?.ownerUpn ?? null),
+    browserCredentialReader: createServerBrowserCredentialProvider(activeRun?.ownerUpn ?? null),
+    browserHandoffStore: createServerBrowserHandoffProvider(activeRun?.ownerUpn ?? null),
     workspaceRoot: runWorkspace.executionRoot,
     filesystemBasePath: runWorkspace.executionRoot,
     searchFilesBasePath: runWorkspace.executionRoot,
@@ -221,6 +245,7 @@ export async function executeRunImpl(
   })
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
+    policyContext: policyCtx,
     ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
   })
 
@@ -421,6 +446,7 @@ export async function executeRunImpl(
     sessionId: activeRun?.sessionId ?? null,
     upn: activeRun?.ownerUpn ?? null,
   })
+  delegateCtx.parentRuntime = runtime
 
   // Wrap sync tools to emit global SSE events so the Sync widget can react
   // to agent-triggered previews and executes without needing to go through
@@ -676,7 +702,7 @@ export async function executeRunImpl(
         broadcast({ type: EventType.ToolCallCompleted, data: { runId, toolCallId } })
       },
       wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
-        const _sig = callSignals.get(toolCallId)
+        void toolCallId
         return fn()
       },
     }
@@ -760,27 +786,9 @@ export async function executeRunImpl(
     runtime.fetchUrl.killSignal = null
     runtime.browseWeb.killSignal = null
 
-    // Hosted policy context — read by the selector-based policy engine
-    // through AsyncLocalStorage. Concurrent runs see independent contexts.
-    // The role is captured at startRun/resumeRun (see orchestrator.ts) and
-    // stashed on ActiveRun because the originating session ALS is no longer
-    // in scope by the time queued work resumes.
-    const ctxRole = activeRun?.role ?? PolicyRole.Admin
-    const policyCtx: HostedPolicyContext = {
-      runId,
-      // Role drives policy default. HostedUser → default-deny + selector
-      // rules; Admin → default-allow + audit. The deployment env flag
-      // (AGENT_HOSTED_MODE) no longer affects this.
-      runMode:     ctxRole === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
-      role:        ctxRole,
-      sandboxRoot: runWorkspace.executionRoot,
-      actorUpn:    activeRun?.ownerUpn ?? null,
-      sessionId:   activeRun?.sessionId ?? null,
-    }
-
-    let answer = await runtime.run(() => runWithPolicyContext(policyCtx, () =>
+    let answer = await runtime.run(() =>
       agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
-    ))
+    )
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
     // so the user has a concrete reference to forward to the platform admin.

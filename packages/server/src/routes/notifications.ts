@@ -84,7 +84,7 @@ export function registerNotificationRoutes(
         case "resume-run": {
           const runId = data?.runId as string
           if (!runId) { reply.code(400); return { error: "runId required" } }
-          const newRunId = orchestrator.resumeRun(runId)
+          const newRunId = orchestrator.resumeRun(runId, req.session ?? null)
           if (!newRunId) { reply.code(404); return { error: "Cannot resume — no checkpoint" } }
           return { ok: true, runId: newRunId }
         }

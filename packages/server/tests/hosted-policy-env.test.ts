@@ -19,7 +19,6 @@ import {
     PolicyEffect,
     PolicyViolationError,
     RulePolicyEvaluator,
-    runWithPolicyContext,
     withPermissionDefaults,
     type AgentRun,
     type HostedPolicyContext,
@@ -58,15 +57,13 @@ async function evaluate(
   step: Step,
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
-  return runWithPolicyContext(HOSTED, async () => {
-    try {
-      const approval = await ev.evaluatePreStep(run, step)
-      return { approval }
-    } catch (err) {
-      if (err instanceof PolicyViolationError) return { approval: null, error: err }
-      throw err
-    }
-  })
+  try {
+    const approval = await ev.evaluatePreStep(run, step, HOSTED)
+    return { approval }
+  } catch (err) {
+    if (err instanceof PolicyViolationError) return { approval: null, error: err }
+    throw err
+  }
 }
 
 // ── Fact extraction ──────────────────────────────────────────────

@@ -158,7 +158,7 @@ export function registerAgentRoutes(
     const runId = orchestrator.startRun(goal, {
       agentId: agent.id,
       systemPrompt: db.resolveAgentSystemPrompt(agent),
-    })
+    }, req.session ?? null)
 
     reply.code(201)
     return { runId, agentId: agent.id }

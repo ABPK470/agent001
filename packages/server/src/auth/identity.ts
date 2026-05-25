@@ -27,7 +27,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { createSession, deleteSession, getSessionWithUser } from "../db/sessions.js"
-import { sessionAls, type CurrentSession } from "./context.js"
+import type { CurrentSession } from "./context.js"
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSid, verifySid } from "./session.js"
 import { upsertSsoUser } from "./users.js"
 
@@ -187,7 +187,6 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
     const session = tryResolveSession(req, reply)
     if (session) {
       req.session = session
-      sessionAls.enterWith({ session })
       return
     }
 

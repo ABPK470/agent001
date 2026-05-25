@@ -1,18 +1,18 @@
 import {
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createEngineServices,
-    EventType,
-    PolicyEffect,
-    PolicyRole,
-    RunStatus,
-    type LLMClient,
-    type Message,
-    type Tool
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createEngineServices,
+  EventType,
+  PolicyEffect,
+  PolicyRole,
+  RunStatus,
+  type LLMClient,
+  type Message,
+  type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { AgentBus } from "../agent-bus.js"
-import { getCurrentSession } from "../auth/context.js"
+import type { CurrentSession } from "../auth/context.js"
 import type { MessageRouter } from "../channels/router.js"
 import * as db from "../db/index.js"
 import { migrateEffects } from "../effects/index.js"
@@ -72,7 +72,7 @@ export class AgentOrchestrator {
 
   // ── Run lifecycle ─────────────────────────────────────────────
 
-  startRun(goal: string, config?: AgentRunConfig): string {
+  startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
     const runId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
@@ -86,7 +86,6 @@ export class AgentOrchestrator {
     // headless browser). Captured here at run-start time when AsyncLocalStorage
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
-    const session = getCurrentSession()
     const role: PolicyRole = !session ? PolicyRole.Admin : session.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     if (session && !session.isAdmin) {
       tools = filterToolsForVisitor(tools)
@@ -185,7 +184,7 @@ export class AgentOrchestrator {
     return true
   }
 
-  resumeRun(runId: string): string | null {
+  resumeRun(runId: string, resumeSession: CurrentSession | null = null): string | null {
     const checkpoint = db.getCheckpoint(runId)
     const originalRun = db.getRun(runId)
     if (!checkpoint || !originalRun) return null
@@ -213,7 +212,6 @@ export class AgentOrchestrator {
     // policy_rules at server boot via policy-seeder.ts, so loading dbRules
     // above already covers them.)
 
-    const resumeSession = getCurrentSession()
     const resumeRole: PolicyRole = !resumeSession ? PolicyRole.Admin : resumeSession.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [], ownerUpn: resumeSession?.upn ?? null, sessionId: resumeSession?.sid ?? null })
 
@@ -342,7 +340,17 @@ export class AgentOrchestrator {
   private buildBootTools(): Tool[] {
     const root = this.workspace ?? process.cwd()
     const host = configureAgent({
-      ...this.bootHostDeps,
+      ...(this.bootHostDeps.attachments ? { attachments: this.bootHostDeps.attachments } : {}),
+      ...(this.bootHostDeps.browserContextReader ? { browserContextReader: this.bootHostDeps.browserContextReader } : {}),
+      ...(this.bootHostDeps.browserCredentialReader ? { browserCredentialReader: this.bootHostDeps.browserCredentialReader } : {}),
+      ...(this.bootHostDeps.browserHandoffStore ? { browserHandoffStore: this.bootHostDeps.browserHandoffStore } : {}),
+      ...(this.bootHostDeps.shellClient ? { shellClient: this.bootHostDeps.shellClient } : {}),
+      ...(this.bootHostDeps.shellSandboxStrict !== undefined ? { shellSandboxStrict: this.bootHostDeps.shellSandboxStrict } : {}),
+      ...(this.bootHostDeps.browserCheckClient ? { browserCheckClient: this.bootHostDeps.browserCheckClient } : {}),
+      ...(this.bootHostDeps.mssqlDatabases ? { mssqlDatabases: this.bootHostDeps.mssqlDatabases } : {}),
+      ...(this.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: this.bootHostDeps.mssqlDefaultConnection } : {}),
+      ...(this.bootHostDeps.catalogInstances ? { catalogInstances: this.bootHostDeps.catalogInstances } : {}),
+      ...(this.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: this.bootHostDeps.catalogDefaultCachePath } : {}),
       workspaceRoot: root,
       filesystemBasePath: root,
       searchFilesBasePath: root,

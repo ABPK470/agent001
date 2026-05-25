@@ -10,7 +10,6 @@
 import {
     PolicyViolationError,
     RulePolicyEvaluator,
-    runWithPolicyContext,
     type AgentRun,
     type HostedPolicyContext,
     type Step
@@ -58,15 +57,13 @@ async function evaluate(
   ctx: HostedPolicyContext,
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
-  return runWithPolicyContext(ctx, async () => {
-    try {
-      const approval = await evaluator.evaluatePreStep(run, step)
-      return { approval }
-    } catch (err) {
-      if (err instanceof PolicyViolationError) return { approval: null, error: err }
-      throw err
-    }
-  })
+  try {
+    const approval = await evaluator.evaluatePreStep(run, step, ctx)
+    return { approval }
+  } catch (err) {
+    if (err instanceof PolicyViolationError) return { approval: null, error: err }
+    throw err
+  }
 }
 
 describe("hosted default policy rules", () => {

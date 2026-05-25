@@ -1,7 +1,6 @@
 import type { Agent, EngineServices } from "@mia/agent"
 import { EventType, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { getCurrentSession } from "../auth/context.js"
 import * as db from "../db/index.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "./types.js"
@@ -91,13 +90,6 @@ export function createNotification(opts: NotificationOpts): void {
     if (r) {
       ownerUpn  = r.upn          ?? null
       sessionId = r.session_id   ?? null
-    }
-  }
-  if (!ownerUpn || !sessionId) {
-    const ctx = getCurrentSession()
-    if (ctx) {
-      ownerUpn  = ownerUpn  ?? ctx.upn
-      sessionId = sessionId ?? ctx.sid
     }
   }
   if (!ownerUpn) {

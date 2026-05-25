@@ -9,14 +9,10 @@
  *   - the canonical sandbox root for path containment checks,
  *   - the default MSSQL environment when a tool call does not name one.
  *
- * Callers wrap a unit of work with {@link runWithPolicyContext}; the policy
- * engine reads the current context with {@link getPolicyContext} during
- * evaluation.
- *
- * No globals are mutated. Concurrent runs see independent contexts.
+ * The shell constructs one of these records per run and passes it into the
+ * policy engine / host-side bridges explicitly. No globals are mutated.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks"
 import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "./enums/policy.js"
 
 export interface HostedPolicyContext {
@@ -38,14 +34,4 @@ export interface HostedPolicyContext {
   readonly actorUpn?:    string | null
   /** Originating session id, mirrored from cookie sid. */
   readonly sessionId?:   string | null
-}
-
-const _als = new AsyncLocalStorage<HostedPolicyContext>()
-
-export function runWithPolicyContext<T>(ctx: HostedPolicyContext, fn: () => Promise<T>): Promise<T> {
-  return _als.run(ctx, fn)
-}
-
-export function getPolicyContext(): HostedPolicyContext | undefined {
-  return _als.getStore()
 }

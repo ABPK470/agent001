@@ -11,7 +11,6 @@ import {
     PolicyEffect,
     PolicyViolationError,
     RulePolicyEvaluator,
-    runWithPolicyContext,
     type AgentRun,
     type HostedPolicyContext,
     type PolicyRule,
@@ -52,16 +51,13 @@ async function evaluate(
   ctx?: HostedPolicyContext,
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
-  const fn = async () => {
-    try {
-      const approval = await evaluator.evaluatePreStep(run, step)
-      return { approval }
-    } catch (err) {
-      if (err instanceof PolicyViolationError) return { approval: null, error: err }
-      throw err
-    }
+  try {
+    const approval = await evaluator.evaluatePreStep(run, step, ctx ?? null)
+    return { approval }
+  } catch (err) {
+    if (err instanceof PolicyViolationError) return { approval: null, error: err }
+    throw err
   }
-  return ctx ? runWithPolicyContext(ctx, fn) : fn()
 }
 
 describe("selector policy engine", () => {
@@ -300,7 +296,7 @@ describe("selector policy engine", () => {
   })
 })
 
-describe("AsyncLocalStorage isolation", () => {
+describe("explicit policy-context isolation", () => {
   it("concurrent runs see independent policy contexts", async () => {
     const ev = new RulePolicyEvaluator()
     ev.addRule({
@@ -314,8 +310,8 @@ describe("AsyncLocalStorage isolation", () => {
     const userCtx  = hostedCtx({ role: "hosted_user" })
 
     const [adminResult, userResult] = await Promise.all([
-      runWithPolicyContext(adminCtx, async () => evaluate(ev, makeStep("anything"))),
-      runWithPolicyContext(userCtx,  async () => evaluate(ev, makeStep("anything"))),
+      evaluate(ev, makeStep("anything"), adminCtx),
+      evaluate(ev, makeStep("anything"), userCtx),
     ])
 
     expect(adminResult.error).toBeUndefined()

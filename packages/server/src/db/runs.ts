@@ -4,7 +4,6 @@
 
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
-import { getCurrentSession } from "../auth/context.js"
 import { getDb } from "./connection.js"
 
 // ── Run queries ──────────────────────────────────────────────────
@@ -69,12 +68,11 @@ export function saveRun(run: DbRun): void {
   // Existing rows keep their stamp on update (we read first via getRun and merge).
   const existing = getDb().prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?").get(run.id) as
     { session_id: string | null; upn: string | null; display_name: string | null } | undefined
-  const ctx = getCurrentSession()
   upsertRun().run({
     ...run,
-    session_id:   run.session_id   ?? existing?.session_id   ?? ctx?.sid         ?? null,
-    upn:          run.upn          ?? existing?.upn          ?? ctx?.upn         ?? null,
-    display_name: run.display_name ?? existing?.display_name ?? ctx?.displayName ?? null,
+    session_id:   run.session_id   ?? existing?.session_id   ?? null,
+    upn:          run.upn          ?? existing?.upn          ?? null,
+    display_name: run.display_name ?? existing?.display_name ?? null,
   })
 }
 

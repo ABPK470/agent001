@@ -2,13 +2,12 @@
  * Server-side AttachmentService implementation.
  *
  * Bridges the agent-side {@link AttachmentService} interface to the
- * server's attachment repo, blob storage, and sandbox layout. Resolves
- * runId / sandboxRoot from the active {@link HostedPolicyContext} so a
- * single installed instance serves every concurrent run safely
- * (no module-global state).
+ * server's attachment repo, blob storage, and sandbox layout. The server
+ * binds per-run identity / sandbox facts explicitly when it constructs the
+ * service instance used by a run.
  */
 
-import { getPolicyContext, type AttachmentMetadata, type AttachmentService } from "@mia/agent"
+import { type AttachmentMetadata, type AttachmentService, type HostedPolicyContext } from "@mia/agent"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
 import {
@@ -80,12 +79,14 @@ function toMetadata(row: AttachmentRow): AttachmentMetadata {
   }
 }
 
-function currentRunContext(): { runId: string; sandboxRoot: string | null } {
-  const ctx = getPolicyContext()
+type AttachmentServiceContext = Pick<HostedPolicyContext, "runId" | "sandboxRoot" | "actorUpn" | "sessionId">
+
+function resolveContext(getContext: () => AttachmentServiceContext | null | undefined): AttachmentServiceContext {
+  const ctx = getContext()
   if (!ctx) {
     throw new Error("Attachment service called outside an active run context.")
   }
-  return { runId: ctx.runId, sandboxRoot: ctx.sandboxRoot }
+  return ctx
 }
 
 /**
@@ -113,10 +114,13 @@ function resolveSandboxPath(sandboxRoot: string, relPath: string): string {
   return absDest
 }
 
-export const serverAttachmentService: AttachmentService = {
+export function createServerAttachmentService(
+  getContext: () => AttachmentServiceContext | null | undefined,
+): AttachmentService {
+  return {
   async list(filter) {
-    const { runId } = currentRunContext()
-    const ctx = getPolicyContext()
+    const ctx = resolveContext(getContext)
+    const { runId } = ctx
     // Visibility model: the agent should see anything the user could
     // reasonably have attached to this run — items explicitly bound to
     // the active runId, items in the active session, and items owned by
@@ -168,7 +172,7 @@ export const serverAttachmentService: AttachmentService = {
   },
 
   async importToSandbox(id, sandboxRelPath) {
-    const { runId, sandboxRoot } = currentRunContext()
+    const { runId, sandboxRoot } = resolveContext(getContext)
     if (!sandboxRoot) {
       throw new Error("import_attachment requires an active sandbox; this run has none.")
     }
@@ -189,7 +193,7 @@ export const serverAttachmentService: AttachmentService = {
   },
 
   async promoteFromSandbox(sandboxRelPath, opts) {
-    const { runId, sandboxRoot } = currentRunContext()
+    const { runId, sandboxRoot, actorUpn, sessionId } = resolveContext(getContext)
     if (!sandboxRoot) {
       throw new Error("promote_attachment requires an active sandbox; this run has none.")
     }
@@ -197,9 +201,6 @@ export const serverAttachmentService: AttachmentService = {
     // arbitrary host files by promoting paths outside the sandbox.
     const absPath = resolveSandboxPath(sandboxRoot, sandboxRelPath)
     const bytes = await readFile(absPath)
-    const ctx = getPolicyContext()
-    const ownerUpn = ctx?.actorUpn ?? null
-    const sessionId = ctx?.sessionId ?? null
     const row = await uploadAttachment({
       bytes,
       originalName: basename(absPath),
@@ -210,7 +211,7 @@ export const serverAttachmentService: AttachmentService = {
       scope:        AttachmentScope.WorkspaceAsset,
       runId,
       sessionId,
-      ownerUpn,
+      ownerUpn: actorUpn ?? null,
       source:       AttachmentSource.Generated,
       ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {}),
     })
@@ -218,6 +219,9 @@ export const serverAttachmentService: AttachmentService = {
     return toMetadata(row)
   },
 }
+}
+
+export const serverAttachmentService: AttachmentService = createServerAttachmentService(() => null)
 
 // Re-exports kept here so tests can exercise path validation without
 // reaching into private internals.

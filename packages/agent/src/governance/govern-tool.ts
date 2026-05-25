@@ -17,10 +17,11 @@ import {
     stepFailed,
     stepStarted
 } from "../domain/index.js"
-import { type EngineServices, type RunState, createToolStep } from "./types.js"
+import type { HostedPolicyContext } from "../domain/policy-context.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recovery/index.js"
 import { normalizeToolExecutionOutput } from "../tools/_helpers/index.js"
 import type { Tool } from "../types.js"
+import { type EngineServices, type RunState, createToolStep } from "./types.js"
 
 // ── Tool governance options ──────────────────────────────────────
 
@@ -34,6 +35,8 @@ export interface GovernToolOptions {
   timeoutMs?: number
   /** AbortSignal — when fired, tool execution terminates immediately. */
   signal?: AbortSignal
+  /** Per-run policy facts for selector evaluation. */
+  policyContext?: HostedPolicyContext | null
 }
 
 // ── Wrap a tool with governance ──────────────────────────────────
@@ -61,6 +64,7 @@ export function governTool(
         const policyResult = await services.policyEvaluator.evaluatePreStep(
           state.run,
           step,
+          options?.policyContext ?? null,
         )
         if (policyResult !== null) {
           // Approval required — block and emit event for notification

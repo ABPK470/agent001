@@ -153,13 +153,13 @@ export function registerRunRoutes(
         agentId: agent.id,
         systemPrompt: db.resolveAgentSystemPrompt(agent),
         attachmentIds: resolvedAttachmentIds,
-      })
+      }, req.session ?? null)
       reply.code(201)
       return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
     }
 
     // No agentId — use all tools + default prompt
-    const runId = orchestrator.startRun(goal, { attachmentIds: resolvedAttachmentIds })
+    const runId = orchestrator.startRun(goal, { attachmentIds: resolvedAttachmentIds }, req.session ?? null)
     reply.code(201)
     return { runId, attachmentIds: resolvedAttachmentIds }
   })
@@ -180,7 +180,7 @@ export function registerRunRoutes(
   app.post<{ Params: { id: string } }>("/api/runs/:id/resume", async (req, reply) => {
     const run = db.getRun(req.params.id)
     if (!run || !canAccessRun(req.session, run)) { reply.code(404); return { error: "Run not found" } }
-    const newRunId = orchestrator.resumeRun(req.params.id)
+    const newRunId = orchestrator.resumeRun(req.params.id, req.session ?? null)
     if (!newRunId) {
       reply.code(404)
       return { error: "Run not found or no checkpoint available" }
@@ -206,12 +206,12 @@ export function registerRunRoutes(
       const runId = orchestrator.startRun(original.goal, {
         agentId: agent.id,
         systemPrompt: db.resolveAgentSystemPrompt(agent),
-      })
+      }, req.session ?? null)
       reply.code(201)
       return { runId, agentId: agent.id }
     }
 
-    const runId = orchestrator.startRun(original.goal)
+    const runId = orchestrator.startRun(original.goal, undefined, req.session ?? null)
     reply.code(201)
     return { runId }
   })

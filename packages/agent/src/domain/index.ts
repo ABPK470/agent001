@@ -64,8 +64,6 @@ export type {
 export { AuditService } from "./audit.js"
 export { Learner, type OperationStats } from "./learner.js"
 export {
-    getPolicyContext,
-    runWithPolicyContext,
     type HostedPolicyContext
 } from "./policy-context.js"
 export {

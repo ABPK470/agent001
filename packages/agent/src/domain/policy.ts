@@ -25,7 +25,7 @@ import { PolicyEffect } from "./enums/index.js"
 import { PolicyViolationError } from "./errors.js"
 import type { PolicyEvaluator } from "./interfaces.js"
 import type { AgentRun, PolicyRule, Step } from "./models.js"
-import { getPolicyContext } from "./policy-context.js"
+import type { HostedPolicyContext } from "./policy-context.js"
 import { extractToolFacts, resolveSelectorRules } from "./policy-selectors.js"
 
 export class RulePolicyEvaluator implements PolicyEvaluator {
@@ -35,8 +35,7 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
   removeRule(name: string): void { this.rules = this.rules.filter(r => r.name !== name) }
   listRules(): PolicyRule[] { return [...this.rules] }
 
-  async evaluatePreStep(_run: AgentRun, step: Step): Promise<string | null> {
-    const ctx = getPolicyContext()
+  async evaluatePreStep(_run: AgentRun, step: Step, ctx: HostedPolicyContext | null = null): Promise<string | null> {
 
     // 1. Legacy action: rules — preserve original first-match semantics.
     for (const rule of this.rules) {
