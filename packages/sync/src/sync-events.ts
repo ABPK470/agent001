@@ -8,32 +8,27 @@
  *      Cardinality: ~10 events per preview. Always emitted.
  *
  *   2. SQL query events  — `sync.preview.sql` / `sync.execute.sql`. Emitted
- *      from the diff/execute SQL helpers via AsyncLocalStorage so any query
- *      run inside a `runWithSyncContext()` scope is automatically attributed
- *      to its previewId/planId. Cardinality: ~3-5 queries per table per op
+ *      from the diff/execute SQL helpers using an explicit telemetry context
+ *      passed down from preview/execute orchestration so every query is
+ *      attributed to its previewId/planId without ambient state. Cardinality: ~3-5 queries per table per op
  *      (~30-50 events per preview). Always emitted to the event stream;
  *      the SQL text is truncated to keep `event_log` rows compact.
  *
  * Why both go through one sink: it lets the server wire a single
- * `setSyncEventSink(broadcast)` and have everything land in the same place
+ * `configureSyncEventSink(host, broadcast)` and have everything land in the same place
  * (SSE clients, event_log table, webhook drains). No second pipe.
  *
  * The agent package can't import server-side `broadcast()` directly (that
  * would create a cycle), so the server injects the sink at startup.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks"
 import { EventType, SyncOperationType, type AgentHost } from "./contracts.js"
 
 export type SyncEvent = { type: EventType; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-
 /** Server installs this once at startup (see server/src/index.ts). */
-export function setSyncEventSink(host: AgentHost, sink: SyncEventSink): void {
+export function configureSyncEventSink(host: AgentHost, sink: SyncEventSink): void {
   host.sync.eventSink = sink
 }
 
@@ -45,14 +40,9 @@ export function emitSyncEvent(host: AgentHost, type: EventType, data: Record<str
   }
 }
 
-// ── Per-operation context (AsyncLocalStorage) ───────────────────
-//
-// Threaded through previewSync / executeSync so deep helpers
-// (diff-engine, sample readers) can attribute their SQL events to the
-// correct previewId/planId without having to plumb the id through every
-// function signature.
+// ── Per-operation telemetry context ─────────────────────────────
 
-export interface SyncOpContext {
+export interface SyncTelemetryContext {
   /** "preview" or "execute" — sets the event-type prefix. */
   kind: SyncOperationType
   /** Correlation key — previewId for preview, planId for execute. */
@@ -60,16 +50,6 @@ export interface SyncOpContext {
   /** Optional source/target connection names for richer event payloads. */
   source?: string
   target?: string
-}
-
-const _opContext = new AsyncLocalStorage<SyncOpContext>()
-
-export function runWithSyncContext<T>(ctx: SyncOpContext, fn: () => Promise<T>): Promise<T> {
-  return _opContext.run(ctx, fn)
-}
-
-export function getSyncContext(): SyncOpContext | undefined {
-  return _opContext.getStore()
 }
 
 // ── SQL event helper ────────────────────────────────────────────
@@ -99,8 +79,8 @@ export interface SqlEventInput {
   error?: string
 }
 
-export function emitSyncSqlEvent(host: AgentHost, input: SqlEventInput): void {
-  const ctx = getSyncContext()
+export function emitSyncSqlEvent(host: AgentHost, input: SqlEventInput, context?: SyncTelemetryContext): void {
+  const ctx = context
   const prefix = ctx?.kind ?? SyncOperationType.Preview
   const truncated = input.sql.length > SQL_EVENT_MAX_CHARS
     ? input.sql.slice(0, SQL_EVENT_MAX_CHARS) + `… [+${input.sql.length - SQL_EVENT_MAX_CHARS} chars]`

@@ -21,6 +21,7 @@
 
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
 import type { AgentHost } from "../contracts.js"
+import type { SyncTelemetryContext } from "../sync-events.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 
 // ────────────────────────────────────────────────────────────
@@ -140,6 +141,7 @@ export async function resolveContractName(
   pool: ConnectionPool,
   contractId: number,
   connection: string,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<string> {
   const req = pool.request()
   req.input("contractId", sqlMod.Int, contractId)
@@ -149,6 +151,7 @@ export async function resolveContractName(
     "SELECT [name] AS contractName FROM core.Contract WHERE contractId = @contractId",
     `contractDeploy.resolveContractName(${contractId})`,
     connection,
+    telemetryContext,
   )
   const row = result.recordset?.[0]
   if (!row?.contractName) {
@@ -173,6 +176,7 @@ export async function undeployMarkedContract(
   contractId: number,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<DeployStepResult> {
   const req = pool.request()
   req.input("contractId", sqlMod.Int, contractId)
@@ -183,6 +187,7 @@ export async function undeployMarkedContract(
     procs.undeployMarkedContract,
     `contractDeploy.undeploy(${contractId})`,
     connection,
+    telemetryContext,
   )
 
   const parsed = parseWorkerResult(result, "undeploy")
@@ -205,6 +210,7 @@ export async function createDataset(
   type: DatasetType,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<DeployStepResult> {
   const req = pool.request()
   req.input("ContractName", sqlMod.VarChar(128), contractName)
@@ -218,6 +224,7 @@ export async function createDataset(
     procs.createDataset,
     `contractDeploy.createDataset(${contractName},${type})`,
     connection,
+    telemetryContext,
   )
 
   const parsed = parseWorkerResult(result, `createDataset(${type})`)
@@ -239,6 +246,7 @@ export async function createDatasetFKs(
   contractName: string,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<DeployStepResult> {
   const req = pool.request()
   req.input("contractName", sqlMod.VarChar(100), contractName)
@@ -254,6 +262,7 @@ export async function createDatasetFKs(
     procs.createDatasetFKs,
     `contractDeploy.createDatasetFKs(${contractName})`,
     connection,
+    telemetryContext,
   )
 
   const parsed = parseWorkerResult(result, "createDatasetFKs")
@@ -276,6 +285,7 @@ export async function deployETL(
   contractName: string,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<DeployStepResult> {
   const req = pool.request()
   req.input("contractName", sqlMod.VarChar(500), contractName)
@@ -287,6 +297,7 @@ export async function deployETL(
     procs.deployETL,
     `contractDeploy.deployETL(${contractName})`,
     connection,
+    telemetryContext,
   )
 
   const parsed = parseWorkerResult(result, "deployETL")
@@ -307,6 +318,7 @@ export async function deployRoutine(
   contractName: string,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<DeployStepResult> {
   const req = pool.request()
   req.input("contractName", sqlMod.VarChar(500), contractName)
@@ -319,6 +331,7 @@ export async function deployRoutine(
     procs.deployRoutine,
     `contractDeploy.deployRoutine(${contractName})`,
     connection,
+    telemetryContext,
   )
 
   const parsed = parseWorkerResult(result, "deployRoutine")
@@ -346,6 +359,7 @@ export async function runAuditCheckDirect(
   params: { schema?: string; objType: string; id: string | number; action: AuditAction },
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<{ status: string; message: string } | null> {
   const req = pool.request()
   req.input("id", sqlMod.VarChar(10), String(params.id))
@@ -359,6 +373,7 @@ export async function runAuditCheckDirect(
     procs.auditRunCheck,
     `contractDeploy.auditRunCheck(${params.action}/${params.objType}/${params.id})`,
     connection,
+    telemetryContext,
   )
 
   const row = (result.recordsets?.[0] as IRecordSet<{ status: string; message: string }> | undefined)?.[0]
@@ -382,6 +397,7 @@ export async function setContractLockDirect(
   isLocked: boolean,
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<void> {
   const req = pool.request()
   req.input("contractId", sqlMod.Int, contractId)
@@ -393,6 +409,7 @@ export async function setContractLockDirect(
     procs.setContractLock,
     `contractDeploy.setContractLock(${contractId},${isLocked ? 1 : 0})`,
     connection,
+    telemetryContext,
   )
 }
 
@@ -414,6 +431,7 @@ export async function runContractDeploymentScriptsDirect(
   action: "Run preScript" | "Run postScript",
   connection: string,
   procs: ContractProcConfig = DEFAULT_PROCS,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<void> {
   const req = pool.request()
   req.input("contractName", sqlMod.VarChar(100), contractName)
@@ -426,5 +444,6 @@ export async function runContractDeploymentScriptsDirect(
     procs.runContractDeploymentScripts,
     `contractDeploy.runDeploymentScripts(${contractName}/${action})`,
     connection,
+    telemetryContext,
   )
 }

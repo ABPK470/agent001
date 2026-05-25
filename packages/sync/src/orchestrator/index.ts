@@ -20,10 +20,11 @@
  * (no public API change; behaviour preserved).
  */
 
+export { configureSyncEventSink, type SyncEvent, type SyncEventSink } from "../sync-events.js"
+export { configureSyncRunSink, type SyncRunFinishInput, type SyncRunSink, type SyncRunStartInput } from "../sync-run-sink.js"
 export { configureSyncOrchestrator } from "./db-helpers.js"
 export { executeSync } from "./execute.js"
-export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 export { previewSync, type PreviewInput } from "./preview.js"
 export { searchEntities, type EntitySearchResult } from "./search.js"
-export { setSyncEventSink, type SyncEvent, type SyncEventSink } from "../sync-events.js"
-export { setSyncRunSink, type SyncRunFinishInput, type SyncRunSink, type SyncRunStartInput } from "../sync-run-sink.js"
+export type { ExecuteOptions, ExecuteProgress } from "./types.js"
+

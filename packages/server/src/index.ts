@@ -36,9 +36,9 @@ import {
 } from "@mia/agent"
 import {
     configurePlanStore,
+    configureSyncEventSink,
     configureSyncOrchestrator,
-    setSyncEventSink,
-    setSyncRunSink,
+    configureSyncRunSink,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -181,10 +181,10 @@ async function main() {
   // Fan sync events out via broadcast(): SSE for live UI, event_log table
   // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
   // for the full list of emitted event types.
-  setSyncEventSink(bootHost, (ev) => broadcast({ type: ev.type, data: ev.data }))
+  configureSyncEventSink(bootHost, (ev) => broadcast({ type: ev.type, data: ev.data }))
   // Persist every executeSync() invocation as a SyncRun row in SQLite for
   // the audit trail / "active syncs" dashboard / drift forensics.
-  setSyncRunSink(bootHost, {
+  configureSyncRunSink(bootHost, {
     start: (i) => {
       try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
     },

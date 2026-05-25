@@ -11,6 +11,7 @@
 import { type Transaction } from "mssql"
 import { getPool, type AgentHost } from "../contracts.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
+import type { SyncTelemetryContext } from "../sync-events.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 
 /**
@@ -32,7 +33,7 @@ const SYNC_META_COLUMNS = new Set([
  * Returns a map keyed by `schema.table`. Tables without a PK get an empty
  * array — callers must guard against that before issuing MERGE / DELETE.
  */
-export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[]): Promise<Map<string, string[]>> {
+export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[], telemetryContext?: SyncTelemetryContext): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
   const { pool } = await getPool(host, connection)
@@ -40,7 +41,10 @@ export async function fetchPkColumns(host: AgentHost, connection: string, tables
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
     try {
-      const r = await pool.request().query(`
+      const r = await trackedQuery(
+        host,
+        pool.request(),
+        `
         SELECT c.name
         FROM sys.indexes i
         JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
@@ -48,8 +52,12 @@ export async function fetchPkColumns(host: AgentHost, connection: string, tables
         WHERE i.is_primary_key = 1
           AND i.object_id = OBJECT_ID('${schema}.${name}')
         ORDER BY ic.key_ordinal
-      `)
-      result.set(qn, r.recordset.map((row: { name: string }) => row.name))
+      `,
+        `fetchPkColumns(${qn})`,
+        connection,
+        telemetryContext,
+      )
+      result.set(qn, (r.recordset as Array<{ name: string }>).map((row) => row.name))
     } catch {
       result.set(qn, [])
     }
@@ -69,7 +77,7 @@ export async function fetchPkColumns(host: AgentHost, connection: string, tables
  * copied from source — instead validFrom=GETUTCDATE(), validTo=NULL on both
  * INSERT and UPDATE, matching the legacy core.uspSyncObjectTran behaviour.
  */
-export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
@@ -83,6 +91,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
     `SELECT * FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyInsertsUpdates.read(${tableName})`,
     plan.source,
+    telemetryContext,
   )
   const rows = srcResult.recordset as Record<string, unknown>[]
   if (rows.length === 0) return 0
@@ -99,6 +108,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
   `,
     `applyInsertsUpdates.cols(${tableName})`,
     plan.target,
+    telemetryContext,
   )
   const targetCols = colResult.recordset as Array<{ name: string; is_identity: boolean; is_computed: boolean }>
   const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
@@ -183,6 +193,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
     fullSql,
     `applyInsertsUpdates.merge(${tableName})`,
     plan.target,
+    telemetryContext,
   )
   // rowsAffected: last meaningful entry is the MERGE itself
   const raIdx = result.rowsAffected.length - 2
@@ -193,7 +204,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
  * Apply deletes: rows on target within scope that no longer exist on source.
  * Uses direct source pool — no linked server needed.
  */
-export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
@@ -208,6 +219,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
     `SELECT ${pkSelect} FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyDeletes.read(${tableName})`,
     plan.source,
+    telemetryContext,
   )
   const srcRows = srcResult.recordset as Record<string, unknown>[]
 
@@ -246,6 +258,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
     fullSql,
     `applyDeletes.exec(${tableName})`,
     plan.target,
+    telemetryContext,
   )
   // The DELETE is the second-to-last statement (before DROP)
   const raIdx = result.rowsAffected.length - 2

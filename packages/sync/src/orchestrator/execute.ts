@@ -4,7 +4,7 @@
  * Wires together drift re-validation, the in-tx metadata sync
  * (`runMetadataSync`), and the post-tx contract pipeline
  * (`runContractPipeline`). Owns: pre-flight safety rails, run-sink
- * lifecycle, AsyncLocalStorage scope for SQL telemetry, and the
+ * lifecycle, explicit SQL telemetry attribution, and the
  * outer try/catch that translates throws into `sync.execute.failed`
  * events and unlocks the entity.
  *
@@ -16,7 +16,7 @@ import { EventType, getPool, SyncOperationType, SyncProgressKind, SyncRunStatus 
 import { getEnvironment } from "../environments.js"
 import { evaluateFreezeWindows } from "../governance/freeze-windows.js"
 import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
-import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncTelemetryContext } from "../sync-events.js"
 import { getSyncRunSink } from "../sync-run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
@@ -125,12 +125,13 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
     totals: plan.totals,
   })
 
-  // Same ALS pattern as previewSync — every SQL query inside this scope gets
-  // attributed to this planId via `sync.execute.sql` events.
-  return runWithSyncContext(
-    { kind: SyncOperationType.Execute, opId: planId, source: plan.source, target: plan.target },
-    () => executeSyncInner(plan, planId, opts, onProgress, execT0),
-  )
+  const telemetryContext: SyncTelemetryContext = {
+    kind: SyncOperationType.Execute,
+    opId: planId,
+    source: plan.source,
+    target: plan.target,
+  }
+  return executeSyncInner(plan, planId, opts, onProgress, execT0, telemetryContext)
 }
 
 async function executeSyncInner(
@@ -139,9 +140,10 @@ async function executeSyncInner(
   opts: ExecuteOptions,
   onProgress: (p: ExecuteProgress) => void,
   execT0: number,
+  telemetryContext: SyncTelemetryContext,
 ): Promise<{ planId: string; success: boolean; error?: string }> {
   // Load PK columns once
-  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name))
+  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name), telemetryContext)
 
   // Drift re-validation
   const driftPct = await revalidatePlanDrift(opts.host, plan)
@@ -197,14 +199,14 @@ async function executeSyncInner(
         action: "syncOrNot",
         objType: entityType === "contract" ? "Contract" : entityType,
         id: entityId,
-      }, plan.target)
+      }, plan.target, undefined, telemetryContext)
     })
 
     // ── Step 2: Lock entity for sync ──
     stepEmit("lock", `Locking ${entityType}`)
     if (isContract) {
       await preTxContractStep("lock", async () => {
-        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target)
+        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target, undefined, telemetryContext)
       })
     }
 
@@ -215,19 +217,19 @@ async function executeSyncInner(
       const tr = plan.tables.find((t) => t.table === tn)
       return tr && tr.counts.insert + tr.counts.update > 0
     })
-    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables)
+    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables, telemetryContext)
 
     // ── Step 4: Sync metadata in transaction ──
     stepEmit("sync-metadata", "Syncing metadata rows")
     const { applied: appliedTotals } = await runMetadataSync({
-      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool,
+      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool, telemetryContext,
     })
     stepEmit("sync-metadata-done", "Metadata sync committed")
 
     // ── Steps 5-23: Post-tx contract pipeline ──
     const { stepWarnings: pipelineWarnings } = await runContractPipeline({
       host: opts.host, tgtPool, srcPool, plan, planId, isContract,
-      entityId, entityType, onProgress,
+      entityId, entityType, onProgress, telemetryContext,
     })
     stepWarnings.push(...pipelineWarnings)
 
@@ -260,7 +262,7 @@ async function executeSyncInner(
     // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
     // helper already rolled back the tx and re-enabled FKs on failure.
     if (isContract) {
-      try { await setContractLockDirect(opts.host, tgtPool, Number(entityId), false, plan.target) }
+      try { await setContractLockDirect(opts.host, tgtPool, Number(entityId), false, plan.target, undefined, telemetryContext) }
       catch { /* best-effort */ }
     }
 

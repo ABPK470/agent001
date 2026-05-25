@@ -28,7 +28,7 @@ import {
 } from "@mia/agent"
 import {
     getEnvironments,
-    setEnvironments,
+    replaceEnvironments,
     withPermissionDefaults,
     type SyncEnvironment,
 } from "@mia/sync"
@@ -59,7 +59,7 @@ export function applyEnvOverrides(host: AgentHost): void {
     const o = overrides.get(e.name)
     return o ? withPermissionDefaults({ ...e, ...o, name: e.name }) : e
   })
-  setEnvironments(host, merged)
+  replaceEnvironments(host, merged)
   console.log(`[policy-seeder] applied ${overrides.size} sync-env override(s): ${Array.from(overrides.keys()).join(", ")}`)
 }
 

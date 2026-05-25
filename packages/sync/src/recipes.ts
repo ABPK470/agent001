@@ -141,9 +141,8 @@ export interface ActiveSyncRecipeSelection {
 
 const DEFAULT_RECIPES_PATH = "deploy/mssql/sync-recipes.json"
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+// The recipe bundle cache lives on the supplied host so sync stays free of
+// ambient runtime state.
 
 /**
  * Load the sync-recipes bundle from disk. Caches in memory.

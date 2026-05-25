@@ -14,7 +14,7 @@
 import { type ConnectionPool } from "mssql"
 import { EventType, SyncProgressKind, type AgentHost } from "../contracts.js"
 import { type SyncPlan } from "../plan-store.js"
-import { emitSyncEvent as emit } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncTelemetryContext } from "../sync-events.js"
 import {
     createDataset,
     createDatasetFKs,
@@ -38,6 +38,7 @@ export interface ContractPipelineInput {
   entityId: string | number
   entityType: string
   onProgress: (p: ExecuteProgress) => void
+  telemetryContext?: SyncTelemetryContext
 }
 
 export interface StepWarning {
@@ -75,13 +76,20 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   // Resolve contractName once for all subsequent heavy steps.
   let contractName: string | undefined
   if (isContract) {
-    contractName = await resolveContractName(host, tgtPool, Number(entityId), input.plan.target)
+    contractName = await resolveContractName(host, tgtPool, Number(entityId), input.plan.target, input.telemetryContext)
   }
 
   if (isContract) {
     step("undeploy", "Undeploying contract on target")
     await callDirectStep("undeploy", async () => {
       await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target)
+    }, "undeploy")
+  }
+
+  if (isContract) {
+    step("undeploy", "Undeploying contract on target")
+    await callDirectStep("undeploy", async () => {
+      await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -89,7 +97,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("unlock-after-undeploy", "Unlocking after undeploy")
     await callDirectStep("unlock-after-undeploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -101,7 +109,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
         action: "syncOrNot",
         objType: "Contract",
         id: entityId,
-      }, input.plan.target)
+      }, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -109,7 +117,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("lock-for-deploy", "Locking for deployment")
     await callDirectStep("lock-for-deploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -117,7 +125,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-pre-script", "Running pre-deployment scripts")
     await callDirectStep("deploy-pre-script", async () => {
-      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run preScript", input.plan.target)
+      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run preScript", input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -126,7 +134,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     for (const dsType of ["stage", "archive", "list", "dim", "fact"] as const) {
       step(`create-dataset-${dsType}`, `Creating ${dsType} dataset`)
       await callDirectStep(`create-dataset-${dsType}`, async () => {
-        await createDataset(host, tgtPool, Number(entityId), contractName!, dsType, input.plan.target)
+        await createDataset(host, tgtPool, Number(entityId), contractName!, dsType, input.plan.target, undefined, input.telemetryContext)
       })
     }
   }
@@ -135,7 +143,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("create-fks", "Creating foreign keys")
     await callDirectStep("create-fks", async () => {
-      await createDatasetFKs(host, tgtPool, contractName!, input.plan.target)
+      await createDatasetFKs(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -143,7 +151,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-etl", "Deploying ETL custom transformations")
     await callDirectStep("deploy-etl", async () => {
-      await deployETL(host, tgtPool, contractName!, input.plan.target)
+      await deployETL(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -151,7 +159,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-routine", "Deploying routines")
     await callDirectStep("deploy-routine", async () => {
-      await deployRoutine(host, tgtPool, contractName!, input.plan.target)
+      await deployRoutine(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -159,7 +167,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-post-script", "Running post-deployment scripts")
     await callDirectStep("deploy-post-script", async () => {
-      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run postScript", input.plan.target)
+      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run postScript", input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -167,7 +175,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("unlock-after-deploy", "Unlocking after deployment")
     await callDirectStep("unlock-after-deploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
     })
   }
 
@@ -178,7 +186,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
       action: "syncDate",
       id: entityId,
       objType: isContract ? "Contract" : entityType,
-    }, input.plan.source)
+    }, input.plan.source, undefined, input.telemetryContext)
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
     console.warn(`[sync.execute] syncDate update failed:`, e)
@@ -194,7 +202,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
       action: "deployDate",
       id: entityId,
       objType: isContract ? "Contract" : entityType,
-    }, input.plan.target)
+    }, input.plan.target, undefined, input.telemetryContext)
   } catch (e) { console.warn(`[sync.execute] deployDate update failed:`, e) }
 
   return { stepWarnings }

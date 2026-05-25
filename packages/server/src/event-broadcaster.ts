@@ -21,7 +21,7 @@
  * fresh instances to avoid shared state.
  *
  * Backend-internal event flow (agent → server) does NOT use this transport.
- * It uses in-process callback injection (`setSyncEventSink`,
+ * It uses in-process callback injection (`configureSyncEventSink`,
  * `engineServices` listeners, `onProgress`) which the server then forwards
  * here via `broadcast(...)`.
  */

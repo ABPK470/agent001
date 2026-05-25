@@ -11,6 +11,7 @@
 
 import type sql from "mssql"
 import type { AgentHost } from "../contracts.js"
+import type { SyncTelemetryContext } from "../sync-events.js"
 import { emitSyncSqlEvent } from "../sync-events.js"
 
 /**
@@ -26,10 +27,6 @@ export const PREVIEW_TABLE_CONCURRENCY = Math.max(
 
 /** Maximum tolerated drift between preview and current source row counts. */
 export const DRIFT_ABORT_PCT = 0.05
-
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
 
 /** Configure the project root used to load sync-recipes.json. */
 export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {
@@ -90,6 +87,7 @@ export async function trackedQuery<T = unknown>(
   sqlText: string,
   label: string,
   connection: string,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<sql.IResult<T>> {
   const t0 = Date.now()
   try {
@@ -101,7 +99,7 @@ export async function trackedQuery<T = unknown>(
       durationMs: Date.now() - t0,
       rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
       attempts: 1,
-    })
+    }, telemetryContext)
     return result
   } catch (e) {
     emitSyncSqlEvent(host, {
@@ -111,7 +109,7 @@ export async function trackedQuery<T = unknown>(
       durationMs: Date.now() - t0,
       attempts: 1,
       error: e instanceof Error ? e.message : String(e),
-    })
+    }, telemetryContext)
     throw e
   }
 }
@@ -123,6 +121,7 @@ export async function trackedExecute(
   sprocName: string,
   label: string,
   connection: string,
+  telemetryContext?: SyncTelemetryContext,
 ): Promise<sql.IProcedureResult<unknown>> {
   const t0 = Date.now()
   try {
@@ -134,7 +133,7 @@ export async function trackedExecute(
       durationMs: Date.now() - t0,
       rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
       attempts: 1,
-    })
+    }, telemetryContext)
     return result
   } catch (e) {
     emitSyncSqlEvent(host, {
@@ -144,7 +143,7 @@ export async function trackedExecute(
       durationMs: Date.now() - t0,
       attempts: 1,
       error: e instanceof Error ? e.message : String(e),
-    })
+    }, telemetryContext)
     throw e
   }
 }

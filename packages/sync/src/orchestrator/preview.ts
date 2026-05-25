@@ -29,7 +29,7 @@ import {
     type SyncRecipe,
     type SyncRecipeTable,
 } from "../recipes.js"
-import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncTelemetryContext } from "../sync-events.js"
 import { fetchPkColumns } from "./apply.js"
 import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db-helpers.js"
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
@@ -58,17 +58,16 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
     force: Boolean(input.force),
   })
 
-  // runWithSyncContext threads {kind, opId, source, target} via AsyncLocalStorage
-  // so every SQL query fired inside this scope (in diff-engine, sample readers,
-  // PK lookup, display-name lookup) can attribute its `sync.preview.sql` event
-  // to this previewId without us having to plumb the id through every helper.
-  return runWithSyncContext(
-    { kind: SyncOperationType.Preview, opId: previewId, source: input.source, target: input.target },
-    () => previewSyncInner(input, previewId, t0),
-  )
+  const telemetryContext: SyncTelemetryContext = {
+    kind: SyncOperationType.Preview,
+    opId: previewId,
+    source: input.source,
+    target: input.target,
+  }
+  return previewSyncInner(input, previewId, t0, telemetryContext)
 }
 
-async function previewSyncInner(input: PreviewInput, previewId: string, t0: number): Promise<SyncPlan> {
+async function previewSyncInner(input: PreviewInput, previewId: string, t0: number, telemetryContext: SyncTelemetryContext): Promise<SyncPlan> {
   try {
     // Lookup order: entity-registry resolver wins; on miss, fall back to
     // the bundled JSON. Both produce the same `SyncRecipe` shape so the
@@ -157,7 +156,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             input.source,
             input.target,
             pkColumnsByTable.get(t.name) ?? [],
-            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds },
+            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds, telemetryContext },
           )
           emit(input.host, EventType.SyncPreviewTableDone, {
             previewId, table: t.name, counts: r.counts, durationMs: r.diffDurationMs,

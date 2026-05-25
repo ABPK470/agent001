@@ -4,6 +4,8 @@
  * @module
  */
 
+import type { SyncTelemetryContext } from "../sync-events.js"
+
 export interface DiffOptions {
   /** Per-table source row cap; if exceeded the table is flagged and skipped. */
   rowCap?: number
@@ -14,12 +16,15 @@ export interface DiffOptions {
    * expanded tree IDs. Substituted into `{ids}` placeholders in predicates.
    */
   expandedIds?: Array<string | number> | null
+  /** Optional telemetry attribution for SQL emitted during this diff. */
+  telemetryContext?: SyncTelemetryContext
 }
 
-export const DEFAULT_OPTS: Required<DiffOptions> = {
+export const DEFAULT_OPTS: DiffOptions = {
   rowCap: 5_000_000,
   sampleSize: 50,
   expandedIds: null,
+  telemetryContext: undefined,
 }
 
 /**

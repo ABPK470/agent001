@@ -137,11 +137,7 @@ export interface SyncPlan {
 
 // ── Store ────────────────────────────────────────────────────────
 
-// In-memory plan cache lives on the active AgentRuntime
-// (`currentRuntime().sync.plans.memCache`).
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+// In-memory plan cache lives on the supplied host (`host.sync.plans.memCache`).
 
 const TTL_MS = 24 * 60 * 60 * 1000
 const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000

@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 /**
- * lint-arch.mjs — architecture lint for `packages/agent/src/` and `packages/server/src/`.
+ * lint-arch.mjs — architecture lint for `packages/agent/src/`, `packages/server/src/`, and `packages/sync/src/`.
  *
- * Enforces, with no external dependencies. Two severities:
- *   - ERROR   → exits non-zero, fails CI.
- *   - WARNING → prints but does not fail. Used during doctrine roll-out.
+ * Enforces, with no external dependencies. All violations are ERRORs.
  *
  * ERRORS:
  *   1. CLUSTER DOORS
@@ -24,9 +22,9 @@
  *      Once Phase 7 lands, server sync entrypoints may not come from
  *      `@mia/agent` anymore.
  *
- * WARNINGS (doctrine — see docs/doctrine.md, flipped to ERROR at Phase 8):
+ * ERRORS (doctrine — see docs/doctrine.md):
  *   5. NO NEW AsyncLocalStorage instances. Known cases are allow-listed.
- *      Every new `new AsyncLocalStorage(...)` warns until the file is
+ *      Every new `new AsyncLocalStorage(...)` fails until the file is
  *      added to the allow-list.
  *
  *   6. NO NEW exported `set<Pascal>(...)` mutator functions. Existing
@@ -38,7 +36,7 @@
  *      Client) — see docs/doctrine.md §4. Existing names allow-listed.
  *
  * Run with: `node scripts/lint-arch.mjs`
- * Exits non-zero on any ERROR. WARNINGS print but don't affect exit code.
+ * Exits non-zero on any ERROR.
  * Designed to slot into CI and pre-commit.
  */
 
@@ -49,6 +47,7 @@ import { fileURLToPath } from "node:url"
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..")
 const AGENT_SRC = join(ROOT, "packages/agent/src")
 const SERVER_SRC = join(ROOT, "packages/server/src")
+const SYNC_SRC = join(ROOT, "packages/sync/src")
 
 // Clusters that own a public `index.ts` door.
 const CLUSTERS = new Set([
@@ -71,13 +70,11 @@ const STATE_ALLOWLIST = new Set([
 const TIMER_ALLOWLIST = new Set([
 ])
 
-// ── Doctrine roll-out allowlists (Phase 0 → Phase 8) ──────────────
+// ── Doctrine allowlists ────────────────────────────────────────────
 //
 // These lists capture every existing violation as of the start of the
 // Functional Core / Imperative Shell refactor (docs/doctrine.md).
 // As Phase 4–5 migrates clusters, entries are removed from these lists.
-// At Phase 8 the allowlists are deleted and the rules become ERRORs.
-//
 // Paths are workspace-relative.
 
 const ALS_ALLOWLIST = new Set([
@@ -113,6 +110,10 @@ const SETTER_ALLOWLIST = new Set([
   "packages/server/src/attachments/repo.ts",
   "packages/server/src/setup-mssql.ts",
   "packages/ui-term/src/uiPref.ts",
+])
+
+const SETTER_NAME_ALLOWLIST = new Set([
+  "setContractLockDirect",
 ])
 
 // Banned type-name suffixes (see docs/doctrine.md §4). Each entry below
@@ -271,6 +272,9 @@ const PHASE7_SYNC_SYMBOLS = new Set([
   "loadSyncRecipes",
   "previewSync",
   "searchEntities",
+  "replaceEnvironments",
+  "configureSyncEventSink",
+  "configureSyncRunSink",
   "setEnvironments",
   "setSyncEventSink",
   "setSyncRunSink",
@@ -297,20 +301,20 @@ function lintServerSyncPackageBoundary() {
     }
   }
 }
-// ── Rule 4 (WARN): no new AsyncLocalStorage instances ────────────
+// ── Rule 4: no new AsyncLocalStorage instances ────────────────────
 function lintNoAls(file, src) {
   const relFromRoot = relative(ROOT, file)
   if (ALS_ALLOWLIST.has(relFromRoot)) return
   const lines = src.split("\n")
   for (let i = 0; i < lines.length; i++) {
     if (/\bnew\s+AsyncLocalStorage\b/.test(lines[i])) {
-      warn(file, i + 1, "no-als-doctrine",
+      fail(file, i + 1, "no-als-doctrine",
         `new AsyncLocalStorage forbidden by docs/doctrine.md §6 — thread deps as parameters`)
     }
   }
 }
 
-// ── Rule 5 (WARN): no new exported set<Pascal> mutator functions ───
+// ── Rule 5: no new exported set<Pascal> mutator functions ─────────
 function lintNoSetters(file, src) {
   const relFromRoot = relative(ROOT, file)
   if (SETTER_ALLOWLIST.has(relFromRoot)) return
@@ -319,13 +323,14 @@ function lintNoSetters(file, src) {
     // export function set<Pascal>(...) — catches top-level exported setters.
     const m = lines[i].match(/^export\s+(?:async\s+)?function\s+(set[A-Z][A-Za-z0-9_]*)\s*\(/)
     if (m) {
-      warn(file, i + 1, "no-setter-doctrine",
+      if (SETTER_NAME_ALLOWLIST.has(m[1])) continue
+      fail(file, i + 1, "no-setter-doctrine",
         `exported "${m[1]}" forbidden by docs/doctrine.md §6 — build state at boot via configureAgent`)
     }
   }
 }
 
-// ── Rule 6 (WARN): no banned type-name suffixes ───────────────
+// ── Rule 6: no banned type-name suffixes ─────────────────────────
 const BANNED_SUFFIX_RE =
   /^export\s+(?:abstract\s+)?(?:interface|class|type)\s+([A-Z][A-Za-z0-9_]*?(Provider|Service|Resolver|Executor|Sandbox|Repository|Manager|Handler|Helper))\b/
 function lintBannedSuffixes(file, src) {
@@ -335,7 +340,7 @@ function lintBannedSuffixes(file, src) {
     if (!m) continue
     const typeName = m[1]
     if (BANNED_SUFFIX_ALLOWLIST.has(typeName)) continue
-    warn(file, i + 1, "banned-suffix-doctrine",
+    fail(file, i + 1, "banned-suffix-doctrine",
       `type name "${typeName}" uses banned suffix — use *Sink / *Store / *Reader / *Client (docs/doctrine.md §4)`)
   }
 }
@@ -356,8 +361,8 @@ for (const f of agentFiles) {
 lintServerImports()
 lintServerSyncPackageBoundary()
 
-// Apply doctrine warning rules to the server package too (and ui-term).
-const extraRoots = [SERVER_SRC, join(ROOT, "packages/ui-term/src")]
+// Apply doctrine rules outside the agent package too.
+const extraRoots = [SERVER_SRC, SYNC_SRC, join(ROOT, "packages/ui-term/src")]
 let extraFileCount = 0
 for (const root of extraRoots) {
   if (!safeStat(root)) continue
@@ -370,27 +375,8 @@ for (const root of extraRoots) {
   }
 }
 
-// Print warnings first (doctrine roll-out), then errors.
-if (warnings.length > 0) {
-  console.warn(`lint-arch: ${warnings.length} doctrine warning(s) — see docs/doctrine.md:\n`)
-  const groupedW = new Map()
-  for (const e of warnings) {
-    const key = relative(ROOT, e.file)
-    if (!groupedW.has(key)) groupedW.set(key, [])
-    groupedW.get(key).push(e)
-  }
-  for (const [file, items] of groupedW) {
-    console.warn(`  ${file}`)
-    for (const e of items) {
-      console.warn(`    L${e.line}  [${e.rule}]  ${e.detail}`)
-    }
-  }
-  console.warn("")
-}
-
 if (errors.length === 0) {
-  const suffix = warnings.length > 0 ? ` (with ${warnings.length} warning(s))` : ""
-  console.log(`lint-arch: ${agentFiles.length + extraFileCount} files OK${suffix}.`)
+  console.log(`lint-arch: ${agentFiles.length + extraFileCount} files OK.`)
   process.exit(0)
 }
 console.error(`lint-arch: ${errors.length} violation(s):\n`)

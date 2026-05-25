@@ -1,7 +1,7 @@
 /**
  * Run-level lifecycle persistence sink.
  *
- * Mirrors the `setSyncEventSink` pattern: agent-package code emits via the
+ * Mirrors the `configureSyncEventSink` pattern: agent-package code emits via the
  * sink interface, server installs the SQLite-backed implementation at
  * startup. Keeps the agent package free of server-side deps.
  */
@@ -46,7 +46,7 @@ export interface SyncRunSink {
 }
 
 /** Server installs this once at startup. */
-export function setSyncRunSink(host: AgentHost, sink: SyncRunSink): void {
+export function configureSyncRunSink(host: AgentHost, sink: SyncRunSink): void {
   host.sync.runSink = sink
 }
 

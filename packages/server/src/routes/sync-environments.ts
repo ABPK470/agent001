@@ -26,7 +26,7 @@ import {
     ENV_ACCESS_MODES,
     getEnvironments,
     isEnvAccessMode,
-    setEnvironments,
+    replaceEnvironments,
     withPermissionDefaults,
     type EnvOperation,
     type SyncEnvironment,
@@ -121,7 +121,7 @@ function refreshRegistryFor(host: AgentHost, name: string): void {
       ? withPermissionDefaults({ ...e, ...parsed, name: e.name })
       : e,
   )
-  setEnvironments(host, next)
+  replaceEnvironments(host, next)
 }
 
 export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {

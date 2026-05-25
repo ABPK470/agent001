@@ -86,11 +86,10 @@ interface SyncEnvironmentsConfigFile {
   environments: Array<Partial<SyncEnvironment> & { name: string }>
 }
 
-// Environment registry lives on the active AgentRuntime
-// (`currentRuntime().sync.environments`).
+// Environment registry lives on the supplied host.
 
 /** Configure all environments at once. Replaces any prior config. */
-export function setEnvironments(host: AgentHost, envs: SyncEnvironment[]): void {
+export function replaceEnvironments(host: AgentHost, envs: SyncEnvironment[]): void {
   host.sync.environments.clear()
   for (const e of envs) host.sync.environments.set(e.name, e)
 }
@@ -182,7 +181,7 @@ export async function setupEnvironments(host: AgentHost, projectRoot: string, re
         denyDdl: e.denyDdl,
         approvalRequiredOperations: e.approvalRequiredOperations,
       }))
-      setEnvironments(host, envs)
+      replaceEnvironments(host, envs)
       const summary = envs.map((e) => `${e.name}[${e.role}/${e.defaultAccessMode}]`).join(", ")
       console.log(`ABI environments (from ${relPath}): ${summary}`)
     } catch (e) {
@@ -201,7 +200,7 @@ export async function setupEnvironments(host: AgentHost, projectRoot: string, re
       ringOrder: i,
       syncAllowlist: [],
     }))
-    setEnvironments(host, envs)
+    replaceEnvironments(host, envs)
     if (envs.length) {
       console.log(`ABI environments (auto from MSSQL_DATABASES): ${envs.map((e) => `${e.name}[${e.defaultAccessMode}]`).join(", ")}`)
     }
