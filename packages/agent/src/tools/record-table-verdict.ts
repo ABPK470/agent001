@@ -16,7 +16,7 @@
  * `recordTableVerdict` from server memory.
  */
 
-import type { TableVerdictRoleType } from "../agent-runtime.js"
+import type { TableVerdictRoleType } from "../host/index.js"
 import type { Tool } from "../types.js"
 
 export const TABLE_VERDICT_ROLES = [

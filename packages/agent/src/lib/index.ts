@@ -7,11 +7,16 @@
  */
 
 // ── Core ────────────────────────────────────────────────────────────
-export { AgentRuntime } from "../agent-runtime.js"
-export type { AgentRuntimeOptions, AttachmentMetadata, AttachmentService, BrowserContextHandle, BrowserContextProvider, BrowserCredentialProvider, BrowserGuard, BrowserHandoffProvider } from "../agent-runtime.js"
 export { Agent } from "../agent/index.js"
 export { configureAgent, makeRunContext } from "../host/index.js"
-export type { AgentHost, BrowserClient, ConfigureAgentOptions, MakeRunContextOptions, RunContext, ShellClient } from "../host/index.js"
+export type {
+    AgentHost, AttachmentMetadata,
+    AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
+    BrowserContextReader as BrowserContextProvider,
+    CredentialReader as BrowserCredentialProvider,
+    BrowserGuard,
+    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, MakeRunContextOptions, RunContext, ShellClient
+} from "../host/index.js"
 
 // ── Types & constants ───────────────────────────────────────────────
 export {

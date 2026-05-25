@@ -1,6 +1,5 @@
 import {
   Agent,
-  AgentRuntime,
   cancelRun,
   completeRun,
   computeAutoDetectedExcludeDirs,
@@ -163,14 +162,6 @@ export async function executeRunImpl(
   persistRun(run, goal, agentId, resume?.parentRunId)
 
   const state: RunState = { run, actor, stepCounter: resume?.iteration ?? 0 }
-
-  // Per-request AgentRuntime — owns this run's workspace cwd, kill signals,
-  // browse-web sessions, and ask-user resolver. Inherits shared infra (mssql
-  // pools, executors, catalog cache, sync sinks) from the process root.
-  const runtime = new AgentRuntime({
-    workspaceRoot: runWorkspace.executionRoot,
-    signal: controller.signal,
-  })
   const runContext = makeRunContext({
     signal: controller.signal,
     memory: {
@@ -337,7 +328,6 @@ export async function executeRunImpl(
     depth: 0,
     maxDepth: maxDelegationDepth,
     signal: controller.signal,
-    parentRuntime: null,
     // Per-child bus tools so each child publishes as ITSELF, not the parent.
     // This is the load-bearing fix for B.3 — without it, every send_message
     // from a delegated child would be persisted with the parent's runId /
@@ -446,7 +436,6 @@ export async function executeRunImpl(
     sessionId: activeRun?.sessionId ?? null,
     upn: activeRun?.ownerUpn ?? null,
   })
-  delegateCtx.parentRuntime = runtime
 
   // Wrap sync tools to emit global SSE events so the Sync widget can react
   // to agent-triggered previews and executes without needing to go through
@@ -681,11 +670,6 @@ export async function executeRunImpl(
         const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
         callSignals.set(toolCallId, composed)
         runContext.signal = composed
-        // Tool-call kill signals live on the per-request runtime. shell/fetch
-        // /browse-web tools still read these from runtime-owned compatibility state.
-        runtime.shell.killSignal = composed
-        runtime.fetchUrl.killSignal = composed
-        runtime.browseWeb.killSignal = composed
         return new Promise<string>((resolve) => {
           const key = `${runId}:${toolCallId}`
           ctx.pendingKills.set(key, { resolve, perToolCtrl })
@@ -696,9 +680,6 @@ export async function executeRunImpl(
         callSignals.delete(toolCallId)
         ctx.pendingKills.delete(`${runId}:${toolCallId}`)
         runContext.signal = controller.signal
-        runtime.shell.killSignal = controller.signal
-        runtime.fetchUrl.killSignal = null
-        runtime.browseWeb.killSignal = null
         broadcast({ type: EventType.ToolCallCompleted, data: { runId, toolCallId } })
       },
       wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
@@ -782,12 +763,9 @@ export async function executeRunImpl(
   })
 
   try {
-    runtime.shell.killSignal = controller.signal
-    runtime.fetchUrl.killSignal = null
-    runtime.browseWeb.killSignal = null
-
-    let answer = await runtime.run(() =>
-      agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
+    let answer = await agent.run(
+      goal,
+      resume ? { messages: resume.messages, iteration: resume.iteration } : undefined,
     )
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
@@ -1033,7 +1011,6 @@ export async function executeRunImpl(
     const hasCheckpoint = !!db.getCheckpoint(runId)
     createNotification({ type: EventType.RunFailed, title: "Run failed", message: `"${goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`, runId, actions: [{ label: "Review", action: NotificationActionType.ViewRun, data: { runId } }, ...(hasCheckpoint ? [{ label: "Resume", action: NotificationActionType.ResumeRun, data: { runId } }] : []), { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId } }] })
   } finally {
-    await runtime.dispose()
     releaseSlot()
     bus.dispose()
     ctx.pendingInputs.delete(runId)

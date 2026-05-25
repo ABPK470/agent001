@@ -34,12 +34,10 @@ export type {
 
 export type {
     AttachmentMetadata,
-    AttachmentStore,
-    BrowserCheckRunResult,
+    AttachmentStore, BrowserCheckRunResult,
     BrowserClient,
     BrowserContextHandle,
-    BrowserContextReader,
-    CredentialReader,
+    BrowserContextReader, BrowserGuard, CredentialReader,
     HandoffStore,
     MssqlEntry,
     RecipeReader,

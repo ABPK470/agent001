@@ -13,11 +13,10 @@
  * there is no ambient/`getActiveAgentHost()` access here.
  */
 
-import { type AttachmentService } from "../agent-runtime.js"
-import { type AgentHost } from "../host/index.js"
+import { type AgentHost, type AttachmentStore } from "../host/index.js"
 import type { Tool } from "../types.js"
 
-function requireServiceFromHost(host: AgentHost): AttachmentService {
+function requireServiceFromHost(host: AgentHost): AttachmentStore {
   if (!host.attachments) {
     throw new Error(
       "Attachment service is not configured on this AgentHost. " +

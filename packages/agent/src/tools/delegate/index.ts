@@ -25,7 +25,6 @@
  *   concurrently with Promise.allSettled so one failure doesn't kill the rest.
  */
 
-import type { AgentRuntime } from "../../agent-runtime.js"
 import { DelegationTraceKind } from "../../domain/enums/planner-trace.js"
 import type { LLMClient, TokenUsage, Tool } from "../../types.js"
 import { spawnChild, type ChildSpec } from "../delegate-spawn/index.js"
@@ -75,8 +74,6 @@ export interface DelegateContext {
   maxDepth?: number
   /** Abort signal from the root run. */
   signal?: AbortSignal
-  /** Parent runtime shell to inherit shared runtime-owned infrastructure from. */
-  parentRuntime?: AgentRuntime | null
   /** Resolve a named agent definition by ID. Returns null if not found. */
   resolveAgent?: (agentId: string) => ResolvedAgent | null
   /** Called when child agent produces trace events for nesting. */

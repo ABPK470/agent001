@@ -3,6 +3,7 @@ import type { AgentHost, RunContext } from "../../host/index.js"
 import { readToolTraceContext } from "../../loop/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
+import type { CatalogGraph } from "../catalog/graph/index.js"
 import { getPool } from "./connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
@@ -10,7 +11,7 @@ import { formatResults } from "./formatter.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
-function catalogAccessorFor(host: AgentHost, connectionName: string): () => unknown {
+function catalogAccessorFor(host: AgentHost, connectionName: string): () => CatalogGraph | null {
   return () => {
     const exact = host.catalog.instances.get(connectionName)
     if (exact) return exact

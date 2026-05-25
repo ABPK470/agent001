@@ -1,6 +1,5 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
-import { AgentRuntime } from "../../agent-runtime.js"
 import { Agent } from "../../agent/index.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
@@ -143,12 +142,6 @@ export async function spawnChildForPlan(
     return null
   } : undefined
 
-  // Per-child AgentRuntime — see spawn-child.ts for rationale.
-  const childRuntime = new AgentRuntime({
-    inheritFrom: ctx.parentRuntime ?? undefined,
-    signal: ctx.signal,
-  })
-
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     // If the parent resolved system prompt is available (contains DB knowledge, schema context,
@@ -222,7 +215,7 @@ export async function spawnChildForPlan(
   })
 
   try {
-    const answer = await childRuntime.run(() => child.run(goal))
+    const answer = await child.run(goal)
     const hitLimit = answer.startsWith("Agent stopped after")
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)
@@ -264,7 +257,6 @@ export async function spawnChildForPlan(
       execution: buildChildExecutionResult(output, child.allToolCalls),
     }
   } finally {
-    await childRuntime.dispose()
     releaseSlot?.()
   }
 }

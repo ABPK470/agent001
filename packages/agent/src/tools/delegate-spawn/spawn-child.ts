@@ -1,4 +1,3 @@
-import { AgentRuntime } from "../../agent-runtime.js"
 import { Agent } from "../../agent/index.js"
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
@@ -135,15 +134,6 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // Buffer LLM request/response events so they emit AFTER the iteration marker
   let pendingLlmEvents: Record<string, unknown>[] = []
 
-  // Per-child AgentRuntime — inherits shared infrastructure (mssql pools,
-  // executors, catalog cache, sync sinks) from the parent's runtime, but has
-  // its own browse-web sessions and kill signals so concurrent siblings
-  // cannot interfere with one another.
-  const childRuntime = new AgentRuntime({
-    inheritFrom: ctx.parentRuntime ?? undefined,
-    signal: ctx.signal,
-  })
-
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: effectivePrompt,
@@ -217,7 +207,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   })
 
   try {
-    const answer = await childRuntime.run(() => child.run(effectiveGoal))
+    const answer = await child.run(effectiveGoal)
     const hitLimit = answer.startsWith("Agent stopped after")
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)
@@ -248,7 +238,6 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
 
     return `Delegation failed: ${errMsg}`
   } finally {
-    await childRuntime.dispose()
     releaseSlot?.()
   }
 }
