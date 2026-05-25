@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * lint-arch.mjs — architecture lint for `packages/agent/src/`.
+ * lint-arch.mjs — architecture lint for `packages/agent/src/` and `packages/server/src/`.
  *
- * Enforces, with no external dependencies:
+ * Enforces, with no external dependencies. Two severities:
+ *   - ERROR   → exits non-zero, fails CI.
+ *   - WARNING → prints but does not fail. Used during doctrine roll-out.
  *
+ * ERRORS:
  *   1. CLUSTER DOORS
  *      Files outside cluster `<X>/` may not import deep into `<X>/`. Only
  *      `<X>/index.js` is importable from the outside.
@@ -11,14 +14,28 @@
  *   2. NO MODULE-LEVEL MUTABLE STATE outside designated runtime files
  *      Bans top-level `let` / `var`. Bans top-level `setInterval` /
  *      `setTimeout`. Bans exported `getGlobal*` / `setGlobal*` symbols.
- *      Allow-listed files (Phase 2b migration targets) keep working.
+ *      Allow-listed files keep working.
  *
  *   3. SERVER MAY NOT REACH INTO AGENT INTERNALS
  *      `packages/server/**` may only import `@mia/agent`, never
  *      `packages/agent/src/**`.
  *
+ * WARNINGS (doctrine — see docs/doctrine.md, flipped to ERROR at Phase 8):
+ *   4. NO NEW AsyncLocalStorage instances. Known cases are allow-listed.
+ *      Every new `new AsyncLocalStorage(...)` warns until the file is
+ *      added to the allow-list.
+ *
+ *   5. NO NEW exported `set<Pascal>(...)` mutator functions. Existing
+ *      ones are allow-listed; the list shrinks as Phase 4 migrates clusters.
+ *
+ *   6. NO BANNED type-name suffixes (Provider / Service / Resolver /
+ *      Executor / Sandbox / Repository / Manager / Handler / Helper).
+ *      Use the four canonical suffixes instead (Sink / Store / Reader /
+ *      Client) — see docs/doctrine.md §4. Existing names allow-listed.
+ *
  * Run with: `node scripts/lint-arch.mjs`
- * Exits non-zero on any violation. Designed to slot into CI and pre-commit.
+ * Exits non-zero on any ERROR. WARNINGS print but don't affect exit code.
+ * Designed to slot into CI and pre-commit.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs"
@@ -33,6 +50,7 @@ const SERVER_SRC = join(ROOT, "packages/server/src")
 const CLUSTERS = new Set([
   "context", "recovery", "delegation", "governance", "tool-helpers",
   "loop", "llm", "tools", "sync", "internal", "engine", "planner",
+  "host",
 ])
 
 // Files that are allowed to hold module-level state. The only legitimate
@@ -50,9 +68,87 @@ const TIMER_ALLOWLIST = new Set([
   "tools/browse-web/session.ts",
 ])
 
+// ── Doctrine roll-out allowlists (Phase 0 → Phase 8) ──────────────
+//
+// These lists capture every existing violation as of the start of the
+// Functional Core / Imperative Shell refactor (docs/doctrine.md).
+// As Phase 4–5 migrates clusters, entries are removed from these lists.
+// At Phase 8 the allowlists are deleted and the rules become ERRORs.
+//
+// Paths are workspace-relative.
+
+const ALS_ALLOWLIST = new Set([
+  "packages/agent/src/loop/tool-execution/trace-context.ts",
+  "packages/agent/src/domain/policy-context.ts",
+  "packages/agent/src/sync/sync-events.ts",
+  "packages/agent/src/agent-runtime.ts",
+  "packages/agent/src/tools/mssql/connection.ts",
+  "packages/server/src/auth/context.ts",
+])
+
+// Files containing exported `set<Pascal>(...)` mutators. Each entry will
+// be deleted in Phase 4 as its cluster migrates to closure-bound tools.
+const SETTER_ALLOWLIST = new Set([
+  "packages/agent/src/sync/sync-events.ts",
+  "packages/agent/src/sync/sync-run-sink.ts",
+  "packages/agent/src/sync/environments.ts",
+  "packages/agent/src/sync/orchestrator/contract-deploy.ts",
+  "packages/agent/src/tenant/config.ts",
+  "packages/agent/src/tools/search-files.ts",
+  "packages/agent/src/tools/fetch-url/index.ts",
+  "packages/agent/src/tools/browser-check/index.ts",
+  "packages/agent/src/tools/browse-web/session.ts",
+  "packages/agent/src/tools/ask-user.ts",
+  "packages/agent/src/tools/attachments.ts",
+  "packages/agent/src/tools/shell/index.ts",
+  "packages/agent/src/tools/filesystem-security.ts",
+  "packages/agent/src/tools/mssql/connection.ts",
+  // The setters below mutate persistent records, not ambient state.
+  // They're allow-listed permanently (legitimate "update this row").
+  "packages/server/src/db/users.ts",
+  "packages/server/src/browser/proxy.ts",
+  "packages/server/src/attachments/repo.ts",
+  "packages/server/src/setup-mssql.ts",
+  "packages/ui-term/src/uiPref.ts",
+])
+
+// Banned type-name suffixes (see docs/doctrine.md §4). Each entry below
+// is an existing type name that violates the rule. Renamed during Phase 4–5
+// per the rename map in /memories/session/plan.md.
+const BANNED_SUFFIX_ALLOWLIST = new Set([
+  // Will be renamed:
+  "AuditService",                        // → AuditStore
+  "MemoryRunRepository",                 // → RunStore (in-memory)
+  "MemoryAuditRepository",               // → AuditStore (in-memory)
+  "MemoryExecutionRecordRepository",     // → ExecutionRecordStore (in-memory)
+  "RunRepository",                       // → RunStore
+  "AuditRepository",                     // → AuditStore
+  "ExecutionRecordRepository",           // → ExecutionRecordStore
+  "BrowserContextProvider",              // → BrowserContextReader
+  "BrowserCredentialProvider",           // → CredentialReader
+  "BrowserHandoffProvider",              // → HandoffStore
+  "AttachmentService",                   // → AttachmentStore
+  "AskUserResolver",                     // → UserInputReader
+  "ShellExecutor",                       // → ShellClient
+  "BrowserCheckExecutor",                // → BrowserClient
+  "RecipeResolver",                      // → RecipeReader
+  "ToolKillManager",                     // TBD — kept for now
+  "NoteHandler",                         // domain callback type — kept
+  "KeybindHandler",                      // UI event callback — kept
+  "RecordTableVerdictHandler",           // domain callback type — kept
+  "RecallPriorResultHandler",            // domain callback type — kept
+  // Permanently kept (genuine domain concepts):
+  "DockerSandbox",                       // domain noun, not a port suffix
+  "LlmProvider",                         // enum of provider names, not a port
+])
+
 const errors = []
+const warnings = []
 function fail(file, line, rule, detail) {
   errors.push({ file, line, rule, detail })
+}
+function warn(file, line, rule, detail) {
+  warnings.push({ file, line, rule, detail })
 }
 
 function walk(dir) {
@@ -158,7 +254,48 @@ function lintServerImports() {
     }
   }
 }
+// ── Rule 4 (WARN): no new AsyncLocalStorage instances ────────────
+function lintNoAls(file, src) {
+  const relFromRoot = relative(ROOT, file)
+  if (ALS_ALLOWLIST.has(relFromRoot)) return
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    if (/\bnew\s+AsyncLocalStorage\b/.test(lines[i])) {
+      warn(file, i + 1, "no-als-doctrine",
+        `new AsyncLocalStorage forbidden by docs/doctrine.md §6 — thread deps as parameters`)
+    }
+  }
+}
 
+// ── Rule 5 (WARN): no new exported set<Pascal> mutator functions ───
+function lintNoSetters(file, src) {
+  const relFromRoot = relative(ROOT, file)
+  if (SETTER_ALLOWLIST.has(relFromRoot)) return
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    // export function set<Pascal>(...) — catches top-level exported setters.
+    const m = lines[i].match(/^export\s+(?:async\s+)?function\s+(set[A-Z][A-Za-z0-9_]*)\s*\(/)
+    if (m) {
+      warn(file, i + 1, "no-setter-doctrine",
+        `exported "${m[1]}" forbidden by docs/doctrine.md §6 — build state at boot via configureAgent`)
+    }
+  }
+}
+
+// ── Rule 6 (WARN): no banned type-name suffixes ───────────────
+const BANNED_SUFFIX_RE =
+  /^export\s+(?:abstract\s+)?(?:interface|class|type)\s+([A-Z][A-Za-z0-9_]*?(Provider|Service|Resolver|Executor|Sandbox|Repository|Manager|Handler|Helper))\b/
+function lintBannedSuffixes(file, src) {
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(BANNED_SUFFIX_RE)
+    if (!m) continue
+    const typeName = m[1]
+    if (BANNED_SUFFIX_ALLOWLIST.has(typeName)) continue
+    warn(file, i + 1, "banned-suffix-doctrine",
+      `type name "${typeName}" uses banned suffix — use *Sink / *Store / *Reader / *Client (docs/doctrine.md §4)`)
+  }
+}
 function safeStat(p) {
   try { return statSync(p) } catch { return null }
 }
@@ -169,11 +306,47 @@ for (const f of agentFiles) {
   const src = readFileSync(f, "utf8")
   lintClusterDoors(f, src)
   lintModuleState(f, src)
+  lintNoAls(f, src)
+  lintNoSetters(f, src)
+  lintBannedSuffixes(f, src)
 }
 lintServerImports()
 
+// Apply doctrine warning rules to the server package too (and ui-term).
+const extraRoots = [SERVER_SRC, join(ROOT, "packages/ui-term/src")]
+let extraFileCount = 0
+for (const root of extraRoots) {
+  if (!safeStat(root)) continue
+  for (const f of walk(root)) {
+    extraFileCount += 1
+    const src = readFileSync(f, "utf8")
+    lintNoAls(f, src)
+    lintNoSetters(f, src)
+    lintBannedSuffixes(f, src)
+  }
+}
+
+// Print warnings first (doctrine roll-out), then errors.
+if (warnings.length > 0) {
+  console.warn(`lint-arch: ${warnings.length} doctrine warning(s) — see docs/doctrine.md:\n`)
+  const groupedW = new Map()
+  for (const e of warnings) {
+    const key = relative(ROOT, e.file)
+    if (!groupedW.has(key)) groupedW.set(key, [])
+    groupedW.get(key).push(e)
+  }
+  for (const [file, items] of groupedW) {
+    console.warn(`  ${file}`)
+    for (const e of items) {
+      console.warn(`    L${e.line}  [${e.rule}]  ${e.detail}`)
+    }
+  }
+  console.warn("")
+}
+
 if (errors.length === 0) {
-  console.log(`lint-arch: ${agentFiles.length} files OK.`)
+  const suffix = warnings.length > 0 ? ` (with ${warnings.length} warning(s))` : ""
+  console.log(`lint-arch: ${agentFiles.length + extraFileCount} files OK${suffix}.`)
   process.exit(0)
 }
 console.error(`lint-arch: ${errors.length} violation(s):\n`)
