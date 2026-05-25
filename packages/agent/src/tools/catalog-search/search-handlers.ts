@@ -4,11 +4,17 @@
  * @module
  */
 
+import type { TableVerdictsReader } from "../../host/ports.js"
 import type { CatalogGraph } from "../catalog/index.js"
 import { fmtSysEntry, fmtTable } from "./formatters.js"
 
-export function handleSearch(catalog: CatalogGraph, query: string, schemaFilter?: string): string {
-  let hits = catalog.search(query)
+export function handleSearch(
+  catalog: CatalogGraph,
+  query: string,
+  schemaFilter?: string,
+  tableVerdicts?: TableVerdictsReader | null,
+): string {
+  let hits = catalog.search(query, 15, tableVerdicts)
   const sysHits = catalog.searchSys(query)
 
   if (schemaFilter) {

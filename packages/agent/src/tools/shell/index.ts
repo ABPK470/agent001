@@ -15,7 +15,6 @@
  */
 
 import { execFile } from "node:child_process"
-import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 
@@ -47,11 +46,6 @@ export type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal)
  * Source: `host.shell.sandboxStrict`. When true, only CONTAINER_RULES apply,
  * so the agent can freely run `node game.js`, `npm install`, etc.
  */
-
-/** Inject the run's AbortSignal so child processes are killed on cancel. */
-export function setShellSignal(signal: AbortSignal | null): void {
-  currentRuntime().shell.killSignal = signal
-}
 
 /** Default per-command timeout. Bumped from 30s → 120s so package installs,
  *  Playwright browser downloads, large test runs, and big git clones can
@@ -149,9 +143,7 @@ export const shellTool: Tool = {
 }
 
 /**
- * Factory variant bound to `host.shell.{cwd,client,sandboxStrict}`.
- * The run-scoped kill signal is still sourced from `currentRuntime()`
- * until Phase 5 introduces a RunContext parameter into Tool.execute.
+ * Factory variant bound to `host.shell.{cwd,client,sandboxStrict}` and optional run context.
  */
 export function createShellTool(host: AgentHost, run?: RunContext): Tool {
   return {
@@ -163,7 +155,7 @@ export function createShellTool(host: AgentHost, run?: RunContext): Tool {
         cwd: host.shell.cwd,
         executor: host.shell.client,
         sandboxStrict: host.shell.sandboxStrict,
-        killSignal: run?.signal ?? currentRuntime().shell.killSignal ?? null,
+        killSignal: run?.signal ?? null,
       })
     },
   }

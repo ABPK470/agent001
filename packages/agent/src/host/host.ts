@@ -22,16 +22,16 @@
 import type { SyncEnvironment, SyncEventSink, SyncPlan, SyncRecipeBundle, SyncRunSink } from "../sync/index.js"
 import type { BrowserSession, CatalogGraph } from "../tools/index.js"
 import type {
-  AttachmentStore,
-  BrowserClient,
-  BrowserContextReader,
-  CredentialReader,
-  HandoffStore,
-  MssqlEntry,
-  ShellClient,
-  TableVerdictsReader,
-  ToolKnowledgeStore,
-  UserInputReader,
+    AttachmentStore,
+    BrowserClient,
+    BrowserContextReader,
+    CredentialReader,
+    HandoffStore,
+    MssqlEntry,
+    ShellClient,
+    TableVerdictsReader,
+    ToolKnowledgeStore,
+    UserInputReader,
 } from "./ports.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────
@@ -185,7 +185,7 @@ export interface SyncOpContext {
  */
 export interface RunContext {
   /** Per-run abort signal. Tools should pass this to long IO. */
-  readonly signal: AbortSignal | null
+  signal: AbortSignal | null
   /** Per-run memory writer; null when no server is bound. */
   readonly memory: RunMemoryWriter | null
   /** Active tool-call trace, if inside a tool handler. */

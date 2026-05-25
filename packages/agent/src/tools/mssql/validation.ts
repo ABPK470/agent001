@@ -1,9 +1,9 @@
 // ── Query validation ─────────────────────────────────────────────
 
-import { currentRuntime } from "../../agent-runtime.js"
 import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import { getTenantConfig } from "../../tenant/config.js"
+import type { CatalogAccessor } from "../catalog/index.js"
 import {
     _resetCatalogQueriesCache,
     calendarDimensionTable,
@@ -148,8 +148,8 @@ function* iterateObjectRefs(query: string): IterableIterator<string> {
 }
 
 /** Lowercased schema.object names in `query` that the catalog classifies as large. */
-export function referencedLargeObjects(query: string): string[] {
-  const large = listLargeObjects({ threshold: getTenantConfig().largeObjectRows })
+export function referencedLargeObjects(query: string, accessor?: CatalogAccessor): string[] {
+  const large = listLargeObjects({ accessor, threshold: getTenantConfig().largeObjectRows })
   const found: string[] = []
   for (const key of iterateObjectRefs(query)) {
     if (large.has(key) && !found.includes(key)) found.push(key)
@@ -158,8 +158,8 @@ export function referencedLargeObjects(query: string): string[] {
 }
 
 /** Per-object reference counts (lowercased) of catalog-large objects in `query`. */
-export function countReferencedLargeObjects(query: string): Map<string, number> {
-  const large = listLargeObjects({ threshold: getTenantConfig().largeObjectRows })
+export function countReferencedLargeObjects(query: string, accessor?: CatalogAccessor): Map<string, number> {
+  const large = listLargeObjects({ accessor, threshold: getTenantConfig().largeObjectRows })
   const counts = new Map<string, number>()
   for (const key of iterateObjectRefs(query)) {
     if (!large.has(key)) continue
@@ -393,6 +393,7 @@ function outerFromTargets(stmt: string): string[] {
 
 export function detectWideUnionViewTopnWithoutBranchAggregation(
   query: string,
+  options: { accessor?: CatalogAccessor } = {},
 ): WideUnionViewTopnOffender | null {
   const tc = getTenantConfig()
   const stripped = stripForScan(query)
@@ -406,10 +407,10 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
     const groupBody = groupByMatch[1]
 
     for (const fromTarget of outerFromTargets(stmt)) {
-      if (!isExpensiveUnionView(fromTarget, { threshold: tc.unionBranchThreshold })) continue
+      if (!isExpensiveUnionView(fromTarget, { accessor: options.accessor, threshold: tc.unionBranchThreshold })) continue
       // Catalog says this FROM target is a wide UNION view. Check whether
       // GROUP BY mentions any of its high-cardinality keys.
-      const highCardKeys = highCardinalityKeyColumns(fromTarget)
+      const highCardKeys = highCardinalityKeyColumns(fromTarget, { accessor: options.accessor })
       if (highCardKeys.length === 0) continue
       let matchedKey: string | null = null
       for (const key of highCardKeys) {
@@ -428,9 +429,9 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
       if (narrowingJoin) continue
 
       return {
-        object: canonicalQualifiedName(fromTarget),
+        object: canonicalQualifiedName(fromTarget, { accessor: options.accessor }),
         groupKey: matchedKey,
-        branchCount: unionBranchCount(fromTarget),
+        branchCount: unionBranchCount(fromTarget, { accessor: options.accessor }),
       }
     }
   }
@@ -550,20 +551,7 @@ interface CatalogLike {
   getTable(qualifiedName: string): { columns: ReadonlyArray<{ name: string }> } | null
 }
 
-/** Default catalog accessor — uses the live runtime snapshot. */
-function defaultCatalogAccessor(): CatalogLike | null {
-  try {
-    const rt = currentRuntime()
-    const exact = rt.catalog.instances.get("default")
-    if (exact) return (exact as unknown as CatalogLike)
-    if (rt.catalog.instances.size > 0) {
-      return (rt.catalog.instances.values().next().value as unknown as CatalogLike) ?? null
-    }
-    return null
-  } catch {
-    return null
-  }
-}
+const EMPTY_CATALOG_ACCESSOR: CatalogAccessor = () => null
 
 /** Editor distance for "did you mean" suggestions; small + cheap, no deps. */
 function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>, k = 3): string[] {
@@ -594,7 +582,7 @@ function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>
  */
 export function detectInventedColumns(
   query: string,
-  accessor: () => CatalogLike | null = defaultCatalogAccessor,
+  accessor: () => CatalogLike | null = EMPTY_CATALOG_ACCESSOR,
 ): InventedColumnOffender[] {
   const catalog = accessor()
   if (!catalog) return []
@@ -744,19 +732,7 @@ export interface BranchCoverageGap {
   totalBranches: number
 }
 
-function defaultBranchAccessor(): BranchCatalogLike | null {
-  try {
-    const rt = currentRuntime()
-    const exact = rt.catalog.instances.get("default")
-    if (exact) return (exact as unknown as BranchCatalogLike)
-    if (rt.catalog.instances.size > 0) {
-      return (rt.catalog.instances.values().next().value as unknown as BranchCatalogLike) ?? null
-    }
-    return null
-  } catch {
-    return null
-  }
-}
+const EMPTY_BRANCH_ACCESSOR = (): BranchCatalogLike | null => null
 
 const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|branch-sample)/i
 
@@ -772,7 +748,7 @@ const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|bran
  */
 export function detectLineageBranchCoverage(
   query: string,
-  accessor: () => BranchCatalogLike | null = defaultBranchAccessor,
+  accessor: () => BranchCatalogLike | null = EMPTY_BRANCH_ACCESSOR,
 ): BranchCoverageGap[] {
   if (BRANCH_SAMPLE_COMMENT.test(query)) return []
 
@@ -842,11 +818,12 @@ export function detectBigViewWithoutProfile(
 }
 
 function liveProfiledTables(): ReadonlySet<string> | null {
-  try {
-    return currentRuntime().mssql.profileDataCalled
-  } catch {
-    return null
-  }
+  return null
+}
+
+export interface QueryValidationOptions {
+  accessor?: CatalogAccessor
+  profiledTables?: ReadonlySet<string> | null
 }
 
 // ── Cross-source reconciliation guard (Phase 5) ──────────────────
@@ -875,7 +852,7 @@ export interface RankingReportingMismatch {
   readonly bigViews: string[]
 }
 
-export function detectRankingVsReportingMismatch(query: string): RankingReportingMismatch | null {
+export function detectRankingVsReportingMismatch(query: string, accessor?: CatalogAccessor): RankingReportingMismatch | null {
   if (UNIVERSES_INTENTIONAL_COMMENT.test(query)) return null
   const stripped = query
     .replace(/--[^\r\n]*/g, "")
@@ -883,15 +860,15 @@ export function detectRankingVsReportingMismatch(query: string): RankingReportin
   if (!TEMP_TABLE_REF.test(stripped)) return null
   if (!AGGREGATE_IN_SELECT.test(stripped)) return null
   const tc = getTenantConfig()
-  const bigViews = referencedLargeObjects(query).filter((r) =>
-    isExpensiveUnionView(r, { threshold: tc.unionBranchThreshold }),
+  const bigViews = referencedLargeObjects(query, accessor).filter((r) =>
+    isExpensiveUnionView(r, { accessor, threshold: tc.unionBranchThreshold }),
   )
   if (bigViews.length === 0) return null
   return { tempTouched: true, bigViews }
 }
 
-export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalysis {
-  const largeObjectRefs = Array.from(countReferencedLargeObjects(query).entries())
+export function analyzeMssqlQueryQuality(query: string, accessor?: CatalogAccessor): MssqlQueryQualityAnalysis {
+  const largeObjectRefs = Array.from(countReferencedLargeObjects(query, accessor).entries())
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const temp = analyzeTempTableBatch(query)
@@ -912,7 +889,7 @@ export function analyzeMssqlQueryQuality(query: string): MssqlQueryQualityAnalys
       // Skip if the ref IS itself a mirror.
       if (ref.name.startsWith(`${mirrorSchema.toLowerCase()}.`)) continue
       // persistedMirrorOf does case-insensitive catalog lookup internally.
-      const mirror = persistedMirrorOf(ref.name, { mirrorSchema })
+      const mirror = persistedMirrorOf(ref.name, { accessor, mirrorSchema })
       if (!mirror) continue
       const mirrorKey = mirror.toLowerCase()
       if (!usesPersistedMirrors.includes(mirrorKey)) missingPersistedMirrorCandidates.push(ref.name)
@@ -1064,8 +1041,12 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
   return validateQueryDetailed(query, writeEnabled).error
 }
 
-export function validateQueryDetailed(query: string, writeEnabled: boolean): QueryValidationDiagnostics {
-  const analysis = analyzeMssqlQueryQuality(query)
+export function validateQueryDetailed(
+  query: string,
+  writeEnabled: boolean,
+  options: QueryValidationOptions = {},
+): QueryValidationDiagnostics {
+  const analysis = analyzeMssqlQueryQuality(query, options.accessor)
   // Always block dangerous operations regardless of write mode — must run BEFORE
   // the write-mode gate so that EXEC / OPENROWSET / DBCC produce the dangerous
   // error message instead of the generic "write disabled" one.
@@ -1146,7 +1127,7 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
   // the catalog classifies as expensive (≥ tenantConfig.unionBranchThreshold
   // branches). The fix is per-branch aggregation — see doctrine
   // `mssql.wide-union-view-policy`.
-  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query)
+  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query, { accessor: options.accessor })
   if (wideUnionOffender) {
     const head = [
       `Query blocked — direct TOP-N + GROUP BY ${wideUnionOffender.groupKey} against ${wideUnionOffender.object}.`,
@@ -1190,7 +1171,7 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
   // alias resolves to. Only fires when (a) a live catalog is loaded and
   // (b) the alias provenance is unambiguous (no CTE/derived/UNION). Catches
   // hallucinated columns like `r.ClientName`, `publish.Officer.fullName`.
-  const inventedColumns = detectInventedColumns(query)
+  const inventedColumns = detectInventedColumns(query, options.accessor ?? EMPTY_CATALOG_ACCESSOR)
   if (inventedColumns.length > 0) {
     const lines = inventedColumns.slice(0, 5).map((o) => {
       const hint = o.suggestions.length > 0 ? `  (closest live columns on ${o.table}: ${o.suggestions.join(", ")})` : ""
@@ -1256,7 +1237,7 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
     }
   }
 
-  const largeRefCounts = countReferencedLargeObjects(query)
+  const largeRefCounts = countReferencedLargeObjects(query, options.accessor)
   const overusedLargeObjects = Array.from(largeRefCounts.entries()).filter(([, count]) => count > 2)
   if (overusedLargeObjects.length > 0) {
     const list = overusedLargeObjects.map(([name, count]) => `${name} (${count} references)`).join(", ")
@@ -1275,13 +1256,13 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
 
   // ── Scan guard ────────────────────────────────────────────────
   // Block queries that would trigger a full table/view scan on known large objects.
-  const largeRefs = referencedLargeObjects(query)
+  const largeRefs = referencedLargeObjects(query, options.accessor)
   const scanReason = isUnsafeScan(query, largeRefs)
   if (scanReason) {
     const objects = largeRefs.join(", ")
     return {
       ok: false,
-      error: scanGuardErrorMessage(objects, scanReason, largeRefs),
+      error: scanGuardErrorMessage(objects, scanReason, largeRefs, options.accessor),
       code: "unsafe_large_object_scan",
       analysis,
     }
@@ -1296,29 +1277,25 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
  * query touched picks the example mirror/calendar/date-key. When the
  * catalog can't supply one, the hint falls back to generic shape advice.
  */
-function scanGuardErrorMessage(objects: string, scanReason: string, largeRefs: string[]): string {
+function scanGuardErrorMessage(
+  objects: string,
+  scanReason: string,
+  largeRefs: string[],
+  accessor?: CatalogAccessor,
+): string {
   const tc = getTenantConfig()
   const firstRef = largeRefs[0]
-  // Inline runtime read — need the full CatalogTable.qualifiedName, not the
-  // narrow CatalogLike shape. Removed in Phase 6 with the runtime.
-  let firstTable: { qualifiedName: string } | null = null
-  if (firstRef) {
-    try {
-      const rt = currentRuntime()
-      const cat = rt.catalog.instances.get("default")
-        ?? (rt.catalog.instances.size > 0 ? rt.catalog.instances.values().next().value ?? null : null)
-      firstTable = cat?.getTable(firstRef) ?? null
-    } catch { /* no runtime: leave null */ }
-  }
+  const catalog = accessor ? accessor() : null
+  const firstTable = firstRef && catalog ? catalog.getTable(firstRef) : null
   const firstQn = firstTable?.qualifiedName ?? firstRef ?? "<large-object>"
 
   const mirror = firstTable && tc.mirrorSchema
-    ? persistedMirrorOf(firstTable.qualifiedName, { mirrorSchema: tc.mirrorSchema })
+    ? persistedMirrorOf(firstTable.qualifiedName, { accessor, mirrorSchema: tc.mirrorSchema })
     : null
   const exampleObject = mirror ?? firstQn
-  const dateKey = firstTable ? dateGrainColumn(firstTable.qualifiedName) : null
-  const calendar = calendarDimensionTable()
-  const calendarKey = calendar ? primaryKeyColumns(calendar)[0] ?? null : null
+  const dateKey = firstTable ? dateGrainColumn(firstTable.qualifiedName, { accessor }) : null
+  const calendar = calendarDimensionTable({ accessor })
+  const calendarKey = calendar ? primaryKeyColumns(calendar, { accessor })[0] ?? null : null
 
   const lines = [
     `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
@@ -1580,13 +1557,13 @@ export function getQueryWarnings(
   const opts: QueryWarningOptions = typeof options === "function"
     ? { branchAccessor: options }
     : options
-  const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? defaultBranchAccessor
+  const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? EMPTY_BRANCH_ACCESSOR
   const profiledTables = opts.profiledTables ?? liveProfiledTables()
 
   const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
   const branchGaps = detectLineageBranchCoverage(query, branchAccessor)
   const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
-  const mixedUniverses = detectRankingVsReportingMismatch(query)
+  const mixedUniverses = detectRankingVsReportingMismatch(query, accessor)
   if (
     warns.length === 0
     && branchGaps.length === 0

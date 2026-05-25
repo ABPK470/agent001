@@ -91,7 +91,7 @@ function buildSearchCatalogTool(host: AgentHost): Tool { return {
 
     if (args.search) {
       const schemaFilter = args.schema ? String(args.schema).trim() : undefined
-      return handleSearch(catalog, String(args.search).trim(), schemaFilter)
+      return handleSearch(catalog, String(args.search).trim(), schemaFilter, host.tableVerdicts)
     }
 
     return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."

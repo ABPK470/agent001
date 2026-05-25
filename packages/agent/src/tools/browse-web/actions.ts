@@ -9,12 +9,12 @@ import type { AgentHost } from "../../host/index.js"
 import { dismissCookieConsent, readPageText } from "./page-helpers.js"
 import { resolveLocator } from "./selectors.js"
 import {
-  type BrowserSession,
-  deleteSession,
-  getSession,
-  launchSession,
-  persistSessionState,
-  withKillGuard,
+    type BrowserSession,
+    deleteSession,
+    getSession,
+    launchSession,
+    persistSessionState,
+    withKillGuard,
 } from "./session.js"
 import { validateUrl } from "./ssrf.js"
 
@@ -71,7 +71,8 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
       // ads, so the network is NEVER idle. We just need the HTML + scripts
       // parsed; subsequent reads happen against the live page anyway.
       session.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 }),
-    , args.signal)
+      args.signal,
+    )
     session.url = session.page.url()
     await dismissCookieConsent(session.page)
     const interstitial = await detectInterstitial(session.page)

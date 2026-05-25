@@ -5,38 +5,49 @@
  *
  * The cache itself is exercised exhaustively in
  * packages/server/tests/tool-knowledge.test.ts; here we test only the
- * tool's interaction with the runtime-bound `lookup` / `save` / `renderHeader`
+ * tool's interaction with the host-bound `lookup` / `save` / `renderHeader`
  * callbacks, including the case where there is no cache bound at all
- * (CLI / root runtime should fall through unchanged).
+ * (CLI / tests without a cache should fall through unchanged).
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { AgentRuntime } from "../src/agent-runtime.js"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent, makeRunContext, type AgentHost } from "../src/host/index.js"
 import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
-import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createProfileDataTool>; databases: Map<string, import("../src/agent-runtime.js").MssqlEntry> } {
-  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+function makeFixture(): {
+  host: AgentHost
+  run: ReturnType<typeof makeRunContext>
+  tool: ReturnType<typeof createProfileDataTool>
+  databases: Map<string, import("../src/host/index.js").MssqlEntry>
+  toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
+} {
+  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
+  const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
+    lookup: () => ({ hit: false as const, reason: "miss" as const }),
+    save: () => undefined,
+    renderHeader: () => "",
+  }
   const host = configureAgent({
     mssqlDatabases: databases,
-    catalogInstances: runtime.catalog.instances,
-    toolKnowledge: runtime.toolKnowledge as unknown as import("../src/host/index.js").AgentHost["toolKnowledge"],
+    catalogInstances,
+    toolKnowledge,
   })
+  const run = makeRunContext()
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
     writeEnabled: false,
     knowledge: null,
   })
-  return { runtime, tool: createProfileDataTool(host), databases }
+  catalogInstances.set("default", canonicalFixtureCatalog())
+  return { host, run, toolKnowledge, tool: createProfileDataTool(host, run), databases }
 }
 
 describe("profile_data cache integration", () => {
   it("returns the cached payload + [cached from ...] header on a hit (no SQL run)", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: profileDataTool } = makeFixture()
 
     const lookup = vi.fn(() => ({
       hit: true as const,
@@ -46,11 +57,11 @@ describe("profile_data cache integration", () => {
     }))
     const save = vi.fn()
     const renderHeader = vi.fn(() => "[cached from 2026-05-01, mode=fast, ageHours=1, source=tool_knowledge]")
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.save = save
-    runtime.toolKnowledge.renderHeader = renderHeader
+    toolKnowledge.lookup = lookup
+    toolKnowledge.save = save
+    toolKnowledge.renderHeader = renderHeader
 
-    const out = await runtime.run(() => profileDataTool.execute({ table: "dim.Date", mode: "fast" }))
+    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" })
     expect(typeof out).toBe("string")
     expect(out).toMatch(/^\[cached from 2026-05-01/)
     expect(out).toContain("Profile for dim.Date")
@@ -64,48 +75,45 @@ describe("profile_data cache integration", () => {
   })
 
   it("marks the table as profiled on a cache hit so the validator's big-view nudge stays satisfied", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
-    runtime.toolKnowledge.lookup = () => ({
+    const { run, toolKnowledge, tool: profileDataTool } = makeFixture()
+    toolKnowledge.lookup = () => ({
       hit: true as const,
       payload: "cached",
       ageMs: 1,
       profiledAt: 0,
     })
-    runtime.toolKnowledge.renderHeader = () => "[hdr]"
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.renderHeader = () => "[hdr]"
+    toolKnowledge.save = vi.fn()
 
-    await runtime.run(() => profileDataTool.execute({ table: "publish.Balances", mode: "fast" }))
-    expect(runtime.mssql.profileDataCalled.has("publish.balances")).toBe(true)
+    await profileDataTool.execute({ table: "publish.Balances", mode: "fast" })
+    expect(run.mssqlProfileCalls.has("publish.balances")).toBe(true)
   })
 
   it("returns the cached payload BEFORE the deep-mode scan guard — large UNION views are served from cache", async () => {
     // publish.Revenue is a known-large UNION view. Without cache, deep mode
     // is refused outright. With a cache hit, the agent should still get its
     // answer (no live deep scan happens — we're literally returning text).
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
-    runtime.toolKnowledge.lookup = () => ({
+    const { toolKnowledge, tool: profileDataTool } = makeFixture()
+    toolKnowledge.lookup = () => ({
       hit: true as const,
       payload: "Profile for publish.Revenue:\n(deep, cached)",
       ageMs: 1,
       profiledAt: 0,
     })
-    runtime.toolKnowledge.renderHeader = () => "[cached]"
+    toolKnowledge.renderHeader = () => "[cached]"
 
-    const out = await runtime.run(() => profileDataTool.execute({ table: "publish.Revenue", mode: "deep" })) as string
+    const out = await profileDataTool.execute({ table: "publish.Revenue", mode: "deep" }) as string
     expect(out).toContain("(deep, cached)")
     expect(out).not.toMatch(/refusing DEEP profile/i)
   })
 
   it("falls through to live execution on cache miss, then persists the rendered result", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: profileDataTool, databases } = makeFixture()
 
-    runtime.toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
+    toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
     const save = vi.fn()
-    runtime.toolKnowledge.save = save
-    runtime.toolKnowledge.renderHeader = () => "ignored"
+    toolKnowledge.save = save
+    toolKnowledge.renderHeader = () => "ignored"
 
     // Patch the stubbed pool so runFastProfile returns a non-error string.
     // We can't easily emulate runFastProfile's full SQL flow, so instead
@@ -129,7 +137,7 @@ describe("profile_data cache integration", () => {
       knowledge: null,
     })
 
-    const out = await runtime.run(() => profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
+    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
     expect(typeof out).toBe("string")
     expect(out).not.toMatch(/^SQL Error/)
     expect(out).not.toMatch(/^Error/)
@@ -146,11 +154,10 @@ describe("profile_data cache integration", () => {
   })
 
   it("does NOT persist a SQL-error result to the cache (avoids poisoning)", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
-    runtime.toolKnowledge.lookup = () => ({ hit: false as const, reason: "miss" as const })
+    const { toolKnowledge, tool: profileDataTool, databases } = makeFixture()
+    toolKnowledge.lookup = () => ({ hit: false as const, reason: "miss" as const })
     const save = vi.fn()
-    runtime.toolKnowledge.save = save
+    toolKnowledge.save = save
 
     // Stub so getPool resolves but runFastProfile throws -> returns "SQL Error: ..."
     databases.set("default", {
@@ -160,35 +167,33 @@ describe("profile_data cache integration", () => {
       knowledge: null,
     })
 
-    const out = await runtime.run(() => profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
+    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
     expect(out).toMatch(/^SQL Error/)
     expect(save).not.toHaveBeenCalled()
   })
 
   it("falls through gracefully when no cache is bound (CLI / root runtime)", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: profileDataTool } = makeFixture()
     // No lookup/save/renderHeader bound — defaults are null.
-    expect(runtime.toolKnowledge.lookup).toBeNull()
-    expect(runtime.toolKnowledge.save).toBeNull()
+    toolKnowledge.lookup = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["lookup"]
+    toolKnowledge.save = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["save"]
 
     // Cheap pool stub that returns an empty recordset — runFastProfile
     // will emit "No columns found ..." which the tool returns as a string.
-    const out = await runtime.run(() => profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
+    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
     expect(typeof out).toBe("string")
     // Whether the result is an error string or a partial render, the key
     // assertion is that the absence of cache wiring did not throw.
   })
 
   it("skips the cache when the catalog has no entry for the qname (no fingerprint = no cache)", async () => {
-    const { runtime, tool: profileDataTool, databases } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: profileDataTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "should-not-be-used", ageMs: 0, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
+    toolKnowledge.lookup = lookup
 
     // mystery.Unknown does not exist in the fixture catalog -> fingerprint=null
     // -> tryServeFromCache returns null before invoking lookup.
-    await runtime.run(() => profileDataTool.execute({ table: "mystery.Unknown", mode: "fast" }))
+    await profileDataTool.execute({ table: "mystery.Unknown", mode: "fast" })
     expect(lookup).not.toHaveBeenCalled()
   })
 })

@@ -1,3 +1,4 @@
+import type { TableVerdictsReader } from "../../../host/ports.js"
 import { tokenize } from "../helpers.js"
 import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
@@ -139,11 +140,12 @@ export class CatalogGraph {
   // ── Search & traversal ────────────────────────────────────────
 
   /** Keyword search across table names and column names. Returns ranked results. */
-  search(query: string, limit = 15): CatalogSearchHit[] {
+  search(query: string, limit = 15, tableVerdicts?: TableVerdictsReader | null): CatalogSearchHit[] {
     return searchCatalog(
       this.tables, this.nameIndex, this.columnIndex,
       this.implicitJoinIndex, query, limit,
       this.viewSourceRows,
+      tableVerdicts,
     )
   }
 

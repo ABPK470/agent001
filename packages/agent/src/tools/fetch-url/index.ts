@@ -13,7 +13,6 @@
  */
 
 import { lookup } from "node:dns/promises"
-import { currentRuntime } from "../../agent-runtime.js"
 import type { RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { checkHostname, checkResolvedIp, fetchWithBrowser } from "./helpers.js"
@@ -22,14 +21,6 @@ import { checkHostname, checkResolvedIp, fetchWithBrowser } from "./helpers.js"
 const MAX_BODY = 1_048_576
 /** Max redirect hops. */
 const MAX_REDIRECTS = 5
-
-/**
- * Set by the orchestrator when a per-tool kill is registered/cleared.
- * Stored on the active {@link AgentRuntime} so concurrent runs don't collide.
- */
-export function setFetchKillSignal(signal: AbortSignal | null): void {
-  currentRuntime().fetchUrl.killSignal = signal
-}
 
 const FETCH_URL_DESCRIPTION =
   "Fetch a URL and return its content as plain text. HTML tags are stripped.\n" +
@@ -90,7 +81,7 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
-    const killSignal = run?.signal ?? currentRuntime().fetchUrl.killSignal
+    const killSignal = run?.signal ?? null
     const signal = killSignal
       ? AbortSignal.any([controller.signal, killSignal])
       : controller.signal

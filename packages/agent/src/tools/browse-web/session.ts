@@ -10,7 +10,6 @@
  * @module
  */
 
-import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost, BrowserContextHandle } from "../../host/index.js"
 import { pickFingerprint, type Fingerprint } from "./fingerprint.js"
 
@@ -36,13 +35,8 @@ export interface BrowserSession {
 // Browser sessions live on the active AgentHost (`host.browser.sessions`).
 const SESSION_TIMEOUT = 5 * 60 * 1000
 
-/** Set by the orchestrator when a per-tool kill is registered/cleared. */
-export function setBrowseKillSignal(signal: AbortSignal | null): void {
-  currentRuntime().browseWeb.killSignal = signal
-}
-
 export function getKillSignal(signal?: AbortSignal | null): AbortSignal | null {
-  return signal ?? currentRuntime().browseWeb.killSignal
+  return signal ?? null
 }
 
 /**

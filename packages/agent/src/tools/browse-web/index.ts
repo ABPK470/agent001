@@ -37,8 +37,8 @@ import {
 } from "./actions.js"
 import { getKillSignal, getSession } from "./session.js"
 
-// Re-export public helpers for backwards compatibility
-export { closeAllBrowserSessions, setBrowseKillSignal } from "./session.js"
+// Re-export public helpers
+export { closeAllBrowserSessions } from "./session.js"
 export type { BrowserSession } from "./session.js"
 
 // ── Constants (hoisted so const-tool initializers don't trip TDZ) ─

@@ -1,4 +1,4 @@
-import { AgentRuntime } from "../../agent-runtime.js"
+import type { TableVerdictsReader } from "../../host/ports.js"
 import { getTenantConfig } from "../../tenant/config.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"
@@ -33,6 +33,7 @@ export function searchCatalog(
   query: string,
   limit: number,
   viewSourceRows?: Map<string, number>,
+  tableVerdicts?: TableVerdictsReader | null,
 ): CatalogSearchHit[] {
   const tokens = tokenize(query)
   if (tokens.length === 0) return []
@@ -90,7 +91,7 @@ export function searchCatalog(
   // Memory verdicts (Plan v3 Phase 4): consult prior runs' role
   // classifications via the runtime callback. Silent no-op when unbound
   // (CLI, tests) or when no verdicts exist — purely additive signal.
-  const verdictBonus = computeMemoryVerdictBonus(candidateKeys, tables)
+  const verdictBonus = computeMemoryVerdictBonus(candidateKeys, tables, tableVerdicts)
 
   // Build ranked results
   const hits: CatalogSearchHit[] = []
@@ -294,16 +295,12 @@ function computeNameClusterBareBonus(
 function computeMemoryVerdictBonus(
   candidateKeys: string[],
   tables: Map<string, CatalogTable>,
+  tableVerdicts?: TableVerdictsReader | null,
 ): Map<string, number> {
   const bonus = new Map<string, number>()
   if (candidateKeys.length === 0) return bonus
 
-  let list: AgentRuntime["tableVerdicts"]["list"] | null = null
-  try {
-    list = AgentRuntime.current().tableVerdicts.list
-  } catch {
-    return bonus
-  }
+  const list = tableVerdicts?.list ?? null
   if (!list) return bonus
 
   // Map qname → key (preserve case for qname lookups; server matches
@@ -317,7 +314,7 @@ function computeMemoryVerdictBonus(
     qnames.push(t.qualifiedName)
   }
 
-  let verdicts: ReturnType<NonNullable<AgentRuntime["tableVerdicts"]["list"]>> = []
+  let verdicts: ReturnType<TableVerdictsReader["list"]> = []
   try {
     verdicts = list({ qnames })
   } catch {

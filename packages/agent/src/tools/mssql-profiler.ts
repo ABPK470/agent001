@@ -7,8 +7,7 @@
  */
 
 import sql from "mssql"
-import { currentRuntime } from "../agent-runtime.js"
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost, RunContext } from "../host/index.js"
 import { getTenantConfig } from "../tenant/config.js"
 import type { Tool } from "../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
@@ -16,12 +15,8 @@ import { getCatalog } from "./catalog/store.js"
 import { getPool } from "./mssql/index.js"
 import { isLargeObject } from "./mssql/validation.js"
 
-function markProfileDataCalled(qname: string): void {
-  try {
-    currentRuntime().mssql.profileDataCalled.add(qname.toLowerCase())
-  } catch {
-    // Runtime may not be installed (tests) — silent.
-  }
+function markProfileDataCalled(qname: string, run?: RunContext): void {
+  run?.mssqlProfileCalls.add(qname.toLowerCase())
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -464,7 +459,7 @@ async function runFastProfile(
 
 // ── The tool ─────────────────────────────────────────────────────
 
-function buildProfileDataTool(host: AgentHost): Tool { return {
+function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool { return {
   name: "profile_data",
   description:
     "Profile a database table — quick statistical understanding of what's in it. " +
@@ -566,7 +561,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
     const fp = fingerprintForQname(host, qn, connName)
     const cached = tryServeFromCache(host, "profile_data", qn, mode, connName, fp)
     if (cached !== null) {
-      markProfileDataCalled(qn)
+      markProfileDataCalled(qn, run)
       return cached
     }
 
@@ -582,7 +577,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
     // TOP-N sample that is skipped on large objects) — it never scans,
     // so the guard does NOT apply to fast mode and large objects are
     // welcome there.
-    if (mode === "deep" && isLargeObject(qn)) {
+    if (mode === "deep" && isLargeObject(qn, () => getCatalog(host, connName ?? "default"))) {
       // Pick the first lineage source (if any) as a concrete worked
       // example. Falls back to generic shape advice when this object
       // has no lineage entry in the catalog.
@@ -631,7 +626,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
       } catch (err) {
         return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
       } finally {
-        markProfileDataCalled(qn)
+        markProfileDataCalled(qn, run)
       }
     }
 
@@ -790,7 +785,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
       // big-view-without-profile-data nudge in the validator can stand down.
       // Done in `finally` because partial profile results (e.g. row count
       // succeeded, then one column failed) still constitute "profiled".
-      markProfileDataCalled(qn)
+      markProfileDataCalled(qn, run)
     }
   },
 } }
@@ -808,6 +803,6 @@ export const profileDataTool: Tool = (() => {
   }
 })()
 
-export function createProfileDataTool(host: AgentHost): Tool {
-  return buildProfileDataTool(host)
+export function createProfileDataTool(host: AgentHost, run?: RunContext): Tool {
+  return buildProfileDataTool(host, run)
 }

@@ -17,9 +17,8 @@
 import sql from "mssql"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import { currentRuntime } from "../../agent-runtime.js"
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { safePathResolvedWith } from "../filesystem-security.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
@@ -126,7 +125,7 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
 
 async function executeExportQueryToFile(
   args: Record<string, unknown>,
-  opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost },
+  opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost; run?: RunContext },
 ): Promise<string> {
   const query = String(args.query ?? "").trim()
   const pathArg = String(args.path ?? "").trim()
@@ -134,6 +133,14 @@ async function executeExportQueryToFile(
   if (!pathArg) return "Error: path cannot be empty."
 
   const connectionName = args.connection ? String(args.connection).trim() : "default"
+  const accessor = () => {
+    const exact = opts.host.catalog.instances.get(connectionName)
+    if (exact) return exact
+    if (connectionName === "default" && opts.host.catalog.instances.size > 0) {
+      return opts.host.catalog.instances.values().next().value ?? null
+    }
+    return null
+  }
 
   let pool: sql.ConnectionPool
   let writeEnabled: boolean
@@ -148,7 +155,10 @@ async function executeExportQueryToFile(
   // Read-only validation. We deliberately ignore the "writeEnabled" override
   // here because exporting is fundamentally a read operation — even if the
   // connection allows writes we don't want this tool used for them.
-  const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled)
+  const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled, {
+    accessor,
+    profiledTables: opts.run?.mssqlProfileCalls ?? null,
+  })
   if (!validation.ok) {
     emitMssqlQualityTrace({
       toolMode: "export",
@@ -161,7 +171,7 @@ async function executeExportQueryToFile(
     const lesson = validation.lesson
     if (lesson) {
       try {
-        currentRuntime().memory.writeNote?.(lesson)
+        opts.run?.memory?.writeNote?.(lesson)
       } catch {
         // Auto-note failures must not mask the block.
       }
@@ -190,7 +200,7 @@ async function executeExportQueryToFile(
   const fullQuery = db ? `USE [${db}];\n${query}` : query
 
   const request = pool.request()
-  const killSignal = getMssqlKillSignal()
+  const killSignal = opts.run?.signal ?? getMssqlKillSignal()
   const onKill = (): void => { request.cancel() }
   if (killSignal) {
     if (killSignal.aborted) return "Error: Tool execution cancelled"
@@ -277,7 +287,10 @@ async function executeExportQueryToFile(
       ? `\nFirst ${PREVIEW_ROWS} rows (full data is in the file):`
       : `\nAll rows:`
 
-    const warn = getQueryWarnings(query)
+    const warn = getQueryWarnings(query, {
+      branchAccessor: accessor as () => { getUnionParents(qualifiedName: string): string[]; getUnionBranches(qualifiedName: string): string[] } | null,
+      profiledTables: opts.run?.mssqlProfileCalls ?? null,
+    })
     const body = `${summary}${previewLabel}\n${previewLines.join("\n")}`
     emitMssqlQualityTrace({
       toolMode: "export",
@@ -329,7 +342,7 @@ export const exportQueryToFileTool: Tool = {
 }
 
 /** Factory: build an `export_query_to_file` tool bound to `host.filesystem.basePath`. */
-export function createExportQueryToFileTool(host: AgentHost): Tool {
+export function createExportQueryToFileTool(host: AgentHost, run?: RunContext): Tool {
   return {
     name: "export_query_to_file",
     description: EXPORT_QUERY_TO_FILE_DESCRIPTION,
@@ -338,6 +351,7 @@ export function createExportQueryToFileTool(host: AgentHost): Tool {
       return executeExportQueryToFile(args, {
         resolveSafe: (p) => safePathResolvedWith(host, p),
         host,
+        run,
       })
     },
   }

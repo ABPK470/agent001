@@ -1,6 +1,5 @@
 import sql from "mssql"
-import { currentRuntime } from "../../agent-runtime.js"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
@@ -10,9 +9,29 @@ import { formatResults } from "./formatter.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
+function catalogAccessorFor(host: AgentHost, connectionName: string): () => unknown {
+  return () => {
+    const exact = host.catalog.instances.get(connectionName)
+    if (exact) return exact
+    if (connectionName === "default" && host.catalog.instances.size > 0) {
+      return host.catalog.instances.values().next().value ?? null
+    }
+    return null
+  }
+}
+
+function recordDoctrineLesson(run: RunContext | undefined, lesson: { subject: string; claim: string; evidence?: string; category?: string } | null | undefined): void {
+  if (!lesson) return
+  try {
+    run?.memory?.writeNote?.(lesson)
+  } catch {
+    // Memory write failures must never block the validator response.
+  }
+}
+
 // ── The tool ─────────────────────────────────────────────────────
 
-function buildQueryMssqlTool(host: AgentHost): Tool { return {
+function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
   name: "query_mssql",
   description:
     "Execute a T-SQL query against Microsoft SQL Server (T-SQL only — no QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC; use TOP / OFFSET-FETCH / LIKE / CAST / DATEADD). " +
@@ -63,6 +82,7 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
     if (!query) return "Error: query cannot be empty."
 
     const connectionName = args.connection ? String(args.connection).trim() : "default"
+  const accessor = catalogAccessorFor(host, connectionName)
 
     let pool: sql.ConnectionPool
     let writeEnabled: boolean
@@ -75,7 +95,10 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
     }
 
     // Validate before executing
-    const validation = validateQueryDetailed(query, writeEnabled)
+    const validation = validateQueryDetailed(query, writeEnabled, {
+      accessor,
+      profiledTables: run?.mssqlProfileCalls ?? null,
+    })
     if (!validation.ok) {
       emitMssqlQualityTrace({
         toolMode: "query",
@@ -89,14 +112,7 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
       // writer so the rationale survives beyond this turn. Fire-and-forget
       // because the writer is synchronous and a failure (null hook, dedup
       // rejection) must not mask the original block error.
-      const lesson = validation.lesson
-      if (lesson) {
-        try {
-          currentRuntime().memory.writeNote?.(lesson)
-        } catch {
-          // Memory write failures must never block the validator response.
-        }
-      }
+      recordDoctrineLesson(run, validation.lesson)
       return validation.error ?? "Query blocked"
     }
 
@@ -111,7 +127,7 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
       }
 
       const request = pool.request()
-      const killSignal = getMssqlKillSignal()
+      const killSignal = run?.signal ?? getMssqlKillSignal()
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }
@@ -126,7 +142,10 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
 
       try {
         const result = await request.query(fullQuery)
-        const rowCount = result.recordsets.reduce((sum, recordset) => sum + recordset.length, 0)
+        const recordsets = Array.isArray(result.recordsets)
+          ? result.recordsets as sql.IRecordSet<unknown>[]
+          : Object.values(result.recordsets) as sql.IRecordSet<unknown>[]
+        const rowCount = recordsets.reduce((sum, recordset) => sum + recordset.length, 0)
         emitMssqlQualityTrace({
           toolMode: "query",
           phase: "executed",
@@ -137,13 +156,16 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
           durationMs: Date.now() - startedAt,
           rowCount,
         })
-        const body = formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
-        const warn = getQueryWarnings(query)
+        const body = formatResults(recordsets, result.rowsAffected)
+        const warn = getQueryWarnings(query, {
+          branchAccessor: accessor as () => { getUnionParents(qualifiedName: string): string[]; getUnionBranches(qualifiedName: string): string[] } | null,
+          profiledTables: run?.mssqlProfileCalls ?? null,
+        })
         // Phase 6: dim-join NULL rot heuristic. Scan the first recordset's
         // *Name/*Description columns; if ≥ 50% of rows are NULL, prepend a
         // join-key warning so the agent re-verifies the join before trusting
         // the row labels.
-        const firstSet = (result.recordsets[0] ?? []) as ReadonlyArray<Record<string, unknown>>
+        const firstSet = (recordsets[0] ?? []) as ReadonlyArray<Record<string, unknown>>
         const dimBanner = renderDimJoinNullBanner(detectDimJoinNullRot(firstSet))
         const banners = [dimBanner, warn].filter((s): s is string => !!s).join("\n")
         return banners ? `${banners}\n${body}` : body
@@ -172,7 +194,7 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
 
 // ── Schema explorer (convenience tool) ───────────────────────────
 
-function buildSchemaMssqlTool(host: AgentHost): Tool { return {
+function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
   name: "explore_mssql_schema",
   description:
     "Explore the MSSQL database schema — list tables/views in a schema, or get exact column names and types for a table. " +
@@ -217,7 +239,7 @@ function buildSchemaMssqlTool(host: AgentHost): Tool { return {
 
     try {
       const request = pool.request()
-      const killSignal = getMssqlKillSignal()
+      const killSignal = run?.signal ?? getMssqlKillSignal()
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }
@@ -494,10 +516,10 @@ export const mssqlSchemaTool: Tool = {
   },
 }
 
-export function createMssqlTool(host: AgentHost): Tool {
-  return buildQueryMssqlTool(host)
+export function createMssqlTool(host: AgentHost, run?: RunContext): Tool {
+  return buildQueryMssqlTool(host, run)
 }
 
-export function createMssqlSchemaTool(host: AgentHost): Tool {
-  return buildSchemaMssqlTool(host)
+export function createMssqlSchemaTool(host: AgentHost, run?: RunContext): Tool {
+  return buildSchemaMssqlTool(host, run)
 }

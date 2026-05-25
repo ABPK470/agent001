@@ -3,8 +3,8 @@
  * (profile_data, inspect_definition, discover_relationships).
  *
  * The cache itself lives in packages/server/src/memory/tool-knowledge.ts;
- * the server binds `runtime.toolKnowledge.{lookup,save,renderHeader}` at
- * run start. When those are null (CLI / tests with no server) the helpers
+ * the server binds `host.toolKnowledge.{lookup,save,renderHeader}` when it
+ * builds the per-run host. When those are null (CLI / tests with no server) the helpers
  * are no-ops and the tool falls through to live execution.
  *
  * See /memories/repo/tool-knowledge-cache.md.

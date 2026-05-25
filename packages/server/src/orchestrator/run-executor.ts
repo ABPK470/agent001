@@ -23,7 +23,6 @@ import {
     runCompleted,
     runFailed,
     runStarted,
-    runWithMssqlKillSignal,
     runWithPolicyContext,
     spawnChildForPlan,
     startPlanning,
@@ -169,7 +168,26 @@ export async function executeRunImpl(
     workspaceRoot: runWorkspace.executionRoot,
     signal: controller.signal,
   })
-  const runContext = makeRunContext({ signal: controller.signal })
+  const runContext = makeRunContext({
+    signal: controller.signal,
+    memory: {
+      writeNote: (payload) => {
+        try {
+          ingestAgentNote({
+            subject: payload.subject,
+            claim: payload.claim,
+            evidence: payload.evidence,
+            category: payload.category,
+            sessionId: activeRun?.sessionId ?? null,
+            runId,
+            upn: activeRun?.ownerUpn ?? null,
+          })
+        } catch {
+          // The writer is a side channel; never let it break a run.
+        }
+      },
+    },
+  })
 
   // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
   // providers) but overrides workspace / sandbox roots with this run's
@@ -200,44 +218,6 @@ export async function executeRunImpl(
       }),
     },
   })
-  // Gap 2: bind the memory writer hook so doctrine lessons (and any other
-  // agent-side auto-notes) get persisted with this run's session/upn
-  // provenance. The hook is a fire-and-forget sync wrapper; ingestAgentNote
-  // does the heavy lifting.
-  runtime.memory.writeNote = (payload) => {
-    try {
-      ingestAgentNote({
-        subject: payload.subject,
-        claim: payload.claim,
-        evidence: payload.evidence,
-        category: payload.category,
-        sessionId: activeRun?.sessionId ?? null,
-        runId,
-        upn: activeRun?.ownerUpn ?? null,
-      })
-    } catch {
-      // The writer is a side channel; never let it break a run.
-    }
-  }
-
-  // Bind the org-wide tool_knowledge cache. The agent's heavy MSSQL tools
-  // (profile_data etc.) consult `lookup` before hitting the database and
-  // `save` on successful live execution. Reads are NOT upn-filtered — these
-  // are objective facts about DB objects; `created_by_upn` is provenance
-  // only. See /memories/repo/tool-knowledge-cache.md.
-  runtime.toolKnowledge.lookup = (args) => lookupToolKnowledge(args)
-  runtime.toolKnowledge.save = (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null })
-  runtime.toolKnowledge.renderHeader = (hit, opts) => renderCachedHeader(hit, opts)
-
-  // Bind the table-verdict reader (Plan v3 Phase 4). search_catalog calls
-  // this at rank time to apply memoryVerdictBonus from prior runs'
-  // judgments. Cross-UPN by default (verdicts are objective DB facts).
-  runtime.tableVerdicts.list = (args) => listTableVerdicts({
-    qnames: args.qnames,
-    connection: args.connection,
-    upn: activeRun?.ownerUpn ?? null,
-  })
-
   const governRuntimeTool = (tool: Tool) => governTool(tool, services, state, {
     signal: controller.signal,
     ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
@@ -672,6 +652,7 @@ export async function executeRunImpl(
         const perToolCtrl = new AbortController()
         const composed = AbortSignal.any([controller.signal, perToolCtrl.signal])
         callSignals.set(toolCallId, composed)
+        runContext.signal = composed
         // Tool-call kill signals live on the per-request runtime. shell/fetch
         // /browse-web tools read these via currentRuntime() inside agent.run().
         runtime.shell.killSignal = composed
@@ -686,15 +667,15 @@ export async function executeRunImpl(
       unregister: (toolCallId: string) => {
         callSignals.delete(toolCallId)
         ctx.pendingKills.delete(`${runId}:${toolCallId}`)
+        runContext.signal = controller.signal
         runtime.shell.killSignal = controller.signal
         runtime.fetchUrl.killSignal = null
         runtime.browseWeb.killSignal = null
         broadcast({ type: EventType.ToolCallCompleted, data: { runId, toolCallId } })
       },
       wrap: <T,>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
-        const sig = callSignals.get(toolCallId)
-        if (!sig) return fn()
-        return runWithMssqlKillSignal(sig, fn) as Promise<T>
+        const _sig = callSignals.get(toolCallId)
+        return fn()
       },
     }
   })()

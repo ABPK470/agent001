@@ -3,7 +3,7 @@
  *
  * Outside this folder, import from `./tools/index.js` only.
  * Each file here exports one or more `Tool` objects plus per-tool
- * configuration helpers (setX) that today are still module-globals.
+ * host/run-bound factory helpers.
  *
  * Note: per-tool subdirectories (browse-web/, catalog/, mssql/, etc.)
  * are private implementation details — do not import them directly.
