@@ -305,3 +305,16 @@ export const exportQueryToFileTool: Tool = {
     }
   },
 }
+
+// ── Host-bound factory (Phase 4 item 6 — API surface only) ───────
+
+import type { AgentHost } from "../../host/index.js"
+
+export function createExportQueryToFileTool(_host: AgentHost): Tool {
+  return {
+    name: exportQueryToFileTool.name,
+    description: exportQueryToFileTool.description,
+    parameters: exportQueryToFileTool.parameters,
+    execute: (args) => exportQueryToFileTool.execute(args),
+  }
+}

@@ -22,6 +22,7 @@
 
 import { currentRuntime } from "../../agent-runtime.js"
 import { BROWSE_WEB_ACTION_VALUES, BrowseWebAction } from "../../domain/enums/browse-web.js"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import {
     handleClick,
@@ -41,88 +42,124 @@ import { getKillSignal, getSession } from "./session.js"
 export { closeAllBrowserSessions, setBrowseKillSignal, setBrowserContextProvider, setBrowserCredentialProvider, setBrowserHandoffProvider } from "./session.js"
 export type { BrowserSession } from "./session.js"
 
+// ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
+
+const BROWSE_WEB_DESCRIPTION =
+  "Interactive web browsing with a persistent browser session. " +
+  "Actions: navigate (open URL), click (CSS selector or button text), " +
+  "type (into input field), scroll (up/down), read (get current page text), close (end session), " +
+  "upload (set <input type=file>), tabs (list/switch/new/close), frame (list/switch/top), intercept (block URL substrings). " +
+  "Selector prefixes: 'css:' (default), 'xpath:', 'text:', 'role:button', 'role:button[name=Submit]'. " +
+  "Returns page text after each action. Use for complex web interactions " +
+  "(forms, cookie consent, multi-page flows). For simple reads, prefer fetch_url. " +
+  "Set visible=true on navigate to open a browser window the user can see — " +
+  "use with ask_user when the user needs to complete a step (CAPTCHA, payment, 2FA)."
+
+const BROWSE_WEB_PARAMETERS = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: [...BROWSE_WEB_ACTION_VALUES],
+      description: "The browser action to perform.",
+    },
+    url: {
+      type: "string",
+      description: "URL to navigate to (for 'navigate' and 'tabs' sub=new).",
+    },
+    visible: {
+      type: "boolean",
+      description:
+        "Set to true to open a visible browser window the user can see and interact with. " +
+        "Use when the user needs to take over (CAPTCHA, payment, login). Default: false (headless).",
+    },
+    selector: {
+      type: "string",
+      description:
+        "Selector for the target element. Plain string is treated as CSS; prefix with 'xpath:', 'text:', or 'role:' for other strategies. " +
+        "If the primary selector isn't found for a click, text content matching is attempted as fallback.",
+    },
+    text: {
+      type: "string",
+      description: "Text to type (for 'type' action). End with a newline to press Enter after typing.",
+    },
+    direction: {
+      type: "string",
+      enum: ["up", "down"],
+      description: "Scroll direction (default: 'down').",
+    },
+    session_id: {
+      type: "string",
+      description:
+        "Session ID returned by a previous 'navigate' call. " +
+        "Omit to start a new session. Required for all actions except 'navigate'.",
+    },
+    max_length: {
+      type: "number",
+      description: "Max characters of page text to return (default: 10000).",
+    },
+    file_path: {
+      type: "string",
+      description:
+        "For 'upload' action: path to the file to upload, relative to the workspace root. " +
+        "Use the import_attachment tool first to bring user files into the workspace.",
+    },
+    sub: {
+      type: "string",
+      description:
+        "Sub-action for 'tabs' (list|switch|new|close), 'frame' (list|switch|top), or 'intercept' (set|clear).",
+    },
+    index: {
+      type: "number",
+      description: "Tab or frame index (for 'tabs' switch/close, 'frame' switch).",
+    },
+    patterns: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "For 'intercept' sub=set: URL substrings to BLOCK (e.g. 'doubleclick.net', '.png'). " +
+        "Replaces any prior list. Empty to allow everything.",
+    },
+  },
+  required: ["action"],
+} as const
+
 export const browseWebTool: Tool = {
   name: "browse_web",
-  description:
-    "Interactive web browsing with a persistent browser session. " +
-    "Actions: navigate (open URL), click (CSS selector or button text), " +
-    "type (into input field), scroll (up/down), read (get current page text), close (end session), " +
-    "upload (set <input type=file>), tabs (list/switch/new/close), frame (list/switch/top), intercept (block URL substrings). " +
-    "Selector prefixes: 'css:' (default), 'xpath:', 'text:', 'role:button', 'role:button[name=Submit]'. " +
-    "Returns page text after each action. Use for complex web interactions " +
-    "(forms, cookie consent, multi-page flows). For simple reads, prefer fetch_url. " +
-    "Set visible=true on navigate to open a browser window the user can see — " +
-    "use with ask_user when the user needs to complete a step (CAPTCHA, payment, 2FA).",
-  parameters: {
-    type: "object",
-    properties: {
-      action: {
-        type: "string",
-        enum: [...BROWSE_WEB_ACTION_VALUES],
-        description: "The browser action to perform.",
-      },
-      url: {
-        type: "string",
-        description: "URL to navigate to (for 'navigate' and 'tabs' sub=new).",
-      },
-      visible: {
-        type: "boolean",
-        description:
-          "Set to true to open a visible browser window the user can see and interact with. " +
-          "Use when the user needs to take over (CAPTCHA, payment, login). Default: false (headless).",
-      },
-      selector: {
-        type: "string",
-        description:
-          "Selector for the target element. Plain string is treated as CSS; prefix with 'xpath:', 'text:', or 'role:' for other strategies. " +
-          "If the primary selector isn't found for a click, text content matching is attempted as fallback.",
-      },
-      text: {
-        type: "string",
-        description: "Text to type (for 'type' action). End with a newline to press Enter after typing.",
-      },
-      direction: {
-        type: "string",
-        enum: ["up", "down"],
-        description: "Scroll direction (default: 'down').",
-      },
-      session_id: {
-        type: "string",
-        description:
-          "Session ID returned by a previous 'navigate' call. " +
-          "Omit to start a new session. Required for all actions except 'navigate'.",
-      },
-      max_length: {
-        type: "number",
-        description: "Max characters of page text to return (default: 10000).",
-      },
-      file_path: {
-        type: "string",
-        description:
-          "For 'upload' action: path to the file to upload, relative to the workspace root. " +
-          "Use the import_attachment tool first to bring user files into the workspace.",
-      },
-      sub: {
-        type: "string",
-        description:
-          "Sub-action for 'tabs' (list|switch|new|close), 'frame' (list|switch|top), or 'intercept' (set|clear).",
-      },
-      index: {
-        type: "number",
-        description: "Tab or frame index (for 'tabs' switch/close, 'frame' switch).",
-      },
-      patterns: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          "For 'intercept' sub=set: URL substrings to BLOCK (e.g. 'doubleclick.net', '.png'). " +
-          "Replaces any prior list. Empty to allow everything.",
-      },
-    },
-    required: ["action"],
-  },
-
+  description: BROWSE_WEB_DESCRIPTION,
+  parameters: BROWSE_WEB_PARAMETERS,
   async execute(args) {
+    return runBrowseWeb(args, { workspaceRoot: currentRuntime().workspaceRoot })
+  },
+}
+
+/**
+ * Factory variant bound to `host.workspaceRoot`.
+ *
+ * Note: deeper session-lifecycle plumbing (sessions Map, context/credential
+ * readers, kill signal) still flows through `currentRuntime()` inside
+ * `session.ts` during Phase 4 additive. The Phase 4 acceptance pass
+ * (call-site swap) is where session.ts is rewritten to take `host` and
+ * `host.browser.sessions` becomes the only sessions map.
+ */
+export function createBrowseWebTool(host: AgentHost): Tool {
+  return {
+    name: "browse_web",
+    description: BROWSE_WEB_DESCRIPTION,
+    parameters: BROWSE_WEB_PARAMETERS,
+    async execute(args) {
+      return runBrowseWeb(args, { workspaceRoot: host.workspaceRoot })
+    },
+  }
+}
+
+// ── Shared body ──────────────────────────────────────────────────
+
+interface BrowseWebCtx {
+  workspaceRoot: string
+}
+
+async function runBrowseWeb(args: Record<string, unknown>, ctx: BrowseWebCtx): Promise<string> {
     const action = String(args.action)
     const sessionId = args.session_id ? String(args.session_id) : undefined
     const maxLength = Number(args.max_length ?? 10000)
@@ -162,7 +199,7 @@ export const browseWebTool: Tool = {
           sessionId,
           String(args.selector ?? ""),
           String(args.file_path ?? ""),
-          currentRuntime().workspaceRoot,
+          ctx.workspaceRoot,
           maxLength,
         )
       case BrowseWebAction.Tabs:
@@ -191,5 +228,4 @@ export const browseWebTool: Tool = {
       default:
         return `Error: Unknown action "${action}". Use: navigate, click, type, scroll, read, close, upload, tabs, frame, intercept.`
     }
-  },
 }

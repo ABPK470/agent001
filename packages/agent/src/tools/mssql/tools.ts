@@ -455,3 +455,32 @@ function isIntegerLikeType(dataType: string): boolean {
   const t = dataType.trim().toLowerCase()
   return t === "int" || t === "bigint" || t === "smallint" || t === "tinyint" || t === "numeric" || t === "decimal"
 }
+
+// ── Host-bound factories (Phase 4 item 6 — API surface only) ─────
+//
+// These factories lock in the `createXxxTool(host)` signature so the
+// Phase 4 acceptance call-site swap is mechanical. Today the wrapped
+// tools still read `currentRuntime()` internally (connection registry,
+// per-run memory writer). The swap will rewrite `getPool` to take
+// `host` and replace `currentRuntime().memory.writeNote` with the run
+// context's writer.
+
+import type { AgentHost } from "../../host/index.js"
+
+export function createMssqlTool(_host: AgentHost): Tool {
+  return {
+    name: mssqlTool.name,
+    description: mssqlTool.description,
+    parameters: mssqlTool.parameters,
+    execute: (args) => mssqlTool.execute(args),
+  }
+}
+
+export function createMssqlSchemaTool(_host: AgentHost): Tool {
+  return {
+    name: mssqlSchemaTool.name,
+    description: mssqlSchemaTool.description,
+    parameters: mssqlSchemaTool.parameters,
+    execute: (args) => mssqlSchemaTool.execute(args),
+  }
+}

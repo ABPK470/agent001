@@ -95,3 +95,16 @@ export const searchCatalogTool: Tool = {
     return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."
   },
 }
+
+// ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
+
+import type { AgentHost } from "../../host/index.js"
+
+export function createSearchCatalogTool(_host: AgentHost): Tool {
+  return {
+    name: searchCatalogTool.name,
+    description: searchCatalogTool.description,
+    parameters: searchCatalogTool.parameters,
+    execute: (args) => searchCatalogTool.execute(args),
+  }
+}

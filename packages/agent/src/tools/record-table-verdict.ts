@@ -138,3 +138,16 @@ export function bindRecordTableVerdictTool(handler: RecordTableVerdictHandler): 
     },
   }
 }
+
+// ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
+
+import type { AgentHost } from "../host/index.js"
+
+export function createRecordTableVerdictTool(_host: AgentHost): Tool {
+  return {
+    name: recordTableVerdictTool.name,
+    description: recordTableVerdictTool.description,
+    parameters: recordTableVerdictTool.parameters,
+    execute: (args) => recordTableVerdictTool.execute(args),
+  }
+}

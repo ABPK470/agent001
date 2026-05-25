@@ -138,3 +138,16 @@ export function bindRecallPriorResultTool(handler: RecallPriorResultHandler): To
     },
   }
 }
+
+// ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
+
+import type { AgentHost } from "../../host/index.js"
+
+export function createRecallPriorResultTool(_host: AgentHost): Tool {
+  return {
+    name: recallPriorResultTool.name,
+    description: recallPriorResultTool.description,
+    parameters: recallPriorResultTool.parameters,
+    execute: (args) => recallPriorResultTool.execute(args),
+  }
+}
