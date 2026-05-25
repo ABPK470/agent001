@@ -109,15 +109,20 @@ export interface HandoffStore {
 
 // ── Ask-user (UI prompt channel) ─────────────────────────────────
 
-/** Resolve a clarifying question with the user via the host UI channel. */
-export interface UserInputReader {
-  ask(input: {
-    runId: string
-    question: string
-    options?: readonly string[]
-    timeoutMs?: number
-  }): Promise<{ status: UserInputStatus; answer?: string }>
-}
+/**
+ * Resolve a clarifying question with the user via the host UI channel.
+ * Returns the user's response as a string. Implementations block until
+ * the user actually responds (the orchestrator handles WS broadcast,
+ * timeout, masking of sensitive answers).
+ *
+ * Shape mirrors the legacy `AskUserResolver` exactly so Phase 4
+ * migration is purely a rename.
+ */
+export type UserInputReader = (
+  question: string,
+  options?: string[],
+  sensitive?: boolean,
+) => Promise<string>
 
 // ── Attachments ──────────────────────────────────────────────────
 

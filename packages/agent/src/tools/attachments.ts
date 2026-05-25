@@ -13,9 +13,14 @@
  */
 
 import { currentRuntime, type AttachmentService } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 
-/** @internal — host-side wiring point. */
+/**
+ * @deprecated Doctrine: prefer `configureAgent({ attachments })` + the
+ * `create*AttachmentTool` factories below. See docs/doctrine.md §6.
+ * @internal
+ */
 export function setAttachmentService(service: AttachmentService | null): void {
   currentRuntime().attachments.service = service
 }
@@ -29,6 +34,16 @@ function getService(): AttachmentService {
     )
   }
   return svc
+}
+
+function requireServiceFromHost(host: AgentHost): AttachmentService {
+  if (!host.attachments) {
+    throw new Error(
+      "Attachment service is not configured on this AgentHost. " +
+      "Pass `attachments` to `configureAgent({...})`.",
+    )
+  }
+  return host.attachments
 }
 
 const DEFAULT_READ_LIMIT_BYTES = 256 * 1024
@@ -147,4 +162,97 @@ export const promoteAttachmentTool: Tool = {
     })
     return `Promoted ${sandboxPath} → attachment id=${meta.id} (${meta.normalizedName}, ${meta.sizeBytes}B, ${meta.mediaType}).`
   },
+}
+
+// ── Doctrine-shaped factories (host-bound, no ambient state) ─────
+//
+// Each factory below returns the same tool shape as the ambient export
+// above, but bound to an explicit AgentHost. Existing ambient tools keep
+// working unchanged for callers that have not migrated yet.
+
+/** Factory variant of {@link listAttachmentsTool} bound to `host.attachments`. */
+export function createListAttachmentsTool(host: AgentHost): Tool {
+  return {
+    name: listAttachmentsTool.name,
+    description: listAttachmentsTool.description,
+    parameters: listAttachmentsTool.parameters,
+    async execute(args) {
+      const svc = requireServiceFromHost(host)
+      const q = typeof args["q"] === "string" ? (args["q"] as string) : undefined
+      const rows = await svc.list(q ? { q } : undefined)
+      if (rows.length === 0) return "No attachments are bound to this run."
+      const lines = rows.map((r) =>
+        `- id=${r.id}  name=${r.normalizedName}  type=${r.mediaType}  size=${r.sizeBytes}B  mode=${r.ingestionMode}`,
+      )
+      return [`Attachments (${rows.length}):`, ...lines].join("\n")
+    },
+  }
+}
+
+/** Factory variant of {@link readAttachmentTool} bound to `host.attachments`. */
+export function createReadAttachmentTool(host: AgentHost): Tool {
+  return {
+    name: readAttachmentTool.name,
+    description: readAttachmentTool.description,
+    parameters: readAttachmentTool.parameters,
+    async execute(args) {
+      const svc = requireServiceFromHost(host)
+      const id = String(args["id"] ?? "")
+      if (!id) throw new Error("id is required")
+      const maxBytes = typeof args["maxBytes"] === "number" ? Math.max(1, args["maxBytes"] as number) : DEFAULT_READ_LIMIT_BYTES
+      const offset   = typeof args["offset"]   === "number" ? Math.max(0, args["offset"]   as number) : 0
+      const result = await svc.read(id, { maxBytes, offset })
+      if (result.kind === "binary") {
+        return `Attachment ${id} is binary (${result.sizeBytes} bytes). Use import_attachment to copy it into the sandbox.`
+      }
+      const sliceEnd = result.offset + (result.text?.length ?? 0)
+      const headerParts = [
+        `Attachment ${id} (${result.sizeBytes}B`,
+        `bytes ${result.offset}-${sliceEnd}`,
+      ]
+      if (result.nextOffset !== null) headerParts.push(`nextOffset=${result.nextOffset}`)
+      else                            headerParts.push(`EOF`)
+      const header = headerParts.join(", ") + "):"
+      return [header, result.text ?? ""].join("\n")
+    },
+  }
+}
+
+/** Factory variant of {@link importAttachmentTool} bound to `host.attachments`. */
+export function createImportAttachmentTool(host: AgentHost): Tool {
+  return {
+    name: importAttachmentTool.name,
+    description: importAttachmentTool.description,
+    parameters: importAttachmentTool.parameters,
+    async execute(args) {
+      const svc = requireServiceFromHost(host)
+      const id          = String(args["id"] ?? "")
+      const destination = String(args["destination"] ?? "")
+      if (!id)          throw new Error("id is required")
+      if (!destination) throw new Error("destination is required")
+      const result = await svc.importToSandbox(id, destination)
+      return `Imported ${id} → ${result.sandboxPath} (${result.sizeBytes} bytes).`
+    },
+  }
+}
+
+/** Factory variant of {@link promoteAttachmentTool} bound to `host.attachments`. */
+export function createPromoteAttachmentTool(host: AgentHost): Tool {
+  return {
+    name: promoteAttachmentTool.name,
+    description: promoteAttachmentTool.description,
+    parameters: promoteAttachmentTool.parameters,
+    async execute(args) {
+      const svc = requireServiceFromHost(host)
+      const sandboxPath = String(args["sandboxPath"] ?? "")
+      if (!sandboxPath) throw new Error("sandboxPath is required")
+      const mediaType  = typeof args["mediaType"]  === "string" ? (args["mediaType"]  as string) : undefined
+      const purposeTag = typeof args["purposeTag"] === "string" ? (args["purposeTag"] as string) : undefined
+      const meta = await svc.promoteFromSandbox(sandboxPath, {
+        ...(mediaType  !== undefined ? { mediaType } : {}),
+        ...(purposeTag !== undefined ? { purposeTag } : {}),
+      })
+      return `Promoted ${sandboxPath} → attachment id=${meta.id} (${meta.normalizedName}, ${meta.sizeBytes}B, ${meta.mediaType}).`
+    },
+  }
 }

@@ -11,8 +11,9 @@
  */
 
 import { readdir, readFile, stat } from "node:fs/promises"
-import { currentRuntime } from "../agent-runtime.js"
 import { basename, extname, resolve } from "node:path"
+import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 
 // ── Configuration ────────────────────────────────────────────────
@@ -108,8 +109,9 @@ function shouldSkipFile(name: string): boolean {
 
 async function* walkFiles(
   dir: string,
+  basePath: string,
   includeGlob: string | undefined,
-  excludeTopLevelDirs?: Set<string>,
+  excludeTopLevelDirs?: ReadonlySet<string>,
 ): AsyncGenerator<string> {
   let entries
   try {
@@ -123,13 +125,13 @@ async function* walkFiles(
 
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      // Check dynamic exclude list (relative to currentRuntime().searchFiles.basePath)
+      // Check dynamic exclude list (relative to basePath)
       if (excludeTopLevelDirs && excludeTopLevelDirs.size > 0) {
-        const relPath = full.slice(currentRuntime().searchFiles.basePath.length + 1)
+        const relPath = full.slice(basePath.length + 1)
         // Only exclude at top level — "packages" excludes "/base/packages" but not "/base/tmp/packages"
         if (excludeTopLevelDirs.has(relPath)) continue
       }
-      yield* walkFiles(full, includeGlob, excludeTopLevelDirs)
+      yield* walkFiles(full, basePath, includeGlob, excludeTopLevelDirs)
     } else if (entry.isFile()) {
       if (shouldSkipFile(entry.name)) continue
 
@@ -154,142 +156,175 @@ function escapeRegex(s: string): string {
 
 // ── Tool ─────────────────────────────────────────────────────────
 
+const SEARCH_FILES_DESCRIPTION =
+  "Search for text or a regex pattern across files in the workspace. " +
+  "Returns matching lines with file paths and line numbers. " +
+  "Useful for finding function definitions, references, TODOs, etc. " +
+  "Use the 'path' parameter to scope searches to a specific directory (e.g. the task output directory) " +
+  "to avoid irrelevant matches from other parts of the workspace."
+
+const SEARCH_FILES_PARAMETERS = {
+  type: "object",
+  properties: {
+    pattern: {
+      type: "string",
+      description: "Text or regex pattern to search for",
+    },
+    path: {
+      type: "string",
+      description: "Directory to search in (default: workspace root). Relative to working directory.",
+    },
+    include: {
+      type: "string",
+      description: "File filter — e.g. '*.ts' or 'package.json'. Only files matching this are searched.",
+    },
+    regex: {
+      type: "boolean",
+      description: "If true, treat pattern as a regex. Default: false (exact text match).",
+    },
+  },
+  required: ["pattern"],
+} as const
+
+interface SearchFilesCtx {
+  basePath: string
+  excludeDirs: ReadonlySet<string>
+}
+
+async function executeSearchFiles(
+  args: Record<string, unknown>,
+  ctx: SearchFilesCtx,
+): Promise<string> {
+  try {
+    const pattern = String(args.pattern)
+    if (!pattern) return "Error: pattern is required"
+
+    const isRegex = Boolean(args.regex)
+    const include = args.include ? String(args.include) : undefined
+    const hasExplicitPath = Boolean(args.path)
+    const searchDir = hasExplicitPath ? resolve(ctx.basePath, String(args.path)) : ctx.basePath
+
+    // Only exclude agent-source directories when searching from workspace root
+    // (no explicit path). When the user/agent explicitly scopes to a directory,
+    // respect that scope fully.
+    const excludeDirs = hasExplicitPath ? undefined : ctx.excludeDirs
+
+    // Validate search dir is within workspace
+    if (!searchDir.startsWith(ctx.basePath + "/") && searchDir !== ctx.basePath) {
+      return `Error: search path escapes the workspace`
+    }
+
+    // Compile regex (or escape literal)
+    let re: RegExp
+    try {
+      re = isRegex ? new RegExp(pattern, "gi") : new RegExp(escapeRegex(pattern), "gi")
+    } catch (err) {
+      return `Error: invalid regex — ${err instanceof Error ? err.message : String(err)}`
+    }
+
+    const matches: Match[] = []
+    let filesSearched = 0
+    let truncated = false
+
+    for await (const filePath of walkFiles(searchDir, ctx.basePath, include, excludeDirs)) {
+      if (matches.length >= MAX_MATCHES) {
+        truncated = true
+        break
+      }
+
+      // Skip large files
+      try {
+        const info = await stat(filePath)
+        if (info.size > MAX_FILE_SIZE) continue
+      } catch {
+        continue
+      }
+
+      let content: string
+      try {
+        content = await readFile(filePath, "utf-8")
+      } catch {
+        continue
+      }
+
+      filesSearched++
+      const lines = content.split("\n")
+      const rel = filePath.slice(ctx.basePath.length + 1)
+
+      for (let i = 0; i < lines.length; i++) {
+        // Re-create regex to reset lastIndex for each line
+        if (re.test(lines[i])) {
+          const ctxStart = Math.max(0, i - CONTEXT_LINES)
+          const ctxEnd = Math.min(lines.length - 1, i + CONTEXT_LINES)
+          const context: string[] = []
+          for (let c = ctxStart; c <= ctxEnd; c++) {
+            context.push(`${c === i ? ">" : " "} ${c + 1}: ${lines[c]}`)
+          }
+          matches.push({ file: rel, line: i + 1, text: lines[i], context })
+
+          if (matches.length >= MAX_MATCHES) {
+            truncated = true
+            break
+          }
+        }
+        // Reset regex state
+        re.lastIndex = 0
+      }
+    }
+
+    if (matches.length === 0) {
+      return `No matches found for "${pattern}" (searched ${filesSearched} files)`
+    }
+
+    // Format output
+    const parts: string[] = []
+    parts.push(`Found ${matches.length} match${matches.length > 1 ? "es" : ""} in ${filesSearched} files${truncated ? " (results truncated)" : ""}:\n`)
+
+    // Group by file for readability
+    const byFile = new Map<string, Match[]>()
+    for (const m of matches) {
+      const existing = byFile.get(m.file)
+      if (existing) existing.push(m)
+      else byFile.set(m.file, [m])
+    }
+
+    for (const [file, fileMatches] of byFile) {
+      parts.push(`── ${file} ──`)
+      for (const m of fileMatches) {
+        parts.push(m.context.join("\n"))
+        parts.push("")
+      }
+    }
+
+    return parts.join("\n")
+  } catch (err) {
+    return `Error: ${err instanceof Error ? err.message : String(err)}`
+  }
+}
+
 export const searchFilesTool: Tool = {
   name: "search_files",
-  description:
-    "Search for text or a regex pattern across files in the workspace. " +
-    "Returns matching lines with file paths and line numbers. " +
-    "Useful for finding function definitions, references, TODOs, etc. " +
-    "Use the 'path' parameter to scope searches to a specific directory (e.g. the task output directory) " +
-    "to avoid irrelevant matches from other parts of the workspace.",
-  parameters: {
-    type: "object",
-    properties: {
-      pattern: {
-        type: "string",
-        description: "Text or regex pattern to search for",
-      },
-      path: {
-        type: "string",
-        description: "Directory to search in (default: workspace root). Relative to working directory.",
-      },
-      include: {
-        type: "string",
-        description: "File filter — e.g. '*.ts' or 'package.json'. Only files matching this are searched.",
-      },
-      regex: {
-        type: "boolean",
-        description: "If true, treat pattern as a regex. Default: false (exact text match).",
-      },
-    },
-    required: ["pattern"],
-  },
-
+  description: SEARCH_FILES_DESCRIPTION,
+  parameters: SEARCH_FILES_PARAMETERS,
   async execute(args) {
-    try {
-      const pattern = String(args.pattern)
-      if (!pattern) return "Error: pattern is required"
-
-      const isRegex = Boolean(args.regex)
-      const include = args.include ? String(args.include) : undefined
-      const hasExplicitPath = Boolean(args.path)
-      const searchDir = hasExplicitPath ? resolve(currentRuntime().searchFiles.basePath, String(args.path)) : currentRuntime().searchFiles.basePath
-
-      // Only exclude agent-source directories when searching from workspace root
-      // (no explicit path). When the user/agent explicitly scopes to a directory,
-      // respect that scope fully.
-      const excludeDirs = hasExplicitPath ? undefined : currentRuntime().searchFiles.excludeDirs
-
-      // Validate search dir is within workspace
-      if (!searchDir.startsWith(currentRuntime().searchFiles.basePath + "/") && searchDir !== currentRuntime().searchFiles.basePath) {
-        return `Error: search path escapes the workspace`
-      }
-
-      // Compile regex (or escape literal)
-      let re: RegExp
-      try {
-        re = isRegex ? new RegExp(pattern, "gi") : new RegExp(escapeRegex(pattern), "gi")
-      } catch (err) {
-        return `Error: invalid regex — ${err instanceof Error ? err.message : String(err)}`
-      }
-
-      const matches: Match[] = []
-      let filesSearched = 0
-      let truncated = false
-
-      for await (const filePath of walkFiles(searchDir, include, excludeDirs)) {
-        if (matches.length >= MAX_MATCHES) {
-          truncated = true
-          break
-        }
-
-        // Skip large files
-        try {
-          const info = await stat(filePath)
-          if (info.size > MAX_FILE_SIZE) continue
-        } catch {
-          continue
-        }
-
-        let content: string
-        try {
-          content = await readFile(filePath, "utf-8")
-        } catch {
-          continue
-        }
-
-        filesSearched++
-        const lines = content.split("\n")
-        const rel = filePath.slice(currentRuntime().searchFiles.basePath.length + 1)
-
-        for (let i = 0; i < lines.length; i++) {
-          // Re-create regex to reset lastIndex for each line
-          if (re.test(lines[i])) {
-            const ctxStart = Math.max(0, i - CONTEXT_LINES)
-            const ctxEnd = Math.min(lines.length - 1, i + CONTEXT_LINES)
-            const context: string[] = []
-            for (let c = ctxStart; c <= ctxEnd; c++) {
-              context.push(`${c === i ? ">" : " "} ${c + 1}: ${lines[c]}`)
-            }
-            matches.push({ file: rel, line: i + 1, text: lines[i], context })
-
-            if (matches.length >= MAX_MATCHES) {
-              truncated = true
-              break
-            }
-          }
-          // Reset regex state
-          re.lastIndex = 0
-        }
-      }
-
-      if (matches.length === 0) {
-        return `No matches found for "${pattern}" (searched ${filesSearched} files)`
-      }
-
-      // Format output
-      const parts: string[] = []
-      parts.push(`Found ${matches.length} match${matches.length > 1 ? "es" : ""} in ${filesSearched} files${truncated ? " (results truncated)" : ""}:\n`)
-
-      // Group by file for readability
-      const byFile = new Map<string, Match[]>()
-      for (const m of matches) {
-        const existing = byFile.get(m.file)
-        if (existing) existing.push(m)
-        else byFile.set(m.file, [m])
-      }
-
-      for (const [file, fileMatches] of byFile) {
-        parts.push(`── ${file} ──`)
-        for (const m of fileMatches) {
-          parts.push(m.context.join("\n"))
-          parts.push("")
-        }
-      }
-
-      return parts.join("\n")
-    } catch (err) {
-      return `Error: ${err instanceof Error ? err.message : String(err)}`
-    }
+    return executeSearchFiles(args, {
+      basePath: currentRuntime().searchFiles.basePath,
+      excludeDirs: currentRuntime().searchFiles.excludeDirs,
+    })
   },
+}
+
+/** Factory variant of {@link searchFilesTool} bound to `host.searchFiles`. */
+export function createSearchFilesTool(host: AgentHost): Tool {
+  return {
+    name: "search_files",
+    description: SEARCH_FILES_DESCRIPTION,
+    parameters: SEARCH_FILES_PARAMETERS,
+    async execute(args) {
+      return executeSearchFiles(args, {
+        basePath: host.searchFiles.basePath,
+        excludeDirs: host.searchFiles.excludeDirs,
+      })
+    },
+  }
 }
