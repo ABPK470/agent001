@@ -10,7 +10,6 @@
  */
 
 import type sql from "mssql"
-import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost } from "../../host/index.js"
 import { emitSyncSqlEvent } from "../sync-events.js"
 
@@ -37,10 +36,8 @@ export function configureSyncOrchestrator(host: AgentHost, projectRoot: string):
   host.sync.dbProjectRoot = projectRoot
 }
 
-export function projectRoot(host?: AgentHost): string {
-  // Legacy bridge: when no host supplied, fall back to the runtime (which
-  // shares its sync state with the boot host). Phase 6 will require host.
-  const root = (host ?? currentRuntime()).sync.dbProjectRoot
+export function projectRoot(host: AgentHost): string {
+  const root = host.sync.dbProjectRoot
   if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   return root
 }
@@ -88,6 +85,7 @@ export async function mapWithConcurrency<T, R>(
  * already has equivalent telemetry inside diff-engine.ts via runQueryWithRetry).
  */
 export async function trackedQuery<T = unknown>(
+  host: AgentHost,
   req: { query: (sql: string) => Promise<sql.IResult<T>> },
   sqlText: string,
   label: string,
@@ -96,7 +94,7 @@ export async function trackedQuery<T = unknown>(
   const t0 = Date.now()
   try {
     const result = await req.query(sqlText)
-    emitSyncSqlEvent({
+    emitSyncSqlEvent(host, {
       label,
       connection,
       sql: sqlText,
@@ -106,7 +104,7 @@ export async function trackedQuery<T = unknown>(
     })
     return result
   } catch (e) {
-    emitSyncSqlEvent({
+    emitSyncSqlEvent(host, {
       label,
       connection,
       sql: sqlText,
@@ -120,6 +118,7 @@ export async function trackedQuery<T = unknown>(
 
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
+  host: AgentHost,
   req: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> },
   sprocName: string,
   label: string,
@@ -128,7 +127,7 @@ export async function trackedExecute(
   const t0 = Date.now()
   try {
     const result = await req.execute(sprocName)
-    emitSyncSqlEvent({
+    emitSyncSqlEvent(host, {
       label,
       connection,
       sql: `EXEC ${sprocName}`,
@@ -138,7 +137,7 @@ export async function trackedExecute(
     })
     return result
   } catch (e) {
-    emitSyncSqlEvent({
+    emitSyncSqlEvent(host, {
       label,
       connection,
       sql: `EXEC ${sprocName}`,

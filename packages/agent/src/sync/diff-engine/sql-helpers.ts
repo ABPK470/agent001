@@ -9,6 +9,7 @@
  */
 
 import type sql from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import { emitSyncSqlEvent } from "../sync-events.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 
@@ -43,6 +44,7 @@ export function isTransientMssqlError(e: unknown): boolean {
  * Backoff: 100ms, 400ms (jittered).
  */
 export async function runQueryWithRetry<T = unknown>(
+  host: AgentHost,
   pool: sql.ConnectionPool,
   query: string,
   label: string,
@@ -56,7 +58,7 @@ export async function runQueryWithRetry<T = unknown>(
     attempts = attempt + 1
     try {
       const result = await pool.request().query<T>(query)
-      emitSyncSqlEvent({
+      emitSyncSqlEvent(host, {
         label, connection, sql: query,
         durationMs: Date.now() - t0,
         rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
@@ -66,7 +68,7 @@ export async function runQueryWithRetry<T = unknown>(
     } catch (e) {
       lastErr = e
       if (attempt === maxRetries || !isTransientMssqlError(e)) {
-        emitSyncSqlEvent({
+        emitSyncSqlEvent(host, {
           label, connection, sql: query,
           durationMs: Date.now() - t0,
           attempts,

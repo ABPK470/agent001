@@ -122,7 +122,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   const onProgress = opts.onProgress ?? (() => {})
   const execT0 = Date.now()
   onProgress({ type: SyncProgressKind.Started, message: `Executing plan ${planId} → ${plan.target}` })
-  emit(EventType.SyncExecuteStarted, {
+  emit(opts.host, EventType.SyncExecuteStarted, {
     planId, source: plan.source, target: plan.target,
     actor: opts.userUpn ?? null,
     totals: plan.totals,
@@ -151,7 +151,7 @@ async function executeSyncInner(
   if (driftPct !== null && driftPct > DRIFT_ABORT_PCT) {
     const msg = `Plan drift ${(driftPct * 100).toFixed(1)}% exceeds ${(DRIFT_ABORT_PCT * 100).toFixed(0)}% threshold — re-preview before executing.`
     onProgress({ type: SyncProgressKind.Failed, error: msg })
-    emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0, driftPct })
+    emit(opts.host, EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0, driftPct })
     try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) } catch { /* ignore */ }
     return { planId, success: false, error: msg }
   }
@@ -170,7 +170,7 @@ async function executeSyncInner(
   // Helper: emit a step progress event
   const stepEmit = (name: string, message?: string) => {
     onProgress({ type: SyncProgressKind.Step, step: name, message: message ?? name })
-    emit(EventType.SyncExecuteStep, { planId, step: name })
+    emit(opts.host, EventType.SyncExecuteStep, { planId, step: name })
   }
 
   // Pre-tx contract setup helper (audit-check / lock).
@@ -184,7 +184,7 @@ async function executeSyncInner(
       console.warn(`[sync.execute] ${stepName} failed:`, e)
       stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
       onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} failed`, error: errMsg })
-      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
+      emit(opts.host, EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
     }
   }
 
@@ -196,7 +196,7 @@ async function executeSyncInner(
     // ── Step 1: Audit pre-check ──
     stepEmit("audit-check", "Pre-sync audit check")
     await preTxContractStep("audit-check", async () => {
-      await runAuditCheckDirect(tgtPool, {
+      await runAuditCheckDirect(opts.host, tgtPool, {
         action: "syncOrNot",
         objType: entityType === "contract" ? "Contract" : entityType,
         id: entityId,
@@ -207,7 +207,7 @@ async function executeSyncInner(
     stepEmit("lock", `Locking ${entityType}`)
     if (isContract) {
       await preTxContractStep("lock", async () => {
-        await setContractLockDirect(tgtPool, Number(entityId), true, plan.target)
+        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target)
       })
     }
 
@@ -218,7 +218,7 @@ async function executeSyncInner(
       const tr = plan.tables.find((t) => t.table === tn)
       return tr && tr.counts.insert + tr.counts.update > 0
     })
-    const triggerCache = await probeTriggers(tgtPool, planId, plan.target, upsertTables)
+    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables)
 
     // ── Step 4: Sync metadata in transaction ──
     stepEmit("sync-metadata", "Syncing metadata rows")
@@ -229,7 +229,7 @@ async function executeSyncInner(
 
     // ── Steps 5-23: Post-tx contract pipeline ──
     const { stepWarnings: pipelineWarnings } = await runContractPipeline({
-      tgtPool, srcPool, plan, planId, isContract,
+      host: opts.host, tgtPool, srcPool, plan, planId, isContract,
       entityId, entityType, onProgress,
     })
     stepWarnings.push(...pipelineWarnings)
@@ -245,7 +245,7 @@ async function executeSyncInner(
       ? stepWarnings.map((w) => `${w.step}: ${w.error}`).join("; ")
       : undefined
     onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
-    emit(EventType.SyncExecuteCompleted, { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
+    emit(opts.host, EventType.SyncExecuteCompleted, { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
     try {
       getSyncRunSink(opts.host).finish({
         planId,
@@ -263,14 +263,14 @@ async function executeSyncInner(
     // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
     // helper already rolled back the tx and re-enabled FKs on failure.
     if (isContract) {
-      try { await setContractLockDirect(tgtPool, Number(entityId), false, plan.target) }
+      try { await setContractLockDirect(opts.host, tgtPool, Number(entityId), false, plan.target) }
       catch { /* best-effort */ }
     }
 
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[sync.execute] plan ${planId} failed:`, e)
     onProgress({ type: SyncProgressKind.Failed, error: msg })
-    emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0 })
+    emit(opts.host, EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0 })
     try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
     catch { /* ignore */ }
     return { planId, success: false, error: msg }

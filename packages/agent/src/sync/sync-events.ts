@@ -23,7 +23,6 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks"
-import { currentRuntime } from "../agent-runtime.js"
 import { EventType } from "../domain/enums/event.js"
 import { SyncOperationType } from "../domain/enums/sync.js"
 import type { AgentHost } from "../host/index.js"
@@ -41,11 +40,9 @@ export function setSyncEventSink(host: AgentHost, sink: SyncEventSink): void {
 }
 
 /** Fire-and-forget emit. Sink errors NEVER propagate.
- *  Reads the sink off the active runtime (which shares state with the host
- *  via `configureAgent({ sync: AgentRuntime.root().sync })`). Phase 6 will
- *  thread `host` here too and delete `currentRuntime`. */
-export function emitSyncEvent(type: EventType, data: Record<string, unknown>): void {
-  try { currentRuntime().sync.eventSink({ type, data }) } catch (e) {
+ *  Reads the sink off the supplied host. */
+export function emitSyncEvent(host: AgentHost, type: EventType, data: Record<string, unknown>): void {
+  try { host.sync.eventSink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }
 }
@@ -104,13 +101,13 @@ export interface SqlEventInput {
   error?: string
 }
 
-export function emitSyncSqlEvent(input: SqlEventInput): void {
+export function emitSyncSqlEvent(host: AgentHost, input: SqlEventInput): void {
   const ctx = getSyncContext()
   const prefix = ctx?.kind ?? SyncOperationType.Preview
   const truncated = input.sql.length > SQL_EVENT_MAX_CHARS
     ? input.sql.slice(0, SQL_EVENT_MAX_CHARS) + `… [+${input.sql.length - SQL_EVENT_MAX_CHARS} chars]`
     : input.sql
-  emitSyncEvent(prefix === SyncOperationType.Execute ? EventType.SyncExecuteSql : EventType.SyncPreviewSql, {
+  emitSyncEvent(host, prefix === SyncOperationType.Execute ? EventType.SyncExecuteSql : EventType.SyncPreviewSql, {
     opId: ctx?.opId ?? null,
     label: input.label,
     connection: input.connection,

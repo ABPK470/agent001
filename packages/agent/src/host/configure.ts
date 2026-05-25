@@ -45,10 +45,6 @@ export interface ConfigureAgentOptions {
   catalogInstances?: AgentHost["catalog"]["instances"]
   catalogDefaultCachePath?: AgentHost["catalog"]["defaultCachePath"]
 
-  // Sync subsystem state (shared with AgentRuntime.sync during the legacy
-  // bridge era — Phase 5). Pass a SyncState object to share by reference.
-  sync?: AgentHost["sync"]
-
   // Browser stack (any/all may be null in CLI / tests)
   browserContextReader?: AgentHost["browser"]["contextReader"]
   browserCredentialReader?: AgentHost["browser"]["credentialReader"]
@@ -115,7 +111,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       instances: options.catalogInstances ?? new Map(),
       defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined },
     }),
-    sync: options.sync ?? {
+    sync: {
       eventSink: NOOP_SYNC_EVENT_SINK,
       runSink: NOOP_SYNC_RUN_SINK,
       recipes: { bundle: null, loadedFromPath: null },

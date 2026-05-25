@@ -5,6 +5,7 @@
  */
 
 import type sql from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
     DETERMINISTIC_SESSION_PREFIX,
@@ -21,11 +22,12 @@ import {
  * skip the identity column (it's the PK and used for matching).
  */
 export async function fetchTableColumns(
+  host: AgentHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
 ): Promise<TableColumnInfo> {
   const [schema, name] = qualifiedTable.split(".")
-  const result = await runQueryWithRetry(pool, `
+  const result = await runQueryWithRetry(host, pool, `
     SELECT
       c.name             AS columnName,
       c.is_computed      AS isComputed,
@@ -61,6 +63,7 @@ export async function fetchTableColumns(
  * in scope are stable, and nullables compare consistently across source/target.
  */
 export async function fetchPkHash(
+  host: AgentHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
   predicate: string,
@@ -77,7 +80,7 @@ export async function fetchPkHash(
     `SELECT ${pkSelect}, ` +
     `HASHBYTES('SHA2_256', ISNULL(CONCAT_WS('|', ${hashArgs}), '')) AS rowHash ` +
     `FROM ${qtable(qualifiedTable)} WHERE ${predicate}`
-  const result = await runQueryWithRetry(pool, query, `fetchPkHash(${qualifiedTable})`)
+  const result = await runQueryWithRetry(host, pool, query, `fetchPkHash(${qualifiedTable})`)
   return (result.recordset as Record<string, unknown>[]).map((row) => {
     const pkValues: Record<string, unknown> = {}
     for (const c of pkColumns) pkValues[c] = row[c]

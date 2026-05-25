@@ -5,6 +5,7 @@
  */
 
 import type sql from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import type { SyncPlanConflict } from "../plan-store.js"
 import type { SyncRecipeTable } from "../recipes.js"
 import { formatScalar, qtable, quoteValue, runQueryWithRetry } from "./sql-helpers.js"
@@ -26,6 +27,7 @@ import type { PkHashRow } from "./types.js"
  *  - Capped at 5_000 PKs per query to keep the IN list reasonable.
  */
 export async function detectScopeMisattribution(
+  host: AgentHost,
   tgtPool: sql.ConnectionPool,
   table: SyncRecipeTable,
   entityId: string | number,
@@ -51,6 +53,7 @@ export async function detectScopeMisattribution(
   let result: sql.IResult<unknown>
   try {
     result = await runQueryWithRetry(
+      host,
       tgtPool,
       // No NOLOCK (consistent with the rest of diff). Plain READ COMMITTED.
       `SELECT [${pkCol}] AS pk, [${scopeCol}] AS scope ` +

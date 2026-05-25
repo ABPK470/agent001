@@ -79,6 +79,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
   // 1. Read source rows via source pool (direct connection, no linked server).
   const { pool: srcPool } = await getPool(host, plan.source)
   const srcResult = await trackedQuery(
+    host,
     srcPool.request(),
     `SELECT * FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyInsertsUpdates.read(${tableName})`,
@@ -89,6 +90,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
 
   // 2. Discover columns from target metadata (not source row keys — schemas may diverge).
   const colResult = await trackedQuery(
+    host,
     tx.request(),
     `
     SELECT c.name, c.is_identity, c.is_computed
@@ -177,6 +179,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
   ].join(";\n")
 
   const result = await trackedQuery(
+    host,
     tx.request(),
     fullSql,
     `applyInsertsUpdates.merge(${tableName})`,
@@ -201,6 +204,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
   const { pool: srcPool } = await getPool(host, plan.source)
   const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
   const srcResult = await trackedQuery(
+    host,
     srcPool.request(),
     `SELECT ${pkSelect} FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyDeletes.read(${tableName})`,
@@ -238,6 +242,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
   ].join(";\n")
 
   const result = await trackedQuery(
+    host,
     tx.request(),
     fullSql,
     `applyDeletes.exec(${tableName})`,

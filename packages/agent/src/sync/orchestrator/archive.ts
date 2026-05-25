@@ -27,6 +27,7 @@ import { trackedQuery } from "./db-helpers.js"
  * where the batch query failed.
  */
 export async function probeTriggers(
+  host: AgentHost,
   tgtPool: ConnectionPool,
   planId: string,
   target: string,
@@ -49,11 +50,11 @@ export async function probeTriggers(
       `JOIN sys.objects o ON o.schema_id = s.schema_id AND o.name = w.n ` +
       `LEFT JOIN sys.triggers t ON t.parent_id = o.object_id AND t.is_disabled = 0 ` +
       `GROUP BY s.name, o.name`
-    const r = await trackedQuery(tgtPool.request(), sqlText, "trigger-probe.batch", target)
+    const r = await trackedQuery(host, tgtPool.request(), sqlText, "trigger-probe.batch", target)
     for (const row of r.recordset as Array<{ schemaName: string; tableName: string; triggerCount: number }>) {
       triggerCache.set(`${row.schemaName}.${row.tableName}`, row.triggerCount > 0)
     }
-    emit(EventType.SyncExecuteArchiveProbeBatch, {
+    emit(host, EventType.SyncExecuteArchiveProbeBatch, {
       planId, tables: upsertTables.length, durationMs: Date.now() - probeT0,
     })
   } catch (e) {
@@ -101,7 +102,7 @@ export async function maybeArchive(
       hasTriggers = await tableHasTriggers(host, plan.target, tableName)
       cached = false
     }
-    emit(EventType.SyncExecuteArchiveProbe, {
+    emit(host, EventType.SyncExecuteArchiveProbe, {
       planId: plan.planId,
       table: tableName,
       hasTriggers,
@@ -109,7 +110,7 @@ export async function maybeArchive(
       durationMs: Date.now() - probeT0,
     })
     if (!hasTriggers) {
-      emit(EventType.SyncExecuteArchiveSkipped, {
+      emit(host, EventType.SyncExecuteArchiveSkipped, {
         planId: plan.planId,
         table: tableName,
         reason:

@@ -43,6 +43,6 @@ export async function revalidatePlanDrift(host: AgentHost, plan: SyncPlan): Prom
       console.warn(`[sync.drift-revalidate] ${t.table}: ${e instanceof Error ? e.message : e}`)
     }
   }
-  emit(EventType.SyncExecuteDriftRevalidated, { planId: plan.planId, maxDriftPct: maxDrift })
+  emit(host, EventType.SyncExecuteDriftRevalidated, { planId: plan.planId, maxDriftPct: maxDrift })
   return maxDrift
 }

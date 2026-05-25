@@ -25,7 +25,6 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
-  AgentRuntime,
   EventType,
   buildCatalog, closeMssqlPool,
   configureAgent,
@@ -128,12 +127,7 @@ async function main() {
   // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
   const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
   const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
-  // Shared sync state: bind the host to the same SyncState object the
-  // legacy AgentRuntime.root() uses, so `host.sync.*` reads/writes and
-  // `currentRuntime().sync.*` reads/writes see the same data. Phase 6
-  // demolishes the runtime and this becomes the sole owner.
-  const sharedSync = AgentRuntime.root().sync as AgentHost["sync"]
-  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath, sync: sharedSync })
+  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath })
   const mssqlSummary = setupMssql(bootHost, _projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.

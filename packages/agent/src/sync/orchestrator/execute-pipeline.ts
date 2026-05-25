@@ -14,22 +14,24 @@
 import { type ConnectionPool } from "mssql"
 import { EventType } from "../../domain/enums/event.js"
 import { SyncProgressKind } from "../../domain/enums/sync.js"
+import type { AgentHost } from "../../host/index.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import {
-  createDataset,
-  createDatasetFKs,
-  deployETL,
-  deployRoutine,
-  resolveContractName,
-  runAuditCheckDirect,
-  runContractDeploymentScriptsDirect,
-  setContractLockDirect,
-  undeployMarkedContract,
+    createDataset,
+    createDatasetFKs,
+    deployETL,
+    deployRoutine,
+    resolveContractName,
+    runAuditCheckDirect,
+    runContractDeploymentScriptsDirect,
+    setContractLockDirect,
+    undeployMarkedContract,
 } from "./contract-deploy.js"
 import type { ExecuteProgress } from "./types.js"
 
 export interface ContractPipelineInput {
+  host: AgentHost
   tgtPool: ConnectionPool
   srcPool: ConnectionPool
   plan: SyncPlan
@@ -48,6 +50,7 @@ export interface StepWarning {
 
 export async function runContractPipeline(input: ContractPipelineInput): Promise<{ stepWarnings: StepWarning[] }> {
   const { tgtPool, srcPool, planId, isContract, entityId, entityType, onProgress } = input
+  const host = input.host
   const stepWarnings: StepWarning[] = []
 
   async function callDirectStep(stepName: string, fn: () => Promise<void>, opName = stepName): Promise<boolean> {
@@ -59,7 +62,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
       console.warn(`[sync.execute] ${stepName} (${opName}) failed:`, e)
       stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
       onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} (${opName}) failed`, error: errMsg })
-      emit(EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
+      emit(host, EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
       return false
     }
   }
@@ -67,20 +70,20 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   // Helper: emit a step progress event
   function step(name: string, message?: string) {
     onProgress({ type: SyncProgressKind.Step, step: name, message: message ?? name })
-    emit(EventType.SyncExecuteStep, { planId, step: name })
+    emit(host, EventType.SyncExecuteStep, { planId, step: name })
   }
 
   // ── Step 8: Undeploy contract on target — contract only ──
   // Resolve contractName once for all subsequent heavy steps.
   let contractName: string | undefined
   if (isContract) {
-    contractName = await resolveContractName(tgtPool, Number(entityId), input.plan.target)
+    contractName = await resolveContractName(host, tgtPool, Number(entityId), input.plan.target)
   }
 
   if (isContract) {
     step("undeploy", "Undeploying contract on target")
     await callDirectStep("undeploy", async () => {
-      await undeployMarkedContract(tgtPool, Number(entityId), input.plan.target)
+      await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target)
     })
   }
 
@@ -88,7 +91,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("unlock-after-undeploy", "Unlocking after undeploy")
     await callDirectStep("unlock-after-undeploy", async () => {
-      await setContractLockDirect(tgtPool, Number(entityId), false, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target)
     })
   }
 
@@ -96,7 +99,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("audit-check-2", "Pre-deploy audit check")
     await callDirectStep("audit-check-2", async () => {
-      await runAuditCheckDirect(tgtPool, {
+      await runAuditCheckDirect(host, tgtPool, {
         action: "syncOrNot",
         objType: "Contract",
         id: entityId,
@@ -108,7 +111,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("lock-for-deploy", "Locking for deployment")
     await callDirectStep("lock-for-deploy", async () => {
-      await setContractLockDirect(tgtPool, Number(entityId), true, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target)
     })
   }
 
@@ -116,7 +119,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-pre-script", "Running pre-deployment scripts")
     await callDirectStep("deploy-pre-script", async () => {
-      await runContractDeploymentScriptsDirect(tgtPool, contractName!, "Run preScript", input.plan.target)
+      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run preScript", input.plan.target)
     })
   }
 
@@ -125,7 +128,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     for (const dsType of ["stage", "archive", "list", "dim", "fact"] as const) {
       step(`create-dataset-${dsType}`, `Creating ${dsType} dataset`)
       await callDirectStep(`create-dataset-${dsType}`, async () => {
-        await createDataset(tgtPool, Number(entityId), contractName!, dsType, input.plan.target)
+        await createDataset(host, tgtPool, Number(entityId), contractName!, dsType, input.plan.target)
       })
     }
   }
@@ -134,7 +137,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("create-fks", "Creating foreign keys")
     await callDirectStep("create-fks", async () => {
-      await createDatasetFKs(tgtPool, contractName!, input.plan.target)
+      await createDatasetFKs(host, tgtPool, contractName!, input.plan.target)
     })
   }
 
@@ -142,7 +145,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-etl", "Deploying ETL custom transformations")
     await callDirectStep("deploy-etl", async () => {
-      await deployETL(tgtPool, contractName!, input.plan.target)
+      await deployETL(host, tgtPool, contractName!, input.plan.target)
     })
   }
 
@@ -150,7 +153,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-routine", "Deploying routines")
     await callDirectStep("deploy-routine", async () => {
-      await deployRoutine(tgtPool, contractName!, input.plan.target)
+      await deployRoutine(host, tgtPool, contractName!, input.plan.target)
     })
   }
 
@@ -158,7 +161,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("deploy-post-script", "Running post-deployment scripts")
     await callDirectStep("deploy-post-script", async () => {
-      await runContractDeploymentScriptsDirect(tgtPool, contractName!, "Run postScript", input.plan.target)
+      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run postScript", input.plan.target)
     })
   }
 
@@ -166,14 +169,14 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
   if (isContract) {
     step("unlock-after-deploy", "Unlocking after deployment")
     await callDirectStep("unlock-after-deploy", async () => {
-      await setContractLockDirect(tgtPool, Number(entityId), false, input.plan.target)
+      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target)
     })
   }
 
   // ── Step 23: Set sync date at source ──
   step("set-sync-date", "Updating sync date on source")
   try {
-    await runAuditCheckDirect(srcPool, {
+    await runAuditCheckDirect(host, srcPool, {
       action: "syncDate",
       id: entityId,
       objType: isContract ? "Contract" : entityType,
@@ -183,13 +186,13 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     console.warn(`[sync.execute] syncDate update failed:`, e)
     stepWarnings.push({ step: "set-sync-date", sproc: "direct", error: errMsg })
     onProgress({ type: SyncProgressKind.Step, step: "set-sync-date", message: "set-sync-date (direct) failed", error: errMsg })
-    emit(EventType.SyncExecuteStepFailed, { planId, step: "set-sync-date", sproc: "direct", error: errMsg })
+    emit(host, EventType.SyncExecuteStepFailed, { planId, step: "set-sync-date", sproc: "direct", error: errMsg })
   }
 
   // ── Step 24: Update deployment date on target ──
   step("set-deploy-date", "Updating deployment date on target")
   try {
-    await runAuditCheckDirect(tgtPool, {
+    await runAuditCheckDirect(host, tgtPool, {
       action: "deployDate",
       id: entityId,
       objType: isContract ? "Contract" : entityType,
