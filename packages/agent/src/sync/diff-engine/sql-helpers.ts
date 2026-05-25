@@ -10,7 +10,7 @@
 
 import type sql from "mssql"
 import type { AgentHost } from "../../host/index.js"
-import { emitSyncSqlEvent } from "../sync-events.js"
+import { emitSyncSqlEvent, type SyncSqlTraceContext } from "../sync-events.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
@@ -48,6 +48,7 @@ export async function runQueryWithRetry<T = unknown>(
   pool: sql.ConnectionPool,
   query: string,
   label: string,
+  syncTrace: SyncSqlTraceContext | null = null,
   maxRetries = 2,
 ): Promise<sql.IResult<T>> {
   const t0 = Date.now()
@@ -63,7 +64,7 @@ export async function runQueryWithRetry<T = unknown>(
         durationMs: Date.now() - t0,
         rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
         attempts,
-      })
+      }, syncTrace)
       return result
     } catch (e) {
       lastErr = e
@@ -73,7 +74,7 @@ export async function runQueryWithRetry<T = unknown>(
           durationMs: Date.now() - t0,
           attempts,
           error: e instanceof Error ? e.message : String(e),
-        })
+        }, syncTrace)
         throw e
       }
       const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)

@@ -12,6 +12,7 @@
 import type sql from "mssql"
 import type { AgentHost } from "../../host/index.js"
 import type { SyncPlanRowSample } from "../plan-store.js"
+import type { SyncSqlTraceContext } from "../sync-events.js"
 import { buildBatchWhere, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import { META_EXCLUDED_COLUMNS, type PkHashRow } from "./types.js"
 
@@ -21,6 +22,7 @@ export async function fetchSamples(
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<SyncPlanRowSample[]> {
   if (rows.length === 0) return []
   try {
@@ -30,6 +32,7 @@ export async function fetchSamples(
       pool,
       `SELECT * FROM ${qtable(qualifiedTable)} WHERE ${where}`,
       `fetchSamples(${qualifiedTable})`,
+      syncTrace,
     )
     // Re-order results to match input row order and build samples.
     const byPk = new Map<string, Record<string, unknown>>()
@@ -55,14 +58,15 @@ export async function fetchUpdateSamples(
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<SyncPlanRowSample[]> {
   if (rows.length === 0) return []
   try {
     const where = buildBatchWhere(rows, pkColumns)
     const qt = qtable(qualifiedTable)
     const [srcResult, tgtResult] = await Promise.all([
-      runQueryWithRetry(host, srcPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.src(${qualifiedTable})`),
-      runQueryWithRetry(host, tgtPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.tgt(${qualifiedTable})`),
+      runQueryWithRetry(host, srcPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.src(${qualifiedTable})`, syncTrace),
+      runQueryWithRetry(host, tgtPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.tgt(${qualifiedTable})`, syncTrace),
     ])
     const srcByPk = new Map<string, Record<string, unknown>>()
     for (const r of srcResult.recordset as Record<string, unknown>[]) {

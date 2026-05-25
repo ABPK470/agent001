@@ -12,6 +12,7 @@ import { type Transaction } from "mssql"
 import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
+import type { SyncSqlTraceContext } from "../sync-events.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 
 /**
@@ -33,7 +34,7 @@ const SYNC_META_COLUMNS = new Set([
  * Returns a map keyed by `schema.table`. Tables without a PK get an empty
  * array — callers must guard against that before issuing MERGE / DELETE.
  */
-export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[]): Promise<Map<string, string[]>> {
+export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[], syncTrace: SyncSqlTraceContext | null = null): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
   const { pool } = await getPool(host, connection)
@@ -70,7 +71,14 @@ export async function fetchPkColumns(host: AgentHost, connection: string, tables
  * copied from source — instead validFrom=GETUTCDATE(), validTo=NULL on both
  * INSERT and UPDATE, matching the legacy core.uspSyncObjectTran behaviour.
  */
-export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyInsertsUpdates(
+  host: AgentHost,
+  tx: Transaction,
+  plan: SyncPlan,
+  tableName: string,
+  pkColumns: string[],
+  syncTrace: SyncSqlTraceContext | null = null,
+): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
@@ -84,6 +92,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
     `SELECT * FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyInsertsUpdates.read(${tableName})`,
     plan.source,
+    syncTrace,
   )
   const rows = srcResult.recordset as Record<string, unknown>[]
   if (rows.length === 0) return 0
@@ -100,6 +109,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
   `,
     `applyInsertsUpdates.cols(${tableName})`,
     plan.target,
+    syncTrace,
   )
   const targetCols = colResult.recordset as Array<{ name: string; is_identity: boolean; is_computed: boolean }>
   const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
@@ -184,6 +194,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
     fullSql,
     `applyInsertsUpdates.merge(${tableName})`,
     plan.target,
+    syncTrace,
   )
   // rowsAffected: last meaningful entry is the MERGE itself
   const raIdx = result.rowsAffected.length - 2
@@ -194,7 +205,14 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
  * Apply deletes: rows on target within scope that no longer exist on source.
  * Uses direct source pool — no linked server needed.
  */
-export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyDeletes(
+  host: AgentHost,
+  tx: Transaction,
+  plan: SyncPlan,
+  tableName: string,
+  pkColumns: string[],
+  syncTrace: SyncSqlTraceContext | null = null,
+): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
@@ -209,6 +227,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
     `SELECT ${pkSelect} FROM ${qtable(tableName)} WHERE ${predicate}`,
     `applyDeletes.read(${tableName})`,
     plan.source,
+    syncTrace,
   )
   const srcRows = srcResult.recordset as Record<string, unknown>[]
 
@@ -247,6 +266,7 @@ export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncP
     fullSql,
     `applyDeletes.exec(${tableName})`,
     plan.target,
+    syncTrace,
   )
   // The DELETE is the second-to-last statement (before DROP)
   const raIdx = result.rowsAffected.length - 2

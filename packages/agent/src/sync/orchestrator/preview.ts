@@ -31,7 +31,7 @@ import {
     type SyncRecipe,
     type SyncRecipeTable,
 } from "../recipes.js"
-import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncSqlTraceContext } from "../sync-events.js"
 import { fetchPkColumns } from "./apply.js"
 import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db-helpers.js"
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
@@ -51,6 +51,7 @@ export interface PreviewInput {
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   const previewId = randomUUID()
   const t0 = Date.now()
+  const syncTrace: SyncSqlTraceContext = { kind: SyncOperationType.Preview, opId: previewId, source: input.source, target: input.target }
   emit(input.host, EventType.SyncPreviewStarted, {
     previewId,
     entityType: input.entityType,
@@ -60,17 +61,10 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
     force: Boolean(input.force),
   })
 
-  // runWithSyncContext threads {kind, opId, source, target} via AsyncLocalStorage
-  // so every SQL query fired inside this scope (in diff-engine, sample readers,
-  // PK lookup, display-name lookup) can attribute its `sync.preview.sql` event
-  // to this previewId without us having to plumb the id through every helper.
-  return runWithSyncContext(
-    { kind: SyncOperationType.Preview, opId: previewId, source: input.source, target: input.target },
-    () => previewSyncInner(input, previewId, t0),
-  )
+  return previewSyncInner(input, previewId, t0, syncTrace)
 }
 
-async function previewSyncInner(input: PreviewInput, previewId: string, t0: number): Promise<SyncPlan> {
+async function previewSyncInner(input: PreviewInput, previewId: string, t0: number, syncTrace: SyncSqlTraceContext): Promise<SyncPlan> {
   try {
     // Lookup order: entity-registry resolver wins; on miss, fall back to
     // the bundled JSON. Both produce the same `SyncRecipe` shape so the
@@ -140,7 +134,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // pool and produces "Connection is closed" cascades that flap classification
     // between runs (a failed table reports counts:0/0/0/0 instead of its real
     // unchanged count, so totals jitter from one preview to the next).
-    const pkColumnsByTable = await fetchPkColumns(input.host, input.source, recipe.tables.map((t) => t.name))
+    const pkColumnsByTable = await fetchPkColumns(input.host, input.source, recipe.tables.map((t) => t.name), syncTrace)
     const tableResults: SyncPlanTable[] = await mapWithConcurrency(
       recipe.tables,
       PREVIEW_TABLE_CONCURRENCY,
@@ -159,7 +153,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             input.source,
             input.target,
             pkColumnsByTable.get(t.name) ?? [],
-            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds },
+            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds, syncTrace },
           )
           emit(input.host, EventType.SyncPreviewTableDone, {
             previewId, table: t.name, counts: r.counts, durationMs: r.diffDurationMs,

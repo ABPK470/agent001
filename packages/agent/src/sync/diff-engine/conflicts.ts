@@ -8,6 +8,7 @@ import type sql from "mssql"
 import type { AgentHost } from "../../host/index.js"
 import type { SyncPlanConflict } from "../plan-store.js"
 import type { SyncRecipeTable } from "../recipes.js"
+import type { SyncSqlTraceContext } from "../sync-events.js"
 import { formatScalar, qtable, quoteValue, runQueryWithRetry } from "./sql-helpers.js"
 import type { PkHashRow } from "./types.js"
 
@@ -34,6 +35,7 @@ export async function detectScopeMisattribution(
   pkColumns: string[],
   insertCandidates: PkHashRow[],
   sampleSize: number,
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<SyncPlanConflict[]> {
   if (insertCandidates.length === 0) return []
   if (pkColumns.length !== 1) return []
@@ -59,6 +61,7 @@ export async function detectScopeMisattribution(
       `SELECT [${pkCol}] AS pk, [${scopeCol}] AS scope ` +
       `FROM ${qtable(table.name)} WHERE [${pkCol}] IN (${pkLiterals})`,
       `detectScopeMisattribution(${table.name})`,
+      syncTrace,
     )
   } catch (e) {
     // Defence-in-depth: if the conflict probe itself fails (transient or

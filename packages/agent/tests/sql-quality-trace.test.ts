@@ -1,6 +1,7 @@
 import { PlannerTraceKind } from "@mia/agent"
 import { describe, expect, it } from "vitest"
 import { createAgentLoopState, executeToolRound } from "../src/loop/index.js"
+import { readToolTraceContext } from "../src/loop/tool-execution/trace-context.js"
 import { emitMssqlQualityTrace } from "../src/tools/mssql/trace.js"
 import { analyzeMssqlQueryQuality, validateQueryDetailed } from "../src/tools/mssql/validation.js"
 import type { Tool } from "../src/types.js"
@@ -317,13 +318,14 @@ describe("SQL quality trace emission", () => {
       async execute(args) {
         const sql = String(args.query)
         const validation = validateQueryDetailed(sql, false)
+        const toolTrace = readToolTraceContext(args)
         emitMssqlQualityTrace({
           toolMode: "query",
           phase: validation.ok ? "executed" : "blocked",
           query: sql,
           connection: "default",
           validation,
-        })
+        }, toolTrace)
         return validation.error ?? "ok"
       },
     }

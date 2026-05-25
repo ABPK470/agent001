@@ -18,7 +18,7 @@ import { EventType } from "../../domain/enums/event.js"
 import type { AgentHost } from "../../host/index.js"
 import { tableHasTriggers } from "../catalog-drift.js"
 import { type SyncPlan } from "../plan-store.js"
-import { emitSyncEvent as emit } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncSqlTraceContext } from "../sync-events.js"
 import { trackedQuery } from "./db-helpers.js"
 
 /**
@@ -32,6 +32,7 @@ export async function probeTriggers(
   planId: string,
   target: string,
   upsertTables: string[],
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<Map<string, boolean>> {
   const triggerCache = new Map<string, boolean>()
   if (upsertTables.length === 0) return triggerCache
@@ -50,7 +51,7 @@ export async function probeTriggers(
       `JOIN sys.objects o ON o.schema_id = s.schema_id AND o.name = w.n ` +
       `LEFT JOIN sys.triggers t ON t.parent_id = o.object_id AND t.is_disabled = 0 ` +
       `GROUP BY s.name, o.name`
-    const r = await trackedQuery(host, tgtPool.request(), sqlText, "trigger-probe.batch", target)
+    const r = await trackedQuery(host, tgtPool.request(), sqlText, "trigger-probe.batch", target, syncTrace)
     for (const row of r.recordset as Array<{ schemaName: string; tableName: string; triggerCount: number }>) {
       triggerCache.set(`${row.schemaName}.${row.tableName}`, row.triggerCount > 0)
     }
@@ -79,6 +80,7 @@ export async function maybeArchive(
   plan: SyncPlan,
   tableName: string,
   triggerCache?: Map<string, boolean>,
+  _syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<void> {
   // Resolve archive sibling for this table.
   const tIdx = plan.recipeSnapshot.tables.findIndex((rt) => rt.name === tableName)

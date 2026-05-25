@@ -8,9 +8,9 @@
  *      Cardinality: ~10 events per preview. Always emitted.
  *
  *   2. SQL query events  — `sync.preview.sql` / `sync.execute.sql`. Emitted
- *      from the diff/execute SQL helpers via AsyncLocalStorage so any query
- *      run inside a `runWithSyncContext()` scope is automatically attributed
- *      to its previewId/planId. Cardinality: ~3-5 queries per table per op
+ *      from the diff/execute SQL helpers with an explicit trace context so
+ *      each query is attributed to its previewId/planId without ambient
+ *      state. Cardinality: ~3-5 queries per table per op
  *      (~30-50 events per preview). Always emitted to the event stream;
  *      the SQL text is truncated to keep `event_log` rows compact.
  *
@@ -22,7 +22,6 @@
  * would create a cycle), so the server injects the sink at startup.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks"
 import { EventType } from "../domain/enums/event.js"
 import { SyncOperationType } from "../domain/enums/sync.js"
 import type { AgentHost } from "../host/index.js"
@@ -47,14 +46,9 @@ export function emitSyncEvent(host: AgentHost, type: EventType, data: Record<str
   }
 }
 
-// ── Per-operation context (AsyncLocalStorage) ───────────────────
-//
-// Threaded through previewSync / executeSync so deep helpers
-// (diff-engine, sample readers) can attribute their SQL events to the
-// correct previewId/planId without having to plumb the id through every
-// function signature.
+// ── Per-operation SQL trace context ─────────────────────────────
 
-export interface SyncOpContext {
+export interface SyncSqlTraceContext {
   /** "preview" or "execute" — sets the event-type prefix. */
   kind: SyncOperationType
   /** Correlation key — previewId for preview, planId for execute. */
@@ -62,16 +56,6 @@ export interface SyncOpContext {
   /** Optional source/target connection names for richer event payloads. */
   source?: string
   target?: string
-}
-
-const _opContext = new AsyncLocalStorage<SyncOpContext>()
-
-export function runWithSyncContext<T>(ctx: SyncOpContext, fn: () => Promise<T>): Promise<T> {
-  return _opContext.run(ctx, fn)
-}
-
-export function getSyncContext(): SyncOpContext | undefined {
-  return _opContext.getStore()
 }
 
 // ── SQL event helper ────────────────────────────────────────────
@@ -101,8 +85,7 @@ export interface SqlEventInput {
   error?: string
 }
 
-export function emitSyncSqlEvent(host: AgentHost, input: SqlEventInput): void {
-  const ctx = getSyncContext()
+export function emitSyncSqlEvent(host: AgentHost, input: SqlEventInput, ctx: SyncSqlTraceContext | null = null): void {
   const prefix = ctx?.kind ?? SyncOperationType.Preview
   const truncated = input.sql.length > SQL_EVENT_MAX_CHARS
     ? input.sql.slice(0, SQL_EVENT_MAX_CHARS) + `… [+${input.sql.length - SQL_EVENT_MAX_CHARS} chars]`

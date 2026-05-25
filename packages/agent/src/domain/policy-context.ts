@@ -9,10 +9,9 @@
  *   - the canonical sandbox root for path containment checks,
  *   - the default MSSQL environment when a tool call does not name one.
  *
- * Following the existing AsyncLocalStorage convention used by
- * {@link runWithSyncContext} and the MSSQL kill-signal scope, callers wrap
- * a unit of work with {@link runWithPolicyContext}; the policy engine reads
- * the current context with {@link getPolicyContext} during evaluation.
+ * Callers wrap a unit of work with {@link runWithPolicyContext}; the policy
+ * engine reads the current context with {@link getPolicyContext} during
+ * evaluation.
  *
  * No globals are mutated. Concurrent runs see independent contexts.
  */

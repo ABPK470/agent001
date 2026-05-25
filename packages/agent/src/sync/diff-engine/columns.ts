@@ -6,6 +6,7 @@
 
 import type sql from "mssql"
 import type { AgentHost } from "../../host/index.js"
+import type { SyncSqlTraceContext } from "../sync-events.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
     DETERMINISTIC_SESSION_PREFIX,
@@ -25,6 +26,7 @@ export async function fetchTableColumns(
   host: AgentHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<TableColumnInfo> {
   const [schema, name] = qualifiedTable.split(".")
   const result = await runQueryWithRetry(host, pool, `
@@ -40,7 +42,7 @@ export async function fetchTableColumns(
       AND o.name = '${name!.replace(/'/g, "''")}'
       AND OBJECT_SCHEMA_NAME(c.object_id) = '${schema!.replace(/'/g, "''")}'
     ORDER BY c.column_id
-  `, `fetchTableColumns(${qualifiedTable})`)
+  `, `fetchTableColumns(${qualifiedTable})`, syncTrace)
   const hashColumns: HashColumn[] = []
   let identityColumn: string | null = null
   for (const row of result.recordset as Array<{ columnName: string; isComputed: boolean; isIdentity: boolean; systemType: string }>) {
@@ -69,6 +71,7 @@ export async function fetchPkHash(
   predicate: string,
   pkColumns: string[],
   colInfo: TableColumnInfo,
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<PkHashRow[]> {
   const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
   const hashArgs = colInfo.hashColumns.map(hashExpr).join(", ")
@@ -80,7 +83,7 @@ export async function fetchPkHash(
     `SELECT ${pkSelect}, ` +
     `HASHBYTES('SHA2_256', ISNULL(CONCAT_WS('|', ${hashArgs}), '')) AS rowHash ` +
     `FROM ${qtable(qualifiedTable)} WHERE ${predicate}`
-  const result = await runQueryWithRetry(host, pool, query, `fetchPkHash(${qualifiedTable})`)
+  const result = await runQueryWithRetry(host, pool, query, `fetchPkHash(${qualifiedTable})`, syncTrace)
   return (result.recordset as Record<string, unknown>[]).map((row) => {
     const pkValues: Record<string, unknown> = {}
     for (const c of pkColumns) pkValues[c] = row[c]

@@ -4,6 +4,8 @@
  * @module
  */
 
+import type { SyncSqlTraceContext } from "../sync-events.js"
+
 export interface DiffOptions {
   /** Per-table source row cap; if exceeded the table is flagged and skipped. */
   rowCap?: number
@@ -14,12 +16,15 @@ export interface DiffOptions {
    * expanded tree IDs. Substituted into `{ids}` placeholders in predicates.
    */
   expandedIds?: Array<string | number> | null
+  /** SQL telemetry attribution for preview/execute queries. */
+  syncTrace?: SyncSqlTraceContext | null
 }
 
 export const DEFAULT_OPTS: Required<DiffOptions> = {
   rowCap: 5_000_000,
   sampleSize: 50,
   expandedIds: null,
+  syncTrace: null,
 }
 
 /**

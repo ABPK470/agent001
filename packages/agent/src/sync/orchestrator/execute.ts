@@ -19,7 +19,7 @@ import { detectCatalogDrift } from "../catalog-drift.js"
 import { getEnvironment } from "../environments.js"
 import { evaluateFreezeWindows } from "../governance/freeze-windows.js"
 import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
-import { emitSyncEvent as emit, runWithSyncContext } from "../sync-events.js"
+import { emitSyncEvent as emit, type SyncSqlTraceContext } from "../sync-events.js"
 import { getSyncRunSink } from "../sync-run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
@@ -121,6 +121,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
 
   const onProgress = opts.onProgress ?? (() => {})
   const execT0 = Date.now()
+  const syncTrace: SyncSqlTraceContext = { kind: SyncOperationType.Execute, opId: planId, source: plan.source, target: plan.target }
   onProgress({ type: SyncProgressKind.Started, message: `Executing plan ${planId} → ${plan.target}` })
   emit(opts.host, EventType.SyncExecuteStarted, {
     planId, source: plan.source, target: plan.target,
@@ -128,12 +129,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
     totals: plan.totals,
   })
 
-  // Same ALS pattern as previewSync — every SQL query inside this scope gets
-  // attributed to this planId via `sync.execute.sql` events.
-  return runWithSyncContext(
-    { kind: SyncOperationType.Execute, opId: planId, source: plan.source, target: plan.target },
-    () => executeSyncInner(plan, planId, opts, onProgress, execT0),
-  )
+  return executeSyncInner(plan, planId, opts, onProgress, execT0, syncTrace)
 }
 
 async function executeSyncInner(
@@ -142,9 +138,10 @@ async function executeSyncInner(
   opts: ExecuteOptions,
   onProgress: (p: ExecuteProgress) => void,
   execT0: number,
+  syncTrace: SyncSqlTraceContext,
 ): Promise<{ planId: string; success: boolean; error?: string }> {
   // Load PK columns once
-  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name))
+  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name), syncTrace)
 
   // Drift re-validation
   const driftPct = await revalidatePlanDrift(opts.host, plan)
@@ -200,14 +197,14 @@ async function executeSyncInner(
         action: "syncOrNot",
         objType: entityType === "contract" ? "Contract" : entityType,
         id: entityId,
-      }, plan.target)
+      }, plan.target, syncTrace)
     })
 
     // ── Step 2: Lock entity for sync ──
     stepEmit("lock", `Locking ${entityType}`)
     if (isContract) {
       await preTxContractStep("lock", async () => {
-        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target)
+        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target, syncTrace)
       })
     }
 
@@ -218,19 +215,19 @@ async function executeSyncInner(
       const tr = plan.tables.find((t) => t.table === tn)
       return tr && tr.counts.insert + tr.counts.update > 0
     })
-    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables)
+    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables, syncTrace)
 
     // ── Step 4: Sync metadata in transaction ──
     stepEmit("sync-metadata", "Syncing metadata rows")
     const { applied: appliedTotals } = await runMetadataSync({
-      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool,
+      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool, syncTrace,
     })
     stepEmit("sync-metadata-done", "Metadata sync committed")
 
     // ── Steps 5-23: Post-tx contract pipeline ──
     const { stepWarnings: pipelineWarnings } = await runContractPipeline({
       host: opts.host, tgtPool, srcPool, plan, planId, isContract,
-      entityId, entityType, onProgress,
+      entityId, entityType, onProgress, syncTrace,
     })
     stepWarnings.push(...pipelineWarnings)
 

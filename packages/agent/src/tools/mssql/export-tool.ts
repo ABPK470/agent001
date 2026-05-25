@@ -19,6 +19,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
 import type { AgentHost, RunContext } from "../../host/index.js"
+import { readToolTraceContext } from "../../loop/tool-execution/trace-context.js"
 import type { Tool } from "../../types.js"
 import { safePathResolvedWith } from "../filesystem-security.js"
 import { getPool } from "./connection.js"
@@ -133,6 +134,7 @@ async function executeExportQueryToFile(
   if (!pathArg) return "Error: path cannot be empty."
 
   const connectionName = args.connection ? String(args.connection).trim() : "default"
+  const toolTrace = readToolTraceContext(args)
   const accessor = () => {
     const exact = opts.host.catalog.instances.get(connectionName)
     if (exact) return exact
@@ -167,7 +169,7 @@ async function executeExportQueryToFile(
       connection: connectionName,
       database: args.database ? String(args.database).trim() : null,
       validation,
-    })
+    }, toolTrace)
     const lesson = validation.lesson
     if (lesson) {
       try {
@@ -301,7 +303,7 @@ async function executeExportQueryToFile(
       validation,
       durationMs: Date.now() - startedAt,
       rowCount: totalRows,
-    })
+    }, toolTrace)
     return warn ? `${warn}\n${body}` : body
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -313,7 +315,7 @@ async function executeExportQueryToFile(
       database: db,
       validation,
       error: msg,
-    })
+    }, toolTrace)
     // Fix #3 (2026-05-23): append catalog-derived column map on `Invalid
     // column name 'X'` so the model gets concrete names instead of guessing.
     const enriched = enrichInvalidColumnError(opts.host, msg, query, connectionName)

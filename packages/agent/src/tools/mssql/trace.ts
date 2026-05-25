@@ -1,6 +1,6 @@
 import { PlannerTraceKind } from "@mia/agent"
 import { MSSQL_DOCTRINES } from "../../doctrine/index.js"
-import { emitCurrentToolTrace } from "../../loop/tool-execution/trace-context.js"
+import { emitToolTrace, type ToolTraceContext } from "../../loop/tool-execution/trace-context.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 
 const SQL_PREVIEW_MAX_CHARS = 600
@@ -28,8 +28,8 @@ export function emitMssqlQualityTrace(input: {
   durationMs?: number
   rowCount?: number
   error?: string
-}): void {
-  emitCurrentToolTrace({
+}, trace: ToolTraceContext | null = null): void {
+  emitToolTrace(trace, {
     kind: PlannerTraceKind.SqlQuality,
     toolMode: input.toolMode,
     phase: input.phase,

@@ -1,5 +1,6 @@
 import sql from "mssql"
 import type { AgentHost, RunContext } from "../../host/index.js"
+import { readToolTraceContext } from "../../loop/tool-execution/trace-context.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "./connection.js"
@@ -82,7 +83,8 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
     if (!query) return "Error: query cannot be empty."
 
     const connectionName = args.connection ? String(args.connection).trim() : "default"
-  const accessor = catalogAccessorFor(host, connectionName)
+    const accessor = catalogAccessorFor(host, connectionName)
+    const toolTrace = readToolTraceContext(args)
 
     let pool: sql.ConnectionPool
     let writeEnabled: boolean
@@ -107,7 +109,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
         connection: connectionName,
         database: args.database ? String(args.database).trim() : null,
         validation,
-      })
+      }, toolTrace)
       // Gap 2: route the doctrine lesson (if any) to the per-run memory
       // writer so the rationale survives beyond this turn. Fire-and-forget
       // because the writer is synchronous and a failure (null hook, dedup
@@ -155,7 +157,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
           validation,
           durationMs: Date.now() - startedAt,
           rowCount,
-        })
+        }, toolTrace)
         const body = formatResults(recordsets, result.rowsAffected)
         const warn = getQueryWarnings(query, {
           branchAccessor: accessor as () => { getUnionParents(qualifiedName: string): string[]; getUnionBranches(qualifiedName: string): string[] } | null,
@@ -182,7 +184,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
         database: args.database ? String(args.database).trim() : null,
         validation,
         error: msg,
-      })
+      }, toolTrace)
       // Fix #3 (2026-05-23): for `Invalid column name 'X'`, append the actual
       // FROM/JOIN tables' columns ranked by similarity to X. Decoration runs
       // *after* so the generic "stop guessing" lesson trails the concrete map.

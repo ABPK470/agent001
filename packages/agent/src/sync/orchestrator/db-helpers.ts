@@ -11,7 +11,7 @@
 
 import type sql from "mssql"
 import type { AgentHost } from "../../host/index.js"
-import { emitSyncSqlEvent } from "../sync-events.js"
+import { emitSyncSqlEvent, type SyncSqlTraceContext } from "../sync-events.js"
 
 /**
  * Hard ceiling on how many tables diff in parallel. The mssql pool defaults
@@ -90,6 +90,7 @@ export async function trackedQuery<T = unknown>(
   sqlText: string,
   label: string,
   connection: string,
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<sql.IResult<T>> {
   const t0 = Date.now()
   try {
@@ -101,7 +102,7 @@ export async function trackedQuery<T = unknown>(
       durationMs: Date.now() - t0,
       rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
       attempts: 1,
-    })
+    }, syncTrace)
     return result
   } catch (e) {
     emitSyncSqlEvent(host, {
@@ -111,7 +112,7 @@ export async function trackedQuery<T = unknown>(
       durationMs: Date.now() - t0,
       attempts: 1,
       error: e instanceof Error ? e.message : String(e),
-    })
+    }, syncTrace)
     throw e
   }
 }
@@ -123,6 +124,7 @@ export async function trackedExecute(
   sprocName: string,
   label: string,
   connection: string,
+  syncTrace: SyncSqlTraceContext | null = null,
 ): Promise<sql.IProcedureResult<unknown>> {
   const t0 = Date.now()
   try {
@@ -134,7 +136,7 @@ export async function trackedExecute(
       durationMs: Date.now() - t0,
       rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
       attempts: 1,
-    })
+    }, syncTrace)
     return result
   } catch (e) {
     emitSyncSqlEvent(host, {
@@ -144,7 +146,7 @@ export async function trackedExecute(
       durationMs: Date.now() - t0,
       attempts: 1,
       error: e instanceof Error ? e.message : String(e),
-    })
+    }, syncTrace)
     throw e
   }
 }

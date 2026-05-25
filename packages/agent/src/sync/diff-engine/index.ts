@@ -75,7 +75,7 @@ export async function diffTable(
 
   // 1. Discover the column list to hash (from source — assumes target is compatible).
   const { pool: srcPool } = await getPool(host, sourceConn)
-  const colInfo = await fetchTableColumns(host, srcPool, table.name)
+  const colInfo = await fetchTableColumns(host, srcPool, table.name, o.syncTrace)
   if (colInfo.hashColumns.length === 0) {
     return emptyResult(table, predicate, [`Table ${table.name} has no comparable non-meta columns — diff skipped.`], Date.now() - t0)
   }
@@ -83,8 +83,8 @@ export async function diffTable(
   // 2–3. Pull pk + rowHash from BOTH environments in parallel.
   const { pool: tgtPool } = await getPool(host, targetConn)
   const [srcRows, tgtRows] = await Promise.all([
-    fetchPkHash(host, srcPool, table.name, predicate, pkColumns, colInfo),
-    fetchPkHash(host, tgtPool, table.name, predicate, pkColumns, colInfo),
+    fetchPkHash(host, srcPool, table.name, predicate, pkColumns, colInfo, o.syncTrace),
+    fetchPkHash(host, tgtPool, table.name, predicate, pkColumns, colInfo, o.syncTrace),
   ])
   if (srcRows.length > o.rowCap) {
     return emptyResult(
@@ -133,6 +133,7 @@ export async function diffTable(
     pkColumns,
     inserts,
     o.sampleSize,
+    o.syncTrace,
   )
 
   // Demote conflicting rows OUT of the insert bucket — they can't be inserted.
@@ -149,9 +150,9 @@ export async function diffTable(
 
   // 5. Sample rows — batched queries + parallelized across pools.
   const [insertSamples, updateSamples, deleteSamples] = await Promise.all([
-    fetchSamples(host, srcPool, table.name, inserts.slice(0, o.sampleSize), pkColumns),
-    fetchUpdateSamples(host, srcPool, tgtPool, table.name, updates.slice(0, o.sampleSize), pkColumns),
-    fetchSamples(host, tgtPool, table.name, deletes.slice(0, o.sampleSize), pkColumns),
+    fetchSamples(host, srcPool, table.name, inserts.slice(0, o.sampleSize), pkColumns, o.syncTrace),
+    fetchUpdateSamples(host, srcPool, tgtPool, table.name, updates.slice(0, o.sampleSize), pkColumns, o.syncTrace),
+    fetchSamples(host, tgtPool, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.syncTrace),
   ])
   const samples = { insert: insertSamples, update: updateSamples, delete: deleteSamples }
 
