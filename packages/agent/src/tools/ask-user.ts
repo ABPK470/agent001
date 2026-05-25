@@ -9,7 +9,6 @@
  * injected by the orchestrator at runtime. The tool itself is a thin shell.
  */
 
-import { currentRuntime } from "../agent-runtime.js"
 import type { AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 
@@ -23,18 +22,6 @@ export type AskUserResolver = (
   options?: string[],
   sensitive?: boolean,
 ) => Promise<string>
-
-/**
- * Inject the resolver that connects this tool to the UI.
- * Stored on the active {@link AgentRuntime} so concurrent agents can have
- * their own resolver (or share one via the root runtime).
- *
- * @deprecated Doctrine: prefer `configureAgent({ userInput })` + the
- * {@link createAskUserTool} factory. See docs/doctrine.md §6.
- */
-export function setAskUserResolver(resolver: AskUserResolver | null): void {
-  currentRuntime().askUser.resolver = resolver
-}
 
 // ── Shared body (hoisted above first use to avoid TDZ) ───────────
 
@@ -84,14 +71,19 @@ async function runAskUser(
   return resolver(question, options, sensitive)
 }
 
+/**
+ * Schema-only ambient export. `execute` is overridden per-run by the
+ * server's `PER_RUN_FACTORIES` (see packages/server/src/tools.ts) which
+ * binds the actual UI resolver via run context. If the body below ever
+ * runs, the orchestrator failed to wrap the tool — treat as unavailable.
+ */
 export const askUserTool: Tool = {
   name: "ask_user",
   description: ASK_USER_DESCRIPTION,
   parameters: ASK_USER_PARAMETERS,
 
-  async execute(args) {
-    const { resolver } = currentRuntime().askUser
-    return runAskUser(resolver, args)
+  async execute() {
+    return "Error: User input is not available in this execution context."
   },
 }
 

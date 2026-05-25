@@ -13,7 +13,7 @@
  *      and that the audit event log captured every step in order
  */
 
-import { importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@mia/agent"
+import { configureAgent, importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setActiveAgentHost, type HostedPolicyContext } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -66,7 +66,7 @@ describe("hosted-mode end-to-end happy path", () => {
     _setDb(testDb)
     _migrate(testDb)
 
-    setAttachmentService(serverAttachmentService)
+    setActiveAgentHost(configureAgent({ attachments: serverAttachmentService }))
     // Seed FK parents required by the attachments table.
     const { seedSession, seedRun } = await import("./_fk-helpers.js")
     seedSession(testDb, "sid-alice", "alice@example.com")

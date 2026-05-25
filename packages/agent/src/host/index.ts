@@ -9,6 +9,7 @@
  * Phase 2 surface — additive. No existing code references this yet.
  */
 
+export { getActiveAgentHost, setActiveAgentHost } from "./active.js"
 export { configureAgent } from "./configure.js"
 export type { ConfigureAgentOptions } from "./configure.js"
 

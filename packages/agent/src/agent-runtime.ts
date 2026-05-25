@@ -61,18 +61,17 @@ import { IngestionMode } from "./domain/enums/runtime.js"
 // between this file and the tool/sync files that call `currentRuntime()`.
 // Sourced via cluster barrels to satisfy the cluster-door lint.
 import type {
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRecipeBundle,
-    SyncRunSink,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRecipeBundle,
+  SyncRunSink,
 } from "./sync/index.js"
 import type {
-    AskUserResolver,
-    BrowserCheckExecutor,
-    BrowserSession,
-    CatalogGraph,
-    ShellExecutor,
+  BrowserCheckExecutor,
+  BrowserSession,
+  CatalogGraph,
+  ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -221,10 +220,6 @@ export interface SearchFilesState {
   basePath: string
   /** Boot-config — shared across runtimes. */
   excludeDirs: Set<string>
-}
-
-export interface AskUserState {
-  resolver: AskUserResolver | null
 }
 
 /**
@@ -404,10 +399,6 @@ export interface AttachmentService {
   promoteFromSandbox(sandboxRelPath: string, opts?: { mediaType?: string; purposeTag?: string | null }): Promise<AttachmentMetadata>
 }
 
-export interface AttachmentsState {
-  service: AttachmentService | null
-}
-
 // ── Defaults ──────────────────────────────────────────────────────
 
 const NOOP_RUN_SINK: SyncRunSink = {
@@ -438,7 +429,6 @@ export class AgentRuntime {
   readonly fetchUrl: FetchUrlState
   readonly filesystem: FilesystemState
   readonly searchFiles: SearchFilesState
-  readonly askUser: AskUserState
   /** Per-run memory writer hook (Gap 2). Null until the server binds it. */
   readonly memory: MemoryState
   /** Org-wide cache of heavy MSSQL-tool outputs. Null until server binds. */
@@ -453,8 +443,6 @@ export class AgentRuntime {
   readonly catalog: CatalogState
   /** Shared with parent (server installs sinks once at boot). */
   readonly sync: SyncState
-  /** Shared with parent (server installs the attachment backend once at boot). */
-  readonly attachments: AttachmentsState
 
   /** True only for the process root runtime. Affects dispose() semantics. */
   readonly #isRoot: boolean
@@ -506,12 +494,10 @@ export class AgentRuntime {
         basePath: parent.searchFiles.basePath,
         excludeDirs: parent.searchFiles.excludeDirs,
       }
-      this.askUser = { resolver: null }
       // Catalog and sync are shared whole — they hold expensive caches and
       // server-installed sinks that are inherently process-wide.
       this.catalog = parent.catalog
       this.sync = parent.sync
-      this.attachments = parent.attachments
       // Memory writer is per-run — child runs start unbound; the server
       // re-binds for each top-level run (sub-runs share working memory by
       // session id, so deferring writes to the parent's writer is fine).
@@ -537,7 +523,6 @@ export class AgentRuntime {
       this.fetchUrl = { killSignal: null }
       this.filesystem = { basePath: process.cwd() }
       this.searchFiles = { basePath: process.cwd(), excludeDirs: new Set() }
-      this.askUser = { resolver: null }
       this.catalog = { instances: new Map(), defaultCachePath: undefined }
       this.sync = {
         eventSink: () => { /* default no-op */ },
@@ -547,7 +532,6 @@ export class AgentRuntime {
         plans: { diskRoot: null, memCache: new Map() },
         dbProjectRoot: null,
       }
-      this.attachments = { service: null }
       this.memory = { writeNote: null }
       this.toolKnowledge = { lookup: null, save: null, renderHeader: null }
       this.tableVerdicts = { list: null }

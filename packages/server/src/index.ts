@@ -27,7 +27,7 @@ import fastifyStatic from "@fastify/static"
 import {
   EventType,
   buildCatalog, closeMssqlPool, configureAgent, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
-  setAttachmentService,
+  setActiveAgentHost,
   setBasePath,
   setBrowserCheckCwd,
   setBrowserCheckExecutor,
@@ -139,11 +139,10 @@ async function main() {
   const mssqlSummary = setupMssql(_projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
-  // Installed once on the root runtime; per-run runtimes inherit it by
-  // reference. The service resolves the active runId / sandboxRoot from
+  // Installed via the AgentHost composition root (see `configureAgent`
+  // call below). The service resolves the active runId / sandboxRoot from
   // HostedPolicyContext at call time, so a single instance is safe for
   // every concurrent run.
-  setAttachmentService(serverAttachmentService)
 
   // Bridge agent-side browse_web tool to per-tenant persistent browser
   // contexts (cookies / localStorage) stored under ~/.mia/browser-contexts/.
@@ -300,6 +299,9 @@ async function main() {
     browserHandoffStore: serverBrowserHandoffProvider,
     attachments: serverAttachmentService,
   })
+  // Install the boot-time host as the service locator for tools that have
+  // migrated off `currentRuntime()` (Phase 4 transition shim).
+  setActiveAgentHost(_agentHost)
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
 

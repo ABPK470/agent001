@@ -12,25 +12,16 @@
  *   - import_attachment   copy bytes into the run sandbox
  */
 
-import { currentRuntime, type AttachmentService } from "../agent-runtime.js"
-import type { AgentHost } from "../host/index.js"
+import { type AttachmentService } from "../agent-runtime.js"
+import { getActiveAgentHost, type AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 
-/**
- * @deprecated Doctrine: prefer `configureAgent({ attachments })` + the
- * `create*AttachmentTool` factories below. See docs/doctrine.md §6.
- * @internal
- */
-export function setAttachmentService(service: AttachmentService | null): void {
-  currentRuntime().attachments.service = service
-}
-
 function getService(): AttachmentService {
-  const svc = currentRuntime().attachments.service
+  const svc = getActiveAgentHost().attachments
   if (!svc) {
     throw new Error(
-      "Attachment service is not configured for this runtime. " +
-      "This usually means the host (server) did not install one at boot.",
+      "Attachment service is not configured on the active AgentHost. " +
+      "Pass `attachments` to `configureAgent({...})` at boot.",
     )
   }
   return svc
