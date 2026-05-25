@@ -3,7 +3,7 @@
  *
  * Proves the doctrine path works end-to-end:
  *   1. Build a host with `configureAgent({ filesystemBasePath })` — no
- *      ambient state, no setters, no `currentRuntime()`.
+ *      ambient state, no setters, no runtime fallback.
  *   2. Build the read_file tool with `createReadFileTool(host)`.
  *   3. The tool reads files from the host-provided base path, rejects
  *      escapes, and produces the same outputs as the legacy ambient

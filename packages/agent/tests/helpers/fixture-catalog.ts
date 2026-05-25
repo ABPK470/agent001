@@ -13,7 +13,7 @@
  * catalog can call `installFixtureCatalog(myTables)` or
  * `clearFixtureCatalog()` themselves.
  */
-import { currentRuntime } from "../../src/agent-runtime.js"
+import { AgentRuntime } from "../../src/agent-runtime.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import { _resetCatalogQueriesCache } from "../../src/tools/catalog/queries.js"
 import type { CatalogFK, CatalogTable } from "../../src/tools/catalog/types.js"
@@ -169,7 +169,7 @@ export function canonicalFixtureCatalog(): CatalogGraph {
 }
 
 export function installFixtureCatalog(graph: CatalogGraph, connection = "default"): void {
-  currentRuntime().catalog.instances.set(connection, graph)
+  AgentRuntime.root().catalog.instances.set(connection, graph)
   _resetCatalogQueriesCache()
 }
 
@@ -180,6 +180,6 @@ export function installCanonicalFixtureCatalog(): CatalogGraph {
 }
 
 export function clearFixtureCatalog(connection = "default"): void {
-  currentRuntime().catalog.instances.delete(connection)
+  AgentRuntime.root().catalog.instances.delete(connection)
   _resetCatalogQueriesCache()
 }

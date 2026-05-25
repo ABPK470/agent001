@@ -23,25 +23,11 @@
  * Construct one with a parent — the default is the process root — and the
  * tier-1 slots are shared by reference while tier-2 slots start fresh.
  *
- * Looking up the runtime from inside a tool
- * -----------------------------------------
- * Tools call {@link currentRuntime} (no arguments). The active runtime is
- * resolved through Node's `AsyncLocalStorage`:
- *
- *   1. If the caller is inside an `AgentRuntime#run(...)` scope, that scope's
- *      runtime is returned. The Agent loop wraps every `agent.run()` call in
- *      `this.runtime.run(...)`, so all tool invocations during a run see the
- *      Agent's own runtime.
- *   2. Otherwise (server startup, CLI bootstrap, tests that haven't
- *      installed a scope), {@link AgentRuntime.root} is returned.
- *
  * Configuring the runtime from server / CLI
  * -----------------------------------------
- * The setter functions exported by individual tool/sync files
- * (`setShellCwd`, `setMssqlConfig`, `setSyncEventSink`, …) are kept as
- * thin wrappers that mutate `currentRuntime()`. Calling them from server
- * startup mutates the root runtime (the one Agents will later inherit
- * shared slots from).
+ * The root runtime is the long-lived shell-owned state container. The
+ * server mutates it at boot and per-run runtimes inherit the shared
+ * infrastructure slots from it.
  *
  * Disposal
  * --------
@@ -51,15 +37,13 @@
  */
 
 import type sql from "mssql"
-import { AsyncLocalStorage } from "node:async_hooks"
 import { HumanHandoffReason, UserInputStatus } from "./domain/enums/agent-runtime.js"
 import { AttachmentScope } from "./domain/enums/attachment.js"
 import { IngestionMode } from "./domain/enums/runtime.js"
 
 // ── Type-only forward declarations ────────────────────────────────
-// These imports are erased at runtime, so there is no circular dependency
-// between this file and the tool/sync files that call `currentRuntime()`.
-// Sourced via cluster barrels to satisfy the cluster-door lint.
+// These imports are erased at runtime. Sourced via cluster barrels to satisfy
+// the cluster-door lint.
 import type {
   SyncEnvironment,
   SyncEventSink,
@@ -416,8 +400,6 @@ export class AgentRuntime {
   /** True only for the process root runtime. Affects dispose() semantics. */
   readonly #isRoot: boolean
 
-  // ── ALS plumbing ───────────────────────────────────────────────
-  static #als = new AsyncLocalStorage<AgentRuntime>()
   static #root: AgentRuntime | null = null
 
   constructor(options: AgentRuntimeOptions = {}) {
@@ -491,24 +473,9 @@ export class AgentRuntime {
     return AgentRuntime.#root
   }
 
-  /**
-   * The runtime active in the calling async context. Falls back to
-   * {@link root} when no scope is active.
-   *
-   * Tools call this (via the `currentRuntime()` helper) instead of holding
-   * module-level state.
-   */
-  static current(): AgentRuntime {
-    return AgentRuntime.#als.getStore() ?? AgentRuntime.root()
-  }
-
-  /**
-   * Run `fn` with this runtime as `AgentRuntime.current()` for its async
-   * context. The `Agent` loop wraps each `agent.run()` invocation in this
-   * so every tool call sees the right runtime.
-   */
+  /** Run `fn` inside this runtime shell. */
   run<T>(fn: () => T): T {
-    return AgentRuntime.#als.run(this, fn)
+    return fn()
   }
 
   /**
@@ -542,20 +509,4 @@ export interface AgentRuntimeOptions {
   inheritFrom?: AgentRuntime | null
   /** Internal flag — only `AgentRuntime.root()` sets this. */
   isRoot?: boolean
-}
-
-/** Convenience accessor — equivalent to `AgentRuntime.current()`. */
-export function currentRuntime(): AgentRuntime {
-  return AgentRuntime.current()
-}
-
-/**
- * Back-compat shim for the previous `getDefaultAgentRuntime()` symbol —
- * returns the root runtime. New code should use {@link AgentRuntime.root}
- * or {@link currentRuntime} directly.
- *
- * @internal
- */
-export function getDefaultAgentRuntime(): AgentRuntime {
-  return AgentRuntime.root()
 }

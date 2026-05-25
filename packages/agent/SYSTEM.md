@@ -23,7 +23,7 @@ The package follows one doctrine:
 
 In practice that means:
 
-- no `currentRuntime()` lookups
+- no ambient runtime lookups
 - no exported module-level `setXxx(...)` mutators for boot wiring
 - no new `AsyncLocalStorage` for passing hidden dependencies
 - long-lived state belongs on `AgentHost` or on explicit shell objects
