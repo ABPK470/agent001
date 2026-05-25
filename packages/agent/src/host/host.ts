@@ -22,17 +22,17 @@
 import type { SyncEnvironment, SyncEventSink, SyncPlan, SyncRecipeBundle, SyncRunSink } from "../sync/index.js"
 import type { BrowserSession, CatalogGraph } from "../tools/index.js"
 import type {
-  AttachmentStore,
-  BrowserClient,
-  BrowserContextReader,
-  CredentialReader,
-  HandoffStore,
-  MssqlEntry,
-  RecipeReader,
-  ShellClient,
-  TableVerdictsReader,
-  ToolKnowledgeStore,
-  UserInputReader,
+    AttachmentStore,
+    BrowserClient,
+    BrowserContextReader,
+    CredentialReader,
+    HandoffStore,
+    MssqlEntry,
+    RecipeReader,
+    ShellClient,
+    TableVerdictsReader,
+    ToolKnowledgeStore,
+    UserInputReader,
 } from "./ports.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────

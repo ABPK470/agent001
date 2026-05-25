@@ -14,6 +14,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 import { lstat, realpath } from "node:fs/promises"
 import { resolve, sep } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import type { ToolResultEnvelope } from "../types.js"
 
 /** Restrict all file operations to a base directory (safety). */
@@ -83,35 +84,47 @@ function rejectTraversal(p: string): void {
 /**
  * Resolve a path safely within the base directory (Layer 4 only).
  * Used as a fast synchronous check when symlink resolution isn't needed.
+ *
+ * Doctrine-shaped variant: takes the host explicitly. The legacy
+ * {@link safePath} below delegates to this with `currentRuntime()` for
+ * source compatibility while Phase 4 migration is in progress.
  */
-export function safePath(p: string): string {
+export function safePathWith(host: AgentHost, p: string): string {
+  const basePath = host.filesystem.basePath
   validateInput(p)
   rejectTraversal(p)
-  const resolved = resolve(currentRuntime().filesystem.basePath, p)
-  if (!resolved.startsWith(currentRuntime().filesystem.basePath + "/") && resolved !== currentRuntime().filesystem.basePath) {
+  const resolved = resolve(basePath, p)
+  if (!resolved.startsWith(basePath + "/") && resolved !== basePath) {
     throw new Error(`Path "${p}" escapes the allowed directory`)
   }
   return resolved
 }
 
 /**
+ * Resolve a path safely within the base directory (Layer 4 only).
+ * Used as a fast synchronous check when symlink resolution isn't needed.
+ */
+export function safePath(p: string): string {
+  return safePathWith(currentRuntime(), p)
+}
+
+/**
  * Full 4-layer validation: input → traversal → symlink walk → root check.
  *
- * Walks EVERY path component from currentRuntime().filesystem.basePath downward:
- *   /workspace/a/b/c.txt → check /workspace/a, then /workspace/a/b
- *
- * If any component is a symlink, follow it with realpath() and verify
- * the real target stays inside currentRuntime().filesystem.basePath.
+ * Doctrine-shaped variant: takes the host explicitly. The legacy
+ * {@link safePathResolved} below delegates to this with `currentRuntime()`
+ * for source compatibility while Phase 4 migration is in progress.
  */
-export async function safePathResolved(p: string): Promise<string> {
-  const resolved = safePath(p) // Layers 1, 2, 4 (logical check)
+export async function safePathResolvedWith(host: AgentHost, p: string): Promise<string> {
+  const basePath = host.filesystem.basePath
+  const resolved = safePathWith(host, p) // Layers 1, 2, 4 (logical check)
 
   // Layer 3: walk each component for symlinks
-  const suffix = resolved.slice(currentRuntime().filesystem.basePath.length + 1)
-  if (!suffix) return resolved // path IS currentRuntime().filesystem.basePath
+  const suffix = resolved.slice(basePath.length + 1)
+  if (!suffix) return resolved // path IS basePath
 
   const segments = suffix.split("/")
-  let current = currentRuntime().filesystem.basePath
+  let current = basePath
 
   for (const segment of segments) {
     current = resolve(current, segment)
@@ -121,8 +134,8 @@ export async function safePathResolved(p: string): Promise<string> {
       if (info.isSymbolicLink()) {
         const real = await realpath(current)
         // Layer 4 re-check on the real path
-        if (!real.startsWith(currentRuntime().filesystem.basePath + "/") && real !== currentRuntime().filesystem.basePath) {
-          throw new Error(`Symlink at "${current.slice(currentRuntime().filesystem.basePath.length + 1)}" points outside the allowed directory`)
+        if (!real.startsWith(basePath + "/") && real !== basePath) {
+          throw new Error(`Symlink at "${current.slice(basePath.length + 1)}" points outside the allowed directory`)
         }
         // Continue walking from the resolved real path
         current = real
@@ -150,4 +163,12 @@ export async function safePathResolved(p: string): Promise<string> {
   }
 
   return current
+}
+
+/**
+ * Full 4-layer validation — legacy ambient form. Delegates to
+ * {@link safePathResolvedWith} sourcing the host from `currentRuntime()`.
+ */
+export async function safePathResolved(p: string): Promise<string> {
+  return safePathResolvedWith(currentRuntime(), p)
 }

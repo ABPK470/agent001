@@ -24,9 +24,9 @@
  */
 
 import type sql from "mssql"
+import type { HumanHandoffReason, UserInputStatus } from "../domain/enums/agent-runtime.js"
 import type { AttachmentScope } from "../domain/enums/attachment.js"
 import type { IngestionMode } from "../domain/enums/runtime.js"
-import type { HumanHandoffReason, UserInputStatus } from "../domain/enums/agent-runtime.js"
 
 // ── Generic shell / browser-check execution clients ──────────────
 

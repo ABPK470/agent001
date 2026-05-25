@@ -1,9 +1,10 @@
 import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 import { appendFile as fsAppendFile, mkdir, readFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
-import { buildToolOutcome, safePathResolved } from "../filesystem-security.js"
+import { buildToolOutcome, safePathResolved, safePathResolvedWith } from "../filesystem-security.js"
 import { executeWriteFile } from "./write-execute.js"
 
 // ── read_file ────────────────────────────────────────────────────
@@ -33,6 +34,44 @@ export const readFileTool: Tool = {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+}
+
+/**
+ * Doctrine-shaped factory: build a `read_file` tool bound to an explicit
+ * {@link AgentHost} (no ambient lookup, no `currentRuntime()`). This is the
+ * Phase 3 pilot for the Functional Core / Imperative Shell migration —
+ * see docs/doctrine.md and docs/runtime-inventory.md.
+ *
+ * `readFileTool` above keeps working unchanged for callers that still go
+ * through the legacy ambient path; new callers should prefer this factory.
+ */
+export function createReadFileTool(host: AgentHost): Tool {
+  return {
+    name: "read_file",
+    description:
+      "Read the contents of a file. Returns the full text content. " +
+      "Paths are relative to the working directory.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to the file to read" },
+      },
+      required: ["path"],
+    },
+
+    async execute(args) {
+      try {
+        const content = await readFile(await safePathResolvedWith(host, String(args.path)), "utf-8")
+        return content
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code === "ENOTDIR") {
+          return `Error: A parent directory in the path "${String(args.path)}" is a regular file, not a directory. Use write_file to the intended path first (it will fix the directory structure), then retry the read.`
+        }
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
+    },
+  }
 }
 
 // ── write_file ───────────────────────────────────────────────────
