@@ -88,6 +88,14 @@ export interface BootHostDeps {
   mssqlDatabases?: import("@mia/agent").AgentHost["mssql"]["databases"]
   /** Shared mssql default-connection ref (mutable container). */
   mssqlDefaultConnection?: import("@mia/agent").AgentHost["mssql"]["defaultConnection"]
+  /** Shared catalog registry (mutable Map, populated by buildCatalog at boot). */
+  catalogInstances?: import("@mia/agent").AgentHost["catalog"]["instances"]
+  /** Shared catalog default-cachePath ref (mutable container). */
+  catalogDefaultCachePath?: import("@mia/agent").AgentHost["catalog"]["defaultCachePath"]
+  /** Shared toolKnowledge adapter — same instance for boot + per-run hosts. */
+  toolKnowledge?: import("@mia/agent").AgentHost["toolKnowledge"]
+  /** Shared tableVerdicts adapter — same instance for boot + per-run hosts. */
+  tableVerdicts?: import("@mia/agent").AgentHost["tableVerdicts"]
 }
 
 // ── Notification types ────────────────────────────────────────────

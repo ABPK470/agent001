@@ -19,14 +19,18 @@ import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
 function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createDiscoverRelationshipsTool> } {
   const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
-  const host = configureAgent({ mssqlDatabases: databases })
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  const host = configureAgent({
+    mssqlDatabases: databases,
+    catalogInstances: runtime.catalog.instances,
+    toolKnowledge: runtime.toolKnowledge as unknown as import("../src/host/index.js").AgentHost["toolKnowledge"],
+  })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: { request: () => ({ input: () => ({ query: async () => ({ recordset: [] }) }), query: async () => ({ recordset: [] }), cancel: () => undefined }), connected: true, close: async () => undefined } as never,
     writeEnabled: false,
     knowledge: null,
   })
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
   return { runtime, tool: createDiscoverRelationshipsTool(host) }
 }
 

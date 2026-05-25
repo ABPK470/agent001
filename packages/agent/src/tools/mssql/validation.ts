@@ -18,7 +18,6 @@ import {
     primaryKeyColumns,
     unionBranchCount,
 } from "../catalog/queries.js"
-import { getCatalog } from "../catalog/store.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
 function withFixHint(error: string, code: string): string {
@@ -554,7 +553,13 @@ interface CatalogLike {
 /** Default catalog accessor — uses the live runtime snapshot. */
 function defaultCatalogAccessor(): CatalogLike | null {
   try {
-    return (getCatalog() as CatalogLike | null) ?? null
+    const rt = currentRuntime()
+    const exact = rt.catalog.instances.get("default")
+    if (exact) return (exact as unknown as CatalogLike)
+    if (rt.catalog.instances.size > 0) {
+      return (rt.catalog.instances.values().next().value as unknown as CatalogLike) ?? null
+    }
+    return null
   } catch {
     return null
   }
@@ -741,7 +746,13 @@ export interface BranchCoverageGap {
 
 function defaultBranchAccessor(): BranchCatalogLike | null {
   try {
-    return (getCatalog() as unknown as BranchCatalogLike | null) ?? null
+    const rt = currentRuntime()
+    const exact = rt.catalog.instances.get("default")
+    if (exact) return (exact as unknown as BranchCatalogLike)
+    if (rt.catalog.instances.size > 0) {
+      return (rt.catalog.instances.values().next().value as unknown as BranchCatalogLike) ?? null
+    }
+    return null
   } catch {
     return null
   }
@@ -1288,7 +1299,17 @@ export function validateQueryDetailed(query: string, writeEnabled: boolean): Que
 function scanGuardErrorMessage(objects: string, scanReason: string, largeRefs: string[]): string {
   const tc = getTenantConfig()
   const firstRef = largeRefs[0]
-  const firstTable = firstRef ? getCatalog()?.getTable(firstRef) : null
+  // Inline runtime read — need the full CatalogTable.qualifiedName, not the
+  // narrow CatalogLike shape. Removed in Phase 6 with the runtime.
+  let firstTable: { qualifiedName: string } | null = null
+  if (firstRef) {
+    try {
+      const rt = currentRuntime()
+      const cat = rt.catalog.instances.get("default")
+        ?? (rt.catalog.instances.size > 0 ? rt.catalog.instances.values().next().value ?? null : null)
+      firstTable = cat?.getTable(firstRef) ?? null
+    } catch { /* no runtime: leave null */ }
+  }
   const firstQn = firstTable?.qualifiedName ?? firstRef ?? "<large-object>"
 
   const mirror = firstTable && tc.mirrorSchema

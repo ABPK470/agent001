@@ -1,16 +1,12 @@
-import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost } from "../../host/index.js"
 import { CatalogGraph } from "./graph/index.js"
 import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 
-// ── Global catalog store (per connection, with disk cache) ───────
-
-// Catalog instances live on the active AgentRuntime
-// (`currentRuntime().catalog.instances`). They are populated lazily by
-// `buildCatalog()` and shared across calls in the same runtime.
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+// ── Catalog store (per connection, with disk cache) ──────────────
+//
+// Catalog instances live on `host.catalog.instances` (a Map populated
+// lazily by `buildCatalog`). All accessors take `host` as the first
+// parameter — no module-level state, no `currentRuntime()`.
 
 /**
  * Build or load the catalog.  If a cachePath is provided and a fresh-enough
@@ -22,9 +18,9 @@ import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuildOptions): Promise<CatalogGraph> {
   const o: CatalogBuildOptions = typeof opts === "string" ? { connection: opts } : (opts ?? {})
   const conn = o.connection ?? "default"
-  const cachePath = o.cachePath ?? currentRuntime().catalog.defaultCachePath
+  const cachePath = o.cachePath ?? host.catalog.defaultCachePath.value
   const maxAge = o.maxAgeMs ?? 7 * 24 * 3600_000  // 7 days default
-  if (o.cachePath) currentRuntime().catalog.defaultCachePath = o.cachePath  // remember for refresh calls
+  if (o.cachePath) host.catalog.defaultCachePath.value = o.cachePath  // remember for refresh calls
 
   // Try loading from persistent cache (unless forceFresh)
   if (cachePath && !o.forceFresh) {
@@ -36,7 +32,7 @@ export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuild
         const snap: CatalogSnapshot = JSON.parse(raw)
         if (snap.version === 7) {
           const catalog = CatalogGraph.fromSnapshot(snap)
-          currentRuntime().catalog.instances.set(conn, catalog)
+          host.catalog.instances.set(conn, catalog)
           return catalog
         }
       }
@@ -45,7 +41,7 @@ export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuild
 
   // Build from live database (expensive — 5 SQL queries)
   const catalog = await CatalogGraph.build(host, conn)
-  currentRuntime().catalog.instances.set(conn, catalog)
+  host.catalog.instances.set(conn, catalog)
 
   // Persist to cache for next startup
   if (cachePath) {
@@ -61,30 +57,30 @@ export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuild
 }
 
 /** Get a previously built/loaded catalog. */
-export function getCatalog(connection = "default"): CatalogGraph | null {
+export function getCatalog(host: AgentHost, connection = "default"): CatalogGraph | null {
   // Exact match first
-  const exact = currentRuntime().catalog.instances.get(connection)
+  const exact = host.catalog.instances.get(connection)
   if (exact) return exact
   // In multi-database mode, connections are named (e.g. "uat", "dev") and
   // there is no "default" entry. Fall back to the first available catalog so
   // tools that don't pass an explicit connection= still work.
-  if (connection === "default" && currentRuntime().catalog.instances.size > 0) {
-    return currentRuntime().catalog.instances.values().next().value ?? null
+  if (connection === "default" && host.catalog.instances.size > 0) {
+    return host.catalog.instances.values().next().value ?? null
   }
   return null
 }
 
 /** Return the name of every loaded connection, in insertion order. */
-export function getCatalogConnectionNames(): string[] {
-  return Array.from(currentRuntime().catalog.instances.keys())
+export function getCatalogConnectionNames(host: AgentHost): string[] {
+  return Array.from(host.catalog.instances.keys())
 }
 
-export function hasCatalog(): boolean {
-  return currentRuntime().catalog.instances.size > 0
+export function hasCatalog(host: AgentHost): boolean {
+  return host.catalog.instances.size > 0
 }
 
-export function getCatalogPromptSummary(connection = "default"): string {
-  return getCatalog(connection)?.promptSummary() ?? ""
+export function getCatalogPromptSummary(host: AgentHost, connection = "default"): string {
+  return getCatalog(host, connection)?.promptSummary() ?? ""
 }
 
 /**
@@ -92,6 +88,6 @@ export function getCatalogPromptSummary(connection = "default"): string {
  * catalog has been built yet. Cheap, pure — safe to call on every
  * memory write.
  */
-export function getCatalogSchemaFingerprint(connection = "default"): string | null {
-  return getCatalog(connection)?.schemaFingerprint() ?? null
+export function getCatalogSchemaFingerprint(host: AgentHost, connection = "default"): string | null {
+  return getCatalog(host, connection)?.schemaFingerprint() ?? null
 }

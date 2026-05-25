@@ -563,8 +563,8 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
     // profile big views before querying" rule because the agent receives
     // the same shape of report it would have from a live call.
     const qn = `${schema}.${table}`
-    const fp = fingerprintForQname(qn, connName)
-    const cached = tryServeFromCache("profile_data", qn, mode, connName, fp)
+    const fp = fingerprintForQname(host, qn, connName)
+    const cached = tryServeFromCache(host, "profile_data", qn, mode, connName, fp)
     if (cached !== null) {
       markProfileDataCalled(qn)
       return cached
@@ -586,7 +586,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
       // Pick the first lineage source (if any) as a concrete worked
       // example. Falls back to generic shape advice when this object
       // has no lineage entry in the catalog.
-      const catalog = getCatalog(connName ?? "default")
+      const catalog = getCatalog(host, connName ?? "default")
       const firstBranch = catalog?.getUnionBranches(qn)?.[0]
       const branchAdvice = firstBranch
         ? `  1. Profile a single branch view instead — e.g. for ${qn} use one of\n     its source branches such as ${firstBranch}.\n     Discover the branches with: inspect_definition(name='${qn}').`
@@ -625,7 +625,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
         // Cache only successful live runs. runFastProfile may return error
         // strings (e.g. "No columns found ..."); avoid poisoning the cache.
         if (typeof out === "string" && !out.startsWith("SQL Error:") && !out.startsWith("Error:") && !out.startsWith("No columns")) {
-          persistToCache("profile_data", qn, "fast", connName, out, fp)
+          persistToCache(host, "profile_data", qn, "fast", connName, out, fp)
         }
         return out
       } catch (err) {
@@ -781,7 +781,7 @@ function buildProfileDataTool(host: AgentHost): Tool { return {
       }
 
       const out = sections.join("\n")
-      persistToCache("profile_data", qn, "deep", connName, out, fp)
+      persistToCache(host, "profile_data", qn, "deep", connName, out, fp)
       return out
     } catch (err) {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`

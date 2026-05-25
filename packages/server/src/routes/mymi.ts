@@ -54,7 +54,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
 
   // ── DB-level overview ────────────────────────────────────────
   app.get<QS>("/api/mymi/overview", async (req) => {
-    const catalog = getCatalog(connName(req.query))
+    const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return []
 
     const bySchema = new Map<string, { tableCount: number; viewCount: number; totalRows: number; totalMb: number }>()
@@ -76,7 +76,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
 
   // ── Schemas with counts ──────────────────────────────────────
   app.get<QS>("/api/mymi/schemas", async (req) => {
-    const catalog = getCatalog(connName(req.query))
+    const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return []
 
     const bySchema = new Map<string, { tableCount: number; viewCount: number }>()
@@ -99,7 +99,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       const schemaFilter = (req.query.schemas ?? "").split(",").filter(Boolean)
       if (q.length < 2) { reply.code(400); return { error: "Query must be at least 2 characters" } }
 
-      const catalog = getCatalog(connName(req.query))
+      const catalog = getCatalog(host, connName(req.query))
       if (!catalog) return []
 
       type SR = {
@@ -150,7 +150,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       const { schema } = req.params
       if (!validateIdentifier(schema)) { reply.code(400); return { error: "Invalid schema name" } }
 
-      const catalog = getCatalog(connName(req.query))
+      const catalog = getCatalog(host, connName(req.query))
       if (!catalog) return []
 
       const results = []
@@ -180,7 +180,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       if (!validateIdentifier(schema) || !validateIdentifier(table)) {
         reply.code(400); return { error: "Invalid identifier" }
       }
-      const catalog = getCatalog(connName(req.query))
+      const catalog = getCatalog(host, connName(req.query))
       if (!catalog) return []
 
       const t = catalog.tables.get(`${schema}.${table}`)
@@ -220,7 +220,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
       if (!validateIdentifier(schema) || !validateIdentifier(table)) {
         reply.code(400); return { error: "Invalid identifier" }
       }
-      const catalog = getCatalog(connName(req.query))
+      const catalog = getCatalog(host, connName(req.query))
       if (!catalog) return { outbound: [], inbound: [] }
 
       const entry = catalog.tables.get(`${schema}.${table}`)
@@ -291,7 +291,7 @@ export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void 
   // ── Full data model snapshot ──────────────────────────────────
   // Entire schema graph from catalog — the Data Model tab uses this
   app.get<QS>("/api/mymi/datamodel", async (req) => {
-    const catalog = getCatalog(connName(req.query))
+    const catalog = getCatalog(host, connName(req.query))
     if (!catalog) return { objects: [], relations: [] }
 
     const objects = []

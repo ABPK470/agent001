@@ -41,6 +41,10 @@ export interface ConfigureAgentOptions {
   mssqlDatabases?: AgentHost["mssql"]["databases"]
   mssqlDefaultConnection?: AgentHost["mssql"]["defaultConnection"]
 
+  // Catalog registry (shared across all per-run hosts at boot)
+  catalogInstances?: AgentHost["catalog"]["instances"]
+  catalogDefaultCachePath?: AgentHost["catalog"]["defaultCachePath"]
+
   // Browser stack (any/all may be null in CLI / tests)
   browserContextReader?: AgentHost["browser"]["contextReader"]
   browserCredentialReader?: AgentHost["browser"]["credentialReader"]
@@ -104,8 +108,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     toolKnowledge: options.toolKnowledge ?? null,
     tableVerdicts: options.tableVerdicts ?? null,
     catalog: Object.freeze({
-      instances: new Map(),
-      defaultCachePath: undefined,
+      instances: options.catalogInstances ?? new Map(),
+      defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined },
     }),
     sync: Object.freeze({
       events: NOOP_SYNC_EVENT_SINK,

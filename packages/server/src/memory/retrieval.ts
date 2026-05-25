@@ -40,6 +40,8 @@ export async function retrieveContext(
      * unauthenticated callers; those see only legacy/global rows.
      */
     upn?: string | null
+    /** Optional host — used to read the live catalog schema fingerprint. */
+    host?: import("@mia/agent").AgentHost
   },
 ): Promise<{
   context: string
@@ -77,7 +79,7 @@ export async function retrieveContext(
   // multiplier is bounded above 0 so audit history is preserved.
   const policyVersion = currentPolicyVersion()
   const currentSchema = (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint
-    ?? getCatalogSchemaFingerprint()
+    ?? (opts?.host ? getCatalogSchemaFingerprint(opts.host) : null)
     ?? null
   let demotedCount = 0
   for (const r of allResults) {

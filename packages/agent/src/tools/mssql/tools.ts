@@ -164,7 +164,7 @@ function buildQueryMssqlTool(host: AgentHost): Tool { return {
       // Fix #3 (2026-05-23): for `Invalid column name 'X'`, append the actual
       // FROM/JOIN tables' columns ranked by similarity to X. Decoration runs
       // *after* so the generic "stop guessing" lesson trails the concrete map.
-      const enriched = enrichInvalidColumnError(msg, query, connectionName)
+      const enriched = enrichInvalidColumnError(host, msg, query, connectionName)
       return `SQL Error: ${decorateMssqlError(enriched)}`
     }
   },
@@ -251,10 +251,10 @@ function buildSchemaMssqlTool(host: AgentHost): Tool { return {
           // fall through to the live path unchanged.
           if (schema) {
             const qn = `${schema}.${table}`
-            const fp = fingerprintForQname(qn, connectionName)
-            const own = tryServeFromCache("explore_mssql_schema", qn, "columns", connectionName, fp)
+            const fp = fingerprintForQname(host, qn, connectionName)
+            const own = tryServeFromCache(host, "explore_mssql_schema", qn, "columns", connectionName, fp)
             if (own !== null) return own
-            const cross = tryServeFromCache("profile_data", qn, "fast", connectionName, fp)
+            const cross = tryServeFromCache(host, "profile_data", qn, "fast", connectionName, fp)
             if (cross !== null) {
               return [
                 `[explore_mssql_schema cross-served from profile_data(fast) cache — payload includes columns]`,
@@ -372,8 +372,8 @@ function buildSchemaMssqlTool(host: AgentHost): Tool { return {
           // of this object — correct, since we cannot validate freshness).
           if (schema) {
             const qn = `${schema}.${table}`
-            const fp = fingerprintForQname(qn, connectionName)
-            if (fp) persistToCache("explore_mssql_schema", qn, "columns", connectionName, payload, fp)
+            const fp = fingerprintForQname(host, qn, connectionName)
+            if (fp) persistToCache(host, "explore_mssql_schema", qn, "columns", connectionName, payload, fp)
           }
           return payload
         }

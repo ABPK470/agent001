@@ -22,17 +22,17 @@
 import type { SyncEnvironment, SyncEventSink, SyncPlan, SyncRecipeBundle, SyncRunSink } from "../sync/index.js"
 import type { BrowserSession, CatalogGraph } from "../tools/index.js"
 import type {
-    AttachmentStore,
-    BrowserClient,
-    BrowserContextReader,
-    CredentialReader,
-    HandoffStore,
-    MssqlEntry,
-    RecipeReader,
-    ShellClient,
-    TableVerdictsReader,
-    ToolKnowledgeStore,
-    UserInputReader,
+  AttachmentStore,
+  BrowserClient,
+  BrowserContextReader,
+  CredentialReader,
+  HandoffStore,
+  MssqlEntry,
+  RecipeReader,
+  ShellClient,
+  TableVerdictsReader,
+  ToolKnowledgeStore,
+  UserInputReader,
 } from "./ports.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────
@@ -80,7 +80,8 @@ export interface BrowserHost {
 export interface CatalogHost {
   /** Per-connection catalog graphs — expensive caches. */
   readonly instances: Map<string, CatalogGraph>
-  readonly defaultCachePath: string | undefined
+  /** Default disk cache path — mutable container so `buildCatalog` can remember the most recent path. */
+  readonly defaultCachePath: { value: string | undefined }
 }
 
 export interface SyncHost {

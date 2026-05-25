@@ -118,7 +118,7 @@ interface CatalogExamples {
 
 function catalogExamples(host?: AgentHost): CatalogExamples {
   const defaultConn = host ? (getDefaultMssqlConnectionName(host) ?? "default") : "default"
-  const catalog = getCatalog(defaultConn)
+  const catalog = host ? getCatalog(host, defaultConn) : null
   const tenant  = getTenantConfig()
 
   // Best wide-union view to use as a worked lineage example.
@@ -261,7 +261,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
 
     // Inject live catalog summary if available
     if (includeMssqlCatalog) {
-      const catalogSummary = getCatalogPromptSummary()
+      const catalogSummary = opts?.host ? getCatalogPromptSummary(opts.host) : ""
       if (catalogSummary) {
         sections.push("", "SCHEMA CATALOG (live, auto-built at startup from sys.* DMVs):", catalogSummary)
       }

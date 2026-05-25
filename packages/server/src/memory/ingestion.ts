@@ -36,6 +36,8 @@ export function ingestTurn(opts: {
    * floor entirely. Defaults to SALIENCE_THRESHOLD.
    */
   minSalience?: number
+  /** Optional host — used to stamp the current catalog schema fingerprint. */
+  host?: import("@mia/agent").AgentHost
 }): MemoryEntry | null {
   const salience = computeSalience(opts.content, opts.role)
   const floor = opts.minSalience ?? SALIENCE_THRESHOLD
@@ -88,7 +90,7 @@ export function ingestTurn(opts: {
       // null when no catalog is loaded (e.g. boot-time service ingests);
       // stampProvenance ignores undefined/empty values so legacy rows
       // remain neutral at retrieval time.
-      schemaFingerprint: getCatalogSchemaFingerprint() ?? undefined,
+      schemaFingerprint: (opts.host ? getCatalogSchemaFingerprint(opts.host) : null) ?? undefined,
     }),
     source: opts.source ?? MemorySource.Agent,
     confidence: opts.confidence ?? 0.5,

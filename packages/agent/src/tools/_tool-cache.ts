@@ -11,7 +11,7 @@
  */
 
 import type { ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../agent-runtime.js"
-import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import { getCatalog } from "./catalog/store.js"
 
 function fnv1a32(s: string): string {
@@ -28,9 +28,9 @@ function fnv1a32(s: string): string {
  * when the object isn't in the catalog — caller should then skip caching
  * (no fingerprint = nothing to validate freshness against).
  */
-export function fingerprintForQname(qname: string, connName: string | undefined): ToolKnowledgeFingerprint | null {
+export function fingerprintForQname(host: AgentHost, qname: string, connName: string | undefined): ToolKnowledgeFingerprint | null {
   try {
-    const catalog = getCatalog(connName ?? "default")
+    const catalog = getCatalog(host, connName ?? "default")
     if (!catalog) return null
     const t = catalog.getTable(qname)
     if (!t) return null
@@ -52,9 +52,9 @@ export function fingerprintForQname(qname: string, connName: string | undefined)
  * driven by the catalog `builtAt` field — a fresh catalog means schemas may
  * have changed, which warrants a re-run. Returns null when no catalog.
  */
-export function fingerprintForCatalogBuild(connName: string | undefined): ToolKnowledgeFingerprint | null {
+export function fingerprintForCatalogBuild(host: AgentHost, connName: string | undefined): ToolKnowledgeFingerprint | null {
   try {
-    const catalog = getCatalog(connName ?? "default")
+    const catalog = getCatalog(host, connName ?? "default")
     if (!catalog) return null
     // The graph type doesn't expose `builtAt`; instead use total table count
     // as a coarse fingerprint. Schema changes that add/remove tables flip it;
@@ -73,6 +73,7 @@ export function fingerprintForCatalogBuild(connName: string | undefined): ToolKn
  * on miss / stale / fingerprint mismatch / no cache bound.
  */
 export function tryServeFromCache(
+  host: AgentHost,
   tool: ToolKnowledgeCachedTool,
   qname: string,
   mode: string,
@@ -80,10 +81,8 @@ export function tryServeFromCache(
   fingerprint: ToolKnowledgeFingerprint | null,
 ): string | null {
   if (!fingerprint) return null
-  let rt
-  try { rt = currentRuntime() } catch { return null }
-  const tk = rt.toolKnowledge
-  if (!tk.lookup) return null
+  const tk = host.toolKnowledge
+  if (!tk || !tk.lookup) return null
   const res = tk.lookup({
     tool,
     qname: qname.toLowerCase(),
@@ -108,6 +107,7 @@ export function tryServeFromCache(
  * so a cache write never breaks the tool path.
  */
 export function persistToCache(
+  host: AgentHost,
   tool: ToolKnowledgeCachedTool,
   qname: string,
   mode: string,
@@ -117,8 +117,8 @@ export function persistToCache(
 ): void {
   if (!fingerprint) return
   try {
-    const tk = currentRuntime().toolKnowledge
-    if (!tk.save) return
+    const tk = host.toolKnowledge
+    if (!tk || !tk.save) return
     tk.save({
       tool,
       qname: qname.toLowerCase(),

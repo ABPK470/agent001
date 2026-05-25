@@ -287,8 +287,8 @@ export async function buildSystemMessages(opts: {
   // MSSQL_DOCTRINES (packages/agent/src/doctrine/) and are surfaced
   // through validator enforcement, not prompt repetition.
   try {
-    const catalog = getCatalog()
-    const fingerprint = getCatalogSchemaFingerprint()
+    const catalog = opts.host ? getCatalog(opts.host) : null
+    const fingerprint = opts.host ? getCatalogSchemaFingerprint(opts.host) : null
     const block = buildResolvedFactsBlock({
       goal,
       catalog,
@@ -314,7 +314,7 @@ export async function buildSystemMessages(opts: {
   // never block the run — clarification is a quality rail, not a gate.
   if (opts.clarifications) {
     try {
-      const catalog = getCatalog()
+      const catalog = opts.host ? getCatalog(opts.host) : null
       const tenant = getTenantConfig()
       const resolved = opts.clarifications.getResolved(opts.runId)
       // Feed the detector + LLM planner a synthetic chat trace built from

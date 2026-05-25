@@ -123,7 +123,11 @@ async function main() {
   // and every per-run host built by the orchestrator see the same state.
   const mssqlDatabases: AgentHost["mssql"]["databases"] = new Map()
   const mssqlDefaultConnection: AgentHost["mssql"]["defaultConnection"] = { value: null }
-  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection })
+  // Shared catalog registry: same Map threaded into the boot host and every
+  // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
+  const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
+  const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
+  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath })
   const mssqlSummary = setupMssql(bootHost, _projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
@@ -282,6 +286,8 @@ async function main() {
       browserCheckClient,
       mssqlDatabases,
       mssqlDefaultConnection,
+      catalogInstances,
+      catalogDefaultCachePath,
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)

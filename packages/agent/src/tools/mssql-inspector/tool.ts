@@ -119,8 +119,8 @@ function buildInspectDefinitionTool(host: AgentHost): Tool { return {
     // they either depend on live runtime stats or take ad-hoc scope.
     if (args.object && typeof args.object === "string") {
       const qn = args.object.trim()
-      const fp = fingerprintForQname(qn, connName)
-      const cached = tryServeFromCache("inspect_definition", qn, "definition", connName, fp)
+      const fp = fingerprintForQname(host, qn, connName)
+      const cached = tryServeFromCache(host, "inspect_definition", qn, "definition", connName, fp)
       if (cached !== null) return cached
     }
 
@@ -150,8 +150,8 @@ function buildInspectDefinitionTool(host: AgentHost): Tool { return {
         const qn = String(args.object).trim()
         const out = await runObjectInspection(p, qn)
         if (typeof out === "string" && !out.startsWith("SQL Error:") && !out.startsWith("Error:")) {
-          const fp = fingerprintForQname(qn, connName)
-          persistToCache("inspect_definition", qn, "definition", connName, out, fp)
+          const fp = fingerprintForQname(host, qn, connName)
+          persistToCache(host, "inspect_definition", qn, "definition", connName, out, fp)
         }
         return out
       }

@@ -63,9 +63,9 @@ function buildSearchCatalogTool(host: AgentHost): Tool { return {
       }
     }
 
-    const catalog = getCatalog(connName)
+    const catalog = getCatalog(host, connName)
     if (!catalog) {
-      const available = getCatalogConnectionNames()
+      const available = getCatalogConnectionNames(host)
       const hint = available.length > 0
         ? `Available connections: ${available.join(", ")}. Pass connection='${available[0]}' to target that database, or omit for auto-select.`
         : "No catalogs loaded. The catalog is built at server startup when MSSQL is configured. " +

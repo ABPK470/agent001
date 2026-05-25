@@ -29,6 +29,7 @@ import {
     startRunning,
     SyncRunStatus,
     synthesizeGenericFailureAnswer,
+    type AgentHost,
     type DelegateContext,
     type EngineServices,
     type HostedPolicyContext,
@@ -182,6 +183,20 @@ export async function executeRunImpl(
     searchFilesExcludeDirs: new Set(computeAutoDetectedExcludeDirs(runWorkspace.executionRoot)),
     shellCwd: runWorkspace.executionRoot,
     browserCheckCwd: runWorkspace.executionRoot,
+    // Per-run toolKnowledge/tableVerdicts adapters — bind upn at construction
+    // so tools reading via host.toolKnowledge.{lookup,save} get the run-scoped
+    // provenance without needing the legacy AgentRuntime ALS slot.
+    toolKnowledge: {
+      lookup: (args) => lookupToolKnowledge(args) as unknown as ReturnType<NonNullable<AgentHost["toolKnowledge"]>["lookup"]>,
+      save: (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null }),
+      renderHeader: (hit, opts) => renderCachedHeader(hit as unknown as Parameters<typeof renderCachedHeader>[0], opts),
+    },
+    tableVerdicts: {
+      list: (args) => listTableVerdicts({
+        qnames: args.qnames,
+        connection: args.connection,
+      }),
+    },
   })
   // Gap 2: bind the memory writer hook so doctrine lessons (and any other
   // agent-side auto-notes) get persisted with this run's session/upn
@@ -563,7 +578,7 @@ export async function executeRunImpl(
       try {
         return loadCandidateVerdicts({
           goal,
-          catalog: getCatalog(),
+          catalog: getCatalog(perRunHost),
           upn: activeRun?.ownerUpn ?? null,
         })
       } catch (err) {

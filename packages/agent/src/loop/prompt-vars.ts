@@ -29,7 +29,6 @@ import {
     topNTables,
     topNUnionViews,
 } from "../tools/catalog/queries.js"
-import { getCatalog } from "../tools/catalog/store.js"
 
 export interface PromptVars {
   mirrorSchema:          string
@@ -75,7 +74,7 @@ export function _resetPromptVarsCache(): void { _cache = null }
  */
 export function buildPromptVars(connection = "default"): PromptVars {
   const tenant  = getTenantConfig()
-  const catalog = getCatalog(connection) ?? defaultCatalogAccessor()
+  const catalog = defaultCatalogAccessor(connection)
   const acc = () => catalog
 
   if (!catalog) return { ...FALLBACK, mirrorSchema: tenant.mirrorSchema ?? FALLBACK.mirrorSchema }

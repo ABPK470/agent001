@@ -79,24 +79,24 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
     // catalog-shape fingerprint so schema changes invalidate cleanly.
     if (args.table && typeof args.table === "string") {
       const qn = String(args.table).trim()
-      const fp = fingerprintForQname(qn, connName)
-      const cached = tryServeFromCache("discover_relationships", qn, "fk", connName, fp)
+      const fp = fingerprintForQname(host, qn, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", qn, "fk", connName, fp)
       if (cached !== null) return cached
     } else if (Array.isArray(args.between) && (args.between as unknown[]).length === 2) {
       const pair = (args.between as unknown[]).map((t) => String(t).trim().toLowerCase()).sort()
       const key = `${pair[0]}|${pair[1]}`
-      const fp = fingerprintForCatalogBuild(connName)
-      const cached = tryServeFromCache("discover_relationships", key, "paths", connName, fp)
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", key, "paths", connName, fp)
       if (cached !== null) return cached
     } else if (args.schema && typeof args.schema === "string") {
       const schema = String(args.schema).trim()
-      const fp = fingerprintForCatalogBuild(connName)
-      const cached = tryServeFromCache("discover_relationships", schema, "schema", connName, fp)
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", schema, "schema", connName, fp)
       if (cached !== null) return cached
     } else if (args.column && typeof args.column === "string") {
       const col = String(args.column).trim()
-      const fp = fingerprintForCatalogBuild(connName)
-      const cached = tryServeFromCache("discover_relationships", col, "column", connName, fp)
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", col, "column", connName, fp)
       if (cached !== null) return cached
     }
 
@@ -148,13 +148,13 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
           `Tip: Use between=['${tableName}','other.Table'] to find indirect paths.`,
         )
         const out = sections.join("\n")
-        persistToCache(
+        persistToCache(host,
           "discover_relationships",
           tableName,
           "fk",
           connName,
           out,
-          fingerprintForQname(tableName, connName),
+          fingerprintForQname(host, tableName, connName),
         )
         return out
       }
@@ -200,13 +200,13 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
         sections.push(`\n${paths.length} path${paths.length !== 1 ? "s" : ""} found.`)
         const out = sections.join("\n")
         const pair = [startTable, endTable].map((t) => t.toLowerCase()).sort()
-        persistToCache(
+        persistToCache(host,
           "discover_relationships",
           `${pair[0]}|${pair[1]}`,
           "paths",
           connName,
           out,
-          fingerprintForCatalogBuild(connName),
+          fingerprintForCatalogBuild(host, connName),
         )
         return out
       }
@@ -239,13 +239,13 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
           lines.push(`  ${c.parent_schema}.${c.parent_table} → ${c.referenced_schema}.${c.referenced_table}  [${colPairs}]  (${name})`)
         }
         const out = lines.join("\n")
-        persistToCache(
+        persistToCache(host,
           "discover_relationships",
           schema,
           "schema",
           connName,
           out,
-          fingerprintForCatalogBuild(connName),
+          fingerprintForCatalogBuild(host, connName),
         )
         return out
       }
@@ -286,13 +286,13 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
           `Verify data types match before joining. Use explore_mssql_schema(table='schema.Table') to confirm.`,
         )
         const out = lines.join("\n")
-        persistToCache(
+        persistToCache(host,
           "discover_relationships",
           colName,
           "column",
           connName,
           out,
-          fingerprintForCatalogBuild(connName),
+          fingerprintForCatalogBuild(host, connName),
         )
         return out
       }

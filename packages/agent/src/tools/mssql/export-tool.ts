@@ -303,7 +303,7 @@ async function executeExportQueryToFile(
     })
     // Fix #3 (2026-05-23): append catalog-derived column map on `Invalid
     // column name 'X'` so the model gets concrete names instead of guessing.
-    const enriched = enrichInvalidColumnError(msg, query, connectionName)
+    const enriched = enrichInvalidColumnError(opts.host, msg, query, connectionName)
     return `SQL Error: ${decorateMssqlError(enriched)}`
   } finally {
     killSignal?.removeEventListener("abort", onKill)
