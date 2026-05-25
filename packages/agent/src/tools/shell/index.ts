@@ -19,14 +19,11 @@ import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 
-/** Workspace directory — shell commands run here. */
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-
-export function setShellCwd(cwd: string): void {
-  currentRuntime().shell.cwd = cwd
-}
+/** Workspace directory — shell commands run here.
+ *  Source: `host.shell.cwd` (built per-run by the server from the run workspace).
+ *  No ambient `setShellCwd` setter exists — the run-executor builds the host
+ *  with `shellCwd: runWorkspace.executionRoot` and threads it into the
+ *  closure-factory `createShellTool(host)`. */
 
 /** Result from a shell execution (matches sandbox interface). */
 export interface ShellExecResult {
@@ -38,28 +35,18 @@ export interface ShellExecResult {
 }
 
 /**
- * Optional executor injected by the server.
- * When set, commands route through Docker sandbox instead of host shell.
+ * Optional executor injected by the host.
+ * When present (host.shell.client), commands route through the Docker sandbox
+ * instead of the host shell. No ambient `setShellExecutor` setter exists
+ * — wire the client via `configureAgent({ shellClient })` in the server boot.
  */
 export type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
 
-/** Inject a sandbox executor (called once at server startup). */
-export function setShellExecutor(executor: ShellExecutor): void {
-  currentRuntime().shell.executor = executor
-}
-
 /**
  * Whether the sandbox is in strict mode ("all").
- * When true, commands run in Docker and only the minimal deny list applies.
- * The agent can freely run `node game.js`, `npm install`, `python script.py`, etc.
+ * Source: `host.shell.sandboxStrict`. When true, only CONTAINER_RULES apply,
+ * so the agent can freely run `node game.js`, `npm install`, etc.
  */
-
-/** Set by the server when sandbox mode is "all". */
-export function setShellSandboxStrict(strict: boolean): void {
-  currentRuntime().shell.sandboxStrict = strict
-}
-
-/** Abort signal — set per-run so child processes can be killed on cancel. */
 
 /** Inject the run's AbortSignal so child processes are killed on cancel. */
 export function setShellSignal(signal: AbortSignal | null): void {
@@ -156,14 +143,8 @@ export const shellTool: Tool = {
   name: "run_command",
   description: SHELL_TOOL_DESCRIPTION,
   parameters: SHELL_TOOL_PARAMETERS,
-  async execute(args) {
-    const sh = currentRuntime().shell
-    return runShell(args, {
-      cwd: sh.cwd,
-      executor: sh.executor ?? null,
-      sandboxStrict: sh.sandboxStrict,
-      killSignal: sh.killSignal ?? null,
-    })
+  async execute() {
+    throw new Error("shellTool must be built via createShellTool(host); ambient execute is no longer supported.")
   },
 }
 

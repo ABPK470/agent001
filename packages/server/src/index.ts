@@ -32,12 +32,10 @@ import {
   setBrowserContextProvider,
   setBrowserCredentialProvider,
   setBrowserHandoffProvider,
-  setShellCwd,
-  setShellExecutor,
-  setShellSandboxStrict,
   setSyncEventSink,
   setSyncRunSink,
   setupEnvironments,
+  type ShellClient,
 } from "@mia/agent"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -117,7 +115,7 @@ async function main() {
   initDatabase()
 
   let currentWorkspace = resolveWorkspace()
-  const sandbox = await configureSandbox(() => currentWorkspace)
+  const { sandbox, shellClient, shellSandboxStrict } = await configureSandbox(() => currentWorkspace)
   const mssqlSummary = setupMssql(_projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
@@ -269,15 +267,17 @@ async function main() {
     // orchestrator builds. This is the doctrine-shaped replacement for
     // the deleted `setActiveAgentHost` / `setBootHostOptions` ambient
     // setters. Tools migrated off `currentRuntime()` (filesystem,
-    // search_files, ask_user, attachments, mssql export-tool) close over
-    // the per-run host produced from these deps; tools that still rely
-    // on the runtime ALS read from setShellCwd / setBrowserCheckCwd /
+    // search_files, ask_user, attachments, mssql export-tool, shell)
+    // close over the per-run host produced from these deps; tools that
+    // still rely on the runtime ALS read from setBrowserCheckCwd /
     // setBrowserContextProvider / etc. above.
     bootHostDeps: {
       attachments: serverAttachmentService,
       browserContextReader: serverBrowserContextProvider,
       browserCredentialReader: serverBrowserCredentialProvider,
       browserHandoffStore: serverBrowserHandoffProvider,
+      shellClient,
+      shellSandboxStrict,
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
@@ -310,7 +310,6 @@ function resolveUiDist(): string {
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
-  setShellCwd(w)
   setBrowserCheckCwd(w)
   orchestrator.setWorkspace(w)
 }
@@ -383,13 +382,16 @@ function resolveWorkspace(): string {
     return from
   }
   const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
-  setShellCwd(workspace)
   setBrowserCheckCwd(workspace)
   console.log(`Agent workspace: ${workspace}`)
   return workspace
 }
 
-async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<typeof initSandbox>> {
+async function configureSandbox(getWorkspace: () => string): Promise<{
+  sandbox: ReturnType<typeof initSandbox>
+  shellClient: ShellClient | null
+  shellSandboxStrict: boolean
+}> {
   const sandboxMode = process.env["SANDBOX_MODE"] === "host"
     ? "host" as const
     : process.env["SANDBOX_MODE"] === "all"
@@ -398,12 +400,15 @@ async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<
   const sandbox = initSandbox({ mode: sandboxMode })
   const dockerReady = await sandbox.isDockerAvailable()
 
+  let shellClient: ShellClient | null = null
+  let shellSandboxStrict = false
+
   if (dockerReady) {
-    setShellExecutor(async (command, cwd, signal) => {
+    shellClient = async (command, cwd, signal) => {
       return sandbox.exec(command, cwd || getWorkspace(), { signal })
-    })
+    }
     if (sandbox.isStrictMode) {
-      setShellSandboxStrict(true)
+      shellSandboxStrict = true
       console.log("Docker sandbox: STRICT mode (all commands require Docker, relaxed deny list)")
     } else {
       console.log("Docker sandbox: ACTIVE (commands run in isolated containers)")
@@ -438,7 +443,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<
     console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
-  return sandbox
+  return { sandbox, shellClient, shellSandboxStrict }
 }
 
 async function buildLlmAndCatalog(mssqlSummary: string) {

@@ -71,7 +71,6 @@ import type {
   BrowserCheckExecutor,
   BrowserSession,
   CatalogGraph,
-  ShellExecutor,
 } from "./tools/index.js"
 
 // ── Sub-state shapes ──────────────────────────────────────────────
@@ -196,10 +195,12 @@ export interface BrowserHandoffProvider {
 }
 
 export interface ShellState {
-  cwd: string
-  /** Process-wide shell executor (e.g. Docker sandbox). */
-  executor: ShellExecutor | null
-  sandboxStrict: boolean
+  /**
+   * Per-tool-call kill signal. Set by the run executor immediately before
+   * each tool call so the child process can be aborted on cancel. Migrated
+   * tools (createShellTool) source `cwd`, `client`, `sandboxStrict` from
+   * the host instead — those slots no longer exist here.
+   */
   killSignal: AbortSignal | null
 }
 
@@ -457,12 +458,7 @@ export class AgentRuntime {
         defaultConnection: parent.mssql.defaultConnection,
         profileDataCalled: new Set<string>(),
       }
-      this.shell = {
-        cwd: parent.shell.cwd,
-        executor: parent.shell.executor,
-        sandboxStrict: parent.shell.sandboxStrict,
-        killSignal: null,
-      }
+      this.shell = { killSignal: null }
       this.browserCheck = {
         cwd: parent.browserCheck.cwd,
         executor: parent.browserCheck.executor,
@@ -501,7 +497,7 @@ export class AgentRuntime {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
       this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null, contextProvider: null, credentialProvider: null, handoffProvider: null }
-      this.shell = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
+      this.shell = { killSignal: null }
       this.browserCheck = { cwd: process.cwd(), executor: null }
       this.fetchUrl = { killSignal: null }
       this.catalog = { instances: new Map(), defaultCachePath: undefined }

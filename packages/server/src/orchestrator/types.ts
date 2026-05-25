@@ -1,4 +1,4 @@
-import type { AttachmentService, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole } from "@mia/agent"
+import type { AttachmentService, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole, ShellClient } from "@mia/agent"
 import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
@@ -78,6 +78,10 @@ export interface BootHostDeps {
   browserContextReader?: BrowserContextProvider | null
   browserCredentialReader?: BrowserCredentialProvider | null
   browserHandoffStore?: BrowserHandoffProvider | null
+  /** Sandbox-routed shell client (Docker exec). Null = host execution. */
+  shellClient?: ShellClient | null
+  /** Sandbox "all" mode — relaxed deny list when true. */
+  shellSandboxStrict?: boolean
 }
 
 // ── Notification types ────────────────────────────────────────────
