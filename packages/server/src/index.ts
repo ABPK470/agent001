@@ -26,7 +26,7 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
   EventType,
-  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
+  buildCatalog, closeMssqlPool, configureAgent, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
   setAttachmentService,
   setBasePath,
   setBrowserCheckCwd,
@@ -40,7 +40,8 @@ import {
   setShellSandboxStrict,
   setSyncEventSink,
   setSyncRunSink,
-  setupEnvironments
+  setupEnvironments,
+  type AgentHost,
 } from "@mia/agent"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -115,6 +116,20 @@ import { installRegistryRecipeResolver } from "./sync/registry-resolver.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
+
+// Doctrine-shaped composition root. Populated once at boot by
+// `configureAgent({...})` inside `main()`. Future cluster migrations
+// (Phase 4 of /memories/session/plan.md) consume this via `getAgentHost()`
+// to replace `currentRuntime()` lookups.
+let _agentHost: AgentHost | null = null
+
+/** Returns the boot-time AgentHost. Throws if called before main(). */
+export function getAgentHost(): AgentHost {
+  if (!_agentHost) {
+    throw new Error("getAgentHost(): server boot has not completed configureAgent({...}) yet")
+  }
+  return _agentHost
+}
 
 async function main() {
   initDatabase()
@@ -267,6 +282,24 @@ async function main() {
   })
 
   const orchestrator = new AgentOrchestrator({ llm, workspace: currentWorkspace })
+  // Build the doctrine-shaped AgentHost mirroring the current setter values.
+  // This is the substrate for the Phase 4 cluster-by-cluster migration off
+  // ambient state (docs/doctrine.md, /memories/session/plan.md). Tools that
+  // have been migrated to `createXxxTool(host)` factories will read from
+  // this; the legacy setters above still populate `AgentRuntime` for
+  // not-yet-migrated tools, so both worlds run in parallel during the
+  // transition.
+  _agentHost = configureAgent({
+    workspaceRoot: currentWorkspace,
+    filesystemBasePath: currentWorkspace,
+    searchFilesBasePath: currentWorkspace,
+    shellCwd: currentWorkspace,
+    browserCheckCwd: currentWorkspace,
+    browserContextReader: serverBrowserContextProvider,
+    browserCredentialReader: serverBrowserCredentialProvider,
+    browserHandoffStore: serverBrowserHandoffProvider,
+    attachments: serverAttachmentService,
+  })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
 

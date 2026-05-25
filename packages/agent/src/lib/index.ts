@@ -7,6 +7,8 @@
  */
 
 // ── Core ────────────────────────────────────────────────────────────
+export { configureAgent } from "../host/index.js"
+export type { AgentHost, ConfigureAgentOptions } from "../host/index.js"
 export { AgentRuntime } from "../agent-runtime.js"
 export type { AgentRuntimeOptions, AttachmentMetadata, AttachmentService, AttachmentsState, BrowserContextHandle, BrowserContextProvider, BrowserCredentialProvider, BrowserGuard, BrowserHandoffProvider } from "../agent-runtime.js"
 export { Agent } from "../agent/index.js"
