@@ -15,7 +15,6 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { currentRuntime } from "../agent-runtime.js"
 import { EnvAccessMode, EnvRole } from "../domain/enums/sync.js"
 import type { AgentHost } from "../host/index.js"
 import { getMssqlConfig } from "../tools/index.js"
@@ -92,21 +91,21 @@ interface SyncEnvironmentsConfigFile {
 // (`currentRuntime().sync.environments`).
 
 /** Configure all environments at once. Replaces any prior config. */
-export function setEnvironments(envs: SyncEnvironment[]): void {
-  currentRuntime().sync.environments.clear()
-  for (const e of envs) currentRuntime().sync.environments.set(e.name, e)
+export function setEnvironments(host: AgentHost, envs: SyncEnvironment[]): void {
+  host.sync.environments.clear()
+  for (const e of envs) host.sync.environments.set(e.name, e)
 }
 
 /** Read the current environment registry. */
-export function getEnvironments(): SyncEnvironment[] {
-  return Array.from(currentRuntime().sync.environments.values())
+export function getEnvironments(host: AgentHost): SyncEnvironment[] {
+  return Array.from(host.sync.environments.values())
 }
 
 /** Get one environment by name; throws if missing. */
-export function getEnvironment(name: string): SyncEnvironment {
-  const e = currentRuntime().sync.environments.get(name)
+export function getEnvironment(host: AgentHost, name: string): SyncEnvironment {
+  const e = host.sync.environments.get(name)
   if (!e) {
-    const available = Array.from(currentRuntime().sync.environments.keys()).join(", ") || "none"
+    const available = Array.from(host.sync.environments.keys()).join(", ") || "none"
     throw new Error(`Unknown environment "${name}". Available: ${available}.`)
   }
   return e
@@ -184,7 +183,7 @@ export async function setupEnvironments(host: AgentHost, projectRoot: string, re
         denyDdl: e.denyDdl,
         approvalRequiredOperations: e.approvalRequiredOperations,
       }))
-      setEnvironments(envs)
+      setEnvironments(host, envs)
       const summary = envs.map((e) => `${e.name}[${e.role}/${e.defaultAccessMode}]`).join(", ")
       console.log(`ABI environments (from ${relPath}): ${summary}`)
     } catch (e) {
@@ -203,7 +202,7 @@ export async function setupEnvironments(host: AgentHost, projectRoot: string, re
       ringOrder: i,
       syncAllowlist: [],
     }))
-    setEnvironments(envs)
+    setEnvironments(host, envs)
     if (envs.length) {
       console.log(`ABI environments (auto from MSSQL_DATABASES): ${envs.map((e) => `${e.name}[${e.defaultAccessMode}]`).join(", ")}`)
     }

@@ -11,6 +11,7 @@
 
 import type sql from "mssql"
 import { currentRuntime } from "../../agent-runtime.js"
+import type { AgentHost } from "../../host/index.js"
 import { emitSyncSqlEvent } from "../sync-events.js"
 
 /**
@@ -32,13 +33,15 @@ export const DRIFT_ABORT_PCT = 0.05
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
 
 /** Configure the project root used to load sync-recipes.json. */
-export function configureSyncOrchestrator(projectRoot: string): void {
-  currentRuntime().sync.dbProjectRoot = projectRoot
+export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {
+  host.sync.dbProjectRoot = projectRoot
 }
 
-export function projectRoot(): string {
-  const root = currentRuntime().sync.dbProjectRoot
-  if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(projectRoot)")
+export function projectRoot(host?: AgentHost): string {
+  // Legacy bridge: when no host supplied, fall back to the runtime (which
+  // shares its sync state with the boot host). Phase 6 will require host.
+  const root = (host ?? currentRuntime()).sync.dbProjectRoot
+  if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   return root
 }
 

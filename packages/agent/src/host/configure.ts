@@ -45,6 +45,10 @@ export interface ConfigureAgentOptions {
   catalogInstances?: AgentHost["catalog"]["instances"]
   catalogDefaultCachePath?: AgentHost["catalog"]["defaultCachePath"]
 
+  // Sync subsystem state (shared with AgentRuntime.sync during the legacy
+  // bridge era — Phase 5). Pass a SyncState object to share by reference.
+  sync?: AgentHost["sync"]
+
   // Browser stack (any/all may be null in CLI / tests)
   browserContextReader?: AgentHost["browser"]["contextReader"]
   browserCredentialReader?: AgentHost["browser"]["credentialReader"]
@@ -111,15 +115,14 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       instances: options.catalogInstances ?? new Map(),
       defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined },
     }),
-    sync: Object.freeze({
-      events: NOOP_SYNC_EVENT_SINK,
+    sync: options.sync ?? {
+      eventSink: NOOP_SYNC_EVENT_SINK,
       runSink: NOOP_SYNC_RUN_SINK,
       recipes: { bundle: null, loadedFromPath: null },
       environments: new Map(),
-      recipeReader: null,
-      plans: Object.freeze({ diskRoot: null, memCache: new Map() }),
+      plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: null,
-    }),
+    },
     tenant: Object.freeze({
       id: options.tenant?.id ?? null,
       displayName: options.tenant?.displayName ?? null,
@@ -134,7 +137,7 @@ const NOOP_SHELL_CLIENT: AgentHost["shell"]["client"] = async () => {
   throw new Error("configureAgent: no shellClient wired (pass options.shellClient).")
 }
 
-const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["events"] = () => {
+const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["eventSink"] = () => {
   // dropped on the floor — Phase 4 will swap in a real sink
 }
 

@@ -232,7 +232,7 @@ function buildSyncExecuteTool(host: AgentHost): Tool { return {
     const planId = String(args.planId)
     const confirm = Boolean(args.confirm)
     if (!confirm) return `Error: confirm must be true to execute.`
-    const plan = loadPlan(planId)
+    const plan = loadPlan(host, planId)
     if (!plan) return `Error: plan ${planId} not found or expired.`
     try {
       const result = await executeSync(planId, { host, confirm: true, userUpn: "agent" })
@@ -263,12 +263,12 @@ export function createSyncExecuteTool(host: AgentHost): Tool {
 
 // ── list_environments (helper) ───────────────────────────────────
 
-function buildListEnvironmentsTool(_host: AgentHost): Tool { return {
+function buildListEnvironmentsTool(host: AgentHost): Tool { return {
   name: "list_environments",
   description: "List all configured ABI environments (source/target candidates for sync).",
   parameters: { type: "object", properties: {}, required: [] },
   async execute() {
-    const envs = getEnvironments()
+    const envs = getEnvironments(host)
     if (envs.length === 0) return "No environments configured."
     const lines = ["Configured ABI environments:"]
     for (const e of envs) {

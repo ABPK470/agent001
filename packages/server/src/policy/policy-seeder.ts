@@ -27,6 +27,7 @@ import {
     getEnvironments,
     setEnvironments,
     withPermissionDefaults,
+    type AgentHost,
     type SyncEnvironment,
 } from "@mia/agent"
 import * as db from "../db/index.js"
@@ -42,7 +43,7 @@ import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-
  * via `getEnvironments()` so calling it after a hot edit picks up the
  * latest JSON-loaded baseline.
  */
-export function applyEnvOverrides(): void {
+export function applyEnvOverrides(host: AgentHost): void {
   const overrides = new Map<string, Partial<SyncEnvironment>>()
   for (const row of db.listSyncEnvOverrides()) {
     try {
@@ -52,11 +53,11 @@ export function applyEnvOverrides(): void {
     }
   }
   if (overrides.size === 0) return
-  const merged = getEnvironments().map((e) => {
+  const merged = getEnvironments(host).map((e) => {
     const o = overrides.get(e.name)
     return o ? withPermissionDefaults({ ...e, ...o, name: e.name }) : e
   })
-  setEnvironments(merged)
+  setEnvironments(host, merged)
   console.log(`[policy-seeder] applied ${overrides.size} sync-env override(s): ${Array.from(overrides.keys()).join(", ")}`)
 }
 
@@ -69,7 +70,7 @@ export function applyEnvOverrides(): void {
  * Call once at server startup AFTER `applyEnvOverrides()` so the derived
  * rules reflect the merged env config.
  */
-export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDerived: number } {
+export function seedDefaultPoliciesIfMissing(host: AgentHost): { hostedDefault: number; envDerived: number } {
   const now = new Date().toISOString()
   let hostedDefault = 0
   let envDerived = 0
@@ -86,7 +87,7 @@ export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDeri
     if (inserted) hostedDefault++
   }
 
-  for (const r of policyRulesFromEnvironments(getEnvironments())) {
+  for (const r of policyRulesFromEnvironments(getEnvironments(host))) {
     const inserted = db.seedPolicyRuleIfMissing({
       name:       r.name,
       effect:     r.effect,
@@ -110,12 +111,12 @@ export function seedDefaultPoliciesIfMissing(): { hostedDefault: number; envDeri
  * Operator-edited rules ({@link db.PolicySource} = `'db'`) are never
  * touched — even if their name collides with a derived one.
  */
-export function refreshEnvDerivedPolicies(envName: string): void {
+export function refreshEnvDerivedPolicies(host: AgentHost, envName: string): void {
   const prefix = `env_${envName}_`
   const existing = db.listPolicyRules().filter((r) => r.source === db.PolicySource.EnvDerived && r.name.startsWith(prefix))
   for (const r of existing) db.deletePolicyRule(r.name)
 
-  const env = getEnvironments().find((e) => e.name === envName)
+  const env = getEnvironments(host).find((e) => e.name === envName)
   if (!env) return
   const now = new Date().toISOString()
   for (const r of policyRulesFromEnvironments([env])) {

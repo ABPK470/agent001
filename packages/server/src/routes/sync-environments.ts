@@ -25,6 +25,7 @@ import {
     isEnvAccessMode,
     setEnvironments,
     withPermissionDefaults,
+    type AgentHost,
     type EnvOperation,
     type SyncEnvironment,
 } from "@mia/agent"
@@ -104,7 +105,7 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
  * Re-apply a single env's override on top of its current registry entry
  * so a PUT takes effect immediately for any future run (no restart).
  */
-function refreshRegistryFor(name: string): void {
+function refreshRegistryFor(host: AgentHost, name: string): void {
   const override = db.getSyncEnvOverride(name)
   if (!override) return
   let parsed: Partial<SyncEnvironment>
@@ -113,19 +114,19 @@ function refreshRegistryFor(name: string): void {
   } catch {
     return
   }
-  const next = getEnvironments().map((e) =>
+  const next = getEnvironments(host).map((e) =>
     e.name === name
       ? withPermissionDefaults({ ...e, ...parsed, name: e.name })
       : e,
   )
-  setEnvironments(next)
+  setEnvironments(host, next)
 }
 
-export function registerSyncEnvironmentRoutes(app: FastifyInstance): void {
+export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {
   app.get("/api/sync-environments", async (req, reply) => {
     if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
     const overrides = new Map(db.listSyncEnvOverrides().map((r) => [r.name, r]))
-    return getEnvironments().map((e) => {
+    return getEnvironments(host).map((e) => {
       const o = overrides.get(e.name)
       let parsed: Record<string, unknown> = {}
       if (o) {
@@ -152,7 +153,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance): void {
     "/api/sync-environments/:name",
     async (req, reply) => {
       if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
-      const env = getEnvironments().find((e) => e.name === req.params.name)
+      const env = getEnvironments(host).find((e) => e.name === req.params.name)
       if (!env) { reply.code(404); return { error: `unknown env "${req.params.name}"` } }
 
       const sanitised = sanitise(req.body ?? {})
@@ -173,10 +174,10 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance): void {
         updated_at:     new Date().toISOString(),
         updated_by:     req.session.upn,
       })
-      refreshRegistryFor(req.params.name)
+      refreshRegistryFor(host, req.params.name)
       // Re-derive env_derived policy rules from the merged config so the
       // engine picks up the change on the very next run start.
-      refreshEnvDerivedPolicies(req.params.name)
+      refreshEnvDerivedPolicies(host, req.params.name)
 
       audit(req, "sync_env.update", { name: req.params.name, fields: sanitised })
       return { ok: true }
@@ -193,7 +194,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance): void {
       // holds the merged copy from when the override was applied; for
       // pure correctness an operator should restart, but the rule set
       // will catch up on next boot via setupEnvironments + seeder.
-      refreshEnvDerivedPolicies(req.params.name)
+      refreshEnvDerivedPolicies(host, req.params.name)
       audit(req, "sync_env.reset", { name: req.params.name })
       return { ok: true }
     },

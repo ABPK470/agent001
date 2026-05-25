@@ -26,6 +26,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { currentRuntime } from "../agent-runtime.js"
 import { EventType } from "../domain/enums/event.js"
 import { SyncOperationType } from "../domain/enums/sync.js"
+import type { AgentHost } from "../host/index.js"
 
 export type SyncEvent = { type: EventType; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
@@ -35,11 +36,14 @@ export type SyncEventSink = (event: SyncEvent) => void
 // shape. The state can be migrated into AgentRuntime sub-runtimes later.
 
 /** Server installs this once at startup (see server/src/index.ts). */
-export function setSyncEventSink(sink: SyncEventSink): void {
-  currentRuntime().sync.eventSink = sink
+export function setSyncEventSink(host: AgentHost, sink: SyncEventSink): void {
+  host.sync.eventSink = sink
 }
 
-/** Fire-and-forget emit. Sink errors NEVER propagate. */
+/** Fire-and-forget emit. Sink errors NEVER propagate.
+ *  Reads the sink off the active runtime (which shares state with the host
+ *  via `configureAgent({ sync: AgentRuntime.root().sync })`). Phase 6 will
+ *  thread `host` here too and delete `currentRuntime`. */
 export function emitSyncEvent(type: EventType, data: Record<string, unknown>): void {
   try { currentRuntime().sync.eventSink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)

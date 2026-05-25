@@ -28,7 +28,6 @@ import type {
   CredentialReader,
   HandoffStore,
   MssqlEntry,
-  RecipeReader,
   ShellClient,
   TableVerdictsReader,
   ToolKnowledgeStore,
@@ -84,15 +83,20 @@ export interface CatalogHost {
   readonly defaultCachePath: { value: string | undefined }
 }
 
+/**
+ * Mutable container for sync state. Shared by reference with the legacy
+ * `AgentRuntime.sync` (so existing `currentRuntime().sync.*` reads see the
+ * same data as new `host.sync.*` reads). Phase 6 will demolish the runtime
+ * and this becomes the sole owner.
+ */
 export interface SyncHost {
-  readonly events: SyncEventSink
-  readonly runSink: SyncRunSink
-  readonly recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
-  readonly environments: ReadonlyMap<string, SyncEnvironment>
-  readonly recipeReader: RecipeReader | null
-  /** Plan disk root + in-memory cache (the cache is mutated; root is fixed). */
-  readonly plans: { readonly diskRoot: string | null; readonly memCache: Map<string, SyncPlan> }
-  readonly dbProjectRoot: string | null
+  eventSink: SyncEventSink
+  runSink: SyncRunSink
+  recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
+  environments: Map<string, SyncEnvironment>
+  /** Plan disk root + in-memory cache. Both fields mutable at runtime. */
+  plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
+  dbProjectRoot: string | null
 }
 
 export interface TenantHost {

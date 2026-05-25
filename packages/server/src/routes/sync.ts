@@ -56,10 +56,10 @@ function auditSync(
 export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, host: AgentHost): void {
 
   // ── Environments ────────────────────────────────────────────
-  app.get("/api/sync/environments", async () => getEnvironments())
+  app.get("/api/sync/environments", async () => getEnvironments(host))
 
   // ── Recipes (read-only metadata) ────────────────────────────
-  app.get("/api/sync/recipes", async () => loadSyncRecipes(projectRoot))
+  app.get("/api/sync/recipes", async () => loadSyncRecipes(host, projectRoot))
 
   // ── Entity search (typeahead by name) ───────────────────────
   app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>(
@@ -118,7 +118,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 
   // ── Plan: load by id ────────────────────────────────────────
   app.get<{ Params: { planId: string } }>("/api/sync/plan/:planId", async (req, reply) => {
-    const plan = loadPlan(req.params.planId)
+    const plan = loadPlan(host, req.params.planId)
     if (!plan) {
       reply.code(404)
       return { error: `Plan ${req.params.planId} not found or expired.` }
@@ -131,7 +131,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 
     const actor = req.session.upn
     const actorUpn = req.session.upn
-    const plan = loadPlan(req.params.planId)
+    const plan = loadPlan(host, req.params.planId)
     const planDetail = plan
       ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null }
       : {}
@@ -156,7 +156,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 
     const actor = req.session.upn
     const actorUpn = req.session.upn
-    const plan = loadPlan(req.params.planId)
+    const plan = loadPlan(host, req.params.planId)
     const planDetail = plan
       ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null }
       : {}

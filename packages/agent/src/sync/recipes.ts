@@ -17,7 +17,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 
 /**
  * Identifier for a sync entity. Originally a closed string union
@@ -152,8 +152,8 @@ const DEFAULT_RECIPES_PATH = "deploy/mssql/sync-recipes.json"
  * @param relPath     Optional override; defaults to `deploy/mssql/sync-recipes.json`.
  * @returns The bundle, or an empty placeholder if the file does not exist.
  */
-export function loadSyncRecipes(projectRoot: string, relPath = DEFAULT_RECIPES_PATH): SyncRecipeBundle {
-  const recipes = currentRuntime().sync.recipes
+export function loadSyncRecipes(host: AgentHost, projectRoot: string, relPath = DEFAULT_RECIPES_PATH): SyncRecipeBundle {
+  const recipes = host.sync.recipes
   if (recipes.bundle && recipes.loadedFromPath === relPath) return recipes.bundle
   const full = resolve(projectRoot, relPath)
   if (!existsSync(full)) {
@@ -189,9 +189,9 @@ export function loadSyncRecipes(projectRoot: string, relPath = DEFAULT_RECIPES_P
 }
 
 /** Force a reload on next call (e.g. after the introspection script ran). */
-export function clearSyncRecipesCache(): void {
-  currentRuntime().sync.recipes.bundle = null
-  currentRuntime().sync.recipes.loadedFromPath = null
+export function clearSyncRecipesCache(host: AgentHost): void {
+  host.sync.recipes.bundle = null
+  host.sync.recipes.loadedFromPath = null
 }
 
 /** Return a recipe by entity type. Throws if unknown or not introspected yet. */

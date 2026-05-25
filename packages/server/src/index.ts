@@ -25,6 +25,7 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
+  AgentRuntime,
   EventType,
   buildCatalog, closeMssqlPool,
   configureAgent,
@@ -127,7 +128,12 @@ async function main() {
   // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
   const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
   const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
-  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath })
+  // Shared sync state: bind the host to the same SyncState object the
+  // legacy AgentRuntime.root() uses, so `host.sync.*` reads/writes and
+  // `currentRuntime().sync.*` reads/writes see the same data. Phase 6
+  // demolishes the runtime and this becomes the sole owner.
+  const sharedSync = AgentRuntime.root().sync as AgentHost["sync"]
+  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath, sync: sharedSync })
   const mssqlSummary = setupMssql(bootHost, _projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
@@ -147,10 +153,10 @@ async function main() {
   // env-derived policy rules into the DB so the admin UI can show the
   // full active ruleset (and let admins edit it). Done AFTER
   // setupEnvironments so derived rules reflect the merged env config.
-  applyEnvOverrides()
-  seedDefaultPoliciesIfMissing()
-  configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
-  configureSyncOrchestrator(_projectRoot)
+  applyEnvOverrides(bootHost)
+  seedDefaultPoliciesIfMissing(bootHost)
+  configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
+  configureSyncOrchestrator(bootHost, _projectRoot)
   // Bridge the in-DB entity registry into the orchestrator's recipe
   // lookup path. When an entity has a registry record, the projected
   // recipe wins over the bundled JSON; on miss, the orchestrator falls
@@ -178,10 +184,10 @@ async function main() {
   // Fan sync events out via broadcast(): SSE for live UI, event_log table
   // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
   // for the full list of emitted event types.
-  setSyncEventSink((ev) => broadcast({ type: ev.type, data: ev.data }))
+  setSyncEventSink(bootHost, (ev) => broadcast({ type: ev.type, data: ev.data }))
   // Persist every executeSync() invocation as a SyncRun row in SQLite for
   // the audit trail / "active syncs" dashboard / drift forensics.
-  setSyncRunSink({
+  setSyncRunSink(bootHost, {
     start: (i) => {
       try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
     },
@@ -661,7 +667,7 @@ async function buildApp(opts: AppOpts) {
   registerBrowserRoutes(app)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
-  registerSyncEnvironmentRoutes(app)
+  registerSyncEnvironmentRoutes(app, bootHost)
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)

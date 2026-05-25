@@ -33,12 +33,12 @@ export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 
 export async function executeSync(planId: string, opts: ExecuteOptions): Promise<{ planId: string; success: boolean; error?: string }> {
   if (!opts.confirm) throw new Error("executeSync requires explicit confirm=true.")
-  const plan = loadPlan(planId)
+  const plan = loadPlan(opts.host, planId)
   if (!plan) throw new Error(`Plan ${planId} not found or expired.`)
   if (planTooOldToExecute(plan)) throw new Error(`Plan ${planId} is older than 1 hour — re-preview before executing.`)
 
   // Safety: target writeEnabled
-  const targetEnv = getEnvironment(plan.target)
+  const targetEnv = getEnvironment(opts.host, plan.target)
   if (targetEnv.role === "source") throw new Error(`Target "${targetEnv.name}" is source-only.`)
   // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
   if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
@@ -107,7 +107,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
 
   // Persist run start (best-effort — sink no-ops in tests).
   try {
-    getSyncRunSink().start({
+    getSyncRunSink(opts.host).start({
       planId,
       entityType: plan.entity.type,
       entityId: plan.entity.id,
@@ -152,7 +152,7 @@ async function executeSyncInner(
     const msg = `Plan drift ${(driftPct * 100).toFixed(1)}% exceeds ${(DRIFT_ABORT_PCT * 100).toFixed(0)}% threshold — re-preview before executing.`
     onProgress({ type: SyncProgressKind.Failed, error: msg })
     emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0, driftPct })
-    try { getSyncRunSink().finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) } catch { /* ignore */ }
+    try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) } catch { /* ignore */ }
     return { planId, success: false, error: msg }
   }
   void opts
@@ -247,7 +247,7 @@ async function executeSyncInner(
     onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
     emit(EventType.SyncExecuteCompleted, { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
     try {
-      getSyncRunSink().finish({
+      getSyncRunSink(opts.host).finish({
         planId,
         // Any step failure = failed run. Data may have been applied but the
         // pipeline didn't complete cleanly — never show this as success.
@@ -271,7 +271,7 @@ async function executeSyncInner(
     console.error(`[sync.execute] plan ${planId} failed:`, e)
     onProgress({ type: SyncProgressKind.Failed, error: msg })
     emit(EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0 })
-    try { getSyncRunSink().finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
+    try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
     catch { /* ignore */ }
     return { planId, success: false, error: msg }
   }

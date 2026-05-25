@@ -6,8 +6,8 @@
  * startup. Keeps the agent package free of server-side deps.
  */
 
-import { currentRuntime } from "../agent-runtime.js"
 import { SyncRunStatus } from "../domain/index.js"
+import type { AgentHost } from "../host/index.js"
 import type { SyncPlan } from "./plan-store.js"
 
 export interface SyncRunStartInput {
@@ -47,10 +47,10 @@ export interface SyncRunSink {
 }
 
 /** Server installs this once at startup. */
-export function setSyncRunSink(sink: SyncRunSink): void {
-  currentRuntime().sync.runSink = sink
+export function setSyncRunSink(host: AgentHost, sink: SyncRunSink): void {
+  host.sync.runSink = sink
 }
 
-export function getSyncRunSink(): SyncRunSink {
-  return currentRuntime().sync.runSink
+export function getSyncRunSink(host: AgentHost): SyncRunSink {
+  return host.sync.runSink
 }

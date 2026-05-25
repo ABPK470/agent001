@@ -77,7 +77,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // downstream code path is identical.
     const resolved = tryResolveRecipe({ tenantId: "_default", entityId: input.entityType })
     const fullRecipe = resolved?.recipe ?? (() => {
-      const bundle = loadSyncRecipes(projectRoot())
+      const bundle = loadSyncRecipes(input.host, projectRoot(input.host))
       return getRecipe(bundle, input.entityType)
     })()
     const resolvedPolicies = resolved?.policies ?? null
@@ -92,8 +92,8 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     }
 
     // Validate environments
-    const sourceEnv = getEnvironment(input.source)
-    const targetEnv = getEnvironment(input.target)
+    const sourceEnv = getEnvironment(input.host, input.source)
+    const targetEnv = getEnvironment(input.host, input.target)
     if (sourceEnv.role === "target") throw new Error(`Environment "${sourceEnv.name}" is target-only — cannot use as source.`)
     if (targetEnv.role === "source") throw new Error(`Environment "${targetEnv.name}" is source-only — cannot use as target.`)
     // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
@@ -245,7 +245,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       },
       entityPolicies: resolvedPolicies,
     }
-    savePlan(plan)
+    savePlan(input.host, plan)
 
     emit(EventType.SyncPreviewCompleted, {
       previewId,

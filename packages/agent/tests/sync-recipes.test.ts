@@ -1,5 +1,6 @@
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
+import { configureAgent } from "../src/host/configure.js"
 import { getRecipe, loadSyncRecipes, selectRecipeTables, type SyncRecipe } from "../src/sync/index.js"
 
 describe("selectRecipeTables", () => {
@@ -51,7 +52,8 @@ describe("selectRecipeTables", () => {
 
 describe("deployed sync recipes", () => {
   it("marks gateMetadata FK-only tables as optional and default-off", () => {
-    const bundle = loadSyncRecipes(resolve(process.cwd(), "../.."))
+    const host = configureAgent({})
+    const bundle = loadSyncRecipes(host, resolve(process.cwd(), "../.."))
     const recipe = getRecipe(bundle, "gateMetadata")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual([
@@ -63,7 +65,8 @@ describe("deployed sync recipes", () => {
   })
 
   it("marks content FK-only tables as optional and default-off", () => {
-    const bundle = loadSyncRecipes(resolve(process.cwd(), "../.."))
+    const host = configureAgent({})
+    const bundle = loadSyncRecipes(host, resolve(process.cwd(), "../.."))
     const recipe = getRecipe(bundle, "content")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual(["gate.UserGroupPermission"])

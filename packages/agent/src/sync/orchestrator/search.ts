@@ -36,7 +36,7 @@ export async function searchEntities(
   query: string,
   limit = 200,
 ): Promise<EntitySearchResult[]> {
-  const recipe = getRecipe(loadSyncRecipes(projectRoot()), entityType)
+  const recipe = getRecipe(loadSyncRecipes(host, projectRoot(host)), entityType)
   if (!recipe.rootNameColumn) return []
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")

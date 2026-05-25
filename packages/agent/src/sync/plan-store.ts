@@ -13,8 +13,8 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { currentRuntime } from "../agent-runtime.js"
 import { SyncPlanChangeType } from "../domain/enums/sync.js"
+import type { AgentHost } from "../host/index.js"
 import type { EntityType } from "./recipes.js"
 
 export interface SyncPlanTableCounts {
@@ -151,10 +151,10 @@ const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
  * Configure the disk root for plan persistence (e.g.
  * `packages/server/data/sync-plans`). Idempotent.
  */
-export function configurePlanStore(diskRoot: string): void {
-  currentRuntime().sync.plans.diskRoot = diskRoot
+export function configurePlanStore(host: AgentHost, diskRoot: string): void {
+  host.sync.plans.diskRoot = diskRoot
   if (!existsSync(diskRoot)) mkdirSync(diskRoot, { recursive: true })
-  pruneExpired()
+  pruneExpired(host)
 }
 
 /** Allocate a new plan UUID. */
@@ -163,9 +163,8 @@ export function allocPlanId(): string {
 }
 
 /** Persist a plan (memory + disk + durable sink, if installed). */
-export function savePlan(plan: SyncPlan): void {
-  const runtime = currentRuntime()
-  const plans = runtime.sync.plans
+export function savePlan(host: AgentHost, plan: SyncPlan): void {
+  const plans = host.sync.plans
   plans.memCache.set(plan.planId, plan)
   if (plans.diskRoot) {
     const path = resolve(plans.diskRoot, `${plan.planId}.json`)
@@ -174,13 +173,12 @@ export function savePlan(plan: SyncPlan): void {
   // Durable persistence (e.g. server's SQLite-backed sink). Survives restarts
   // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
   // older plans on demand.
-  try { runtime.sync.runSink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
+  try { host.sync.runSink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
 }
 
 /** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
-export function loadPlan(planId: string): SyncPlan | null {
-  const runtime = currentRuntime()
-  const plans = runtime.sync.plans
+export function loadPlan(host: AgentHost, planId: string): SyncPlan | null {
+  const plans = host.sync.plans
   const cached = plans.memCache.get(planId)
   if (cached && !isExpired(cached)) return cached
   // Disk fast path (in-process, may be expired by 24h TTL).
@@ -200,7 +198,7 @@ export function loadPlan(planId: string): SyncPlan | null {
   // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
   // after server restart.
   try {
-    const fromSink = runtime.sync.runSink.loadPlan?.(planId) ?? null
+    const fromSink = host.sync.runSink.loadPlan?.(planId) ?? null
     if (fromSink) {
       plans.memCache.set(planId, fromSink)
       return fromSink
@@ -215,8 +213,8 @@ export function planTooOldToExecute(plan: SyncPlan): boolean {
 }
 
 /** Drop a plan from memory + disk (after successful execute). */
-export function deletePlan(planId: string): void {
-  const plans = currentRuntime().sync.plans
+export function deletePlan(host: AgentHost, planId: string): void {
+  const plans = host.sync.plans
   plans.memCache.delete(planId)
   if (plans.diskRoot) {
     const path = resolve(plans.diskRoot, `${planId}.json`)
@@ -228,8 +226,8 @@ function isExpired(plan: SyncPlan): boolean {
   return Date.now() - plan.createdAtMs > TTL_MS
 }
 
-function pruneExpired(): void {
-  const diskRoot = currentRuntime().sync.plans.diskRoot
+function pruneExpired(host: AgentHost): void {
+  const diskRoot = host.sync.plans.diskRoot
   if (!diskRoot) return
   for (const f of readdirSync(diskRoot)) {
     if (!f.endsWith(".json")) continue
