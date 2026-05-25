@@ -1,4 +1,4 @@
-import type { AttachmentService, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole, ShellClient } from "@mia/agent"
+import type { AttachmentService, BrowserClient, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole, ShellClient } from "@mia/agent"
 import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
@@ -82,6 +82,8 @@ export interface BootHostDeps {
   shellClient?: ShellClient | null
   /** Sandbox "all" mode — relaxed deny list when true. */
   shellSandboxStrict?: boolean
+  /** Sandbox-routed Playwright client. Null = host fallback. */
+  browserCheckClient?: BrowserClient | null
 }
 
 // ── Notification types ────────────────────────────────────────────

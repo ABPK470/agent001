@@ -68,7 +68,6 @@ import type {
   SyncRunSink,
 } from "./sync/index.js"
 import type {
-  BrowserCheckExecutor,
   BrowserSession,
   CatalogGraph,
 } from "./tools/index.js"
@@ -204,10 +203,8 @@ export interface ShellState {
   killSignal: AbortSignal | null
 }
 
-export interface BrowserCheckState {
-  cwd: string
-  executor: BrowserCheckExecutor | null
-}
+// `BrowserCheckState` removed in cluster 6 — createBrowserCheckTool sources
+// `cwd` and `client` from the host. No per-run state remains.
 
 export interface FetchUrlState {
   killSignal: AbortSignal | null
@@ -416,7 +413,6 @@ export class AgentRuntime {
   readonly mssql: MssqlState
   readonly browseWeb: BrowseWebState
   readonly shell: ShellState
-  readonly browserCheck: BrowserCheckState
   readonly fetchUrl: FetchUrlState
   /** Per-run memory writer hook (Gap 2). Null until the server binds it. */
   readonly memory: MemoryState
@@ -459,10 +455,6 @@ export class AgentRuntime {
         profileDataCalled: new Set<string>(),
       }
       this.shell = { killSignal: null }
-      this.browserCheck = {
-        cwd: parent.browserCheck.cwd,
-        executor: parent.browserCheck.executor,
-      }
       this.browseWeb = {
         sessions: new Map(),
         counter: 0,
@@ -498,7 +490,6 @@ export class AgentRuntime {
       this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
       this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null, contextProvider: null, credentialProvider: null, handoffProvider: null }
       this.shell = { killSignal: null }
-      this.browserCheck = { cwd: process.cwd(), executor: null }
       this.fetchUrl = { killSignal: null }
       this.catalog = { instances: new Map(), defaultCachePath: undefined }
       this.sync = {

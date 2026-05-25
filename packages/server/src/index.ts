@@ -27,14 +27,13 @@ import fastifyStatic from "@fastify/static"
 import {
   EventType,
   buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
-  setBrowserCheckCwd,
-  setBrowserCheckExecutor,
   setBrowserContextProvider,
   setBrowserCredentialProvider,
   setBrowserHandoffProvider,
   setSyncEventSink,
   setSyncRunSink,
   setupEnvironments,
+  type BrowserClient,
   type ShellClient,
 } from "@mia/agent"
 import Fastify from "fastify"
@@ -115,7 +114,7 @@ async function main() {
   initDatabase()
 
   let currentWorkspace = resolveWorkspace()
-  const { sandbox, shellClient, shellSandboxStrict } = await configureSandbox(() => currentWorkspace)
+  const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
   const mssqlSummary = setupMssql(_projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
@@ -278,6 +277,7 @@ async function main() {
       browserHandoffStore: serverBrowserHandoffProvider,
       shellClient,
       shellSandboxStrict,
+      browserCheckClient,
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
@@ -310,7 +310,6 @@ function resolveUiDist(): string {
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
-  setBrowserCheckCwd(w)
   orchestrator.setWorkspace(w)
 }
 
@@ -382,7 +381,6 @@ function resolveWorkspace(): string {
     return from
   }
   const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
-  setBrowserCheckCwd(workspace)
   console.log(`Agent workspace: ${workspace}`)
   return workspace
 }
@@ -391,6 +389,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
   sandbox: ReturnType<typeof initSandbox>
   shellClient: ShellClient | null
   shellSandboxStrict: boolean
+  browserCheckClient: BrowserClient | null
 }> {
   const sandboxMode = process.env["SANDBOX_MODE"] === "host"
     ? "host" as const
@@ -402,6 +401,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
 
   let shellClient: ShellClient | null = null
   let shellSandboxStrict = false
+  let browserCheckClient: BrowserClient | null = null
 
   if (dockerReady) {
     shellClient = async (command, cwd, signal) => {
@@ -414,27 +414,30 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
       console.log("Docker sandbox: ACTIVE (commands run in isolated containers)")
     }
 
-    // Build browser image in background — don't block startup
-    sandbox.ensureBrowserImage().then((ready) => {
-      if (ready) {
-        setBrowserCheckExecutor(async (htmlPath, clicks, waitMs, cwd) => {
-          const script = buildBrowserScript(htmlPath, clicks, waitMs)
-          const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
-          if (result.stderr === "FALLBACK_TO_HOST") throw new Error("Browser image not available")
-          if (result.exitCode !== 0) {
-            return { report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`, sandboxed: true }
-          }
-          try {
-            return { report: formatBrowserReport(JSON.parse(result.stdout)), sandboxed: true }
-          } catch {
-            return { report: result.stdout || "(no output)", sandboxed: true }
-          }
-        })
-        console.log("Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
-      } else {
-        console.log("Browser sandbox: UNAVAILABLE (browser_check runs on host)")
+    // Build the browser image synchronously at boot. This is one-time on
+    // first run (subsequent boots hit the Docker image cache and return
+    // in milliseconds). We need the client resolved before constructing
+    // the orchestrator so per-run hosts can close over it explicitly
+    // (doctrine §1 — no late-bound module setter).
+    const browserReady = await sandbox.ensureBrowserImage()
+    if (browserReady) {
+      browserCheckClient = async (htmlPath, clicks, waitMs, cwd) => {
+        const script = buildBrowserScript(htmlPath, clicks, waitMs)
+        const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
+        if (result.stderr === "FALLBACK_TO_HOST") throw new Error("Browser image not available")
+        if (result.exitCode !== 0) {
+          return { report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`, sandboxed: true }
+        }
+        try {
+          return { report: formatBrowserReport(JSON.parse(result.stdout)), sandboxed: true }
+        } catch {
+          return { report: result.stdout || "(no output)", sandboxed: true }
+        }
       }
-    })
+      console.log("Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
+    } else {
+      console.log("Browser sandbox: UNAVAILABLE (browser_check runs on host)")
+    }
   } else {
     if (sandbox.isStrictMode) {
       console.error("SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
@@ -443,7 +446,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
     console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
-  return { sandbox, shellClient, shellSandboxStrict }
+  return { sandbox, shellClient, shellSandboxStrict, browserCheckClient }
 }
 
 async function buildLlmAndCatalog(mssqlSummary: string) {

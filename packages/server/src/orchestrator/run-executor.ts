@@ -167,7 +167,6 @@ export async function executeRunImpl(
     workspaceRoot: runWorkspace.executionRoot,
     signal: controller.signal,
   })
-  runtime.browserCheck.cwd = runWorkspace.executionRoot
 
   // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
   // providers) but overrides workspace / sandbox roots with this run's

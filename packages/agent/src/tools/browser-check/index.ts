@@ -16,16 +16,9 @@
 
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
-import { currentRuntime } from "../../agent-runtime.js"
 import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { startStaticServer } from "./static-server.js"
-
-/** Workspace directory + optional sandbox executor — owned by a const state record. */
-
-export function setBrowserCheckCwd(cwd: string): void {
-  currentRuntime().browserCheck.cwd = cwd
-}
 
 /** Result from a sandboxed browser check. */
 export interface BrowserCheckResult {
@@ -36,8 +29,11 @@ export interface BrowserCheckResult {
 }
 
 /**
- * Optional executor injected by the server for Docker-sandboxed browser checks.
- * When set, the browser runs inside a container with Chromium + its own sandbox.
+ * Optional executor injected by the host for Docker-sandboxed browser checks.
+ * When present (host.browserCheck.client), the browser runs inside a container
+ * with Chromium + its own sandbox. No ambient `setBrowserCheckExecutor` setter
+ * exists — wire the client via `configureAgent({ browserCheckClient })` in the
+ * server boot.
  */
 export type BrowserCheckExecutor = (
   htmlPath: string,
@@ -45,11 +41,6 @@ export type BrowserCheckExecutor = (
   waitMs: number,
   cwd: string,
 ) => Promise<BrowserCheckResult>
-
-/** Inject a sandbox executor for browser checks (called once at server startup). */
-export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
-  currentRuntime().browserCheck.executor = executor
-}
 
 // ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
 
@@ -91,9 +82,8 @@ export const browserCheckTool: Tool = {
   name: "browser_check",
   description: BROWSER_CHECK_DESCRIPTION,
   parameters: BROWSER_CHECK_PARAMETERS,
-  async execute(args) {
-    const bc = currentRuntime().browserCheck
-    return runBrowserCheck(args, { cwd: bc.cwd, executor: bc.executor ?? null })
+  async execute() {
+    throw new Error("browserCheckTool must be built via createBrowserCheckTool(host); ambient execute is no longer supported.")
   },
 }
 
