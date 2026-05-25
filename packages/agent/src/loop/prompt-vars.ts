@@ -21,6 +21,7 @@
  */
 import { getTenantConfig } from "../tenant/config.js"
 import {
+    type CatalogAccessor,
     calendarDimensionTable,
     dateGrainColumn,
     defaultCatalogAccessor,
@@ -66,15 +67,23 @@ let _cache: { fingerprint: string; vars: PromptVars } | null = null
 /** Test-only hook to clear the prompt-vars cache between tests. */
 export function _resetPromptVarsCache(): void { _cache = null }
 
+export interface BuildPromptVarsOptions {
+  connection?: string
+  accessor?: CatalogAccessor
+}
+
 /**
  * Build a PromptVars object from the live catalog + tenant config.
  * Cheap (catalog lookups are in-memory) and memoised on the
  * "(mirrorSchema, top-view, top-fact, top-dim)" fingerprint so
  * repeated renders in the same session pay the cost once.
  */
-export function buildPromptVars(connection = "default"): PromptVars {
+export function buildPromptVars(options: string | BuildPromptVarsOptions = "default"): PromptVars {
+  const resolved = typeof options === "string"
+    ? { connection: options }
+    : options
   const tenant  = getTenantConfig()
-  const catalog = defaultCatalogAccessor(connection)
+  const catalog = (resolved.accessor ?? (() => defaultCatalogAccessor(resolved.connection ?? "default")))()
   const acc = () => catalog
 
   if (!catalog) return { ...FALLBACK, mirrorSchema: tenant.mirrorSchema ?? FALLBACK.mirrorSchema }

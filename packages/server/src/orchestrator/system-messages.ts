@@ -380,7 +380,9 @@ export async function buildSystemMessages(opts: {
 
   // Section 1: system_anchor — base prompt + environment (NEVER dropped)
   const basePrompt = systemPrompt ?? DEFAULT_SYSTEM_PROMPT
-  const promptVars = buildPromptVars()
+  const promptVars = buildPromptVars({
+    accessor: () => (opts.host ? getCatalog(opts.host, "default") : null),
+  })
   const envBlock = buildEnvironmentContext({ isAdmin })
   systemMessages.push({
     role: MessageRole.System,

@@ -55,7 +55,7 @@ describe("buildPromptVars — defaults / tenant config integration", () => {
   it("picks up mirrorSchema from tenant config when set", () => {
     setTenantConfig({ mirrorSchema: "shadowSchema" })
     _resetPromptVarsCache()
-    const v = buildPromptVars("__nonexistent__")
+    const v = buildPromptVars({ connection: "__nonexistent__" })
     expect(v.mirrorSchema).toBe("shadowSchema")
   })
 })

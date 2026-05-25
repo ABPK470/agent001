@@ -14,30 +14,35 @@ import {
     isUnsafeScan,
     referencedLargeObjects,
 } from "../src/tools/index.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
+
+const catalog = canonicalFixtureCatalog()
+const accessor = () => catalog
 
 // ── referencedLargeObjects ────────────────────────────────────────
 
 describe("referencedLargeObjects", () => {
   it("detects a plain large view", () => {
-    expect(referencedLargeObjects("SELECT * FROM publish.Revenue")).toContain("publish.revenue")
+    expect(referencedLargeObjects("SELECT * FROM publish.Revenue", accessor)).toContain("publish.revenue")
   })
 
   it("detects bracketed names", () => {
-    expect(referencedLargeObjects("SELECT * FROM [publish].[Revenue]")).toContain("publish.revenue")
+    expect(referencedLargeObjects("SELECT * FROM [publish].[Revenue]", accessor)).toContain("publish.revenue")
   })
 
   it("detects large fact table", () => {
-    expect(referencedLargeObjects("SELECT TOP 10 * FROM fact.UnoTranspose WHERE x=1")).toContain("fact.unotranspose")
+    expect(referencedLargeObjects("SELECT TOP 10 * FROM fact.UnoTranspose WHERE x=1", accessor)).toContain("fact.unotranspose")
   })
 
   it("returns empty for small/unknown tables", () => {
-    expect(referencedLargeObjects("SELECT * FROM core.Pipeline")).toHaveLength(0)
-    expect(referencedLargeObjects("SELECT * FROM dim.Date WHERE calYear=2025")).toHaveLength(0)
+    expect(referencedLargeObjects("SELECT * FROM core.Pipeline", accessor)).toHaveLength(0)
+    expect(referencedLargeObjects("SELECT * FROM dim.Date WHERE calYear=2025", accessor)).toHaveLength(0)
   })
 
   it("detects multiple large objects in one query", () => {
     const refs = referencedLargeObjects(
       "SELECT * FROM publish.Revenue r JOIN dim.Client c ON r.pkClient = c.pkClient",
+      accessor,
     )
     expect(refs).toContain("publish.revenue")
     expect(refs).toContain("dim.client")
@@ -65,7 +70,7 @@ describe("hasWhereClause", () => {
 
 describe("isUnsafeScan — should BLOCK these queries", () => {
   const block = (query: string) => {
-    const refs = referencedLargeObjects(query)
+    const refs = referencedLargeObjects(query, accessor)
     return isUnsafeScan(query, refs)
   }
 
@@ -99,7 +104,7 @@ describe("isUnsafeScan — should BLOCK these queries", () => {
 
 describe("isUnsafeScan — should ALLOW these queries", () => {
   const allow = (query: string) => {
-    const refs = referencedLargeObjects(query)
+    const refs = referencedLargeObjects(query, accessor)
     return isUnsafeScan(query, refs)
   }
 

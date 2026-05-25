@@ -16,7 +16,6 @@
  *   - agent-loop-state.ts — mutable state for the tool loop
  */
 
-import { AgentRuntime, getDefaultAgentRuntime } from "../agent-runtime.js"
 import { LLMCallPhase } from "../domain/enums/llm.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
@@ -59,13 +58,6 @@ export class Agent {
     deferRecoveryHintsUntilCompletionAttempt: AgentConfig["deferRecoveryHintsUntilCompletionAttempt"]
   }
 
-  /**
-   * Per-agent runtime container. Owns state that previously lived in tool
-   * module-globals. Per-tool migrations land incrementally; today this is
-   * mostly a placeholder, but it's the canonical home for future state.
-   */
-  readonly runtime: AgentRuntime
-
   /** Cumulative token usage across all LLM calls in this agent's run. */
   readonly usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   /** Number of LLM API calls made. */
@@ -77,9 +69,6 @@ export class Agent {
     this.llm = llm
     this.tools = new Map(tools.map((t) => [t.name, t]))
     this.toolList = tools
-    this.runtime = config.runtime ?? getDefaultAgentRuntime()
-    if (config.workspaceRoot) this.runtime.workspaceRoot = config.workspaceRoot
-    if (config.signal) this.runtime.signal = config.signal
     this.config = {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
@@ -115,24 +104,14 @@ export class Agent {
     return this.config.systemPrompt
   }
 
-  /**
-   * Run the agent with a goal. Returns the final answer.
-   *
-   * Wraps the agentic loop in `this.runtime.run(...)` so every tool call
-   * and helper that consults `currentRuntime()` resolves to this Agent's
-   * runtime via AsyncLocalStorage.
-   */
+  /** Run the agent with a goal. Returns the final answer. */
   run(
     goal: string,
     resume?: { messages: Message[], iteration: number },
   ): Promise<string> {
-    return this.runtime.run(() => this.runInternal(goal, resume))
+    return this.runInternal(goal, resume)
   }
 
-  /**
-   * The actual agentic loop. Always invoked inside `this.runtime.run(...)`
-   * so `currentRuntime()` inside tool handlers resolves to `this.runtime`.
-   */
   private async runInternal(
     goal: string,
     resume?: { messages: Message[], iteration: number },

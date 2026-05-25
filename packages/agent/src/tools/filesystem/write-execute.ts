@@ -16,7 +16,7 @@ import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.j
 /**
  * Doctrine-shaped variant: run the write-file logic sourcing the sandbox
  * root from the provided {@link AgentHost} (no ambient state, no
- * `currentRuntime()`).
+ * runtime fallback).
  */
 export function executeWriteFileWith(
   host: AgentHost,

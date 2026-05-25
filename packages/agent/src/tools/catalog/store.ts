@@ -6,7 +6,7 @@ import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 //
 // Catalog instances live on `host.catalog.instances` (a Map populated
 // lazily by `buildCatalog`). All accessors take `host` as the first
-// parameter — no module-level state, no `currentRuntime()`.
+// parameter — no module-level state.
 
 /**
  * Build or load the catalog.  If a cachePath is provided and a fresh-enough

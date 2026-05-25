@@ -2,7 +2,7 @@ import sql from "mssql"
 import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
-import { getMssqlKillSignal, getPool } from "./connection.js"
+import { getPool } from "./connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
@@ -127,7 +127,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
       }
 
       const request = pool.request()
-      const killSignal = run?.signal ?? getMssqlKillSignal()
+      const killSignal = run?.signal ?? null
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }
@@ -239,7 +239,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool { return 
 
     try {
       const request = pool.request()
-      const killSignal = run?.signal ?? getMssqlKillSignal()
+      const killSignal = run?.signal ?? null
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }

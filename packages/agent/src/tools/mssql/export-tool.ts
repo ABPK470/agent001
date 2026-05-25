@@ -21,7 +21,7 @@ import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums
 import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { safePathResolvedWith } from "../filesystem-security.js"
-import { getMssqlKillSignal, getPool } from "./connection.js"
+import { getPool } from "./connection.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
@@ -200,7 +200,7 @@ async function executeExportQueryToFile(
   const fullQuery = db ? `USE [${db}];\n${query}` : query
 
   const request = pool.request()
-  const killSignal = opts.run?.signal ?? getMssqlKillSignal()
+  const killSignal = opts.run?.signal ?? null
   const onKill = (): void => { request.cancel() }
   if (killSignal) {
     if (killSignal.aborted) return "Error: Tool execution cancelled"

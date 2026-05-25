@@ -17,7 +17,6 @@
 // All accessors are pure and synchronous — they read in-memory catalog
 // data only. No SQL is issued from this module.
 
-import { currentRuntime } from "../../agent-runtime.js"
 import type { CatalogGraph } from "./graph/index.js"
 import type { CatalogTable } from "./types.js"
 
@@ -38,25 +37,16 @@ export const UNION_BRANCH_THRESHOLD = 8
 
 // ── Accessor injection ──────────────────────────────────────────
 //
-// Every query takes an optional accessor callback so tests can inject a
-// synthetic catalog (no DB, no fixtures pinned to customer names). When
-// omitted, queries pull from the live runtime catalog.
+// Every query takes an optional accessor callback so tests and the hosted
+// server can inject a synthetic or host-scoped catalog (no DB, no fixtures
+// pinned to customer names). When omitted, queries degrade to "no catalog"
+// instead of consulting ambient runtime state.
 
 export type CatalogAccessor = () => CatalogGraph | null
 
 export function defaultCatalogAccessor(connection = "default"): CatalogGraph | null {
-  // Legacy bridge: read the runtime's catalog directly. The boot wires the
-  // SAME Map to both `host.catalog.instances` and `runtime.catalog.instances`,
-  // so both paths see the same catalogs. Removed entirely in Phase 6.
-  try {
-    const rt = currentRuntime()
-    const exact = rt.catalog.instances.get(connection)
-    if (exact) return exact
-    if (connection === "default" && rt.catalog.instances.size > 0) {
-      return rt.catalog.instances.values().next().value ?? null
-    }
-    return null
-  } catch { return null }
+  void connection
+  return null
 }
 
 // ── Case-insensitive table lookup ────────────────────────────────

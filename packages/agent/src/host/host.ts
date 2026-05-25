@@ -14,9 +14,6 @@
  * built once by `configureAgent()` and never re-bound. The run context
  * is built once per `runAgent()` call and never re-bound. Both are
  * plain readonly records.
- *
- * Existing `AgentRuntime` and `currentRuntime()` keep working unchanged
- * while Phase 4 migrates each cluster to read these types instead.
  */
 
 import type { SyncEnvironment, SyncEventSink, SyncPlan, SyncRecipeBundle, SyncRunSink } from "../sync/index.js"
@@ -84,10 +81,8 @@ export interface CatalogHost {
 }
 
 /**
- * Mutable container for sync state. Shared by reference with the legacy
- * `AgentRuntime.sync` (so existing `currentRuntime().sync.*` reads see the
- * same data as new `host.sync.*` reads). Phase 6 will demolish the runtime
- * and this becomes the sole owner.
+ * Mutable container for sync state. This is the host-owned sync surface.
+ * Phase 6 removes the remaining runtime bridge so this becomes the sole owner.
  */
 export interface SyncHost {
   eventSink: SyncEventSink

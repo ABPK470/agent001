@@ -1,5 +1,4 @@
 import sql from "mssql"
-import { AsyncLocalStorage } from "node:async_hooks"
 import type { AgentHost } from "../../host/index.js"
 
 // ── Named connection registry ────────────────────────────────────
@@ -14,8 +13,7 @@ export interface DatabaseEntry {
 // The connection registry lives on `host.mssql.databases` (a real Map
 // shared across every per-run host built at boot via `bootHostDeps`).
 // All setters/getters in this module take the host explicitly — there
-// is no module-level state and no ALS lookup. The kill-signal ALS is
-// the one exception (per-tool-call concurrency-safe scope; see below).
+// is no module-level state and no ALS lookup.
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(host: AgentHost, name: string): void {
@@ -25,27 +23,6 @@ export function setDefaultMssqlConnection(host: AgentHost, name: string): void {
 /** Return the configured default connection name (null = fall back to first). */
 export function getDefaultMssqlConnectionName(host: AgentHost): string | null {
   return host.mssql.defaultConnection.value
-}
-
-/**
- * Per-tool-call kill signal — when aborted, cancels any in-flight query.
- *
- * Stored in `AsyncLocalStorage` scoped per tool execution. The orchestrator
- * wraps each tool call in `runWithMssqlKillSignal()` so concurrent runs see
- * their own signal even when interleaved. There is no module-level fallback:
- * the legacy `setMssqlKillSignal` was a known concurrency bug (last writer
- * wins under multi-user load) and was deleted in Phase 2.
- */
-const killSignalAls = new AsyncLocalStorage<AbortSignal>()
-
-/** Get the active kill signal (ALS-scoped). */
-export function getMssqlKillSignal(): AbortSignal | null {
-  return killSignalAls.getStore() ?? null
-}
-
-/** Run `fn` with `signal` as the active mssql kill signal for its async context. */
-export function runWithMssqlKillSignal<T>(signal: AbortSignal, fn: () => T): T {
-  return killSignalAls.run(signal, fn)
 }
 
 /**

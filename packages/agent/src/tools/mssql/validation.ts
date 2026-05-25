@@ -1037,8 +1037,12 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
   return `no WHERE clause`
 }
 
-export function validateQuery(query: string, writeEnabled: boolean): string | null {
-  return validateQueryDetailed(query, writeEnabled).error
+export function validateQuery(
+  query: string,
+  writeEnabled: boolean,
+  options: QueryValidationOptions = {},
+): string | null {
+  return validateQueryDetailed(query, writeEnabled, options).error
 }
 
 export function validateQueryDetailed(

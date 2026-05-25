@@ -140,7 +140,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // its own browse-web sessions and kill signals so concurrent siblings
   // cannot interfere with one another.
   const childRuntime = new AgentRuntime({
-    inheritFrom: AgentRuntime.current(),
+    inheritFrom: ctx.parentRuntime ?? undefined,
     signal: ctx.signal,
   })
 
@@ -149,7 +149,6 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     systemPrompt: effectivePrompt,
     verbose: false,
     signal: ctx.signal,
-    runtime: childRuntime,
     onThinking: (content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: DelegationTraceKind.Iteration,
@@ -218,7 +217,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   })
 
   try {
-    const answer = await child.run(effectiveGoal)
+    const answer = await childRuntime.run(() => child.run(effectiveGoal))
     const hitLimit = answer.startsWith("Agent stopped after")
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)

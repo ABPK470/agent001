@@ -168,6 +168,7 @@ export async function executeRunImpl(
     workspaceRoot: runWorkspace.executionRoot,
     signal: controller.signal,
   })
+  delegateCtx.parentRuntime = runtime
   const runContext = makeRunContext({
     signal: controller.signal,
     memory: {
@@ -192,7 +193,7 @@ export async function executeRunImpl(
   // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
   // providers) but overrides workspace / sandbox roots with this run's
   // execution root so isolated sandboxes don't leak across runs. Tools that
-  // have been migrated off the ambient `currentRuntime()` shortcut (filesystem
+  // have been migrated to explicit host/run dependencies (filesystem
   // cluster, search_files, ask_user, attachments, mssql export-tool) close
   // over this host explicitly via their `createXxxTool(host)` factories.
   const perRunHost = configureAgent({
@@ -311,6 +312,7 @@ export async function executeRunImpl(
     depth: 0,
     maxDepth: maxDelegationDepth,
     signal: controller.signal,
+    parentRuntime: null,
     // Per-child bus tools so each child publishes as ITSELF, not the parent.
     // This is the load-bearing fix for B.3 — without it, every send_message
     // from a delegated child would be persisted with the parent's runId /
@@ -654,7 +656,7 @@ export async function executeRunImpl(
         callSignals.set(toolCallId, composed)
         runContext.signal = composed
         // Tool-call kill signals live on the per-request runtime. shell/fetch
-        // /browse-web tools read these via currentRuntime() inside agent.run().
+        // /browse-web tools still read these from runtime-owned compatibility state.
         runtime.shell.killSignal = composed
         runtime.fetchUrl.killSignal = composed
         runtime.browseWeb.killSignal = composed
@@ -689,7 +691,6 @@ export async function executeRunImpl(
     toolKillManager: killManager,
     enablePlanner: true,
     workspaceRoot: runWorkspace.executionRoot,
-    runtime,
     onPlannerTrace: (entry) => handlePlannerTrace(entry, { runId, services, debugSeqRef, saveTrace: boundSaveTrace }),
     plannerDelegateFn: (step, envelope) => spawnChildForPlan(delegateCtx, step, envelope),
     onNudge: (data) => {
@@ -777,9 +778,9 @@ export async function executeRunImpl(
       sessionId:   activeRun?.sessionId ?? null,
     }
 
-    let answer = await runWithPolicyContext(policyCtx, () =>
+    let answer = await runtime.run(() => runWithPolicyContext(policyCtx, () =>
       agent.run(goal, resume ? { messages: resume.messages, iteration: resume.iteration } : undefined),
-    )
+    ))
 
     // Fill the {RUN_REF} placeholder in opaque platform-unconfigured answers
     // so the user has a concrete reference to forward to the platform admin.

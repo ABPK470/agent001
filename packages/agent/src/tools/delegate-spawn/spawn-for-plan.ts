@@ -145,7 +145,7 @@ export async function spawnChildForPlan(
 
   // Per-child AgentRuntime — see spawn-child.ts for rationale.
   const childRuntime = new AgentRuntime({
-    inheritFrom: AgentRuntime.current(),
+    inheritFrom: ctx.parentRuntime ?? undefined,
     signal: ctx.signal,
   })
 
@@ -159,7 +159,6 @@ export async function spawnChildForPlan(
       : CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
-    runtime: childRuntime,
     deferRecoveryHintsUntilCompletionAttempt: true,
     completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
@@ -223,7 +222,7 @@ export async function spawnChildForPlan(
   })
 
   try {
-    const answer = await child.run(goal)
+    const answer = await childRuntime.run(() => child.run(goal))
     const hitLimit = answer.startsWith("Agent stopped after")
 
     ctx.onChildUsage?.(child.usage, child.llmCalls)

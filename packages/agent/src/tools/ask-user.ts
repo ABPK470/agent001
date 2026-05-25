@@ -74,7 +74,7 @@ async function runAskUser(
 /**
  * Doctrine-shaped factory: build an `ask_user` tool bound to the
  * {@link AgentHost}'s `userInput` reader. No ambient state, no
- * `currentRuntime()`. See docs/doctrine.md.
+ * runtime fallback. See docs/doctrine.md.
  */
 export function createAskUserTool(host: AgentHost): Tool {
   return {

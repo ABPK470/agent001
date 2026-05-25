@@ -73,12 +73,10 @@ export interface ToolInfo {
 
 // ── Factories ─────────────────────────────────────────────────────
 // Each entry produces ONE tool bound to the supplied host. Tools that
-// still rely on AgentRuntime ALS internally (mssql, catalog, fetch_url,
+// still rely on runtime-owned compatibility scaffolding internally (mssql, catalog,
 // note, recall_prior_result, record_table_verdict, get_chart_specs,
 // think, sync_*) are returned as-is — the host argument is ignored for
-// those, and they will continue to read configuration from
-// `currentRuntime()`. Migrating them is a follow-up task outside this
-// refactor's scope.
+// those. Migrating them is a follow-up task outside this refactor's scope.
 
 type ToolFactory = (host: AgentHost, run?: RunContext) => Tool
 
@@ -97,7 +95,7 @@ const ALL_TOOL_FACTORIES: ToolFactory[] = [
   createBrowserAutoLoginTool,
   createBrowserHumanHandoffTool,
   createWebSearchTool,
-  // ── Ambient (still on currentRuntime ALS — host arg ignored) ──
+  // ── Legacy runtime-backed factories (host arg ignored) ──
   (_h, run) => createFetchUrlTool(run),
   // ── User input (host-bound) ──
   createAskUserTool,

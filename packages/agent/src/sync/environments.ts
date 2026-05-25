@@ -87,8 +87,7 @@ interface SyncEnvironmentsConfigFile {
   environments: Array<Partial<SyncEnvironment> & { name: string }>
 }
 
-// Environment registry lives on the active AgentRuntime
-// (`currentRuntime().sync.environments`).
+// Environment registry lives on the host sync state (`host.sync.environments`).
 
 /** Configure all environments at once. Replaces any prior config. */
 export function setEnvironments(host: AgentHost, envs: SyncEnvironment[]): void {

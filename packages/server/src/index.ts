@@ -274,10 +274,10 @@ async function main() {
     // Boot deps explicitly threaded into every per-run AgentHost the
     // orchestrator builds. This is the doctrine-shaped replacement for
     // the deleted `setActiveAgentHost` / `setBootHostOptions` ambient
-    // setters. Tools migrated off `currentRuntime()` (filesystem,
+    // setters. Tools migrated to explicit host/run dependencies (filesystem,
     // search_files, ask_user, attachments, mssql export-tool, shell)
     // close over the per-run host produced from these deps; tools that
-    // still rely on the runtime ALS read from setBrowserCheckCwd /
+    // still rely on runtime-owned compatibility shims read from setBrowserCheckCwd /
     // setBrowserContextProvider / etc. above.
     bootHostDeps: {
       attachments: serverAttachmentService,

@@ -6,10 +6,10 @@
  *      and is wired into a block branch (aggregate, temp-integrity, temp-scalar).
  *   2. validateQueryDetailed attaches a non-null `lesson` to the three
  *      block branches that have templates.
- *   3. mssqlTool.execute routes the lesson to currentRuntime().memory.writeNote
+ *   3. mssqlTool.execute routes the lesson to RunContext.memory.writeNote
  *      when validation blocks.
  *
- * The writer hook is observed via a spy bound on a temporary AgentRuntime;
+ * The writer hook is observed via a spy bound on a temporary RunContext;
  * no DB / no server-side ingestion is exercised here (that's covered by
  * memory-ingest-note.test.ts in the server package).
  */
@@ -21,13 +21,17 @@ import {
     DOCTRINE_LESSON_TEMPLATES,
     getDoctrineLessonTemplate,
 } from "../src/doctrine/fix-hints.js"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent, makeRunContext } from "../src/host/index.js"
 import { createMssqlTool } from "../src/tools/mssql/tools.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
 const mssqlTool = createMssqlTool(configureAgent({}))
 
-function makeRuntimeWithPool(): { runtime: AgentRuntime; tool: ReturnType<typeof createMssqlTool> } {
+function makeRuntimeWithPool(): {
+  runtime: AgentRuntime
+  tool: ReturnType<typeof createMssqlTool>
+  run: ReturnType<typeof makeRunContext>
+} {
   const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
   const host = configureAgent({ mssqlDatabases: databases })
   databases.set("default", {
@@ -37,7 +41,8 @@ function makeRuntimeWithPool(): { runtime: AgentRuntime; tool: ReturnType<typeof
     knowledge: null,
   })
   const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  return { runtime, tool: createMssqlTool(host) }
+  const run = makeRunContext()
+  return { runtime, tool: createMssqlTool(host, run), run }
 }
 
 describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
@@ -134,14 +139,14 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
   })
 })
 
-describe("mssqlTool wires lesson into runtime.memory.writeNote on block", () => {
+describe("mssqlTool wires lesson into run.memory.writeNote on block", () => {
   // The mssql tool fetches the connection pool BEFORE validating, so without
   // a configured pool the validator never runs. Inject a no-network pool
   // stub keyed off the global runtime so the tool reaches validation.
   it("calls writeNote with the lesson payload when validation blocks", async () => {
     const writeNote = vi.fn()
-    const { runtime, tool: mssqlTool } = makeRuntimeWithPool()
-    runtime.memory.writeNote = writeNote
+    const { runtime, run, tool: mssqlTool } = makeRuntimeWithPool()
+    run.memory = { writeNote }
 
     const result = await runtime.run(() => mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",
@@ -158,8 +163,8 @@ describe("mssqlTool wires lesson into runtime.memory.writeNote on block", () => 
   })
 
   it("swallows writeNote exceptions silently (block error still returned)", async () => {
-    const { runtime, tool: mssqlTool } = makeRuntimeWithPool()
-    runtime.memory.writeNote = () => { throw new Error("boom") }
+    const { runtime, run, tool: mssqlTool } = makeRuntimeWithPool()
+    run.memory = { writeNote: () => { throw new Error("boom") } }
 
     const result = await runtime.run(() => mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",
