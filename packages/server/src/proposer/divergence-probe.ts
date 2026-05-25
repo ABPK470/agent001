@@ -16,13 +16,13 @@
 import {
     emptyCounts,
     getMssqlPool,
-    previewSync,
     tryResolveRecipe,
     type AgentHost,
     type DivergentEntityRow,
     type EnvPair,
     type ProposalCounts,
 } from "@mia/agent"
+import { previewSync } from "@mia/sync"
 
 export interface ProbeRowDivergenceInput {
   host:        AgentHost

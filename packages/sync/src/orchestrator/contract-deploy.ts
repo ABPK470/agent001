@@ -20,7 +20,7 @@
  */
 
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../contracts.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 
 // ────────────────────────────────────────────────────────────

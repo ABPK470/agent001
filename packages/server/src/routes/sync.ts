@@ -11,16 +11,18 @@
  */
 
 import {
+    type AgentHost,
+} from "@mia/agent"
+import {
     executeSync,
     getEnvironments,
     loadPlan,
     loadSyncRecipes,
     previewSync,
     searchEntities,
-    type AgentHost,
     type EntityType,
     type ExecuteProgress,
-} from "@mia/agent"
+} from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../db/index.js"
 

@@ -25,18 +25,21 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
-  EventType,
-  buildCatalog, closeMssqlPool,
-  configureAgent,
-  configurePlanStore,
-  configureSyncOrchestrator, getMssqlConfig,
-  setSyncEventSink,
-  setSyncRunSink,
-  setupEnvironments,
-  type AgentHost,
-  type BrowserClient,
-  type ShellClient,
+    EventType,
+    buildCatalog, closeMssqlPool,
+    configureAgent,
+    getMssqlConfig,
+    setupEnvironments,
+    type AgentHost,
+    type BrowserClient,
+    type ShellClient,
 } from "@mia/agent"
+import {
+    configurePlanStore,
+    configureSyncOrchestrator,
+    setSyncEventSink,
+    setSyncRunSink,
+} from "@mia/sync"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
 import { registerIdentity } from "./auth/identity.js"
@@ -46,22 +49,22 @@ import { serverBrowserCredentialProvider } from "./browser/credential-provider.j
 import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
 import { serverBrowserContextProvider } from "./browser/provider.js"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./channels/index.js"
 import {
-  clearTransactionalData,
-  getDb, getDbPath, getDbStats, getLlmConfig,
-  getSyncRunPlanJson,
-  migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-  normaliseUnknownRunStatuses,
-  pruneOldData,
-  recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
+    clearTransactionalData,
+    getDb, getDbPath, getDbStats, getLlmConfig,
+    getSyncRunPlanJson,
+    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
+    normaliseUnknownRunStatuses,
+    pruneOldData,
+    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
 } from "./db/index.js"
 import { touchSession } from "./db/sessions.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
@@ -75,32 +78,32 @@ import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
 import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
 import { registerAuthRoutes } from "./routes/auth.js"
 import {
-  registerAdminRoutes,
-  registerAgentRoutes,
-  registerApprovalRoutes,
-  registerAttachmentRoutes,
-  registerBrowserRoutes,
-  registerEntityRegistryRoutes,
-  registerEventRoutes,
-  registerEvidenceRoutes,
-  registerFreezeWindowRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMetricsRoutes,
-  registerMymiRoutes,
-  registerNotificationRouteRoutes,
-  registerNotificationRoutes,
-  registerOperationRoutes,
-  registerPolicyRoutes,
-  registerProfileRoutes,
-  registerProposerRoutes,
-  registerRunRoutes,
-  registerSyncEnvironmentRoutes,
-  registerSyncRoutes,
-  registerToolCacheRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes,
+    registerAdminRoutes,
+    registerAgentRoutes,
+    registerApprovalRoutes,
+    registerAttachmentRoutes,
+    registerBrowserRoutes,
+    registerEntityRegistryRoutes,
+    registerEventRoutes,
+    registerEvidenceRoutes,
+    registerFreezeWindowRoutes,
+    registerLayoutRoutes,
+    registerLlmRoutes,
+    registerMemoryRoutes,
+    registerMetricsRoutes,
+    registerMymiRoutes,
+    registerNotificationRouteRoutes,
+    registerNotificationRoutes,
+    registerOperationRoutes,
+    registerPolicyRoutes,
+    registerProfileRoutes,
+    registerProposerRoutes,
+    registerRunRoutes,
+    registerSyncEnvironmentRoutes,
+    registerSyncRoutes,
+    registerToolCacheRoutes,
+    registerUsageRoutes,
+    registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox/index.js"

@@ -36,7 +36,7 @@ async function main() {
     // can mask refactor regressions if someone wires a tool to them.
     // NOTE: keep `packages/ui/dist` — server serves UI static files
     // from there during dev (see packages/server/src/index.ts).
-    for (const pkg of ["agent", "server", "ui-term"]) {
+    for (const pkg of ["agent", "server", "sync", "ui-term"]) {
         const stale = resolve(ROOT, `packages/${pkg}/dist`)
         if (existsSync(stale)) {
             rmSync(stale, { recursive: true })
@@ -60,6 +60,7 @@ async function main() {
         // Resolve workspace packages as part of the bundle
         alias: {
             "@mia/agent": resolve(ROOT, "packages/agent/src/lib/index.ts"),
+            "@mia/sync": resolve(ROOT, "packages/sync/src/index.ts"),
             "@mia/shared-enums": resolve(ROOT, "packages/shared-enums/src/index.ts"),
             "@mia/shared-types": resolve(ROOT, "packages/shared-types/src/index.ts"),
         },

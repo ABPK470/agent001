@@ -22,7 +22,6 @@ import {
     createBrowserAutoLoginTool,
     createBrowserCheckTool,
     createBrowserHumanHandoffTool,
-    createCompareCatalogsTool,
     createDelegateTools,
     createDiscoverRelationshipsTool,
     createExportQueryToFileTool,
@@ -30,7 +29,6 @@ import {
     createInspectDefinitionTool,
     createListAttachmentsTool,
     createListDirectoryTool,
-    createListEnvironmentsTool,
     createMssqlSchemaTool,
     createMssqlTool,
     createProfileDataTool,
@@ -41,8 +39,6 @@ import {
     createSearchCatalogTool,
     createSearchFilesTool,
     createShellTool,
-    createSyncExecuteTool,
-    createSyncPreviewTool,
     createWebSearchTool,
     createWriteFileTool,
     fetchUrlTool,
@@ -57,6 +53,12 @@ import {
     type LLMClient,
     type Tool
 } from "@mia/agent"
+import {
+    createCompareCatalogsTool,
+    createListEnvironmentsTool,
+    createSyncExecuteTool,
+    createSyncPreviewTool,
+} from "@mia/sync"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 import { getToolResult, loadRecentToolResults } from "./db/tool-results.js"
 import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"

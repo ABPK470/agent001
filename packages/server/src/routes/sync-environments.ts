@@ -20,15 +20,17 @@
  */
 
 import {
+    type AgentHost,
+} from "@mia/agent"
+import {
     ENV_ACCESS_MODES,
     getEnvironments,
     isEnvAccessMode,
     setEnvironments,
     withPermissionDefaults,
-    type AgentHost,
     type EnvOperation,
     type SyncEnvironment,
-} from "@mia/agent"
+} from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db/index.js"
 import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"

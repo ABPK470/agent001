@@ -24,12 +24,14 @@
  */
 
 import {
+    type AgentHost,
+} from "@mia/agent"
+import {
     getEnvironments,
     setEnvironments,
     withPermissionDefaults,
-    type AgentHost,
     type SyncEnvironment,
-} from "@mia/agent"
+} from "@mia/sync"
 import * as db from "../db/index.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 

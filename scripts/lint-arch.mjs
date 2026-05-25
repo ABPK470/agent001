@@ -20,15 +20,19 @@
  *      `packages/server/**` may only import `@mia/agent`, never
  *      `packages/agent/src/**`.
  *
+ *   4. SERVER MUST IMPORT EXTRACTED SYNC APIS FROM `@mia/sync`
+ *      Once Phase 7 lands, server sync entrypoints may not come from
+ *      `@mia/agent` anymore.
+ *
  * WARNINGS (doctrine — see docs/doctrine.md, flipped to ERROR at Phase 8):
- *   4. NO NEW AsyncLocalStorage instances. Known cases are allow-listed.
+ *   5. NO NEW AsyncLocalStorage instances. Known cases are allow-listed.
  *      Every new `new AsyncLocalStorage(...)` warns until the file is
  *      added to the allow-list.
  *
- *   5. NO NEW exported `set<Pascal>(...)` mutator functions. Existing
+ *   6. NO NEW exported `set<Pascal>(...)` mutator functions. Existing
  *      ones are allow-listed; the list shrinks as Phase 4 migrates clusters.
  *
- *   6. NO BANNED type-name suffixes (Provider / Service / Resolver /
+ *   7. NO BANNED type-name suffixes (Provider / Service / Resolver /
  *      Executor / Sandbox / Repository / Manager / Handler / Helper).
  *      Use the four canonical suffixes instead (Sink / Store / Reader /
  *      Client) — see docs/doctrine.md §4. Existing names allow-listed.
@@ -253,6 +257,46 @@ function lintServerImports() {
     }
   }
 }
+
+const PHASE7_SYNC_SYMBOLS = new Set([
+  "configurePlanStore",
+  "configureSyncOrchestrator",
+  "createCompareCatalogsTool",
+  "createListEnvironmentsTool",
+  "createSyncExecuteTool",
+  "createSyncPreviewTool",
+  "executeSync",
+  "getEnvironments",
+  "loadPlan",
+  "loadSyncRecipes",
+  "previewSync",
+  "searchEntities",
+  "setEnvironments",
+  "setSyncEventSink",
+  "setSyncRunSink",
+  "withPermissionDefaults",
+])
+
+function lintServerSyncPackageBoundary() {
+  if (!safeStat(SERVER_SRC)) return
+  for (const file of walk(SERVER_SRC)) {
+    const src = readFileSync(file, "utf8")
+    const importRe = /import\s*\{([\s\S]*?)\}\s*from\s*["']@mia\/agent["']/g
+    let match
+    while ((match = importRe.exec(src)) !== null) {
+      const names = match[1]
+        .split(",")
+        .map((s) => s.replace(/\btype\b/g, "").trim())
+        .filter(Boolean)
+        .map((s) => s.split(/\s+as\s+/i)[0]?.trim() ?? s)
+      const bad = names.filter((name) => PHASE7_SYNC_SYMBOLS.has(name))
+      if (bad.length === 0) continue
+      const line = src.slice(0, match.index).split("\n").length
+      fail(file, line, "server-sync-package-boundary",
+        `import extracted sync API(s) from "@mia/sync", not "@mia/agent": ${bad.join(", ")}`)
+    }
+  }
+}
 // ── Rule 4 (WARN): no new AsyncLocalStorage instances ────────────
 function lintNoAls(file, src) {
   const relFromRoot = relative(ROOT, file)
@@ -310,6 +354,7 @@ for (const f of agentFiles) {
   lintBannedSuffixes(f, src)
 }
 lintServerImports()
+lintServerSyncPackageBoundary()
 
 // Apply doctrine warning rules to the server package too (and ui-term).
 const extraRoots = [SERVER_SRC, join(ROOT, "packages/ui-term/src")]
