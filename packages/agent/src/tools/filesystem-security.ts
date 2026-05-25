@@ -6,25 +6,20 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
  *   Layer 1: Input validation — reject null bytes, URL-encoded separators
  *   Layer 2: Traversal detection — reject ".." BEFORE path resolution
  *   Layer 3: Symlink resolution — walk every component with realpath()
- *   Layer 4: Allowed root check — canonical path must be under currentRuntime().filesystem.basePath
+ *   Layer 4: Allowed root check — canonical path must be under getActiveAgentHost().filesystem.basePath
  *
  * @module
  */
 
 import { lstat, realpath } from "node:fs/promises"
 import { resolve, sep } from "node:path"
-import { currentRuntime } from "../agent-runtime.js"
 import type { AgentHost } from "../host/index.js"
+import { getActiveAgentHost } from "../host/index.js"
 import type { ToolResultEnvelope } from "../types.js"
-
-/** Restrict all file operations to a base directory (safety). */
-export function setBasePath(path: string): void {
-  currentRuntime().filesystem.basePath = resolve(path)
-}
 
 /** Expose current base path for use by tool modules. */
 export function getBasePath(): string {
-  return currentRuntime().filesystem.basePath
+  return getActiveAgentHost().filesystem.basePath
 }
 
 export function buildToolOutcome(
@@ -86,7 +81,7 @@ function rejectTraversal(p: string): void {
  * Used as a fast synchronous check when symlink resolution isn't needed.
  *
  * Doctrine-shaped variant: takes the host explicitly. The legacy
- * {@link safePath} below delegates to this with `currentRuntime()` for
+ * {@link safePath} below delegates to this with `getActiveAgentHost()` for
  * source compatibility while Phase 4 migration is in progress.
  */
 export function safePathWith(host: AgentHost, p: string): string {
@@ -105,14 +100,14 @@ export function safePathWith(host: AgentHost, p: string): string {
  * Used as a fast synchronous check when symlink resolution isn't needed.
  */
 export function safePath(p: string): string {
-  return safePathWith(currentRuntime(), p)
+  return safePathWith(getActiveAgentHost(), p)
 }
 
 /**
  * Full 4-layer validation: input → traversal → symlink walk → root check.
  *
  * Doctrine-shaped variant: takes the host explicitly. The legacy
- * {@link safePathResolved} below delegates to this with `currentRuntime()`
+ * {@link safePathResolved} below delegates to this with `getActiveAgentHost()`
  * for source compatibility while Phase 4 migration is in progress.
  */
 export async function safePathResolvedWith(host: AgentHost, p: string): Promise<string> {
@@ -167,8 +162,8 @@ export async function safePathResolvedWith(host: AgentHost, p: string): Promise<
 
 /**
  * Full 4-layer validation — legacy ambient form. Delegates to
- * {@link safePathResolvedWith} sourcing the host from `currentRuntime()`.
+ * {@link safePathResolvedWith} sourcing the host from `getActiveAgentHost()`.
  */
 export async function safePathResolved(p: string): Promise<string> {
-  return safePathResolvedWith(currentRuntime(), p)
+  return safePathResolvedWith(getActiveAgentHost(), p)
 }

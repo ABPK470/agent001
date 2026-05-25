@@ -28,7 +28,6 @@ import {
   EventType,
   buildCatalog, closeMssqlPool, configureAgent, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
   setActiveAgentHost,
-  setBasePath,
   setBrowserCheckCwd,
   setBrowserCheckExecutor,
   setBrowserContextProvider,
@@ -42,6 +41,7 @@ import {
   setSyncRunSink,
   setupEnvironments,
   type AgentHost,
+  type ConfigureAgentOptions,
 } from "@mia/agent"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -122,6 +122,7 @@ const HOST = process.env["HOST"] ?? "0.0.0.0"
 // (Phase 4 of /memories/session/plan.md) consume this via `getAgentHost()`
 // to replace `currentRuntime()` lookups.
 let _agentHost: AgentHost | null = null
+let _hostOpts: ConfigureAgentOptions = {}
 
 /** Returns the boot-time AgentHost. Throws if called before main(). */
 export function getAgentHost(): AgentHost {
@@ -299,6 +300,14 @@ async function main() {
     browserHandoffStore: serverBrowserHandoffProvider,
     attachments: serverAttachmentService,
   })
+  // Stash boot-time options so applyWorkspace() can rebuild the host
+  // when the user changes the active workspace from the UI.
+  _hostOpts = {
+    browserContextReader: serverBrowserContextProvider,
+    browserCredentialReader: serverBrowserCredentialProvider,
+    browserHandoffStore: serverBrowserHandoffProvider,
+    attachments: serverAttachmentService,
+  }
   // Install the boot-time host as the service locator for tools that have
   // migrated off `currentRuntime()` (Phase 4 transition shim).
   setActiveAgentHost(_agentHost)
@@ -332,10 +341,20 @@ function resolveUiDist(): string {
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
-  setBasePath(w)
   setSearchBasePath(w)
   setShellCwd(w)
   setBrowserCheckCwd(w)
+  // Rebuild the AgentHost so filesystem.basePath (and other host-resident
+  // cwds) track the new workspace. Tools that have migrated off ambient
+  // state read these via getActiveAgentHost().
+  setActiveAgentHost(configureAgent({
+    ..._hostOpts,
+    workspaceRoot: w,
+    filesystemBasePath: w,
+    searchFilesBasePath: w,
+    shellCwd: w,
+    browserCheckCwd: w,
+  }))
   orchestrator.setWorkspace(w)
 }
 
@@ -407,7 +426,6 @@ function resolveWorkspace(): string {
     return from
   }
   const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
-  setBasePath(workspace)
   setSearchBasePath(workspace)
   setShellCwd(workspace)
   setBrowserCheckCwd(workspace)

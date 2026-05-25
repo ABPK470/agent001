@@ -16,17 +16,18 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { Agent } from "../src/agent/index.js"
 import { detectPlaceholderPatterns } from "../src/governance/index.js"
+import { configureAgent, setActiveAgentHost } from "../src/lib/index.js"
 import { normalizeToolExecutionOutput } from "../src/tools/_helpers/index.js"
-import { listDirectoryTool, readFileTool, setBasePath, writeFileTool } from "../src/tools/index.js"
+import { listDirectoryTool, readFileTool, writeFileTool } from "../src/tools/index.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
-// ── Helpers ──────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────
 
 let tempDir: string
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agent-e2e-"))
-  setBasePath(tempDir)
+  setActiveAgentHost(configureAgent({ filesystemBasePath: tempDir }))
 })
 
 afterEach(async () => {
