@@ -29,7 +29,7 @@ import {
     primaryKeyColumns,
     topNTables,
     topNUnionViews,
-} from "../tools/catalog/queries.js"
+} from "../tools/index.js"
 
 export interface PromptVars {
   mirrorSchema:          string
@@ -62,10 +62,12 @@ const FALLBACK: PromptVars = Object.freeze({
   branchExample2:        "<branch-view-B>",
 })
 
-let _cache: { fingerprint: string; vars: PromptVars } | null = null
+const promptVarsState = {
+  cache: null as { fingerprint: string; vars: PromptVars } | null,
+}
 
 /** Test-only hook to clear the prompt-vars cache between tests. */
-export function _resetPromptVarsCache(): void { _cache = null }
+export function _resetPromptVarsCache(): void { promptVarsState.cache = null }
 
 export interface BuildPromptVarsOptions {
   connection?: string
@@ -116,7 +118,7 @@ export function buildPromptVars(options: string | BuildPromptVarsOptions = "defa
     ? dateGrainColumn(wideQn, { accessor: acc })
     : null) ?? FALLBACK.dateKeyExample
   const keyCol  = (centralDim !== FALLBACK.centralDim
-    ? primaryKeyColumns(centralDim, { accessor: acc })[0] ?? null
+    ? primaryKeyColumns(centralDim, { accessor: acc })[0]
     : null) ?? FALLBACK.keyColumnExample
   const calendar = calendarDimensionTable({ accessor: acc }) ?? FALLBACK.calendarDim
 
@@ -143,8 +145,8 @@ export function buildPromptVars(options: string | BuildPromptVarsOptions = "defa
   }
 
   const fingerprint = JSON.stringify(vars)
-  if (_cache?.fingerprint === fingerprint) return _cache.vars
-  _cache = { fingerprint, vars }
+  if (promptVarsState.cache?.fingerprint === fingerprint) return promptVarsState.cache.vars
+  promptVarsState.cache = { fingerprint, vars }
   return vars
 }
 

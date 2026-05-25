@@ -14,7 +14,7 @@ import {
     summarizeCoherentVerifierDecision,
     verify,
 } from "../planner/index.js"
-import type { ToolCallRecord } from "../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 
 export interface CoherentVerificationDeps {

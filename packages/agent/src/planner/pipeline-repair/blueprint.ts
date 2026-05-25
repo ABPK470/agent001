@@ -9,7 +9,7 @@
 
 import { DelegationOutputValidationCode } from "../../domain/enums/delegation.js"
 import type { ToolCallRecord } from "../../recovery/index.js"
-import { normalizeToolExecutionOutput } from "../../tools/_helpers/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/index.js"
 import type { Tool } from "../../types.js"
 import {
     buildBlueprintSeedTemplate,

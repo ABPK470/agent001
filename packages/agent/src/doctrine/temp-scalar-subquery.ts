@@ -19,7 +19,7 @@
 // countTempScalarSubqueriesByTemp(); this module is the citable
 // rule body and the doctrine-owned fixHint.
 
-import { countTempScalarSubqueriesByTemp } from "../tools/mssql/validation.js"
+import { countTempScalarSubqueriesByTemp } from "../tools/index.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

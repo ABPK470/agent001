@@ -1,6 +1,6 @@
 import sql from "mssql"
 import type { AgentHost, RunContext } from "../../host/index.js"
-import { readToolTraceContext } from "../../loop/tool-execution/trace-context.js"
+import { readToolTraceContext } from "../../loop/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "./connection.js"

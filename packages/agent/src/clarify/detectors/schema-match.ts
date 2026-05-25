@@ -9,7 +9,7 @@
 
 import { MessageRole } from "../../domain/enums/message.js"
 import { getTenantConfig } from "../../tenant/config.js"
-import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
+import type { CatalogGraph } from "../../tools/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import { goalTokens } from "./stopwords.js"

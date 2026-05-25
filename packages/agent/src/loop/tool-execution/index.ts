@@ -16,14 +16,14 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
  */
 
 import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
-import { compactAtWriteTime } from "../../context/context-management/write-time-compact.js"
+import { compactAtWriteTime } from "../../context/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import * as log from "../../logger.js"
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
 import {
     buildSemanticToolCallKey, didToolCallFail, enrichToolResultMetadata as enrichResult,
     trackToolCallFailureState
-} from "../../tools/_helpers/index.js"
+} from "../../tools/index.js"
 import { extractWritePayload, recordTruncatedQuery } from "./anti-paste-guard.js"
 import {
     collectChildToolNames,
@@ -42,6 +42,8 @@ import {
 } from "./types.js"
 
 // Re-export public types/helpers for backwards compatibility.
+export { emitToolTrace, readToolTraceContext, TOOL_TRACE_ARG, withToolTraceArgs } from "./trace-context.js"
+export type { ToolTraceContext } from "./trace-context.js"
 export { normalizeArtifactPath } from "./types.js"
 export type { ToolExecContext, ToolRoundResult } from "./types.js"
 

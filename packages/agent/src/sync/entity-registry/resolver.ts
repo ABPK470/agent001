@@ -48,14 +48,16 @@ export interface RecipeResolver {
   resolve(args: { tenantId: string; entityId: string }): ResolvedRecipe | null
 }
 
-let installed: RecipeResolver | null = null
+const recipeResolverState = {
+  installed: null as RecipeResolver | null,
+}
 
 export function installRecipeResolver(r: RecipeResolver | null): void {
-  installed = r
+  recipeResolverState.installed = r
 }
 
 export function getRecipeResolver(): RecipeResolver | null {
-  return installed
+  return recipeResolverState.installed
 }
 
 /**
@@ -64,9 +66,9 @@ export function getRecipeResolver(): RecipeResolver | null {
  * `installed` directly.
  */
 export function tryResolveRecipe(args: { tenantId: string; entityId: string }): ResolvedRecipe | null {
-  if (!installed) return null
+  if (!recipeResolverState.installed) return null
   try {
-    return installed.resolve(args)
+    return recipeResolverState.installed.resolve(args)
   } catch (e) {
     console.warn("[sync] RecipeResolver threw; falling back to bundled JSON:", e instanceof Error ? e.message : e)
     return null

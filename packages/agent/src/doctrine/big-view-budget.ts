@@ -9,8 +9,7 @@
 // objects is sampled from the live catalog so there is nothing
 // customer-specific hardcoded here.
 
-import { listLargeObjects } from "../tools/catalog/queries.js"
-import { countReferencedLargeObjects } from "../tools/mssql/validation.js"
+import { countReferencedLargeObjects, listLargeObjects } from "../tools/index.js"
 import type { DoctrineModule } from "./types.js"
 
 export const bigViewBudgetDoctrine: DoctrineModule = {

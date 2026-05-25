@@ -16,7 +16,7 @@ import { StepRole } from "@mia/agent"
  * @module
  */
 
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
 import {
     gateAcceptanceCriteria,
     gateContradictoryCompletion,
@@ -74,7 +74,7 @@ export {
     extractToolFailureText,
     parseToolResultObject,
     type ToolCallRecord
-} from "../../tools/_helpers/index.js"
+} from "../../tools/index.js"
 
 export { computeQualityProxy } from "../../governance/index.js"
 export type { QualityProxyInput } from "../../governance/index.js"

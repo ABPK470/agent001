@@ -1,4 +1,4 @@
-import type { TableVerdictsReader } from "../../../host/ports.js"
+import type { TableVerdictsReader } from "../../../host/index.js"
 import { tokenize } from "../helpers.js"
 import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"

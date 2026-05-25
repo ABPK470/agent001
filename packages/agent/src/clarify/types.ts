@@ -17,7 +17,7 @@
 //                      finding's stable id so the same subject never re-asks.
 
 import type { TenantConfig } from "../tenant/config.js"
-import type { CatalogGraph } from "../tools/catalog/graph/index.js"
+import type { CatalogGraph } from "../tools/index.js"
 import type { Message } from "../types.js"
 
 // ── Finding ──────────────────────────────────────────────────────

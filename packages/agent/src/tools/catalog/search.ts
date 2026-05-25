@@ -1,4 +1,4 @@
-import type { TableVerdictsReader } from "../../host/ports.js"
+import type { TableVerdictsReader } from "../../host/index.js"
 import { getTenantConfig } from "../../tenant/config.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"

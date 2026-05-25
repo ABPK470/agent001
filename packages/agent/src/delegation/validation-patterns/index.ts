@@ -8,7 +8,8 @@ import { TaskIntent } from "../../domain/enums/delegation.js"
  * @module
  */
 
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
+import type { DelegationContractSpec } from "../validation/index.js"
 import {
     DOCUMENTATION_TASK_RE,
     EXECUTABLE_VERIFICATION_CMD_RE,
@@ -28,7 +29,6 @@ import {
     VALIDATION_TASK_RE,
     WORKSPACE_FILE_EXT_RE,
 } from "./constants.js"
-import type { DelegationContractSpec } from "../validation/index.js"
 
 // Re-export every constant so existing call-sites still work
 export * from "./constants.js"

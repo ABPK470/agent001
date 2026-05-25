@@ -9,7 +9,7 @@ import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, trunca
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
 import type { AgentLoopState } from "../loop/index.js"
-import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tools/_helpers/index.js"
+import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tools/index.js"
 import type { AgentConfig, Message, Tool } from "../types.js"
 
 /**

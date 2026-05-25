@@ -6,7 +6,7 @@
 // findAggregateSemanticIssues(); this module is the citable rule body.
 
 import { AggregateSeverity } from "../domain/enums/sql-guard.js"
-import { findAggregateSemanticIssues } from "../tools/mssql/validation.js"
+import { findAggregateSemanticIssues } from "../tools/index.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

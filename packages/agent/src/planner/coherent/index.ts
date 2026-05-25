@@ -1,5 +1,5 @@
 import { EffectClass, PipelineStatus, StepRole, VerificationMode } from "@mia/agent"
-import { applyPromptBudget } from "../../context/prompt-budget/index.js"
+import { applyPromptBudget } from "../../context/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import { canonicalizeRelative } from "../../internal/index.js"
 import type { ToolCallRecord } from "../../recovery/index.js"

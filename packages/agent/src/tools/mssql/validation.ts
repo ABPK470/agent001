@@ -1401,18 +1401,21 @@ const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
 // (`\bAverageCredit…`, `EOMBalance`) OR right after a lowercase letter
 // (`MonthlyAvg`, `dailySpot`). We DO NOT require a trailing word boundary —
 // `AverageCreditBalanceZARMTD` must trigger on `Average`.
-let preAggregatedColReCache: { tokensRef: object; re: RegExp } | null = null
+const validationCache = {
+  preAggregatedColReCache: null as { tokensRef: object; re: RegExp } | null,
+}
+
 function preAggregatedColRe(): RegExp {
   const tokens = getTenantConfig().preAggregationTokens
-  if (preAggregatedColReCache && preAggregatedColReCache.tokensRef === (tokens as unknown as object)) {
-    return preAggregatedColReCache.re
+  if (validationCache.preAggregatedColReCache && validationCache.preAggregatedColReCache.tokensRef === (tokens as unknown as object)) {
+    return validationCache.preAggregatedColReCache.re
   }
   const alternation = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
   // Empty tenant config → regex that never matches.
   const re = alternation.length > 0
     ? new RegExp(`(?:\\b|(?<=[a-z]))(${alternation})`, "i")
     : /a^/
-  preAggregatedColReCache = { tokensRef: tokens as unknown as object, re }
+  validationCache.preAggregatedColReCache = { tokensRef: tokens as unknown as object, re }
   return re
 }
 

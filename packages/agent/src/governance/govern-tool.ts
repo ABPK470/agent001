@@ -19,7 +19,7 @@ import {
 } from "../domain/index.js"
 import type { HostedPolicyContext } from "../domain/policy-context.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recovery/index.js"
-import { normalizeToolExecutionOutput } from "../tools/_helpers/index.js"
+import { normalizeToolExecutionOutput } from "../tools/index.js"
 import type { Tool } from "../types.js"
 import { type EngineServices, type RunState, createToolStep } from "./types.js"
 

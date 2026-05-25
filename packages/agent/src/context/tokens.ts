@@ -57,29 +57,31 @@ interface TiktokenLike {
   encode(text: string): { length: number } | number[]
 }
 const tiktokenCache = new Map<string, TiktokenLike | null>()
-let tiktokenModule: { encoding_for_model?: (m: string) => TiktokenLike; get_encoding?: (n: string) => TiktokenLike } | null | undefined
+const tiktokenState: {
+  module: { encoding_for_model?: (m: string) => TiktokenLike; get_encoding?: (n: string) => TiktokenLike } | null | undefined
+} = { module: undefined }
 
 function tiktokenFor(model: string): TiktokenLike | null {
   if (process.env.MIA_USE_TIKTOKEN !== "1") return null
   if (!/^gpt-|^o[1-9]/i.test(model)) return null
   if (tiktokenCache.has(model)) return tiktokenCache.get(model) ?? null
-  if (tiktokenModule === undefined) {
+  if (tiktokenState.module === undefined) {
     try {
       // Use a Node createRequire (ESM-safe, sync) so esbuild doesn't warn
       // about direct eval. tiktoken is marked external in scripts/build.mjs
       // (packages: "external"), so the bundler leaves this require alone.
-      tiktokenModule = requireCJS("tiktoken") as typeof tiktokenModule
+      tiktokenState.module = requireCJS("tiktoken") as typeof tiktokenState.module
     } catch {
-      tiktokenModule = null
+      tiktokenState.module = null
     }
   }
-  if (!tiktokenModule) {
+  if (!tiktokenState.module) {
     tiktokenCache.set(model, null)
     return null
   }
   let enc: TiktokenLike | null = null
   try {
-    enc = tiktokenModule.encoding_for_model?.(model) ?? tiktokenModule.get_encoding?.("cl100k_base") ?? null
+    enc = tiktokenState.module.encoding_for_model?.(model) ?? tiktokenState.module.get_encoding?.("cl100k_base") ?? null
   } catch {
     enc = null
   }

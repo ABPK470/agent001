@@ -44,13 +44,18 @@ interface CacheEntry {
   readonly currentIteration: number
   readonly result: ArtifactCompactionState
 }
-let lastCache: CacheEntry | null = null
-let _walkCount = 0
+const extractState = {
+  lastCache: null as CacheEntry | null,
+  walkCount: 0,
+}
 
 /** Test-only: how many times the inner extractor walked the history. */
-export function __getExtractWalkCount(): number { return _walkCount }
+export function __getExtractWalkCount(): number { return extractState.walkCount }
 /** Test-only: reset the memo + counter. */
-export function __resetExtractCache(): void { lastCache = null; _walkCount = 0 }
+export function __resetExtractCache(): void {
+  extractState.lastCache = null
+  extractState.walkCount = 0
+}
 
 export function extractCompactionState(
   messages: readonly Message[],
@@ -60,17 +65,17 @@ export function extractCompactionState(
   const length = messages.length
   const lastRef = length > 0 ? messages[length - 1] : undefined
   if (
-    lastCache
-    && lastCache.length === length
-    && lastCache.lastRef === lastRef
-    && lastCache.messages === messages
-    && lastCache.goal === goal
-    && lastCache.currentIteration === currentIteration
+    extractState.lastCache
+    && extractState.lastCache.length === length
+    && extractState.lastCache.lastRef === lastRef
+    && extractState.lastCache.messages === messages
+    && extractState.lastCache.goal === goal
+    && extractState.lastCache.currentIteration === currentIteration
   ) {
-    return lastCache.result
+    return extractState.lastCache.result
   }
   const result = extractCompactionStateInner(messages, goal, currentIteration)
-  lastCache = { messages, length, lastRef, goal, currentIteration, result }
+  extractState.lastCache = { messages, length, lastRef, goal, currentIteration, result }
   return result
 }
 
@@ -79,7 +84,7 @@ function extractCompactionStateInner(
   goal: string,
   currentIteration: number,
 ): ArtifactCompactionState {
-  _walkCount++
+  extractState.walkCount++
   const toolCallCounts: Record<string, number> = {}
   const writeMap = new Map<
     string,

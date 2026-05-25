@@ -1,6 +1,6 @@
 import { PlannerTraceKind } from "@mia/agent"
 import { MSSQL_DOCTRINES } from "../../doctrine/index.js"
-import { emitToolTrace, type ToolTraceContext } from "../../loop/tool-execution/trace-context.js"
+import { emitToolTrace, type ToolTraceContext } from "../../loop/index.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 
 const SQL_PREVIEW_MAX_CHARS = 600

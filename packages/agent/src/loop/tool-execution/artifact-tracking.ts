@@ -8,8 +8,8 @@ import { ToolOutcomeSeverity } from "@mia/agent"
  * @module
  */
 
+import { executeToolWithTimeout } from "../../tools/index.js"
 import type { AgentLoopState } from "../state.js"
-import { executeToolWithTimeout } from "../../tools/_helpers/index.js"
 import { normalizeArtifactPath } from "./types.js"
 
 export function recordBlockedArtifactFailure(

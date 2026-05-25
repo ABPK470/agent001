@@ -31,14 +31,16 @@ export interface FreezeEvaluation {
   unknownIds: string[]
 }
 
-let installedRegistry: ReadonlyMap<string, FreezeWindowDefinition> = new Map()
+const freezeWindowState = {
+  installedRegistry: new Map<string, FreezeWindowDefinition>() as ReadonlyMap<string, FreezeWindowDefinition>,
+}
 
 export function installFreezeWindowRegistry(defs: readonly FreezeWindowDefinition[]): void {
-  installedRegistry = new Map(defs.map((d) => [d.id, d]))
+  freezeWindowState.installedRegistry = new Map(defs.map((d) => [d.id, d]))
 }
 
 export function listFreezeWindows(): readonly FreezeWindowDefinition[] {
-  return [...installedRegistry.values()]
+  return [...freezeWindowState.installedRegistry.values()]
 }
 
 export function evaluateFreezeWindows(
@@ -50,7 +52,7 @@ export function evaluateFreezeWindows(
   const unknownIds: string[] = []
 
   for (const id of freezeWindowIds) {
-    const def = installedRegistry.get(id)
+    const def = freezeWindowState.installedRegistry.get(id)
     if (!def) { unknownIds.push(id); continue }
     matched.push(def)
     const startMs = Date.parse(def.startsAt)

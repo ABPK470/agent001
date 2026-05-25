@@ -5,7 +5,7 @@
  */
 
 import { canonicalizeRelative } from "../../internal/index.js"
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
 import type { AgentConfig, Message, Tool } from "../../types.js"
 import type { AgentLoopState } from "../state.js"
 

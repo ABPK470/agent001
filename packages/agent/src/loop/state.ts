@@ -8,7 +8,7 @@
 
 import type { CoherentSolutionBundle, Plan, VerifierDecision } from "../planner/index.js"
 import { ToolFailureCircuitBreaker } from "../recovery/index.js"
-import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tools/_helpers/index.js"
+import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tools/index.js"
 
 /** Active coherent-generation execution context. */
 export interface CoherentExecutionState {

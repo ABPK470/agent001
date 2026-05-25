@@ -5,7 +5,7 @@
  * Extracted from recovery.ts. These are pure functions with no side effects.
  */
 
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
 
 // ============================================================================
 // Shell command helpers

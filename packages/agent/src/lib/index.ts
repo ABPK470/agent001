@@ -71,7 +71,6 @@ export * from "../governance/index.js"
 export * from "../llm/index.js"
 export * from "../loop/index.js"
 export * from "../recovery/index.js"
-export * from "../tools/_helpers/index.js"
 export * from "../tools/index.js"
 
 // ── Tenant configuration ────────────────────────────────────────────

@@ -136,11 +136,13 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
 
 // ── Singleton + loader ──────────────────────────────────────────
 
-let active: TenantConfig = DEFAULT_TENANT_CONFIG
+const tenantConfigState = {
+  active: DEFAULT_TENANT_CONFIG as TenantConfig,
+}
 
 /** Returns the live tenant config. Cheap — just returns the singleton. */
 export function getTenantConfig(): TenantConfig {
-  return active
+  return tenantConfigState.active
 }
 
 /**
@@ -151,13 +153,13 @@ export function getTenantConfig(): TenantConfig {
  * (`setTenantConfig({...})`).
  */
 export function setTenantConfig(overrides: Partial<TenantConfig>): TenantConfig {
-  active = freezeDeep(mergeWithDefaults(overrides))
-  return active
+  tenantConfigState.active = freezeDeep(mergeWithDefaults(overrides))
+  return tenantConfigState.active
 }
 
 /** Reset to factory defaults. Tests call this in `afterEach`. */
 export function resetTenantConfig(): void {
-  active = DEFAULT_TENANT_CONFIG
+  tenantConfigState.active = DEFAULT_TENANT_CONFIG
 }
 
 /**

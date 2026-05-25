@@ -9,7 +9,7 @@
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
 import type { TenantConfig } from "../../tenant/config.js"
-import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
+import type { CatalogGraph } from "../../tools/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import { isStopword } from "./stopwords.js"

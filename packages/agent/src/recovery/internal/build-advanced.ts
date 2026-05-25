@@ -7,22 +7,22 @@
  * @module
  */
 
-import {
-    extractMissingNpmScriptName,
-    isMissingLocalPackageDistFailure,
-    isMissingNpmScriptFailure,
-    isMissingNpmWorkspaceFailure,
-    isPackagePathNotExportedFailure,
-    isRecursiveNpmInstallLifecycleFailure,
-    isTimedOutNonWatchTestRunnerFailure,
-    isTypescriptRootDirScopeFailure,
-    isUnsupportedWorkspaceProtocolFailure,
-    isVitestUnsupportedThreadsFlagFailure,
-    isWatchModeTestRunnerFailure,
-} from "./recovery-detectors.js"
+import type { ToolCallRecord } from "../../tools/index.js"
+import { parseToolResultObject } from "../../tools/index.js"
 import type { RecoveryHint } from "../recovery.js"
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
-import { parseToolResultObject } from "../../tools/_helpers/index.js"
+import {
+  extractMissingNpmScriptName,
+  isMissingLocalPackageDistFailure,
+  isMissingNpmScriptFailure,
+  isMissingNpmWorkspaceFailure,
+  isPackagePathNotExportedFailure,
+  isRecursiveNpmInstallLifecycleFailure,
+  isTimedOutNonWatchTestRunnerFailure,
+  isTypescriptRootDirScopeFailure,
+  isUnsupportedWorkspaceProtocolFailure,
+  isVitestUnsupportedThreadsFlagFailure,
+  isWatchModeTestRunnerFailure,
+} from "./recovery-detectors.js"
 
 export interface AdvancedHintContext {
   readonly call: ToolCallRecord

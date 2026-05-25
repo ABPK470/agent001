@@ -15,6 +15,8 @@
 import type { Message } from "../../types.js"
 import { estimateTokensFromMessages } from "../tokens.js"
 
+export { compactAtWriteTime } from "./write-time-compact.js"
+
 // ============================================================================
 // Constants
 // ============================================================================

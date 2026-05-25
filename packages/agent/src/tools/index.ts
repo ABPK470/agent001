@@ -9,6 +9,7 @@
  * are private implementation details — do not import them directly.
  */
 
+export * from "./_helpers/index.js"
 export * from "./ask-user.js"
 export * from "./attachments.js"
 export * from "./browse-web/index.js"

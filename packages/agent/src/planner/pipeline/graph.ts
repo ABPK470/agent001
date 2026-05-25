@@ -6,13 +6,13 @@ import { PipelineStatus } from "@mia/agent"
  * @module
  */
 
-import { normalizeToolExecutionOutput } from "../../tools/_helpers/index.js"
+import { normalizeToolExecutionOutput } from "../../tools/index.js"
 import type { Tool } from "../../types.js"
 import type {
-  PipelineResult,
-  PipelineStepResult,
-  Plan,
-  PlanStep,
+    PipelineResult,
+    PipelineStepResult,
+    Plan,
+    PlanStep,
 } from "../types.js"
 
 export interface Graph {

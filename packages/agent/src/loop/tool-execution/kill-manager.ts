@@ -6,7 +6,7 @@
  * @module
  */
 
-import { executeToolWithTimeout } from "../../tools/_helpers/index.js"
+import { executeToolWithTimeout } from "../../tools/index.js"
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../types.js"
 import { withToolTraceArgs } from "./trace-context.js"
 

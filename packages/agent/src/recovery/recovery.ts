@@ -15,15 +15,15 @@
  */
 
 import { MAX_RUNTIME_SYSTEM_HINTS } from "../constants.js"
-import { inferRecoveryHint } from "./internal/build-per-call-hints.js"
 import {
     didToolCallFail,
     type ToolCallRecord,
-} from "../tools/_helpers/index.js"
+} from "../tools/index.js"
+import { inferRecoveryHint } from "./internal/build-per-call-hints.js"
 
 // Re-export from tool-result for backwards compatibility
-export { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText, parseToolResultObject } from "../tools/_helpers/index.js"
-export type { ToolCallRecord } from "../tools/_helpers/index.js"
+  export { buildSemanticToolCallKey, didToolCallFail, extractToolFailureText, parseToolResultObject } from "../tools/index.js"
+export type { ToolCallRecord } from "../tools/index.js"
 
 // Re-export from quality-proxy for backwards compatibility
 export { computeQualityProxy } from "../governance/index.js"

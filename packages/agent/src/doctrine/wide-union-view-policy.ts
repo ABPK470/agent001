@@ -11,8 +11,11 @@
 // LIVE catalog at prompt-build time, so no customer-specific name is
 // hardcoded here — the doctrine activates on the SHAPE the catalog reports.
 
-import { listExpensiveUnionViews, unionBranchCount } from "../tools/catalog/queries.js"
-import { detectWideUnionViewTopnWithoutBranchAggregation } from "../tools/mssql/validation.js"
+import {
+    detectWideUnionViewTopnWithoutBranchAggregation,
+    listExpensiveUnionViews,
+    unionBranchCount,
+} from "../tools/index.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

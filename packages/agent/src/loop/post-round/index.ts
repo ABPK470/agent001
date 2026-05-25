@@ -7,12 +7,12 @@
 
 import * as log from "../../logger.js"
 import { buildRecoveryHints } from "../../recovery/index.js"
-import type { ToolCallRecord } from "../../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
 import {
     checkToolLoopStuckDetection,
     evaluateToolRoundBudgetExtension,
     summarizeToolRoundProgress,
-} from "../../tools/_helpers/index.js"
+} from "../../tools/index.js"
 import type { AgentConfig, Message } from "../../types.js"
 import type { AgentLoopState } from "../state.js"
 

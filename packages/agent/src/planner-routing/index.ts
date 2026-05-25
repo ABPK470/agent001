@@ -9,12 +9,12 @@ import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "
 
 import * as log from "../logger.js"
 import type { AgentLoopState } from "../loop/index.js"
-import { attemptCoherentGeneration } from "./coherent-generation.js"
-import { handleVerificationFailure } from "./verification-failure.js"
 import type { PlannerContext, VerifierDecision } from "../planner/index.js"
 import { assessPlannerDecision, executePlannerPath } from "../planner/index.js"
-import type { ToolCallRecord } from "../tools/_helpers/index.js"
+import type { ToolCallRecord } from "../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
+import { attemptCoherentGeneration } from "./coherent-generation.js"
+import { handleVerificationFailure } from "./verification-failure.js"
 
 /** Result of planner-first routing. */
 export interface PlannerRoutingResult {

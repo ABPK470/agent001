@@ -56,12 +56,21 @@ export function defaultCatalogAccessor(connection = "default"): CatalogGraph | n
 // memoise a lowercase→canonical-key map per catalog identity and consult
 // it whenever a public API receives a qualifiedName from query text.
 
-let ciIndexCache: { catalog: object; lower: Map<string, string> } | null = null
+const catalogQueryState = {
+  ciIndexCache: null as { catalog: object; lower: Map<string, string> } | null,
+  largeIndexCache: null as { catalog: object; threshold: number; names: Set<string> } | null,
+  unionIndexCache: null as {
+    catalog: object
+    threshold: number
+    branchCounts: Map<string, number>
+  } | null,
+}
+
 function ciIndex(catalog: CatalogGraph): Map<string, string> {
-  if (ciIndexCache && ciIndexCache.catalog === (catalog as unknown as object)) return ciIndexCache.lower
+  if (catalogQueryState.ciIndexCache && catalogQueryState.ciIndexCache.catalog === (catalog as unknown as object)) return catalogQueryState.ciIndexCache.lower
   const lower = new Map<string, string>()
   for (const [key] of catalog.tables) lower.set(key.toLowerCase(), key)
-  ciIndexCache = { catalog: catalog as unknown as object, lower }
+  catalogQueryState.ciIndexCache = { catalog: catalog as unknown as object, lower }
   return lower
 }
 
@@ -96,8 +105,6 @@ export function canonicalQualifiedName(
 // on next call. Avoids walking every table on every isLargeObject() call
 // from the hot validation path.
 
-let largeIndexCache: { catalog: object; threshold: number; names: Set<string> } | null = null
-
 function buildLargeIndex(catalog: CatalogGraph, threshold: number): Set<string> {
   const out = new Set<string>()
   for (const [, t] of catalog.tables) {
@@ -113,32 +120,25 @@ function buildLargeIndex(catalog: CatalogGraph, threshold: number): Set<string> 
 
 /** Force-rebuild the cache. Tests call this between catalog swaps. */
 export function _resetCatalogQueriesCache(): void {
-  largeIndexCache = null
-  unionIndexCache = null
-  ciIndexCache = null
+  catalogQueryState.largeIndexCache = null
+  catalogQueryState.unionIndexCache = null
+  catalogQueryState.ciIndexCache = null
 }
 
 function currentLargeIndex(accessor: CatalogAccessor, threshold: number): Set<string> | null {
   const catalog = accessor()
   if (!catalog) return null
   if (
-    largeIndexCache
-    && largeIndexCache.catalog === (catalog as unknown as object)
-    && largeIndexCache.threshold === threshold
-  ) return largeIndexCache.names
+    catalogQueryState.largeIndexCache
+    && catalogQueryState.largeIndexCache.catalog === (catalog as unknown as object)
+    && catalogQueryState.largeIndexCache.threshold === threshold
+  ) return catalogQueryState.largeIndexCache.names
   const names = buildLargeIndex(catalog, threshold)
-  largeIndexCache = { catalog: catalog as unknown as object, threshold, names }
+  catalogQueryState.largeIndexCache = { catalog: catalog as unknown as object, threshold, names }
   return names
 }
 
 // ── Memoised "expensive UNION views" index ──────────────────────
-
-let unionIndexCache: {
-  catalog: object
-  threshold: number
-  // qualifiedName.toLowerCase() → branch count
-  branchCounts: Map<string, number>
-} | null = null
 
 /**
  * Count `UNION ALL` (and bare `UNION`) clauses in a VIEW definition. Returns
@@ -174,12 +174,12 @@ function currentUnionIndex(accessor: CatalogAccessor, threshold: number): Map<st
   const catalog = accessor()
   if (!catalog) return null
   if (
-    unionIndexCache
-    && unionIndexCache.catalog === (catalog as unknown as object)
-    && unionIndexCache.threshold === threshold
-  ) return unionIndexCache.branchCounts
+    catalogQueryState.unionIndexCache
+    && catalogQueryState.unionIndexCache.catalog === (catalog as unknown as object)
+    && catalogQueryState.unionIndexCache.threshold === threshold
+  ) return catalogQueryState.unionIndexCache.branchCounts
   const branchCounts = buildUnionIndex(catalog, threshold)
-  unionIndexCache = { catalog: catalog as unknown as object, threshold, branchCounts }
+  catalogQueryState.unionIndexCache = { catalog: catalog as unknown as object, threshold, branchCounts }
   return branchCounts
 }
 
