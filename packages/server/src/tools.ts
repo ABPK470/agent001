@@ -1,50 +1,57 @@
 /**
  * Tool registry — single source of truth for all available agent tools.
  *
- * Agent definitions select a subset of these by name.
- * The registry is populated once at startup; the tools themselves
- * are stateless (workspace path is set globally via setBasePath).
+ * Agents pick a subset by name. The factory list ({@link ALL_TOOL_FACTORIES})
+ * is the only authority for what the registry advertises; every accessor
+ * (`getAllTools`, `resolveTools`, `getToolMap`, `listAvailableTools`) flows
+ * through it. Tools are built host-bound: each factory takes an
+ * {@link AgentHost} and returns a {@link Tool} closed over that host.
+ * No ambient/global host lookup happens here — callers must supply a host.
  */
 
 import {
-    appendFileTool,
-    askUserTool,
+    ASK_USER_DESCRIPTION,
+    ASK_USER_PARAMETERS,
     bindNoteTool,
     bindRecallPriorResultTool,
     bindRecordTableVerdictTool,
     browserAutoLoginTool,
-    browserCheckTool,
     browserHumanHandoffTool,
-    browseWebTool,
     compareCatalogsTool,
+    configureAgent,
+    createAppendFileTool,
+    createAskUserTool,
+    createBrowseWebTool,
+    createBrowserCheckTool,
     createDelegateTools,
+    createExportQueryToFileTool,
+    createImportAttachmentTool,
+    createListAttachmentsTool,
+    createListDirectoryTool,
+    createPromoteAttachmentTool,
+    createReadAttachmentTool,
+    createReadFileTool,
+    createReplaceInFileTool,
+    createSearchFilesTool,
+    createShellTool,
+    createWriteFileTool,
     discoverRelationshipsTool,
-    exportQueryToFileTool,
     fetchUrlTool,
     getChartSpecsTool,
-    importAttachmentTool,
     inspectDefinitionTool,
-    listAttachmentsTool,
-    listDirectoryTool,
     listEnvironmentsTool,
     mssqlSchemaTool,
     mssqlTool,
     noteTool,
     profileDataTool,
-    promoteAttachmentTool,
-    readAttachmentTool,
-    readFileTool,
     recallPriorResultTool,
     recordTableVerdictTool,
-    replaceInFileTool,
     searchCatalogTool,
-    searchFilesTool,
-    shellTool,
     syncExecuteTool,
     syncPreviewTool,
     thinkTool,
     webSearchTool,
-    writeFileTool,
+    type AgentHost,
     type DelegateContext,
     type GovernToolOptions,
     type LLMClient,
@@ -61,48 +68,75 @@ export interface ToolInfo {
   description: string
 }
 
-const ALL_TOOLS: Tool[] = [
-  readFileTool,
-  writeFileTool,
-  appendFileTool,
-  replaceInFileTool,
-  listDirectoryTool,
-  searchFilesTool,
-  shellTool,
-  fetchUrlTool,
-  browserCheckTool,
-  browseWebTool,
-  browserAutoLoginTool,
-  browserHumanHandoffTool,
-  webSearchTool,
-  askUserTool,
-  getChartSpecsTool,
-  thinkTool,
-  noteTool,
-  recallPriorResultTool,
-  recordTableVerdictTool,
-  mssqlTool,
-  mssqlSchemaTool,
-  exportQueryToFileTool,
-  discoverRelationshipsTool,
-  profileDataTool,
-  inspectDefinitionTool,
-  searchCatalogTool,
-  // ── ABI environment sync ──
-  compareCatalogsTool,
-  syncPreviewTool,
-  syncExecuteTool,
-  listEnvironmentsTool,
-  // ── Attachments (hosted-MIA Phase 4) ──
-  listAttachmentsTool,
-  readAttachmentTool,
-  importAttachmentTool,
-  promoteAttachmentTool,
+// ── Factories ─────────────────────────────────────────────────────
+// Each entry produces ONE tool bound to the supplied host. Tools that
+// still rely on AgentRuntime ALS internally (mssql, catalog, fetch_url,
+// note, recall_prior_result, record_table_verdict, browserAutoLogin,
+// browserHumanHandoff, web_search, get_chart_specs, think, sync_*) are
+// returned as-is — the host argument is ignored for those, and they will
+// continue to read configuration from `currentRuntime()`. Migrating them
+// is a follow-up task outside this refactor's scope.
+
+type ToolFactory = (host: AgentHost) => Tool
+
+const ALL_TOOL_FACTORIES: ToolFactory[] = [
+  // ── Filesystem (host-bound) ──
+  createReadFileTool,
+  createWriteFileTool,
+  createAppendFileTool,
+  createReplaceInFileTool,
+  createListDirectoryTool,
+  createSearchFilesTool,
+  // ── Shell + browser (host-bound; factories already existed) ──
+  createShellTool,
+  createBrowseWebTool,
+  createBrowserCheckTool,
+  // ── Ambient (still on currentRuntime ALS — host arg ignored) ──
+  (_h) => fetchUrlTool,
+  (_h) => browserAutoLoginTool,
+  (_h) => browserHumanHandoffTool,
+  (_h) => webSearchTool,
+  // ── User input (host-bound) ──
+  createAskUserTool,
+  // ── Misc ambient ──
+  (_h) => getChartSpecsTool,
+  (_h) => thinkTool,
+  (_h) => noteTool,
+  (_h) => recallPriorResultTool,
+  (_h) => recordTableVerdictTool,
+  // ── MSSQL / catalog (ambient) ──
+  (_h) => mssqlTool,
+  (_h) => mssqlSchemaTool,
+  createExportQueryToFileTool,
+  (_h) => discoverRelationshipsTool,
+  (_h) => profileDataTool,
+  (_h) => inspectDefinitionTool,
+  (_h) => searchCatalogTool,
+  // ── ABI environment sync (ambient) ──
+  (_h) => compareCatalogsTool,
+  (_h) => syncPreviewTool,
+  (_h) => syncExecuteTool,
+  (_h) => listEnvironmentsTool,
+  // ── Attachments (host-bound) ──
+  createListAttachmentsTool,
+  createReadAttachmentTool,
+  createImportAttachmentTool,
+  createPromoteAttachmentTool,
 ]
 
-// Single source of truth: every static tool lives in ALL_TOOLS. The toolMap is
-// a name-keyed view used by agent definitions and runtime resolution.
-const toolMap = new Map<string, Tool>(ALL_TOOLS.map((t) => [t.name, t]))
+/**
+ * Build all registered tools, each closed over the supplied host.
+ * Callers must pass the host they want the tools to be bound to — e.g.
+ * the per-run host built from boot deps + run workspace root.
+ */
+export function getAllTools(host: AgentHost): Tool[] {
+  return ALL_TOOL_FACTORIES.map((f) => f(host))
+}
+
+/** Build the name-keyed tool map for a given host. */
+export function getToolMap(host: AgentHost): ReadonlyMap<string, Tool> {
+  return new Map(getAllTools(host).map((t) => [t.name, t]))
+}
 
 const catalogLlm: LLMClient = {
   async chat() {
@@ -114,14 +148,21 @@ const catalogLlm: LLMClient = {
   },
 }
 
+/**
+ * Build the catalog list used by `listAvailableTools()` and the agents
+ * route — every static tool plus the delegate/bus families. Uses a stub
+ * host so we surface name/description without binding to any workspace.
+ */
 function listRuntimeCatalogTools(): Tool[] {
+  const stubHost = configureAgent({})
+  const staticTools = getAllTools(stubHost)
   const catalog = new Map<string, Tool>()
 
-  for (const tool of toolMap.values()) catalog.set(tool.name, tool)
+  for (const tool of staticTools) catalog.set(tool.name, tool)
 
   const delegateTools = createDelegateTools({
     llm: catalogLlm,
-    availableTools: [...ALL_TOOLS],
+    availableTools: staticTools,
     depth: 0,
     maxDepth: 1,
     resolveAgent: () => null,
@@ -132,11 +173,6 @@ function listRuntimeCatalogTools(): Tool[] {
   for (const tool of busTools) catalog.set(tool.name, tool)
 
   return [...catalog.values()].sort((a, b) => a.name.localeCompare(b.name))
-}
-
-/** Get all registered tools as a Map. */
-export function getToolMap(): ReadonlyMap<string, Tool> {
-  return toolMap
 }
 
 /**
@@ -171,10 +207,14 @@ function warnOnMissingGuardTools(resolvedNames: ReadonlySet<string>): void {
   }
 }
 
-/** Resolve an array of tool names into Tool objects. Throws on unknown names. */
-export function resolveTools(names: string[]): Tool[] {
+/**
+ * Resolve an array of tool names into host-bound Tool objects. Throws on
+ * unknown names.
+ */
+export function resolveTools(names: string[], host: AgentHost): Tool[] {
+  const map = getToolMap(host)
   const resolved = names.map((name) => {
-    const tool = toolMap.get(name)
+    const tool = map.get(name)
     if (!tool) throw new Error(`Unknown tool: ${name}`)
     return tool
   })
@@ -185,11 +225,6 @@ export function resolveTools(names: string[]): Tool[] {
 /** List all available tool names + descriptions (for API/UI). */
 export function listAvailableTools(): ToolInfo[] {
   return listRuntimeCatalogTools().map((t) => ({ name: t.name, description: t.description }))
-}
-
-/** Get all registered tools as an array. */
-export function getAllTools(): Tool[] {
-  return [...ALL_TOOLS]
 }
 
 /**
@@ -249,15 +284,12 @@ export function isVisitorTool(name: string): boolean {
 }
 
 // ── Per-run tool registry ────────────────────────────────────────
-// Static tools (above) live in ALL_TOOLS and are stateless. A second class
-// of tools must be constructed fresh per run because they close over run-
-// scoped state: delegation (parent run-id, depth, child usage tracking),
-// inter-agent bus (run-id + agent name), and ask_user (the pending-input
-// resolver tied to this run's controller). Rather than re-concatenating
-// these in run-executor every time we add a category, declare them once
-// here as a list of factories and let `composePerRunTools` assemble the
-// final array. This is the single source of truth for "what tools exist
-// at runtime"; see `listRuntimeCatalogTools` for the catalog-mode mirror.
+// Static tools (above) are stateless. A second class of tools must be
+// constructed fresh per run because they close over run-scoped state:
+// delegation (parent run-id, depth, child usage tracking), inter-agent
+// bus (run-id + agent name), and ask_user (the pending-input resolver
+// tied to this run's controller). Each per-run category is declared
+// here as a factory and assembled by `composePerRunTools`.
 
 export interface PerRunToolContext {
   runId: string
@@ -305,7 +337,9 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
   (ctx) => [
     ctx.govern(
       {
-        ...askUserTool,
+        name: "ask_user",
+        description: ASK_USER_DESCRIPTION,
+        parameters: ASK_USER_PARAMETERS,
         execute: async (args) => {
           const question = String(args["question"] ?? "")
           if (!question) return "Error: 'question' is required"

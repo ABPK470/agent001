@@ -11,7 +11,6 @@ import * as db from "../db/index.js"
 import { MemoryValidationAction } from "../enums/memory.js"
 import { flagRunMemory } from "../memory/index.js"
 import type { AgentOrchestrator } from "../orchestrator/index.js"
-import { getAllTools } from "../tools.js"
 
 export function registerRunRoutes(
   app: FastifyInstance,
@@ -152,7 +151,6 @@ export function registerRunRoutes(
       }
       const runId = orchestrator.startRun(goal, {
         agentId: agent.id,
-        tools: getAllTools(),
         systemPrompt: db.resolveAgentSystemPrompt(agent),
         attachmentIds: resolvedAttachmentIds,
       })
@@ -207,7 +205,6 @@ export function registerRunRoutes(
       }
       const runId = orchestrator.startRun(original.goal, {
         agentId: agent.id,
-        tools: getAllTools(),
         systemPrompt: db.resolveAgentSystemPrompt(agent),
       })
       reply.code(201)

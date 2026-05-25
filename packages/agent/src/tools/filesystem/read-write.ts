@@ -4,60 +4,29 @@ import { dirname } from "node:path"
 import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
-import { buildToolOutcome, safePathResolved, safePathResolvedWith } from "../filesystem-security.js"
-import { executeWriteFile, executeWriteFileWith } from "./write-execute.js"
+import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"
+import { executeWriteFileWith } from "./write-execute.js"
 
 // ── read_file ────────────────────────────────────────────────────
 
-export const readFileTool: Tool = {
-  name: "read_file",
-  description:
-    "Read the contents of a file. Returns the full text content. " +
-    "Paths are relative to the working directory.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "Path to the file to read" },
-    },
-    required: ["path"],
-  },
+const READ_FILE_DESCRIPTION =
+  "Read the contents of a file. Returns the full text content. " +
+  "Paths are relative to the working directory."
 
-  async execute(args) {
-    try {
-      const content = await readFile(await safePathResolved(String(args.path)), "utf-8")
-      return content
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code
-      if (code === "ENOTDIR") {
-        return `Error: A parent directory in the path "${String(args.path)}" is a regular file, not a directory. Use write_file to the intended path first (it will fix the directory structure), then retry the read.`
-      }
-      return `Error: ${err instanceof Error ? err.message : String(err)}`
-    }
+const READ_FILE_PARAMETERS = {
+  type: "object",
+  properties: {
+    path: { type: "string", description: "Path to the file to read" },
   },
-}
+  required: ["path"],
+} as const
 
-/**
- * Doctrine-shaped factory: build a `read_file` tool bound to an explicit
- * {@link AgentHost} (no ambient lookup, no `currentRuntime()`). This is the
- * Phase 3 pilot for the Functional Core / Imperative Shell migration —
- * see docs/doctrine.md and docs/runtime-inventory.md.
- *
- * `readFileTool` above keeps working unchanged for callers that still go
- * through the legacy ambient path; new callers should prefer this factory.
- */
+/** Factory: build a `read_file` tool bound to `host.filesystem.basePath`. */
 export function createReadFileTool(host: AgentHost): Tool {
   return {
     name: "read_file",
-    description:
-      "Read the contents of a file. Returns the full text content. " +
-      "Paths are relative to the working directory.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Path to the file to read" },
-      },
-      required: ["path"],
-    },
+    description: READ_FILE_DESCRIPTION,
+    parameters: READ_FILE_PARAMETERS,
 
     async execute(args) {
       try {
@@ -72,29 +41,6 @@ export function createReadFileTool(host: AgentHost): Tool {
       }
     },
   }
-}
-
-// ── write_file ───────────────────────────────────────────────────
-
-export const writeFileTool: Tool = {
-  name: "write_file",
-  description:
-    "Write content to a file. Creates the file if it doesn't exist. " +
-    "WARNING: This REPLACES the entire file content — it does NOT append. " +
-    "To add code to an existing file, you MUST include all existing content plus your additions. " +
-    "Paths are relative to the working directory.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "Path to write to" },
-      content: { type: "string", description: "Content to write" },
-    },
-    required: ["path", "content"],
-  },
-
-  async execute(args) {
-    return executeWriteFile(args)
-  },
 }
 
 // ── append_file ──────────────────────────────────────────────────
@@ -176,15 +122,6 @@ async function executeAppendFile(
   }
 }
 
-export const appendFileTool: Tool = {
-  name: "append_file",
-  description: APPEND_FILE_DESCRIPTION,
-  parameters: APPEND_FILE_PARAMETERS,
-  async execute(args) {
-    return executeAppendFile(args, (p) => safePathResolved(p))
-  },
-}
-
 // ── Doctrine-shaped factories (write_file + append_file) ─────────
 
 const WRITE_FILE_DESCRIPTION =
@@ -202,7 +139,7 @@ const WRITE_FILE_PARAMETERS = {
   required: ["path", "content"],
 } as const
 
-/** Factory variant of {@link writeFileTool} bound to `host.filesystem.basePath`. */
+/** Factory: build a `write_file` tool bound to `host.filesystem.basePath`. */
 export function createWriteFileTool(host: AgentHost): Tool {
   return {
     name: "write_file",
@@ -214,7 +151,7 @@ export function createWriteFileTool(host: AgentHost): Tool {
   }
 }
 
-/** Factory variant of {@link appendFileTool} bound to `host.filesystem.basePath`. */
+/** Factory: build an `append_file` tool bound to `host.filesystem.basePath`. */
 export function createAppendFileTool(host: AgentHost): Tool {
   return {
     name: "append_file",

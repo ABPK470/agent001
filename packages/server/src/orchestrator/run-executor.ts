@@ -3,6 +3,8 @@ import {
     AgentRuntime,
     cancelRun,
     completeRun,
+    computeAutoDetectedExcludeDirs,
+    configureAgent,
     createRun,
     detectInternalFailure,
     EventType,
@@ -167,8 +169,22 @@ export async function executeRunImpl(
   })
   runtime.shell.cwd = runWorkspace.executionRoot
   runtime.browserCheck.cwd = runWorkspace.executionRoot
-  runtime.filesystem.basePath = runWorkspace.executionRoot
-  runtime.searchFiles.basePath = runWorkspace.executionRoot
+
+  // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
+  // providers) but overrides workspace / sandbox roots with this run's
+  // execution root so isolated sandboxes don't leak across runs. Tools that
+  // have been migrated off the ambient `currentRuntime()` shortcut (filesystem
+  // cluster, search_files, ask_user, attachments, mssql export-tool) close
+  // over this host explicitly via their `createXxxTool(host)` factories.
+  const perRunHost = configureAgent({
+    ...ctx.bootHostDeps,
+    workspaceRoot: runWorkspace.executionRoot,
+    filesystemBasePath: runWorkspace.executionRoot,
+    searchFilesBasePath: runWorkspace.executionRoot,
+    searchFilesExcludeDirs: new Set(computeAutoDetectedExcludeDirs(runWorkspace.executionRoot)),
+    shellCwd: runWorkspace.executionRoot,
+    browserCheckCwd: runWorkspace.executionRoot,
+  })
   // Gap 2: bind the memory writer hook so doctrine lessons (and any other
   // agent-side auto-notes) get persisted with this run's session/upn
   // provenance. The hook is a fire-and-forget sync wrapper; ingestAgentNote
@@ -333,7 +349,7 @@ export async function executeRunImpl(
     resolveAgent: (aId: string): ResolvedAgent | null => {
       const def = db.getAgentDefinition(aId)
       if (!def) return null
-      const agentTools = getAllTools().map(governRuntimeTool)
+      const agentTools = getAllTools(perRunHost).map(governRuntimeTool)
       // resolveAgentSystemPrompt enforces the file-managed contract for the
       // default agent — a child delegation never sees a stale stored value.
       return { id: def.id, name: def.name, systemPrompt: db.resolveAgentSystemPrompt(def), tools: agentTools }

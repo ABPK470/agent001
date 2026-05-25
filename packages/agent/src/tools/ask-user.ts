@@ -25,14 +25,14 @@ export type AskUserResolver = (
 
 // ── Shared body (hoisted above first use to avoid TDZ) ───────────
 
-const ASK_USER_DESCRIPTION =
+export const ASK_USER_DESCRIPTION =
   "Ask the user a question and wait for their response. " +
   "Use when you need information only the user can provide: login credentials, " +
   "personal details (email, address), choices between options, payment confirmation, " +
   "or when handing control for something you can't do (CAPTCHA, 2FA code). " +
   "The agent pauses until the user responds."
 
-const ASK_USER_PARAMETERS = {
+export const ASK_USER_PARAMETERS = {
   type: "object",
   properties: {
     question: {
@@ -69,22 +69,6 @@ async function runAskUser(
   const sensitive = Boolean(args.sensitive)
 
   return resolver(question, options, sensitive)
-}
-
-/**
- * Schema-only ambient export. `execute` is overridden per-run by the
- * server's `PER_RUN_FACTORIES` (see packages/server/src/tools.ts) which
- * binds the actual UI resolver via run context. If the body below ever
- * runs, the orchestrator failed to wrap the tool — treat as unavailable.
- */
-export const askUserTool: Tool = {
-  name: "ask_user",
-  description: ASK_USER_DESCRIPTION,
-  parameters: ASK_USER_PARAMETERS,
-
-  async execute() {
-    return "Error: User input is not available in this execution context."
-  },
 }
 
 /**

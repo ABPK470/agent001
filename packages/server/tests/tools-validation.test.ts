@@ -10,7 +10,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { configureAgent } from "@mia/agent"
 import { resolveTools } from "../src/tools.js"
+
+const stubHost = configureAgent({})
 
 describe("resolveTools — guard-referenced tool validation", () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
@@ -24,7 +27,7 @@ describe("resolveTools — guard-referenced tool validation", () => {
     // A minimal whitelist that deliberately omits export_query_to_file even
     // though query_mssql is present (so the formatter's truncation warning
     // would direct the model to a tool it cannot call).
-    resolveTools(["read_file", "write_file", "query_mssql"])
+    resolveTools(["read_file", "write_file", "query_mssql"], stubHost)
     const messages = warnSpy.mock.calls.map((c) => String(c[0]))
     expect(messages.some((m) => m.includes("export_query_to_file"))).toBe(true)
     expect(messages.some((m) => m.includes("loop"))).toBe(true)
@@ -32,7 +35,7 @@ describe("resolveTools — guard-referenced tool validation", () => {
 
   it("does not warn when all guard-referenced tools are present", () => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
-    resolveTools(["read_file", "write_file", "query_mssql", "export_query_to_file"])
+    resolveTools(["read_file", "write_file", "query_mssql", "export_query_to_file"], stubHost)
     const messages = warnSpy.mock.calls.map((c) => String(c[0]))
     expect(messages.some((m) => m.includes("export_query_to_file"))).toBe(false)
   })
@@ -44,7 +47,7 @@ describe("getAllTools — guard contract", () => {
     const { getAllTools } = await import("../src/tools.js")
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      resolveTools(getAllTools().map((t) => t.name))
+      resolveTools(getAllTools(stubHost).map((t) => t.name), stubHost)
       const messages = warnSpy.mock.calls.map((c) => String(c[0]))
       expect(messages.filter((m) => m.startsWith("[tools] WARNING"))).toEqual([])
     } finally {

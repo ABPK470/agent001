@@ -5,14 +5,13 @@
  * Supports exact text and regex patterns, optional path filtering,
  * and configurable result limits.
  *
- * Security: Uses the same `currentRuntime().searchFiles.basePath`-scoped path validation as
+ * Security: Uses the same `getActiveAgentHost().searchFiles.basePath`-scoped path validation as
  * filesystem.ts — all search paths are resolved under the workspace root.
  * Output is capped to prevent memory issues on large codebases.
  */
 
 import { readdir, readFile, stat } from "node:fs/promises"
 import { basename, extname, resolve } from "node:path"
-import { currentRuntime } from "../agent-runtime.js"
 import type { AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 
@@ -47,57 +46,31 @@ const BINARY_EXTS = new Set([
 
 // ── Shared base path (same as filesystem.ts) ────────────────────
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-
 /**
- * Extra directories to exclude from search results (relative to currentRuntime().searchFiles.basePath).
- * Set via `setSearchExcludeDirs()` — used to prevent the agent's own source
- * code from flooding search results when child agents search for patterns
- * like TODO/PLACEHOLDER.
+ * Auto-detect agent source directories under a workspace root that
+ * should be excluded from search results, so child agents searching for
+ * patterns like TODO/PLACEHOLDER don't have their own source code flood
+ * the results. Server boot calls this when building the boot-time
+ * AgentHost and passes the result as `searchFilesExcludeDirs`.
  */
-
-export function setSearchBasePath(path: string): void {
-  currentRuntime().searchFiles.basePath = resolve(path)
-  // Auto-detect agent source directories to exclude on workspace change
-  autoDetectExcludeDirs()
-}
-
-/**
- * Set directories to exclude from search (relative to currentRuntime().searchFiles.basePath).
- * Prevents agent source code from appearing in task-scoped searches.
- *
- * Example: setSearchExcludeDirs(["packages", "scripts", "deploy", "docs"])
- */
-export function setSearchExcludeDirs(dirs: string[]): void {
-  currentRuntime().searchFiles.excludeDirs = new Set(dirs)
-}
-
-/**
- * Auto-detect agent source directories in the workspace and exclude them.
- * Call once at startup or when workspace changes.
- */
-export function autoDetectExcludeDirs(): void {
-  // If the workspace root has a packages/ dir with package.json files,
-  // it's likely a monorepo containing agent source code
+export function computeAutoDetectedExcludeDirs(basePath: string): string[] {
   const dirs: string[] = []
   const knownAgentDirs = ["packages", "deploy", "scripts", "bin", "docs"]
   for (const dir of knownAgentDirs) {
     try {
-      const stats = require("node:fs").statSync(resolve(currentRuntime().searchFiles.basePath, dir))
+      const stats = require("node:fs").statSync(resolve(basePath, dir))
       if (stats.isDirectory()) {
         dirs.push(dir)
       }
     } catch { /* doesn't exist, skip */ }
   }
-  currentRuntime().searchFiles.excludeDirs = new Set(dirs)
+  return dirs
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 interface Match {
-  file: string // relative to currentRuntime().searchFiles.basePath
+  file: string // relative to getActiveAgentHost().searchFiles.basePath
   line: number
   text: string
   context: string[]
@@ -302,19 +275,7 @@ async function executeSearchFiles(
   }
 }
 
-export const searchFilesTool: Tool = {
-  name: "search_files",
-  description: SEARCH_FILES_DESCRIPTION,
-  parameters: SEARCH_FILES_PARAMETERS,
-  async execute(args) {
-    return executeSearchFiles(args, {
-      basePath: currentRuntime().searchFiles.basePath,
-      excludeDirs: currentRuntime().searchFiles.excludeDirs,
-    })
-  },
-}
-
-/** Factory variant of {@link searchFilesTool} bound to `host.searchFiles`. */
+/** Factory: build a `search_files` tool bound to `host.searchFiles`. */
 export function createSearchFilesTool(host: AgentHost): Tool {
   return {
     name: "search_files",

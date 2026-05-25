@@ -11,18 +11,12 @@ import { detectPlaceholderPatterns } from "../../governance/index.js"
 import type { AgentHost } from "../../host/index.js"
 import type { ToolResultEnvelope } from "../../types.js"
 import { checkWriteIntegrity, extractDefinedNames, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
-import { buildToolOutcome, getBasePath, safePathResolved, safePathResolvedWith } from "../filesystem-security.js"
-
-export function executeWriteFile(args: Record<string, unknown>): Promise<string | ToolResultEnvelope> {
-  return executeWriteFileCore(args, {
-    basePath: getBasePath(),
-    resolveSafe: (p) => safePathResolved(p),
-  })
-}
+import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"
 
 /**
- * Doctrine-shaped variant: run the same write-file logic but sourcing the
- * sandbox root from the provided {@link AgentHost} (no `currentRuntime()`).
+ * Doctrine-shaped variant: run the write-file logic sourcing the sandbox
+ * root from the provided {@link AgentHost} (no ambient state, no
+ * `currentRuntime()`).
  */
 export function executeWriteFileWith(
   host: AgentHost,

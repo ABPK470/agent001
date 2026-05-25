@@ -26,22 +26,18 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
   EventType,
-  buildCatalog, closeMssqlPool, configureAgent, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
-  setActiveAgentHost,
+  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
   setBrowserCheckCwd,
   setBrowserCheckExecutor,
   setBrowserContextProvider,
   setBrowserCredentialProvider,
   setBrowserHandoffProvider,
-  setSearchBasePath,
   setShellCwd,
   setShellExecutor,
   setShellSandboxStrict,
   setSyncEventSink,
   setSyncRunSink,
   setupEnvironments,
-  type AgentHost,
-  type ConfigureAgentOptions,
 } from "@mia/agent"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -116,21 +112,6 @@ import { installRegistryRecipeResolver } from "./sync/registry-resolver.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
-
-// Doctrine-shaped composition root. Populated once at boot by
-// `configureAgent({...})` inside `main()`. Future cluster migrations
-// (Phase 4 of /memories/session/plan.md) consume this via `getAgentHost()`
-// to replace `currentRuntime()` lookups.
-let _agentHost: AgentHost | null = null
-let _hostOpts: ConfigureAgentOptions = {}
-
-/** Returns the boot-time AgentHost. Throws if called before main(). */
-export function getAgentHost(): AgentHost {
-  if (!_agentHost) {
-    throw new Error("getAgentHost(): server boot has not completed configureAgent({...}) yet")
-  }
-  return _agentHost
-}
 
 async function main() {
   initDatabase()
@@ -281,36 +262,24 @@ async function main() {
     }
   })
 
-  const orchestrator = new AgentOrchestrator({ llm, workspace: currentWorkspace })
-  // Build the doctrine-shaped AgentHost mirroring the current setter values.
-  // This is the substrate for the Phase 4 cluster-by-cluster migration off
-  // ambient state (docs/doctrine.md, /memories/session/plan.md). Tools that
-  // have been migrated to `createXxxTool(host)` factories will read from
-  // this; the legacy setters above still populate `AgentRuntime` for
-  // not-yet-migrated tools, so both worlds run in parallel during the
-  // transition.
-  _agentHost = configureAgent({
-    workspaceRoot: currentWorkspace,
-    filesystemBasePath: currentWorkspace,
-    searchFilesBasePath: currentWorkspace,
-    shellCwd: currentWorkspace,
-    browserCheckCwd: currentWorkspace,
-    browserContextReader: serverBrowserContextProvider,
-    browserCredentialReader: serverBrowserCredentialProvider,
-    browserHandoffStore: serverBrowserHandoffProvider,
-    attachments: serverAttachmentService,
+  const orchestrator = new AgentOrchestrator({
+    llm,
+    workspace: currentWorkspace,
+    // Boot deps explicitly threaded into every per-run AgentHost the
+    // orchestrator builds. This is the doctrine-shaped replacement for
+    // the deleted `setActiveAgentHost` / `setBootHostOptions` ambient
+    // setters. Tools migrated off `currentRuntime()` (filesystem,
+    // search_files, ask_user, attachments, mssql export-tool) close over
+    // the per-run host produced from these deps; tools that still rely
+    // on the runtime ALS read from setShellCwd / setBrowserCheckCwd /
+    // setBrowserContextProvider / etc. above.
+    bootHostDeps: {
+      attachments: serverAttachmentService,
+      browserContextReader: serverBrowserContextProvider,
+      browserCredentialReader: serverBrowserCredentialProvider,
+      browserHandoffStore: serverBrowserHandoffProvider,
+    },
   })
-  // Stash boot-time options so applyWorkspace() can rebuild the host
-  // when the user changes the active workspace from the UI.
-  _hostOpts = {
-    browserContextReader: serverBrowserContextProvider,
-    browserCredentialReader: serverBrowserCredentialProvider,
-    browserHandoffStore: serverBrowserHandoffProvider,
-    attachments: serverAttachmentService,
-  }
-  // Install the boot-time host as the service locator for tools that have
-  // migrated off `currentRuntime()` (Phase 4 transition shim).
-  setActiveAgentHost(_agentHost)
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
 
@@ -341,20 +310,8 @@ function resolveUiDist(): string {
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
-  setSearchBasePath(w)
   setShellCwd(w)
   setBrowserCheckCwd(w)
-  // Rebuild the AgentHost so filesystem.basePath (and other host-resident
-  // cwds) track the new workspace. Tools that have migrated off ambient
-  // state read these via getActiveAgentHost().
-  setActiveAgentHost(configureAgent({
-    ..._hostOpts,
-    workspaceRoot: w,
-    filesystemBasePath: w,
-    searchFilesBasePath: w,
-    shellCwd: w,
-    browserCheckCwd: w,
-  }))
   orchestrator.setWorkspace(w)
 }
 
@@ -426,7 +383,6 @@ function resolveWorkspace(): string {
     return from
   }
   const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
-  setSearchBasePath(workspace)
   setShellCwd(workspace)
   setBrowserCheckCwd(workspace)
   console.log(`Agent workspace: ${workspace}`)

@@ -10,7 +10,7 @@
 export { AgentRuntime } from "../agent-runtime.js"
 export type { AgentRuntimeOptions, AttachmentMetadata, AttachmentService, BrowserContextHandle, BrowserContextProvider, BrowserCredentialProvider, BrowserGuard, BrowserHandoffProvider } from "../agent-runtime.js"
 export { Agent } from "../agent/index.js"
-export { configureAgent, getActiveAgentHost, setActiveAgentHost } from "../host/index.js"
+export { configureAgent } from "../host/index.js"
 export type { AgentHost, ConfigureAgentOptions } from "../host/index.js"
 
 // ── Types & constants ───────────────────────────────────────────────

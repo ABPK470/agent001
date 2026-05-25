@@ -1,4 +1,6 @@
 import {
+    computeAutoDetectedExcludeDirs,
+    configureAgent,
     createEngineServices,
     EventType,
     PolicyEffect,
@@ -26,7 +28,7 @@ import { ClarificationsRegistry } from "./clarifications-state.js"
 import { createNotification, saveTrace } from "./persistence.js"
 import { recoverStaleRunsImpl } from "./recovery.js"
 import { executeRunImpl } from "./run-executor.js"
-import type { ActiveRun, AgentRunConfig, NotificationOpts, OrchestratorConfig, OrchestratorRunCtx } from "./types.js"
+import type { ActiveRun, AgentRunConfig, BootHostDeps, NotificationOpts, OrchestratorConfig, OrchestratorRunCtx } from "./types.js"
 import { applyRunWorkspaceDiff } from "./workspace-effects.js"
 
 // ── AgentOrchestrator ─────────────────────────────────────────────
@@ -40,6 +42,7 @@ export class AgentOrchestrator {
   private readonly queue: RunQueue
   private messageRouter: MessageRouter | null = null
   private workspace: string | null = null
+  private readonly bootHostDeps: BootHostDeps
   private readonly completedRunWorkspaces = new Map<string, RunWorkspaceContext>()
   private readonly completedRunDiffs = new Map<string, WorkspaceDiff>()
 
@@ -47,6 +50,7 @@ export class AgentOrchestrator {
     this.llm = config.llm
     this.messageRouter = config.messageRouter ?? null
     this.workspace = config.workspace ?? null
+    this.bootHostDeps = config.bootHostDeps
     this.queue = new RunQueue()
     migrateMemory()
     migrateEffects()
@@ -73,7 +77,11 @@ export class AgentOrchestrator {
     const controller = new AbortController()
     const services = createEngineServices()
     const agentId = config?.agentId ?? null
-    let tools = config?.tools ?? getAllTools()
+    // When the caller didn't supply an explicit tool list, build per-run
+    // tools from boot deps + the orchestrator's workspace. This is the
+    // pre-run host used only to size the registry; the actual execute-time
+    // host is rebuilt inside run-executor with the run-workspace path.
+    let tools = config?.tools ?? this.buildBootTools()
     // Visitor allowlist: non-admin sessions get the safe subset (no shell, no
     // headless browser). Captured here at run-start time when AsyncLocalStorage
     // still holds the originating request's session. Admin sessions get the
@@ -234,7 +242,7 @@ export class AgentOrchestrator {
 
     const messages = JSON.parse(checkpoint.messages) as Message[]
     const iteration = checkpoint.iteration
-    let tools = getAllTools()
+    let tools = this.buildBootTools()
     let systemPrompt: string | undefined
     if (originalRun.agent_id) {
       const agentDef = db.getAgentDefinition(originalRun.agent_id)
@@ -323,6 +331,28 @@ export class AgentOrchestrator {
 
   // ── Private: delegate to run-executor ────────────────────────
 
+  /**
+   * Build a transient host + tool list at run-queue time. Used only for
+   * the registry passed to executeRun; the executor itself rebuilds the
+   * host with the actual run-workspace root before constructing the
+   * Agent. Tools that close over `host.filesystem.basePath` here will
+   * therefore be overwritten — what matters is that the tool *set* matches
+   * what filterToolsForVisitor / filterToolsByGoal expect.
+   */
+  private buildBootTools(): Tool[] {
+    const root = this.workspace ?? process.cwd()
+    const host = configureAgent({
+      ...this.bootHostDeps,
+      workspaceRoot: root,
+      filesystemBasePath: root,
+      searchFilesBasePath: root,
+      searchFilesExcludeDirs: new Set(computeAutoDetectedExcludeDirs(root)),
+      shellCwd: root,
+      browserCheckCwd: root,
+    })
+    return getAllTools(host)
+  }
+
   private getCtx(): OrchestratorRunCtx {
     return {
       llm: this.llm,
@@ -335,6 +365,7 @@ export class AgentOrchestrator {
       completedRunDiffs: this.completedRunDiffs,
       messageRouter: this.messageRouter,
       clarifications: this.clarifications,
+      bootHostDeps: this.bootHostDeps,
     }
   }
 

@@ -13,7 +13,7 @@ import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../db/index.js"
 import type { AgentOrchestrator } from "../orchestrator/index.js"
-import { getAllTools, listAvailableTools } from "../tools.js"
+import { listAvailableTools } from "../tools.js"
 
 export function registerAgentRoutes(
   app: FastifyInstance,
@@ -157,7 +157,6 @@ export function registerAgentRoutes(
     // (file-managed) and the stored prompt for any custom agent.
     const runId = orchestrator.startRun(goal, {
       agentId: agent.id,
-      tools: getAllTools(),
       systemPrompt: db.resolveAgentSystemPrompt(agent),
     })
 
@@ -175,11 +174,12 @@ function formatAgent(a: db.DbAgentDefinition) {
     description: a.description,
     systemPrompt: a.system_prompt,
     // Tools are not yet stored per-agent in the DB — every agent currently
-    // receives the full registry at run time (see getAllTools usage above).
-    // We still surface the effective tool list so the UI's AgentDefinition
-    // contract (tools: string[]) is honoured and downstream consumers (IOE
-    // map, agent panels) don't crash on `undefined.length`/`for..of`.
-    tools: getAllTools().map((t) => t.name),
+    // receives the full registry at run time (resolved by the orchestrator
+    // when the run starts). We still surface the effective tool list so the
+    // UI's AgentDefinition contract (tools: string[]) is honoured and
+    // downstream consumers (IOE map, agent panels) don't crash on
+    // `undefined.length`/`for..of`.
+    tools: listAvailableTools().map((t) => t.name),
     createdAt: a.created_at,
     updatedAt: a.updated_at,
   }

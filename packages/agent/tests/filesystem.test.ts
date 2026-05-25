@@ -8,15 +8,22 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { configureAgent, setActiveAgentHost } from "../src/lib/index.js"
+import { configureAgent } from "../src/lib/index.js"
 import { normalizeToolExecutionOutput } from "../src/tools/_helpers/index.js"
-import { readFileTool, replaceInFileTool, writeFileTool } from "../src/tools/index.js"
+import { createReadFileTool, createReplaceInFileTool, createWriteFileTool } from "../src/tools/index.js"
+import type { Tool } from "../src/types.js"
 
 let tempDir: string
+let writeFileTool!: Tool
+let readFileTool!: Tool
+let replaceInFileTool!: Tool
 
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agent-fs-test-"))
-  setActiveAgentHost(configureAgent({ filesystemBasePath: tempDir }))
+  const host = configureAgent({ filesystemBasePath: tempDir })
+  writeFileTool     = createWriteFileTool(host)
+  readFileTool      = createReadFileTool(host)
+  replaceInFileTool = createReplaceInFileTool(host)
 })
 
 afterAll(async () => {

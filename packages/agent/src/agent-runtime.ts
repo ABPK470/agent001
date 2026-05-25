@@ -212,12 +212,6 @@ export interface FetchUrlState {
   killSignal: AbortSignal | null
 }
 
-export interface SearchFilesState {
-  basePath: string
-  /** Boot-config — shared across runtimes. */
-  excludeDirs: Set<string>
-}
-
 /**
  * Per-run memory writer hook (Gap 2). The server binds this at run start so
  * agent-side code (validator-driven auto-notes, tool-execution lessons) can
@@ -423,7 +417,6 @@ export class AgentRuntime {
   readonly shell: ShellState
   readonly browserCheck: BrowserCheckState
   readonly fetchUrl: FetchUrlState
-  readonly searchFiles: SearchFilesState
   /** Per-run memory writer hook (Gap 2). Null until the server binds it. */
   readonly memory: MemoryState
   /** Org-wide cache of heavy MSSQL-tool outputs. Null until server binds. */
@@ -484,10 +477,6 @@ export class AgentRuntime {
         handoffProvider: parent.browseWeb.handoffProvider,
       }
       this.fetchUrl = { killSignal: null }
-      this.searchFiles = {
-        basePath: parent.searchFiles.basePath,
-        excludeDirs: parent.searchFiles.excludeDirs,
-      }
       // Catalog and sync are shared whole — they hold expensive caches and
       // server-installed sinks that are inherently process-wide.
       this.catalog = parent.catalog
@@ -515,7 +504,6 @@ export class AgentRuntime {
       this.shell = { cwd: process.cwd(), executor: null, sandboxStrict: false, killSignal: null }
       this.browserCheck = { cwd: process.cwd(), executor: null }
       this.fetchUrl = { killSignal: null }
-      this.searchFiles = { basePath: process.cwd(), excludeDirs: new Set() }
       this.catalog = { instances: new Map(), defaultCachePath: undefined }
       this.sync = {
         eventSink: () => { /* default no-op */ },

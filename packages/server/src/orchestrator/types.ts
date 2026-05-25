@@ -1,4 +1,4 @@
-import type { EngineServices, LLMClient, PolicyRole } from "@mia/agent"
+import type { AttachmentService, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole } from "@mia/agent"
 import type { AgentBus } from "../agent-bus.js"
 import type { MessageRouter } from "../channels/router.js"
 import type { RunQueue } from "../queue.js"
@@ -55,6 +55,29 @@ export interface OrchestratorConfig {
   llm: LLMClient
   messageRouter?: MessageRouter
   workspace?: string
+  /**
+   * Boot-time host dependencies (ports captured by the server entrypoint and
+   * threaded through to every per-run host built by the orchestrator).
+   *
+   * The orchestrator NEVER constructs these — it just forwards them into
+   * `configureAgent({...})` at run start. This is the explicit-DI replacement
+   * for the deleted module-level setBootHostOptions/setActiveAgentHost
+   * shortcut. See docs/doctrine.md §1.
+   */
+  bootHostDeps: BootHostDeps
+}
+
+/**
+ * Boot-time host dependencies — ports the server resolves once at boot and
+ * passes to every per-run host. Each field is optional (the server may not
+ * have an attachments backend in tests, for example) and forwarded verbatim
+ * to {@link import("@mia/agent").configureAgent}.
+ */
+export interface BootHostDeps {
+  attachments?: AttachmentService | null
+  browserContextReader?: BrowserContextProvider | null
+  browserCredentialReader?: BrowserCredentialProvider | null
+  browserHandoffStore?: BrowserHandoffProvider | null
 }
 
 // ── Notification types ────────────────────────────────────────────
@@ -92,4 +115,6 @@ export interface OrchestratorRunCtx {
    * suppress re-asking the same subject.
    */
   clarifications: ClarificationsRegistry
+  /** Boot deps forwarded into every per-run `configureAgent({...})` call. */
+  bootHostDeps: BootHostDeps
 }
