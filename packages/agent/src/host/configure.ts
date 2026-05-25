@@ -89,6 +89,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     }),
     browser: Object.freeze({
       sessions: new Map(),
+      idCounter: { value: 0 },
+      cleanupTimer: { value: null },
       contextReader: options.browserContextReader ?? null,
       credentialReader: options.browserCredentialReader ?? null,
       handoffStore: options.browserHandoffStore ?? null,

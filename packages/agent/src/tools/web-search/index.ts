@@ -19,6 +19,7 @@
  * @module
  */
 
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { closeAllBrowserSessions, deleteSession, launchSession, persistSessionState } from "../browse-web/session.js"
 import { bingAdapter } from "./bing.js"
@@ -42,7 +43,7 @@ export interface WebSearchOptions {
   limit?: number
 }
 
-export async function runWebSearch(opts: WebSearchOptions): Promise<{
+export async function runWebSearch(opts: WebSearchOptions, host: AgentHost): Promise<{
   engine: string
   results: SearchResult[]
   captcha: boolean
@@ -73,7 +74,7 @@ export async function runWebSearch(opts: WebSearchOptions): Promise<{
     adapter: SearchAdapter,
   ): Promise<{ results: SearchResult[]; captcha: boolean }> => {
     attempted.push(adapter.id)
-    const launched = await launchSession(false, {})
+    const launched = await launchSession(host, false, {})
     if (typeof launched === "string") {
       // launchSession returned an error message rather than a session.
       throw new Error(`could not launch browser for ${adapter.id}: ${launched}`)
@@ -93,7 +94,7 @@ export async function runWebSearch(opts: WebSearchOptions): Promise<{
       throw err
     } finally {
       await session.browser.close().catch(() => { /* best-effort */ })
-      deleteSession(id)
+      deleteSession(host, id)
     }
   }
 
@@ -114,14 +115,13 @@ export async function runWebSearch(opts: WebSearchOptions): Promise<{
   return { engine: "none", results: [], captcha: lastCaptcha, attempted }
 }
 
-export const webSearchTool: Tool = {
-  name: "web_search",
-  description:
+const WEB_SEARCH_DESCRIPTION =
     "Search the web via a real browser against DuckDuckGo, Bing, or Google's public HTML " +
     "interface. Returns ranked {title, url, snippet} results. Use 'auto' (default) to try " +
     "engines in order until one succeeds; on CAPTCHA the auto chain falls over to the next " +
-    "engine. To follow a result, pass its url to fetch_url or browse_web.",
-  parameters: {
+    "engine. To follow a result, pass its url to fetch_url or browse_web."
+
+const WEB_SEARCH_PARAMETERS = {
     type: "object",
     properties: {
       query: { type: "string", description: "Search query string." },
@@ -133,31 +133,47 @@ export const webSearchTool: Tool = {
       limit: { type: "number", description: "Max results (1-25). Default 10." },
     },
     required: ["query"],
-  },
-  async execute(args) {
-    const query = String(args["query"] ?? "").trim()
-    if (!query) return "web_search requires a non-empty 'query'."
-    const engine = (args["engine"] as "auto" | "ddg" | "bing" | "google" | undefined) ?? "auto"
-    const limitRaw = args["limit"]
-    const limit = typeof limitRaw === "number" ? limitRaw : undefined
+  } as const
 
-    try {
-      const out = await runWebSearch({ query, engine, ...(limit !== undefined ? { limit } : {}) })
-      if (out.results.length === 0) {
-        const reason = out.captcha
-          ? "All engines returned a CAPTCHA wall. Consider browser_human_handoff to complete a search interactively."
-          : "No results returned (engine returned an empty page)."
-        return `web_search ${query} → 0 results (engines tried: ${out.attempted.join(", ")}). ${reason}`
-      }
-      const lines = out.results.map(
-        (r) => `${r.rank}. ${r.title}\n   ${r.url}\n   ${r.snippet}`,
-      )
-      return `web_search via ${out.engine} for "${query}":\n${lines.join("\n")}`
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      // Belt-and-braces — make sure we don't leak browser processes.
-      try { closeAllBrowserSessions() } catch { /* ignore */ }
-      return `web_search failed: ${msg}`
-    }
+export const webSearchTool: Tool = {
+  name: "web_search",
+  description: WEB_SEARCH_DESCRIPTION,
+  parameters: WEB_SEARCH_PARAMETERS,
+  async execute(_args) {
+    throw new Error("webSearchTool must be built via createWebSearchTool(host)")
   },
+}
+
+export function createWebSearchTool(host: AgentHost): Tool {
+  return {
+    name: "web_search",
+    description: WEB_SEARCH_DESCRIPTION,
+    parameters: WEB_SEARCH_PARAMETERS,
+    async execute(args) {
+      const query = String(args["query"] ?? "").trim()
+      if (!query) return "web_search requires a non-empty 'query'."
+      const engine = (args["engine"] as "auto" | "ddg" | "bing" | "google" | undefined) ?? "auto"
+      const limitRaw = args["limit"]
+      const limit = typeof limitRaw === "number" ? limitRaw : undefined
+
+      try {
+        const out = await runWebSearch({ query, engine, ...(limit !== undefined ? { limit } : {}) }, host)
+        if (out.results.length === 0) {
+          const reason = out.captcha
+            ? "All engines returned a CAPTCHA wall. Consider browser_human_handoff to complete a search interactively."
+            : "No results returned (engine returned an empty page)."
+          return `web_search ${query} → 0 results (engines tried: ${out.attempted.join(", ")}). ${reason}`
+        }
+        const lines = out.results.map(
+          (r) => `${r.rank}. ${r.title}\n   ${r.url}\n   ${r.snippet}`,
+        )
+        return `web_search via ${out.engine} for "${query}":\n${lines.join("\n")}`
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // Belt-and-braces — make sure we don't leak browser processes.
+        try { closeAllBrowserSessions(host) } catch { /* ignore */ }
+        return `web_search failed: ${msg}`
+      }
+    },
+  }
 }

@@ -10,23 +10,9 @@
  * @module
  */
 
-import { currentRuntime, type BrowserContextHandle, type BrowserContextProvider, type BrowserCredentialProvider, type BrowserHandoffProvider } from "../../agent-runtime.js"
+import { currentRuntime } from "../../agent-runtime.js"
+import type { AgentHost, BrowserContextHandle } from "../../host/index.js"
 import { pickFingerprint, type Fingerprint } from "./fingerprint.js"
-
-/** @internal — host-side wiring point. Server installs the persistent-context backend at boot. */
-export function setBrowserContextProvider(provider: BrowserContextProvider | null): void {
-  currentRuntime().browseWeb.contextProvider = provider
-}
-
-/** @internal — host-side wiring point. Server installs the credential resolver at boot. */
-export function setBrowserCredentialProvider(provider: BrowserCredentialProvider | null): void {
-  currentRuntime().browseWeb.credentialProvider = provider
-}
-
-/** @internal — host-side wiring point. Server installs the visible-browser handoff backend at boot. */
-export function setBrowserHandoffProvider(provider: BrowserHandoffProvider | null): void {
-  currentRuntime().browseWeb.handoffProvider = provider
-}
 
 export interface BrowserSession {
   browser: import("playwright").Browser
@@ -45,10 +31,9 @@ export interface BrowserSession {
 }
 
 // State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes. Owned by AgentRuntime in future.
+// banning module-level `let` passes. Owned by AgentHost (`host.browser.*`).
 
-// Browser sessions live on the active AgentRuntime
-// (`currentRuntime().browseWeb.sessions`).
+// Browser sessions live on the active AgentHost (`host.browser.sessions`).
 const SESSION_TIMEOUT = 5 * 60 * 1000
 
 /** Set by the orchestrator when a per-tool kill is registered/cleared. */
@@ -61,39 +46,37 @@ export function getKillSignal(): AbortSignal | null {
 }
 
 /**
- * Start the periodic cleanup of idle browser currentRuntime().browseWeb.sessions. Idempotent — calling
- * twice does nothing. Call once at startup; pair with `stopBrowseSessionCleanup()`
+ * Start the periodic cleanup of idle browser sessions on this host.
+ * Idempotent — calling twice does nothing. Call once at startup (or
+ * lazily on first session launch); pair with `stopBrowseSessionCleanup()`
  * on shutdown so the timer doesn't keep the process alive.
  */
-export function startBrowseSessionCleanup(): void {
-  const browseWeb = currentRuntime().browseWeb
-  if (browseWeb.cleanupTimer) return
+export function startBrowseSessionCleanup(host: AgentHost): void {
+  const browser = host.browser
+  if (browser.cleanupTimer.value) return
   const timer = setInterval(() => {
     const now = Date.now()
-    for (const [id, session] of browseWeb.sessions) {
+    for (const [id, session] of browser.sessions) {
       if (now - session.lastUsed > SESSION_TIMEOUT) {
         // Best-effort persistence before close.
         persistSessionState(session)
           .finally(() => session.browser.close().catch(() => {}))
-        browseWeb.sessions.delete(id)
+        browser.sessions.delete(id)
       }
     }
   }, 60_000)
   timer.unref()
-  browseWeb.cleanupTimer = timer
+  browser.cleanupTimer.value = timer
 }
 
 /** Stop the periodic cleanup timer. Safe to call when not started. */
-export function stopBrowseSessionCleanup(): void {
-  const browseWeb = currentRuntime().browseWeb
-  if (browseWeb.cleanupTimer) {
-    clearInterval(browseWeb.cleanupTimer)
-    browseWeb.cleanupTimer = null
+export function stopBrowseSessionCleanup(host: AgentHost): void {
+  const browser = host.browser
+  if (browser.cleanupTimer.value) {
+    clearInterval(browser.cleanupTimer.value)
+    browser.cleanupTimer.value = null
   }
 }
-
-// Auto-start preserves prior behaviour for existing call sites.
-startBrowseSessionCleanup()
 
 /**
  * Wrap a Playwright operation to abort early when the kill signal fires.
@@ -146,9 +129,13 @@ async function resolveStealthChromium(): Promise<typeof import("playwright").chr
 }
 
 export async function launchSession(
+  host: AgentHost,
   visible = false,
   options: { tenantSeed?: string } = {},
 ): Promise<{ session: BrowserSession; id: string } | string> {
+  // Lazily start the per-host idle-session cleanup timer.
+  startBrowseSessionCleanup(host)
+
   let chromium: typeof import("playwright").chromium
   const stealth = await resolveStealthChromium()
   if (stealth) {
@@ -163,7 +150,7 @@ export async function launchSession(
   }
 
   // Acquire persistent context handle (null for anon / no provider).
-  const provider = currentRuntime().browseWeb.contextProvider
+  const provider = host.browser.contextReader
   let handle: BrowserContextHandle | null = null
   if (provider) {
     try { handle = await provider.acquire() } catch { handle = null }
@@ -200,7 +187,7 @@ export async function launchSession(
   const context = await browser.newContext(contextOpts)
   const page = await context.newPage()
 
-  const id = `s${++currentRuntime().browseWeb.counter}`
+  const id = `s${++host.browser.idCounter.value}`
   const session: BrowserSession = {
     browser,
     context,
@@ -213,7 +200,7 @@ export async function launchSession(
     fingerprint,
     contextHandle: handle,
   }
-  currentRuntime().browseWeb.sessions.set(id, session)
+  host.browser.sessions.set(id, session)
   return { session, id }
 }
 
@@ -232,22 +219,22 @@ export async function persistSessionState(session: BrowserSession): Promise<void
   }
 }
 
-export function getSession(sessionId: string): BrowserSession | string {
-  const session = currentRuntime().browseWeb.sessions.get(sessionId)
+export function getSession(host: AgentHost, sessionId: string): BrowserSession | string {
+  const session = host.browser.sessions.get(sessionId)
   if (!session) return `Error: Session "${sessionId}" not found or expired`
   session.lastUsed = Date.now()
   return session
 }
 
-export function deleteSession(sessionId: string): void {
-  currentRuntime().browseWeb.sessions.delete(sessionId)
+export function deleteSession(host: AgentHost, sessionId: string): void {
+  host.browser.sessions.delete(sessionId)
 }
 
-/** Force-close all open browser currentRuntime().browseWeb.sessions (for cleanup on server shutdown). */
-export function closeAllBrowserSessions(): void {
-  for (const [id, session] of currentRuntime().browseWeb.sessions) {
+/** Force-close all open browser sessions on this host (for cleanup on server shutdown). */
+export function closeAllBrowserSessions(host: AgentHost): void {
+  for (const [id, session] of host.browser.sessions) {
     persistSessionState(session)
       .finally(() => session.browser.close().catch(() => {}))
-    currentRuntime().browseWeb.sessions.delete(id)
+    host.browser.sessions.delete(id)
   }
 }

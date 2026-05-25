@@ -15,14 +15,14 @@ import {
     bindNoteTool,
     bindRecallPriorResultTool,
     bindRecordTableVerdictTool,
-    browserAutoLoginTool,
-    browserHumanHandoffTool,
     compareCatalogsTool,
     configureAgent,
     createAppendFileTool,
     createAskUserTool,
     createBrowseWebTool,
+    createBrowserAutoLoginTool,
     createBrowserCheckTool,
+    createBrowserHumanHandoffTool,
     createDelegateTools,
     createExportQueryToFileTool,
     createImportAttachmentTool,
@@ -34,6 +34,7 @@ import {
     createReplaceInFileTool,
     createSearchFilesTool,
     createShellTool,
+    createWebSearchTool,
     createWriteFileTool,
     discoverRelationshipsTool,
     fetchUrlTool,
@@ -50,7 +51,6 @@ import {
     syncExecuteTool,
     syncPreviewTool,
     thinkTool,
-    webSearchTool,
     type AgentHost,
     type DelegateContext,
     type GovernToolOptions,
@@ -71,11 +71,11 @@ export interface ToolInfo {
 // ── Factories ─────────────────────────────────────────────────────
 // Each entry produces ONE tool bound to the supplied host. Tools that
 // still rely on AgentRuntime ALS internally (mssql, catalog, fetch_url,
-// note, recall_prior_result, record_table_verdict, browserAutoLogin,
-// browserHumanHandoff, web_search, get_chart_specs, think, sync_*) are
-// returned as-is — the host argument is ignored for those, and they will
-// continue to read configuration from `currentRuntime()`. Migrating them
-// is a follow-up task outside this refactor's scope.
+// note, recall_prior_result, record_table_verdict, get_chart_specs,
+// think, sync_*) are returned as-is — the host argument is ignored for
+// those, and they will continue to read configuration from
+// `currentRuntime()`. Migrating them is a follow-up task outside this
+// refactor's scope.
 
 type ToolFactory = (host: AgentHost) => Tool
 
@@ -87,15 +87,15 @@ const ALL_TOOL_FACTORIES: ToolFactory[] = [
   createReplaceInFileTool,
   createListDirectoryTool,
   createSearchFilesTool,
-  // ── Shell + browser (host-bound; factories already existed) ──
+  // ── Shell + browser (host-bound) ──
   createShellTool,
   createBrowseWebTool,
   createBrowserCheckTool,
+  createBrowserAutoLoginTool,
+  createBrowserHumanHandoffTool,
+  createWebSearchTool,
   // ── Ambient (still on currentRuntime ALS — host arg ignored) ──
   (_h) => fetchUrlTool,
-  (_h) => browserAutoLoginTool,
-  (_h) => browserHumanHandoffTool,
-  (_h) => webSearchTool,
   // ── User input (host-bound) ──
   createAskUserTool,
   // ── Misc ambient ──

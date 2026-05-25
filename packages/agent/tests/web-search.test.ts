@@ -29,6 +29,8 @@ vi.mock("../src/tools/web-search/ddg-fetch.js", () => ({
 
 import { CaptchaBlockedError } from "../src/tools/web-search/types.js"
 
+const mockHost = {} as never
+
 describe("web_search runWebSearch", () => {
   beforeEach(() => {
     vi.resetModules()
@@ -53,7 +55,7 @@ describe("web_search runWebSearch", () => {
     }))
 
     const { runWebSearch } = await import("../src/tools/web-search/index.js")
-    const out = await runWebSearch({ query: "hello", engine: "ddg", limit: 5 })
+    const out = await runWebSearch({ query: "hello", engine: "ddg", limit: 5 }, mockHost)
 
     expect(out.engine).toBe("ddg")
     expect(out.results.length).toBe(1)
@@ -79,7 +81,7 @@ describe("web_search runWebSearch", () => {
     }))
 
     const { runWebSearch } = await import("../src/tools/web-search/index.js")
-    const out = await runWebSearch({ query: "test", engine: "auto" })
+    const out = await runWebSearch({ query: "test", engine: "auto" }, mockHost)
 
     expect(out.engine).toBe("bing")
     expect(out.attempted).toEqual(["ddg-lite", "ddg", "bing"])
@@ -100,7 +102,7 @@ describe("web_search runWebSearch", () => {
     }))
 
     const { runWebSearch } = await import("../src/tools/web-search/index.js")
-    const out = await runWebSearch({ query: "blocked" })
+    const out = await runWebSearch({ query: "blocked" }, mockHost)
 
     expect(out.engine).toBe("none")
     expect(out.captcha).toBe(true)
@@ -111,7 +113,7 @@ describe("web_search runWebSearch", () => {
   it("rejects unknown engine", async () => {
     const { runWebSearch } = await import("../src/tools/web-search/index.js")
     await expect(
-      runWebSearch({ query: "x", engine: "yahoo" as never }),
+      runWebSearch({ query: "x", engine: "yahoo" as never }, mockHost),
     ).rejects.toThrow(/unknown search engine/)
   })
 
@@ -132,9 +134,9 @@ describe("web_search runWebSearch", () => {
     }))
 
     const { runWebSearch } = await import("../src/tools/web-search/index.js")
-    await runWebSearch({ query: "x", engine: "ddg", limit: 999 })
+    await runWebSearch({ query: "x", engine: "ddg", limit: 999 }, mockHost)
     expect(captured).toBe(25)
-    await runWebSearch({ query: "x", engine: "ddg", limit: 0 })
+    await runWebSearch({ query: "x", engine: "ddg", limit: 0 }, mockHost)
     expect(captured).toBe(1)
   })
 })

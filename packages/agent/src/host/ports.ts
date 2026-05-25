@@ -77,12 +77,33 @@ export type BrowserClient = (
 
 // ── Browser context / credential / handoff ───────────────────────
 
+/**
+ * Compliance hooks installed by the host alongside the persistent
+ * context. The agent treats `null` as a permissive default — only the
+ * server actually enforces policy / rate limits / auditing.
+ */
+export interface BrowserGuard {
+  /** Approve (or deny) a navigation. */
+  checkUrl(url: string): Promise<{ allow: boolean; reason: string; retryAfterMs?: number }>
+  /** Record a successful action for auditing. Best-effort; never throws. */
+  recordAction(input: { action: string; url?: string; detail?: string }): Promise<void>
+}
+
 /** Handle returned by the persistent-context reader; passed to Playwright. */
 export interface BrowserContextHandle {
   /** Stable seed for fingerprint selection (typically the upn). */
   fingerprintSeed: string
   /** Pass directly to Playwright `browser.newContext({ storageState })`. */
   storageState: unknown | null
+  /**
+   * Optional BYO upstream proxy for this tenant. Plumbed straight into
+   * Playwright's `chromium.launch({ proxy })`. Null = direct connection.
+   */
+  proxy?: { server: string; bypass?: string; username?: string; password?: string } | null
+  /** Optional compliance guard — see {@link BrowserGuard}. */
+  guard?: BrowserGuard | null
+  /** Persist the latest storage state. Caller invokes after meaningful changes. */
+  save(state: unknown): Promise<void>
 }
 
 /**

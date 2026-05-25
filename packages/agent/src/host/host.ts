@@ -66,8 +66,12 @@ export interface BrowserCheckHost {
 }
 
 export interface BrowserHost {
-  /** Process-wide live browser sessions. Tools mutate this map. */
+  /** Live browser sessions for this host. Tools mutate this map. */
   readonly sessions: Map<string, BrowserSession>
+  /** Monotonic session-id counter — mutable ref so tools can `++.value`. */
+  readonly idCounter: { value: number }
+  /** Per-host idle-session cleanup timer — mutable ref started lazily. */
+  readonly cleanupTimer: { value: NodeJS.Timeout | null }
   readonly contextReader: BrowserContextReader | null
   readonly credentialReader: CredentialReader | null
   readonly handoffStore: HandoffStore | null

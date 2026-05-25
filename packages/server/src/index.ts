@@ -27,9 +27,6 @@ import fastifyStatic from "@fastify/static"
 import {
   EventType,
   buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
-  setBrowserContextProvider,
-  setBrowserCredentialProvider,
-  setBrowserHandoffProvider,
   setSyncEventSink,
   setSyncRunSink,
   setupEnvironments,
@@ -123,17 +120,10 @@ async function main() {
   // HostedPolicyContext at call time, so a single instance is safe for
   // every concurrent run.
 
-  // Bridge agent-side browse_web tool to per-tenant persistent browser
-  // contexts (cookies / localStorage) stored under ~/.mia/browser-contexts/.
-  // Anonymous sessions get null and stay ephemeral.
-  setBrowserContextProvider(serverBrowserContextProvider)
-
-  // Bridge agent-side browser_auto_login tool to vault-encrypted credentials.
-  // Refused for anonymous tenants by the provider itself.
-  setBrowserCredentialProvider(serverBrowserCredentialProvider)
-
-  // Bridge agent-side browser_human_handoff tool to the in-process handoff registry.
-  setBrowserHandoffProvider(serverBrowserHandoffProvider)
+  // Browse-web persistent-context, credential, and human-handoff backends
+  // are wired exclusively via `configureAgent({ browserContextReader,
+  // browserCredentialReader, browserHandoffStore })` below — the legacy
+  // `setBrowser*Provider` ambient setters were removed in cluster 7.
 
   // ── ABI sync subsystem ──
   await setupEnvironments(_projectRoot)

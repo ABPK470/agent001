@@ -61,11 +61,10 @@ const STATE_ALLOWLIST = new Set([
 ])
 
 // File-level allow-list overrides for setInterval / setTimeout at module load.
-// `tools/browse-web/session.ts` calls `startBrowseSessionCleanup()` once at
-// load so existing callers keep working; the timer can be torn down by
-// `stopBrowseSessionCleanup()` (used by AgentRuntime.dispose() in future).
+// Empty as of cluster 7 — `tools/browse-web/session.ts` no longer auto-starts
+// its cleanup timer at module load (the timer now lives on
+// `AgentHost.browser.cleanupTimer` and is started lazily by `launchSession`).
 const TIMER_ALLOWLIST = new Set([
-  "tools/browse-web/session.ts",
 ])
 
 // ── Doctrine roll-out allowlists (Phase 0 → Phase 8) ──────────────

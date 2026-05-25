@@ -20,7 +20,6 @@
  * @module
  */
 
-import { currentRuntime } from "../../agent-runtime.js"
 import { BROWSE_WEB_ACTION_VALUES, BrowseWebAction } from "../../domain/enums/browse-web.js"
 import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
@@ -39,7 +38,7 @@ import {
 import { getKillSignal, getSession } from "./session.js"
 
 // Re-export public helpers for backwards compatibility
-export { closeAllBrowserSessions, setBrowseKillSignal, setBrowserContextProvider, setBrowserCredentialProvider, setBrowserHandoffProvider } from "./session.js"
+export { closeAllBrowserSessions, setBrowseKillSignal } from "./session.js"
 export type { BrowserSession } from "./session.js"
 
 // ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
@@ -128,19 +127,16 @@ export const browseWebTool: Tool = {
   name: "browse_web",
   description: BROWSE_WEB_DESCRIPTION,
   parameters: BROWSE_WEB_PARAMETERS,
-  async execute(args) {
-    return runBrowseWeb(args, { workspaceRoot: currentRuntime().workspaceRoot })
+  async execute(_args) {
+    throw new Error("browseWebTool must be built via createBrowseWebTool(host)")
   },
 }
 
 /**
- * Factory variant bound to `host.workspaceRoot`.
- *
- * Note: deeper session-lifecycle plumbing (sessions Map, context/credential
- * readers, kill signal) still flows through `currentRuntime()` inside
- * `session.ts` during Phase 4 additive. The Phase 4 acceptance pass
- * (call-site swap) is where session.ts is rewritten to take `host` and
- * `host.browser.sessions` becomes the only sessions map.
+ * Factory variant bound to a host — the only supported construction path.
+ * Threads the host through to session.ts so `host.browser.sessions`,
+ * `host.browser.idCounter`, and `host.browser.contextReader` are sourced
+ * from the per-run AgentHost rather than the AgentRuntime ALS.
  */
 export function createBrowseWebTool(host: AgentHost): Tool {
   return {
@@ -148,18 +144,14 @@ export function createBrowseWebTool(host: AgentHost): Tool {
     description: BROWSE_WEB_DESCRIPTION,
     parameters: BROWSE_WEB_PARAMETERS,
     async execute(args) {
-      return runBrowseWeb(args, { workspaceRoot: host.workspaceRoot })
+      return runBrowseWeb(args, host)
     },
   }
 }
 
 // ── Shared body ──────────────────────────────────────────────────
 
-interface BrowseWebCtx {
-  workspaceRoot: string
-}
-
-async function runBrowseWeb(args: Record<string, unknown>, ctx: BrowseWebCtx): Promise<string> {
+async function runBrowseWeb(args: Record<string, unknown>, host: AgentHost): Promise<string> {
     const action = String(args.action)
     const sessionId = args.session_id ? String(args.session_id) : undefined
     const maxLength = Number(args.max_length ?? 10000)
@@ -169,6 +161,7 @@ async function runBrowseWeb(args: Record<string, unknown>, ctx: BrowseWebCtx): P
 
     if (action === BrowseWebAction.Navigate) {
       return handleNavigate({
+        host,
         url: String(args.url ?? ""),
         visible: Boolean(args.visible),
         sessionId,
@@ -178,7 +171,7 @@ async function runBrowseWeb(args: Record<string, unknown>, ctx: BrowseWebCtx): P
 
     // All remaining actions require a session
     if (!sessionId) return "Error: 'session_id' is required. Use 'navigate' first to start a session."
-    const s = getSession(sessionId)
+    const s = getSession(host, sessionId)
     if (typeof s === "string") return s
     const session = s
 
@@ -192,14 +185,14 @@ async function runBrowseWeb(args: Record<string, unknown>, ctx: BrowseWebCtx): P
       case BrowseWebAction.Read:
         return handleRead(session, sessionId, maxLength)
       case BrowseWebAction.Close:
-        return handleClose(session, sessionId)
+        return handleClose(host, session, sessionId)
       case BrowseWebAction.Upload:
         return handleUpload(
           session,
           sessionId,
           String(args.selector ?? ""),
           String(args.file_path ?? ""),
-          ctx.workspaceRoot,
+          host.workspaceRoot,
           maxLength,
         )
       case BrowseWebAction.Tabs:

@@ -5,6 +5,7 @@
  * @module
  */
 
+import type { AgentHost } from "../../host/index.js"
 import { dismissCookieConsent, readPageText } from "./page-helpers.js"
 import { resolveLocator } from "./selectors.js"
 import {
@@ -27,6 +28,7 @@ function activeTarget(session: BrowserSession): import("playwright").Page | impo
 }
 
 interface NavigateArgs {
+  host: AgentHost
   url: string
   visible: boolean
   sessionId: string | undefined
@@ -34,7 +36,7 @@ interface NavigateArgs {
 }
 
 export async function handleNavigate(args: NavigateArgs): Promise<string> {
-  const { url, visible, sessionId, maxLength } = args
+  const { host, url, visible, sessionId, maxLength } = args
   if (!url) return "Error: 'url' is required for navigate action"
 
   const urlErr = await validateUrl(url)
@@ -43,11 +45,11 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
   let session: BrowserSession
   let id: string
   if (sessionId) {
-    const s = getSession(sessionId)
+    const s = getSession(host, sessionId)
     if (typeof s === "string") return s
     session = s; id = sessionId
   } else {
-    const result = await launchSession(visible)
+    const result = await launchSession(host, visible)
     if (typeof result === "string") return result
     session = result.session; id = result.id
   }
@@ -249,12 +251,13 @@ export async function handleRead(
 }
 
 export async function handleClose(
+  host: AgentHost,
   session: BrowserSession,
   sessionId: string,
 ): Promise<string> {
   await persistSessionState(session)
   try { await session.browser.close() } catch { /* ignore */ }
-  deleteSession(sessionId)
+  deleteSession(host, sessionId)
   return `Session ${sessionId} closed.`
 }
 

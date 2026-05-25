@@ -19,19 +19,18 @@
  * @module
  */
 
-import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import type { Tool } from "../types.js"
 import { resolveLocator } from "./browse-web/selectors.js"
 import { getKillSignal, getSession, persistSessionState } from "./browse-web/session.js"
 
-export const browserAutoLoginTool: Tool = {
-  name: "browser_auto_login",
-  description:
+const BROWSER_AUTO_LOGIN_DESCRIPTION =
     "Auto-fill and submit a login form on the active browse_web session using a stored credential. " +
     "Resolves the credential via the per-tenant vault (cross-tenant access is refused). " +
     "Use mode='password' for { username, password } credentials and mode='totp' to type a fresh TOTP code. " +
-    "Selector strings accept the same prefixes as browse_web ('css:', 'xpath:', 'text:', 'role:').",
-  parameters: {
+    "Selector strings accept the same prefixes as browse_web ('css:', 'xpath:', 'text:', 'role:')."
+
+const BROWSER_AUTO_LOGIN_PARAMETERS = {
     type: "object",
     properties: {
       session_id: { type: "string", description: "Active browse_web session id." },
@@ -60,81 +59,96 @@ export const browserAutoLoginTool: Tool = {
       },
     },
     required: ["session_id", "credential_id", "mode"],
+  } as const
+
+export const browserAutoLoginTool: Tool = {
+  name: "browser_auto_login",
+  description: BROWSER_AUTO_LOGIN_DESCRIPTION,
+  parameters: BROWSER_AUTO_LOGIN_PARAMETERS,
+  async execute(_args) {
+    throw new Error("browserAutoLoginTool must be built via createBrowserAutoLoginTool(host)")
   },
+}
 
-  async execute(args) {
-    const provider = currentRuntime().browseWeb.credentialProvider
-    if (!provider) {
-      return "Error: credential vault is not configured for this runtime (anonymous session or non-server host)."
-    }
+export function createBrowserAutoLoginTool(host: AgentHost): Tool {
+  return {
+    name: "browser_auto_login",
+    description: BROWSER_AUTO_LOGIN_DESCRIPTION,
+    parameters: BROWSER_AUTO_LOGIN_PARAMETERS,
+    async execute(args) {
+      const provider = host.browser.credentialReader
+      if (!provider) {
+        return "Error: credential vault is not configured for this runtime (anonymous session or non-server host)."
+      }
 
-    if (getKillSignal()?.aborted) return "Error: Tool execution cancelled"
+      if (getKillSignal()?.aborted) return "Error: Tool execution cancelled"
 
-    const sessionId = String(args.session_id ?? "")
-    const credentialId = String(args.credential_id ?? "")
-    const mode = String(args.mode ?? "")
-    if (!sessionId) return "Error: 'session_id' is required"
-    if (!credentialId) return "Error: 'credential_id' is required"
+      const sessionId = String(args.session_id ?? "")
+      const credentialId = String(args.credential_id ?? "")
+      const mode = String(args.mode ?? "")
+      if (!sessionId) return "Error: 'session_id' is required"
+      if (!credentialId) return "Error: 'credential_id' is required"
 
-    const sess = getSession(sessionId)
-    if (typeof sess === "string") return sess
-    const session = sess
-    const target = session.frame ?? session.page
+      const sess = getSession(host, sessionId)
+      if (typeof sess === "string") return sess
+      const session = sess
+      const target = session.frame ?? session.page
 
-    const submitSelector = args.submit_selector ? String(args.submit_selector) : undefined
+      const submitSelector = args.submit_selector ? String(args.submit_selector) : undefined
 
-    try {
-      if (mode === "password") {
-        const usernameSelector = String(args.username_selector ?? "")
-        const passwordSelector = String(args.password_selector ?? "")
-        if (!usernameSelector || !passwordSelector) {
-          return "Error: 'username_selector' and 'password_selector' are required for mode='password'"
+      try {
+        if (mode === "password") {
+          const usernameSelector = String(args.username_selector ?? "")
+          const passwordSelector = String(args.password_selector ?? "")
+          if (!usernameSelector || !passwordSelector) {
+            return "Error: 'username_selector' and 'password_selector' are required for mode='password'"
+          }
+          const cred = await provider.resolvePassword(credentialId)
+          if (!cred) return `Error: credential "${credentialId}" not found for this user`
+
+          const userLoc = resolveLocator(target, usernameSelector)
+          await userLoc.first().waitFor({ timeout: 5000 })
+          await userLoc.first().click({ clickCount: 3 })
+          await userLoc.first().pressSequentially(cred.username, { delay: 30 })
+
+          const passLoc = resolveLocator(target, passwordSelector)
+          await passLoc.first().waitFor({ timeout: 5000 })
+          await passLoc.first().click({ clickCount: 3 })
+          await passLoc.first().pressSequentially(cred.password, { delay: 30 })
+        } else if (mode === "totp") {
+          const codeSelector = String(args.code_selector ?? "")
+          if (!codeSelector) return "Error: 'code_selector' is required for mode='totp'"
+          const cred = await provider.resolveTotp(credentialId)
+          if (!cred) return `Error: credential "${credentialId}" not found for this user`
+
+          const codeLoc = resolveLocator(target, codeSelector)
+          await codeLoc.first().waitFor({ timeout: 5000 })
+          await codeLoc.first().click({ clickCount: 3 })
+          await codeLoc.first().pressSequentially(cred.code, { delay: 30 })
+        } else {
+          return `Error: unknown mode "${mode}". Use 'password' or 'totp'.`
         }
-        const cred = await provider.resolvePassword(credentialId)
-        if (!cred) return `Error: credential "${credentialId}" not found for this user`
 
-        const userLoc = resolveLocator(target, usernameSelector)
-        await userLoc.first().waitFor({ timeout: 5000 })
-        await userLoc.first().click({ clickCount: 3 })
-        await userLoc.first().pressSequentially(cred.username, { delay: 30 })
+        if (submitSelector) {
+          const submitLoc = resolveLocator(target, submitSelector)
+          await submitLoc.first().click()
+        } else {
+          await session.page.keyboard.press("Enter")
+        }
+        await session.page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {})
+        session.url = session.page.url()
 
-        const passLoc = resolveLocator(target, passwordSelector)
-        await passLoc.first().waitFor({ timeout: 5000 })
-        await passLoc.first().click({ clickCount: 3 })
-        await passLoc.first().pressSequentially(cred.password, { delay: 30 })
-      } else if (mode === "totp") {
-        const codeSelector = String(args.code_selector ?? "")
-        if (!codeSelector) return "Error: 'code_selector' is required for mode='totp'"
-        const cred = await provider.resolveTotp(credentialId)
-        if (!cred) return `Error: credential "${credentialId}" not found for this user`
+        // Persist storage state so the cookie set by login survives the
+        // session timeout — same path as handleClose.
+        persistSessionState(session).catch(() => {})
 
-        const codeLoc = resolveLocator(target, codeSelector)
-        await codeLoc.first().waitFor({ timeout: 5000 })
-        await codeLoc.first().click({ clickCount: 3 })
-        await codeLoc.first().pressSequentially(cred.code, { delay: 30 })
-      } else {
-        return `Error: unknown mode "${mode}". Use 'password' or 'totp'.`
+        const text = await session.page
+          .evaluate("document.body?.innerText?.slice(0, 4000) ?? ''")
+          .catch(() => "")
+        return `[Session: ${sessionId}] [URL: ${session.page.url()}]\nLogin submitted.\n\n${text}`
+      } catch (err) {
+        return `Error during auto-login: ${err instanceof Error ? err.message : String(err)}`
       }
-
-      if (submitSelector) {
-        const submitLoc = resolveLocator(target, submitSelector)
-        await submitLoc.first().click()
-      } else {
-        await session.page.keyboard.press("Enter")
-      }
-      await session.page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {})
-      session.url = session.page.url()
-
-      // Persist storage state so the cookie set by login survives the
-      // session timeout — same path as handleClose.
-      persistSessionState(session).catch(() => {})
-
-      const text = await session.page
-        .evaluate("document.body?.innerText?.slice(0, 4000) ?? ''")
-        .catch(() => "")
-      return `[Session: ${sessionId}] [URL: ${session.page.url()}]\nLogin submitted.\n\n${text}`
-    } catch (err) {
-      return `Error during auto-login: ${err instanceof Error ? err.message : String(err)}`
-    }
-  },
+    },
+  }
 }

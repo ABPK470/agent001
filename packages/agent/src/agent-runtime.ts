@@ -68,7 +68,6 @@ import type {
   SyncRunSink,
 } from "./sync/index.js"
 import type {
-  BrowserSession,
   CatalogGraph,
 } from "./tools/index.js"
 
@@ -97,19 +96,8 @@ export interface MssqlState {
 }
 
 export interface BrowseWebState {
-  /** Per-runtime browser sessions — disposed when the runtime is disposed. */
-  sessions: Map<string, BrowserSession>
-  counter: number
   /** Per-tool-call kill signal — closes the active page when aborted. */
   killSignal: AbortSignal | null
-  /** Process-wide idle-session evictor — owned by the root runtime. */
-  cleanupTimer: NodeJS.Timeout | null
-  /** Persistent context provider installed by the host (server). Null in CLI/tests → ephemeral sessions. */
-  contextProvider: BrowserContextProvider | null
-  /** Credential resolver installed by the host (server). Null in CLI/tests → auto-login refused. */
-  credentialProvider: BrowserCredentialProvider | null
-  /** Visible-browser handoff provider installed by the host. Null in CLI/tests → human handoff refused. */
-  handoffProvider: BrowserHandoffProvider | null
 }
 
 /**
@@ -455,15 +443,7 @@ export class AgentRuntime {
         profileDataCalled: new Set<string>(),
       }
       this.shell = { killSignal: null }
-      this.browseWeb = {
-        sessions: new Map(),
-        counter: 0,
-        killSignal: null,
-        cleanupTimer: parent.browseWeb.cleanupTimer,
-        contextProvider: parent.browseWeb.contextProvider,
-        credentialProvider: parent.browseWeb.credentialProvider,
-        handoffProvider: parent.browseWeb.handoffProvider,
-      }
+      this.browseWeb = { killSignal: null }
       this.fetchUrl = { killSignal: null }
       // Catalog and sync are shared whole — they hold expensive caches and
       // server-installed sinks that are inherently process-wide.
@@ -488,7 +468,7 @@ export class AgentRuntime {
     } else {
       // Root: fresh defaults everywhere.
       this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
-      this.browseWeb = { sessions: new Map(), counter: 0, killSignal: null, cleanupTimer: null, contextProvider: null, credentialProvider: null, handoffProvider: null }
+      this.browseWeb = { killSignal: null }
       this.shell = { killSignal: null }
       this.fetchUrl = { killSignal: null }
       this.catalog = { instances: new Map(), defaultCachePath: undefined }
@@ -547,18 +527,13 @@ export class AgentRuntime {
    * callers should not reuse the runtime — make a fresh one.
    */
   async dispose(): Promise<void> {
-    // Always: this runtime's own browser sessions
-    for (const [id, session] of this.browseWeb.sessions) {
-      try { await session.browser.close() } catch { /* ignore */ }
-      this.browseWeb.sessions.delete(id)
-    }
+    // Browse-web sessions + cleanup timer now live on AgentHost
+    // (`host.browser.sessions` / `host.browser.cleanupTimer`). Hosts
+    // own their own teardown; `dispose()` only handles root-owned
+    // infrastructure that still lives on the runtime.
     if (!this.#isRoot) return
 
     // Root-only: shared infrastructure
-    if (this.browseWeb.cleanupTimer) {
-      clearInterval(this.browseWeb.cleanupTimer)
-      this.browseWeb.cleanupTimer = null
-    }
     for (const entry of this.mssql.databases.values()) {
       if (entry.pool) {
         try { await entry.pool.close() } catch { /* ignore */ }
