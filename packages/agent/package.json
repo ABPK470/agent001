@@ -15,6 +15,7 @@
         "lint": "tsc --noEmit"
     },
     "dependencies": {
+        "@mia/sync": "*",
         "@mia/shared-enums": "*",
         "mssql": "^12.2.1",
         "playwright": "^1.49.0",

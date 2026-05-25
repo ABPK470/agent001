@@ -34,7 +34,6 @@ export * from "./recall/index.js"
 export * from "./record-table-verdict.js"
 export * from "./search-files.js"
 export * from "./shell/index.js"
-export * from "./sync-tools.js"
 export * from "./think.js"
 export * from "./web-search/index.js"
 

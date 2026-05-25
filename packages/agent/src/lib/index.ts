@@ -54,16 +54,23 @@ export type {
 } from "../types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
+export * from "@mia/sync"
 export * from "../clarify/index.js"
 export * from "../context/index.js"
 export * from "../delegation/index.js"
 export * from "../doctrine/index.js"
 export * from "../domain/index.js"
+export {
+    DiscoverySource,
+    ENV_ACCESS_MODES,
+    EnvAccessMode,
+    EnvRole,
+    isEnvAccessMode
+} from "../domain/index.js"
 export * from "../governance/index.js"
 export * from "../llm/index.js"
 export * from "../loop/index.js"
 export * from "../recovery/index.js"
-export * from "../sync/index.js"
 export * from "../tools/_helpers/index.js"
 export * from "../tools/index.js"
 
