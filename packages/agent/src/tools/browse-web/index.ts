@@ -21,7 +21,7 @@
  */
 
 import { BROWSE_WEB_ACTION_VALUES, BrowseWebAction } from "../../domain/enums/browse-web.js"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import {
     handleClick,
@@ -138,26 +138,26 @@ export const browseWebTool: Tool = {
  * `host.browser.idCounter`, and `host.browser.contextReader` are sourced
  * from the per-run AgentHost rather than the AgentRuntime ALS.
  */
-export function createBrowseWebTool(host: AgentHost): Tool {
+export function createBrowseWebTool(host: AgentHost, run?: RunContext): Tool {
   return {
     name: "browse_web",
     description: BROWSE_WEB_DESCRIPTION,
     parameters: BROWSE_WEB_PARAMETERS,
     async execute(args) {
-      return runBrowseWeb(args, host)
+      return runBrowseWeb(args, host, run)
     },
   }
 }
 
 // ── Shared body ──────────────────────────────────────────────────
 
-async function runBrowseWeb(args: Record<string, unknown>, host: AgentHost): Promise<string> {
+async function runBrowseWeb(args: Record<string, unknown>, host: AgentHost, run?: RunContext): Promise<string> {
     const action = String(args.action)
     const sessionId = args.session_id ? String(args.session_id) : undefined
     const maxLength = Number(args.max_length ?? 10000)
 
     // If kill signal already fired before we start, bail immediately
-    if (getKillSignal()?.aborted) return "Error: Tool execution cancelled"
+    if (getKillSignal(run?.signal)?.aborted) return "Error: Tool execution cancelled"
 
     if (action === BrowseWebAction.Navigate) {
       return handleNavigate({
@@ -166,6 +166,7 @@ async function runBrowseWeb(args: Record<string, unknown>, host: AgentHost): Pro
         visible: Boolean(args.visible),
         sessionId,
         maxLength,
+        signal: run?.signal ?? null,
       })
     }
 
@@ -177,9 +178,9 @@ async function runBrowseWeb(args: Record<string, unknown>, host: AgentHost): Pro
 
     switch (action) {
       case BrowseWebAction.Click:
-        return handleClick(session, sessionId, String(args.selector ?? ""), maxLength)
+        return handleClick(session, sessionId, String(args.selector ?? ""), maxLength, run?.signal ?? null)
       case BrowseWebAction.Type:
-        return handleType(session, sessionId, String(args.selector ?? ""), String(args.text ?? ""), maxLength)
+        return handleType(session, sessionId, String(args.selector ?? ""), String(args.text ?? ""), maxLength, run?.signal ?? null)
       case BrowseWebAction.Scroll:
         return handleScroll(session, sessionId, String(args.direction ?? "down"), maxLength)
       case BrowseWebAction.Read:

@@ -25,6 +25,7 @@ import {
     createDelegateTools,
     createDiscoverRelationshipsTool,
     createExportQueryToFileTool,
+    createFetchUrlTool,
     createImportAttachmentTool,
     createInspectDefinitionTool,
     createListAttachmentsTool,
@@ -41,7 +42,6 @@ import {
     createShellTool,
     createWebSearchTool,
     createWriteFileTool,
-    fetchUrlTool,
     getChartSpecsTool,
     noteTool,
     recallPriorResultTool,
@@ -51,6 +51,7 @@ import {
     type DelegateContext,
     type GovernToolOptions,
     type LLMClient,
+    type RunContext,
     type Tool
 } from "@mia/agent"
 import {
@@ -79,7 +80,7 @@ export interface ToolInfo {
 // `currentRuntime()`. Migrating them is a follow-up task outside this
 // refactor's scope.
 
-type ToolFactory = (host: AgentHost) => Tool
+type ToolFactory = (host: AgentHost, run?: RunContext) => Tool
 
 const ALL_TOOL_FACTORIES: ToolFactory[] = [
   // ── Filesystem (host-bound) ──
@@ -97,7 +98,7 @@ const ALL_TOOL_FACTORIES: ToolFactory[] = [
   createBrowserHumanHandoffTool,
   createWebSearchTool,
   // ── Ambient (still on currentRuntime ALS — host arg ignored) ──
-  (_h) => fetchUrlTool,
+  (_h, run) => createFetchUrlTool(run),
   // ── User input (host-bound) ──
   createAskUserTool,
   // ── Misc ambient ──
@@ -131,13 +132,13 @@ const ALL_TOOL_FACTORIES: ToolFactory[] = [
  * Callers must pass the host they want the tools to be bound to — e.g.
  * the per-run host built from boot deps + run workspace root.
  */
-export function getAllTools(host: AgentHost): Tool[] {
-  return ALL_TOOL_FACTORIES.map((f) => f(host))
+export function getAllTools(host: AgentHost, run?: RunContext): Tool[] {
+  return ALL_TOOL_FACTORIES.map((f) => f(host, run))
 }
 
 /** Build the name-keyed tool map for a given host. */
-export function getToolMap(host: AgentHost): ReadonlyMap<string, Tool> {
-  return new Map(getAllTools(host).map((t) => [t.name, t]))
+export function getToolMap(host: AgentHost, run?: RunContext): ReadonlyMap<string, Tool> {
+  return new Map(getAllTools(host, run).map((t) => [t.name, t]))
 }
 
 const catalogLlm: LLMClient = {
@@ -213,8 +214,8 @@ function warnOnMissingGuardTools(resolvedNames: ReadonlySet<string>): void {
  * Resolve an array of tool names into host-bound Tool objects. Throws on
  * unknown names.
  */
-export function resolveTools(names: string[], host: AgentHost): Tool[] {
-  const map = getToolMap(host)
+export function resolveTools(names: string[], host: AgentHost, run?: RunContext): Tool[] {
+  const map = getToolMap(host, run)
   const resolved = names.map((name) => {
     const tool = map.get(name)
     if (!tool) throw new Error(`Unknown tool: ${name}`)

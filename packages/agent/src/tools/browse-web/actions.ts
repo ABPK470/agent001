@@ -33,6 +33,7 @@ interface NavigateArgs {
   visible: boolean
   sessionId: string | undefined
   maxLength: number
+  signal?: AbortSignal | null
 }
 
 export async function handleNavigate(args: NavigateArgs): Promise<string> {
@@ -70,7 +71,7 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
       // ads, so the network is NEVER idle. We just need the HTML + scripts
       // parsed; subsequent reads happen against the live page anyway.
       session.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 }),
-    )
+    , args.signal)
     session.url = session.page.url()
     await dismissCookieConsent(session.page)
     const interstitial = await detectInterstitial(session.page)
@@ -137,6 +138,7 @@ export async function handleClick(
   sessionId: string,
   selector: string,
   maxLength: number,
+  signal?: AbortSignal | null,
 ): Promise<string> {
   if (!selector) return "Error: 'selector' is required for click action"
 
@@ -145,7 +147,7 @@ export async function handleClick(
     let clicked = false
     try {
       const loc = resolveLocator(target, selector)
-      await withKillGuard(session.page, () => loc.first().waitFor({ timeout: 3000 }))
+      await withKillGuard(session.page, () => loc.first().waitFor({ timeout: 3000 }), signal)
       await loc.first().click()
       clicked = true
     } catch { /* primary selector failed, try text-content fallback below */ }
@@ -188,6 +190,7 @@ export async function handleType(
   selector: string,
   rawText: string,
   maxLength: number,
+  signal?: AbortSignal | null,
 ): Promise<string> {
   if (!selector) return "Error: 'selector' is required for type action"
   if (!rawText) return "Error: 'text' is required for type action"
@@ -195,7 +198,7 @@ export async function handleType(
   try {
     const target = activeTarget(session)
     const loc = resolveLocator(target, selector)
-    await withKillGuard(session.page, () => loc.first().waitFor({ timeout: 5000 }))
+    await withKillGuard(session.page, () => loc.first().waitFor({ timeout: 5000 }), signal)
     await loc.first().click({ clickCount: 3 }) // select existing content
 
     // Detect submit intent: literal newline or escaped \n at end
@@ -204,7 +207,7 @@ export async function handleType(
     if (typeText.endsWith("\n")) { typeText = typeText.slice(0, -1); submit = true }
     else if (typeText.endsWith("\\n")) { typeText = typeText.slice(0, -2); submit = true }
 
-    await withKillGuard(session.page, () => loc.first().pressSequentially(typeText, { delay: 30 }))
+    await withKillGuard(session.page, () => loc.first().pressSequentially(typeText, { delay: 30 }), signal)
 
     if (submit) {
       await session.page.keyboard.press("Enter")

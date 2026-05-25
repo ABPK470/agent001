@@ -16,7 +16,7 @@
 
 import { execFile } from "node:child_process"
 import { currentRuntime } from "../../agent-runtime.js"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 
 /** Workspace directory — shell commands run here.
@@ -153,7 +153,7 @@ export const shellTool: Tool = {
  * The run-scoped kill signal is still sourced from `currentRuntime()`
  * until Phase 5 introduces a RunContext parameter into Tool.execute.
  */
-export function createShellTool(host: AgentHost): Tool {
+export function createShellTool(host: AgentHost, run?: RunContext): Tool {
   return {
     name: "run_command",
     description: SHELL_TOOL_DESCRIPTION,
@@ -163,7 +163,7 @@ export function createShellTool(host: AgentHost): Tool {
         cwd: host.shell.cwd,
         executor: host.shell.client,
         sandboxStrict: host.shell.sandboxStrict,
-        killSignal: currentRuntime().shell.killSignal ?? null,
+        killSignal: run?.signal ?? currentRuntime().shell.killSignal ?? null,
       })
     },
   }

@@ -41,8 +41,8 @@ export function setBrowseKillSignal(signal: AbortSignal | null): void {
   currentRuntime().browseWeb.killSignal = signal
 }
 
-export function getKillSignal(): AbortSignal | null {
-  return currentRuntime().browseWeb.killSignal
+export function getKillSignal(signal?: AbortSignal | null): AbortSignal | null {
+  return signal ?? currentRuntime().browseWeb.killSignal
 }
 
 /**
@@ -83,8 +83,12 @@ export function stopBrowseSessionCleanup(host: AgentHost): void {
  * Closing the page causes any pending Playwright promise to reject, unblocking
  * the awaiting code so the agent can move on.
  */
-export function withKillGuard<T>(page: import("playwright").Page, fn: () => Promise<T>): Promise<T> {
-  const sig = currentRuntime().browseWeb.killSignal
+export function withKillGuard<T>(
+  page: import("playwright").Page,
+  fn: () => Promise<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  const sig = getKillSignal(signal)
   if (!sig) return fn()
   if (sig.aborted) return Promise.reject(new Error("Tool execution cancelled"))
   return new Promise<T>((resolve, reject) => {

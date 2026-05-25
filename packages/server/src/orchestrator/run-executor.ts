@@ -14,6 +14,7 @@ import {
     governTool,
     isPlatformUnconfiguredAnswer,
     isUserSafeFailureAnswer,
+    makeRunContext,
     mapFailureKindForPolish,
     markPolishedFailure,
     PolicyRole,
@@ -168,6 +169,7 @@ export async function executeRunImpl(
     workspaceRoot: runWorkspace.executionRoot,
     signal: controller.signal,
   })
+  const runContext = makeRunContext({ signal: controller.signal })
 
   // Per-run AgentHost — inherits boot-time port wiring (attachments, browser
   // providers) but overrides workspace / sandbox roots with this run's
@@ -362,7 +364,7 @@ export async function executeRunImpl(
     resolveAgent: (aId: string): ResolvedAgent | null => {
       const def = db.getAgentDefinition(aId)
       if (!def) return null
-      const agentTools = getAllTools(perRunHost).map(governRuntimeTool)
+      const agentTools = getAllTools(perRunHost, runContext).map(governRuntimeTool)
       // resolveAgentSystemPrompt enforces the file-managed contract for the
       // default agent — a child delegation never sees a stale stored value.
       return { id: def.id, name: def.name, systemPrompt: db.resolveAgentSystemPrompt(def), tools: agentTools }
