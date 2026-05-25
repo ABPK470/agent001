@@ -1,15 +1,17 @@
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
-  handleColumn,
-  handleJoins,
-  handlePath,
-  handleSearch,
-  handleStats,
-  handleSys,
-  handleTable,
+    handleColumn,
+    handleJoins,
+    handlePath,
+    handleSearch,
+    handleStats,
+    handleSys,
+    handleTable,
 } from "./handlers.js"
-export const searchCatalogTool: Tool = {
+
+function buildSearchCatalogTool(host: AgentHost): Tool { return {
   name: "search_catalog",
   description:
     "Search the pre-built schema catalog — your PRIMARY tool for finding tables, columns, and relationships. " +
@@ -53,7 +55,7 @@ export const searchCatalogTool: Tool = {
 
     if (args.refresh) {
       try {
-        const catalog = await buildCatalog({ connection: connName, forceFresh: true })
+        const catalog = await buildCatalog(host, { connection: connName, forceFresh: true })
         const s = catalog.stats()
         return `Catalog rebuilt from live DB and cached to disk: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges.`
       } catch (err) {
@@ -94,17 +96,23 @@ export const searchCatalogTool: Tool = {
 
     return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."
   },
-}
+} }
+
+export const searchCatalogTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildSearchCatalogTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("searchCatalogTool must be built via createSearchCatalogTool(host)")
+    },
+  }
+})()
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-import type { AgentHost } from "../../host/index.js"
-
-export function createSearchCatalogTool(_host: AgentHost): Tool {
-  return {
-    name: searchCatalogTool.name,
-    description: searchCatalogTool.description,
-    parameters: searchCatalogTool.parameters,
-    execute: (args) => searchCatalogTool.execute(args),
-  }
+export function createSearchCatalogTool(host: AgentHost): Tool {
+  return buildSearchCatalogTool(host)
 }

@@ -13,8 +13,11 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { profileDataTool } from "../src/tools/mssql-profiler.js"
+import { configureAgent } from "../src/host/index.js"
+import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
 import { isLargeObject } from "../src/tools/mssql/validation.js"
+
+const profileDataTool = createProfileDataTool(configureAgent({}))
 
 describe("isLargeObject helper", () => {
   it("flags the canonical UNION big views", () => {

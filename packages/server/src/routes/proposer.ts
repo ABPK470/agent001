@@ -15,7 +15,7 @@
  *   ?tenant= (admin only) overrides the sentinel `_default` tenant.
  */
 
-import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/agent"
+import type { AgentHost, LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../db/index.js"
 import { runProposer } from "../proposer/runner.js"
@@ -32,11 +32,13 @@ function resolveTenant(req: FastifyRequest): string {
 }
 
 export interface ProposerRouteDeps {
+  /** Server boot-host (shared mssql Map). Required for manual triggers. */
+  host: AgentHost
   /** Injected so the runner can annotate without coupling routes to the LLM module. */
   getLlm?: () => LlmCompletionPort | null
 }
 
-export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRouteDeps = {}): void {
+export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRouteDeps): void {
 
   // ── Runs ────────────────────────────────────────────────────
   app.get<{ Querystring: { tenant?: string; limit?: string } }>(
@@ -56,7 +58,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       if (!source || !target) { reply.code(400); return { error: "source and target are required" } }
       try {
         const tenantId = resolveTenant(req)
-        const result = await runProposer({ source, target }, {
+        const result = await runProposer(deps.host, { source, target }, {
           tenantId,
           triggeredBy: req.session.upn,
           trigger:     "manual",

@@ -7,8 +7,9 @@
  * @module
  */
 
-import { getPool } from "../../tools/index.js"
 import { EventType } from "../../domain/enums/event.js"
+import type { AgentHost } from "../../host/index.js"
+import { getPool } from "../../tools/index.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { qtable } from "./db-helpers.js"
@@ -20,12 +21,12 @@ import { qtable } from "./db-helpers.js"
  *
  * Cheap: one COUNT(*) per affected table; bounded by recipe size.
  */
-export async function revalidatePlanDrift(plan: SyncPlan): Promise<number | null> {
+export async function revalidatePlanDrift(host: AgentHost, plan: SyncPlan): Promise<number | null> {
   const affected = plan.tables.filter(
     (t) => t.counts.insert + t.counts.update + t.counts.delete > 0,
   )
   if (affected.length === 0) return null
-  const { pool } = await getPool(plan.source)
+  const { pool } = await getPool(host, plan.source)
   let maxDrift = 0
   for (const t of affected) {
     try {

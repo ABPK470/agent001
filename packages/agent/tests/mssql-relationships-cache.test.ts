@@ -13,23 +13,26 @@
 
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
-import { discoverRelationshipsTool } from "../src/tools/mssql-relationships/index.js"
+import { configureAgent } from "../src/host/index.js"
+import { createDiscoverRelationshipsTool } from "../src/tools/mssql-relationships/index.js"
 import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): AgentRuntime {
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  runtime.mssql.databases.set("default", {
+function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createDiscoverRelationshipsTool> } {
+  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const host = configureAgent({ mssqlDatabases: databases })
+  databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: { request: () => ({ input: () => ({ query: async () => ({ recordset: [] }) }), query: async () => ({ recordset: [] }), cancel: () => undefined }), connected: true, close: async () => undefined } as never,
     writeEnabled: false,
     knowledge: null,
   })
-  return runtime
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  return { runtime, tool: createDiscoverRelationshipsTool(host) }
 }
 
 describe("discover_relationships cache integration", () => {
   it("serves a cached payload + header for table= mode (key=qname, mode=fk)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "FK graph for dim.Date", ageMs: 1, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
@@ -46,7 +49,7 @@ describe("discover_relationships cache integration", () => {
   })
 
   it("normalises and sorts the between=[a,b] cache key (mode=paths)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "two paths", ageMs: 1, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
@@ -60,7 +63,7 @@ describe("discover_relationships cache integration", () => {
   })
 
   it("uses schema= name as the cache key (mode=schema)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "schema graph", ageMs: 1, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
@@ -74,7 +77,7 @@ describe("discover_relationships cache integration", () => {
   })
 
   it("uses column= name as the cache key (mode=column)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "shared col list", ageMs: 1, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
@@ -88,7 +91,7 @@ describe("discover_relationships cache integration", () => {
   })
 
   it("falls through cleanly when no cache is bound (CLI / root runtime)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
     // toolKnowledge.lookup is null by default — must not throw
     try {
       await runtime.run(() => discoverRelationshipsTool.execute({ table: "dim.Date" }))

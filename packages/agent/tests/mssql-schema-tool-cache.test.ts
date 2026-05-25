@@ -15,12 +15,14 @@
 
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
-import { mssqlSchemaTool } from "../src/tools/mssql/tools.js"
+import { configureAgent } from "../src/host/index.js"
+import { createMssqlSchemaTool } from "../src/tools/mssql/tools.js"
 import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>): AgentRuntime {
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  runtime.mssql.databases.set("default", {
+function makeRuntime(query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>): { runtime: AgentRuntime; tool: ReturnType<typeof createMssqlSchemaTool> } {
+  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const host = configureAgent({ mssqlDatabases: databases })
+  databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: {
       request: () => ({
@@ -34,12 +36,13 @@ function makeRuntime(query?: (sql: string) => Promise<{ recordset: unknown[]; re
     writeEnabled: false,
     knowledge: null,
   })
-  return runtime
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  return { runtime, tool: createMssqlSchemaTool(host) }
 }
 
 describe("explore_mssql_schema cache integration (Gap 1)", () => {
   it("returns cached payload + header on a hit (own bucket: explore_mssql_schema, columns)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
     installCanonicalFixtureCatalog()
 
     const lookup = vi.fn((args: { tool: string; mode?: string }) => {
@@ -63,7 +66,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("cross-serves from profile_data(fast) cache when own bucket misses", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
     installCanonicalFixtureCatalog()
 
     const lookup = vi.fn((args: { tool: string; mode?: string }) => {
@@ -105,7 +108,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
       }
       return Promise.resolve({ recordset: [], recordsets: [[]], rowsAffected: [0] })
     }
-    const runtime = makeRuntime(fakeQuery as never)
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime(fakeQuery as never)
     installCanonicalFixtureCatalog()
 
     runtime.toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
@@ -127,7 +130,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("falls through gracefully when no cache is bound (CLI / root runtime)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     expect(runtime.toolKnowledge.lookup).toBeNull()
     expect(runtime.toolKnowledge.save).toBeNull()
@@ -138,7 +141,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("skips the cache when the table has no schema prefix (cannot build a stable qname)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
@@ -149,7 +152,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("skips the cache when the qname is not in the catalog (no fingerprint)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup

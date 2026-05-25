@@ -10,6 +10,7 @@
  */
 
 import sqlMod from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
 import {
     getRecipe,
@@ -29,6 +30,7 @@ export interface EntitySearchResult {
  * Returns up to `limit` matches from the source environment.
  */
 export async function searchEntities(
+  host: AgentHost,
   entityType: EntityType,
   source: string,
   query: string,
@@ -36,7 +38,7 @@ export async function searchEntities(
 ): Promise<EntitySearchResult[]> {
   const recipe = getRecipe(loadSyncRecipes(projectRoot()), entityType)
   if (!recipe.rootNameColumn) return []
-  const { pool } = await getPool(source)
+  const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const r = await pool.request()
     .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
@@ -56,13 +58,14 @@ export async function searchEntities(
 }
 
 export async function fetchEntityDisplayName(
+  host: AgentHost,
   recipe: ReturnType<typeof getRecipe>,
   entityId: string | number,
   source: string,
 ): Promise<string | null> {
   if (!recipe.rootNameColumn) return null
   try {
-    const { pool } = await getPool(source)
+    const { pool } = await getPool(host, source)
     const r = await pool.request().query(`
       SELECT TOP 1 [${recipe.rootNameColumn}] AS displayName
       FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
@@ -86,12 +89,13 @@ export async function fetchEntityDisplayName(
  * Runs against the SOURCE environment (the tree structure we want to replicate).
  */
 export async function expandTreeIds(
+  host: AgentHost,
   recipe: SyncRecipe,
   entityId: string | number,
   source: string,
 ): Promise<Array<string | number>> {
   if (!recipe.selfJoinColumn) return [entityId]
-  const { pool } = await getPool(source)
+  const { pool } = await getPool(host, source)
   const pk = recipe.rootKeyColumn
   const fk = recipe.selfJoinColumn
   const table = qtable(recipe.rootTable)

@@ -12,7 +12,7 @@
  * return an empty result set rather than erroring.
  */
 
-import { getCatalog, getMssqlConfig, getMssqlPool } from "@mia/agent"
+import { getCatalog, getMssqlConfig, getMssqlPool, type AgentHost } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -27,10 +27,6 @@ function validateIdentifier(name: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_\-]*$/.test(name)
 }
 
-async function acquirePool(db: string) {
-  return getMssqlPool(db)
-}
-
 /** Format maxLength into a display type-detail string. */
 function fmtTypeDetail(dataType: string, maxLength: number | null): string | null {
   if (maxLength === null) return null
@@ -43,11 +39,15 @@ function fmtTypeDetail(dataType: string, maxLength: number | null): string | nul
 
 // ── Routes ───────────────────────────────────────────────────────
 
-export function registerMymiRoutes(app: FastifyInstance): void {
+export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void {
+
+  async function acquirePoolH(db: string) {
+    return getMssqlPool(host, db)
+  }
 
   // ── Configured databases ─────────────────────────────────────
   app.get("/api/mymi/databases", async () =>
-    getMssqlConfig().map((c) => ({
+    getMssqlConfig(host).map((c) => ({
       name: c.name, server: c.server, database: c.database, writeEnabled: c.writeEnabled,
     })),
   )
@@ -271,8 +271,8 @@ export function registerMymiRoutes(app: FastifyInstance): void {
       if (!validateIdentifier(schema) || !validateIdentifier(table)) {
         reply.code(400); return { error: "Invalid identifier" }
       }
-      let conn: Awaited<ReturnType<typeof acquirePool>>
-      try { conn = await acquirePool(db) } catch (e) {
+      let conn: Awaited<ReturnType<typeof acquirePoolH>>
+      try { conn = await acquirePoolH(db) } catch (e) {
         reply.code(400); return { error: String(e) }
       }
       const result = await conn.pool.request().query(

@@ -8,6 +8,7 @@
  */
 
 import { SyncProgressKind } from "../../domain/enums/sync.js"
+import type { AgentHost } from "../../host/index.js"
 
 export interface ExecuteProgress {
   type: SyncProgressKind
@@ -20,6 +21,7 @@ export interface ExecuteProgress {
 }
 
 export interface ExecuteOptions {
+  host: AgentHost
   confirm: boolean
   /** Optional progress callback (used by SSE route). */
   onProgress?: (p: ExecuteProgress) => void

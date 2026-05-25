@@ -26,10 +26,14 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
   EventType,
-  buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig,
+  buildCatalog, closeMssqlPool,
+  configureAgent,
+  configurePlanStore,
+  configureSyncOrchestrator, getMssqlConfig,
   setSyncEventSink,
   setSyncRunSink,
   setupEnvironments,
+  type AgentHost,
   type BrowserClient,
   type ShellClient,
 } from "@mia/agent"
@@ -112,7 +116,15 @@ async function main() {
 
   let currentWorkspace = resolveWorkspace()
   const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
-  const mssqlSummary = setupMssql(_projectRoot)
+
+  // Shared mssql connection registry: a single Map (+ default-connection
+  // container) owned by the server and threaded into every per-run host
+  // via bootHostDeps. setupMssql populates it; the boot-level host below
+  // and every per-run host built by the orchestrator see the same state.
+  const mssqlDatabases: AgentHost["mssql"]["databases"] = new Map()
+  const mssqlDefaultConnection: AgentHost["mssql"]["defaultConnection"] = { value: null }
+  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection })
+  const mssqlSummary = setupMssql(bootHost, _projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
   // Installed via the AgentHost composition root (see `configureAgent`
@@ -126,7 +138,7 @@ async function main() {
   // `setBrowser*Provider` ambient setters were removed in cluster 7.
 
   // ── ABI sync subsystem ──
-  await setupEnvironments(_projectRoot)
+  await setupEnvironments(bootHost, _projectRoot)
   // Operator overrides on top of JSON config + seed hosted-default and
   // env-derived policy rules into the DB so the admin UI can show the
   // full active ruleset (and let admins edit it). Done AFTER
@@ -197,7 +209,7 @@ async function main() {
     },
   })
 
-  const llm = await buildLlmAndCatalog(mssqlSummary)
+  const llm = await buildLlmAndCatalog(bootHost, mssqlSummary)
 
   // ── F1 evidence signer ────────────────────────────────────────
   // Built once at boot. If the operator has not configured a signer
@@ -219,7 +231,7 @@ async function main() {
   // `registerLlmRoutes` below (kept in a holder so the running
   // scheduler picks up the new client).
   const llmPortHolder = { current: llmClientAsCompletionPort(llm) }
-  startScheduler({ llm: () => llmPortHolder.current })
+  startScheduler({ host: bootHost, llm: () => llmPortHolder.current })
   // Graceful shutdown — drain in-flight proposer runs before exit.
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => {
@@ -268,6 +280,8 @@ async function main() {
       shellClient,
       shellSandboxStrict,
       browserCheckClient,
+      mssqlDatabases,
+      mssqlDefaultConnection,
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
@@ -283,12 +297,13 @@ async function main() {
     evidenceStorageRoot,
     evidenceSigner,
     llmPortHolder,
+    bootHost,
   })
 
   await app.listen({ port: PORT, host: HOST })
   recoverStaleRuns(orchestrator)
   printBanner({ mssqlSummary, channelConfigs, uiDist })
-  registerShutdown({ sandbox, messageQueue })
+  registerShutdown({ sandbox, messageQueue, bootHost })
 }
 
 // ── Bootstrap phase functions ─────────────────────────────────
@@ -310,11 +325,11 @@ function recoverStaleRuns(orchestrator: AgentOrchestrator): void {
   }
 }
 
-function registerShutdown({ sandbox, messageQueue }: { sandbox: ReturnType<typeof initSandbox>; messageQueue: MessageQueue }): void {
+function registerShutdown({ sandbox, messageQueue, bootHost }: { sandbox: ReturnType<typeof initSandbox>; messageQueue: MessageQueue; bootHost: AgentHost }): void {
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
     process.on(sig, async () => {
       messageQueue.stop()
-      await closeMssqlPool()
+      await closeMssqlPool(bootHost)
       await sandbox.cleanup()
       process.exit(0)
     })
@@ -439,7 +454,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
   return { sandbox, shellClient, shellSandboxStrict, browserCheckClient }
 }
 
-async function buildLlmAndCatalog(mssqlSummary: string) {
+async function buildLlmAndCatalog(host: AgentHost, mssqlSummary: string) {
   const llmCfg = getLlmConfig()
   const llm = buildLlmClient(llmCfg)
   console.log(`LLM: ${llmCfg.provider} / ${llmCfg.model}`)
@@ -452,7 +467,7 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
       // Build catalog per configured connection so the Mymi DB explorer
       // (and any catalog-backed tool) works against the actual DB the user picks.
       // Cache file name is derived from the connection name to avoid collisions.
-      const configs = getMssqlConfig()
+      const configs = getMssqlConfig(host)
       const conns = configs.length > 0 ? configs.map((c) => c.name) : ["default"]
 
       for (const conn of conns) {
@@ -461,7 +476,7 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
           : baseCachePath.replace(/\.json$/i, `.${conn}.json`)
         console.log(`Loading schema catalog for "${conn}" (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
         try {
-          const catalog = await buildCatalog({ connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
+          const catalog = await buildCatalog(host, { connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
           const s = catalog.stats()
           const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
           const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
@@ -510,11 +525,13 @@ interface AppOpts {
   evidenceStorageRoot: string
   evidenceSigner: import("./evidence/signer.js").Signer | null
   llmPortHolder: { current: import("@mia/agent").LlmCompletionPort }
+  /** Boot-level AgentHost (shared mssql Map) for routes that hit DB. */
+  bootHost: AgentHost
 }
 
 async function buildApp(opts: AppOpts) {
   const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace,
-          evidenceStorageRoot, evidenceSigner, llmPortHolder } = opts
+          evidenceStorageRoot, evidenceSigner, llmPortHolder, bootHost } = opts
 
   // trustProxy: when behind a corporate HTTPS terminator (proxy-https, IIS,
   // nginx) Fastify needs to honour X-Forwarded-* headers so req.ip reflects
@@ -642,8 +659,8 @@ async function buildApp(opts: AppOpts) {
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)
-  registerMymiRoutes(app)
-  registerSyncRoutes(app, _projectRoot)
+  registerMymiRoutes(app, bootHost)
+  registerSyncRoutes(app, _projectRoot, bootHost)
   registerEntityRegistryRoutes(app, _projectRoot)
   registerToolCacheRoutes(app)
   registerEventRoutes(app)
@@ -657,7 +674,7 @@ async function buildApp(opts: AppOpts) {
     console.log("LLM client hot-swapped")
   })
   // F1 — reconciliation proposer + approvals + evidence + metrics + notification routes
-  registerProposerRoutes(app, { getLlm: () => llmPortHolder.current })
+  registerProposerRoutes(app, { host: bootHost, getLlm: () => llmPortHolder.current })
   registerApprovalRoutes(app)
   registerFreezeWindowRoutes(app)
   registerEvidenceRoutes(app, { storageRoot: evidenceStorageRoot, signer: evidenceSigner })

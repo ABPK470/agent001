@@ -56,6 +56,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
     return ix > 0 ? t.name.slice(0, ix) : ""
   }).filter((s) => s.length > 0)))
   const drift = await detectCatalogDrift(
+    opts.host,
     plan.source,
     plan.target,
     plan.recipeSnapshot.tables.map((t) => t.name),
@@ -143,10 +144,10 @@ async function executeSyncInner(
   execT0: number,
 ): Promise<{ planId: string; success: boolean; error?: string }> {
   // Load PK columns once
-  const pkByTable = await fetchPkColumns(plan.source, plan.recipeSnapshot.tables.map((t) => t.name))
+  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name))
 
   // Drift re-validation
-  const driftPct = await revalidatePlanDrift(plan)
+  const driftPct = await revalidatePlanDrift(opts.host, plan)
   if (driftPct !== null && driftPct > DRIFT_ABORT_PCT) {
     const msg = `Plan drift ${(driftPct * 100).toFixed(1)}% exceeds ${(DRIFT_ABORT_PCT * 100).toFixed(0)}% threshold — re-preview before executing.`
     onProgress({ type: SyncProgressKind.Failed, error: msg })
@@ -156,8 +157,8 @@ async function executeSyncInner(
   }
   void opts
 
-  const { pool: tgtPool } = await getPool(plan.target)
-  const { pool: srcPool } = await getPool(plan.source)
+  const { pool: tgtPool } = await getPool(opts.host, plan.target)
+  const { pool: srcPool } = await getPool(opts.host, plan.source)
   if (!tgtPool) throw new Error(`Target pool unavailable.`)
 
   const entityId = plan.entity.id
@@ -222,7 +223,7 @@ async function executeSyncInner(
     // ── Step 4: Sync metadata in transaction ──
     stepEmit("sync-metadata", "Syncing metadata rows")
     const { applied: appliedTotals } = await runMetadataSync({
-      plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool,
+      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool,
     })
     stepEmit("sync-metadata-done", "Metadata sync committed")
 

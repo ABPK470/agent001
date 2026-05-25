@@ -126,7 +126,7 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
 
 async function executeExportQueryToFile(
   args: Record<string, unknown>,
-  opts: { resolveSafe: (p: string) => Promise<string> },
+  opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost },
 ): Promise<string> {
   const query = String(args.query ?? "").trim()
   const pathArg = String(args.path ?? "").trim()
@@ -138,7 +138,7 @@ async function executeExportQueryToFile(
   let pool: sql.ConnectionPool
   let writeEnabled: boolean
   try {
-    const result = await getPool(connectionName)
+    const result = await getPool(opts.host, connectionName)
     pool = result.pool
     writeEnabled = result.entry.writeEnabled
   } catch (err) {
@@ -337,6 +337,7 @@ export function createExportQueryToFileTool(host: AgentHost): Tool {
     async execute(args) {
       return executeExportQueryToFile(args, {
         resolveSafe: (p) => safePathResolvedWith(host, p),
+        host,
       })
     },
   }

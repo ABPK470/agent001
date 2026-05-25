@@ -12,15 +12,16 @@
  * @module
  */
 
+import type { AgentHost } from "../../../host/index.js"
 import { getPool } from "../../mssql/index.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"
 import type {
-  CatalogColumn,
-  CatalogFK,
-  CatalogTable,
-  ImplicitEdge,
-  SysEntry,
+    CatalogColumn,
+    CatalogFK,
+    CatalogTable,
+    ImplicitEdge,
+    SysEntry,
 } from "../types.js"
 import { buildSysCatalog } from "./sys-catalog.js"
 
@@ -34,8 +35,8 @@ export interface CatalogLoadResult {
   sysCatalog: SysEntry[]
 }
 
-export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoadResult> {
-  const { pool } = await getPool(connection)
+export async function loadCatalogFromDb(host: AgentHost, connection?: string): Promise<CatalogLoadResult> {
+  const { pool } = await getPool(host, connection)
   // Start sys catalog fetch in parallel with user catalog (non-fatal if it fails)
   const sysCatalogPromise = buildSysCatalog(pool)
 

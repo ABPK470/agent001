@@ -18,6 +18,7 @@ import {
     rankProposals,
     runProposerPass,
     tryResolveRecipe,
+    type AgentHost,
     type EntityDescriptor,
     type EnvPair,
     type LlmCompletionPort,
@@ -65,6 +66,7 @@ export interface ProposerRunnerResult {
  * scheduler enforces "one run per pair at a time").
  */
 export async function runProposer(
+  host:     AgentHost,
   envPair:  EnvPair,
   options:  ProposerRunnerOptions,
 ): Promise<ProposerRunnerResult> {
@@ -78,7 +80,7 @@ export async function runProposer(
   markProposerRunRunning(runId)
   broadcast({ type: EventType.SyncProposerRunStarted, data: { runId, envPair, triggeredBy: options.triggeredBy } })
 
-  const deps = buildPassDeps(options.tenantId)
+  const deps = buildPassDeps(host, options.tenantId)
   let passResult: ProposerPassResult
   try {
     passResult = await runProposerPass(envPair, options, deps)
@@ -115,7 +117,7 @@ export async function runProposer(
 
 // ── DI wiring ────────────────────────────────────────────────────
 
-function buildPassDeps(tenantId: string): ProposerPassDeps {
+function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
   return {
     now: () => new Date().toISOString(),
     listEntities: async (_envPair) => {
@@ -134,14 +136,14 @@ function buildPassDeps(tenantId: string): ProposerPassDeps {
       const recipe = resolved.recipe
       const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))
       try {
-        const r = await detectCatalogDrift(envPair.source, envPair.target, recipe.tables.map((t) => t.name), allowedSchemas)
+        const r = await detectCatalogDrift(host, envPair.source, envPair.target, recipe.tables.map((t) => t.name), allowedSchemas)
         return { issues: r.issues }
       } catch (e) {
         return { issues: [`catalog probe failed: ${e instanceof Error ? e.message : String(e)}`] }
       }
     },
     scanDivergentRows: async (envPair, ent) => {
-      return probeRowDivergence({ tenantId, envPair, entityId: ent.id, entityLabel: ent.label })
+      return probeRowDivergence({ host, tenantId, envPair, entityId: ent.id, entityLabel: ent.label })
     },
   }
 }

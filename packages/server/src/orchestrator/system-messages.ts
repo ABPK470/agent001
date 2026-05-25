@@ -144,6 +144,13 @@ export async function buildSystemMessages(opts: {
   runWorkspace: RunWorkspaceContext
   perTier: { working: string; episodic: string; semantic: string }
   runId: string
+  /**
+   * Per-run AgentHost — forwarded to buildToolContext so the mssql
+   * section can read the host-scoped connection registry. Optional so
+   * existing tests that don't supply one degrade to the no-config
+   * branch (matches pre-migration behaviour).
+   */
+  host?: import("@mia/agent").AgentHost
   attachmentIds?: string[]
   /**
    * Whether this run participates in the inter-agent bus with peers —
@@ -557,6 +564,7 @@ export async function buildSystemMessages(opts: {
   // prose is gated behind the same DB-intent heuristic as the chart block.
   // `mssqlKnowledgeMode` lets borderline DB goals get a header-only body.
   const toolCtx = buildToolContext(allTools, {
+    ...(opts.host ? { host: opts.host } : {}),
     includeMssqlKnowledge: decision.includeMssqlKnowledge,
     mssqlKnowledgeMode:    decision.mssqlKnowledgeMode,
     includeMssqlCatalog:   decision.includeMssqlCatalog,

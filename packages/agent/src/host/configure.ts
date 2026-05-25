@@ -37,6 +37,10 @@ export interface ConfigureAgentOptions {
   browserCheckCwd?: string
   browserCheckClient?: AgentHost["browserCheck"]["client"]
 
+  // MSSQL connection registry (shared across all per-run hosts at boot)
+  mssqlDatabases?: AgentHost["mssql"]["databases"]
+  mssqlDefaultConnection?: AgentHost["mssql"]["defaultConnection"]
+
   // Browser stack (any/all may be null in CLI / tests)
   browserContextReader?: AgentHost["browser"]["contextReader"]
   browserCredentialReader?: AgentHost["browser"]["credentialReader"]
@@ -68,8 +72,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   return Object.freeze<AgentHost>({
     workspaceRoot,
     mssql: Object.freeze({
-      databases: new Map(),
-      defaultConnection: null,
+      databases: options.mssqlDatabases ?? new Map(),
+      defaultConnection: options.mssqlDefaultConnection ?? { value: null },
     }),
     filesystem: Object.freeze({
       basePath: options.filesystemBasePath ?? workspaceRoot,

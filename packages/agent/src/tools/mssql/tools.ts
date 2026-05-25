@@ -1,5 +1,6 @@
 import sql from "mssql"
 import { currentRuntime } from "../../agent-runtime.js"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getMssqlKillSignal, getPool } from "./connection.js"
@@ -11,7 +12,7 @@ import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
 // ── The tool ─────────────────────────────────────────────────────
 
-export const mssqlTool: Tool = {
+function buildQueryMssqlTool(host: AgentHost): Tool { return {
   name: "query_mssql",
   description:
     "Execute a T-SQL query against Microsoft SQL Server (T-SQL only — no QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC; use TOP / OFFSET-FETCH / LIKE / CAST / DATEADD). " +
@@ -66,7 +67,7 @@ export const mssqlTool: Tool = {
     let pool: sql.ConnectionPool
     let writeEnabled: boolean
     try {
-      const result = await getPool(connectionName)
+      const result = await getPool(host, connectionName)
       pool = result.pool
       writeEnabled = result.entry.writeEnabled
     } catch (err) {
@@ -167,11 +168,11 @@ export const mssqlTool: Tool = {
       return `SQL Error: ${decorateMssqlError(enriched)}`
     }
   },
-}
+} }
 
 // ── Schema explorer (convenience tool) ───────────────────────────
 
-export const mssqlSchemaTool: Tool = {
+function buildSchemaMssqlTool(host: AgentHost): Tool { return {
   name: "explore_mssql_schema",
   description:
     "Explore the MSSQL database schema — list tables/views in a schema, or get exact column names and types for a table. " +
@@ -208,7 +209,7 @@ export const mssqlSchemaTool: Tool = {
 
     let pool: sql.ConnectionPool
     try {
-      const result = await getPool(connectionName)
+      const result = await getPool(host, connectionName)
       pool = result.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -433,7 +434,7 @@ export const mssqlSchemaTool: Tool = {
       return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },
-}
+} }
 
 // ── Surrogate-shape helpers (used by explore_mssql_schema) ───────
 //
@@ -456,31 +457,47 @@ function isIntegerLikeType(dataType: string): boolean {
   return t === "int" || t === "bigint" || t === "smallint" || t === "tinyint" || t === "numeric" || t === "decimal"
 }
 
-// ── Host-bound factories (Phase 4 item 6 — API surface only) ─────
+// ── Host-bound factories (Phase 4 acceptance — cluster 8b) ──────
 //
-// These factories lock in the `createXxxTool(host)` signature so the
-// Phase 4 acceptance call-site swap is mechanical. Today the wrapped
-// tools still read `currentRuntime()` internally (connection registry,
-// per-run memory writer). The swap will rewrite `getPool` to take
-// `host` and replace `currentRuntime().memory.writeNote` with the run
-// context's writer.
+// The connection registry now lives on `host.mssql.databases`. The
+// factories below capture the host at composition time; the legacy
+// ambient `mssqlTool` / `mssqlSchemaTool` exports throw on `execute`
+// so any forgotten ambient call site fails loudly. We expose static
+// `name` / `description` / `parameters` so callers (CLI listers,
+// prompt generators) can introspect without building a host.
 
-import type { AgentHost } from "../../host/index.js"
+const QUERY_MSSQL_DEF = (() => {
+  // Build once with a throwaway host purely to expose the static shape.
+  // The throwaway is never executed because the ambient export below
+  // also throws — `createMssqlTool(host)` is the only valid path.
+  const stub = {} as AgentHost
+  const t = buildQueryMssqlTool(stub)
+  return { name: t.name, description: t.description, parameters: t.parameters }
+})()
+const SCHEMA_MSSQL_DEF = (() => {
+  const stub = {} as AgentHost
+  const t = buildSchemaMssqlTool(stub)
+  return { name: t.name, description: t.description, parameters: t.parameters }
+})()
 
-export function createMssqlTool(_host: AgentHost): Tool {
-  return {
-    name: mssqlTool.name,
-    description: mssqlTool.description,
-    parameters: mssqlTool.parameters,
-    execute: (args) => mssqlTool.execute(args),
-  }
+export const mssqlTool: Tool = {
+  ...QUERY_MSSQL_DEF,
+  async execute(_args) {
+    throw new Error("mssqlTool must be built via createMssqlTool(host)")
+  },
 }
 
-export function createMssqlSchemaTool(_host: AgentHost): Tool {
-  return {
-    name: mssqlSchemaTool.name,
-    description: mssqlSchemaTool.description,
-    parameters: mssqlSchemaTool.parameters,
-    execute: (args) => mssqlSchemaTool.execute(args),
-  }
+export const mssqlSchemaTool: Tool = {
+  ...SCHEMA_MSSQL_DEF,
+  async execute(_args) {
+    throw new Error("mssqlSchemaTool must be built via createMssqlSchemaTool(host)")
+  },
+}
+
+export function createMssqlTool(host: AgentHost): Tool {
+  return buildQueryMssqlTool(host)
+}
+
+export function createMssqlSchemaTool(host: AgentHost): Tool {
+  return buildSchemaMssqlTool(host)
 }

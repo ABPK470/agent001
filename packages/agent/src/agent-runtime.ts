@@ -81,10 +81,6 @@ export interface MssqlEntry {
 }
 
 export interface MssqlState {
-  /** Process-wide pool registry — shared with parent runtime. */
-  databases: Map<string, MssqlEntry>
-  /** Override which named connection serves `connection: "default"`. */
-  defaultConnection: string | null
   /**
    * Per-run set of schema-qualified table names that the agent has called
    * `profile_data` on. Used by the validator to soft-warn when a query
@@ -438,8 +434,6 @@ export class AgentRuntime {
     if (parent) {
       // Process-wide infrastructure — shared by reference.
       this.mssql = {
-        databases: parent.mssql.databases,
-        defaultConnection: parent.mssql.defaultConnection,
         profileDataCalled: new Set<string>(),
       }
       this.shell = { killSignal: null }
@@ -467,7 +461,7 @@ export class AgentRuntime {
       this.tableVerdicts = { list: parent.tableVerdicts.list }
     } else {
       // Root: fresh defaults everywhere.
-      this.mssql = { databases: new Map(), defaultConnection: null, profileDataCalled: new Set<string>() }
+      this.mssql = { profileDataCalled: new Set<string>() }
       this.browseWeb = { killSignal: null }
       this.shell = { killSignal: null }
       this.fetchUrl = { killSignal: null }
@@ -528,19 +522,11 @@ export class AgentRuntime {
    */
   async dispose(): Promise<void> {
     // Browse-web sessions + cleanup timer now live on AgentHost
-    // (`host.browser.sessions` / `host.browser.cleanupTimer`). Hosts
-    // own their own teardown; `dispose()` only handles root-owned
-    // infrastructure that still lives on the runtime.
-    if (!this.#isRoot) return
-
-    // Root-only: shared infrastructure
-    for (const entry of this.mssql.databases.values()) {
-      if (entry.pool) {
-        try { await entry.pool.close() } catch { /* ignore */ }
-        entry.pool = null
-      }
-    }
-    this.mssql.databases.clear()
+    // (`host.browser.sessions` / `host.browser.cleanupTimer`). The mssql
+    // connection registry now lives on `host.mssql.databases`; the server
+    // closes pools via `closeMssqlPool(host)` on shutdown. `dispose()` is
+    // now a no-op kept for API compatibility with prior call sites.
+    return
   }
 }
 

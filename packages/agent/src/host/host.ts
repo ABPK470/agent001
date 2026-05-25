@@ -38,10 +38,10 @@ import type {
 // ── AgentHost — wired once at boot ───────────────────────────────
 
 export interface MssqlHost {
-  /** Connection registry — read-only after boot. */
-  readonly databases: ReadonlyMap<string, MssqlEntry>
-  /** Override which named connection serves `connection: "default"`. */
-  readonly defaultConnection: string | null
+  /** Connection registry — mutated by `setMssqlConfig*` setters at boot. */
+  readonly databases: Map<string, MssqlEntry>
+  /** Override which named connection serves `connection: "default"` (mutable container). */
+  readonly defaultConnection: { value: string | null }
 }
 
 export interface FilesystemHost {

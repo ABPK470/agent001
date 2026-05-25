@@ -17,12 +17,28 @@
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
 import {
-  DOCTRINE_FIX_HINTS,
-  DOCTRINE_LESSON_TEMPLATES,
-  getDoctrineLessonTemplate,
+    DOCTRINE_FIX_HINTS,
+    DOCTRINE_LESSON_TEMPLATES,
+    getDoctrineLessonTemplate,
 } from "../src/doctrine/fix-hints.js"
-import { mssqlTool } from "../src/tools/mssql/tools.js"
+import { configureAgent } from "../src/host/index.js"
+import { createMssqlTool } from "../src/tools/mssql/tools.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
+
+const mssqlTool = createMssqlTool(configureAgent({}))
+
+function makeRuntimeWithPool(): { runtime: AgentRuntime; tool: ReturnType<typeof createMssqlTool> } {
+  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const host = configureAgent({ mssqlDatabases: databases })
+  databases.set("default", {
+    config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
+    pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
+    writeEnabled: false,
+    knowledge: null,
+  })
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  return { runtime, tool: createMssqlTool(host) }
+}
 
 describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
   it("covers the doctrines that have wired block branches", () => {
@@ -124,17 +140,8 @@ describe("mssqlTool wires lesson into runtime.memory.writeNote on block", () => 
   // stub keyed off the global runtime so the tool reaches validation.
   it("calls writeNote with the lesson payload when validation blocks", async () => {
     const writeNote = vi.fn()
-    const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+    const { runtime, tool: mssqlTool } = makeRuntimeWithPool()
     runtime.memory.writeNote = writeNote
-
-    // Plant a fake database entry with a pre-connected pool stub so getPool
-    // resolves without hitting a real server.
-    runtime.mssql.databases.set("default", {
-      config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-      pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
-      writeEnabled: false,
-      knowledge: null,
-    })
 
     const result = await runtime.run(() => mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",
@@ -151,14 +158,8 @@ describe("mssqlTool wires lesson into runtime.memory.writeNote on block", () => 
   })
 
   it("swallows writeNote exceptions silently (block error still returned)", async () => {
-    const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+    const { runtime, tool: mssqlTool } = makeRuntimeWithPool()
     runtime.memory.writeNote = () => { throw new Error("boom") }
-    runtime.mssql.databases.set("default", {
-      config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-      pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
-      writeEnabled: false,
-      knowledge: null,
-    })
 
     const result = await runtime.run(() => mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",

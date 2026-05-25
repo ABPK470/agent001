@@ -15,6 +15,7 @@
 
 import type { ConnectionPool } from "mssql"
 import { EventType } from "../../domain/enums/event.js"
+import type { AgentHost } from "../../host/index.js"
 import { tableHasTriggers } from "../catalog-drift.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
@@ -73,6 +74,7 @@ export async function probeTriggers(
  * The trigger-based path is the production-default per the original plan.
  */
 export async function maybeArchive(
+  host: AgentHost,
   plan: SyncPlan,
   tableName: string,
   triggerCache?: Map<string, boolean>,
@@ -96,7 +98,7 @@ export async function maybeArchive(
       hasTriggers = triggerCache.get(tableName)!
       cached = true
     } else {
-      hasTriggers = await tableHasTriggers(plan.target, tableName)
+      hasTriggers = await tableHasTriggers(host, plan.target, tableName)
       cached = false
     }
     emit(EventType.SyncExecuteArchiveProbe, {

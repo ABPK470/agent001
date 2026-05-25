@@ -12,8 +12,8 @@
  *      the prefix from cache on calls 2..N.
  */
 
-import type { Tool } from "@mia/agent"
-import { resetTenantConfig, setMssqlConfigs } from "@mia/agent"
+import type { AgentHost, Tool } from "@mia/agent"
+import { configureAgent, resetTenantConfig, setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
 import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
@@ -31,6 +31,11 @@ const RW: RunWorkspaceContext = {
 
 function emptyTier() { return { working: "", episodic: "", semantic: "" } }
 
+// Shared host carrying a single mssql Map for the whole file. Recreated
+// once at module load; setMssqlConfigs(host, ...) populates the same Map
+// that buildToolContext / buildSystemMessages read via { host }.
+const host: AgentHost = configureAgent({})
+
 // Hermetic fixture: tenant config, MSSQL configs, and the dynamic gate
 // regex cache are all process-global singletons. Without an explicit
 // reset, any test that calls `setMssqlConfigs([...])` or seeds tenant
@@ -42,7 +47,7 @@ function emptyTier() { return { working: "", episodic: "", semantic: "" } }
 // schema-token regexes built from leaked catalog state.
 beforeEach(() => {
   resetTenantConfig()
-  setMssqlConfigs([])
+  setMssqlConfigs(host, [])
   _resetDecideSectionsCache()
 })
 
@@ -339,17 +344,17 @@ describe("scoreDbLikelihood telemetry", () => {
 
 describe("buildToolContext gates", () => {
   beforeEach(() => {
-    setMssqlConfigs([
+    setMssqlConfigs(host, [
       { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
       { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
     ])
   })
   afterEach(() => {
-    setMssqlConfigs([])
+    setMssqlConfigs(host, [])
   })
 
   it("emits each unique knowledge body exactly once (single-group case omits the env header)", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
     const occurrences = out.split("ALPHA-KNOWLEDGE-BODY").length - 1
     expect(occurrences).toBe(1)
     // When every connection shares the same body, the per-env header is
@@ -358,12 +363,12 @@ describe("buildToolContext gates", () => {
   })
 
   it("emits a per-group env header when bodies differ across connections", () => {
-    setMssqlConfigs([
+    setMssqlConfigs(host, [
       { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
       { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
       { name: "dev",  server: "h", database: "d", knowledge: "BETA-DEV-ONLY-BODY" },
     ])
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
     expect(out.split("ALPHA-KNOWLEDGE-BODY").length - 1).toBe(1)
     expect(out.split("BETA-DEV-ONLY-BODY").length - 1).toBe(1)
     expect(out).toMatch(/\[uat,\s*prod\]/)
@@ -371,13 +376,13 @@ describe("buildToolContext gates", () => {
   })
 
   it("omits the knowledge block when includeMssqlKnowledge is false", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
     expect(out).not.toContain("ALPHA-KNOWLEDGE-BODY")
     expect(out).not.toContain("DATABASE KNOWLEDGE")
   })
 
   it("omits the SCALE CONTEXT / DATA TOOLS guidance when includeMssqlGuidance is false", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
     expect(out).not.toContain("SCALE CONTEXT")
     expect(out).not.toContain("DATA TOOLS")
   })
@@ -386,7 +391,7 @@ describe("buildToolContext gates", () => {
 describe("buildSystemMessages cache hint + section budget", () => {
   it("marks the LAST system message with cacheHint=ephemeral", async () => {
     const messages = await buildSystemMessages({
-      goal: "hello", systemPrompt: undefined, allTools: [], runWorkspace: RW, perTier: emptyTier(), runId: "run-x",
+      goal: "hello", host, systemPrompt: undefined, allTools: [], runWorkspace: RW, perTier: emptyTier(), runId: "run-x",
     })
     expect(messages.length).toBeGreaterThan(0)
     expect(messages[messages.length - 1].cacheHint).toBe("ephemeral")
@@ -401,33 +406,33 @@ describe("buildSystemMessages cache hint + section budget", () => {
     // include (knowledge body + catalogue scaffolding). Without them the
     // gates only differ by the now-removed chart catalogue, and casual
     // vs DB would be byte-identical.
-    setMssqlConfigs([
+    setMssqlConfigs(host, [
       { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
       { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
     ])
     try {
       const tools = [{ name: "query_mssql" } as Tool]
-      const casual = await buildSystemMessages({ goal: "what can you tell me about these logs?", systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const db     = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",      systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const casual = await buildSystemMessages({ goal: "what can you tell me about these logs?", host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const db     = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",      host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
       const len = (ms: typeof casual) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
       expect(len(casual)).toBeLessThan(len(db))
     } finally {
-      setMssqlConfigs([])
+      setMssqlConfigs(host, [])
     }
   })
 
   it("a DB goal WITHOUT explicit chart intent ships a SHORTER prompt than the same goal WITH 'chart' (catalogue gate is strict)", async () => {
-    setMssqlConfigs([
+    setMssqlConfigs(host, [
       { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
     ])
     try {
       const tools = [{ name: "query_mssql" } as Tool]
-      const dbOnly  = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",       systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const dbChart = await buildSystemMessages({ goal: "chart the top 10 from publish.Revenue",    systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const dbOnly  = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",       host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
+      const dbChart = await buildSystemMessages({ goal: "chart the top 10 from publish.Revenue",    host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
       const len = (ms: typeof dbOnly) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
       expect(len(dbOnly)).toBeLessThan(len(dbChart))
     } finally {
-      setMssqlConfigs([])
+      setMssqlConfigs(host, [])
     }
   })
 })

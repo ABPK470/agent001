@@ -8,6 +8,7 @@
 
 import sql from "mssql"
 import { currentRuntime } from "../agent-runtime.js"
+import type { AgentHost } from "../host/index.js"
 import { getTenantConfig } from "../tenant/config.js"
 import type { Tool } from "../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
@@ -463,7 +464,7 @@ async function runFastProfile(
 
 // ── The tool ─────────────────────────────────────────────────────
 
-export const profileDataTool: Tool = {
+function buildProfileDataTool(host: AgentHost): Tool { return {
   name: "profile_data",
   description:
     "Profile a database table — quick statistical understanding of what's in it. " +
@@ -542,7 +543,7 @@ export const profileDataTool: Tool = {
     if (args.compareMirror === true) {
       let pool: sql.ConnectionPool
       try {
-        const result = await getPool(connName)
+        const result = await getPool(host, connName)
         pool = result.pool
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -612,7 +613,7 @@ export const profileDataTool: Tool = {
 
     let pool: sql.ConnectionPool
     try {
-      const result = await getPool(connName)
+      const result = await getPool(host, connName)
       pool = result.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -792,4 +793,21 @@ export const profileDataTool: Tool = {
       markProfileDataCalled(qn)
     }
   },
+} }
+
+export const profileDataTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildProfileDataTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("profileDataTool must be built via createProfileDataTool(host)")
+    },
+  }
+})()
+
+export function createProfileDataTool(host: AgentHost): Tool {
+  return buildProfileDataTool(host)
 }

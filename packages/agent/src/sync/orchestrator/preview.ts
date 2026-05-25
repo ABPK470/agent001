@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto"
 import { EventType } from "../../domain/enums/event.js"
 import { SyncOperationType } from "../../domain/enums/sync.js"
+import type { AgentHost } from "../../host/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { tryResolveRecipe } from "../entity-registry/resolver.js"
@@ -36,6 +37,7 @@ import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
 
 export interface PreviewInput {
+  host: AgentHost
   entityType: EntityType
   entityId: string | number
   source: string
@@ -100,14 +102,14 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     }
 
     // Resolve entity display name
-    const displayName = await fetchEntityDisplayName(recipe, input.entityId, input.source)
+    const displayName = await fetchEntityDisplayName(input.host, recipe, input.entityId, input.source)
 
     // Tree expansion: when the recipe root table has a self-referencing FK
     // (e.g. core.Rule.parentRuleId → core.Rule.ruleId), expand the single
     // entity ID to the full descendant tree. Predicates using {ids} will
     // receive the complete set; {id} still binds to the root entity only.
     const expandedIds = recipe.selfJoinColumn
-      ? await expandTreeIds(recipe, input.entityId, input.source)
+      ? await expandTreeIds(input.host, recipe, input.entityId, input.source)
       : null
 
     //// Allowed schemas come from the recipe itself — every table is
@@ -121,6 +123,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     let preflight: { catalogCompatible: boolean; issues: string[] }
     try {
       preflight = await detectCatalogDrift(
+        input.host,
         input.source,
         input.target,
         recipe.tables.map((t) => t.name),
@@ -137,7 +140,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // pool and produces "Connection is closed" cascades that flap classification
     // between runs (a failed table reports counts:0/0/0/0 instead of its real
     // unchanged count, so totals jitter from one preview to the next).
-    const pkColumnsByTable = await fetchPkColumns(input.source, recipe.tables.map((t) => t.name))
+    const pkColumnsByTable = await fetchPkColumns(input.host, input.source, recipe.tables.map((t) => t.name))
     const tableResults: SyncPlanTable[] = await mapWithConcurrency(
       recipe.tables,
       PREVIEW_TABLE_CONCURRENCY,
@@ -149,6 +152,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         emit(EventType.SyncPreviewTableStart, { previewId, table: t.name, predicate })
         try {
           const r = await diffTable(
+            input.host,
             recipe,
             t,
             input.entityId,

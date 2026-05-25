@@ -17,7 +17,7 @@
  *   aliases or `L`/`W` — keep it simple, document the subset in the runbook.
  */
 
-import type { LlmCompletionPort } from "@mia/agent"
+import type { AgentHost, LlmCompletionPort } from "@mia/agent"
 import { getDb } from "../db/connection.js"
 import { runProposer } from "./runner.js"
 
@@ -32,6 +32,8 @@ export interface ProposerScheduleRow {
 }
 
 export interface SchedulerOptions {
+  /** Server boot-host (shared mssql Map). Required when scheduled passes will hit the DB. */
+  host?: AgentHost
   tickMs?: number
   /** Optional LLM port (or a getter returning the current port) passed to every scheduled run. */
   llm?:    LlmCompletionPort | null | (() => LlmCompletionPort | null)
@@ -104,6 +106,7 @@ async function executeWithRetry(s: ProposerScheduleRow, opts: SchedulerOptions):
     for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
       try {
         await runProposer(
+          opts.host!,
           { source: s.source, target: s.target },
           {
             tenantId:    s.tenant_id,

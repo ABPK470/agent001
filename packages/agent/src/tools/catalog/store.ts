@@ -1,4 +1,5 @@
 import { currentRuntime } from "../../agent-runtime.js"
+import type { AgentHost } from "../../host/index.js"
 import { CatalogGraph } from "./graph/index.js"
 import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 
@@ -18,7 +19,7 @@ import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
  *
  * Accepts a string (connection name, backward compat) or CatalogBuildOptions.
  */
-export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise<CatalogGraph> {
+export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuildOptions): Promise<CatalogGraph> {
   const o: CatalogBuildOptions = typeof opts === "string" ? { connection: opts } : (opts ?? {})
   const conn = o.connection ?? "default"
   const cachePath = o.cachePath ?? currentRuntime().catalog.defaultCachePath
@@ -43,7 +44,7 @@ export async function buildCatalog(opts?: string | CatalogBuildOptions): Promise
   }
 
   // Build from live database (expensive — 5 SQL queries)
-  const catalog = await CatalogGraph.build(conn)
+  const catalog = await CatalogGraph.build(host, conn)
   currentRuntime().catalog.instances.set(conn, catalog)
 
   // Persist to cache for next startup

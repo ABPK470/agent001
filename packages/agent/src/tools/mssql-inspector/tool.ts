@@ -1,4 +1,5 @@
 import type sql from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
@@ -14,7 +15,7 @@ import { runScanDuplicates } from "./handlers/scan-duplicates.js"
  * @module
  */
 
-export const inspectDefinitionTool: Tool = {
+function buildInspectDefinitionTool(host: AgentHost): Tool { return {
   name: "inspect_definition",
   description:
     "Read and analyze T-SQL source code of views, stored procedures, and functions. " +
@@ -125,7 +126,7 @@ export const inspectDefinitionTool: Tool = {
 
     let p: sql.ConnectionPool
     try {
-      const r = await getPool(connName)
+      const r = await getPool(host, connName)
       p = r.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -160,4 +161,21 @@ export const inspectDefinitionTool: Tool = {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+} }
+
+export const inspectDefinitionTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildInspectDefinitionTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("inspectDefinitionTool must be built via createInspectDefinitionTool(host)")
+    },
+  }
+})()
+
+export function createInspectDefinitionTool(host: AgentHost): Tool {
+  return buildInspectDefinitionTool(host)
 }

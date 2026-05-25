@@ -36,11 +36,8 @@
  */
 
 import { SyncPlanChangeType } from "../../domain/enums/sync.js"
+import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
-import { fetchPkHash, fetchTableColumns } from "./columns.js"
-import { detectScopeMisattribution } from "./conflicts.js"
-import { fetchSamples, fetchUpdateSamples } from "./samples.js"
-import { DEFAULT_OPTS, type DiffOptions, type PkHashRow } from "./types.js"
 import type {
     SyncPlanGraph,
     SyncPlanTable,
@@ -48,10 +45,15 @@ import type {
 } from "../plan-store.js"
 import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../recipes.js"
+import { fetchPkHash, fetchTableColumns } from "./columns.js"
+import { detectScopeMisattribution } from "./conflicts.js"
+import { fetchSamples, fetchUpdateSamples } from "./samples.js"
+import { DEFAULT_OPTS, type DiffOptions, type PkHashRow } from "./types.js"
 
 export type { DiffOptions } from "./types.js"
 
 export async function diffTable(
+  host: AgentHost,
   _recipe: SyncRecipe,
   table: SyncRecipeTable,
   entityId: string | number,
@@ -72,14 +74,14 @@ export async function diffTable(
   }
 
   // 1. Discover the column list to hash (from source — assumes target is compatible).
-  const { pool: srcPool } = await getPool(sourceConn)
+  const { pool: srcPool } = await getPool(host, sourceConn)
   const colInfo = await fetchTableColumns(srcPool, table.name)
   if (colInfo.hashColumns.length === 0) {
     return emptyResult(table, predicate, [`Table ${table.name} has no comparable non-meta columns — diff skipped.`], Date.now() - t0)
   }
 
   // 2–3. Pull pk + rowHash from BOTH environments in parallel.
-  const { pool: tgtPool } = await getPool(targetConn)
+  const { pool: tgtPool } = await getPool(host, targetConn)
   const [srcRows, tgtRows] = await Promise.all([
     fetchPkHash(srcPool, table.name, predicate, pkColumns, colInfo),
     fetchPkHash(tgtPool, table.name, predicate, pkColumns, colInfo),

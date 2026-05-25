@@ -9,6 +9,7 @@
  */
 
 import { type Transaction } from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
@@ -32,10 +33,10 @@ const SYNC_META_COLUMNS = new Set([
  * Returns a map keyed by `schema.table`. Tables without a PK get an empty
  * array — callers must guard against that before issuing MERGE / DELETE.
  */
-export async function fetchPkColumns(connection: string, tables: string[]): Promise<Map<string, string[]>> {
+export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[]): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
-  const { pool } = await getPool(connection)
+  const { pool } = await getPool(host, connection)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
@@ -69,14 +70,14 @@ export async function fetchPkColumns(connection: string, tables: string[]): Prom
  * copied from source — instead validFrom=GETUTCDATE(), validTo=NULL on both
  * INSERT and UPDATE, matching the legacy core.uspSyncObjectTran behaviour.
  */
-export async function applyInsertsUpdates(tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot MERGE.`)
 
   // 1. Read source rows via source pool (direct connection, no linked server).
-  const { pool: srcPool } = await getPool(plan.source)
+  const { pool: srcPool } = await getPool(host, plan.source)
   const srcResult = await trackedQuery(
     srcPool.request(),
     `SELECT * FROM ${qtable(tableName)} WHERE ${predicate}`,
@@ -190,14 +191,14 @@ export async function applyInsertsUpdates(tx: Transaction, plan: SyncPlan, table
  * Apply deletes: rows on target within scope that no longer exist on source.
  * Uses direct source pool — no linked server needed.
  */
-export async function applyDeletes(tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
+export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[]): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot delete.`)
 
   // 1. Read source PKs.
-  const { pool: srcPool } = await getPool(plan.source)
+  const { pool: srcPool } = await getPool(host, plan.source)
   const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
   const srcResult = await trackedQuery(
     srcPool.request(),

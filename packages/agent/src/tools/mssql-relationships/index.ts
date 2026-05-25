@@ -8,22 +8,23 @@
  */
 
 import sql from "mssql"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForCatalogBuild, fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
 import {
-  bfs,
-  buildAdjacency,
-  FK_ALL,
-  FK_FOR_SCHEMA,
-  FK_FOR_TABLE,
-  formatPath,
-  IMPLICIT_JOINS,
-  type FkEdge,
+    bfs,
+    buildAdjacency,
+    FK_ALL,
+    FK_FOR_SCHEMA,
+    FK_FOR_TABLE,
+    formatPath,
+    IMPLICIT_JOINS,
+    type FkEdge,
 } from "./queries.js"
 
-// ── The tool ─────────────────────────────────────────────────────
-export const discoverRelationshipsTool: Tool = {
+// ── The tool ────────────────────────────────────
+function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
   name: "discover_relationships",
   description:
     "Discover database relationships — foreign key graphs, join paths between tables, and implicit column-name matches. " +
@@ -101,7 +102,7 @@ export const discoverRelationshipsTool: Tool = {
 
     let p: sql.ConnectionPool
     try {
-      const result = await getPool(connName)
+      const result = await getPool(host, connName)
       p = result.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -301,4 +302,21 @@ export const discoverRelationshipsTool: Tool = {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+} }
+
+export const discoverRelationshipsTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildDiscoverRelationshipsTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("discoverRelationshipsTool must be built via createDiscoverRelationshipsTool(host)")
+    },
+  }
+})()
+
+export function createDiscoverRelationshipsTool(host: AgentHost): Tool {
+  return buildDiscoverRelationshipsTool(host)
 }

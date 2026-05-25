@@ -18,12 +18,14 @@ import {
     getMssqlPool,
     previewSync,
     tryResolveRecipe,
+    type AgentHost,
     type DivergentEntityRow,
     type EnvPair,
     type ProposalCounts,
 } from "@mia/agent"
 
 export interface ProbeRowDivergenceInput {
+  host:        AgentHost
   tenantId:    string
   envPair:     EnvPair
   entityId:    string
@@ -42,7 +44,7 @@ export async function probeRowDivergence(
 
   // Sample candidate IDs from the source root table.
   const candidates = await sampleRootIds(
-    i.envPair.source, recipe.rootTable, recipe.rootKeyColumn,
+    i.host, i.envPair.source, recipe.rootTable, recipe.rootKeyColumn,
     i.sampleSize ?? DEFAULT_SAMPLE_SIZE,
   )
   if (candidates.length === 0) return []
@@ -51,6 +53,7 @@ export async function probeRowDivergence(
   for (const rootId of candidates) {
     try {
       const plan = await previewSync({
+        host:       i.host,
         entityType: recipe.entityType,
         entityId:   rootId,
         source:     i.envPair.source,
@@ -89,11 +92,11 @@ export async function probeRowDivergence(
 // ── helpers ─────────────────────────────────────────────────────
 
 async function sampleRootIds(
-  conn: string, table: string, keyCol: string, limit: number,
+  host: AgentHost, conn: string, table: string, keyCol: string, limit: number,
 ): Promise<readonly (string | number)[]> {
   const [schema, name] = table.split(".")
   if (!schema || !name) throw new Error(`Invalid table name: ${table}`)
-  const { pool } = await getMssqlPool(conn)
+  const { pool } = await getMssqlPool(host, conn)
   const req = pool.request()
   const sql = `SELECT TOP (${Math.max(1, Math.min(limit, 500))}) [${keyCol}] AS id
                  FROM [${schema}].[${name}] WITH (NOLOCK)

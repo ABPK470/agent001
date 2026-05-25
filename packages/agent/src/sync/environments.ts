@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { currentRuntime } from "../agent-runtime.js"
 import { EnvAccessMode, EnvRole } from "../domain/enums/sync.js"
+import type { AgentHost } from "../host/index.js"
 import { getMssqlConfig } from "../tools/index.js"
 
 export type { EnvAccessMode, EnvRole }
@@ -160,7 +161,7 @@ const DEFAULT_CONFIG_PATH = "deploy/mssql/sync-environments.json"
  * Initialise environments. Reads `deploy/mssql/sync-environments.json` if
  * present; otherwise synthesises one entry per configured MSSQL connection.
  */
-export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
+export async function setupEnvironments(host: AgentHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
   const configPath = resolve(projectRoot, relPath)
   let envs: SyncEnvironment[]
 
@@ -193,7 +194,7 @@ export async function setupEnvironments(projectRoot: string, relPath = DEFAULT_C
   } else {
     // Fallback — one env per configured MSSQL connection, role=both.
     const FALLBACK_PALETTE = ["blue", "teal", "indigo", "pink", "slate", "cyan"]
-    const conns = getMssqlConfig()
+    const conns = getMssqlConfig(host)
     envs = conns.map((c: { name: string }, i: number) => withPermissionDefaults({
       name: c.name,
       displayName: c.name,

@@ -14,6 +14,7 @@ import {
     listExpensiveUnionViews,
     topNTables,
     topNUnionViews,
+    type AgentHost,
     type Tool,
 } from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
@@ -77,6 +78,14 @@ function extractKnowledgeHeader(body: string): string {
  * `tools`.
  */
 export interface BuildToolContextOptions {
+  /**
+   * AgentHost — required to consult the mssql connection registry
+   * (config list + default-connection name). When omitted, the mssql
+   * section degrades to the no-config branch (tests / non-runtime
+   * callers). Production callers (run-executor.ts) always pass the
+   * per-run host.
+   */
+  host?: AgentHost
   /** Include the MSSQL knowledge body (large — typically the biggest single win). */
   includeMssqlKnowledge?: boolean
   /**
@@ -107,8 +116,9 @@ interface CatalogExamples {
   dimensionAdvice:     string
 }
 
-function catalogExamples(): CatalogExamples {
-  const catalog = getCatalog(getDefaultMssqlConnectionName() ?? "default")
+function catalogExamples(host?: AgentHost): CatalogExamples {
+  const defaultConn = host ? (getDefaultMssqlConnectionName(host) ?? "default") : "default"
+  const catalog = getCatalog(defaultConn)
   const tenant  = getTenantConfig()
 
   // Best wide-union view to use as a worked lineage example.
@@ -175,7 +185,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
   // Catalog-derived example placeholders so guidance text never names a
   // customer-specific table. All placeholders fall back to generic shape
   // language when the catalog has no qualifying object.
-  const ex = catalogExamples()
+  const ex = catalogExamples(opts?.host)
   const sections: string[] = []
 
   const hasMssql = tools.some((t) =>
@@ -184,7 +194,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     t.name === "inspect_definition" || t.name === "search_catalog",
   )
   if (hasMssql) {
-    const cfgs = getMssqlConfig()
+    const cfgs = opts?.host ? getMssqlConfig(opts.host) : []
     if (cfgs.length > 0) {
       const dbList = cfgs.map((c) => {
         const mode = c.writeEnabled ? "read-write" : "read-only"
@@ -198,7 +208,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
       // so it never has to guess. The default is used for all DB queries unless
       // the task explicitly requires a different environment (e.g. sync operations).
       if (cfgs.length > 1) {
-        const defaultConnName = getDefaultMssqlConnectionName()
+        const defaultConnName = (opts?.host ? getDefaultMssqlConnectionName(opts.host) : null)
           ?? cfgs[0].name  // mirrors getPool() fallback
         sections.push(
           `Default connection: "${defaultConnName}" — use this for all regular database queries.`,

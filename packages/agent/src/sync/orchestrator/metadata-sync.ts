@@ -14,6 +14,7 @@
 import sqlMod from "mssql"
 import { EventType } from "../../domain/enums/event.js"
 import { SyncProgressKind } from "../../domain/enums/sync.js"
+import type { AgentHost } from "../../host/index.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
@@ -22,6 +23,7 @@ import { qtable, trackedQuery } from "./db-helpers.js"
 import type { ExecuteProgress } from "./types.js"
 
 export interface RunMetadataSyncInput {
+  host: AgentHost
   plan: SyncPlan
   planId: string
   pkByTable: Map<string, string[]>
@@ -35,6 +37,7 @@ export async function runMetadataSync(
   input: RunMetadataSyncInput,
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
   const { plan, planId, pkByTable, triggerCache, onProgress, target, tgtPool } = input
+  const host = input.host
 
   const appliedTotals = { insert: 0, update: 0, delete: 0 }
   const allTables = plan.recipeSnapshot.executionOrder
@@ -69,8 +72,8 @@ export async function runMetadataSync(
       const rowsTotal = tableResult.counts.insert + tableResult.counts.update
       onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal })
       emit(EventType.SyncExecuteTableStart, { planId, table: tableName, op: "upsert", rowsTotal })
-      await maybeArchive(plan, tableName, triggerCache)
-      const applied = await applyInsertsUpdates(tx, plan, tableName, pkByTable.get(tableName) ?? [])
+      await maybeArchive(host, plan, tableName, triggerCache)
+      const applied = await applyInsertsUpdates(host, tx, plan, tableName, pkByTable.get(tableName) ?? [])
       appliedTotals.update += applied
       onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
       emit(EventType.SyncExecuteTableDone, { planId, table: tableName, op: "upsert", rowsApplied: applied })
@@ -82,7 +85,7 @@ export async function runMetadataSync(
       if (!tableResult || tableResult.counts.delete === 0) continue
       onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal: tableResult.counts.delete })
       emit(EventType.SyncExecuteTableStart, { planId, table: tableName, op: "delete", rowsTotal: tableResult.counts.delete })
-      const applied = await applyDeletes(tx, plan, tableName, pkByTable.get(tableName) ?? [])
+      const applied = await applyDeletes(host, tx, plan, tableName, pkByTable.get(tableName) ?? [])
       appliedTotals.delete += applied
       onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
       emit(EventType.SyncExecuteTableDone, { planId, table: tableName, op: "delete", rowsApplied: applied })

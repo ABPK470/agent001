@@ -12,25 +12,26 @@
 
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
-import { profileDataTool } from "../src/tools/mssql-profiler.js"
+import { configureAgent } from "../src/host/index.js"
+import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
 import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): AgentRuntime {
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  // A connected-pool stub so getPool resolves without a real server. Each
-  // test that exercises the live path swaps in its own query behaviour.
-  runtime.mssql.databases.set("default", {
+function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createProfileDataTool>; databases: Map<string, import("../src/agent-runtime.js").MssqlEntry> } {
+  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const host = configureAgent({ mssqlDatabases: databases })
+  databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
     writeEnabled: false,
     knowledge: null,
   })
-  return runtime
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  return { runtime, tool: createProfileDataTool(host), databases }
 }
 
 describe("profile_data cache integration", () => {
   it("returns the cached payload + [cached from ...] header on a hit (no SQL run)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
 
     const lookup = vi.fn(() => ({
@@ -59,7 +60,7 @@ describe("profile_data cache integration", () => {
   })
 
   it("marks the table as profiled on a cache hit so the validator's big-view nudge stays satisfied", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
     runtime.toolKnowledge.lookup = () => ({
       hit: true as const,
@@ -78,7 +79,7 @@ describe("profile_data cache integration", () => {
     // publish.Revenue is a known-large UNION view. Without cache, deep mode
     // is refused outright. With a cache hit, the agent should still get its
     // answer (no live deep scan happens — we're literally returning text).
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
     runtime.toolKnowledge.lookup = () => ({
       hit: true as const,
@@ -94,7 +95,7 @@ describe("profile_data cache integration", () => {
   })
 
   it("falls through to live execution on cache miss, then persists the rendered result", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
 
     runtime.toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
@@ -117,7 +118,7 @@ describe("profile_data cache integration", () => {
       }
       return Promise.resolve({ recordset: [] })
     }
-    runtime.mssql.databases.set("default", {
+    databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
       pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: fakeQuery }), connected: true, close: async () => undefined } as never,
       writeEnabled: false,
@@ -141,14 +142,14 @@ describe("profile_data cache integration", () => {
   })
 
   it("does NOT persist a SQL-error result to the cache (avoids poisoning)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
     runtime.toolKnowledge.lookup = () => ({ hit: false as const, reason: "miss" as const })
     const save = vi.fn()
     runtime.toolKnowledge.save = save
 
     // Stub so getPool resolves but runFastProfile throws -> returns "SQL Error: ..."
-    runtime.mssql.databases.set("default", {
+    databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
       pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: () => Promise.reject(new Error("boom")) }), connected: true, close: async () => undefined } as never,
       writeEnabled: false,
@@ -161,7 +162,7 @@ describe("profile_data cache integration", () => {
   })
 
   it("falls through gracefully when no cache is bound (CLI / root runtime)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
     // No lookup/save/renderHeader bound — defaults are null.
     expect(runtime.toolKnowledge.lookup).toBeNull()
@@ -176,7 +177,7 @@ describe("profile_data cache integration", () => {
   })
 
   it("skips the cache when the catalog has no entry for the qname (no fingerprint = no cache)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: profileDataTool, databases } = makeRuntime()
     installCanonicalFixtureCatalog()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "should-not-be-used", ageMs: 0, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup

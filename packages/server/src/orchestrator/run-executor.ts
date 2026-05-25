@@ -537,6 +537,7 @@ export async function executeRunImpl(
 
   const systemMessages = await buildSystemMessages({
     goal, systemPrompt, allTools, runWorkspace, perTier, runId,
+    host: perRunHost,
     attachmentIds: activeRun?.attachmentIds ?? [],
     priorTurns: priorTurnsForRun,
     priorResults: priorResultsForRun,

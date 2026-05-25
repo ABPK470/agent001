@@ -17,6 +17,7 @@ import {
     loadSyncRecipes,
     previewSync,
     searchEntities,
+    type AgentHost,
     type EntityType,
     type ExecuteProgress,
 } from "@mia/agent"
@@ -52,7 +53,7 @@ function auditSync(
   }
 }
 
-export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): void {
+export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, host: AgentHost): void {
 
   // ── Environments ────────────────────────────────────────────
   app.get("/api/sync/environments", async () => getEnvironments())
@@ -70,7 +71,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
         return { error: "entityType, source, and q are required" }
       }
       try {
-        return await searchEntities(entityType as EntityType, source, q, limit ? Number(limit) : 200)
+        return await searchEntities(host, entityType as EntityType, source, q, limit ? Number(limit) : 200)
       } catch (e) {
         reply.code(400)
         return { error: e instanceof Error ? e.message : String(e) }
@@ -85,6 +86,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
     const actorUpn = req.session.upn
     try {
       const plan = await previewSync({
+        host,
         entityType: req.body.entityType,
         entityId: req.body.entityId,
         source: req.body.source,
@@ -135,7 +137,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
       : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {
-      const result = await executeSync(req.params.planId, { confirm: true, userUpn: actor })
+      const result = await executeSync(req.params.planId, { host, confirm: true, userUpn: actor })
       auditSync(req.params.planId, actor, actorUpn,
         result.success ? "sync.execute.completed" : "sync.execute.failed",
         { ...planDetail, error: result.error ?? null })
@@ -165,7 +167,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string): v
     req.raw.on("close", () => clearInterval(heartbeat))
 
     try {
-      const result = await executeSync(req.params.planId, { confirm: true, onProgress: send, userUpn: actor })
+      const result = await executeSync(req.params.planId, { host, confirm: true, onProgress: send, userUpn: actor })
       // Terminal event (completed/failed) already sent by orchestrator via onProgress
       auditSync(req.params.planId, actor, actorUpn,
         result.success ? "sync.execute.completed" : "sync.execute.failed",

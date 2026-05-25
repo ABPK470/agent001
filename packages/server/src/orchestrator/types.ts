@@ -84,6 +84,10 @@ export interface BootHostDeps {
   shellSandboxStrict?: boolean
   /** Sandbox-routed Playwright client. Null = host fallback. */
   browserCheckClient?: BrowserClient | null
+  /** Shared mssql connection registry (mutable Map, populated by setupMssql). */
+  mssqlDatabases?: import("@mia/agent").AgentHost["mssql"]["databases"]
+  /** Shared mssql default-connection ref (mutable container). */
+  mssqlDefaultConnection?: import("@mia/agent").AgentHost["mssql"]["defaultConnection"]
 }
 
 // ── Notification types ────────────────────────────────────────────

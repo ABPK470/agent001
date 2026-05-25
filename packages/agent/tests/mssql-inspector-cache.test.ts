@@ -8,23 +8,26 @@
 
 import { describe, expect, it, vi } from "vitest"
 import { AgentRuntime } from "../src/agent-runtime.js"
-import { inspectDefinitionTool } from "../src/tools/mssql-inspector/tool.js"
+import { configureAgent } from "../src/host/index.js"
+import { createInspectDefinitionTool } from "../src/tools/mssql-inspector/tool.js"
 import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): AgentRuntime {
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  runtime.mssql.databases.set("default", {
+function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createInspectDefinitionTool> } {
+  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const host = configureAgent({ mssqlDatabases: databases })
+  databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
     writeEnabled: false,
     knowledge: null,
   })
-  return runtime
+  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+  return { runtime, tool: createInspectDefinitionTool(host) }
 }
 
 describe("inspect_definition cache integration", () => {
   it("returns the cached payload + header on a hit for object= mode", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
     installCanonicalFixtureCatalog()
 
     const lookup = vi.fn(() => ({
@@ -47,7 +50,7 @@ describe("inspect_definition cache integration", () => {
   })
 
   it("does NOT cache dynamic modes (slow_queries / missing_indexes / index_usage / search / depends_on)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
     const lookup = vi.fn()
     runtime.toolKnowledge.lookup = lookup
     runtime.toolKnowledge.save = vi.fn()
@@ -72,7 +75,7 @@ describe("inspect_definition cache integration", () => {
   })
 
   it("skips the cache when the object is not in the catalog (no fingerprint)", async () => {
-    const runtime = makeRuntime()
+    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
     runtime.toolKnowledge.lookup = lookup
     try {

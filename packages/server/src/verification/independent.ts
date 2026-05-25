@@ -23,10 +23,12 @@ import {
     canonicalJsonStringify,
     getMssqlPool,
     tryResolveRecipe,
+    type AgentHost,
 } from "@mia/agent"
 import { createHash } from "node:crypto"
 
 export interface IndependentVerifyInput {
+  host:         AgentHost
   tenantId:     string
   source:       string
   target:       string
@@ -85,6 +87,7 @@ export async function runIndependentVerification(
   for (const t of recipe.tables) {
     try {
       const r = await verifyTable({
+        host: i.host,
         source: i.source, target: i.target, table: t.name,
         predicate: t.predicate.replace(/\{id\}/g, idLiteral),
         sampleSize, tolerance,
@@ -129,6 +132,7 @@ function baseReport(startedAt: string, t0: number, status: VerificationStatus, i
 }
 
 interface VerifyTableInput {
+  host: AgentHost
   source: string; target: string; table: string;
   predicate: string; sampleSize: number; tolerance: number
 }
@@ -138,8 +142,8 @@ async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
   if (!schema || !name) throw new Error(`bad table id "${i.table}"`)
   const qt = `[${schema}].[${name}]`
 
-  const { pool: srcPool } = await getMssqlPool(i.source)
-  const { pool: tgtPool } = await getMssqlPool(i.target)
+  const { pool: srcPool } = await getMssqlPool(i.host, i.source)
+  const { pool: tgtPool } = await getMssqlPool(i.host, i.target)
 
   const where = i.predicate.trim() ? `WHERE ${i.predicate}` : ""
   const countSql = `SELECT COUNT_BIG(*) AS n FROM ${qt} WITH (NOLOCK) ${where}`

@@ -11,6 +11,7 @@
  * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
+import type { AgentHost } from "../host/index.js"
 import { getPool } from "../tools/index.js"
 
 export interface CatalogDriftResult {
@@ -52,11 +53,12 @@ function isTransientCatalogDriftError(e: unknown): boolean {
 }
 
 async function queryWithRetry<T>(
+  host: AgentHost,
   connection: string,
   query: string,
   maxRetries = 2,
 ): Promise<T[]> {
-  const { pool } = await getPool(connection)
+  const { pool } = await getPool(host, connection)
   let lastErr: unknown
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -73,7 +75,7 @@ async function queryWithRetry<T>(
   throw lastErr
 }
 
-async function fetchSchema(connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
+async function fetchSchema(host: AgentHost, connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
   if (schemas.length === 0) {
     // Defensive: an empty allowlist would generate `IN ()` (a SQL syntax
     // error). Return an empty snapshot instead — the caller's restrict
@@ -88,7 +90,7 @@ async function fetchSchema(connection: string, schemas: readonly string[]): Prom
     COLUMN_NAME: string
     DATA_TYPE: string
     CHARACTER_MAXIMUM_LENGTH: number | null
-  }>(connection, `
+  }>(host, connection, `
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA IN (${list})
@@ -119,6 +121,7 @@ async function fetchSchema(connection: string, schemas: readonly string[]): Prom
  * augmented with the schema prefix of each restricted table.
  */
 export async function detectCatalogDrift(
+  host: AgentHost,
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
@@ -133,7 +136,7 @@ export async function detectCatalogDrift(
     }
   }
   const schemaList = [...schemaSet]
-  const [src, tgt] = await Promise.all([fetchSchema(source, schemaList), fetchSchema(target, schemaList)])
+  const [src, tgt] = await Promise.all([fetchSchema(host, source, schemaList), fetchSchema(host, target, schemaList)])
   const issues: string[] = []
   const tablesToCheck = restrict ?? src.tables
   for (const t of tablesToCheck) {
@@ -162,11 +165,11 @@ export async function detectCatalogDrift(
  * preflight to decide whether the engine should write archive rows itself or
  * rely on existing target-side triggers (the ABI convention is the latter).
  */
-export async function tableHasTriggers(connection: string, qualifiedName: string): Promise<boolean> {
+export async function tableHasTriggers(host: AgentHost, connection: string, qualifiedName: string): Promise<boolean> {
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
   try {
-    const rows = await queryWithRetry<{ cnt: number }>(connection, `
+    const rows = await queryWithRetry<{ cnt: number }>(host, connection, `
       SELECT COUNT(*) AS cnt
       FROM sys.triggers t
       JOIN sys.objects o ON o.object_id = t.parent_id

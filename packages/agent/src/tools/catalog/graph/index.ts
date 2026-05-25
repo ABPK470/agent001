@@ -2,15 +2,15 @@ import { tokenize } from "../helpers.js"
 import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
 import type {
-  CatalogBuildOptions,
-  CatalogColumn,
-  CatalogFK,
-  CatalogSearchHit,
-  CatalogSnapshot,
-  CatalogStats,
-  CatalogTable,
-  ImplicitEdge,
-  SysEntry,
+    CatalogBuildOptions,
+    CatalogColumn,
+    CatalogFK,
+    CatalogSearchHit,
+    CatalogSnapshot,
+    CatalogStats,
+    CatalogTable,
+    ImplicitEdge,
+    SysEntry,
 } from "../types.js"
 import { loadCatalogFromDb } from "./build.js"
 import { loadCatalogFromSnapshot } from "./snapshot.js"
@@ -94,8 +94,8 @@ export class CatalogGraph {
 
   // ── Build ─────────────────────────────────────────────────────
 
-  static async build(connection?: string): Promise<CatalogGraph> {
-    const r = await loadCatalogFromDb(connection)
+  static async build(host: import("../../../host/index.js").AgentHost, connection?: string): Promise<CatalogGraph> {
+    const r = await loadCatalogFromDb(host, connection)
     return new CatalogGraph(
       r.tables, r.nameIndex, r.columnIndex, r.adjacency, r.implicitEdges,
       undefined, r.viewSourceRows, r.sysCatalog,

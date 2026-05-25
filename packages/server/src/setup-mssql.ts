@@ -1,4 +1,4 @@
-import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled } from "@mia/agent"
+import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled, type AgentHost } from "@mia/agent"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
@@ -28,7 +28,7 @@ function readKnowledgeFile(projectRoot: string, filePath: string): string | null
  *
  * @returns Human-readable summary string for logging.
  */
-export function setupMssql(projectRoot: string): string {
+export function setupMssql(host: AgentHost, projectRoot: string): string {
   const mssqlDatabasesJson = process.env["MSSQL_DATABASES"]
   if (mssqlDatabasesJson) {
     // ── Multi-database mode ──────────────────────────────────────
@@ -54,6 +54,7 @@ export function setupMssql(projectRoot: string): string {
     }
 
     setMssqlConfigs(
+      host,
       dbConfigs.map((db) => ({
         name: db.name,
         server: db.host,
@@ -72,14 +73,14 @@ export function setupMssql(projectRoot: string): string {
     )
 
     for (const db of dbConfigs) {
-      if (db.writeEnabled) setMssqlWriteEnabled(true, db.name)
+      if (db.writeEnabled) setMssqlWriteEnabled(host, true, db.name)
     }
 
     // Optional: pin which named connection is the agent's "home" default.
     // Without this the agent falls back to the first entry in the array.
     const defaultConn = process.env["MSSQL_DEFAULT_CONNECTION"]
     if (defaultConn) {
-      setDefaultMssqlConnection(defaultConn)
+      setDefaultMssqlConnection(host, defaultConn)
       console.log(`MSSQL default connection: ${defaultConn}`)
     }
 
@@ -94,6 +95,7 @@ export function setupMssql(projectRoot: string): string {
     const domain = process.env["MSSQL_DOMAIN"]
     const knowledgePath = process.env["MSSQL_KNOWLEDGE_FILE"]
     setMssqlConfig(
+      host,
       {
         server: mssqlServer,
         port: Number(process.env["MSSQL_PORT"] ?? 1433),
@@ -110,7 +112,7 @@ export function setupMssql(projectRoot: string): string {
       knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
     )
     if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
-      setMssqlWriteEnabled(true)
+      setMssqlWriteEnabled(host, true)
       const summary = `${mssqlServer} (WRITE mode enabled)`
       console.log(`MSSQL: ${summary}`)
       return summary
