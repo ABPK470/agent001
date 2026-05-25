@@ -120,10 +120,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
 
 // ── Built-in no-op adapters (Phase 2 stubs) ──────────────────────
 
-const NOOP_SHELL_CLIENT: AgentHost["shell"]["client"] = {
-  async exec() {
-    throw new Error("configureAgent: no shellClient wired (pass options.shellClient).")
-  },
+const NOOP_SHELL_CLIENT: AgentHost["shell"]["client"] = async () => {
+  throw new Error("configureAgent: no shellClient wired (pass options.shellClient).")
 }
 
 const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["events"] = () => {

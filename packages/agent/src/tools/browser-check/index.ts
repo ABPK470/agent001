@@ -17,6 +17,7 @@
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
 import { currentRuntime } from "../../agent-runtime.js"
+import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { startStaticServer } from "./static-server.js"
 
@@ -50,48 +51,84 @@ export function setBrowserCheckExecutor(executor: BrowserCheckExecutor): void {
   currentRuntime().browserCheck.executor = executor
 }
 
+// ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
+
+const BROWSER_CHECK_DESCRIPTION =
+  "Open an HTML file in a headless browser and report all errors. " +
+  "Returns console errors, warnings, network failures, and uncaught exceptions. " +
+  "Use this AFTER creating or modifying web projects (HTML/JS/CSS) to verify " +
+  "they actually work. Optionally click elements to test interactions. " +
+  "IMPORTANT: The file is served via a local HTTP server rooted at the HTML file's " +
+  "parent directory. All CSS/JS/image references in the HTML must be relative to " +
+  "that directory. If your HTML is at tmp/game/index.html, references like " +
+  "'css/styles.css' resolve to tmp/game/css/styles.css. Place ALL project assets " +
+  "(CSS, JS, images) under the same directory as the HTML file."
+
+const BROWSER_CHECK_PARAMETERS = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description:
+        "Path to the HTML file to check, relative to workspace root (e.g., 'tmp/game/index.html').",
+    },
+    click: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Optional CSS selectors to click, in order (e.g., ['#startBtn', '.play-button']). " +
+        "Each click waits 500ms for any resulting errors.",
+    },
+    wait: {
+      type: "number",
+      description: "Milliseconds to wait after page load before collecting errors (default: 1000).",
+    },
+  },
+  required: ["path"],
+} as const
+
 export const browserCheckTool: Tool = {
   name: "browser_check",
-  description:
-    "Open an HTML file in a headless browser and report all errors. " +
-    "Returns console errors, warnings, network failures, and uncaught exceptions. " +
-    "Use this AFTER creating or modifying web projects (HTML/JS/CSS) to verify " +
-    "they actually work. Optionally click elements to test interactions. " +
-    "IMPORTANT: The file is served via a local HTTP server rooted at the HTML file's " +
-    "parent directory. All CSS/JS/image references in the HTML must be relative to " +
-    "that directory. If your HTML is at tmp/game/index.html, references like " +
-    "'css/styles.css' resolve to tmp/game/css/styles.css. Place ALL project assets " +
-    "(CSS, JS, images) under the same directory as the HTML file.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: {
-        type: "string",
-        description:
-          "Path to the HTML file to check, relative to workspace root (e.g., 'tmp/game/index.html').",
-      },
-      click: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          "Optional CSS selectors to click, in order (e.g., ['#startBtn', '.play-button']). " +
-          "Each click waits 500ms for any resulting errors.",
-      },
-      wait: {
-        type: "number",
-        description: "Milliseconds to wait after page load before collecting errors (default: 1000).",
-      },
-    },
-    required: ["path"],
-  },
-
+  description: BROWSER_CHECK_DESCRIPTION,
+  parameters: BROWSER_CHECK_PARAMETERS,
   async execute(args) {
+    const bc = currentRuntime().browserCheck
+    return runBrowserCheck(args, { cwd: bc.cwd, executor: bc.executor ?? null })
+  },
+}
+
+/** Factory variant bound to `host.browserCheck.{cwd,client}`. */
+export function createBrowserCheckTool(host: AgentHost): Tool {
+  return {
+    name: "browser_check",
+    description: BROWSER_CHECK_DESCRIPTION,
+    parameters: BROWSER_CHECK_PARAMETERS,
+    async execute(args) {
+      return runBrowserCheck(args, {
+        cwd: host.browserCheck.cwd,
+        executor: host.browserCheck.client,
+      })
+    },
+  }
+}
+
+// ── Shared body ──────────────────────────────────────────────────
+
+interface BrowserCheckCtx {
+  cwd: string
+  executor: BrowserCheckExecutor | null
+}
+
+async function runBrowserCheck(
+  args: Record<string, unknown>,
+  ctx: BrowserCheckCtx,
+): Promise<string> {
     const relPath = String(args.path)
     const clicks = Array.isArray(args.click) ? args.click.map(String) : []
     const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
 
     // Resolve paths
-    const fullPath = join(currentRuntime().browserCheck.cwd, relPath)
+    const fullPath = join(ctx.cwd, relPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
     const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
 
@@ -103,10 +140,9 @@ export const browserCheckTool: Tool = {
     }
 
     // Route through Docker sandbox if executor is available
-    const browserCheck = currentRuntime().browserCheck
-    if (browserCheck.executor) {
+    if (ctx.executor) {
       try {
-        const result = await browserCheck.executor(relPath, clicks, waitMs, browserCheck.cwd)
+        const result = await ctx.executor(relPath, clicks, waitMs, ctx.cwd)
         return result.report
       } catch (err) {
         return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`
@@ -241,5 +277,4 @@ export const browserCheckTool: Tool = {
       await browser?.close().catch(() => {})
       server.close()
     }
-  },
 }

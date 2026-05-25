@@ -35,29 +35,45 @@ export interface ShellExecResult {
   stdout: string
   stderr: string
   exitCode: number
-  durationMs: number
+  timedOut: boolean
+  sandboxed: boolean
 }
 
 /**
  * The agent's only door to the OS shell. The host wires this once at
  * boot (Docker sandbox, local subprocess, mock). Per-call abort flows
- * via `RunContext.signal`, not through this port.
+ * via the AbortSignal threaded from the active run.
+ *
+ * Shape mirrors the legacy `ShellExecutor` exactly so Phase 4
+ * migration is purely a rename.
  */
-export interface ShellClient {
-  exec(command: string, cwd: string, signal?: AbortSignal): Promise<ShellExecResult>
-}
+export type ShellClient = (
+  command: string,
+  cwd: string,
+  signal?: AbortSignal,
+) => Promise<ShellExecResult>
 
 /**
- * The agent's only door to running browser-check (visual diff / linkrot)
- * jobs. Concrete adapter lives in the server package.
+ * The agent's only door to running browser-check (Playwright in a sandbox)
+ * jobs. Concrete adapter lives in the server package; CLI deployments
+ * leave this `null` and the tool falls back to a host-Playwright path.
+ *
+ * Shape mirrors the legacy `BrowserCheckExecutor` exactly so Phase 4
+ * migration is purely a rename.
  */
-export interface BrowserClient {
-  run(args: {
-    cwd: string
-    targetPath: string
-    signal?: AbortSignal
-  }): Promise<{ ok: boolean; report: string }>
+export interface BrowserCheckRunResult {
+  /** Structured report text shown to the agent. */
+  report: string
+  /** Whether the check ran in Docker or on host. */
+  sandboxed: boolean
 }
+
+export type BrowserClient = (
+  htmlPath: string,
+  clicks: string[],
+  waitMs: number,
+  cwd: string,
+) => Promise<BrowserCheckRunResult>
 
 // ── Browser context / credential / handoff ───────────────────────
 

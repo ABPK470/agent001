@@ -33,6 +33,7 @@ export type {
 export type {
     AttachmentMetadata,
     AttachmentStore,
+    BrowserCheckRunResult,
     BrowserClient,
     BrowserContextHandle,
     BrowserContextReader,
