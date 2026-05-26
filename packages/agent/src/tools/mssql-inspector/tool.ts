@@ -1,5 +1,5 @@
 import type sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { Tool } from "../../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"

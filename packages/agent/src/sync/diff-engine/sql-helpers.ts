@@ -9,7 +9,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { emitSyncSqlEvent, type SyncSqlTraceContext } from "../sync-events.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 

@@ -20,7 +20,7 @@
  */
 
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { SyncSqlTraceContext } from "../sync-events.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 

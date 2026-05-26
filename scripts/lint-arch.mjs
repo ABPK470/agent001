@@ -83,9 +83,9 @@ const TIMER_ALLOWLIST = new Set([
 // Paths are workspace-relative.
 
 const ALS_ALLOWLIST = new Set([
-  "packages/agent/src/loop/tool-execution/trace-context.ts",
+  "packages/agent/src/application/shell/loop-cluster/tool-execution/trace-context.ts",
   "packages/agent/src/domain/policy-context.ts",
-  "packages/agent/src/sync/sync-events.ts",
+  "packages/sync/src/sync-events.ts",
   "packages/agent/src/agent-runtime.ts",
   "packages/agent/src/tools/mssql/connection.ts",
   "packages/server/src/auth/context.ts",
@@ -94,12 +94,11 @@ const ALS_ALLOWLIST = new Set([
 // Files containing exported `set<Pascal>(...)` mutators. Each entry will
 // be deleted in Phase 4 as its cluster migrates to closure-bound tools.
 const SETTER_ALLOWLIST = new Set([
-  "packages/agent/src/sync/sync-events.ts",
-  "packages/agent/src/sync/sync-run-sink.ts",
-  "packages/agent/src/sync/environments.ts",
-  "packages/agent/src/sync/orchestrator/contract-deploy.ts",
+  "packages/sync/src/sync-events.ts",
+  "packages/sync/src/sync-run-sink.ts",
+  "packages/sync/src/environments.ts",
+  "packages/sync/src/orchestrator/contract-deploy.ts",
   "packages/agent/src/application/shell/tenant-config.ts",
-  "packages/agent/src/tenant/config.ts",
   "packages/agent/src/tools/search-files.ts",
   "packages/agent/src/tools/fetch-url/index.ts",
   "packages/agent/src/tools/browser-check/index.ts",

@@ -7,7 +7,7 @@ import {
     diffEntityDefinitions,
     type EntityDefinition,
     type EntityTable,
-} from "../src/sync/entity-registry/index.js"
+} from "../../sync/src/entity-registry/index.js"
 
 function table(overrides: Partial<EntityTable> = {}): EntityTable {
   return {

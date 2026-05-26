@@ -12,7 +12,7 @@
  * @module
  */
 
-import type { AgentHost } from "../../../host/index.js"
+import type { AgentHost } from "../../../application/shell/runtime.js"
 import { getPool } from "../../mssql/index.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"

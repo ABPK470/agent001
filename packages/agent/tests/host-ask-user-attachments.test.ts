@@ -14,8 +14,8 @@
  * See docs/doctrine.md and docs/runtime-inventory.md §7.
  */
 import { describe, expect, it } from "vitest"
-import type { AttachmentMetadata, AttachmentStore, UserInputReader } from "../src/host/index.js"
-import { configureAgent } from "../src/host/index.js"
+import type { AttachmentMetadata, AttachmentStore, UserInputReader } from "../src/application/shell/runtime.js"
+import { configureAgent } from "../src/application/shell/runtime.js"
 import { createAskUserTool } from "../src/tools/ask-user.js"
 import {
     createImportAttachmentTool,

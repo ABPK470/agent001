@@ -9,7 +9,7 @@
  * it ran the sync" is always answerable.
  *
  * Storage layer lives in `packages/server/src/db/entity-defs.ts`. Recipe
- * projection (Definition → Recipe) lives in `packages/agent/src/sync/
+ * projection (Definition → Recipe) lives in `packages/sync/src/
  * entity-registry/projector.ts`.
  *
  * Design decisions locked in (see /memories/session/plan.md):

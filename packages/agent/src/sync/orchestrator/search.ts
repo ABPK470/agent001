@@ -10,7 +10,7 @@
  */
 
 import sqlMod from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { getPool } from "../../tools/index.js"
 import {
     getRecipe,

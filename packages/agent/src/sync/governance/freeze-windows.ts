@@ -8,7 +8,7 @@
  * a warning (so a typo doesn't accidentally block all syncs).
  */
 
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 
 export interface FreezeWindowDefinition {
   /** Stable id (matches `EntityPolicies.freezeWindowIds[]`). */

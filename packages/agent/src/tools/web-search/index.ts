@@ -19,7 +19,7 @@
  * @module
  */
 
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { Tool } from "../../types.js"
 import { closeAllBrowserSessions, deleteSession, launchSession, persistSessionState } from "../browse-web/session.js"
 import { bingAdapter } from "./bing.js"

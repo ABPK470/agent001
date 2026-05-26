@@ -7,8 +7,8 @@
  * @module
  */
 
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { EventType } from "../../domain/enums/event.js"
-import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit } from "../sync-events.js"

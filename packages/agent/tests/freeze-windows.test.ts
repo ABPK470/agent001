@@ -6,12 +6,12 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { configureAgent } from "../src/host/index.js"
 import {
     evaluateFreezeWindows,
+    installFreezeWindowRegistry,
     listFreezeWindows,
     type FreezeWindowDefinition,
-} from "../src/sync/governance/freeze-windows.js"
+} from "../../sync/src/governance/freeze-windows.js"
 
 const WINDOW_A: FreezeWindowDefinition = {
   id:          "month-end",
@@ -31,50 +31,50 @@ const WINDOW_B: FreezeWindowDefinition = {
 
 describe("freeze-windows", () => {
   it("listFreezeWindows reflects the installed registry", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A, WINDOW_B] })
-    const list = listFreezeWindows(host)
+    installFreezeWindowRegistry([WINDOW_A, WINDOW_B])
+    const list = listFreezeWindows()
     expect(list.map((w) => w.id).sort()).toEqual(["month-end", "release-week"])
   })
 
   it("returns inactive when no ids are referenced", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A] })
-    const ev = evaluateFreezeWindows(host, [], new Date("2025-01-29T12:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A])
+    const ev = evaluateFreezeWindows([], new Date("2025-01-29T12:00:00.000Z"))
     expect(ev.active).toBe(false)
     expect(ev.matched).toHaveLength(0)
     expect(ev.unknownIds).toHaveLength(0)
   })
 
   it("marks a window active when `now` falls inside [start, end)", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A] })
-    const ev = evaluateFreezeWindows(host, ["month-end"], new Date("2025-01-29T12:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A])
+    const ev = evaluateFreezeWindows(["month-end"], new Date("2025-01-29T12:00:00.000Z"))
     expect(ev.active).toBe(true)
     expect(ev.activeWindows.map((w) => w.id)).toEqual(["month-end"])
   })
 
   it("marks a window inactive when `now` is at the exclusive end boundary", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A] })
-    const ev = evaluateFreezeWindows(host, ["month-end"], new Date("2025-02-01T00:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A])
+    const ev = evaluateFreezeWindows(["month-end"], new Date("2025-02-01T00:00:00.000Z"))
     expect(ev.active).toBe(false)
     expect(ev.matched).toHaveLength(1)
     expect(ev.activeWindows).toHaveLength(0)
   })
 
   it("marks a window active at the inclusive start boundary", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A] })
-    const ev = evaluateFreezeWindows(host, ["month-end"], new Date("2025-01-27T00:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A])
+    const ev = evaluateFreezeWindows(["month-end"], new Date("2025-01-27T00:00:00.000Z"))
     expect(ev.active).toBe(true)
   })
 
   it("collects unknown ids without blocking — typo safety", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A] })
-    const ev = evaluateFreezeWindows(host, ["month-end", "typo-id"], new Date("2025-01-29T12:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A])
+    const ev = evaluateFreezeWindows(["month-end", "typo-id"], new Date("2025-01-29T12:00:00.000Z"))
     expect(ev.active).toBe(true)
     expect(ev.unknownIds).toEqual(["typo-id"])
   })
 
   it("returns active when ANY referenced window is active", () => {
-    const host = configureAgent({ syncFreezeWindowsReader: () => [WINDOW_A, WINDOW_B] })
-    const ev = evaluateFreezeWindows(host, ["release-week", "month-end"], new Date("2025-01-29T12:00:00.000Z"))
+    installFreezeWindowRegistry([WINDOW_A, WINDOW_B])
+    const ev = evaluateFreezeWindows(["release-week", "month-end"], new Date("2025-01-29T12:00:00.000Z"))
     expect(ev.active).toBe(true)
     expect(ev.activeWindows.map((w) => w.id)).toEqual(["month-end"])
   })

@@ -5,7 +5,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { SyncSqlTraceContext } from "../sync-events.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {

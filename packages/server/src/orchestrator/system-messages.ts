@@ -284,7 +284,7 @@ export async function buildSystemMessages(opts: {
   // Section 0: system_law — per-run, catalog-resolved facts (Phase 3).
   // Empty when no catalog is loaded and no curated lineage matches; the
   // section is never injected with prose rules — those live in
-  // MSSQL_DOCTRINES (packages/agent/src/doctrine/) and are surfaced
+  // MSSQL_DOCTRINES (packages/agent/src/application/core/doctrine-cluster/) and are surfaced
   // through validator enforcement, not prompt repetition.
   try {
     const catalog = opts.host ? getCatalog(opts.host) : null

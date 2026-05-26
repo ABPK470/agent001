@@ -3,7 +3,7 @@
 // reason, at least one doctrine should be capable of explaining it.
 
 import { describe, expect, it } from "vitest"
-import { enforceDoctrines } from "../src/doctrine/index.js"
+import { enforceDoctrines } from "../src/application/core/doctrine.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
 interface Case {

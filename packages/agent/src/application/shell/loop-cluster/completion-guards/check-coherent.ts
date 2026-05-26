@@ -1,4 +1,4 @@
-import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "../../../../domain/index.js"
 /**
  * Coherent-verification completion guard. Extracted from completion-guards.ts.
  *
@@ -10,7 +10,7 @@ import {
     buildCoherentRepairInstructions,
     executePlannerPath,
     summarizeCoherentVerifierDecision,
-} from "../../application/core/planner.js"
+} from "../../../core/planner.js"
 import type { CompletionGuardContext, CompletionGuardResult } from "../completion-guards/index.js"
 
 export async function checkCoherentVerification(

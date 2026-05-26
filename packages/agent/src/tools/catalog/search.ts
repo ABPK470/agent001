@@ -1,5 +1,5 @@
+import type { TableVerdictsReader } from "../../application/shell/runtime.js"
 import { getTenantConfig } from "../../application/shell/tenant-config.js"
-import type { TableVerdictsReader } from "../../host/index.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"
 

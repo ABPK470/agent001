@@ -9,7 +9,7 @@
  */
 
 import { type Transaction } from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { getPool } from "../../tools/index.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import type { SyncSqlTraceContext } from "../sync-events.js"

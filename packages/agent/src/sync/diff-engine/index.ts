@@ -35,8 +35,8 @@
  * live UAT mymi DB). All earlier hash-column logic was based on a false assumption.
  */
 
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { SyncPlanChangeType } from "../../domain/enums/sync.js"
-import type { AgentHost } from "../../host/index.js"
 import { getPool } from "../../tools/index.js"
 import type {
     SyncPlanGraph,

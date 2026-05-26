@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent } from "../src/application/shell/runtime.js"
 import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
 import { isLargeObject } from "../src/tools/mssql/validation.js"
 

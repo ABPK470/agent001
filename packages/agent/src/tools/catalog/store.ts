@@ -1,4 +1,4 @@
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { CatalogGraph } from "./graph/index.js"
 import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 

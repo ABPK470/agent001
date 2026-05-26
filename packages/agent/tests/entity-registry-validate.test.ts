@@ -17,7 +17,7 @@ import {
     looksUnsafeSqlFragment,
     validateEntityDefinition,
     validateScd2Strategy,
-} from "../src/sync/entity-registry/index.js"
+} from "../../sync/src/entity-registry/index.js"
 
 // ── Fixture factories ────────────────────────────────────────────
 

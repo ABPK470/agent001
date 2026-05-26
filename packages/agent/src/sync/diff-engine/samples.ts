@@ -10,7 +10,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { SyncPlanRowSample } from "../plan-store.js"
 import type { SyncSqlTraceContext } from "../sync-events.js"
 import { buildBatchWhere, qtable, runQueryWithRetry } from "./sql-helpers.js"

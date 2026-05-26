@@ -133,10 +133,10 @@ If you are new to the package, read in this order:
 
 1. `docs/doctrine.md`
 2. `src/lib/index.ts`
-3. `src/agent.ts` and `src/agent/`
-4. `src/loop/`
+3. `src/application/shell/agent.ts` and `src/application/shell/agent-cluster/`
+4. `src/application/shell/loop.ts` and `src/application/shell/loop-cluster/`
 5. `src/types.ts`
-6. `src/planner/` and `src/recovery/`
+6. `src/application/core/planner.ts` and `src/application/core/recovery.ts`
 
 That path gives the shortest route from the public entry point to the execution
 core.

@@ -1,7 +1,7 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../application/core/doctrine-cluster/fix-hints.js"
 import { getTenantConfig } from "../../application/shell/tenant-config.js"
-import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import type { CatalogAccessor } from "../catalog/index.js"
 import {
@@ -217,7 +217,7 @@ export interface QueryValidationDiagnostics {
    * the calling tool can route it to the agent's memory writer. Pure data;
    * the validator has no side effects.
    */
-  readonly lesson?: import("../../doctrine/fix-hints.js").NoteLessonPayload | null
+  readonly lesson?: import("../../application/core/doctrine-cluster/fix-hints.js").NoteLessonPayload | null
 }
 
 function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {

@@ -10,7 +10,7 @@ import {
     enforceDoctrines,
     getDoctrineFixHint,
     MSSQL_DOCTRINES,
-} from "../src/doctrine/index.js"
+} from "../src/application/core/doctrine.js"
 import { validateQuery } from "../src/tools/mssql/validation.js"
 
 describe("doctrine fixHints", () => {

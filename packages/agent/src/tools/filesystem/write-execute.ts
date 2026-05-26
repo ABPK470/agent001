@@ -8,7 +8,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../application/core/governance.js"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { ToolResultEnvelope } from "../../types.js"
 import { checkWriteIntegrity, extractDefinedNames, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"

@@ -1,7 +1,7 @@
 import { appendFile as fsAppendFile, mkdir, readFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
-import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"

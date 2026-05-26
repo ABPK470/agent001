@@ -115,7 +115,7 @@ export function decorateMssqlError(rawMessage: string): string {
 // (b) a catalog snapshot is available, (c) at least one referenced table is
 // catalog-resolvable. Otherwise returns the input unchanged.
 
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { getCatalog } from "../catalog/store.js"
 import type { CatalogColumn, CatalogTable } from "../catalog/types.js"
 

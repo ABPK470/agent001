@@ -18,7 +18,7 @@ import {
     type LlmCompletionPort,
     type ProposerFinding,
     type RiskAnnotation,
-} from "../src/sync/proposer/index.js"
+} from "../../sync/src/proposer/index.js"
 
 function finding(): ProposerFinding {
   return {

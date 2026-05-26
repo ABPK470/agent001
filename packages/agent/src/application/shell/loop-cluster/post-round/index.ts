@@ -5,15 +5,15 @@
  * extension, recovery hint injection, and post-delegation verification.
  */
 
-import { buildRecoveryHints } from "../../application/core/recovery.js"
-import * as log from "../../internal/index.js"
-import type { ToolCallRecord } from "../../tools/index.js"
+import { buildRecoveryHints } from "../../../core/recovery.js"
+import * as log from "../../../../internal/index.js"
+import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
     checkToolLoopStuckDetection,
     evaluateToolRoundBudgetExtension,
     summarizeToolRoundProgress,
-} from "../../tools/index.js"
-import type { AgentConfig, Message } from "../../types.js"
+} from "../../../../tools/index.js"
+import type { AgentConfig, Message } from "../../../../types.js"
 import type { AgentLoopState } from "../state.js"
 
 
@@ -131,7 +131,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
 
 // ── Internal helpers ────────────────────────────────────────────
 
-import { MessageRole } from "../../domain/enums/message.js"
+import { MessageRole } from "../../../../domain/enums/message.js"
 import { processCoherentRepairStall, processExcessiveReadFiles } from "./file-stalls.js"
 
 function processRoundBudgetExtension(ctx: PostRoundContext): void {

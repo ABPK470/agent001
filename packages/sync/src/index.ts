@@ -1,8 +1,8 @@
 /**
  * Sync subsystem — public API.
  *
- * Outside this folder, import from `./sync/index.js` only.
- * Files inside `sync/` (including `diff-engine/` and `orchestrator/`)
+ * Outside this folder, import from `@mia/sync` or `./index.js` only.
+ * Files inside this package (including `diff-engine/` and `orchestrator/`)
  * are private implementation details.
  */
 

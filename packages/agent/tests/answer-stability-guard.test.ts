@@ -10,9 +10,9 @@ import { describe, expect, it } from "vitest"
 import {
     checkAnswerStability,
     computeAnswerSignature,
-} from "../src/loop/completion-guards/answer-stability-guard.js"
-import type { CompletionGuardContext } from "../src/loop/completion-guards/index.js"
-import { createAgentLoopState } from "../src/loop/state.js"
+} from "../src/application/shell/loop-cluster/completion-guards/answer-stability-guard.js"
+import type { CompletionGuardContext } from "../src/application/shell/loop-cluster/completion-guards/index.js"
+import { createAgentLoopState } from "../src/application/shell/loop-cluster/state.js"
 
 const ANSWER_WITH_TABLE = [
   "## Top clients",

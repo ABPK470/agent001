@@ -14,8 +14,8 @@
  */
 
 import type { ConnectionPool } from "mssql"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { EventType } from "../../domain/enums/event.js"
-import type { AgentHost } from "../../host/index.js"
 import { tableHasTriggers } from "../catalog-drift.js"
 import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit, type SyncSqlTraceContext } from "../sync-events.js"

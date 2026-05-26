@@ -1,6 +1,6 @@
 /**
  * Phase 7 guardrail: the structural SQL rules live in exactly ONE place —
- * the doctrine SSoT under packages/agent/src/doctrine/. This test makes
+ * the doctrine SSoT under packages/agent/src/application/core/doctrine-cluster/. This test makes
  * sure (a) the doctrine summaries carry the rules we removed from the
  * markdown prompts, and (b) no prompt file re-states them in detail.
  */
@@ -9,14 +9,14 @@ import {
     assembleDoctrineBlock,
     DOCTRINE_BLOCK_BUDGET_BYTES,
     MSSQL_DOCTRINES,
-} from "../src/doctrine/index.js"
+} from "../src/application/core/doctrine.js"
 import {
     ABI_SYNC_SECTION,
     BIG_TABLE_ETL_SECTION,
     CHART_CATALOGUE_SECTION,
     DEFAULT_SYSTEM_PROMPT,
     MIA_DATA_PERSONA_SECTION,
-} from "../src/loop/system-prompt.js"
+} from "../src/application/shell/loop-cluster/system-prompt.js"
 
 const ALL_PROMPTS: Array<readonly [string, string]> = [
   ["DEFAULT_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT],

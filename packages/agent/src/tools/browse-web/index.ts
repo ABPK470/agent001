@@ -20,8 +20,8 @@
  * @module
  */
 
+import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
 import { BROWSE_WEB_ACTION_VALUES, BrowseWebAction } from "../../domain/enums/browse-web.js"
-import type { AgentHost, RunContext } from "../../host/index.js"
 import type { Tool } from "../../types.js"
 import {
     handleClick,

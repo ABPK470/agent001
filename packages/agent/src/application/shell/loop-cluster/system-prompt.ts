@@ -8,8 +8,8 @@
  *      and anti-duplication assertions.
  *
  * Load strategy: dual-path readFileSync at module init.
- *   - Source / vitest:  import.meta.url is .../packages/agent/src/loop/system-prompt.ts
- *                       → ../../prompts/X.md → packages/agent/prompts/X.md
+ *   - Source / vitest:  import.meta.url is .../packages/agent/src/application/shell/loop-cluster/system-prompt.ts
+ *                       → ../../../../prompts/X.md → packages/agent/prompts/X.md
  *   - Bundled (esbuild → dist/server.js): import.meta.url is .../dist/server.js
  *                       → ./prompts/X.md → dist/prompts/X.md (copied by scripts/build.mjs)
  *
@@ -46,8 +46,8 @@ function resolvePromptCandidates(name: string): string[] {
   const cwdSource = resolve(process.cwd(), "packages/agent/prompts", name)
   out.push(cwdSource)
 
-  // 2. Source tree relative to this module (depth-2 escape from src/loop/).
-  out.push(fileURLToPath(new URL(`../../prompts/${name}`, import.meta.url)))
+  // 2. Source tree relative to this module (depth-4 escape from src/application/shell/loop-cluster/).
+  out.push(fileURLToPath(new URL(`../../../../prompts/${name}`, import.meta.url)))
 
   // 3. Bundled path next to dist/server.js (production).
   out.push(fileURLToPath(new URL(`./prompts/${name}`, import.meta.url)))

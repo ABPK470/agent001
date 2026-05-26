@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { buildDependencyGraph } from "../src/sync/index.js"
-import type { SyncPlanTable, SyncRecipe } from "../src/sync/index.js"
+import { buildDependencyGraph } from "../../sync/src/index.js"
+import type { SyncPlanTable, SyncRecipe } from "../../sync/src/index.js"
 
 describe("buildDependencyGraph smoke", () => {
   const recipe: SyncRecipe = {

@@ -8,12 +8,12 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { projectRecipe } from "../src/sync/entity-registry/projector.js"
+import { projectRecipe } from "../../sync/src/entity-registry/projector.js"
 import type {
     EntityDefinition,
     EntityTable,
     Scd2Strategy,
-} from "../src/sync/entity-registry/types.js"
+} from "../../sync/src/entity-registry/types.js"
 
 const STRATEGY: Scd2Strategy = {
   id:                "mymi-scd2",

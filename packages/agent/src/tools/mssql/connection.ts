@@ -1,5 +1,5 @@
 import sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 
 // ── Named connection registry ────────────────────────────────────
 

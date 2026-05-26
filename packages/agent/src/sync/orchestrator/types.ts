@@ -7,8 +7,8 @@
  * @module
  */
 
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { SyncProgressKind } from "../../domain/enums/sync.js"
-import type { AgentHost } from "../../host/index.js"
 
 export interface ExecuteProgress {
   type: SyncProgressKind

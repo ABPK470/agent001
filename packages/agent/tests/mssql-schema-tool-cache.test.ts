@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { configureAgent, type AgentHost } from "../src/host/index.js"
+import { configureAgent, type AgentHost } from "../src/application/shell/runtime.js"
 import { createMssqlSchemaTool } from "../src/tools/mssql/tools.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
@@ -22,7 +22,7 @@ function makeFixture(query?: (sql: string) => Promise<{ recordset: unknown[]; re
   tool: ReturnType<typeof createMssqlSchemaTool>
   toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
 } {
-  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const databases = new Map<string, import("../src/application/shell/runtime.js").MssqlEntry>()
   const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),

@@ -19,7 +19,7 @@ import {
     type EntityDescriptor,
     type EnvPair,
     type ProposerPassDeps,
-} from "../src/sync/proposer/index.js"
+} from "../../sync/src/proposer/index.js"
 
 function ent(id: string, defVersion = 1): EntityDescriptor {
   return { id, label: `Entity ${id}`, defVersion }

@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { configureAgent, makeRunContext, type AgentHost } from "../src/host/index.js"
+import { configureAgent, makeRunContext, type AgentHost } from "../src/application/shell/runtime.js"
 import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
@@ -19,10 +19,10 @@ function makeFixture(): {
   host: AgentHost
   run: ReturnType<typeof makeRunContext>
   tool: ReturnType<typeof createProfileDataTool>
-  databases: Map<string, import("../src/host/index.js").MssqlEntry>
+  databases: Map<string, import("../src/application/shell/runtime.js").MssqlEntry>
   toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
 } {
-  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const databases = new Map<string, import("../src/application/shell/runtime.js").MssqlEntry>()
   const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),

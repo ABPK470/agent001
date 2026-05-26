@@ -19,7 +19,7 @@
  * substitutions are a flat string map. `{{foo}}` is the smallest
  * surface that meets the contract.
  */
-import { getTenantConfig } from "../application/shell/tenant-config.js"
+import { getTenantConfig } from "../tenant-config.js"
 import {
     type CatalogAccessor,
     calendarDimensionTable,
@@ -29,7 +29,7 @@ import {
     primaryKeyColumns,
     topNTables,
     topNUnionViews,
-} from "../tools/index.js"
+} from "../../../tools/index.js"
 
 export interface PromptVars {
   mirrorSchema:          string

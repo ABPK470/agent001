@@ -13,7 +13,7 @@
  */
 
 import { lookup } from "node:dns/promises"
-import type { RunContext } from "../../host/index.js"
+import type { RunContext } from "../../application/shell/runtime.js"
 import type { Tool } from "../../types.js"
 import { checkHostname, checkResolvedIp, fetchWithBrowser } from "./helpers.js"
 

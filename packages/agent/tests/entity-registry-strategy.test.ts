@@ -10,7 +10,7 @@ import {
     resolveEffectiveScd2,
     type Scd2Override,
     type Scd2Strategy,
-} from "../src/sync/entity-registry/index.js"
+} from "../../sync/src/entity-registry/index.js"
 
 function table(scd2Override: Scd2Override | null = null): EntityTable {
   return {

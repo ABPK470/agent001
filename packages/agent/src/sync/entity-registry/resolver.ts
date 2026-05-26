@@ -18,7 +18,7 @@
  * `configureAgent({ syncRecipeResolver })`; lookup stays explicit.
  */
 
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { SyncRecipe } from "../recipes.js"
 
 /**

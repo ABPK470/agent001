@@ -4,12 +4,12 @@
  * catalog → placeholder fallback) without standing up a real catalog.
  */
 import { beforeEach, describe, expect, it } from "vitest"
-import { resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
 import {
     _resetPromptVarsCache,
     buildPromptVars,
     renderPromptVars,
-} from "../src/loop/prompt-vars.js"
+} from "../src/application/shell/loop-cluster/prompt-vars.js"
+import { resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
 
 describe("renderPromptVars — substitution semantics", () => {
   beforeEach(() => {

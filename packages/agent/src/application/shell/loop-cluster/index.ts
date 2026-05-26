@@ -1,8 +1,8 @@
 /**
  * Loop cluster — public API.
  *
- * Outside this folder, import from `./loop/index.js` only.
- * Files inside `loop/` are private implementation details.
+ * Outside this folder, import from `../loop.js` or `./index.js` only.
+ * Files inside this cluster are private implementation details.
  *
  * Note: `agent.ts` (the public Agent class) is the primary consumer and
  * orchestrates the loop. Other consumers (planner-routing, agent-helpers)

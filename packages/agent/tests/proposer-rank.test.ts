@@ -11,14 +11,14 @@
  */
 
 import { describe, expect, it } from "vitest"
-import type { RiskAnnotation } from "../src/sync/proposer/annotation-schema.js"
+import type { RiskAnnotation } from "../../sync/src/proposer/annotation-schema.js"
 import {
     ProposalKind,
     rankProposals,
     RiskTier,
     type ProposerFinding,
     type RankableProposal,
-} from "../src/sync/proposer/index.js"
+} from "../../sync/src/proposer/index.js"
 
 function finding(entityType: string, observedAt = "2025-01-15T12:00:00.000Z"): ProposerFinding {
   return {

@@ -10,7 +10,7 @@
  * @module
  */
 
-import type { AgentHost, BrowserContextHandle } from "../../host/index.js"
+import type { AgentHost, BrowserContextHandle } from "../../application/shell/runtime.js"
 import { pickFingerprint, type Fingerprint } from "./fingerprint.js"
 
 export interface BrowserSession {

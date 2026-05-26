@@ -1,4 +1,4 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../../../domain/index.js"
 /**
  * Per-tool-call execution logic extracted from Agent.run().
  *
@@ -15,15 +15,15 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js
  * @module
  */
 
-import { READ_ONLY_TOOL_NAMES } from "../../domain/agent-constants.js"
-import { MessageRole } from "../../domain/enums/message.js"
-import * as log from "../../internal/index.js"
-import { compactAtWriteTime } from "../../memory/index.js"
-import type { ToolCallRecord } from "../../tools/index.js"
+import { READ_ONLY_TOOL_NAMES } from "../../../../domain/agent-constants.js"
+import { MessageRole } from "../../../../domain/enums/message.js"
+import * as log from "../../../../internal/index.js"
+import { compactAtWriteTime } from "../../../../memory/index.js"
+import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
     buildSemanticToolCallKey, didToolCallFail, enrichToolResultMetadata as enrichResult,
     trackToolCallFailureState
-} from "../../tools/index.js"
+} from "../../../../tools/index.js"
 import { extractWritePayload, recordTruncatedQuery } from "./anti-paste-guard.js"
 import {
     collectChildToolNames,

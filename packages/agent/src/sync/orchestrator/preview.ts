@@ -7,9 +7,9 @@
  */
 
 import { randomUUID } from "node:crypto"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { EventType } from "../../domain/enums/event.js"
 import { SyncOperationType } from "../../domain/enums/sync.js"
-import type { AgentHost } from "../../host/index.js"
 import { detectCatalogDrift } from "../catalog-drift.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { tryResolveRecipe } from "../entity-registry/resolver.js"

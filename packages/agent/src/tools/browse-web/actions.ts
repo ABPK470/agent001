@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import { dismissCookieConsent, readPageText } from "./page-helpers.js"
 import { resolveLocator } from "./selectors.js"
 import {

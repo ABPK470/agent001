@@ -5,7 +5,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../host/index.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
 import type { SyncPlanConflict } from "../plan-store.js"
 import type { SyncRecipeTable } from "../recipes.js"
 import type { SyncSqlTraceContext } from "../sync-events.js"

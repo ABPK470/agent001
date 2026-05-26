@@ -6,9 +6,9 @@
  * iterations lives here.
  */
 
-import type { CoherentSolutionBundle, Plan, VerifierDecision } from "../application/core/planner.js"
-import { ToolFailureCircuitBreaker } from "../application/core/recovery.js"
-import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../tools/index.js"
+import type { CoherentSolutionBundle, Plan, VerifierDecision } from "../../core/planner.js"
+import { ToolFailureCircuitBreaker } from "../../core/recovery.js"
+import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../../../tools/index.js"
 
 /** Active coherent-generation execution context. */
 export interface CoherentExecutionState {
