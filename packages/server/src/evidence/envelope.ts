@@ -27,7 +27,7 @@ import {
     canonicalJsonStringify,
     canonicalSha256,
     sha256Hex,
-} from "@mia/agent"
+} from "@mia/sync"
 
 export const ENVELOPE_VERSION = 1 as const
 

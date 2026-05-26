@@ -7,13 +7,13 @@
  * `effectiveScd2[]` parallel array.
  */
 
-import { describe, expect, it } from "vitest"
-import { projectRecipe } from "../../sync/src/entity-registry/projector.js"
 import type {
     EntityDefinition,
     EntityTable,
     Scd2Strategy,
-} from "../../sync/src/entity-registry/types.js"
+} from "@mia/sync"
+import { projectRecipe } from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 const STRATEGY: Scd2Strategy = {
   id:                "mymi-scd2",

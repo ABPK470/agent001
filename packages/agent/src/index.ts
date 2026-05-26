@@ -58,7 +58,6 @@ export type {
 } from "./domain/agent-types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
-export * from "@mia/sync"
 export * from "./application/core/clarify.js"
 export * from "./application/core/doctrine.js"
 export * from "./application/core/governance.js"

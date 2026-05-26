@@ -6,9 +6,9 @@
  * real database — feeds in synthesized `SyncPlanTable[]` directly.
  */
 
+import type { SyncPlanTable, SyncRecipe } from "@mia/sync"
+import { buildDependencyGraph } from "@mia/sync"
 import { describe, expect, it } from "vitest"
-import { buildDependencyGraph } from "../../sync/src/index.js"
-import type { SyncPlanTable, SyncRecipe } from "../../sync/src/index.js"
 
 describe("buildDependencyGraph smoke", () => {
   const recipe: SyncRecipe = {

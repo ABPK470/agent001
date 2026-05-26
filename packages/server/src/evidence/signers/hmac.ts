@@ -6,7 +6,7 @@
  * without sharing the secret — use `file-rsa` or `kms` for those.
  */
 
-import { hmacSha256Hex } from "@mia/agent"
+import { hmacSha256Hex } from "@mia/sync"
 import { Signer } from "../signer.js"
 
 export interface HmacSignerOptions {

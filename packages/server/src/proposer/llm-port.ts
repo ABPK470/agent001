@@ -7,8 +7,9 @@
  * shields the proposer from the full chat/tool-call surface.
  */
 
-import type { LLMClient, LlmCompletionPort, LlmCompletionRequest, Message } from "@mia/agent"
+import type { LLMClient, Message } from "@mia/agent"
 import { MessageRole } from "@mia/agent"
+import type { LlmCompletionPort, LlmCompletionRequest } from "@mia/sync"
 
 export function llmClientAsCompletionPort(client: LLMClient): LlmCompletionPort {
   return {

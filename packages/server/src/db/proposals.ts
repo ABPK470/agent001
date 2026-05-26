@@ -6,7 +6,7 @@
  *  - `sync_proposals`       one row per surviving finding (lifecycle row)
  *  - `sync_proposal_history` append-only transition log
  *
- * The lifecycle state-machine itself lives in `@mia/agent`
+ * The lifecycle state-machine itself lives in `@mia/sync`
  * (`assertProposalTransition`); this module only persists. Any caller
  * that mutates `status` MUST call the assert first or use
  * `updateProposalStatus` which performs it inline.
@@ -23,7 +23,7 @@ import {
     type ProposerRunCounts,
     type RiskAnnotation,
     type RiskTier,
-} from "@mia/agent"
+} from "@mia/sync"
 import { randomUUID } from "node:crypto"
 import { getDb } from "./connection.js"
 

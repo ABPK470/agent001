@@ -10,15 +10,15 @@
  *  - lineageCentrality contributes deterministically
  */
 
-import { describe, expect, it } from "vitest"
-import type { RiskAnnotation } from "../../sync/src/proposer/annotation-schema.js"
+import type { RiskAnnotation } from "@mia/sync"
 import {
     ProposalKind,
     rankProposals,
     RiskTier,
     type ProposerFinding,
     type RankableProposal,
-} from "../../sync/src/proposer/index.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 function finding(entityType: string, observedAt = "2025-01-15T12:00:00.000Z"): ProposerFinding {
   return {

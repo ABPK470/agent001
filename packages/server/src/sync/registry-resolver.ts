@@ -19,7 +19,7 @@
 import {
     projectRecipe,
     type RecipeResolver,
-} from "@mia/agent"
+} from "@mia/sync"
 import {
     getEntityDefinition,
     resolveScd2Strategy,

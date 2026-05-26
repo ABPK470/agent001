@@ -2,8 +2,8 @@
  * Approval workflow transport routes.
  */
 
-import type { RiskTier } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
+import type { RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"

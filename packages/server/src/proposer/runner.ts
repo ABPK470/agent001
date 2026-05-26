@@ -12,13 +12,16 @@
  */
 
 import {
+    type AgentHost,
+} from "@mia/agent"
+import { EventType } from "@mia/shared-enums"
+import {
     annotateProposal,
     detectCatalogDrift,
     emptyCounts,
     rankProposals,
     runProposerPass,
     tryResolveRecipe,
-    type AgentHost,
     type EntityDescriptor,
     type EnvPair,
     type LlmCompletionPort,
@@ -27,8 +30,7 @@ import {
     type ProposerPassOptions,
     type ProposerPassResult,
     type RankableProposal,
-} from "@mia/agent"
-import { EventType } from "@mia/shared-enums"
+} from "@mia/sync"
 import { listEntityDefinitions } from "../db/entity-defs.js"
 import {
     createProposerRun,
@@ -124,14 +126,14 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
       const defs = listEntityDefinitions(tenantId, { includeRetired: false })
       const descriptors: EntityDescriptor[] = []
       for (const d of defs) {
-        const resolved = tryResolveRecipe(host, { tenantId, entityId: d.id })
+        const resolved = tryResolveRecipe({ tenantId, entityId: d.id })
         if (!resolved) continue
         descriptors.push({ id: d.id, label: d.displayName ?? d.id, defVersion: d.version })
       }
       return descriptors
     },
     probeCatalogDrift: async (envPair, ent) => {
-      const resolved = tryResolveRecipe(host, { tenantId, entityId: ent.id })
+      const resolved = tryResolveRecipe({ tenantId, entityId: ent.id })
       if (!resolved) return { issues: [] }
       const recipe = resolved.recipe
       const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))

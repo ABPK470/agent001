@@ -9,7 +9,6 @@
  *  - markdown code-fence stripping
  */
 
-import { describe, expect, it, vi } from "vitest"
 import {
     annotateProposal,
     ProposalKind,
@@ -18,7 +17,8 @@ import {
     type LlmCompletionPort,
     type ProposerFinding,
     type RiskAnnotation,
-} from "../../sync/src/proposer/index.js"
+} from "@mia/sync"
+import { describe, expect, it, vi } from "vitest"
 
 function finding(): ProposerFinding {
   return {

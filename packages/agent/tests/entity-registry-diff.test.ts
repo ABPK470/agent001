@@ -2,12 +2,12 @@
  * Entity registry — diff tests.
  */
 
-import { describe, expect, it } from "vitest"
 import {
     diffEntityDefinitions,
     type EntityDefinition,
     type EntityTable,
-} from "../../sync/src/entity-registry/index.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 function table(overrides: Partial<EntityTable> = {}): EntityTable {
   return {

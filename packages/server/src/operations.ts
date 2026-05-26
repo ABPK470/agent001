@@ -25,7 +25,8 @@
  * by supplying `before` (ISO timestamp).
  */
 
-import { EventType, isCancellationEvent, isCompletionEvent, isEventType, isFailureEvent, isSubStepFailureEvent, RunStatus, SyncRunStatus } from "@mia/agent"
+import { EventType, isCancellationEvent, isCompletionEvent, isEventType, isFailureEvent, isSubStepFailureEvent, RunStatus } from "@mia/agent"
+import { SyncRunStatus } from "@mia/shared-enums"
 import * as db from "./db/index.js"
 import { OperationKind, OperationStatus } from "./enums/operations.js"
 

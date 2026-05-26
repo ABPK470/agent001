@@ -2,7 +2,8 @@
  * Reconciliation proposer transport routes.
  */
 
-import type { AgentHost, LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/agent"
+import type { AgentHost } from "@mia/agent"
+import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { runProposer } from "../proposer/runner.js"

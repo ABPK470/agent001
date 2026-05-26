@@ -10,7 +10,6 @@
  *  - `entityIds` whitelist filter
  */
 
-import { describe, expect, it } from "vitest"
 import {
     ProposalKind,
     runProposerPass,
@@ -19,7 +18,8 @@ import {
     type EntityDescriptor,
     type EnvPair,
     type ProposerPassDeps,
-} from "../../sync/src/proposer/index.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 function ent(id: string, defVersion = 1): EntityDescriptor {
   return { id, label: `Entity ${id}`, defVersion }

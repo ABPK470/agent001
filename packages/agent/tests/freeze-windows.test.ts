@@ -5,13 +5,13 @@
  * the unknown-id soft-handling guarantee (typo safety).
  */
 
-import { describe, expect, it } from "vitest"
 import {
     evaluateFreezeWindows,
     installFreezeWindowRegistry,
     listFreezeWindows,
     type FreezeWindowDefinition,
-} from "../../sync/src/governance/freeze-windows.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 const WINDOW_A: FreezeWindowDefinition = {
   id:          "month-end",

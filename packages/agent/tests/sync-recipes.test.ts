@@ -1,6 +1,6 @@
+import { getRecipe, loadSyncRecipes, selectRecipeTables, type SyncRecipe } from "@mia/sync"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
-import { getRecipe, loadSyncRecipes, selectRecipeTables, type SyncRecipe } from "../../sync/src/index.js"
 import { configureAgent } from "../src/application/shell/runtime.js"
 
 describe("selectRecipeTables", () => {

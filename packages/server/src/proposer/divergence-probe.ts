@@ -14,15 +14,17 @@
  */
 
 import {
-    emptyCounts,
     getMssqlPool,
-    tryResolveRecipe,
     type AgentHost,
+} from "@mia/agent"
+import {
+    emptyCounts,
+    previewSync,
+    tryResolveRecipe,
     type DivergentEntityRow,
     type EnvPair,
     type ProposalCounts,
-} from "@mia/agent"
-import { previewSync } from "@mia/sync"
+} from "@mia/sync"
 
 export interface ProbeRowDivergenceInput {
   host:        AgentHost
@@ -38,7 +40,7 @@ const DEFAULT_SAMPLE_SIZE = 25
 export async function probeRowDivergence(
   i: ProbeRowDivergenceInput,
 ): Promise<readonly DivergentEntityRow[]> {
-  const resolved = tryResolveRecipe(i.host, { tenantId: i.tenantId, entityId: i.entityId })
+  const resolved = tryResolveRecipe({ tenantId: i.tenantId, entityId: i.entityId })
   if (!resolved) return []
   const recipe = resolved.recipe
 

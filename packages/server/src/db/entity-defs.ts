@@ -23,7 +23,7 @@
  *     resolvable for historical reads.
  *
  * Validation is enforced by `validateEntityDefinition` /
- * `validateScd2Strategy` from `@mia/agent` (structural only — catalog
+ * `validateScd2Strategy` from `@mia/sync` (structural only — catalog
  * validation happens later in the orchestrator).
  */
 
@@ -35,7 +35,7 @@ import {
     type EntityDefinition,
     type Scd2Strategy,
     type ValidationResult,
-} from "@mia/agent"
+} from "@mia/sync"
 import { getDb } from "./connection.js"
 
 const DEFAULT_TENANT_ID = "_default"

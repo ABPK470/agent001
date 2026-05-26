@@ -6,7 +6,6 @@
  * point at exactly the rule that broke.
  */
 
-import { describe, expect, it } from "vitest"
 import {
     type EntityDefinition,
     type EntityTable,
@@ -17,7 +16,8 @@ import {
     looksUnsafeSqlFragment,
     validateEntityDefinition,
     validateScd2Strategy,
-} from "../../sync/src/entity-registry/index.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 // ── Fixture factories ────────────────────────────────────────────
 

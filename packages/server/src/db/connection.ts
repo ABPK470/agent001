@@ -6,7 +6,8 @@
  * Env override: MIA_DATA_DIR.
  */
 
-import { BUNDLED_SCD2_STRATEGIES, DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
+import { DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
+import { BUNDLED_SCD2_STRATEGIES } from "@mia/sync"
 import Database from "better-sqlite3"
 import { createHash } from "node:crypto"
 import { mkdirSync } from "node:fs"

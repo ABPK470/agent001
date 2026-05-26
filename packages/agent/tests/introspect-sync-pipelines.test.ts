@@ -1112,7 +1112,7 @@ describe("detectSelfJoinColumn", () => {
 
 describe("instantiatePredicateWithTree", async () => {
   // Import from recipes.ts
-  const { instantiatePredicateWithTree } = await import("../../sync/src/recipes.js")
+  const { instantiatePredicateWithTree } = await import("@mia/sync")
 
   it("substitutes {ids} with expanded tree IDs", () => {
     const result = instantiatePredicateWithTree("ruleId IN ({ids})", 100, [100, 200, 300])

@@ -2,9 +2,9 @@
  * Entity registry transport routes.
  */
 
-import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import type { EntityRegistryYamlImportResponse } from "@mia/shared-types"
+import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"

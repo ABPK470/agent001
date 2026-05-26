@@ -17,7 +17,8 @@
  *   aliases or `L`/`W` — keep it simple, document the subset in the runbook.
  */
 
-import type { AgentHost, LlmCompletionPort } from "@mia/agent"
+import type { AgentHost } from "@mia/agent"
+import type { LlmCompletionPort } from "@mia/sync"
 import { getDb } from "../adapters/persistence/sqlite.js"
 import { runProposer } from "./runner.js"
 

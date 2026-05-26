@@ -20,11 +20,10 @@
  */
 
 import {
-    canonicalJsonStringify,
     getMssqlPool,
-    tryResolveRecipe,
     type AgentHost,
 } from "@mia/agent"
+import { canonicalJsonStringify, tryResolveRecipe } from "@mia/sync"
 import { createHash } from "node:crypto"
 
 export interface IndependentVerifyInput {
@@ -73,7 +72,7 @@ export async function runIndependentVerification(
 ): Promise<VerificationReport> {
   const t0 = Date.now()
   const startedAt = new Date(t0).toISOString()
-  const resolved = tryResolveRecipe(i.host, { tenantId: i.tenantId, entityId: i.entityType })
+  const resolved = tryResolveRecipe({ tenantId: i.tenantId, entityId: String(i.entityId) })
   if (!resolved) {
     return baseReport(startedAt, t0, "fail", [`no recipe for entity "${i.entityType}"`])
   }

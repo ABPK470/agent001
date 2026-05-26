@@ -29,13 +29,13 @@ import {
     buildCatalog, closeMssqlPool,
     configureAgent,
     getMssqlConfig,
-    loadSyncEnvironments,
     type AgentHost,
     type BrowserClient,
     type ShellClient,
 } from "@mia/agent"
 import {
     configurePlanStore,
+    loadSyncEnvironments,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
@@ -518,7 +518,7 @@ interface AppOpts {
   // F1 — evidence + proposer wiring built at boot, threaded into routes.
   evidenceStorageRoot: string
   evidenceSigner: import("./evidence/signer.js").Signer | null
-  llmPortHolder: { current: import("@mia/agent").LlmCompletionPort }
+  llmPortHolder: { current: import("@mia/sync").LlmCompletionPort }
   /** Boot-level AgentHost (shared mssql Map) for routes that hit DB. */
   bootHost: AgentHost
 }

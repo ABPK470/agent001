@@ -2,7 +2,6 @@
  * Entity registry — strategy resolver + bundled strategies tests.
  */
 
-import { describe, expect, it } from "vitest"
 import {
     BUNDLED_SCD2_STRATEGIES,
     bundledStrategyById,
@@ -10,7 +9,8 @@ import {
     resolveEffectiveScd2,
     type Scd2Override,
     type Scd2Strategy,
-} from "../../sync/src/entity-registry/index.js"
+} from "@mia/sync"
+import { describe, expect, it } from "vitest"
 
 function table(scd2Override: Scd2Override | null = null): EntityTable {
   return {

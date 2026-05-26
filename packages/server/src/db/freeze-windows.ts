@@ -9,7 +9,7 @@
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 
-import { DEFAULT_TENANT_ID, type FreezeWindowDefinition } from "@mia/agent"
+import { DEFAULT_TENANT_ID, type FreezeWindowDefinition } from "@mia/sync"
 import { getDb } from "./connection.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────

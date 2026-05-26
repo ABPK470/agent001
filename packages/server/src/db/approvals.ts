@@ -15,7 +15,7 @@
  * invoking `bypassApproval`.
  */
 
-import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/agent"
+import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/sync"
 import { randomBytes, randomUUID } from "node:crypto"
 import { getDb } from "./connection.js"
 

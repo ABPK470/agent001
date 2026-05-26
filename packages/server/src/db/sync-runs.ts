@@ -6,7 +6,7 @@
  * what to where" audit queries.
  */
 
-import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/agent"
+import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-enums"
 import { getDb } from "./connection.js"
 
 export interface SyncRunRow {
