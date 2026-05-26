@@ -52,8 +52,8 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
     }
 
     // 2. Selector rules — collect matches and resolve by priority/rank.
-    const facts = extractToolFacts(step, ctx)
-    const resolution = resolveSelectorRules(this.rules, facts, ctx)
+    const facts = extractToolFacts(step, ctx ?? undefined)
+    const resolution = resolveSelectorRules(this.rules, facts, ctx ?? undefined)
     if (resolution) {
       const params = resolution.rule.parameters as { reason?: string }
       const reason = params?.reason ?? `selector match: ${resolution.rule.name}`

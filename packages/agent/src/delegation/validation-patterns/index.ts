@@ -1,5 +1,5 @@
-import { StepRole, VerificationMode } from "@mia/agent"
 import { TaskIntent } from "../../domain/enums/delegation.js"
+import { StepRole, VerificationMode } from "../../domain/index.js"
 /**
  * Delegation validation patterns — evidence helpers and spec requirement
  * classifiers. Pattern constants are in

@@ -1,16 +1,15 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../domain/index.js"
 /**
  * Verification-failure remediation helper. Extracted from planner-routing.ts.
  *
  * @module
  */
 
+import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
 import type { PlannerRoutingContext } from "../planner-routing/index.js"
-import type { PlannerContext, PlannerResult } from "../planner/index.js"
+import type { PlannerContext, PlannerResult, SubagentTaskStep } from "../planner/index.js"
 import { executePlannerPath } from "../planner/index.js"
-import type { SubagentTaskStep } from "../planner/index.js"
-import { MessageRole } from "../domain/enums/message.js"
 
 export async function handleVerificationFailure(
   ctx: PlannerRoutingContext,

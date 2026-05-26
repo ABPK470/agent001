@@ -1,4 +1,4 @@
-import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "../domain/index.js"
 /**
  * Planner-first routing — the logic that attempts structured planning
  * before falling through to the direct tool loop.

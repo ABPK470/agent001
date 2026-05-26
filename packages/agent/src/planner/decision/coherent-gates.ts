@@ -1,4 +1,4 @@
-import { PlannerNeedLevel } from "@mia/agent"
+import { PlannerNeedLevel } from "../../domain/index.js"
 /**
  * Layer 5: sanity override + coherence gates. Extracted from assess.ts.
  *

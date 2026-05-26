@@ -1,4 +1,4 @@
-import { DelegationSpanEventKind, VerifierOutcome } from "@mia/agent"
+import { DelegationSpanEventKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Verifier code structure analysis — deterministic import/declaration
  * extraction and LLM verification wrapper.
@@ -11,16 +11,16 @@ import { DelegationSpanEventKind, VerifierOutcome } from "@mia/agent"
 import { MessageRole } from "../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
-  PipelineResult,
-  Plan,
-  SubagentTaskStep,
-  VerifierDecision,
-  VerifierStepAssessment,
+    PipelineResult,
+    Plan,
+    SubagentTaskStep,
+    VerifierDecision,
+    VerifierStepAssessment,
 } from "../types.js"
 import { buildFallbackDecision, parseLLMVerification } from "../verifier-helpers/index.js"
 import {
-  analyzeCodeStructure,
-  wrapArtifactWithStructureAnalysis,
+    analyzeCodeStructure,
+    wrapArtifactWithStructureAnalysis,
 } from "../verifier-llm/code-structure.js"
 import type { StepSpecEvidence } from "./verifier-blueprint.js"
 export type { CodeStructureAnalysis } from "../verifier-llm/code-structure.js"

@@ -1,4 +1,4 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
 /**
  * write_file execution logic. Extracted from read-write.ts.
  *

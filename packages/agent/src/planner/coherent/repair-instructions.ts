@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../../domain/index.js"
 /**
  * Repair-instruction and escalation-goal builders for the coherent bundle
  * pipeline. Extracted from coherent.ts.

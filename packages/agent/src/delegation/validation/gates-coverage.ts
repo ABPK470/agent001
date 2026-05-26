@@ -1,4 +1,4 @@
-import { DelegationRole, VerificationMode } from "@mia/agent"
+import { DelegationRole, VerificationMode } from "../../domain/index.js"
 /**
  * Gates 8 + 8b: file-artifact evidence + target-artifact coverage
  * + reference integrity, and gate 9: browser-evidence quality.

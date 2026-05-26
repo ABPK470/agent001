@@ -1,31 +1,31 @@
-import { VerifierMode, VerifierOutcome } from "@mia/agent"
+import { VerifierMode, VerifierOutcome } from "../../domain/index.js"
 import {
-  buildEvidenceId,
-  deriveOwnershipAttribution,
-  getArchitectureRepairContext,
-  getSubagentStep,
-  inferAffectedArtifacts,
-  inferIssueCode,
-  inferRepairClass,
-  inferSeverity,
-  inferSourceArtifacts,
-  isDependencyGateIssue,
-  normalizePath,
-  uniqueStrings,
+    buildEvidenceId,
+    deriveOwnershipAttribution,
+    getArchitectureRepairContext,
+    getSubagentStep,
+    inferAffectedArtifacts,
+    inferIssueCode,
+    inferRepairClass,
+    inferSeverity,
+    inferSourceArtifacts,
+    isDependencyGateIssue,
+    normalizePath,
+    uniqueStrings,
 } from "../internal/verification-inference.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
-  ChildRepairGoal,
-  ChildRepairPayload,
-  PipelineResult,
-  Plan,
-  RepairPlan,
-  RepairTask,
-  StepAcceptanceState,
-  VerificationEvidence,
-  VerifierDecision,
-  VerifierIssue,
-  VerifierStepAssessment,
+    ChildRepairGoal,
+    ChildRepairPayload,
+    PipelineResult,
+    Plan,
+    RepairPlan,
+    RepairTask,
+    StepAcceptanceState,
+    VerificationEvidence,
+    VerifierDecision,
+    VerifierIssue,
+    VerifierStepAssessment,
 } from "../types.js"
 
 export function collectVerificationEvidence(
@@ -229,8 +229,8 @@ export function buildRepairPlan(
 // ============================================================================
 
 export {
-  buildLegacyRetryPlan,
-  compareRepairPlanCompatibility
+    buildLegacyRetryPlan,
+    compareRepairPlanCompatibility
 } from "./legacy-compat.js"
 
 export function deriveAcceptanceState(assessment: VerifierStepAssessment | undefined, prior: StepAcceptanceState | undefined): StepAcceptanceState {

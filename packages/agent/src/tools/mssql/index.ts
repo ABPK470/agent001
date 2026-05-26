@@ -1,24 +1,25 @@
 export {
-    closeMssqlPool, countReferencedLargeObjects,
-    countTempScalarSubqueriesByTemp,
-    detectWideUnionViewTopnWithoutBranchAggregation,
-    findAggregateSemanticIssues, getDefaultMssqlConnectionName,
+    closeMssqlPool,
+    getDefaultMssqlConnectionName,
     getMssqlConfig,
     getPool,
     setDefaultMssqlConnection,
     setMssqlConfig,
     setMssqlConfigs,
-    setMssqlWriteEnabled,
-    validateTempTableBatch
+    setMssqlWriteEnabled
 } from "./connection.js"
 export { createExportQueryToFileTool, exportQueryToFileTool } from "./export-tool.js"
 export { formatResults } from "./formatter.js"
 export { createMssqlSchemaTool, createMssqlTool, mssqlSchemaTool, mssqlTool } from "./tools.js"
 export {
+    countReferencedLargeObjects,
+    countTempScalarSubqueriesByTemp,
+    detectWideUnionViewTopnWithoutBranchAggregation,
+    findAggregateSemanticIssues,
     hasWhereClause,
-    isLargeObject,
     isUnsafeScan,
     referencedLargeObjects,
-    validateQuery
+    validateQuery,
+    validateTempTableBatch
 } from "./validation.js"
 

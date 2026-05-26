@@ -1,4 +1,4 @@
-import { PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Stub-count regression tracking for the planner retry loop.
  *

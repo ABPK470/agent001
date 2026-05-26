@@ -1,4 +1,4 @@
-import { CoherentGenerationTraceKind, LLMCallPhase, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { CoherentGenerationTraceKind, LLMCallPhase, PlannerTraceKind, VerifierOutcome } from "../domain/index.js"
 /**
  * Coherent generation execution helper. Extracted from planner-routing.ts.
  *

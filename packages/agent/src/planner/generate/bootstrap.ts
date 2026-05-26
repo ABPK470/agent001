@@ -1,10 +1,11 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 /**
  * Planner coherent bootstrap generation. Extracted from generate.ts.
  *
  * @module
  */
 
+import { MessageRole } from "../../domain/enums/message.js"
 import type { LLMClient, Message } from "../../types.js"
 import {
     asNonEmptyString,
@@ -16,7 +17,6 @@ import {
     parseJsonObject,
 } from "../internal/generate-prompts.js"
 import type { PlanDiagnostic, PlannerCoherentBootstrap } from "../types.js"
-import { MessageRole } from "../../domain/enums/message.js"
 
 export interface CoherentBootstrapGenerationContext {
   readonly goal: string

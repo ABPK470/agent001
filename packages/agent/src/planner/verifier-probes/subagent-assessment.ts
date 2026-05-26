@@ -1,4 +1,4 @@
-import { StepRole, VerifierOutcome } from "@mia/agent"
+import { StepRole, VerifierOutcome } from "../../domain/index.js"
 /**
  * Per-subagent-step deterministic assessment — extracted from
  * verifier-probes.ts to keep the runDeterministicProbes loop readable.
@@ -7,20 +7,7 @@ import { StepRole, VerifierOutcome } from "@mia/agent"
  */
 
 import type { Tool } from "../../types.js"
-import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierStepAssessment,
-} from "../types.js"
 import { buildStepSpecEvidence } from "../internal/verifier-blueprint.js"
-import {
-    computeGibberishScore,
-    isBlockingCriteriaProofGap,
-    outputIntersectsArtifacts,
-    safeParseJson
-} from "../verifier-helpers/index.js"
 import {
     extractActualPaths,
     probeArtifact,
@@ -28,6 +15,19 @@ import {
 } from "../internal/verifier-io.js"
 import { detectVerificationModalityGaps } from "../internal/verifier-llm.js"
 import { probeContentCompleteness, probeCriteriaProof } from "../internal/verifier-probes-subprobes.js"
+import type {
+    PipelineResult,
+    PipelineStepResult,
+    Plan,
+    SubagentTaskStep,
+    VerifierStepAssessment,
+} from "../types.js"
+import {
+    computeGibberishScore,
+    isBlockingCriteriaProofGap,
+    outputIntersectsArtifacts,
+    safeParseJson
+} from "../verifier-helpers/index.js"
 import { runBrowserCheckProbe, runTestsProbe } from "./runtime-probes.js"
 import { detectPathMismatchIssues, detectScopeViolationIssues } from "./scope-checks.js"
 

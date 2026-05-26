@@ -1549,6 +1549,7 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
  * the bar.
  */
 export interface QueryWarningOptions {
+  accessor?: CatalogAccessor
   branchAccessor?: () => BranchCatalogLike | null
   /** @deprecated alias for branchAccessor */
   lineageAccessor?: () => BranchCatalogLike | null
@@ -1566,11 +1567,12 @@ export function getQueryWarnings(
     : options
   const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? EMPTY_BRANCH_ACCESSOR
   const profiledTables = opts.profiledTables ?? liveProfiledTables()
+  const rankingAccessor = opts.accessor ?? EMPTY_CATALOG_ACCESSOR
 
   const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
   const branchGaps = detectLineageBranchCoverage(query, branchAccessor)
   const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
-  const mixedUniverses = detectRankingVsReportingMismatch(query, accessor)
+  const mixedUniverses = detectRankingVsReportingMismatch(query, rankingAccessor)
   if (
     warns.length === 0
     && branchGaps.length === 0

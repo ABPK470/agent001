@@ -1,4 +1,4 @@
-import { PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Trace-emission helpers for the planner orchestrator.
  *

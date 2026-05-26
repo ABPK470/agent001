@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 /**
  * Plan graph + tool reference validation passes. Extracted from validate.ts.
  *

@@ -1,4 +1,4 @@
-import { BanditArmId, DelegationTraceKind } from "@mia/agent"
+import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
 /**
  * Step 3b of planner setup — delegation decision gate.
  *

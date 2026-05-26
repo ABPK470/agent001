@@ -1,4 +1,4 @@
-import { PipelineStatus } from "@mia/agent"
+import { PipelineStatus } from "../../domain/index.js"
 /**
  * Pipeline graph helpers — adjacency/in-degree DAG construction and
  * result summarisation extracted from pipeline.ts.

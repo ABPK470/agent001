@@ -1,4 +1,4 @@
-import { VerificationMode } from "@mia/agent"
+import { VerificationMode } from "../../domain/index.js"
 /**
  * Runtime probes for subagent assessment — browser_check on HTML artifacts
  * and `npm test` execution when verificationMode is run_tests.

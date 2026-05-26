@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 /**
  * Path consistency validation pass. Extracted from validate-checks.ts.
  *

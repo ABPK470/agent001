@@ -5,13 +5,13 @@
  * @module
  */
 
-import { VerifierEvidenceSource } from "@mia/agent"
+import { VerifierEvidenceSource } from "../../domain/index.js"
 import { uniqueStrings } from "../blueprint-contract/index.js"
 import type {
-  PipelineResult,
-  Plan,
-  VerificationEvidence,
-  VerifierStepAssessment,
+    PipelineResult,
+    Plan,
+    VerificationEvidence,
+    VerifierStepAssessment,
 } from "../types.js"
 import { deriveIssuesFromEvidence } from "../verification-model/index.js"
 

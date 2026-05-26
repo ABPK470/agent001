@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../../../domain/index.js"
 /**
  * Web entry-point runtime wiring probe — checks that HTML artifacts reach
  * their related runtime JS artifacts via <script> / module imports and that

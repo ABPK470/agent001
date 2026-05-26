@@ -1,4 +1,4 @@
-import { StepRole } from "@mia/agent"
+import { StepRole } from "../../domain/index.js"
 /**
  * Build the child agent's goal prompt from a planner step + envelope.
  * Extracted from spawn-for-plan.ts.

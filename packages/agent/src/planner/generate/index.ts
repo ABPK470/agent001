@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 /**
  * Plan generation — ask the LLM to decompose a complex task into a structured plan.
  *
@@ -13,7 +13,7 @@ import { DiagnosticCategory, DiagnosticSeverity } from "@mia/agent"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import { parsePlanFromResponse } from "../internal/generate-parse.js"
 import {
-  PLANNER_SYSTEM_PROMPT,
+    PLANNER_SYSTEM_PROMPT,
 } from "../internal/generate-prompts.js"
 import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "../types.js"
 
@@ -227,7 +227,7 @@ export async function generatePlan(
 
 import { MessageRole } from "../../domain/enums/message.js"
 import {
-  normalizeWorkspaceRoots,
-  salvagePlanFromMalformedResponse,
+    normalizeWorkspaceRoots,
+    salvagePlanFromMalformedResponse,
 } from "./normalize.js"
 

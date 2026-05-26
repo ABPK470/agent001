@@ -1,4 +1,4 @@
-import { DelegationOutputValidationCode, StepRole, ToolOutcomeSeverity, VerificationMode } from "@mia/agent"
+import { DelegationOutputValidationCode, StepRole, ToolOutcomeSeverity, VerificationMode } from "../../domain/index.js"
 /**
  * Pipeline validation — subagent completion checks, artifact quality gates,
  * syntax validation, and gibberish detection.

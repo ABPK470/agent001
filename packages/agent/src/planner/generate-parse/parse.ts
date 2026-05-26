@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "@mia/agent"
+import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "../../domain/index.js"
 /**
  * Plan parsing — parse LLM JSON responses into typed Plan objects, with auto-fix passes.
  *
@@ -9,16 +9,16 @@ import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode }
 
 import type { DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 import {
-  deduplicateWriteOwnership,
-  ensureVerificationCoverage,
-  isValidArtifactPath,
-  normalizeArtifactDirectories,
-  parseArtifactRelations,
-  parseEffectClass,
-  parseStepRole,
-  parseVerificationMode,
-  safeStringArray,
-  stripRedundantVerificationSteps,
+    deduplicateWriteOwnership,
+    ensureVerificationCoverage,
+    isValidArtifactPath,
+    normalizeArtifactDirectories,
+    parseArtifactRelations,
+    parseEffectClass,
+    parseStepRole,
+    parseVerificationMode,
+    safeStringArray,
+    stripRedundantVerificationSteps,
 } from "./helpers.js"
 
 // ============================================================================

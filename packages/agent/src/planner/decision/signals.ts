@@ -1,10 +1,11 @@
-import { PlannerNeedLevel } from "@mia/agent"
+import { PlannerNeedLevel } from "../../domain/index.js"
 /**
  * Signal collection and routing confidence scoring for the planner decision system.
  *
  * @module
  */
 
+import { MessageRole } from "../../domain/enums/message.js"
 import type { Message } from "../../types.js"
 import {
     BOUNDED_COHERENT_SCOPE_RE,
@@ -22,7 +23,6 @@ import {
     VERIFICATION_RE,
 } from "../internal/decision-patterns.js"
 import type { RoutingConfidence } from "../types.js"
-import { MessageRole } from "../../domain/enums/message.js"
 
 // ============================================================================
 // Structured signal collection

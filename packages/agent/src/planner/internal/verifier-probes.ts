@@ -1,4 +1,4 @@
-import { PipelineStatus, VerifierOutcome } from "@mia/agent"
+import { PipelineStatus, VerifierOutcome } from "../../domain/index.js"
 /**
  * Verifier deterministic probes — top-level loop that fans out per-step
  * assessment and runs cross-step integration probes.
@@ -15,8 +15,8 @@ import type {
     SubagentTaskStep,
     VerifierStepAssessment,
 } from "../types.js"
-import { runIntegrationProbes } from "./verifier-integration.js"
 import { assessSubagentStep } from "../verifier-probes/subagent-assessment.js"
+import { runIntegrationProbes } from "./verifier-integration.js"
 
 export async function runDeterministicProbes(
   plan: Plan,

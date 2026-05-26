@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../domain/index.js"
 /**
  * Answer synthesis — build a human-readable summary from planner results.
  * @module

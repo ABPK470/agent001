@@ -1,6 +1,6 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 import { readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
 import { detectPlaceholderPatterns } from "../../governance/index.js"
 import type { AgentHost } from "../../host/index.js"
 import type { Tool } from "../../types.js"

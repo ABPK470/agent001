@@ -1,4 +1,4 @@
-import { ToolOutcomeSeverity } from "@mia/agent"
+import { ToolOutcomeSeverity } from "../../domain/index.js"
 /**
  * Artifact-tracking helpers used by `executeToolRound` to record
  * mutation outcomes, count repeat failures, route replace_in_file

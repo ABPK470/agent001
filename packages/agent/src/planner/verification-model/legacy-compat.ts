@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../../domain/index.js"
 /**
  * Legacy retry plan + repair-plan compatibility comparison.
  *
@@ -8,6 +8,10 @@ import { VerifierOutcome } from "@mia/agent"
  * @module
  */
 
+import {
+    getArchitectureRepairContext,
+    uniqueStrings,
+} from "../internal/verification-inference.js"
 import type {
     LegacyRetryPlan,
     PipelineResult,
@@ -18,10 +22,6 @@ import type {
     RepairTask,
     VerifierDecision,
 } from "../types.js"
-import {
-    getArchitectureRepairContext,
-    uniqueStrings,
-} from "../internal/verification-inference.js"
 
 export function buildLegacyRetryPlan(
   plan: Plan,

@@ -1,4 +1,4 @@
-import { StepRole } from "@mia/agent"
+import { StepRole } from "../../domain/index.js"
 /**
  * Delegation output contract validation — structured evidence-based checks.
  *

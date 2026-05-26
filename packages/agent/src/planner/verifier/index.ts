@@ -1,4 +1,4 @@
-import { PipelineStatus, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { PipelineStatus, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Verifier — post-pipeline verification of execution results.
  *
@@ -25,20 +25,20 @@ import { extractActualPaths, probeArtifact, readArtifactContent } from "../inter
 import { runLLMVerification } from "../internal/verifier-llm.js"
 import { runDeterministicProbes } from "../internal/verifier-probes.js"
 import type {
-  PipelineResult,
-  Plan,
-  SubagentTaskStep,
-  VerificationEvidence,
-  VerifierDecision,
-  VerifierStepAssessment,
+    PipelineResult,
+    Plan,
+    SubagentTaskStep,
+    VerificationEvidence,
+    VerifierDecision,
+    VerifierStepAssessment,
 } from "../types.js"
 import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "../verification-model/index.js"
 import { buildFallbackDecision } from "../verifier-helpers/index.js"
 import { runContractValidation } from "./contract-check.js"
 import {
-  collectFollowupEvidence,
-  mergeFollowupIntoAssessments,
-  needsFollowupVerification,
+    collectFollowupEvidence,
+    mergeFollowupIntoAssessments,
+    needsFollowupVerification,
 } from "./followup.js"
 
 // ============================================================================

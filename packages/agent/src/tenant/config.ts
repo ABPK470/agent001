@@ -204,6 +204,6 @@ function freezeDeep<T>(v: T): T {
  * Convenience for callers that want a one-line "is this the default
  * config?" check (e.g. doctrine modules logging the active config).
  */
-export function isDefaultTenantConfig(c: TenantConfig = active): boolean {
+export function isDefaultTenantConfig(c: TenantConfig = getTenantConfig()): boolean {
   return isDeepStrictEqual(c, DEFAULT_TENANT_CONFIG)
 }

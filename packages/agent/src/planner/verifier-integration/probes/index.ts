@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../../../domain/index.js"
 /**
  * Integration probe functions for cross-step artifact verification.
  *
@@ -8,22 +8,22 @@ import { VerifierOutcome } from "@mia/agent"
 import { normalizeSpecPath } from "../../blueprint-contract/index.js"
 import type { Plan, VerifierStepAssessment } from "../../types.js"
 import {
-  type IntegrationProbe,
-  type IntegrationProbeContext,
-  collectIntegrationArtifacts,
-  collectReachableRuntimeArtifacts,
-  extractDefinedCssClasses,
-  extractHtmlScriptRefs,
-  extractModuleExports,
-  extractModuleImports,
-  extractReferencedCssClassesFromHtml,
-  extractReferencedCssClassesFromScript,
-  findWsRootForStep,
-  probeArtifactViaTool,
-  readArtifactContentViaTool,
-  readIntegrationArtifactContents,
-  resolveArtifactImport,
-  resolveArtifactReference
+    type IntegrationProbe,
+    type IntegrationProbeContext,
+    collectIntegrationArtifacts,
+    collectReachableRuntimeArtifacts,
+    extractDefinedCssClasses,
+    extractHtmlScriptRefs,
+    extractModuleExports,
+    extractModuleImports,
+    extractReferencedCssClassesFromHtml,
+    extractReferencedCssClassesFromScript,
+    findWsRootForStep,
+    probeArtifactViaTool,
+    readArtifactContentViaTool,
+    readIntegrationArtifactContents,
+    resolveArtifactImport,
+    resolveArtifactReference
 } from "../helpers.js"
 import { probeCrossFileFunctionSignatures } from "./signatures.js"
 import { probeWebEntrypointRuntimeWiring } from "./web-entrypoint.js"

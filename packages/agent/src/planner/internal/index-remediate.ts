@@ -1,4 +1,4 @@
-import { StepRole, VerificationMode } from "@mia/agent"
+import { StepRole, VerificationMode } from "../../domain/index.js"
 /**
  * Plan remediation — step merging, dependency graph traversal, and
  * automatic remediation of validation errors.

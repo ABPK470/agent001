@@ -1,5 +1,5 @@
-import { VerifierOutcome } from "@mia/agent"
 import { EscalationAction, EscalationReason } from "../domain/enums/delegation.js"
+import { VerifierOutcome } from "../domain/index.js"
 /**
  * Escalation graph — deterministic state machine for verification outcomes.
  *

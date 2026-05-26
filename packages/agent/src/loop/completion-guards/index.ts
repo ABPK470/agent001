@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "@mia/agent"
+import { VerifierOutcome } from "../../domain/index.js"
 /**
  * Completion guards — sequential checks applied when the LLM returns
  * a response with zero tool calls (i.e. it wants to finish).

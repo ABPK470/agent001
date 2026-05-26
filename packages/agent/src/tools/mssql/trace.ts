@@ -1,5 +1,5 @@
-import { PlannerTraceKind } from "@mia/agent"
 import { MSSQL_DOCTRINES } from "../../doctrine/index.js"
+import { PlannerTraceKind } from "../../domain/index.js"
 import { emitToolTrace, type ToolTraceContext } from "../../loop/index.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 

@@ -1,4 +1,4 @@
-import { EffectClass, StepRole, VerificationMode } from "@mia/agent"
+import { EffectClass, StepRole, VerificationMode } from "../../domain/index.js"
 /**
  * Blueprint step injection — auto-inject contract-first blueprint steps
  * for multi-file code generation plans.
@@ -11,10 +11,10 @@ import { EffectClass, StepRole, VerificationMode } from "@mia/agent"
 import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract/index.js"
 import { inferOutputDir } from "../normalize/index.js"
 import type {
-  Plan,
-  PlanEdge,
-  PlanStep,
-  SubagentTaskStep,
+    Plan,
+    PlanEdge,
+    PlanStep,
+    SubagentTaskStep,
 } from "../types.js"
 
 // ============================================================================

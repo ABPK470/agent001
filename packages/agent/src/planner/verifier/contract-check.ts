@@ -1,4 +1,4 @@
-import { PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Phase-0 delegation contract validation. Returns contractFailures detected
  * before LLM verification needs to run.

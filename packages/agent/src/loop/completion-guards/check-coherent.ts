@@ -1,4 +1,4 @@
-import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "@mia/agent"
+import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
 /**
  * Coherent-verification completion guard. Extracted from completion-guards.ts.
  *
