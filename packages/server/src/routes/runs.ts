@@ -5,12 +5,12 @@
 import { EventType } from "@mia/agent"
 import type { AuditEntry, LogEntry, Run, RunDetail } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
+import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
 import { getAttachment, type AttachmentRow } from "../attachments/index.js"
 import { canAccessRun } from "../auth/access.js"
 import * as db from "../db/index.js"
 import { MemoryValidationAction } from "../enums/memory.js"
 import { flagRunMemory } from "../memory/index.js"
-import type { AgentOrchestrator } from "../orchestrator/index.js"
 
 export function registerRunRoutes(
   app: FastifyInstance,

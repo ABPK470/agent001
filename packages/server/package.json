@@ -4,7 +4,14 @@
     "description": "MI:A command center — server with persistence, real-time updates, and agent orchestration.",
     "type": "module",
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./application": "./src/application/index.ts",
+        "./application/core": "./src/application/core/index.ts",
+        "./application/core/clarification-block": "./src/application/core/clarification-block.ts",
+        "./application/core/decide-sections": "./src/application/core/decide-sections.ts",
+        "./application/core/system-messages": "./src/application/core/system-messages.ts",
+        "./application/shell": "./src/application/shell/index.ts",
+        "./application/shell/agent-orchestrator": "./src/application/shell/agent-orchestrator.ts"
     },
     "scripts": {
         "build": "tsc",

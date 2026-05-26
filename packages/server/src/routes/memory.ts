@@ -3,6 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
 import {
     getEffectStats,
     getFileHistory,
@@ -22,7 +23,6 @@ import {
     searchProcedures,
     type MemoryTier,
 } from "../memory/index.js"
-import type { AgentOrchestrator } from "../orchestrator/index.js"
 import {
     compareTrajectories,
     loadTrajectory,

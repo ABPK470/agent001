@@ -1,44 +1,46 @@
 import {
-  Agent,
-  cancelRun,
-  completeRun,
-  computeAutoDetectedExcludeDirs,
-  configureAgent,
-  createRun,
-  detectInternalFailure,
-  EventType,
-  failRun,
-  fillRunReference,
-  getCatalog,
-  governTool,
-  isPlatformUnconfiguredAnswer,
-  isUserSafeFailureAnswer,
-  makeRunContext,
-  mapFailureKindForPolish,
-  markPolishedFailure,
-  PolicyRole,
-  PolicyRunMode,
-  polishFailureForUser,
-  runCompleted,
-  runFailed,
-  runStarted,
-  spawnChildForPlan,
-  startPlanning,
-  startRunning,
-  SyncRunStatus,
-  synthesizeGenericFailureAnswer,
-  type AgentHost,
-  type DelegateContext,
-  type EngineServices,
-  type HostedPolicyContext,
-  type Message,
-  type ResolvedAgent,
-  type RunState,
-  type Tool,
-  type ToolKillManager
+    Agent,
+    cancelRun,
+    completeRun,
+    computeAutoDetectedExcludeDirs,
+    configureAgent,
+    createRun,
+    detectInternalFailure,
+    EventType,
+    failRun,
+    fillRunReference,
+    getCatalog,
+    governTool,
+    isPlatformUnconfiguredAnswer,
+    isUserSafeFailureAnswer,
+    makeRunContext,
+    mapFailureKindForPolish,
+    markPolishedFailure,
+    PolicyRole,
+    PolicyRunMode,
+    polishFailureForUser,
+    runCompleted,
+    runFailed,
+    runStarted,
+    spawnChildForPlan,
+    startPlanning,
+    startRunning,
+    SyncRunStatus,
+    synthesizeGenericFailureAnswer,
+    type AgentHost,
+    type DelegateContext,
+    type EngineServices,
+    type HostedPolicyContext,
+    type Message,
+    type ResolvedAgent,
+    type RunState,
+    type Tool,
+    type ToolKillManager
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { AgentBus, createBusTools } from "../agent-bus.js"
+import { decideSections, filterToolsByGoal } from "../application/core/decide-sections.js"
+import { buildSystemMessages } from "../application/core/system-messages.js"
 import { createServerAttachmentService } from "../attachments/index.js"
 import { createServerBrowserCredentialProvider } from "../browser/credential-provider.js"
 import { createServerBrowserHandoffProvider } from "../browser/handoff-provider.js"
@@ -54,7 +56,6 @@ import { consolidate, extractProcedural, ingestAgentNote, ingestRunTurns, listTa
 import { RunPriority } from "../queue.js"
 import { prepareRunWorkspace } from "../run-workspace.js"
 import { composePerRunTools, getAllTools } from "../tools.js"
-import { decideSections, filterToolsByGoal } from "./decide-sections.js"
 import { wireEventBroadcasting } from "./event-wiring.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "./known-objects.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
@@ -62,7 +63,6 @@ import { handlePlannerTrace } from "./planner-events.js"
 import { loadPriorResults } from "./prior-results-block.js"
 import { loadPriorTurns } from "./prior-turns.js"
 import { runReflectionTurn } from "./run-reflection.js"
-import { buildSystemMessages } from "./system-messages.js"
 import { persistToolResult } from "./tool-result-persister.js"
 import type { OrchestratorRunCtx } from "./types.js"
 import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"

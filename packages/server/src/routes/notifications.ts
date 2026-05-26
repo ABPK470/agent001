@@ -3,9 +3,9 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
 import { canAccessRun } from "../auth/access.js"
 import * as db from "../db/index.js"
-import type { AgentOrchestrator } from "../orchestrator/index.js"
 
 /** Returns true if the request's session may see/mutate this notification. */
 function canSee(session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,

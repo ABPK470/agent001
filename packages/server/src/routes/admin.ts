@@ -12,9 +12,9 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
 import { getDb } from "../db/connection.js"
 import { listSessions, listUserHistory, listUsersWithStats } from "../db/sessions.js"
-import type { AgentOrchestrator } from "../orchestrator/index.js"
 
 export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get("/api/admin/sessions", async (req, reply) => {
