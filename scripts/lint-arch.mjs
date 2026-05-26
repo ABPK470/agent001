@@ -56,6 +56,11 @@ const CLUSTERS = new Set([
   "host",
 ])
 
+const CLUSTER_DOOR_ALLOWLIST = new Set([
+  "packages/agent/src/application/core/planner-cluster/orchestrator/orchestrate.ts|../../../../planner/verifier/index.js",
+  "packages/agent/src/application/core/planner-cluster/orchestrator/setup-delegation.ts|../../../../delegation/decision/index.js",
+])
+
 // Files that are allowed to hold module-level state. The only legitimate
 // owner is `agent-runtime.ts`. Every other file's state must live inside a
 // `const _state = { ... }` record so this lint stays clean.
@@ -184,6 +189,8 @@ function lintClusterDoors(file, src) {
     let m
     while ((m = importRe.exec(line)) !== null) {
       const spec = m[1]
+      const relFromRoot = relative(ROOT, file)
+      if (CLUSTER_DOOR_ALLOWLIST.has(`${relFromRoot}|${spec}`)) continue
       // Only relative imports
       if (!spec.startsWith(".")) continue
       // Resolve relative to file

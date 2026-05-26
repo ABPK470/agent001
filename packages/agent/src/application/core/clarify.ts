@@ -2,4 +2,4 @@
  * Functional-core entrypoint for clarification logic.
  */
 
-export * from "../../clarify/index.js"
+export * from "./clarify-cluster/index.js"

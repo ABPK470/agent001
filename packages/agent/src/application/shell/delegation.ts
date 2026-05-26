@@ -2,4 +2,4 @@
  * Stateful-shell entrypoint for delegation runtime flow.
  */
 
-export * from "../../delegation/index.js"
+export * from "./delegation-cluster/index.js"
