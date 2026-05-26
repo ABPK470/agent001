@@ -28,8 +28,8 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { SandboxBackendKind } from "../enums/sandbox.js"
 import { resolve, sep } from "node:path"
+import { SandboxBackendKind } from "../enums/sandbox.js"
 import { getSandbox } from "./index.js"
 import type { SandboxResult } from "./types.js"
 
@@ -101,7 +101,7 @@ function resolveCwd(sandboxRoot: string, sub?: string): string {
 // ── Host backend (cross-platform Node child_process) ─────────────────
 
 class HostSandboxBackend implements SandboxBackend {
-  readonly kind = SandboxBackendKind.Host as const
+  readonly kind = SandboxBackendKind.Host
 
   async available(): Promise<boolean> {
     return true
@@ -264,7 +264,7 @@ function sanitizeEnv(env?: Record<string, string>): Record<string, string> | und
 // ── Docker backend (wraps existing DockerSandbox) ────────────────────
 
 class DockerSandboxBackend implements SandboxBackend {
-  readonly kind = SandboxBackendKind.Docker as const
+  readonly kind = SandboxBackendKind.Docker
 
   async available(): Promise<boolean> {
     return getSandbox().isDockerAvailable()

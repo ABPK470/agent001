@@ -369,7 +369,7 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
   return activities
 }
 
-function buildSyncPipeline(planId: string, kind: OperationKind.SyncPreview | OperationKind.SyncExecute, events: OperationEvent[]): OperationPipeline {
+function buildSyncPipeline(planId: string, kind: typeof OperationKind.SyncPreview | typeof OperationKind.SyncExecute, events: OperationEvent[]): OperationPipeline {
   const meta = db.getSyncRun?.(planId)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]

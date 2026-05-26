@@ -184,7 +184,7 @@ export interface TeamsConversationRef {
 // ── Teams channel ─────────────────────────────────────────────────
 
 export class TeamsChannel implements Channel {
-  readonly type = ChannelType.Teams as const
+  readonly type = ChannelType.Teams
   private readonly config: ChannelConfig
 
   constructor(config: ChannelConfig) {

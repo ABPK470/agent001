@@ -36,7 +36,7 @@ export interface QueueStore {
   save(msg: OutboundMessage): void
   updateStatus(id: string, status: DeliveryStatus, error: string | null, nextRetryAt: Date | null, deliveredAt: Date | null): void
   loadPending(): OutboundMessage[]
-  saveAttempt(messageId: string, attempt: number, status: "success" | DeliveryStatus.Failed, error: string | null, durationMs: number): void
+  saveAttempt(messageId: string, attempt: number, status: "success" | typeof DeliveryStatus.Failed, error: string | null, durationMs: number): void
 }
 
 // ── Message Queue ────────────────────────────────────────────────

@@ -37,6 +37,7 @@ import {
     type ValidationResult,
 } from "@mia/sync"
 import { getDb } from "./connection.js"
+import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
