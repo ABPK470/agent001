@@ -1,3 +1,2 @@
-export * from "../adapters/persistence/users.js"
-export { updateLastLoginAt as setLastLogin } from "../adapters/persistence/users.js"
-
+export * from "../adapters/persistence/db/users.js"
+export { updateLastLoginAt as setLastLogin } from "../adapters/persistence/db/users.js"

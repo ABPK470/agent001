@@ -1,2 +1,1 @@
-export * from "../adapters/persistence/sqlite.js"
-
+export * from "../adapters/persistence/db/index.js"

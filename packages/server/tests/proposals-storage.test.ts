@@ -5,7 +5,7 @@
  * filtering, and history append.
  */
 
-import { ProposalKind, ProposalStatus, RiskTier, type ProposerFinding } from "@mia/agent"
+import { ProposalKind, ProposalStatus, RiskTier, type ProposerFinding } from "@mia/sync"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"

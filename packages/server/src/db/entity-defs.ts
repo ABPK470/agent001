@@ -1,1 +1,1 @@
-export * from "../adapters/persistence/entity-defs.js"
+export * from "../adapters/persistence/db/entity-defs.js"

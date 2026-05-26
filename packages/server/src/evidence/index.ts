@@ -1,2 +1,1 @@
-export * from "../adapters/persistence/evidence.js"
-
+export * from "../adapters/persistence/evidence/index.js"

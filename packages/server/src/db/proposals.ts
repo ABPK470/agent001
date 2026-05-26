@@ -1,1 +1,1 @@
-export * from "../adapters/persistence/proposals.js"
+export * from "../adapters/persistence/db/proposals.js"

@@ -1,2 +1,1 @@
-export * from "../adapters/persistence/attachments.js"
-
+export * from "../adapters/persistence/attachments/index.js"

@@ -1,1 +1,1 @@
-export * from "../adapters/persistence/db-connection.js"
+export * from "../adapters/persistence/db/connection.js"

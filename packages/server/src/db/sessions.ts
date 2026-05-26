@@ -1,1 +1,1 @@
-export * from "../adapters/persistence/sessions.js"
+export * from "../adapters/persistence/db/sessions.js"
