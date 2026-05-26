@@ -31,7 +31,7 @@ import {
     type ProposerPassResult,
     type RankableProposal,
 } from "@mia/sync"
-import { listEntityDefinitions } from "../db/entity-defs.js"
+import { listEntityDefinitions } from "../adapters/persistence/entity-defs.js"
 import {
     createProposerRun,
     finishProposerRun,
@@ -42,7 +42,7 @@ import {
     saveAnnotation,
     saveRankScore,
     type ProposalRow,
-} from "../db/proposals.js"
+} from "../adapters/persistence/proposals.js"
 import { broadcast } from "../event-broadcaster.js"
 import { probeRowDivergence } from "./divergence-probe.js"
 

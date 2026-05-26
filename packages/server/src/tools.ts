@@ -60,9 +60,9 @@ import {
     createSyncExecuteTool,
     createSyncPreviewTool,
 } from "@mia/sync"
+import { ingestAgentNote, recordTableVerdict } from "./adapters/persistence/memory.js"
+import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./adapters/persistence/tool-results.js"
 import { AgentBus, createBusTools } from "./agent-bus.js"
-import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./db/tool-results.js"
-import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
 
 export { thinkTool }
 
@@ -448,7 +448,7 @@ const RECALL_DEFAULT_CAP = 8 * 1024
 const RECALL_FULL_CAP = 48 * 1024
 
 function formatRecall(
-  row: import("./db/tool-results.js").DbToolResult,
+  row: import("./adapters/persistence/tool-results.js").DbToolResult,
   full: boolean,
 ): { ok: true; result: string; toolName: string; runId: string; toolCallId: string; rowCount: number | null; truncated: boolean } {
   const text = extractStoredText(row.result_json)

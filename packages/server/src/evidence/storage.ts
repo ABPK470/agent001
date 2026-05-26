@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/db-connection.js"
 import {
     buildEnvelope,
     envelopeBodyBytes,

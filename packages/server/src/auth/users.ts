@@ -15,9 +15,9 @@ import {
     findUserByUpn,
     findUserByUsername,
     insertUser,
-    setLastLogin,
+    updateLastLoginAt,
     type DbUser,
-} from "../db/users.js"
+} from "../adapters/persistence/users.js"
 import { UserSource } from "../enums/auth.js"
 
 const BCRYPT_ROUNDS = 10  // dev-grade; raise if/when production volume warrants
@@ -93,7 +93,7 @@ export function verifyLocalLogin(username: string, password: string): DbUser {
   if (!bcrypt.compareSync(password, u.password_hash)) {
     throw new AuthError("invalid credentials", 401)
   }
-  setLastLogin(u.upn)
+  updateLastLoginAt(u.upn)
   return u
 }
 
@@ -108,7 +108,7 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
 
   const existing = findUserByUpn(upn)
   if (existing) {
-    setLastLogin(upn)
+    updateLastLoginAt(upn)
     return existing
   }
   insertUser({

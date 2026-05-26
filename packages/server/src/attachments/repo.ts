@@ -9,7 +9,7 @@
 
 import type Database from "better-sqlite3"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/db-connection.js"
 import { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus } from "../enums/attachments.js"
 
 export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }

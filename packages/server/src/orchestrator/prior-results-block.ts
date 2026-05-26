@@ -22,8 +22,8 @@
  *     recall tool.
  */
 
-import type { DbToolResult } from "../db/tool-results.js"
-import { extractToolResultText, isRecallableToolResult, loadRecentToolResults } from "../db/tool-results.js"
+import type { DbToolResult } from "../adapters/persistence/tool-results.js"
+import { extractToolResultText, isRecallableToolResult, loadRecentToolResults } from "../adapters/persistence/tool-results.js"
 
 /** Tools whose results we surface in <prior_results>. Mirrors the writer. */
 const SURFACED_TOOLS = ["query_mssql", "export_query_to_file"] as const

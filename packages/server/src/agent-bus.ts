@@ -30,7 +30,7 @@
  */
 
 import { EventType } from "@mia/shared-enums"
-import * as db from "./db/index.js"
+import * as db from "./adapters/persistence/sqlite.js"
 import { BusProtocol } from "./enums/bus.js"
 import { broadcast } from "./event-broadcaster.js"
 

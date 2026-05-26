@@ -27,7 +27,7 @@
 
 import { EventType, isCancellationEvent, isCompletionEvent, isEventType, isFailureEvent, isSubStepFailureEvent, RunStatus } from "@mia/agent"
 import { SyncRunStatus } from "@mia/shared-enums"
-import * as db from "./db/index.js"
+import * as db from "./adapters/persistence/sqlite.js"
 import { OperationKind, OperationStatus } from "./enums/operations.js"
 
 // ── Types ────────────────────────────────────────────────────────

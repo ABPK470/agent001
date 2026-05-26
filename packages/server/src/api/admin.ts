@@ -3,9 +3,9 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { listSessions, listUserHistory, listUsersWithStats } from "../adapters/persistence/sessions.js"
 import { getDb } from "../adapters/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import { listSessions, listUserHistory, listUsersWithStats } from "../db/sessions.js"
 
 export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
 	app.get("/api/admin/sessions", async (req, reply) => {

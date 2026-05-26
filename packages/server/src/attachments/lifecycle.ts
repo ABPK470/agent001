@@ -16,7 +16,7 @@
  * the user gets immediate feedback rather than a silent purge later.
  */
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/db-connection.js"
 import { AttachmentScope } from "../enums/attachments.js"
 import { auditAttachmentsPruned } from "./audit.js"
 

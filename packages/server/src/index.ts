@@ -48,6 +48,7 @@ import { buildLlmClient } from "./adapters/llm/registry.js"
 import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
 import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
+import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
@@ -89,7 +90,6 @@ import {
     listChannelConfigs,
     migrateChannels,
 } from "./channels/index.js"
-import { touchSession } from "./db/sessions.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
 import { dispatchNotification } from "./notifications/router.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
@@ -517,7 +517,7 @@ interface AppOpts {
   setWorkspace: (w: string) => void
   // F1 — evidence + proposer wiring built at boot, threaded into routes.
   evidenceStorageRoot: string
-  evidenceSigner: import("./evidence/signer.js").Signer | null
+  evidenceSigner: import("./adapters/persistence/evidence.js").Signer | null
   llmPortHolder: { current: import("@mia/sync").LlmCompletionPort }
   /** Boot-level AgentHost (shared mssql Map) for routes that hit DB. */
   bootHost: AgentHost

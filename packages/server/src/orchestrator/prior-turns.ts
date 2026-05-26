@@ -17,9 +17,9 @@
  * internal delegation chatter does not pollute the anchor.
  */
 
+import { truncateAtBoundary } from "../adapters/persistence/memory.js"
+import type { DbRun } from "../adapters/persistence/sqlite.js"
 import { getDb } from "../adapters/persistence/sqlite.js"
-import type { DbRun } from "../db/runs.js"
-import { truncateAtBoundary } from "../memory/scoring.js"
 
 /** Maximum chars retained per prior-turn answer. Keeps the anchor inside
  *  the prompt budget while preserving small result tables and the

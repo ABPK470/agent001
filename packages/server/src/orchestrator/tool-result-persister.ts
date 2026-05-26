@@ -14,9 +14,9 @@
  *   - Swallow all errors. A SQLite hiccup must not break a live run.
  */
 
-import { isRecallableToolText, saveToolResult } from "../db/tool-results.js"
+import { ingestTurn } from "../adapters/persistence/memory.js"
+import { isRecallableToolText, saveToolResult } from "../adapters/persistence/tool-results.js"
 import { MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
-import { ingestTurn } from "../memory/ingestion.js"
 
 /**
  * Tools whose results we persist for cross-turn grounding. Keep this list

@@ -29,7 +29,7 @@
 import { EventType } from "@mia/shared-enums"
 import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
-import { getRun, listWebhookDrains, saveEvent } from "./db/index.js"
+import { getRun, listWebhookDrains, saveEvent } from "./adapters/persistence/sqlite.js"
 
 export type { SseEvent }
 

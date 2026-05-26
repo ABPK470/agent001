@@ -17,7 +17,7 @@ import {
     recordAttachmentImport,
     uploadAttachment,
     type AttachmentRow,
-} from "../attachments/index.js"
+} from "../adapters/persistence/attachments.js"
 import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 

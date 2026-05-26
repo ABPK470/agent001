@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { searchEvents } from "../db/events.js"
+import { searchEvents } from "../adapters/persistence/events.js"
 import { subscribeToEvents } from "../event-broadcaster.js"
 import { listOperations } from "../operations.js"
 

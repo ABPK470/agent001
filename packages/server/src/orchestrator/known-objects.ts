@@ -16,10 +16,8 @@
  */
 
 import type Database from "better-sqlite3"
-import { listTableVerdicts, type TableVerdictRole } from "../adapters/persistence/memory.js"
+import { listTableVerdicts, summarizeCachedPayload, type CachedTool, type TableVerdictRole } from "../adapters/persistence/memory.js"
 import { getDb } from "../adapters/persistence/sqlite.js"
-import { summarizeCachedPayload } from "../memory/tool-knowledge-summarizer.js"
-import type { CachedTool } from "../memory/tool-knowledge.js"
 import type { PriorTurn } from "./prior-turns.js"
 
 export interface LoadKnownObjectsOptions {
