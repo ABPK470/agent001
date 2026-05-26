@@ -17,8 +17,8 @@ import type { ActiveRun, NotificationOpts } from "./types.js"
  * - all others: pass through unchanged.
  *
  * Workspace cwd / basePath isolation is now provided by the per-request
- * AgentRuntime mounted around `agent.run()`; no global serialization
- * needed.
+ * AgentHost + RunContext wiring around `agent.run()`; no global
+ * serialization needed.
  */
 export function wrapWithEffects(
   tool: Tool,

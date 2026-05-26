@@ -29,7 +29,7 @@ export const DRIFT_ABORT_PCT = 0.05
 
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+// shape until this sync state is moved fully behind the host surface.
 
 /** Configure the project root used to load sync-recipes.json. */
 export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {

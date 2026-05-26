@@ -136,7 +136,7 @@ export const browseWebTool: Tool = {
  * Factory variant bound to a host — the only supported construction path.
  * Threads the host through to session.ts so `host.browser.sessions`,
  * `host.browser.idCounter`, and `host.browser.contextReader` are sourced
- * from the per-run AgentHost rather than the AgentRuntime ALS.
+ * from the explicit AgentHost rather than any ambient runtime state.
  */
 export function createBrowseWebTool(host: AgentHost, run?: RunContext): Tool {
   return {

@@ -11,8 +11,8 @@ import only from `@mia/agent`** — never reach into
 
 Headline exports:
 
-- `AgentRuntime` — the long-lived container that owns LLM client, tool
-  registry, attachment service, browser providers.
+- `configureAgent()` / `makeRunContext()` — explicit host and per-run
+  wiring for tools, ports, and run-scoped state.
 - `Agent` — a single run. Wraps the loop and planner routing.
 - Constants in `constants.ts` — budgets, limits, retry caps.
 - Cluster barrels for `domain/`, `tools/`, `planner/`, `loop/`, `sync/`,

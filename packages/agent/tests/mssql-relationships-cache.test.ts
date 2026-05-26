@@ -12,18 +12,25 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { AgentRuntime } from "../src/agent-runtime.js"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent, type AgentHost } from "../src/host/index.js"
 import { createDiscoverRelationshipsTool } from "../src/tools/mssql-relationships/index.js"
-import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createDiscoverRelationshipsTool> } {
-  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+function makeFixture(): {
+  tool: ReturnType<typeof createDiscoverRelationshipsTool>
+  toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
+} {
+  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
+  const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
+    lookup: () => ({ hit: false as const, reason: "miss" as const }),
+    save: () => undefined,
+    renderHeader: () => "",
+  }
   const host = configureAgent({
     mssqlDatabases: databases,
-    catalogInstances: runtime.catalog.instances,
-    toolKnowledge: runtime.toolKnowledge as unknown as import("../src/host/index.js").AgentHost["toolKnowledge"],
+    catalogInstances,
+    toolKnowledge,
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
@@ -31,19 +38,19 @@ function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createD
     writeEnabled: false,
     knowledge: null,
   })
-  return { runtime, tool: createDiscoverRelationshipsTool(host) }
+  catalogInstances.set("default", canonicalFixtureCatalog())
+  return { toolKnowledge, tool: createDiscoverRelationshipsTool(host) }
 }
 
 describe("discover_relationships cache integration", () => {
   it("serves a cached payload + header for table= mode (key=qname, mode=fk)", async () => {
-    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "FK graph for dim.Date", ageMs: 1, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=fk, ageHours=1, source=tool_knowledge]"
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.lookup = lookup
+    toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=fk, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.save = vi.fn()
 
-    const out = await runtime.run(() => discoverRelationshipsTool.execute({ table: "dim.Date" })) as string
+    const out = await discoverRelationshipsTool.execute({ table: "dim.Date" }) as string
     expect(out).toMatch(/^\[cached from .*mode=fk/)
     expect(out).toContain("FK graph for dim.Date")
     const args = lookup.mock.calls[0]![0]
@@ -53,52 +60,49 @@ describe("discover_relationships cache integration", () => {
   })
 
   it("normalises and sorts the between=[a,b] cache key (mode=paths)", async () => {
-    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "two paths", ageMs: 1, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.renderHeader = () => "[hdr]"
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.lookup = lookup
+    toolKnowledge.renderHeader = () => "[hdr]"
+    toolKnowledge.save = vi.fn()
 
-    await runtime.run(() => discoverRelationshipsTool.execute({ between: ["publish.Balances", "dim.Date"] }))
+    await discoverRelationshipsTool.execute({ between: ["publish.Balances", "dim.Date"] })
     const args = lookup.mock.calls[0]![0]
     expect(args.mode).toBe("paths")
     expect(args.qname).toBe("dim.date|publish.balances")
   })
 
   it("uses schema= name as the cache key (mode=schema)", async () => {
-    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "schema graph", ageMs: 1, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.renderHeader = () => "[hdr]"
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.lookup = lookup
+    toolKnowledge.renderHeader = () => "[hdr]"
+    toolKnowledge.save = vi.fn()
 
-    await runtime.run(() => discoverRelationshipsTool.execute({ schema: "publish" }))
+    await discoverRelationshipsTool.execute({ schema: "publish" })
     const args = lookup.mock.calls[0]![0]
     expect(args.mode).toBe("schema")
     expect(args.qname).toBe("publish")
   })
 
   it("uses column= name as the cache key (mode=column)", async () => {
-    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "shared col list", ageMs: 1, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.renderHeader = () => "[hdr]"
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.lookup = lookup
+    toolKnowledge.renderHeader = () => "[hdr]"
+    toolKnowledge.save = vi.fn()
 
-    await runtime.run(() => discoverRelationshipsTool.execute({ column: "CustomerKey" }))
+    await discoverRelationshipsTool.execute({ column: "CustomerKey" })
     const args = lookup.mock.calls[0]![0]
     expect(args.mode).toBe("column")
     expect(args.qname).toBe("customerkey")
   })
 
   it("falls through cleanly when no cache is bound (CLI / root runtime)", async () => {
-    const { runtime, tool: discoverRelationshipsTool } = makeRuntime()
-    // toolKnowledge.lookup is null by default — must not throw
+    const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
+    toolKnowledge.lookup = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["lookup"]
     try {
-      await runtime.run(() => discoverRelationshipsTool.execute({ table: "dim.Date" }))
+      await discoverRelationshipsTool.execute({ table: "dim.Date" })
     } catch { /* live SQL stub may throw; fall-through is what matters */ }
     expect(true).toBe(true)
   })

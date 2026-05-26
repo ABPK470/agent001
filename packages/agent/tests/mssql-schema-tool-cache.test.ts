@@ -14,18 +14,25 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { AgentRuntime } from "../src/agent-runtime.js"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent, type AgentHost } from "../src/host/index.js"
 import { createMssqlSchemaTool } from "../src/tools/mssql/tools.js"
-import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>): { runtime: AgentRuntime; tool: ReturnType<typeof createMssqlSchemaTool> } {
-  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+function makeFixture(query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>): {
+  tool: ReturnType<typeof createMssqlSchemaTool>
+  toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
+} {
+  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
+  const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
+    lookup: () => ({ hit: false as const, reason: "miss" as const }),
+    save: () => undefined,
+    renderHeader: () => "",
+  }
   const host = configureAgent({
     mssqlDatabases: databases,
-    catalogInstances: runtime.catalog.instances,
-    toolKnowledge: runtime.toolKnowledge as unknown as import("../src/host/index.js").AgentHost["toolKnowledge"],
+    catalogInstances,
+    toolKnowledge,
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
@@ -41,13 +48,13 @@ function makeRuntime(query?: (sql: string) => Promise<{ recordset: unknown[]; re
     writeEnabled: false,
     knowledge: null,
   })
-  return { runtime, tool: createMssqlSchemaTool(host) }
+  catalogInstances.set("default", canonicalFixtureCatalog())
+  return { toolKnowledge, tool: createMssqlSchemaTool(host) }
 }
 
 describe("explore_mssql_schema cache integration (Gap 1)", () => {
   it("returns cached payload + header on a hit (own bucket: explore_mssql_schema, columns)", async () => {
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture()
 
     const lookup = vi.fn((args: { tool: string; mode?: string }) => {
       if (args.tool === "explore_mssql_schema" && args.mode === "columns") {
@@ -55,23 +62,22 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
       }
       return { hit: false as const, reason: "miss" as const }
     })
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.save = vi.fn()
-    runtime.toolKnowledge.renderHeader = () => "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.lookup = lookup
+    toolKnowledge.save = vi.fn()
+    toolKnowledge.renderHeader = () => "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge]"
 
-    const out = await runtime.run(() => mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
+    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
     expect(out).toMatch(/^\[cached from 2026-05-22.*mode=columns/)
     expect(out).toContain("Columns for publish.Revenue")
     expect(lookup).toHaveBeenCalled()
     expect(lookup.mock.calls[0]![0].tool).toBe("explore_mssql_schema")
     expect(lookup.mock.calls[0]![0].qname).toBe("publish.revenue")
     expect(lookup.mock.calls[0]![0].mode).toBe("columns")
-    expect(runtime.toolKnowledge.save).not.toHaveBeenCalled()
+    expect(toolKnowledge.save).not.toHaveBeenCalled()
   })
 
   it("cross-serves from profile_data(fast) cache when own bucket misses", async () => {
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture()
 
     const lookup = vi.fn((args: { tool: string; mode?: string }) => {
       if (args.tool === "explore_mssql_schema") return { hit: false as const, reason: "miss" as const }
@@ -85,11 +91,11 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
       }
       return { hit: false as const, reason: "miss" as const }
     })
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.save = vi.fn()
-    runtime.toolKnowledge.renderHeader = () => "[hdr]"
+    toolKnowledge.lookup = lookup
+    toolKnowledge.save = vi.fn()
+    toolKnowledge.renderHeader = () => "[hdr]"
 
-    const out = await runtime.run(() => mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
+    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
     expect(out).toContain("cross-served from profile_data(fast) cache")
     expect(out).toContain("Profile for publish.Revenue")
     // Both buckets consulted, own first then profile_data
@@ -98,7 +104,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     expect(lookup.mock.calls[1]![0].tool).toBe("profile_data")
     expect(lookup.mock.calls[1]![0].mode).toBe("fast")
     // Cross-serve must NOT re-persist (avoid duplicating data across buckets)
-    expect(runtime.toolKnowledge.save).not.toHaveBeenCalled()
+    expect(toolKnowledge.save).not.toHaveBeenCalled()
   })
 
   it("falls through to live execution on full miss, then persists the result", async () => {
@@ -112,15 +118,14 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
       }
       return Promise.resolve({ recordset: [], recordsets: [[]], rowsAffected: [0] })
     }
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime(fakeQuery as never)
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture(fakeQuery as never)
 
-    runtime.toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
+    toolKnowledge.lookup = vi.fn(() => ({ hit: false as const, reason: "miss" as const }))
     const save = vi.fn()
-    runtime.toolKnowledge.save = save
-    runtime.toolKnowledge.renderHeader = () => "ignored"
+    toolKnowledge.save = save
+    toolKnowledge.renderHeader = () => "ignored"
 
-    const out = await runtime.run(() => mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
+    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
     expect(out).toMatch(/^Columns for publish\.Revenue/)
     expect(out).not.toMatch(/^\[cached/)
 
@@ -134,34 +139,31 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("falls through gracefully when no cache is bound (CLI / root runtime)", async () => {
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
-    expect(runtime.toolKnowledge.lookup).toBeNull()
-    expect(runtime.toolKnowledge.save).toBeNull()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture()
+    toolKnowledge.lookup = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["lookup"]
+    toolKnowledge.save = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["save"]
 
     // Stub returns empty rows so the tool emits the "No columns found" string.
-    const out = await runtime.run(() => mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
+    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
     expect(typeof out).toBe("string")
   })
 
   it("skips the cache when the table has no schema prefix (cannot build a stable qname)", async () => {
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
+    toolKnowledge.lookup = lookup
     try {
-      await runtime.run(() => mssqlSchemaTool.execute({ table: "Revenue" }))
+      await mssqlSchemaTool.execute({ table: "Revenue" })
     } catch { /* live path may fail against the stub pool */ }
     expect(lookup).not.toHaveBeenCalled()
   })
 
   it("skips the cache when the qname is not in the catalog (no fingerprint)", async () => {
-    const { runtime, tool: mssqlSchemaTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: mssqlSchemaTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
+    toolKnowledge.lookup = lookup
     try {
-      await runtime.run(() => mssqlSchemaTool.execute({ table: "mystery.Unknown" }))
+      await mssqlSchemaTool.execute({ table: "mystery.Unknown" })
     } catch { /* live path may fail against the stub pool */ }
     expect(lookup).not.toHaveBeenCalled()
   })

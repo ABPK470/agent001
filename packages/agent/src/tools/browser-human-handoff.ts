@@ -1,4 +1,4 @@
-import { HUMAN_HANDOFF_REASON_VALUES, HumanHandoffReason, UserInputStatus } from "@mia/agent"
+import { HUMAN_HANDOFF_REASON_VALUES, HumanHandoffReason, UserInputStatus } from "../domain/index.js"
 /**
  * browser_human_handoff — escalate to a human when the browser hits a
  * step automation can't (or shouldn't) do: CAPTCHA, non-TOTP 2FA push

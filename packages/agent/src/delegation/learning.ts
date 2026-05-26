@@ -217,7 +217,7 @@ export class DelegationBanditTuner {
   }
 }
 
-// The bandit tuner is owned by the caller (PlannerContext.delegationBanditTuner)
-// or by AgentRuntime. There is no module-global instance — Phase 2 deleted
-// the legacy `getGlobalDelegationBanditTuner` / `setGlobalDelegationBanditTuner`
+// The bandit tuner is owned by the caller (PlannerContext.delegationBanditTuner).
+// There is no module-global instance — Phase 2 deleted the legacy
+// `getGlobalDelegationBanditTuner` / `setGlobalDelegationBanditTuner`
 // helpers because nothing called them.

@@ -7,18 +7,25 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { AgentRuntime } from "../src/agent-runtime.js"
-import { configureAgent } from "../src/host/index.js"
+import { configureAgent, type AgentHost } from "../src/host/index.js"
 import { createInspectDefinitionTool } from "../src/tools/mssql-inspector/tool.js"
-import { installCanonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createInspectDefinitionTool> } {
-  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
+function makeFixture(): {
+  tool: ReturnType<typeof createInspectDefinitionTool>
+  toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
+} {
+  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
+  const catalogInstances = new Map<string, import("../src/tools/catalog/index.js").CatalogGraph>()
+  const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
+    lookup: () => ({ hit: false as const, reason: "miss" as const }),
+    save: () => undefined,
+    renderHeader: () => "",
+  }
   const host = configureAgent({
     mssqlDatabases: databases,
-    catalogInstances: runtime.catalog.instances,
-    toolKnowledge: runtime.toolKnowledge as unknown as import("../src/host/index.js").AgentHost["toolKnowledge"],
+    catalogInstances,
+    toolKnowledge,
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
@@ -26,13 +33,13 @@ function makeRuntime(): { runtime: AgentRuntime; tool: ReturnType<typeof createI
     writeEnabled: false,
     knowledge: null,
   })
-  return { runtime, tool: createInspectDefinitionTool(host) }
+  catalogInstances.set("default", canonicalFixtureCatalog())
+  return { toolKnowledge, tool: createInspectDefinitionTool(host) }
 }
 
 describe("inspect_definition cache integration", () => {
   it("returns the cached payload + header on a hit for object= mode", async () => {
-    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
-    installCanonicalFixtureCatalog()
+    const { toolKnowledge, tool: inspectDefinitionTool } = makeFixture()
 
     const lookup = vi.fn(() => ({
       hit: true as const,
@@ -40,11 +47,11 @@ describe("inspect_definition cache integration", () => {
       ageMs: 1,
       profiledAt: 0,
     }))
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.save = vi.fn()
-    runtime.toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.lookup = lookup
+    toolKnowledge.save = vi.fn()
+    toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge]"
 
-    const out = await runtime.run(() => inspectDefinitionTool.execute({ object: "dim.Date" })) as string
+    const out = await inspectDefinitionTool.execute({ object: "dim.Date" }) as string
     expect(out).toMatch(/^\[cached from 2026-05-01.*mode=definition/)
     expect(out).toContain("T-SQL source for dim.Date")
     expect(lookup).toHaveBeenCalledTimes(1)
@@ -54,10 +61,10 @@ describe("inspect_definition cache integration", () => {
   })
 
   it("does NOT cache dynamic modes (slow_queries / missing_indexes / index_usage / search / depends_on)", async () => {
-    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
+    const { toolKnowledge, tool: inspectDefinitionTool } = makeFixture()
     const lookup = vi.fn()
-    runtime.toolKnowledge.lookup = lookup
-    runtime.toolKnowledge.save = vi.fn()
+    toolKnowledge.lookup = lookup
+    toolKnowledge.save = vi.fn()
 
     // We only care that the cache pre-flight does not consult the cache
     // when args.object is absent. The downstream SQL handlers may fail
@@ -70,7 +77,7 @@ describe("inspect_definition cache integration", () => {
       { depends_on: "dim.Date" },
     ]) {
       try {
-        await runtime.run(() => inspectDefinitionTool.execute(args))
+        await inspectDefinitionTool.execute(args)
       } catch {
         // ignore — handler may throw against the stub pool
       }
@@ -79,11 +86,11 @@ describe("inspect_definition cache integration", () => {
   })
 
   it("skips the cache when the object is not in the catalog (no fingerprint)", async () => {
-    const { runtime, tool: inspectDefinitionTool } = makeRuntime()
+    const { toolKnowledge, tool: inspectDefinitionTool } = makeFixture()
     const lookup = vi.fn(() => ({ hit: true as const, payload: "x", ageMs: 0, profiledAt: 0 }))
-    runtime.toolKnowledge.lookup = lookup
+    toolKnowledge.lookup = lookup
     try {
-      await runtime.run(() => inspectDefinitionTool.execute({ object: "mystery.Unknown" }))
+      await inspectDefinitionTool.execute({ object: "mystery.Unknown" })
     } catch { /* live path may fail against the stub pool */ }
     expect(lookup).not.toHaveBeenCalled()
   })

@@ -66,9 +66,8 @@ export interface ConfigureAgentOptions {
  * caller didn't provide.
  *
  * In Phase 3 the wiring for `searchFiles`, `attachments`, etc. moves
- * from each tool's module-level setter into here. In Phase 6 the
- * `AgentRuntime` class is deleted and this becomes the only way to
- * configure an agent.
+ * from each tool's module-level setter into here. This is now the only
+ * supported way to configure an agent host.
  */
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()

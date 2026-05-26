@@ -31,7 +31,7 @@ export type SyncEventSink = (event: SyncEvent) => void
 
 // State container — `const` reference to a mutable record so the lint rule
 // banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
+// shape until this sync state is moved fully behind the host surface.
 
 /** Server installs this once at startup (see server/src/index.ts). */
 export function setSyncEventSink(host: AgentHost, sink: SyncEventSink): void {

@@ -15,24 +15,22 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { AgentRuntime } from "../src/agent-runtime.js"
 import {
     DOCTRINE_FIX_HINTS,
     DOCTRINE_LESSON_TEMPLATES,
     getDoctrineLessonTemplate,
 } from "../src/doctrine/fix-hints.js"
-import { configureAgent, makeRunContext } from "../src/host/index.js"
+import { configureAgent, makeRunContext, type RunMemoryWriter } from "../src/host/index.js"
 import { createMssqlTool } from "../src/tools/mssql/tools.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
 const mssqlTool = createMssqlTool(configureAgent({}))
 
-function makeRuntimeWithPool(): {
-  runtime: AgentRuntime
+function makeFixtureWithPool(memory: RunMemoryWriter | null = null): {
   tool: ReturnType<typeof createMssqlTool>
   run: ReturnType<typeof makeRunContext>
 } {
-  const databases = new Map<string, import("../src/agent-runtime.js").MssqlEntry>()
+  const databases = new Map<string, import("../src/host/index.js").MssqlEntry>()
   const host = configureAgent({ mssqlDatabases: databases })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
@@ -40,9 +38,8 @@ function makeRuntimeWithPool(): {
     writeEnabled: false,
     knowledge: null,
   })
-  const runtime = new AgentRuntime({ workspaceRoot: process.cwd() })
-  const run = makeRunContext()
-  return { runtime, tool: createMssqlTool(host, run), run }
+  const run = makeRunContext({ memory })
+  return { tool: createMssqlTool(host, run), run }
 }
 
 describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
@@ -142,15 +139,14 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
 describe("mssqlTool wires lesson into run.memory.writeNote on block", () => {
   // The mssql tool fetches the connection pool BEFORE validating, so without
   // a configured pool the validator never runs. Inject a no-network pool
-  // stub keyed off the global runtime so the tool reaches validation.
+  // stub so the tool reaches validation.
   it("calls writeNote with the lesson payload when validation blocks", async () => {
     const writeNote = vi.fn()
-    const { runtime, run, tool: mssqlTool } = makeRuntimeWithPool()
-    run.memory = { writeNote }
+    const { tool: mssqlTool } = makeFixtureWithPool({ writeNote })
 
-    const result = await runtime.run(() => mssqlTool.execute({
+    const result = await mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",
-    }))
+    })
 
     expect(typeof result).toBe("string")
     expect(result).toMatch(/aggregate-semantic mismatch/i)
@@ -163,12 +159,13 @@ describe("mssqlTool wires lesson into run.memory.writeNote on block", () => {
   })
 
   it("swallows writeNote exceptions silently (block error still returned)", async () => {
-    const { runtime, run, tool: mssqlTool } = makeRuntimeWithPool()
-    run.memory = { writeNote: () => { throw new Error("boom") } }
+    const { tool: mssqlTool } = makeFixtureWithPool({
+      writeNote: () => { throw new Error("boom") },
+    })
 
-    const result = await runtime.run(() => mssqlTool.execute({
+    const result = await mssqlTool.execute({
       query: "SELECT SUM(x) AS Avg_y FROM t",
-    }))
+    })
     expect(typeof result).toBe("string")
     expect(result).toMatch(/aggregate-semantic mismatch/i)
   })

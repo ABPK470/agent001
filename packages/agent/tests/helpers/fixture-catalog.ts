@@ -1,21 +1,14 @@
 /**
- * Canonical fixture catalog — installs a synthetic CatalogGraph into the
- * runtime so tests that exercise scan-guards, branch-aggregation guards
- * and persisted-mirror suggestions have realistic catalog data to query
- * (large fact tables, multi-branch UNION views, dimensions with PK/FK
- * relationships, a calendar dimension).
+ * Canonical fixture catalog — builds a synthetic CatalogGraph for tests
+ * that exercise scan-guards, branch-aggregation guards, and persisted-
+ * mirror suggestions without standing up a live MSSQL catalog.
  *
  * The shape mirrors the canonical deployment, but the tests don't depend
  * on the EXACT names — they depend on the SHAPE (a view is "large" because
  * its source rows are large, not because its name is "publish.Revenue").
  *
- * Used by tests/setup.ts (vitest setupFiles). Tests that need a different
- * catalog can call `installFixtureCatalog(myTables)` or
- * `clearFixtureCatalog()` themselves.
  */
-import { AgentRuntime } from "../../src/agent-runtime.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
-import { _resetCatalogQueriesCache } from "../../src/tools/catalog/queries.js"
 import type { CatalogFK, CatalogTable } from "../../src/tools/catalog/types.js"
 
 function col(name: string, dataType = "int", isPK = false): { name: string; dataType: string; nullable: boolean; isPK: boolean; maxLength: number | null } {
@@ -166,20 +159,4 @@ export function canonicalFixtureCatalog(): CatalogGraph {
     viewSourceRows,
     sysCatalog: [],
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
-}
-
-export function installFixtureCatalog(graph: CatalogGraph, connection = "default"): void {
-  AgentRuntime.root().catalog.instances.set(connection, graph)
-  _resetCatalogQueriesCache()
-}
-
-export function installCanonicalFixtureCatalog(): CatalogGraph {
-  const g = canonicalFixtureCatalog()
-  installFixtureCatalog(g)
-  return g
-}
-
-export function clearFixtureCatalog(connection = "default"): void {
-  AgentRuntime.root().catalog.instances.delete(connection)
-  _resetCatalogQueriesCache()
 }

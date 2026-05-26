@@ -221,7 +221,7 @@ export async function executeRunImpl(
     browserCheckCwd: runWorkspace.executionRoot,
     // Per-run toolKnowledge/tableVerdicts adapters — bind upn at construction
     // so tools reading via host.toolKnowledge.{lookup,save} get the run-scoped
-    // provenance without needing the legacy AgentRuntime ALS slot.
+    // provenance without any ambient runtime slot.
     toolKnowledge: {
       lookup: (args) => lookupToolKnowledge(args) as unknown as ReturnType<NonNullable<AgentHost["toolKnowledge"]>["lookup"]>,
       save: (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null }),
