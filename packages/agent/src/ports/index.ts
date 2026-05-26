@@ -1,9 +1,5 @@
 /**
- * Contract door for the new `ports/` cluster.
- *
- * This is an additive compatibility barrel. Existing implementations still
- * live under `host/ports.ts`; new imports can start depending on `ports/`
- * immediately while the physical migration remains incremental.
+ * Contract door for the `ports/` cluster.
  */
 
 export type {
@@ -31,4 +27,4 @@ export type {
     ToolKnowledgeSaveArgs,
     ToolKnowledgeStore,
     UserInputReader
-} from "../host/ports.js"
+} from "./ports.js"

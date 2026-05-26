@@ -1,4 +1,5 @@
 export { CatalogGraph } from "./graph/index.js"
+export { tokenize } from "./helpers.js"
 export {
     _resetCatalogQueriesCache,
     calendarDimensionTable,

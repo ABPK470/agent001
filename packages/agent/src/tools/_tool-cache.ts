@@ -98,7 +98,7 @@ export function tryServeFromCache(
   const ageHours = Math.round(res.ageMs / 3_600_000)
   // eslint-disable-next-line no-console
   console.log(`[${tool}] source=cache qname=${qname.toLowerCase()} mode=${mode} ageHours=${ageHours} fpMatch=1`)
-  const header = tk.renderHeader ? tk.renderHeader(res, { tool, mode }) : ""
+  const header = tk.renderHeader ? tk.renderHeader(res, { qname: qname.toLowerCase(), tool, mode }) : ""
   return header ? `${header}\n${res.payload}` : res.payload
 }
 
