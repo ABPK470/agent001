@@ -20,7 +20,7 @@
  */
 
 import { createPublicKey, createVerify } from "node:crypto"
-import { ChannelType } from "../enums/channels.js"
+import { ChannelType } from "../../enums/channels.js"
 import { ChannelApiError } from "./retry.js"
 import type { Channel, ChannelConfig, InboundMessage } from "./types.js"
 

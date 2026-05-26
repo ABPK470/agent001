@@ -14,8 +14,8 @@
 
 import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
-import type { CurrentSession } from "../adapters/auth/context.js"
-import { broadcast } from "../event-broadcaster.js"
+import type { CurrentSession } from "../../adapters/auth/context.js"
+import { broadcast } from "../../event-broadcaster.js"
 import type { MessageQueue } from "./queue.js"
 import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
 

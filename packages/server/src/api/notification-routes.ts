@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import { deleteNotificationRoute, listNotificationLog, listNotificationRoutes, upsertNotificationRoute, type NotificationChannel, type NotificationFilter } from "../notifications/router.js"
+import { deleteNotificationRoute, listNotificationLog, listNotificationRoutes, upsertNotificationRoute, type NotificationChannel, type NotificationFilter } from "./notifications/router.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

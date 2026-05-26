@@ -7,9 +7,9 @@ import type { EntityRegistryYamlImportResponse } from "@mia/shared-types"
 import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
+import { bootstrapEntityRegistryFromYaml } from "../adapters/sync/entity-bootstrap.js"
+import { formatEntitiesYaml, formatEntityYaml, parseEntitiesYaml } from "../adapters/sync/entity-yaml.js"
 import { broadcast } from "../event-broadcaster.js"
-import { bootstrapEntityRegistryFromYaml } from "../sync/entity-bootstrap.js"
-import { formatEntitiesYaml, formatEntityYaml, parseEntitiesYaml } from "../sync/entity-yaml.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

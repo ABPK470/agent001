@@ -2,15 +2,15 @@ import type { LLMClient, Message, Tool } from "@mia/agent"
 import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOGUE_SECTION, CLARIFICATION_DISCIPLINE_SECTION, DEFAULT_SYSTEM_PROMPT, detectAmbiguities, getCatalog, getCatalogSchemaFingerprint, getTenantConfig, MessageRole, MIA_DATA_PERSONA_SECTION, renderPromptVars, runLlmPlanner, shouldInvokePlanner } from "@mia/agent"
 import { getAttachment, type AttachmentRow } from "../../adapters/persistence/attachments.js"
 import type { DbToolResult } from "../../adapters/persistence/sqlite.js"
-import type { ClarificationsRegistry } from "../../orchestrator/clarifications-state.js"
-import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "../../orchestrator/known-objects.js"
-import { renderPriorResultsBlock } from "../../orchestrator/prior-results-block.js"
-import type { PriorTurn } from "../../orchestrator/prior-turns.js"
-import { buildResolvedFactsBlock } from "../../orchestrator/resolved-facts-block.js"
-import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "../../prompt-builder.js"
+import type { ClarificationsPort } from "../../ports/clarifications.js"
 import type { RunWorkspaceContext } from "../../run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
+import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "./data-blocks/known-objects.js"
+import { renderPriorResultsBlock } from "./data-blocks/prior-results-block.js"
+import type { PriorTurn } from "./data-blocks/prior-turns.js"
+import { buildResolvedFactsBlock } from "./data-blocks/resolved-facts-block.js"
 import { decideSections } from "./decide-sections.js"
+import { buildEnvironmentContext, buildHostedRuntimeContext, buildMemoryGuidance, buildToolContext, getWorkspaceContext } from "./prompt/builder.js"
 
 // ── System message construction ───────────────────────────────────
 
@@ -187,7 +187,7 @@ export async function buildSystemMessages(opts: {
    * test surface (which calls buildSystemMessages without an
    * orchestrator) keeps working.
    */
-  clarifications?: ClarificationsRegistry
+  clarifications?: ClarificationsPort
   /**
    * LLM client used by the clarification planner fallback when the
    * deterministic detectors find nothing. Omit to skip the planner.

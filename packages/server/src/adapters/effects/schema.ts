@@ -1,4 +1,4 @@
-import { getDb } from "../adapters/persistence/sqlite.js"
+import { getDb } from "../persistence/sqlite.js"
 
 // ── Schema migration ─────────────────────────────────────────────
 

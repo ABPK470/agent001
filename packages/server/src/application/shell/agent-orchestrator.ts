@@ -12,25 +12,25 @@ import {
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import type { CurrentSession } from "../../adapters/auth/context.js"
+import { migrateEffects } from "../../adapters/effects/index.js"
 import { cleanupExpiredCache, migrateMemory } from "../../adapters/persistence/index.js"
 import * as db from "../../adapters/persistence/sqlite.js"
 import { AgentBus } from "../../agent-bus.js"
-import type { MessageRouter } from "../../channels/router.js"
-import { migrateEffects } from "../../effects/index.js"
 import { TrajectoryEventKind } from "../../enums/trajectory.js"
 import { broadcast } from "../../event-broadcaster.js"
-import { ClarificationsRegistry } from "../../orchestrator/clarifications-state.js"
-import { createNotification, saveTrace } from "../../orchestrator/persistence.js"
-import { recoverStaleRunsImpl } from "../../orchestrator/recovery.js"
-import { executeRunImpl } from "../../orchestrator/run-executor.js"
-import type { ActiveRun, AgentRunConfig, BootHostDeps, NotificationOpts, OrchestratorConfig, OrchestratorRunCtx } from "../../orchestrator/types.js"
-import { applyRunWorkspaceDiff } from "../../orchestrator/workspace-effects.js"
-import { RunPriority, RunQueue } from "../../queue.js"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../../run-workspace.js"
-import { cleanupStaleRunWorkspaces } from "../../run-workspace.js"
+import type { MessageRouterPort } from "../../ports/channels.js"
+import type { ActiveRun, AgentRunConfig, BootHostDeps, NotificationOpts, OrchestratorConfig, OrchestratorRunCtx } from "../../ports/orchestration.js"
 import { filterToolsForVisitor, getAllTools } from "../../tools.js"
+import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
+import { createNotification, saveTrace } from "./execution/persistence.js"
+import { recoverStaleRunsImpl } from "./execution/recovery.js"
+import { executeRunImpl } from "./execution/run-executor.js"
+import { applyRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { RunPriority, RunQueue } from "./queue/run-queue.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/run-workspace.js"
+import { cleanupStaleRunWorkspaces } from "./workspace/run-workspace.js"
 
-  export type { AgentRunConfig, OrchestratorConfig } from "../../orchestrator/types.js"
+  export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
 
 // ── AgentOrchestrator ─────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export class AgentOrchestrator {
   private readonly pendingKills = new Map<string, { resolve: (message: string) => void; perToolCtrl: AbortController }>()
   private readonly clarifications = new ClarificationsRegistry()
   private readonly queue: RunQueue
-  private messageRouter: MessageRouter | null = null
+  private messageRouter: MessageRouterPort | null = null
   private workspace: string | null = null
   private readonly bootHostDeps: BootHostDeps
   private readonly completedRunWorkspaces = new Map<string, RunWorkspaceContext>()
@@ -69,7 +69,7 @@ export class AgentOrchestrator {
 
   setWorkspace(path: string): void { this.workspace = path }
   setLlm(client: LLMClient): void { this.llm = client }
-  setMessageRouter(router: MessageRouter): void { this.messageRouter = router }
+  setMessageRouter(router: MessageRouterPort): void { this.messageRouter = router }
 
   // ── Run lifecycle ─────────────────────────────────────────────
 

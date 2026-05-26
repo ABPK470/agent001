@@ -6,7 +6,7 @@ import { type AgentHost } from "@mia/agent"
 import { ENV_ACCESS_MODES, getEnvironments, isEnvAccessMode, replaceEnvironments, withPermissionDefaults, type EnvOperation, type SyncEnvironment } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
-import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"
+import { refreshEnvDerivedPolicies } from "../domain/policy/policy-seeder.js"
 
 const VALID_OPS: EnvOperation[] = ["query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml"]
 

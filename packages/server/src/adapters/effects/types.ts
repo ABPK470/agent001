@@ -1,9 +1,7 @@
-import { EffectKind } from "../enums/effects.js"
-import { EffectStatus } from "../enums/effects.js"
+import { EffectKind, EffectStatus } from "../../enums/effects.js"
 // ── Types ────────────────────────────────────────────────────────
 
-export { EffectKind }
-export { EffectStatus }
+export { EffectKind, EffectStatus }
 
 export interface Effect {
   id: string

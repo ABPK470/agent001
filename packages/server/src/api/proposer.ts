@@ -6,8 +6,8 @@ import type { AgentHost } from "@mia/agent"
 import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
-import { runProposer } from "../proposer/runner.js"
-import { deleteSchedule, listSchedules, upsertSchedule } from "../proposer/scheduler.js"
+import { runProposer } from "../application/shell/proposer/runner.js"
+import { deleteSchedule, listSchedules, upsertSchedule } from "../application/shell/proposer/scheduler.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

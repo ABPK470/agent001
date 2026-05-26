@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify"
 import { searchEvents } from "../adapters/persistence/events.js"
 import { subscribeToEvents } from "../event-broadcaster.js"
-import { listOperations } from "../operations.js"
+import { listOperations } from "./operations-query.js"
 
 export function registerOperationRoutes(app: FastifyInstance): void {
 	app.get<{ Querystring: { limit?: string; before?: string; search?: string; kind?: string; status?: string } }>("/api/operations", async (req) => {

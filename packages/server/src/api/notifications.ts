@@ -86,7 +86,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
 			case "rollback-run": {
 				const runId = data?.runId as string
 				if (!runId) { reply.code(400); return { error: "runId required" } }
-				const { rollbackRun } = await import("../effects/index.js")
+				const { rollbackRun } = await import("../adapters/effects/index.js")
 				const result = await rollbackRun(runId)
 				return { ok: true, compensated: result.compensated, skipped: result.skipped, failed: result.failed.length }
 			}

@@ -50,7 +50,18 @@ import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, get
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
 import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
+import { bootstrapEntityRegistryFromYaml } from "./adapters/sync/entity-bootstrap.js"
+import { createRegistryRecipeResolver } from "./adapters/sync/registry-resolver.js"
 import { registerAuthRoutes } from "./api/auth.js"
+import {
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
+} from "./api/channels/index.js"
 import {
     registerAdminRoutes,
     registerAgentRoutes,
@@ -79,25 +90,14 @@ import {
     registerUsageRoutes,
     registerWebhookRoutes,
 } from "./api/http-routes.js"
+import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
+import { startScheduler, stopScheduler } from "./application/shell/proposer/scheduler.js"
+import { getRunProfile } from "./application/shell/workspace/run-workspace.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import {
-    MessageQueue,
-    MessageRouter,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    TeamsChannel,
-    listChannelConfigs,
-    migrateChannels,
-} from "./channels/index.js"
+import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
-import { dispatchNotification } from "./notifications/router.js"
-import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
-import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
-import { getRunProfile } from "./run-workspace.js"
 import { setupMssql } from "./setup-mssql.js"
-import { bootstrapEntityRegistryFromYaml } from "./sync/entity-bootstrap.js"
-import { createRegistryRecipeResolver } from "./sync/registry-resolver.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"

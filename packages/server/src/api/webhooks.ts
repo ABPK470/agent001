@@ -3,8 +3,8 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { deleteChannelConfig, getDeliveryStats, getOutboundMessages, listChannelConfigs, saveChannelConfig, TeamsChannel, type MessageQueue, type MessageRouter } from "../channels/index.js"
 import { ChannelType, isChannelType } from "../enums/channels.js"
+import { deleteChannelConfig, getDeliveryStats, getOutboundMessages, listChannelConfigs, saveChannelConfig, TeamsChannel, type MessageQueue, type MessageRouter } from "./channels/index.js"
 
 export function registerWebhookRoutes(app: FastifyInstance, router: MessageRouter, queue: MessageQueue): void {
 	app.post("/webhooks/teams", async (req, reply) => {

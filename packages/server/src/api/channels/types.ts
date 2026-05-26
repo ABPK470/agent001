@@ -1,5 +1,4 @@
-import { ChannelType } from "../enums/channels.js"
-import { DeliveryStatus } from "../enums/channels.js"
+import { ChannelType, DeliveryStatus } from "../../enums/channels.js"
 /**
  * Channel types — the vocabulary for multi-platform message routing.
  *

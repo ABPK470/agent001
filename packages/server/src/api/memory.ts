@@ -3,9 +3,9 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { getEffectStats, getFileHistory, getRunEffects, getRunSnapshots, previewRollback, rollbackRun } from "../adapters/effects/index.js"
 import { clearAllMemories, consolidate, getMemoryStats, listMemories, prune, retrieveContext, searchEntries, searchProcedures, type MemoryTier } from "../adapters/persistence/memory.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import { getEffectStats, getFileHistory, getRunEffects, getRunSnapshots, previewRollback, rollbackRun } from "../effects/index.js"
 import { compareTrajectories, loadTrajectory, replay, summarizeTrajectory, type Mutation } from "../trajectory/index.js"
 
 export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentOrchestrator): void {
