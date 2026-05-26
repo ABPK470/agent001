@@ -17,9 +17,9 @@
  *   - Cancellation-aware: cancelled runs release their slot immediately
  */
 
-import { broadcast } from "./event-broadcaster.js"
-import { RunPriority } from "./enums/queue.js"
 import { EventType } from "@mia/agent"
+import { RunPriority } from "./enums/queue.js"
+import { broadcast } from "./event-broadcaster.js"
 
 // ── Types ────────────────────────────────────────────────────────
 

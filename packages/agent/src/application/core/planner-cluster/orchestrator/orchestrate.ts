@@ -7,14 +7,14 @@ import { PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } fro
  * @module
  */
 
-import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../../../../delegation/index.js"
-import { verify } from "../../../../planner/verifier/index.js"
+import { buildEscalationInput, resolveEscalation, type EscalationDecision } from "../../../shell/delegation.js"
 import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import type { DelegateFn } from "../pipeline/index.js"
 import { executePipeline } from "../pipeline/index.js"
 import type { PipelineResult, RepairPlan, VerifierDecision } from "../types.js"
 import { buildIssueIdentity, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility } from "../verification-model/index.js"
+import { verify } from "../verifier/index.js"
 import { applyVerificationAcceptanceStates, finalizePlannerRun, tryPlatformUnconfiguredShortCircuit } from "./helpers.js"
 import { checkStubCountRegression } from "./regression.js"
 import { runPlannerSetup } from "./setup.js"

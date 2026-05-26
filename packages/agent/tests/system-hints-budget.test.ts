@@ -3,7 +3,7 @@
  * only the most recent N (default 4).
  */
 import { describe, expect, it } from "vitest"
-import { capRuntimeHints } from "../src/agent/iteration-prepare.js"
+import { capRuntimeHints } from "../src/application/shell/agent-cluster/iteration-prepare.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 import type { Message } from "../src/types.js"
 

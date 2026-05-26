@@ -13,8 +13,8 @@
  * 22-May-2026 fabricated-chart-numbers incident".
  */
 import { describe, expect, it } from "vitest"
-import { anaphoraUngroundedDetector } from "../src/clarify/detectors/anaphora-ungrounded.js"
-import type { ClarifyContext } from "../src/clarify/types.js"
+import { anaphoraUngroundedDetector } from "../src/application/core/clarify-cluster/detectors/anaphora-ungrounded.js"
+import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 import type { TenantConfig } from "../src/tenant/config.js"
 

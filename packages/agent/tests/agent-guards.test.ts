@@ -1,4 +1,4 @@
-import { ToolOutcomeSeverity, ToolControlDirective } from "@mia/agent"
+import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 /**
  * Agent loop guard tests — verify all exit guards fire correctly.
  *
@@ -13,7 +13,7 @@ import { ToolOutcomeSeverity, ToolControlDirective } from "@mia/agent"
  *   8. normal exit when no guards fire
  */
 import { describe, expect, it } from "vitest"
-import { Agent } from "../src/agent/index.js"
+import { Agent } from "../src/application/shell/agent.js"
 import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────

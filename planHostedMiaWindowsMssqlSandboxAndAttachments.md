@@ -54,7 +54,7 @@ Design a hosted-agent mode that can be deployed on Windows, Linux, or macOS whil
    Effort: High. Risk: High.
    Work:
    - Replace the current visitor allowlist in `/Users/abpk470/git/agent001/packages/server/src/tools.ts` with an explicit hosted profile oriented around MSSQL, attachments, and sandbox-local processing.
-   - Extend `/Users/abpk470/git/agent001/packages/agent/src/engine/policy.ts` and `/Users/abpk470/git/agent001/packages/agent/src/governance/govern-tool.ts` to evaluate path-aware, command-aware, role-aware, and environment-aware conditions.
+  - Extend `/Users/abpk470/git/agent001/packages/agent/src/engine/policy.ts` and `/Users/abpk470/git/agent001/packages/agent/src/application/core/governance-cluster/govern-tool.ts` to evaluate path-aware, command-aware, role-aware, and environment-aware conditions.
    - Make shell and filesystem tools reject any operation whose effective path is outside `sandboxRoot`, including symlink and traversal escapes.
    - Introduce explicit MSSQL environment classes such as `dev`, `uat`, and `prod`, with operation classes such as `read`, `metadata_sync_preview`, and `metadata_sync_execute`.
    - Enforce default permissions so UAT and PROD are read-only unless configuration explicitly overrides that behavior.
@@ -236,7 +236,7 @@ Design a hosted-agent mode that can be deployed on Windows, Linux, or macOS whil
 - `/Users/abpk470/git/agent001/packages/server/src/orchestrator/system-messages.ts` — currently exposes runtime/workspace context; must become sandbox-only for hosted mode.
 - `/Users/abpk470/git/agent001/packages/server/src/prompt-builder.ts` — environment/tool/workspace context generation and prompt redaction.
 - `/Users/abpk470/git/agent001/packages/server/src/tools.ts` — current visitor/admin tool filtering and hosted profile entry point.
-- `/Users/abpk470/git/agent001/packages/agent/src/governance/govern-tool.ts` — enforcement wrapper for richer hosted policies.
+- `/Users/abpk470/git/agent001/packages/agent/src/application/core/governance-cluster/govern-tool.ts` — enforcement wrapper for richer hosted policies.
 - `/Users/abpk470/git/agent001/packages/agent/src/engine/policy.ts` — current tool-name-only policy engine that must grow into a selector-based evaluator.
 - `/Users/abpk470/git/agent001/packages/agent/src/tools/filesystem-security.ts` — current boundary checks to strengthen around sandboxRoot.
 - `/Users/abpk470/git/agent001/packages/agent/src/tools/shell.ts` — shell description/contract and hosted-mode capability wording.

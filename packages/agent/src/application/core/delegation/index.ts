@@ -1,1 +1,1 @@
-export * from "../../../delegation/index.js"
+export * from "../../shell/delegation.js"

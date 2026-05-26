@@ -14,11 +14,11 @@
 
 import { describe, expect, it } from "vitest"
 
-import { schemaMatchDetector } from "../../src/clarify/detectors/schema-match.js"
-import { runLlmPlanner, shouldInvokePlanner } from "../../src/clarify/llm-planner.js"
-import type { ClarifyContext } from "../../src/clarify/types.js"
+import { schemaMatchDetector } from "../../src/application/core/clarify-cluster/detectors/schema-match.js"
+import { runLlmPlanner, shouldInvokePlanner } from "../../src/application/core/clarify-cluster/llm-planner.js"
+import type { ClarifyContext } from "../../src/application/core/clarify-cluster/types.js"
+import { DEFAULT_TENANT_CONFIG } from "../../src/application/shell/tenant-config.js"
 import { MessageRole } from "../../src/domain/enums/message.js"
-import { DEFAULT_TENANT_CONFIG } from "../../src/tenant/config.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
 import type { LLMClient, Message } from "../../src/types.js"

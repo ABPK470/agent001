@@ -8,9 +8,9 @@
 
 import { describe, expect, it, vi } from "vitest"
 
-import { parsePlannerResponse, runLlmPlanner, shouldInvokePlanner } from "../../src/clarify/llm-planner.js"
-import type { ClarifyContext, ResolvedClarification } from "../../src/clarify/types.js"
-import { DEFAULT_TENANT_CONFIG } from "../../src/tenant/config.js"
+import { parsePlannerResponse, runLlmPlanner, shouldInvokePlanner } from "../../src/application/core/clarify-cluster/llm-planner.js"
+import type { ClarifyContext, ResolvedClarification } from "../../src/application/core/clarify-cluster/types.js"
+import { DEFAULT_TENANT_CONFIG } from "../../src/application/shell/tenant-config.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
 import type { LLMClient, LLMResponse, Message, Tool } from "../../src/types.js"

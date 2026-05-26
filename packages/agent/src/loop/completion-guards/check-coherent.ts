@@ -10,7 +10,7 @@ import {
     buildCoherentRepairInstructions,
     executePlannerPath,
     summarizeCoherentVerifierDecision,
-} from "../../planner/index.js"
+} from "../../application/core/planner.js"
 import type { CompletionGuardContext, CompletionGuardResult } from "../completion-guards/index.js"
 
 export async function checkCoherentVerification(

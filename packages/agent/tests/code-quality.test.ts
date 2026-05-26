@@ -10,7 +10,7 @@ import {
     detectInconsistentBranches,
     detectPlaceholderPatterns,
     PLACEHOLDER_PATTERNS,
-} from "../src/governance/index.js"
+} from "../src/application/core/governance.js"
 
 // ============================================================================
 // Real stub code samples from agent traces

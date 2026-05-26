@@ -10,7 +10,7 @@ import {
     buildContractSpec,
     getCorrectionGuidance,
     validateDelegatedOutputContract,
-} from "../../../../delegation/index.js"
+} from "../../../shell/delegation.js"
 import type {
     PipelineResult,
     Plan,

@@ -10,7 +10,7 @@
  *   5. Small results are never compacted
  */
 import { describe, expect, it } from "vitest"
-import { compactMessages } from "../src/agent/index.js"
+import { compactMessages } from "../src/application/shell/agent.js"
 import type { Message } from "../src/types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────

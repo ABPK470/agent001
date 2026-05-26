@@ -14,7 +14,7 @@
  *   - row_count = original row count (NOT post-truncation length)
  *   - bytes     = size of the stored result_json string
  *   - truncated = 1 if the writer dropped rows / clipped fields
- * See packages/agent/src/agent/iteration-tool-round.ts for the cap policy.
+ * See packages/agent/src/application/shell/agent-cluster/iteration-tool-round.ts for the cap policy.
  */
 
 import { getDb } from "./connection.js"

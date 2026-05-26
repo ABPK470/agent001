@@ -4,7 +4,7 @@ import { isPlannerRepairCompatibilityMode, PipelineStatus, PlannerRepairCompatib
  * @module
  */
 
-import type { DelegationTrajectoryRecord } from "../../../../delegation/index.js"
+import type { DelegationTrajectoryRecord } from "../../../shell/delegation.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import { synthesizeAnswer } from "../synthesize.js"
 import type { PipelineResult, Plan, VerifierDecision } from "../types.js"

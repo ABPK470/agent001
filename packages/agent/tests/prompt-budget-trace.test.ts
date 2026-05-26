@@ -4,7 +4,7 @@
  * actually constrained the messages (drops or truncations).
  */
 import { describe, expect, it } from "vitest"
-import { prepareIterationContext } from "../src/agent/iteration-prepare.js"
+import { prepareIterationContext } from "../src/application/shell/agent-cluster/iteration-prepare.js"
 import { createAgentLoopState } from "../src/loop/index.js"
 import type { Message } from "../src/types.js"
 

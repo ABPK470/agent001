@@ -1,4 +1,4 @@
-import { Agent } from "../../agent/index.js"
+import { Agent } from "../../application/shell/agent.js"
 import { READ_ONLY_TOOL_NAMES } from "../../domain/agent-constants.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"

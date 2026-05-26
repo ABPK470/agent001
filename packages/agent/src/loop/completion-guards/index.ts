@@ -9,8 +9,8 @@ import { VerifierOutcome } from "../../domain/index.js"
  */
 
 
+import type { PlannerContext, VerifierDecision } from "../../application/core/planner.js"
 import { MessageRole } from "../../domain/enums/message.js"
-import type { PlannerContext, VerifierDecision } from "../../planner/index.js"
 import type { AgentConfig, Message, Tool } from "../../types.js"
 import type { AgentLoopState } from "../state.js"
 import { checkAnswerStability } from "./answer-stability-guard.js"

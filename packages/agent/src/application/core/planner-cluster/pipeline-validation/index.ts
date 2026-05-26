@@ -8,14 +8,14 @@ import { DelegationOutputValidationCode, StepRole, ToolOutcomeSeverity, Verifica
  * @module
  */
 
+import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
     buildContractSpec,
     getCorrectionGuidance,
     specRequiresFileMutationEvidence,
     specRequiresSuccessfulToolEvidence,
     validateDelegatedOutputContract,
-} from "../../../../delegation/index.js"
-import type { ToolCallRecord } from "../../../../recovery/index.js"
+} from "../../../shell/delegation.js"
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../governance.js"
 import type { Tool } from "../../types.js"
 import {

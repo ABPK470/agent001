@@ -9,8 +9,8 @@
  * supplies its own minimal `CatalogGraph` and tenant `routingKeywords`.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { canonicalAmbiguityDetector } from "../src/clarify/detectors/canonical-ambiguity.js"
-import type { ClarifyContext } from "../src/clarify/types.js"
+import { canonicalAmbiguityDetector } from "../src/application/core/clarify-cluster/detectors/canonical-ambiguity.js"
+import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 import { getTenantConfig, resetTenantConfig, setTenantConfig } from "../src/tenant/config.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"

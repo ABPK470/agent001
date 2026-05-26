@@ -3,8 +3,8 @@ export { PipelineBlockCode, PipelineStatus }
 // ============================================================================
 // Pipeline execution types (extracted from types.ts)
 // ============================================================================
-import type { DelegationOutputValidationCode } from "../../../../delegation/index.js"
-import type { ToolCallRecord } from "../../../../recovery/index.js"
+import type { ToolCallRecord } from "../../../../tools/index.js"
+import type { DelegationOutputValidationCode } from "../../../shell/delegation.js"
 
 export type PipelineStepStatus =
   | "pending"

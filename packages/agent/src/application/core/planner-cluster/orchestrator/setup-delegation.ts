@@ -10,8 +10,8 @@ import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
  * @module
  */
 
-import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../../../delegation/decision/index.js"
-import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../../delegation/index.js"
+import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../../shell/delegation-cluster/decision/index.js"
+import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../shell/delegation.js"
 import type { Plan, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"

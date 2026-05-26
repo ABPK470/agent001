@@ -1,4 +1,4 @@
-import type { VerificationAttempt } from "../../planner/index.js"
+import type { VerificationAttempt } from "../../application/core/planner.js"
 import { uniqueStrings } from "../delegate-paths.js"
 
 export interface ChildSpec {
@@ -24,7 +24,7 @@ export function buildVerificationAttempts(toolCalls: readonly { name: string; ar
     }))
 }
 
-export function buildChildExecutionResult(output: string, toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]): import("../../planner/types.js").ChildExecutionResult {
+export function buildChildExecutionResult(output: string, toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]): import("../../application/core/planner.js").ChildExecutionResult {
   const mutatedArtifacts = uniqueStrings(toolCalls
     .filter((call) => !call.isError && (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file"))
     .map((call) => typeof call.args.path === "string" ? call.args.path : "")
