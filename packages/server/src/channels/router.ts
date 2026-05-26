@@ -12,11 +12,12 @@
  * so a user's WhatsApp thread stays linked to their active agent session.
  */
 
-import { randomUUID } from "node:crypto"
+import { EventType } from "@mia/agent"
+import { createHash, randomUUID } from "node:crypto"
+import type { CurrentSession } from "../auth/context.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { MessageQueue } from "./queue.js"
 import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
-import { EventType } from "@mia/agent"
 
 // ── Persistence interface ────────────────────────────────────────
 
@@ -33,7 +34,7 @@ export interface ConversationStore {
 
 export interface RunTrigger {
   /** Start a new agent run with the given goal. Returns the run ID. */
-  startRun(goal: string): string
+  startRun(goal: string, session?: CurrentSession | null): string
 }
 
 // ── Message Router ───────────────────────────────────────────────
@@ -99,7 +100,7 @@ export class MessageRouter {
     }
 
     // Start a new agent run with the user's message
-    const runId = this.runTrigger.startRun(message.text)
+    const runId = this.runTrigger.startRun(message.text, buildChannelSession(message))
 
     // Track run → conversation so sendReply works even if active_run_id
     // is later overwritten by a subsequent inbound message.
@@ -174,4 +175,21 @@ export class MessageRouter {
       connected: true,
     }))
   }
+}
+
+function buildChannelSession(message: InboundMessage): CurrentSession {
+  const continuityId = buildChannelContinuityId(message.channelType, message.senderId)
+  return {
+    sid: continuityId,
+    upn: continuityId,
+    displayName: message.senderName?.trim() || `${message.channelType} user`,
+    isAdmin: false,
+    ip: `${message.channelType}:inbound`,
+    userAgent: `${message.channelType}:channel`,
+  }
+}
+
+function buildChannelContinuityId(channelType: ChannelType, senderId: string): string {
+  const digest = createHash("sha256").update(senderId).digest("hex").slice(0, 24)
+  return `channel:${channelType}:${digest}`
 }

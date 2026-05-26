@@ -23,7 +23,7 @@
  */
 
 import type { DbToolResult } from "../db/tool-results.js"
-import { loadRecentToolResults } from "../db/tool-results.js"
+import { extractToolResultText, isRecallableToolResult, loadRecentToolResults } from "../db/tool-results.js"
 
 /** Tools whose results we surface in <prior_results>. Mirrors the writer. */
 const SURFACED_TOOLS = ["query_mssql", "export_query_to_file"] as const
@@ -52,7 +52,7 @@ export function loadPriorResults(opts: LoadPriorResultsOptions): DbToolResult[] 
     toolNames: SURFACED_TOOLS,
   })
   const excludeRunId = opts.excludeRunId ?? null
-  return rows.filter((r) => r.run_id !== excludeRunId).slice(0, MAX_RESULTS)
+  return rows.filter((r) => r.run_id !== excludeRunId && isRecallableToolResult(r)).slice(0, MAX_RESULTS)
 }
 
 /**
@@ -81,7 +81,7 @@ export function renderPriorResultsBlock(results: readonly DbToolResult[]): strin
     if (r.goal_excerpt) lines.push(`  Goal: ${oneLine(r.goal_excerpt)}`)
     const args = oneLine(r.args_json)
     if (args && args !== "{}") lines.push(`  Args: ${args.slice(0, 240)}`)
-    const text = extractTextFromResultJson(r.result_json)
+    const text = extractToolResultText(r.result_json)
     const clipped = text.length > PER_RESULT_CHARS
       ? text.slice(0, PER_RESULT_CHARS) + "\n    …[clipped — call recall_prior_result for full payload]…"
       : text
@@ -97,12 +97,3 @@ function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim()
 }
 
-function extractTextFromResultJson(json: string): string {
-  try {
-    const parsed = JSON.parse(json) as { text?: unknown }
-    if (typeof parsed.text === "string") return parsed.text
-  } catch {
-    // fall through
-  }
-  return json
-}

@@ -713,6 +713,7 @@ export async function executeRunImpl(
       persistToolResult({
         runId,
         sessionId: activeRun?.sessionId ?? null,
+        upn: activeRun?.ownerUpn ?? null,
         goal,
         iteration: data.iteration,
         toolCallId: data.toolCallId,

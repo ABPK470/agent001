@@ -34,6 +34,12 @@ export interface DbToolResult {
   created_at: string
 }
 
+const NON_RECALLABLE_RESULT_PATTERNS = [
+  /^DENIED:\s*Policy\b/i,
+  /forbidden by governance policy/i,
+  /governance-blocked/i,
+] as const
+
 /** Write one tool-call result. Idempotent on (run_id, tool_call_id). */
 export function saveToolResult(record: Omit<DbToolResult, "id">): void {
   // tool_call_id is provider-issued and unique per call within a run, so
@@ -112,4 +118,24 @@ export function getToolResult(runId: string, toolCallId: string): DbToolResult |
   return (getDb()
     .prepare("SELECT * FROM tool_results WHERE run_id = ? AND tool_call_id = ?")
     .get(runId, toolCallId) as DbToolResult | undefined) ?? null
+}
+
+export function extractToolResultText(json: string): string {
+  try {
+    const parsed = JSON.parse(json) as { text?: unknown }
+    if (typeof parsed.text === "string") return parsed.text
+  } catch {
+    // fall through
+  }
+  return json
+}
+
+export function isRecallableToolText(text: string): boolean {
+  const normalized = text.trim()
+  if (!normalized) return false
+  return !NON_RECALLABLE_RESULT_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+export function isRecallableToolResult(row: Pick<DbToolResult, "result_json">): boolean {
+  return isRecallableToolText(extractToolResultText(row.result_json))
 }

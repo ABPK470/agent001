@@ -14,7 +14,9 @@
  *   - Swallow all errors. A SQLite hiccup must not break a live run.
  */
 
-import { saveToolResult } from "../db/tool-results.js"
+import { isRecallableToolText, saveToolResult } from "../db/tool-results.js"
+import { MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
+import { ingestTurn } from "../memory/ingestion.js"
 
 /**
  * Tools whose results we persist for cross-turn grounding. Keep this list
@@ -39,6 +41,7 @@ const GOAL_EXCERPT_CAP = 240
 export interface PersistToolResultInput {
   runId: string
   sessionId: string | null
+  upn: string | null
   goal: string
   iteration: number
   toolCallId: string
@@ -63,6 +66,7 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
     const storedText = truncated
       ? rawText.slice(0, PERSIST_BYTES_CAP) + "\n\n…[truncated by tool-result persister]…"
       : rawText
+    if (!isRecallableToolText(storedText)) return false
 
     // Best-effort row-count extraction. The text result for query_mssql is a
     // markdown table — counting lines past the header gives a reasonable
@@ -85,12 +89,143 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
       goal_excerpt: input.goal.slice(0, GOAL_EXCERPT_CAP),
       created_at:   new Date().toISOString(),
     })
+    maybePersistReferableArtifact({
+      runId: input.runId,
+      sessionId: input.sessionId,
+      upn: input.upn,
+      goal: input.goal,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      rowCount,
+      text: storedText,
+      isError: input.isError,
+    })
     return true
-  } catch {
+  } catch (err) {
     // Persistence must never crash the run. Failures here are logged by the
     // caller's own try/catch around onToolResult.
+    console.warn("[memory] persistToolResult failed:", err instanceof Error ? err.message : String(err))
     return false
   }
+}
+
+interface ReferableArtifactInput {
+  runId: string
+  sessionId: string | null
+  upn: string | null
+  goal: string
+  toolCallId: string
+  toolName: string
+  rowCount: number | null
+  text: string
+  isError: boolean
+}
+
+function maybePersistReferableArtifact(input: ReferableArtifactInput): void {
+  if (input.isError) return
+  const summary = summarizeReferableArtifact(input)
+  if (!summary) return
+
+  ingestTurn({
+    tier: MemoryTier.Episodic,
+    role: MemoryRole.Summary,
+    content: summary,
+    metadata: {
+      type: "referable_artifact",
+      toolName: input.toolName,
+      toolCallId: input.toolCallId,
+      rowCount: input.rowCount,
+      goal: input.goal,
+    },
+    source: MemorySource.Tool,
+    confidence: 0.82,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    upn: input.upn,
+    minSalience: 0.05,
+  })
+}
+
+function summarizeReferableArtifact(input: ReferableArtifactInput): string | null {
+  const goal = input.goal.trim()
+  if (!goal) return null
+
+  const table = parseMarkdownTable(input.text)
+  if (table) {
+    const headers = table.headers.slice(0, 4)
+    const labelIndex = findReferentColumn(headers)
+    const valueIndex = findMetricColumn(headers)
+    const referents = table.rows
+      .slice(0, 6)
+      .map((row) => {
+        const label = row[labelIndex] ?? row[0] ?? ""
+        const value = valueIndex >= 0 ? row[valueIndex] ?? "" : ""
+        return value ? `${label}=${value}` : label
+      })
+      .filter(Boolean)
+
+    const lines = [
+      `[artifact:data_result] goal=${JSON.stringify(truncateOneLine(goal, 180))}`,
+      `tool=${input.toolName} rows=${input.rowCount ?? table.rows.length} columns=${headers.join(", ")}`,
+    ]
+    if (referents.length > 0) lines.push(`referents: ${referents.join("; ")}`)
+    return lines.join("\n")
+  }
+
+  if (input.toolName === "export_query_to_file") {
+    const oneLine = truncateOneLine(input.text, 240)
+    if (!oneLine) return null
+    return [
+      `[artifact:data_export] goal=${JSON.stringify(truncateOneLine(goal, 180))}`,
+      `tool=${input.toolName} rows=${input.rowCount ?? "unknown"}`,
+      `summary: ${oneLine}`,
+    ].join("\n")
+  }
+
+  return null
+}
+
+function parseMarkdownTable(text: string): { headers: string[]; rows: string[][] } | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("|"))
+
+  if (lines.length < 3) return null
+  const headers = splitMarkdownRow(lines[0] ?? "")
+  const separator = splitMarkdownRow(lines[1] ?? "")
+  if (headers.length === 0 || separator.length === 0) return null
+
+  const rows = lines
+    .slice(2)
+    .map(splitMarkdownRow)
+    .filter((cells) => cells.length > 0)
+
+  if (rows.length === 0) return null
+  return { headers, rows }
+}
+
+function splitMarkdownRow(line: string): string[] {
+  return line
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter((cell) => cell.length > 0)
+}
+
+function findReferentColumn(headers: string[]): number {
+  const idx = headers.findIndex((header) => /product|client|name|entity|label|item/i.test(header))
+  return idx >= 0 ? idx : 0
+}
+
+function findMetricColumn(headers: string[]): number {
+  return headers.findIndex((header) => /revenue|profit|margin|amount|value|count|total|share/i.test(header))
+}
+
+function truncateOneLine(text: string, maxLen: number): string {
+  const flat = text.replace(/\s+/g, " ").trim()
+  return flat.length > maxLen ? flat.slice(0, maxLen) + "…" : flat
 }
 
 function safeStringify(value: unknown): string {

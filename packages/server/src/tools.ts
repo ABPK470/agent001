@@ -61,7 +61,7 @@ import {
     createSyncPreviewTool,
 } from "@mia/sync"
 import { AgentBus, createBusTools } from "./agent-bus.js"
-import { getToolResult, loadRecentToolResults } from "./db/tool-results.js"
+import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./db/tool-results.js"
 import { ingestAgentNote, recordTableVerdict } from "./memory/index.js"
 
 export { thinkTool }
@@ -408,6 +408,9 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           if (payload.runId && payload.toolCallId) {
             const row = getToolResult(payload.runId, payload.toolCallId)
             if (!row) return { ok: false, reason: `no tool result for run=${payload.runId} tool_call=${payload.toolCallId}` }
+            if (!isRecallableToolResult(row)) {
+              return { ok: false, reason: `tool result for run=${payload.runId} tool_call=${payload.toolCallId} is not recallable in this context` }
+            }
             return formatRecall(row, payload.full === true)
           }
           // Path 2: turn-relative lookup. Requires a session.
@@ -423,7 +426,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           })
           // loadRecentToolResults returns newest-first; turn=-1 → rows[0], -2 → rows[1].
           // Exclude the current run so the model never recalls its own in-flight call.
-          const filtered = rows.filter((r) => r.run_id !== ctx.runId)
+          const filtered = rows.filter((r) => r.run_id !== ctx.runId && isRecallableToolResult(r))
           const target = filtered[limit - 1]
           if (!target) {
             return { ok: false, reason: `no prior result at turn=${payload.turn ?? -1}${payload.toolName ? ` for tool ${payload.toolName}` : ""}` }
