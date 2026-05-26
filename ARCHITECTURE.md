@@ -44,14 +44,11 @@ adapters, and registers HTTP routes and orchestrators.
 ## Boot flow
 
 1. Server loads config and database state.
-2. Server builds `AgentHost` via `configureAgent(...)`.
-3. Server wires sync infrastructure with:
-   - `configurePlanStore(...)`
-   - `configureSyncOrchestrator(...)`
-   - `configureSyncEventSink(...)`
-   - `configureSyncRunSink(...)`
-4. Server constructs the run orchestrator and route handlers.
-5. Per request or per run, the server passes the host into the relevant tool or orchestrator path.
+2. Server loads env/file-backed boot data such as MSSQL connection config and sync environments.
+3. Server builds `AgentHost` via `configureAgent(...)`, including MSSQL config, sync sinks, sync environments, registry readers, and browser/shell adapters.
+4. Server finishes side-effectful boot setup such as `configurePlanStore(...)`.
+5. Server constructs the run orchestrator and route handlers.
+6. Per request or per run, the server passes the host into the relevant tool or orchestrator path.
 
 ## Sync architecture
 
@@ -96,9 +93,9 @@ State is not expected to hide behind ambient runtime lookups.
 ## Current caveat
 
 `lint-arch` still reports an existing 60-violation baseline, mostly from older
-agent cluster-door imports and legacy module-level mutable state. Phase 8 did
-not erase that backlog; it promoted the doctrine rules and ensured the sync
-package itself does not add new ambient-state violations.
+agent cluster-door imports and legacy module-level mutable state. The doctrine
+is enforced for new work, but the repo still carries some historical cleanup
+that has not yet been burned down.
 
 ## Reading order
 

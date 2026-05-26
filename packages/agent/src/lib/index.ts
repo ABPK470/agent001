@@ -12,10 +12,9 @@ export { configureAgent, makeRunContext } from "../host/index.js"
 export type {
     AgentHost, AttachmentMetadata,
     AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
-    BrowserContextReader as BrowserContextProvider,
-    CredentialReader as BrowserCredentialProvider,
+    BrowserContextReader as BrowserContextProvider, CredentialReader as BrowserCredentialProvider,
     BrowserGuard,
-    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, MakeRunContextOptions, RunContext, ShellClient
+    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, RunContext, ShellClient
 } from "../host/index.js"
 
 // ── Types & constants ───────────────────────────────────────────────

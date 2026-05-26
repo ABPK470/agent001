@@ -1,4 +1,4 @@
-import { setDefaultMssqlConnection, setMssqlConfig, setMssqlConfigs, setMssqlWriteEnabled, type AgentHost } from "@mia/agent"
+import type { ConfigureMssqlConnection } from "@mia/agent"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
@@ -22,13 +22,17 @@ function readKnowledgeFile(projectRoot: string, filePath: string): string | null
 }
 
 /**
- * Configure MSSQL connections from environment variables.
+ * Load MSSQL connections from environment variables.
  * Supports multi-database mode (MSSQL_DATABASES JSON array) and
  * single-database mode (MSSQL_HOST).
  *
- * @returns Human-readable summary string for logging.
+ * Returns the parsed boot configuration plus a human-readable summary.
  */
-export function setupMssql(host: AgentHost, projectRoot: string): string {
+export function setupMssql(projectRoot: string): {
+  configs: ConfigureMssqlConnection[]
+  defaultConnectionName: string | null
+  summary: string
+} {
   const mssqlDatabasesJson = process.env["MSSQL_DATABASES"]
   if (mssqlDatabasesJson) {
     // ── Multi-database mode ──────────────────────────────────────
@@ -53,9 +57,7 @@ export function setupMssql(host: AgentHost, projectRoot: string): string {
       process.exit(1)
     }
 
-    setMssqlConfigs(
-      host,
-      dbConfigs.map((db) => ({
+    const configs: ConfigureMssqlConnection[] = dbConfigs.map((db) => ({
         name: db.name,
         server: db.host,
         port: db.port ?? 1433,
@@ -69,24 +71,18 @@ export function setupMssql(host: AgentHost, projectRoot: string): string {
         },
         writeEnabled: db.writeEnabled ?? false,
         knowledge: db.knowledgePath ? readKnowledgeFile(projectRoot, db.knowledgePath) : null,
-      })),
-    )
-
-    for (const db of dbConfigs) {
-      if (db.writeEnabled) setMssqlWriteEnabled(host, true, db.name)
-    }
+      }))
 
     // Optional: pin which named connection is the agent's "home" default.
     // Without this the agent falls back to the first entry in the array.
     const defaultConn = process.env["MSSQL_DEFAULT_CONNECTION"]
     if (defaultConn) {
-      setDefaultMssqlConnection(host, defaultConn)
       console.log(`MSSQL default connection: ${defaultConn}`)
     }
 
     const summary = dbConfigs.map((db) => `${db.name}(${db.host}/${db.database ?? "master"})`).join(", ")
     console.log(`MSSQL databases: ${summary}`)
-    return summary
+    return { configs, defaultConnectionName: defaultConn ?? null, summary }
   }
 
   // ── Single-database mode ─────────────────────────────────────
@@ -94,9 +90,8 @@ export function setupMssql(host: AgentHost, projectRoot: string): string {
   if (mssqlServer) {
     const domain = process.env["MSSQL_DOMAIN"]
     const knowledgePath = process.env["MSSQL_KNOWLEDGE_FILE"]
-    setMssqlConfig(
-      host,
-      {
+    const configs: ConfigureMssqlConnection[] = [{
+      name: "default",
         server: mssqlServer,
         port: Number(process.env["MSSQL_PORT"] ?? 1433),
         ...(domain ? { domain } : {}),
@@ -107,20 +102,18 @@ export function setupMssql(host: AgentHost, projectRoot: string): string {
           encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
           trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
         },
-      },
-      "default",
-      knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
-    )
+        writeEnabled: process.env["MSSQL_WRITE_ENABLED"] === "true",
+        knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
+      }]
     if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
-      setMssqlWriteEnabled(host, true)
       const summary = `${mssqlServer} (WRITE mode enabled)`
       console.log(`MSSQL: ${summary}`)
-      return summary
+      return { configs, defaultConnectionName: null, summary }
     }
     const summary = `${mssqlServer} (read-only)`
     console.log(`MSSQL: ${summary}`)
-    return summary
+    return { configs, defaultConnectionName: null, summary }
   }
 
-  return "not configured"
+  return { configs: [], defaultConnectionName: null, summary: "not configured" }
 }

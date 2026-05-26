@@ -42,7 +42,7 @@ import type {
 // ── AgentHost — wired once at boot ───────────────────────────────
 
 export interface MssqlHost {
-  /** Connection registry — mutated by `setMssqlConfig*` setters at boot. */
+  /** Connection registry — populated at boot via `configureAgent(...)`. */
   readonly databases: Map<string, MssqlEntry>
   /** Override which named connection serves `connection: "default"` (mutable container). */
   readonly defaultConnection: { value: string | null }

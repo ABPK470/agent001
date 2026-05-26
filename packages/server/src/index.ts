@@ -29,16 +29,13 @@ import {
     buildCatalog, closeMssqlPool,
     configureAgent,
     getMssqlConfig,
-    setupEnvironments,
+    loadSyncEnvironments,
     type AgentHost,
     type BrowserClient,
     type ShellClient,
 } from "@mia/agent"
 import {
     configurePlanStore,
-    configureSyncEventSink,
-    configureSyncOrchestrator,
-    configureSyncRunSink,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
@@ -121,65 +118,12 @@ async function main() {
   let currentWorkspace = resolveWorkspace()
   const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
 
-  // Shared mssql connection registry: a single Map (+ default-connection
-  // container) owned by the server and threaded into every per-run host
-  // via bootHostDeps. setupMssql populates it; the boot-level host below
-  // and every per-run host built by the orchestrator see the same state.
-  const mssqlDatabases: AgentHost["mssql"]["databases"] = new Map()
-  const mssqlDefaultConnection: AgentHost["mssql"]["defaultConnection"] = { value: null }
-  // Shared catalog registry: same Map threaded into the boot host and every
-  // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
-  const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
-  const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
-  const bootHost: AgentHost = configureAgent({
-    mssqlDatabases,
-    mssqlDefaultConnection,
-    catalogInstances,
-    catalogDefaultCachePath,
-    syncRecipeResolver: createRegistryRecipeResolver(),
-    syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
-  })
-  const mssqlSummary = setupMssql(bootHost, _projectRoot)
-
-  // Bridge agent-side attachment tools to the server's repo + sandbox.
-  // Installed via the AgentHost composition root (see `configureAgent`
-  // call below). The service resolves the active runId / sandboxRoot from
-  // HostedPolicyContext at call time, so a single instance is safe for
-  // every concurrent run.
-
-  // Browse-web persistent-context, credential, and human-handoff backends
-  // are wired exclusively via `configureAgent({ browserContextReader,
-  // browserCredentialReader, browserHandoffStore })` below — the legacy
-  // `setBrowser*Provider` ambient setters were removed in cluster 7.
-
-  // ── ABI sync subsystem ──
-  await setupEnvironments(bootHost, _projectRoot)
-  // Operator overrides on top of JSON config + seed hosted-default and
-  // env-derived policy rules into the DB so the admin UI can show the
-  // full active ruleset (and let admins edit it). Done AFTER
-  // setupEnvironments so derived rules reflect the merged env config.
-  applyEnvOverrides(bootHost)
-  seedDefaultPoliciesIfMissing(bootHost)
-  configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
-  configureSyncOrchestrator(bootHost, _projectRoot)
-  // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
-  // `_default` tenant on first boot (idempotent — files that already
-  // exist as registry rows are skipped).
-  try {
-    const seeded = bootstrapEntityRegistryFromYaml(_projectRoot)
-    if (seeded.imported > 0) {
-      console.log(`[entity-registry] seeded ${seeded.imported} entity definition(s) from deploy/mssql/entities/`)
-    }
-  } catch (e) {
-    console.warn("[entity-registry] bootstrap from deploy/mssql/entities/ failed:", e instanceof Error ? e.message : e)
+  const mssqlSetup = setupMssql(_projectRoot)
+  const syncEnvironments = loadSyncEnvironments(_projectRoot, mssqlSetup.configs)
+  const syncEventSink: AgentHost["sync"]["eventSink"] = (ev) => {
+    broadcast({ type: ev.type, data: ev.data })
   }
-  // Fan sync events out via broadcast(): SSE for live UI, event_log table
-  // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
-  // for the full list of emitted event types.
-  configureSyncEventSink(bootHost, (ev) => broadcast({ type: ev.type, data: ev.data }))
-  // Persist every executeSync() invocation as a SyncRun row in SQLite for
-  // the audit trail / "active syncs" dashboard / drift forensics.
-  configureSyncRunSink(bootHost, {
+  const syncRunSink: AgentHost["sync"]["runSink"] = {
     start: (i) => {
       try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
     },
@@ -197,7 +141,7 @@ async function main() {
           entityDisplayName: plan.entity.displayName,
           source: plan.source,
           target: plan.target,
-          actorUpn: null, // not known here; recordSyncRunStart sets it on execute
+          actorUpn: null,
           previewTotals: plan.totals,
           planJson: JSON.stringify(plan),
         })
@@ -209,8 +153,61 @@ async function main() {
         return json ? JSON.parse(json) : null
       } catch (e) { console.warn("[sync] getSyncRunPlanJson failed:", e); return null }
     },
-  })
+  }
 
+  // Shared catalog registry: same Map threaded into the boot host and every
+  // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
+  const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
+  const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
+  const bootHost: AgentHost = configureAgent({
+    mssqlConfigs: mssqlSetup.configs,
+    mssqlDefaultConnectionName: mssqlSetup.defaultConnectionName,
+    catalogInstances,
+    catalogDefaultCachePath,
+    syncEventSink,
+    syncRunSink,
+    syncEnvironments: syncEnvironments.environments,
+    syncDbProjectRoot: _projectRoot,
+    syncRecipeResolver: createRegistryRecipeResolver(),
+    syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
+  })
+  const mssqlSummary = mssqlSetup.summary
+
+  // Bridge agent-side attachment tools to the server's repo + sandbox.
+  // Installed via the AgentHost composition root (see `configureAgent`
+  // call below). The service resolves the active runId / sandboxRoot from
+  // HostedPolicyContext at call time, so a single instance is safe for
+  // every concurrent run.
+
+  // Browse-web persistent-context, credential, and human-handoff backends
+  // are wired exclusively via `configureAgent({ browserContextReader,
+  // browserCredentialReader, browserHandoffStore })` below — the legacy
+  // `setBrowser*Provider` ambient setters were removed in cluster 7.
+
+  // ── ABI sync subsystem ──
+  if (syncEnvironments.source === "file") {
+    console.log(`ABI environments (from deploy/mssql/sync-environments.json): ${syncEnvironments.summary}`)
+  } else if (syncEnvironments.source === "mssql") {
+    console.log(`ABI environments (auto from MSSQL_DATABASES): ${syncEnvironments.summary}`)
+  }
+  // Operator overrides on top of JSON config + seed hosted-default and
+  // env-derived policy rules into the DB so the admin UI can show the
+  // full active ruleset (and let admins edit it). Done AFTER
+  // boot env loading so derived rules reflect the merged env config.
+  applyEnvOverrides(bootHost)
+  seedDefaultPoliciesIfMissing(bootHost)
+  configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
+  // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
+  // `_default` tenant on first boot (idempotent — files that already
+  // exist as registry rows are skipped).
+  try {
+    const seeded = bootstrapEntityRegistryFromYaml(_projectRoot)
+    if (seeded.imported > 0) {
+      console.log(`[entity-registry] seeded ${seeded.imported} entity definition(s) from deploy/mssql/entities/`)
+    }
+  } catch (e) {
+    console.warn("[entity-registry] bootstrap from deploy/mssql/entities/ failed:", e instanceof Error ? e.message : e)
+  }
   const llm = await buildLlmAndCatalog(bootHost, mssqlSummary)
 
   // ── F1 evidence signer ────────────────────────────────────────
@@ -282,10 +279,10 @@ async function main() {
       shellClient,
       shellSandboxStrict,
       browserCheckClient,
-      mssqlDatabases,
-      mssqlDefaultConnection,
-      catalogInstances,
-      catalogDefaultCachePath,
+      mssqlDatabases: bootHost.mssql.databases,
+      mssqlDefaultConnection: bootHost.mssql.defaultConnection,
+      catalogInstances: bootHost.catalog.instances,
+      catalogDefaultCachePath: bootHost.catalog.defaultCachePath,
       syncState: bootHost.sync,
     },
   })

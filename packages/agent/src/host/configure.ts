@@ -10,7 +10,15 @@
  * sole composition root for the agent.
  */
 
+import type sql from "mssql"
+import type { SyncEnvironment } from "../sync/index.js"
 import type { AgentHost } from "./host.js"
+
+export interface ConfigureMssqlConnection extends sql.config {
+  name: string
+  writeEnabled?: boolean
+  knowledge?: string | null
+}
 
 /**
  * Options passed by the entrypoint. Every field is optional so the
@@ -38,8 +46,10 @@ export interface ConfigureAgentOptions {
   browserCheckClient?: AgentHost["browserCheck"]["client"]
 
   // MSSQL connection registry (shared across all per-run hosts at boot)
+  mssqlConfigs?: ReadonlyArray<ConfigureMssqlConnection>
   mssqlDatabases?: AgentHost["mssql"]["databases"]
   mssqlDefaultConnection?: AgentHost["mssql"]["defaultConnection"]
+  mssqlDefaultConnectionName?: string | null
 
   // Catalog registry (shared across all per-run hosts at boot)
   catalogInstances?: AgentHost["catalog"]["instances"]
@@ -61,6 +71,10 @@ export interface ConfigureAgentOptions {
 
   // Shared sync surface and hosted sync readers
   syncState?: AgentHost["sync"]
+  syncEventSink?: AgentHost["sync"]["eventSink"]
+  syncRunSink?: AgentHost["sync"]["runSink"]
+  syncEnvironments?: ReadonlyArray<SyncEnvironment>
+  syncDbProjectRoot?: string
   syncRecipeResolver?: AgentHost["sync"]["recipeResolver"]
   syncFreezeWindowsReader?: AgentHost["sync"]["freezeWindowsReader"]
 }
@@ -76,22 +90,36 @@ export interface ConfigureAgentOptions {
  */
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()
+  const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
+  const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
   const syncState = options.syncState ?? {
-    eventSink: NOOP_SYNC_EVENT_SINK,
-    runSink: NOOP_SYNC_RUN_SINK,
+    eventSink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK,
+    runSink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK,
     recipes: { bundle: null, loadedFromPath: null },
     recipeResolver: options.syncRecipeResolver ?? null,
     freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER,
-    environments: new Map(),
+    environments: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])),
     plans: { diskRoot: null, memCache: new Map() },
-    dbProjectRoot: null,
+    dbProjectRoot: options.syncDbProjectRoot ?? null,
+  }
+
+  if (options.syncState) {
+    if (options.syncEventSink) syncState.eventSink = options.syncEventSink
+    if (options.syncRunSink) syncState.runSink = options.syncRunSink
+    if (options.syncEnvironments) {
+      syncState.environments.clear()
+      for (const env of options.syncEnvironments) syncState.environments.set(env.name, env)
+    }
+    if (options.syncDbProjectRoot !== undefined) syncState.dbProjectRoot = options.syncDbProjectRoot
+    if (options.syncRecipeResolver !== undefined) syncState.recipeResolver = options.syncRecipeResolver
+    if (options.syncFreezeWindowsReader) syncState.freezeWindowsReader = options.syncFreezeWindowsReader
   }
 
   return Object.freeze<AgentHost>({
     workspaceRoot,
     mssql: Object.freeze({
-      databases: options.mssqlDatabases ?? new Map(),
-      defaultConnection: options.mssqlDefaultConnection ?? { value: null },
+      databases: mssqlDatabases,
+      defaultConnection: mssqlDefaultConnection,
     }),
     filesystem: Object.freeze({
       basePath: options.filesystemBasePath ?? workspaceRoot,
@@ -150,3 +178,32 @@ const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runSink"] = {
 }
 
 const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["freezeWindowsReader"] = () => []
+
+function buildMssqlDatabases(configs: ReadonlyArray<ConfigureMssqlConnection> | undefined): AgentHost["mssql"]["databases"] {
+  const databases = new Map<string, AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never>()
+  for (const config of configs ?? []) {
+    const { name, writeEnabled = false, knowledge = null, ...rest } = config
+    databases.set(name, {
+      config: {
+        ...rest,
+        options: {
+          encrypt: true,
+          trustServerCertificate: true,
+          ...rest.options,
+        },
+        pool: {
+          min: 0,
+          max: 20,
+          idleTimeoutMillis: 30_000,
+          ...(rest.pool ?? {}),
+        },
+        requestTimeout: rest.requestTimeout ?? 120_000,
+        connectionTimeout: rest.connectionTimeout ?? 15_000,
+      },
+      pool: null,
+      writeEnabled,
+      knowledge,
+    })
+  }
+  return databases
+}

@@ -86,6 +86,12 @@ interface SyncEnvironmentsConfigFile {
   environments: Array<Partial<SyncEnvironment> & { name: string }>
 }
 
+export interface LoadSyncEnvironmentsResult {
+  environments: SyncEnvironment[]
+  summary: string
+  source: "file" | "mssql" | "none"
+}
+
 // Environment registry lives on the supplied host.
 
 /** Configure all environments at once. Replaces any prior config. */
@@ -154,20 +160,19 @@ export function withPermissionDefaults(
 
 const DEFAULT_CONFIG_PATH = "deploy/mssql/sync-environments.json"
 
-/**
- * Initialise environments. Reads `deploy/mssql/sync-environments.json` if
- * present; otherwise synthesises one entry per configured MSSQL connection.
- */
-export async function setupEnvironments(host: AgentHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
+export function loadSyncEnvironments(
+  projectRoot: string,
+  connections: ReadonlyArray<{ name: string }>,
+  relPath = DEFAULT_CONFIG_PATH,
+): LoadSyncEnvironmentsResult {
   const configPath = resolve(projectRoot, relPath)
-  let envs: SyncEnvironment[]
 
   if (existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, "utf-8")
       const parsed = JSON.parse(raw) as SyncEnvironmentsConfigFile
       if (parsed.version !== 1) throw new Error(`Unsupported version: ${parsed.version}`)
-      envs = parsed.environments.map((e) => withPermissionDefaults({
+      const environments = parsed.environments.map((e) => withPermissionDefaults({
         name: e.name,
         displayName: e.displayName ?? e.name,
         color: e.color ?? "slate",
@@ -181,30 +186,44 @@ export async function setupEnvironments(host: AgentHost, projectRoot: string, re
         denyDdl: e.denyDdl,
         approvalRequiredOperations: e.approvalRequiredOperations,
       }))
-      replaceEnvironments(host, envs)
-      const summary = envs.map((e) => `${e.name}[${e.role}/${e.defaultAccessMode}]`).join(", ")
-      console.log(`ABI environments (from ${relPath}): ${summary}`)
+      return {
+        environments,
+        summary: environments.map((env) => `${env.name}[${env.role}/${env.defaultAccessMode}]`).join(", "),
+        source: "file",
+      }
     } catch (e) {
       console.error(`Invalid ${relPath}:`, e instanceof Error ? e.message : e)
-      envs = []
-    }
-  } else {
-    // Fallback — one env per configured MSSQL connection, role=both.
-    const FALLBACK_PALETTE = ["blue", "teal", "indigo", "pink", "slate", "cyan"]
-    const conns = getMssqlConfig(host)
-    envs = conns.map((c: { name: string }, i: number) => withPermissionDefaults({
-      name: c.name,
-      displayName: c.name,
-      color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
-      role: EnvRole.Both,
-      ringOrder: i,
-      syncAllowlist: [],
-    }))
-    replaceEnvironments(host, envs)
-    if (envs.length) {
-      console.log(`ABI environments (auto from MSSQL_DATABASES): ${envs.map((e) => `${e.name}[${e.defaultAccessMode}]`).join(", ")}`)
+      return { environments: [], summary: "", source: "none" }
     }
   }
 
-  return envs.map((e) => `${e.name}[${e.role}]`).join(", ")
+  const FALLBACK_PALETTE = ["blue", "teal", "indigo", "pink", "slate", "cyan"]
+  const environments = connections.map((connection, i) => withPermissionDefaults({
+    name: connection.name,
+    displayName: connection.name,
+    color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
+    role: EnvRole.Both,
+    ringOrder: i,
+    syncAllowlist: [],
+  }))
+  return {
+    environments,
+    summary: environments.map((env) => `${env.name}[${env.defaultAccessMode}]`).join(", "),
+    source: environments.length ? "mssql" : "none",
+  }
+}
+
+/**
+ * Initialise environments. Reads `deploy/mssql/sync-environments.json` if
+ * present; otherwise synthesises one entry per configured MSSQL connection.
+ */
+export async function setupEnvironments(host: AgentHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
+  const loaded = loadSyncEnvironments(projectRoot, getMssqlConfig(host), relPath)
+  replaceEnvironments(host, loaded.environments)
+  if (loaded.source === "file") {
+    console.log(`ABI environments (from ${relPath}): ${loaded.summary}`)
+  } else if (loaded.source === "mssql") {
+    console.log(`ABI environments (auto from MSSQL_DATABASES): ${loaded.summary}`)
+  }
+  return loaded.environments.map((env) => `${env.name}[${env.role}]`).join(", ")
 }
