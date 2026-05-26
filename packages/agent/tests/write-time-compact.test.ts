@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { compactAtWriteTime } from "../src/context/context-management/write-time-compact.js"
+import { compactAtWriteTime } from "../src/memory/context-management/write-time-compact.js"
 
 describe("compactAtWriteTime", () => {
   it("returns small results unchanged regardless of tool", () => {

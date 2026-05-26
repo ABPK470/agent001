@@ -15,8 +15,8 @@
 import { describe, expect, it } from "vitest"
 import { anaphoraUngroundedDetector } from "../src/application/core/clarify-cluster/detectors/anaphora-ungrounded.js"
 import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
+import type { TenantConfig } from "../src/application/shell/tenant-config.js"
 import { MessageRole } from "../src/domain/enums/message.js"
-import type { TenantConfig } from "../src/tenant/config.js"
 
 const TENANT: TenantConfig = {
   routingKeywords: { schemas: [], domain: [], sync: [] },

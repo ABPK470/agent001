@@ -4,7 +4,7 @@
  * (unlike system_anchor where only the first instance keeps the tag).
  */
 import { describe, expect, it } from "vitest"
-import { applyPromptBudget, derivePromptBudgetPlan } from "../src/context/index.js"
+import { applyPromptBudget, derivePromptBudgetPlan } from "../src/memory/index.js"
 import type { Message } from "../src/types.js"
 
 function msg(role: Message["role"], content: string, section?: Message["section"]): Message {
@@ -39,7 +39,7 @@ describe("system_law section tier", () => {
   })
 
   it("system_law is not in the droppable sections list", async () => {
-    const { SECTION_BEHAVIOR } = await import("../src/context/prompt-budget-types.js")
+    const { SECTION_BEHAVIOR } = await import("../src/memory/prompt-budget-types.js")
     expect(SECTION_BEHAVIOR["system_law"].dropAllowed).toBe(false)
   })
 })

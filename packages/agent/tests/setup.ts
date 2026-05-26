@@ -5,7 +5,7 @@
  * or apply schema-ranking heuristics.
  */
 import { afterAll, beforeAll } from "vitest"
-import { getTenantConfig, resetTenantConfig, setTenantConfig } from "../src/tenant/config.js"
+import { getTenantConfig, resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
 import { _resetCatalogQueriesCache } from "../src/tools/catalog/queries.js"
 
 beforeAll(() => {

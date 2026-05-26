@@ -9,9 +9,9 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { compactMessages, truncateMessages } from "../src/context/index.js"
-import { estimateTokensFromMessages } from "../src/context/tokens.js"
 import { MessageRole } from "../src/domain/enums/message.js"
+import { compactMessages, truncateMessages } from "../src/memory/index.js"
+import { estimateTokensFromMessages } from "../src/memory/tokens.js"
 import type { Message } from "../src/types.js"
 
 const ENABLED = process.env.MIA_RUN_STRESS === "1"
