@@ -98,6 +98,58 @@ describe("schemaMatchDetector", () => {
     expect(schemaMatchDetector.detect(ctx({ goal: "show me data", catalog: cat }))).toEqual([])
   })
 
+  it("ignores framing words, metric-position nouns, and column-only collisions from broad query requests", () => {
+    const cat = catalogFrom([
+      table("publish", "Revenue", [col("RevenueZARMTD", "decimal"), col("pkProduct", "int")], "VIEW"),
+      table("core", "RevenueRaw", [col("RevenueAmount", "decimal"), col("ProductName", "nvarchar")]),
+      table("dim", "Product", [col("Product", "nvarchar")]),
+      table("archive", "CustomerExperience", [col("Using", "nvarchar"), col("Keep", "nvarchar"), col("DatabaseName", "nvarchar")]),
+    ])
+
+    const findings = schemaMatchDetector.detect(ctx({
+      goal: "Using the database, return a simple ranked table of the top 10 products by revenue. Keep it concise.",
+      catalog: cat,
+    }))
+
+    expect(findings).toEqual([])
+  })
+
+  it("suppresses plural object mentions when the singular qualified object is already explicit", () => {
+    const cat = catalogFrom([
+      table("publish", "Revenue", [col("RevenueZARMTD", "decimal")], "VIEW"),
+      table("dim", "Product", [col("Name", "nvarchar")]),
+      table("archive", "PrimaryBankingProducts", [col("Name", "nvarchar")]),
+      table("archive", "UNOProducts", [col("Name", "nvarchar")]),
+      table("dim", "Calendar", [col("CalendarCode", "nvarchar")]),
+      table("archive", "Calendar", [col("CalendarCode", "nvarchar")]),
+    ])
+
+    const findings = schemaMatchDetector.detect(ctx({
+      goal: "Use publish.Revenue joined to dim.Product and dim.Date. Return a simple ranked table of the top 10 products by RevenueZARMTD for calendar year 2025.",
+      catalog: cat,
+    }))
+
+    expect(findings).toEqual([])
+  })
+
+  it("ignores output nouns like 'names' in an otherwise explicit SQL-shaped request", () => {
+    const cat = catalogFrom([
+      table("publish", "Revenue", [col("RevenueZARMTD", "decimal")], "VIEW"),
+      table("dim", "Product", [col("Name", "nvarchar")]),
+      table("dim", "Date", [col("Year", "int")]),
+      table("archive", "NamesTestLoad", [col("Name", "nvarchar")]),
+      table("archive", "NamesTestLoadSales", [col("Name", "nvarchar")]),
+      table("etl", "ETL0_FileNames", [col("FileName", "nvarchar")]),
+    ])
+
+    const findings = schemaMatchDetector.detect(ctx({
+      goal: "Run a SQL query on dev that returns the top 10 product names by SUM(RevenueZARMTD) for d.Year = 2025 using publish.Revenue joined to dim.Product and dim.Date. Return the result as a compact markdown table.",
+      catalog: cat,
+    }))
+
+    expect(findings).toEqual([])
+  })
+
   // Production regression — 22 May 2026. Goal "use publish.Revenue" fired
   // TWO blocking findings ("publish" matched 1341 catalog objects;
   // "revenue" matched 562) even though the user typed the fully-qualified

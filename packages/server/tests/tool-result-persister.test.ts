@@ -130,6 +130,44 @@ describe("persistToolResult", () => {
     expect(meta["type"]).toBe("referable_artifact")
   })
 
+  it("stores an episodic referable artifact for live query_mssql pipe tables", async () => {
+    const { persistToolResult } = await setupDb()
+
+    persistToolResult({
+      runId: "run-live-shape",
+      sessionId: "sid-live-shape",
+      upn: "pka",
+      goal: "top 10 products by 2025 revenue",
+      iteration: 1,
+      toolCallId: "tc-live-shape",
+      toolName: "query_mssql",
+      args: { query: "SELECT TOP 10 ..." },
+      result: [
+        "(10 rows)",
+        "ProductName | RevenueZARMTD",
+        "------------+--------------",
+        "POS SERVICE FEE INCOME | 187192337716.08",
+        "FX CURRENCY SPOT (ARO) | 60754228106.85",
+        "FINANCIAL SOLUTIONS GROUP | 32242818387.04",
+      ].join("\n"),
+      isError: false,
+    })
+
+    const toolRow = testDb.prepare(
+      "SELECT row_count FROM tool_results WHERE run_id = 'run-live-shape'",
+    ).get() as { row_count: number }
+    expect(toolRow.row_count).toBe(3)
+
+    const artifact = testDb.prepare(
+      `SELECT content FROM memory_entries WHERE run_id = 'run-live-shape' AND json_extract(metadata, '$.type') = 'referable_artifact'`,
+    ).get() as { content: string }
+
+    expect(artifact.content).toContain("[artifact:data_result]")
+    expect(artifact.content).toContain("columns=ProductName, RevenueZARMTD")
+    expect(artifact.content).toContain("POS SERVICE FEE INCOME=187192337716.08")
+    expect(artifact.content).toContain("FINANCIAL SOLUTIONS GROUP=32242818387.04")
+  })
+
   it("does not store a referable artifact for failed tool results", async () => {
     const { persistToolResult } = await setupDb()
 

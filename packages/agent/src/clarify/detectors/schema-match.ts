@@ -9,6 +9,7 @@
 
 import { MessageRole } from "../../domain/enums/message.js"
 import { getTenantConfig } from "../../tenant/config.js"
+import { tokenize } from "../../tools/catalog/helpers.js"
 import type { CatalogGraph } from "../../tools/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
@@ -31,8 +32,15 @@ import { goalTokens } from "./stopwords.js"
  * fires two blocking findings ("publish" → 1341 candidates, "revenue" →
  * 562) even though the user typed the fully-qualified name. The bug
  * surfaced in production on 22 May 2026.
+ *
+ * 1.3.0: object-name scope only — schema-match now ignores collisions that
+ * arise solely from COLUMN tokens in `nameIndex`. Broad request nouns like
+ * "product" / "revenue" often appear across many columns, and blocking on
+ * those prevents the agent from using search_catalog or schema exploration to
+ * resolve the path itself. The detector still blocks on ambiguous schema/table
+ * names, and skips metric-position tokens like "by revenue".
  */
-const VERSION = "1.2.0"
+const VERSION = "1.3.0"
 
 /** Catches `schema.object` references in goal text. Case-insensitive on
  *  the catalog side via `CatalogGraph.getTable`. Underscores and digits
@@ -59,9 +67,16 @@ function disambiguatedTokens(goal: string, catalog: CatalogGraph): Set<string> {
     if (resolved) {
       out.add(schema)
       out.add(object)
+      for (const variant of simplePluralVariants(object)) out.add(variant)
     }
   }
   return out
+}
+
+function simplePluralVariants(token: string): string[] {
+  if (token.endsWith("s")) return [token]
+  if (token.endsWith("y") && token.length > 1) return [`${token.slice(0, -1)}ies`, `${token}s`]
+  return [`${token}s`]
 }
 
 /**
@@ -98,6 +113,29 @@ function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][nu
   return false
 }
 
+function objectNameMatches(catalog: CatalogGraph, token: string): Set<string> {
+  const out = new Set<string>()
+  for (const [key, table] of catalog.tables) {
+    if (table.schema.toLowerCase() === token) {
+      out.add(key)
+      continue
+    }
+    const nameTokens = tokenize(table.name)
+    if (nameTokens.includes(token)) out.add(key)
+  }
+  return out
+}
+
+function isMetricContext(goal: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`\\bby\\s+${escaped}\\b`, "i").test(goal)
+}
+
+function isTemporalContext(goal: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`\\b${escaped}\\s+(year|month|quarter|week)\\b`, "i").test(goal)
+}
+
 export const schemaMatchDetector: Detector = {
   id: "schema-match",
   version: VERSION,
@@ -122,9 +160,11 @@ export const schemaMatchDetector: Detector = {
       if (token.length < MIN_TOKEN_LEN) continue
       if (consumed.has(token)) continue
       if (seenTokens.has(token)) continue
+      if (isMetricContext(ctx.goal, token)) continue
+      if (isTemporalContext(ctx.goal, token)) continue
       seenTokens.add(token)
-      const matches = ctx.catalog.nameIndex.get(token)
-      if (!matches || matches.size < 2) continue
+      const matches = objectNameMatches(ctx.catalog, token)
+      if (matches.size < 2) continue
       const candidates = [...matches].sort().slice(0, MAX_CANDIDATES)
       const totalCount = matches.size
       const more = totalCount > candidates.length ? ` (and ${totalCount - candidates.length} more)` : ""

@@ -189,20 +189,25 @@ function parseMarkdownTable(text: string): { headers: string[]; rows: string[][]
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("|"))
+    .filter(Boolean)
 
-  if (lines.length < 3) return null
-  const headers = splitMarkdownRow(lines[0] ?? "")
-  const separator = splitMarkdownRow(lines[1] ?? "")
-  if (headers.length === 0 || separator.length === 0) return null
+  for (let index = 0; index <= lines.length - 3; index += 1) {
+    const headerLine = lines[index] ?? ""
+    const separatorLine = lines[index + 1] ?? ""
+    if (!isPipeTableLine(headerLine) || !isTableSeparatorLine(separatorLine)) continue
 
-  const rows = lines
-    .slice(2)
-    .map(splitMarkdownRow)
-    .filter((cells) => cells.length > 0)
+    const headers = splitMarkdownRow(headerLine)
+    if (headers.length === 0) continue
 
-  if (rows.length === 0) return null
-  return { headers, rows }
+    const rows = takeLeadingPipeTableLines(lines.slice(index + 2))
+      .map(splitMarkdownRow)
+      .filter((cells) => cells.length > 0)
+
+    if (rows.length === 0) continue
+    return { headers, rows }
+  }
+
+  return null
 }
 
 function splitMarkdownRow(line: string): string[] {
@@ -212,6 +217,26 @@ function splitMarkdownRow(line: string): string[] {
     .split("|")
     .map((cell) => cell.trim())
     .filter((cell) => cell.length > 0)
+}
+
+function isPipeTableLine(line: string): boolean {
+  if (!line.includes("|")) return false
+  return splitMarkdownRow(line).length > 0
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed || !trimmed.includes("-")) return false
+  return /^\|?[:\-+\s|]+\|?$/.test(trimmed)
+}
+
+function takeLeadingPipeTableLines(lines: readonly string[]): string[] {
+  const taken: string[] = []
+  for (const line of lines) {
+    if (!isPipeTableLine(line)) break
+    taken.push(line)
+  }
+  return taken
 }
 
 function findReferentColumn(headers: string[]): number {
@@ -249,10 +274,13 @@ function estimateRowCount(toolName: string, text: string): number | null {
   // For query_mssql the text contains a markdown table. Count pipe-delimited
   // data rows (excluding the header + separator). This is a lower-bound but
   // useful for downstream tools.
-  const lines = text.split(/\r?\n/).filter((l) => l.trimStart().startsWith("|"))
-  if (lines.length >= 3) {
-    // First two lines are header + separator (---).
-    return Math.max(0, lines.length - 2)
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  for (let index = 0; index <= lines.length - 3; index += 1) {
+    if (!isPipeTableLine(lines[index] ?? "") || !isTableSeparatorLine(lines[index + 1] ?? "")) continue
+    return takeLeadingPipeTableLines(lines.slice(index + 2)).length
   }
   return null
 }

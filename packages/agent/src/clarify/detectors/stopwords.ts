@@ -26,9 +26,10 @@ export const STOPWORDS: ReadonlySet<string> = new Set([
   // agent-conversation framing
   "show", "give", "tell", "find", "list", "get", "fetch", "return", "display",
   "please", "thanks", "thank", "hi", "hello", "hey", "ok",
+  "use", "using", "keep",
   "want", "need", "like", "see", "know", "let", "make",
-  "rows", "row", "data", "table", "column", "value", "values",
-  "result", "results", "report", "query", "queries",
+  "rows", "row", "data", "table", "column", "value", "values", "name", "names",
+  "result", "results", "report", "query", "queries", "database",
   // numerals & quantifiers
   "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
   "first", "second", "third", "last", "next", "previous", "current",
@@ -36,6 +37,7 @@ export const STOPWORDS: ReadonlySet<string> = new Set([
   "more", "less", "much", "many", "few", "several", "both", "either", "neither",
   // common adjectives that are not business terms
   "new", "old", "good", "bad", "high", "low", "big", "small", "long", "short",
+  "simple", "concise",
   "open", "closed", "active", "inactive", "real", "true", "false",
   // misc
   "now", "today", "yesterday", "tomorrow", "soon", "later", "ago",
