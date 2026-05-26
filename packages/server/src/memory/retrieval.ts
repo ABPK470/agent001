@@ -1,5 +1,5 @@
 import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { MemoryRole, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { searchProcedures } from "./procedural.js"

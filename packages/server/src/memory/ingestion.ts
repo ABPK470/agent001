@@ -1,6 +1,6 @@
 import { EventType, getCatalogSchemaFingerprint, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { stampProvenance } from "./provenance.js"

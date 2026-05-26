@@ -16,7 +16,7 @@
  */
 import { setTenantConfig } from "@mia/agent"
 import { beforeAll, beforeEach } from "vitest"
-import { _resetDecideSectionsCache } from "../src/orchestrator/decide-sections.ts"
+import { _resetDecideSectionsCache } from "../src/application/core/decide-sections.ts"
 
 beforeAll(() => {
   setTenantConfig({

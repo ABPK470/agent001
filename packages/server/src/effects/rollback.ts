@@ -1,7 +1,7 @@
 import { EventType } from "@mia/agent"
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { RollbackActionType } from "../enums/effects.js"
 import { broadcast } from "../event-broadcaster.js"
 import { getRunEffects } from "./queries.js"

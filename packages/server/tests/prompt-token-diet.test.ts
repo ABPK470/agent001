@@ -15,8 +15,8 @@
 import type { AgentHost, Tool } from "@mia/agent"
 import { configureAgent, resetTenantConfig, setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/orchestrator/decide-sections.js"
-import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
+import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/application/core/decide-sections.js"
+import { buildSystemMessages } from "../src/application/core/system-messages.js"
 import { buildToolContext } from "../src/prompt-builder.js"
 import type { RunWorkspaceContext } from "../src/run-workspace.js"
 

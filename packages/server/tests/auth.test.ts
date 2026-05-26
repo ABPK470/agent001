@@ -30,7 +30,7 @@ const ORIGINAL_SECRET  = process.env["MIA_SESSION_SECRET"]
 async function buildApp(): Promise<FastifyInstance> {
   const { _setDb, _migrate } = await import("../src/db/index.js")
   const { registerIdentity }   = await import("../src/auth/identity.js")
-  const { registerAuthRoutes } = await import("../src/routes/auth.js")
+  const { registerAuthRoutes } = await import("../src/api/auth.js")
   const { registerLocalUser }  = await import("../src/auth/users.js")
   _setDb(testDb)
   _migrate(testDb)

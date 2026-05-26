@@ -26,7 +26,7 @@ const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
   const { _setDb, _migrate } = await import("../src/db/index.js")
-  const { registerLayoutRoutes } = await import("../src/routes/layouts.js")
+  const { registerLayoutRoutes } = await import("../src/api/layouts.js")
   _setDb(testDb)
   _migrate(testDb)
 

@@ -1,9 +1,9 @@
-import { getDb } from "../db/index.js"
+import { EventType } from "@mia/agent"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { MemoryRole, MemorySource, MemoryTier } from "../enums/memory.js"
 import { broadcast } from "../event-broadcaster.js"
 import { ingestTurn } from "./ingestion.js"
 import { DEDUP_JACCARD_THRESHOLD, jaccardSimilarity, tokenize, truncateAtBoundary } from "./scoring.js"
-import { EventType } from "@mia/agent"
 
 // ── Consolidation pipeline (agenc-core pattern) ─────────────────
 //

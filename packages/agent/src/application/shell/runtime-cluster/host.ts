@@ -25,7 +25,6 @@ import type {
     SyncRecipeBundle,
     SyncRunSink,
 } from "@mia/sync"
-import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
 import type {
     AttachmentStore,
     BrowserClient,
@@ -37,7 +36,8 @@ import type {
     TableVerdictsReader,
     ToolKnowledgeStore,
     UserInputReader,
-} from "./ports.js"
+} from "../../../ports/ports.js"
+import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────
 

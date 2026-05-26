@@ -2,11 +2,6 @@
  * HTTP transport door for server route registration.
  */
 
-export * from "../routes/llm.js"
-export * from "../routes/metrics.js"
-export * from "../routes/profile.js"
-export * from "../routes/tool-cache.js"
-export * from "../routes/usage.js"
 export * from "./admin.js"
 export * from "./agents.js"
 export * from "./approvals.js"

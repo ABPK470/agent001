@@ -10,7 +10,7 @@
  * Freshness = catalog fingerprint match AND age < TTL(tool, mode).
  */
 
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 export type CachedTool = "profile_data" | "inspect_definition" | "discover_relationships" | "explore_mssql_schema"
 

@@ -14,7 +14,7 @@ function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
 }
 
 async function buildApp(session: CurrentSession | null) {
-  const { registerRunRoutes } = await import("../src/routes/runs.js")
+  const { registerRunRoutes } = await import("../src/api/runs.js")
   const startRun = vi.fn(() => "run-123")
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {

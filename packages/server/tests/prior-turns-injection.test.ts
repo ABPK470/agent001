@@ -13,9 +13,9 @@
 import type { Tool } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import { buildSystemMessages } from "../src/application/core/system-messages.js"
 import { ClarificationsRegistry } from "../src/orchestrator/clarifications-state.js"
 import type { PriorTurn } from "../src/orchestrator/prior-turns.js"
-import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
 import type { RunWorkspaceContext } from "../src/run-workspace.js"
 
 const RW: RunWorkspaceContext = {

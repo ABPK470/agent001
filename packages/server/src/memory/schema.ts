@@ -1,5 +1,5 @@
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { migrateSessionFkSetNull } from "../db/connection.js"
-import { getDb } from "../db/index.js"
 import type { MemoryEntry, MemoryRole, MemorySource, MemoryTier } from "./types.js"
 
 // ── Schema migration ─────────────────────────────────────────────
