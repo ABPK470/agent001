@@ -48,24 +48,7 @@ import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/per
 import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
-import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
-import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import {
-    MessageQueue,
-    MessageRouter,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    TeamsChannel,
-    listChannelConfigs,
-    migrateChannels,
-} from "./channels/index.js"
-import { touchSession } from "./db/sessions.js"
-import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
-import { dispatchNotification } from "./notifications/router.js"
-import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
-import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
-import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
-import { registerAuthRoutes } from "./routes/auth.js"
+import { registerAuthRoutes } from "./api/auth.js"
 import {
     registerAdminRoutes,
     registerAgentRoutes,
@@ -93,7 +76,24 @@ import {
     registerToolCacheRoutes,
     registerUsageRoutes,
     registerWebhookRoutes,
-} from "./routes/index.js"
+} from "./api/http-routes.js"
+import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
+import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
+import {
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
+} from "./channels/index.js"
+import { touchSession } from "./db/sessions.js"
+import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
+import { dispatchNotification } from "./notifications/router.js"
+import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
+import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
+import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
 import { getRunProfile } from "./run-workspace.js"
 import { setupMssql } from "./setup-mssql.js"
 import { bootstrapEntityRegistryFromYaml } from "./sync/entity-bootstrap.js"

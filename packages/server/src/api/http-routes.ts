@@ -1,0 +1,31 @@
+/**
+ * HTTP transport door for server route registration.
+ */
+
+export * from "../routes/admin.js"
+export * from "../routes/agents.js"
+export * from "../routes/approvals.js"
+export * from "../routes/attachments.js"
+export * from "../routes/browser.js"
+export * from "../routes/entity-registry.js"
+export * from "../routes/events.js"
+export * from "../routes/evidence.js"
+export * from "../routes/freeze-windows.js"
+export * from "../routes/layouts.js"
+export * from "../routes/llm.js"
+export * from "../routes/memory.js"
+export * from "../routes/metrics.js"
+export * from "../routes/mymi.js"
+export * from "../routes/notification-routes.js"
+export * from "../routes/notifications.js"
+export * from "../routes/operations.js"
+export * from "../routes/policies.js"
+export * from "../routes/profile.js"
+export * from "../routes/proposer.js"
+export * from "../routes/runs.js"
+export * from "../routes/sync-environments.js"
+export * from "../routes/sync.js"
+export * from "../routes/tool-cache.js"
+export * from "../routes/usage.js"
+export * from "../routes/webhooks.js"
+
