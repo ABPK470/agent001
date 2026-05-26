@@ -114,7 +114,7 @@ export async function runLlmPlanner(
   if (!raw) return []
   const parsed = parsePlannerResponse(raw)
   if (!parsed) return []
-  return parsed.slice(0, maxFindings)
+  return filterPlannerFindings(ctx, parsed).slice(0, maxFindings)
 }
 
 // ── Prompt construction ──────────────────────────────────────────
@@ -157,6 +157,12 @@ function buildSystemPrompt(): string {
     "    has no plausible catalog match.",
     "  • Use kind=\"schema-match\" with severity=\"block\" when a word plausibly",
     "    matches two or more catalog identifiers.",
+    "  • Do NOT ask the user to confirm schema-qualified objects that already",
+    "    appear in the goal and are present in the catalog sample.",
+    "  • Do NOT emit metric-undefined when the goal already names an exact",
+    "    numeric column or an aggregate over that exact column.",
+    "  • Do NOT emit output-format when the goal already asks for a table,",
+    "    chart, list, csv, json, markdown, or other explicit delivery format.",
   ].join("\n")
 }
 
@@ -204,6 +210,96 @@ function renderConversationPreamble(messages: readonly Message[]): string {
     used += line.length
   }
   return lines.length > 1 ? lines.join("\n") : ""
+}
+
+const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/g
+const EXPLICIT_FORMAT_HINT_RE = /\b(table|chart|graph|bar|line|pie|scatter|histogram|csv|json|list|paragraph|narrative|markdown|spreadsheet|excel|dashboard|export)\b/i
+const TEMPORAL_OBJECT_RE = /\b(date|calendar|time|month|quarter|week|year|day)\b/i
+const NUMERIC_TYPE_HINTS = [
+  "decimal", "numeric", "money", "smallmoney",
+  "float", "real",
+  "int", "bigint", "smallint", "tinyint",
+] as const
+
+function filterPlannerFindings(
+  ctx: ClarifyContext,
+  findings: readonly AmbiguityFinding[],
+): AmbiguityFinding[] {
+  return findings.filter((finding) => !isResolvedByGroundedGoal(ctx, finding))
+}
+
+function isResolvedByGroundedGoal(
+  ctx: ClarifyContext,
+  finding: AmbiguityFinding,
+): boolean {
+  switch (finding.kind) {
+    case "schema-match":
+    case "term-undefined":
+      return isResolvedObjectConfirmation(ctx, finding)
+    case "metric-undefined":
+      return isResolvedMetricConfirmation(ctx, finding)
+    case "grain-undefined":
+      return hasSingleExplicitRowGrain(ctx)
+    case "output-format":
+      return hasExplicitFormatHint(ctx.goal)
+    default:
+      return false
+  }
+}
+
+function isResolvedObjectConfirmation(
+  ctx: ClarifyContext,
+  finding: AmbiguityFinding,
+): boolean {
+  if (!ctx.catalog) return false
+  const relevantText = `${finding.subject}\n${finding.suggestedQuestion}`
+  const qualified = extractQualifiedNames(relevantText)
+  const fallbackQualified = qualified.length > 0 ? qualified : extractQualifiedNames(ctx.goal)
+  const resolved = fallbackQualified.filter((name) => ctx.catalog?.getTable(name))
+  if (resolved.length === 0) return false
+  return resolved.length === fallbackQualified.length
+}
+
+function isResolvedMetricConfirmation(
+  ctx: ClarifyContext,
+  finding: AmbiguityFinding,
+): boolean {
+  if (!ctx.catalog) return false
+  const subject = finding.subject.trim().toLowerCase()
+  if (!subject) return false
+  const tables = ctx.catalog.columnIndex.get(subject)
+  if (!tables || tables.size === 0) return false
+  for (const tableKey of tables) {
+    const table = ctx.catalog.tables.get(tableKey)
+    const column = table?.columns.find((col) => col.name.toLowerCase() === subject)
+    if (!column) continue
+    if (NUMERIC_TYPE_HINTS.some((hint) => column.dataType.toLowerCase().includes(hint))) return true
+  }
+  return false
+}
+
+function hasExplicitFormatHint(goal: string): boolean {
+  return EXPLICIT_FORMAT_HINT_RE.test(goal)
+}
+
+function hasSingleExplicitRowGrain(ctx: ClarifyContext): boolean {
+  if (!ctx.catalog) return false
+  const resolvedTables = extractQualifiedNames(ctx.goal)
+    .map((name) => ctx.catalog?.getTable(name))
+    .filter((table): table is NonNullable<typeof table> => Boolean(table))
+
+  const rowGrainCandidates = resolvedTables.filter((table) => {
+    if (table.type === "VIEW") return false
+    return !TEMPORAL_OBJECT_RE.test(table.name)
+  })
+
+  return rowGrainCandidates.length === 1
+}
+
+function extractQualifiedNames(text: string): string[] {
+  const out = new Set<string>()
+  for (const match of text.matchAll(QUALIFIED_NAME_RE)) out.add(match[0])
+  return [...out]
 }
 
 // ── Response parsing ─────────────────────────────────────────────
