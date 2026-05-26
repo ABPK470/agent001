@@ -17,7 +17,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 
 /**
  * Identifier for a sync entity. Originally a closed string union

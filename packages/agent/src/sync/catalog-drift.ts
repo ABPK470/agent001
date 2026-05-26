@@ -11,7 +11,7 @@
  * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 import { getPool } from "../tools/index.js"
 
 export interface CatalogDriftResult {

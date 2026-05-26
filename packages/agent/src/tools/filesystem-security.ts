@@ -15,7 +15,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../domain/index.js"
 
 import { lstat, realpath } from "node:fs/promises"
 import { resolve, sep } from "node:path"
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 import type { ToolResultEnvelope } from "../types.js"
 
 export function buildToolOutcome(

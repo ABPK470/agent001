@@ -13,8 +13,8 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { AgentHost } from "../application/shell/runtime.js"
 import { SyncPlanChangeType } from "../domain/enums/sync.js"
-import type { AgentHost } from "../host/index.js"
 import type { EntityType } from "./recipes.js"
 
 export interface SyncPlanTableCounts {

@@ -16,12 +16,12 @@
  *   - agent-loop-state.ts — mutable state for the tool loop
  */
 
+import { attemptPlannerRouting } from "../application/core/planner-routing.js"
+import type { PlannerContext, VerifierDecision } from "../application/core/planner.js"
+import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "../application/shell/loop.js"
 import { LLMCallPhase } from "../domain/enums/llm.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
-import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "../loop/index.js"
-import { attemptPlannerRouting } from "../planner-routing/index.js"
-import type { PlannerContext, VerifierDecision } from "../planner/index.js"
 import type { ToolCallRecord } from "../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent-helpers.js"
@@ -29,7 +29,7 @@ import { prepareIterationContext } from "./iteration-prepare.js"
 import { executeToolCallsBranch } from "./iteration-tool-round.js"
 
 // Re-export compactMessages for tests (context-compaction.test.ts)
-export { compactMessages } from "../context/index.js"
+export { compactMessages } from "../memory/index.js"
 
 export class Agent {
   private readonly llm: LLMClient

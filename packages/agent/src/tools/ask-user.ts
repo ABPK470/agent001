@@ -9,7 +9,7 @@
  * injected by the orchestrator at runtime. The tool itself is a thin shell.
  */
 
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 import type { Tool } from "../types.js"
 
 /**

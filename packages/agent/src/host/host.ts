@@ -24,7 +24,7 @@ import type {
     SyncPlan,
     SyncRecipeBundle,
     SyncRunSink,
-} from "../sync/index.js"
+} from "@mia/sync"
 import type { BrowserSession, CatalogGraph } from "../tools/index.js"
 import type {
     AttachmentStore,

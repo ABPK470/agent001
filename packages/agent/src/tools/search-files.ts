@@ -12,7 +12,7 @@
 
 import { readdir, readFile, stat } from "node:fs/promises"
 import { basename, extname, resolve } from "node:path"
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 import type { Tool } from "../types.js"
 
 // ── Configuration ────────────────────────────────────────────────

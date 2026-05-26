@@ -5,10 +5,10 @@
  * @module
  */
 
-import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, truncateMessages } from "../context/index.js"
+import type { AgentLoopState } from "../application/shell/loop.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
-import type { AgentLoopState } from "../loop/index.js"
+import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, truncateMessages } from "../memory/index.js"
 import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../tools/index.js"
 import type { AgentConfig, Message, Tool } from "../types.js"
 

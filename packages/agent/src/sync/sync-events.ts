@@ -22,9 +22,9 @@
  * would create a cycle), so the server injects the sink at startup.
  */
 
+import type { AgentHost } from "../application/shell/runtime.js"
 import { EventType } from "../domain/enums/event.js"
 import { SyncOperationType } from "../domain/enums/sync.js"
-import type { AgentHost } from "../host/index.js"
 
 export type SyncEvent = { type: EventType; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void

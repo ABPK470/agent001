@@ -7,10 +7,10 @@ import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "
  * remediation, and verification-driven fallback routing.
  */
 
+import type { PlannerContext, VerifierDecision } from "../application/core/planner.js"
+import { assessPlannerDecision, executePlannerPath } from "../application/core/planner.js"
+import type { AgentLoopState } from "../application/shell/loop.js"
 import * as log from "../logger.js"
-import type { AgentLoopState } from "../loop/index.js"
-import type { PlannerContext, VerifierDecision } from "../planner/index.js"
-import { assessPlannerDecision, executePlannerPath } from "../planner/index.js"
 import type { ToolCallRecord } from "../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 import { attemptCoherentGeneration } from "./coherent-generation.js"

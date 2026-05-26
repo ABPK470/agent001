@@ -10,8 +10,8 @@
  * sole composition root for the agent.
  */
 
+import type { SyncEnvironment } from "@mia/sync"
 import type sql from "mssql"
-import type { SyncEnvironment } from "../sync/index.js"
 import type { AgentHost } from "./host.js"
 
 export interface ConfigureMssqlConnection extends sql.config {

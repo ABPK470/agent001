@@ -10,7 +10,8 @@
  * See /memories/repo/tool-knowledge-cache.md.
  */
 
-import type { AgentHost, ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
+import type { ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../ports/index.js"
 import { getCatalog } from "./catalog/store.js"
 
 function fnv1a32(s: string): string {

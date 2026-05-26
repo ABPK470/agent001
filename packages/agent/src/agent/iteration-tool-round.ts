@@ -5,10 +5,10 @@
  * @module
  */
 
+import type { AgentLoopState } from "../application/shell/loop.js"
+import { executeToolRound, processPostRound, type PostRoundContext, type ToolExecContext } from "../application/shell/loop.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
-import type { AgentLoopState } from "../loop/index.js"
-import { executeToolRound, processPostRound, type PostRoundContext, type ToolExecContext } from "../loop/index.js"
 import type { ToolCallRecord } from "../tools/index.js"
 import type { Message, Tool } from "../types.js"
 

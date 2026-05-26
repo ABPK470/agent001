@@ -13,7 +13,8 @@
  * there is no ambient/`getActiveAgentHost()` access here.
  */
 
-import { type AgentHost, type AttachmentStore } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
+import type { AttachmentStore } from "../ports/index.js"
 import type { Tool } from "../types.js"
 
 function requireServiceFromHost(host: AgentHost): AttachmentStore {

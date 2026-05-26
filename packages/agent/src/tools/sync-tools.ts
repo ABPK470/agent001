@@ -6,9 +6,9 @@
  *   sync_execute     : execute a previously-computed plan with safety rails
  */
 
-import type { AgentHost } from "../host/index.js"
-import type { EntityType } from "../sync/index.js"
-import { executeSync, getEnvironments, loadPlan, previewSync } from "../sync/index.js"
+import type { EntityType } from "@mia/sync"
+import { executeSync, getEnvironments, loadPlan, previewSync } from "@mia/sync"
+import type { AgentHost } from "../application/shell/runtime.js"
 import type { Tool } from "../types.js"
 import { getPool } from "./mssql/index.js"
 

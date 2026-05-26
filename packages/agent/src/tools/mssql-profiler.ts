@@ -7,7 +7,7 @@
  */
 
 import sql from "mssql"
-import type { AgentHost, RunContext } from "../host/index.js"
+import type { AgentHost, RunContext } from "../application/shell/runtime.js"
 import { getTenantConfig } from "../tenant/config.js"
 import type { Tool } from "../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"

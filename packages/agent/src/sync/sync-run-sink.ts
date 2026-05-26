@@ -6,8 +6,8 @@
  * startup. Keeps the agent package free of server-side deps.
  */
 
+import type { AgentHost } from "../application/shell/runtime.js"
 import { SyncRunStatus } from "../domain/index.js"
-import type { AgentHost } from "../host/index.js"
 import type { SyncPlan } from "./plan-store.js"
 
 export interface SyncRunStartInput {

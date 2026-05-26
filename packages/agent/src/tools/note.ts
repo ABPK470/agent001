@@ -144,7 +144,7 @@ export function bindNoteTool(handler: NoteHandler): Tool {
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 
 export function createNoteTool(_host: AgentHost): Tool {
   return {

@@ -13,7 +13,7 @@
  * renderer-compatible payload.
  */
 
-import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../loop/index.js"
+import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../application/shell/loop.js"
 import type { Tool } from "../types.js"
 
 export const getChartSpecsTool: Tool = {

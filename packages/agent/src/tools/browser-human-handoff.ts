@@ -16,7 +16,7 @@ import { HUMAN_HANDOFF_REASON_VALUES, HumanHandoffReason, UserInputStatus } from
  * @module
  */
 
-import type { AgentHost } from "../host/index.js"
+import type { AgentHost } from "../application/shell/runtime.js"
 import type { Tool } from "../types.js"
 import { getSession } from "./browse-web/session.js"
 

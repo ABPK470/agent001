@@ -4,16 +4,16 @@
  * @module
  */
 
-import { truncateMessages } from "../context/index.js"
-import { MessageRole } from "../domain/enums/message.js"
-import { CoherentGenerationTraceKind } from "../domain/enums/planner-trace.js"
-import type { AgentLoopState } from "../loop/index.js"
-import type { VerifierDecision } from "../planner/index.js"
+import type { VerifierDecision } from "../application/core/planner.js"
 import {
     buildCoherentVerificationPipelineResult,
     summarizeCoherentVerifierDecision,
     verify,
-} from "../planner/index.js"
+} from "../application/core/planner.js"
+import type { AgentLoopState } from "../application/shell/loop.js"
+import { MessageRole } from "../domain/enums/message.js"
+import { CoherentGenerationTraceKind } from "../domain/enums/planner-trace.js"
+import { truncateMessages } from "../memory/index.js"
 import type { ToolCallRecord } from "../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../types.js"
 

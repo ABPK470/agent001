@@ -5,8 +5,6 @@ import { CoherentGenerationTraceKind, LLMCallPhase, PlannerTraceKind, VerifierOu
  * @module
  */
 
-import { MessageRole } from "../domain/enums/message.js"
-import type { PlannerRoutingContext } from "../planner-routing/index.js"
 import {
     applyCoherentPromptBudget,
     buildCoherentGenerationMessages,
@@ -15,7 +13,9 @@ import {
     materializeCoherentSolutionBundle,
     parseCoherentSolutionBundle,
     summarizeCoherentVerifierDecision,
-} from "../planner/index.js"
+} from "../application/core/planner.js"
+import { MessageRole } from "../domain/enums/message.js"
+import type { PlannerRoutingContext } from "../planner-routing/index.js"
 import type { Message } from "../types.js"
 
 export async function attemptCoherentGeneration(

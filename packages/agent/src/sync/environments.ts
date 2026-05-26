@@ -15,8 +15,8 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { AgentHost } from "../application/shell/runtime.js"
 import { EnvAccessMode, EnvRole } from "../domain/enums/sync.js"
-import type { AgentHost } from "../host/index.js"
 import { getMssqlConfig } from "../tools/index.js"
 
 export type { EnvAccessMode, EnvRole }

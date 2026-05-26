@@ -5,11 +5,11 @@ import { VerifierOutcome } from "../domain/index.js"
  * @module
  */
 
+import type { PlannerContext, PlannerResult, SubagentTaskStep } from "../application/core/planner.js"
+import { executePlannerPath } from "../application/core/planner.js"
 import { MessageRole } from "../domain/enums/message.js"
 import * as log from "../logger.js"
 import type { PlannerRoutingContext } from "../planner-routing/index.js"
-import type { PlannerContext, PlannerResult, SubagentTaskStep } from "../planner/index.js"
-import { executePlannerPath } from "../planner/index.js"
 
 export async function handleVerificationFailure(
   ctx: PlannerRoutingContext,

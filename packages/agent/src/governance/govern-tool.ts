@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../application/core/recovery.js"
 import {
     type ExecutionRecord,
     PolicyViolationError,
@@ -18,7 +19,6 @@ import {
     stepStarted
 } from "../domain/index.js"
 import type { HostedPolicyContext } from "../domain/policy-context.js"
-import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recovery/index.js"
 import { normalizeToolExecutionOutput } from "../tools/index.js"
 import type { Tool } from "../types.js"
 import { type EngineServices, type RunState, createToolStep } from "./types.js"

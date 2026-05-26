@@ -7,15 +7,15 @@
  */
 
 // ── Core ────────────────────────────────────────────────────────────
-export { Agent } from "../agent/index.js"
-export { configureAgent, makeRunContext } from "../host/index.js"
+export { Agent } from "../application/shell/agent.js"
+export { configureAgent, makeRunContext } from "../application/shell/runtime.js"
 export type {
     AgentHost, AttachmentMetadata,
     AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
     BrowserContextReader as BrowserContextProvider, CredentialReader as BrowserCredentialProvider,
     BrowserGuard,
     HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, RunContext, ShellClient
-} from "../host/index.js"
+} from "../application/shell/runtime.js"
 
 // ── Types & constants ───────────────────────────────────────────────
 export {
@@ -59,10 +59,12 @@ export type {
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
 export * from "@mia/sync"
-export * from "../clarify/index.js"
-export * from "../context/index.js"
-export * from "../delegation/index.js"
-export * from "../doctrine/index.js"
+export * from "../application/core/clarify.js"
+export * from "../application/core/doctrine.js"
+export * from "../application/core/governance.js"
+export * from "../application/core/recovery.js"
+export * from "../application/shell/delegation.js"
+export * from "../application/shell/loop.js"
 export * from "../domain/index.js"
 export {
     DiscoverySource,
@@ -71,10 +73,8 @@ export {
     EnvRole,
     isEnvAccessMode
 } from "../domain/index.js"
-export * from "../governance/index.js"
 export * from "../llm/index.js"
-export * from "../loop/index.js"
-export * from "../recovery/index.js"
+export * from "../memory/index.js"
 export * from "../tools/index.js"
 
 // ── Tenant configuration ────────────────────────────────────────────
@@ -110,4 +110,4 @@ export {
     type InternalFailureHit,
     type PlatformUnconfiguredHit,
     type PolishFailureInput
-} from "../planner/index.js"
+} from "../application/core/planner.js"
