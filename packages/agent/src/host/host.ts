@@ -16,7 +16,15 @@
  * plain readonly records.
  */
 
-import type { SyncEnvironment, SyncEventSink, SyncPlan, SyncRecipeBundle, SyncRunSink } from "../sync/index.js"
+import type {
+    FreezeWindowDefinition,
+    RecipeResolver,
+    SyncEnvironment,
+    SyncEventSink,
+    SyncPlan,
+    SyncRecipeBundle,
+    SyncRunSink,
+} from "../sync/index.js"
 import type { BrowserSession, CatalogGraph } from "../tools/index.js"
 import type {
     AttachmentStore,
@@ -80,14 +88,13 @@ export interface CatalogHost {
   readonly defaultCachePath: { value: string | undefined }
 }
 
-/**
- * Mutable container for sync state. This is the host-owned sync surface.
- * Phase 6 removes the remaining runtime bridge so this becomes the sole owner.
- */
+/** Mutable container for sync state. This is the host-owned sync surface. */
 export interface SyncHost {
   eventSink: SyncEventSink
   runSink: SyncRunSink
   recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
+  recipeResolver: RecipeResolver | null
+  freezeWindowsReader: () => readonly FreezeWindowDefinition[]
   environments: Map<string, SyncEnvironment>
   /** Plan disk root + in-memory cache. Both fields mutable at runtime. */
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }

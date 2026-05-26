@@ -1,8 +1,8 @@
 /**
  * Server-side `RecipeResolver` implementation — bridges the in-DB entity
  * registry into the agent orchestrator without violating the "agent has
- * no runtime IO deps" invariant. Installed once at server startup via
- * {@link installRegistryRecipeResolver}.
+ * no runtime IO deps" invariant. The server wires the returned resolver
+ * into `configureAgent({ syncRecipeResolver })` at boot.
  *
  * On every `previewSync` / `executeSync` call, the orchestrator asks the
  * resolver "do you know about this entity?". This implementation:
@@ -17,7 +17,6 @@
  */
 
 import {
-    installRecipeResolver,
     projectRecipe,
     type RecipeResolver,
 } from "@mia/agent"
@@ -47,6 +46,6 @@ const resolver: RecipeResolver = {
   },
 }
 
-export function installRegistryRecipeResolver(): void {
-  installRecipeResolver(resolver)
+export function createRegistryRecipeResolver(): RecipeResolver {
+  return resolver
 }

@@ -209,6 +209,7 @@ export async function executeRunImpl(
     ...(ctx.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: ctx.bootHostDeps.mssqlDefaultConnection } : {}),
     ...(ctx.bootHostDeps.catalogInstances ? { catalogInstances: ctx.bootHostDeps.catalogInstances } : {}),
     ...(ctx.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: ctx.bootHostDeps.catalogDefaultCachePath } : {}),
+    ...(ctx.bootHostDeps.syncState ? { syncState: ctx.bootHostDeps.syncState } : {}),
     attachments: createServerAttachmentService(() => policyCtx),
     browserContextReader: createServerBrowserContextProvider(activeRun?.ownerUpn ?? null),
     browserCredentialReader: createServerBrowserCredentialProvider(activeRun?.ownerUpn ?? null),

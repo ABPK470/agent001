@@ -58,6 +58,11 @@ export interface ConfigureAgentOptions {
 
   // Tenant identity (server fills this from the active tenant config)
   tenant?: Partial<AgentHost["tenant"]>
+
+  // Shared sync surface and hosted sync readers
+  syncState?: AgentHost["sync"]
+  syncRecipeResolver?: AgentHost["sync"]["recipeResolver"]
+  syncFreezeWindowsReader?: AgentHost["sync"]["freezeWindowsReader"]
 }
 
 /**
@@ -71,6 +76,16 @@ export interface ConfigureAgentOptions {
  */
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()
+  const syncState = options.syncState ?? {
+    eventSink: NOOP_SYNC_EVENT_SINK,
+    runSink: NOOP_SYNC_RUN_SINK,
+    recipes: { bundle: null, loadedFromPath: null },
+    recipeResolver: options.syncRecipeResolver ?? null,
+    freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER,
+    environments: new Map(),
+    plans: { diskRoot: null, memCache: new Map() },
+    dbProjectRoot: null,
+  }
 
   return Object.freeze<AgentHost>({
     workspaceRoot,
@@ -110,14 +125,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       instances: options.catalogInstances ?? new Map(),
       defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined },
     }),
-    sync: {
-      eventSink: NOOP_SYNC_EVENT_SINK,
-      runSink: NOOP_SYNC_RUN_SINK,
-      recipes: { bundle: null, loadedFromPath: null },
-      environments: new Map(),
-      plans: { diskRoot: null, memCache: new Map() },
-      dbProjectRoot: null,
-    },
+    sync: syncState,
     tenant: Object.freeze({
       id: options.tenant?.id ?? null,
       displayName: options.tenant?.displayName ?? null,
@@ -140,3 +148,5 @@ const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runSink"] = {
   start() { /* noop */ },
   finish() { /* noop */ },
 }
+
+const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["freezeWindowsReader"] = () => []

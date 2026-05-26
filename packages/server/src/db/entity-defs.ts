@@ -30,7 +30,6 @@
 import {
     bundledStrategyById,
     diffEntityDefinitions,
-    listFreezeWindows,
     validateEntityDefinition,
     validateScd2Strategy,
     type EntityDefinition,
@@ -149,7 +148,7 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
  * swap `installFreezeWindowRegistry` between cases see the latest set.
  */
 function listFreezeWindowIdsForGate(): Set<string> {
-  return new Set(listFreezeWindows().map((w) => w.id))
+  return new Set(listFreezeWindowsForTenant(DEFAULT_TENANT_ID).map((w) => w.id))
 }
 
 // ── Entity definitions ──────────────────────────────────────────────

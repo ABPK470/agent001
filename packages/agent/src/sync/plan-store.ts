@@ -139,9 +139,8 @@ export interface SyncPlan {
 // ── Store ────────────────────────────────────────────────────────
 
 // In-memory plan cache lives on the host sync state (`host.sync.plans.memCache`).
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape.
+// Per-run hosts can share the same sync state object when they should see the
+// same plan store, disk root, and durable run sink.
 
 const TTL_MS = 24 * 60 * 60 * 1000
 const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000

@@ -1,20 +1,15 @@
 /**
  * Freeze-window persistence (tenant-scoped).
  *
- * The agent owns the in-process evaluator (`evaluateFreezeWindows`) and
- * the registry interface (`installFreezeWindowRegistry`). This module
- * owns the durable backing store and the boot-time bridge that pushes
- * the persisted set into that registry.
+ * The agent reads freeze-window definitions through a host-wired reader.
+ * This module owns the durable backing store and exposes a read helper the
+ * server passes into `configureAgent({ syncFreezeWindowsReader })`.
  *
  * Schema is created in `connection.ts::_migrate`; this file only
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 
-import {
-    DEFAULT_TENANT_ID,
-    installFreezeWindowRegistry,
-    type FreezeWindowDefinition,
-} from "@mia/agent"
+import { DEFAULT_TENANT_ID, type FreezeWindowDefinition } from "@mia/agent"
 import { getDb } from "./connection.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -129,8 +124,6 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
   })
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
-  // Mirror into the in-process evaluator so subsequent sync gates see it.
-  refreshFreezeWindowRegistry()
   return fresh
 }
 
@@ -138,30 +131,28 @@ export function deleteFreezeWindow(tenantId: string, id: string): boolean {
   const info = getDb().prepare(
     `DELETE FROM freeze_windows WHERE tenant_id = ? AND id = ?`,
   ).run(tenantId, id)
-  if (info.changes > 0) refreshFreezeWindowRegistry()
   return info.changes > 0
 }
 
-// ── Registry bridge ─────────────────────────────────────────────
+// ── Host reader bridge ──────────────────────────────────────────
 
 /**
- * Push every persisted freeze window into the agent's in-process
- * registry. Called once at server boot (after `_migrate`) and again
- * on every upsert/delete so the evaluator stays consistent.
+ * Read persisted freeze windows in the agent's `FreezeWindowDefinition`
+ * shape. The server passes this into the host so sync execution evaluates
+ * against live persisted data without any agent-side singleton registry.
  *
  * Today the evaluator is tenant-agnostic (one global registry); we
  * publish the `_default` tenant set since the single-tenant deployment
  * is the only shipping shape. Future multi-tenant work will swap this
  * for a tenant-keyed registry.
  */
-export function refreshFreezeWindowRegistry(): void {
-  const recs = listFreezeWindowsForTenant(DEFAULT_TENANT_ID)
-  const defs: FreezeWindowDefinition[] = recs.map((r) => ({
+export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
+  const recs = listFreezeWindowsForTenant(tenantId)
+  return recs.map((r) => ({
     id:          r.id,
     displayName: r.displayName,
     description: r.description,
     startsAt:    r.startsAt,
     endsAt:      r.endsAt,
   }))
-  installFreezeWindowRegistry(defs)
 }

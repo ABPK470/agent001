@@ -92,6 +92,8 @@ export interface BootHostDeps {
   catalogInstances?: import("@mia/agent").AgentHost["catalog"]["instances"]
   /** Shared catalog default-cachePath ref (mutable container). */
   catalogDefaultCachePath?: import("@mia/agent").AgentHost["catalog"]["defaultCachePath"]
+  /** Shared sync host state (environments, plans, sinks, registry readers). */
+  syncState?: import("@mia/agent").AgentHost["sync"]
   /** Shared toolKnowledge adapter — same instance for boot + per-run hosts. */
   toolKnowledge?: import("@mia/agent").AgentHost["toolKnowledge"]
   /** Shared tableVerdicts adapter — same instance for boot + per-run hosts. */

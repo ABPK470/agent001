@@ -27,9 +27,8 @@ export const PREVIEW_TABLE_CONCURRENCY = Math.max(
 /** Maximum tolerated drift between preview and current source row counts. */
 export const DRIFT_ABORT_PCT = 0.05
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape until this sync state is moved fully behind the host surface.
+// Sync orchestrator configuration lives on `host.sync.dbProjectRoot`; no
+// module-local singleton remains in this helper.
 
 /** Configure the project root used to load sync-recipes.json. */
 export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {

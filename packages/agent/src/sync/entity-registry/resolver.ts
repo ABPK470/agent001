@@ -14,10 +14,11 @@
  *      A non-null response wins.
  *   2. Otherwise (or on null), fall through to the legacy JSON bundle.
  *
- * Tests can install ad-hoc resolvers via {@link installRecipeResolver};
- * production callers install one once at startup and never replace it.
+ * Tests and production callers wire a resolver into the host once via
+ * `configureAgent({ syncRecipeResolver })`; lookup stays explicit.
  */
 
+import type { AgentHost } from "../../host/index.js"
 import type { SyncRecipe } from "../recipes.js"
 
 /**
@@ -48,16 +49,12 @@ export interface RecipeResolver {
   resolve(args: { tenantId: string; entityId: string }): ResolvedRecipe | null
 }
 
-const recipeResolverState = {
-  installed: null as RecipeResolver | null,
+export function installRecipeResolver(host: AgentHost, resolver: RecipeResolver | null): void {
+  host.sync.recipeResolver = resolver
 }
 
-export function installRecipeResolver(r: RecipeResolver | null): void {
-  recipeResolverState.installed = r
-}
-
-export function getRecipeResolver(): RecipeResolver | null {
-  return recipeResolverState.installed
+export function getRecipeResolver(host: AgentHost): RecipeResolver | null {
+  return host.sync.recipeResolver
 }
 
 /**
@@ -65,10 +62,11 @@ export function getRecipeResolver(): RecipeResolver | null {
  * Pure read; orchestrator callers should prefer this over reaching into
  * `installed` directly.
  */
-export function tryResolveRecipe(args: { tenantId: string; entityId: string }): ResolvedRecipe | null {
-  if (!recipeResolverState.installed) return null
+export function tryResolveRecipe(host: AgentHost, args: { tenantId: string; entityId: string }): ResolvedRecipe | null {
+  const resolver = host.sync.recipeResolver
+  if (!resolver) return null
   try {
-    return recipeResolverState.installed.resolve(args)
+    return resolver.resolve(args)
   } catch (e) {
     console.warn("[sync] RecipeResolver threw; falling back to bundled JSON:", e instanceof Error ? e.message : e)
     return null

@@ -351,6 +351,7 @@ export class AgentOrchestrator {
       ...(this.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: this.bootHostDeps.mssqlDefaultConnection } : {}),
       ...(this.bootHostDeps.catalogInstances ? { catalogInstances: this.bootHostDeps.catalogInstances } : {}),
       ...(this.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: this.bootHostDeps.catalogDefaultCachePath } : {}),
+      ...(this.bootHostDeps.syncState ? { syncState: this.bootHostDeps.syncState } : {}),
       workspaceRoot: root,
       filesystemBasePath: root,
       searchFilesBasePath: root,

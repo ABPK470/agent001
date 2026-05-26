@@ -61,6 +61,7 @@ import {
     clearTransactionalData,
     getDb, getDbPath, getDbStats, getLlmConfig,
     getSyncRunPlanJson,
+    listFreezeWindowDefinitionsForTenant,
     migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
     normaliseUnknownRunStatuses,
     pruneOldData,
@@ -109,7 +110,7 @@ import { getRunProfile } from "./run-workspace.js"
 import { initSandbox } from "./sandbox/index.js"
 import { setupMssql } from "./setup-mssql.js"
 import { bootstrapEntityRegistryFromYaml } from "./sync/entity-bootstrap.js"
-import { installRegistryRecipeResolver } from "./sync/registry-resolver.js"
+import { createRegistryRecipeResolver } from "./sync/registry-resolver.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -130,7 +131,14 @@ async function main() {
   // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
   const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
   const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
-  const bootHost: AgentHost = configureAgent({ mssqlDatabases, mssqlDefaultConnection, catalogInstances, catalogDefaultCachePath })
+  const bootHost: AgentHost = configureAgent({
+    mssqlDatabases,
+    mssqlDefaultConnection,
+    catalogInstances,
+    catalogDefaultCachePath,
+    syncRecipeResolver: createRegistryRecipeResolver(),
+    syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
+  })
   const mssqlSummary = setupMssql(bootHost, _projectRoot)
 
   // Bridge agent-side attachment tools to the server's repo + sandbox.
@@ -154,19 +162,6 @@ async function main() {
   seedDefaultPoliciesIfMissing(bootHost)
   configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
   configureSyncOrchestrator(bootHost, _projectRoot)
-  // Bridge the in-DB entity registry into the orchestrator's recipe
-  // lookup path. When an entity has a registry record, the projected
-  // recipe wins over the bundled JSON; on miss, the orchestrator falls
-  // back to the bundle automatically.
-  installRegistryRecipeResolver()
-  // Push persisted freeze windows into the agent's in-process registry
-  // so the sync gate evaluates against the current set. Subsequent
-  // CRUD calls re-publish automatically via db/freeze-windows.ts.
-  try {
-    (await import("./db/freeze-windows.js")).refreshFreezeWindowRegistry()
-  } catch (e) {
-    console.warn("[freeze-windows] initial registry install failed:", e instanceof Error ? e.message : e)
-  }
   // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
   // `_default` tenant on first boot (idempotent — files that already
   // exist as registry rows are skipped).
@@ -291,6 +286,7 @@ async function main() {
       mssqlDefaultConnection,
       catalogInstances,
       catalogDefaultCachePath,
+      syncState: bootHost.sync,
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)

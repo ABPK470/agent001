@@ -101,7 +101,7 @@ export {
 // Freeze windows (governance — referenced from EntityPolicies.freezeWindowIds[])
 export {
     deleteFreezeWindow, FreezeWindowValidationError, getFreezeWindow,
-    listFreezeWindowsForTenant, refreshFreezeWindowRegistry, upsertFreezeWindow,
+    listFreezeWindowDefinitionsForTenant, listFreezeWindowsForTenant, upsertFreezeWindow,
     type FreezeWindowRecord, type UpsertFreezeWindowArgs
 } from "./freeze-windows.js"
 

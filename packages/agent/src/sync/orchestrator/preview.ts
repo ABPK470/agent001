@@ -69,7 +69,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // Lookup order: entity-registry resolver wins; on miss, fall back to
     // the bundled JSON. Both produce the same `SyncRecipe` shape so the
     // downstream code path is identical.
-    const resolved = tryResolveRecipe({ tenantId: "_default", entityId: input.entityType })
+    const resolved = tryResolveRecipe(input.host, { tenantId: "_default", entityId: input.entityType })
     const fullRecipe = resolved?.recipe ?? (() => {
       const bundle = loadSyncRecipes(input.host, projectRoot(input.host))
       return getRecipe(bundle, input.entityType)

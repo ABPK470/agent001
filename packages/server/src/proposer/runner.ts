@@ -124,14 +124,14 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
       const defs = listEntityDefinitions(tenantId, { includeRetired: false })
       const descriptors: EntityDescriptor[] = []
       for (const d of defs) {
-        const resolved = tryResolveRecipe({ tenantId, entityId: d.id })
+        const resolved = tryResolveRecipe(host, { tenantId, entityId: d.id })
         if (!resolved) continue
         descriptors.push({ id: d.id, label: d.displayName ?? d.id, defVersion: d.version })
       }
       return descriptors
     },
     probeCatalogDrift: async (envPair, ent) => {
-      const resolved = tryResolveRecipe({ tenantId, entityId: ent.id })
+      const resolved = tryResolveRecipe(host, { tenantId, entityId: ent.id })
       if (!resolved) return { issues: [] }
       const recipe = resolved.recipe
       const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))

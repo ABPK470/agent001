@@ -73,7 +73,7 @@ export async function runIndependentVerification(
 ): Promise<VerificationReport> {
   const t0 = Date.now()
   const startedAt = new Date(t0).toISOString()
-  const resolved = tryResolveRecipe({ tenantId: i.tenantId, entityId: i.entityType })
+  const resolved = tryResolveRecipe(i.host, { tenantId: i.tenantId, entityId: i.entityType })
   if (!resolved) {
     return baseReport(startedAt, t0, "fail", [`no recipe for entity "${i.entityType}"`])
   }

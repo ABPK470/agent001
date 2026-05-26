@@ -38,7 +38,7 @@ const DEFAULT_SAMPLE_SIZE = 25
 export async function probeRowDivergence(
   i: ProbeRowDivergenceInput,
 ): Promise<readonly DivergentEntityRow[]> {
-  const resolved = tryResolveRecipe({ tenantId: i.tenantId, entityId: i.entityId })
+  const resolved = tryResolveRecipe(i.host, { tenantId: i.tenantId, entityId: i.entityId })
   if (!resolved) return []
   const recipe = resolved.recipe
 

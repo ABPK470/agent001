@@ -29,9 +29,8 @@ import type { AgentHost } from "../host/index.js"
 export type SyncEvent = { type: EventType; data: Record<string, unknown> }
 export type SyncEventSink = (event: SyncEvent) => void
 
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape until this sync state is moved fully behind the host surface.
+// The event sink is stored on `host.sync.eventSink`, so emitting remains
+// explicit and host-scoped even when multiple hosts coexist in one process.
 
 /** Server installs this once at startup (see server/src/index.ts). */
 export function setSyncEventSink(host: AgentHost, sink: SyncEventSink): void {

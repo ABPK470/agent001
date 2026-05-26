@@ -4,7 +4,7 @@
  * Wires together drift re-validation, the in-tx metadata sync
  * (`runMetadataSync`), and the post-tx contract pipeline
  * (`runContractPipeline`). Owns: pre-flight safety rails, run-sink
- * lifecycle, AsyncLocalStorage scope for SQL telemetry, and the
+ * lifecycle, explicit SQL telemetry context threading, and the
  * outer try/catch that translates throws into `sync.execute.failed`
  * events and unlocks the entity.
  *
@@ -74,7 +74,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   // operator can override (audited) via opts.overrideFreezeWindow. When
   // no windows are configured this is a no-op.
   if (plan.entityPolicies && plan.entityPolicies.freezeWindowIds.length > 0) {
-    const ev = evaluateFreezeWindows(plan.entityPolicies.freezeWindowIds)
+    const ev = evaluateFreezeWindows(opts.host, plan.entityPolicies.freezeWindowIds)
     if (ev.active && !opts.overrideFreezeWindow) {
       const names = ev.activeWindows.map((w) => `${w.id} (${w.displayName})`).join(", ")
       throw new Error(

@@ -2,12 +2,13 @@
  * Freeze-window evaluator — Phase 0 of governance integration.
  *
  * A freeze-window id is a tenant-defined token (e.g. `month-end`,
- * `release-week`). The full registry lives elsewhere (Phase 1 territory);
- * Phase 0 evaluates against a static, env-injected map populated by the
- * server at boot. If a freeze window referenced by an entity has no
+ * `release-week`). Definitions are supplied by the host through an explicit
+ * reader. If a freeze window referenced by an entity has no
  * matching definition the evaluator treats it as *inactive* and emits
  * a warning (so a typo doesn't accidentally block all syncs).
  */
+
+import type { AgentHost } from "../../host/index.js"
 
 export interface FreezeWindowDefinition {
   /** Stable id (matches `EntityPolicies.freezeWindowIds[]`). */
@@ -31,28 +32,26 @@ export interface FreezeEvaluation {
   unknownIds: string[]
 }
 
-const freezeWindowState = {
-  installedRegistry: new Map<string, FreezeWindowDefinition>() as ReadonlyMap<string, FreezeWindowDefinition>,
+export function installFreezeWindowRegistry(host: AgentHost, defs: readonly FreezeWindowDefinition[]): void {
+  host.sync.freezeWindowsReader = () => defs
 }
 
-export function installFreezeWindowRegistry(defs: readonly FreezeWindowDefinition[]): void {
-  freezeWindowState.installedRegistry = new Map(defs.map((d) => [d.id, d]))
-}
-
-export function listFreezeWindows(): readonly FreezeWindowDefinition[] {
-  return [...freezeWindowState.installedRegistry.values()]
+export function listFreezeWindows(host: AgentHost): readonly FreezeWindowDefinition[] {
+  return [...host.sync.freezeWindowsReader()]
 }
 
 export function evaluateFreezeWindows(
+  host: AgentHost,
   freezeWindowIds: readonly string[],
   now: Date = new Date(),
 ): FreezeEvaluation {
+  const installedRegistry = new Map(host.sync.freezeWindowsReader().map((d) => [d.id, d] as const))
   const matched: FreezeWindowDefinition[] = []
   const activeWindows: FreezeWindowDefinition[] = []
   const unknownIds: string[] = []
 
   for (const id of freezeWindowIds) {
-    const def = freezeWindowState.installedRegistry.get(id)
+    const def = installedRegistry.get(id)
     if (!def) { unknownIds.push(id); continue }
     matched.push(def)
     const startMs = Date.parse(def.startsAt)
