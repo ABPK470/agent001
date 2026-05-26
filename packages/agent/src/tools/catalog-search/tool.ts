@@ -1,5 +1,5 @@
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
     handleColumn,

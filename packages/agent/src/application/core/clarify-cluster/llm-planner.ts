@@ -16,7 +16,7 @@
 // so unit tests can pass a fake client without spinning up a real model.
 
 import { MessageRole } from "../../../domain/enums/message.js"
-import type { LLMClient, Message } from "../../../types.js"
+import type { LLMClient, Message } from "../../../domain/agent-types.js"
 import type {
     AmbiguityFinding,
     AmbiguityKind,

@@ -11,7 +11,7 @@ import { VerifierOutcome } from "../../../../domain/index.js"
 
 import type { PlannerContext, VerifierDecision } from "../../../core/planner.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
-import type { AgentConfig, Message, Tool } from "../../../../types.js"
+import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 import { checkAnswerStability } from "./answer-stability-guard.js"
 import { checkCoherentVerification } from "./check-coherent.js"

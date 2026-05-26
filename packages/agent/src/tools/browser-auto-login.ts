@@ -20,7 +20,7 @@
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 import { resolveLocator } from "./browse-web/selectors.js"
 import { getKillSignal, getSession, persistSessionState } from "./browse-web/session.js"
 

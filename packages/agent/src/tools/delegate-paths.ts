@@ -8,7 +8,7 @@
  */
 
 import type { ExecutionEnvelope, SubagentTaskStep } from "../application/core/planner.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 const COMPLEX_IMPLEMENTATION_RE = /\b(?:game|rules?|engine|validator|workflow|state machine|parser|compiler|algorithm|reconciliation|move validation|checkmate|castling|en passant|promotion|scheduling|constraint|domain logic|business logic)\b/i
 

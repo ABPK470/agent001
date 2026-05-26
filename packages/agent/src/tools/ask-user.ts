@@ -10,7 +10,7 @@
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 /**
  * Resolver function injected by the orchestrator.

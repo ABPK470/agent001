@@ -17,7 +17,7 @@
  */
 
 import type { TableVerdictRoleType } from "../ports/index.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 export const TABLE_VERDICT_ROLES = [
   "canonical",

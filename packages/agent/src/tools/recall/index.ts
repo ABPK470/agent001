@@ -13,7 +13,7 @@
  * `record_table_verdict`.
  */
 
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 
 /** Payload passed to the bound handler. */
 export interface RecallPriorResultPayload {

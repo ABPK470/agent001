@@ -21,7 +21,7 @@ import { DEFAULT_TENANT_CONFIG } from "../../src/application/shell/tenant-config
 import { MessageRole } from "../../src/domain/enums/message.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
-import type { LLMClient, Message } from "../../src/types.js"
+import type { LLMClient, Message } from "../../src/domain/agent-types.js"
 
 function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, nullable: false, isPK: false, maxLength: null }

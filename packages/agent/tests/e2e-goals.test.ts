@@ -19,7 +19,7 @@ import { Agent } from "../src/application/shell/agent.js"
 import { configureAgent } from "../src/index.js"
 import { normalizeToolExecutionOutput } from "../src/tools/_helpers/index.js"
 import { createListDirectoryTool, createReadFileTool, createWriteFileTool } from "../src/tools/index.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/types.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/agent-types.js"
 
 // ── Helpers ──────────────
 

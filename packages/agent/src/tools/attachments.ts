@@ -15,7 +15,7 @@
 
 import type { AgentHost } from "../application/shell/runtime.js"
 import type { AttachmentStore } from "../ports/index.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 function requireServiceFromHost(host: AgentHost): AttachmentStore {
   if (!host.attachments) {

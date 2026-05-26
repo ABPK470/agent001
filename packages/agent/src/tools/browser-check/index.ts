@@ -17,7 +17,7 @@
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { startStaticServer } from "./static-server.js"
 
 /** Result from a sandboxed browser check. */

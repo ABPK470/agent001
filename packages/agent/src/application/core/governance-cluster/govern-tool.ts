@@ -20,7 +20,7 @@ import {
 } from "../../../domain/index.js"
 import type { HostedPolicyContext } from "../../../domain/policy-context.js"
 import { normalizeToolExecutionOutput } from "../../../tools/index.js"
-import type { Tool } from "../../../types.js"
+import type { Tool } from "../../../domain/agent-types.js"
 import { type EngineServices, type RunState, createToolStep } from "./types.js"
 
 // ── Tool governance options ──────────────────────────────────────

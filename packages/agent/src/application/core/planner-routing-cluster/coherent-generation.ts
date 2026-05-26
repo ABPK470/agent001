@@ -16,7 +16,7 @@ import {
 } from "../planner.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import type { PlannerRoutingContext } from "./index.js"
-import type { Message } from "../../../types.js"
+import type { Message } from "../../../domain/agent-types.js"
 
 export async function attemptCoherentGeneration(
   ctx: PlannerRoutingContext,

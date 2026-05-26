@@ -9,7 +9,7 @@
  * Works with any OpenAI-compatible API (OpenAI, Azure, local vLLM, etc.)
  */
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../domain/agent-types.js"
 import { MessageRole } from "../domain/enums/message.js"
 
 function safeParseArgs(raw: string): Record<string, unknown> {

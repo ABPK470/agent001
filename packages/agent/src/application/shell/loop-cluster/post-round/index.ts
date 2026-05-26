@@ -13,7 +13,7 @@ import {
     evaluateToolRoundBudgetExtension,
     summarizeToolRoundProgress,
 } from "../../../../tools/index.js"
-import type { AgentConfig, Message } from "../../../../types.js"
+import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 

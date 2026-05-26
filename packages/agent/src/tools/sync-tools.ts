@@ -9,7 +9,7 @@
 import type { EntityType } from "@mia/sync"
 import { executeSync, getEnvironments, loadPlan, previewSync } from "@mia/sync"
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 import { getPool } from "./mssql/index.js"
 
 const VALID_ENTITY_TYPES = new Set<EntityType>([

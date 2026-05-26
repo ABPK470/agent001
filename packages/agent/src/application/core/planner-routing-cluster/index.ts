@@ -9,7 +9,7 @@ import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "
 
 import * as log from "../../../internal/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../types.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
 import type { AgentLoopState } from "../../shell/loop.js"
 import type { PlannerContext, VerifierDecision } from "../planner.js"
 import { assessPlannerDecision, executePlannerPath } from "../planner.js"

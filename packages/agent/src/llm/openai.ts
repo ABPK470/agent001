@@ -10,7 +10,7 @@
  */
 
 import { MessageRole } from "../domain/enums/message.js"
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../types.js"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../domain/agent-types.js"
 
 function safeParseArgs(raw: string): Record<string, unknown> {
   try {

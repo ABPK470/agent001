@@ -8,8 +8,8 @@
  */
 
 import { MessageRole } from "../domain/enums/message.js"
-import type { Message, PromptBudgetSection } from "../types.js"
-import { DROP_PRIORITY } from "../types.js"
+import type { Message, PromptBudgetSection } from "../domain/agent-types.js"
+import { DROP_PRIORITY } from "../domain/agent-types.js"
 import { estimateTokens, extractFilePath, MAX_CONTEXT_TOKENS } from "./context-management/index.js"
 import { applyPromptBudget, type PromptBudgetDiagnostics } from "./prompt-budget/index.js"
 

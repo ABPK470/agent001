@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { Message, PromptBudgetSection } from "../../types.js"
+import type { Message, PromptBudgetSection } from "../../domain/agent-types.js"
 import {
     createSectionCapMap,
     estimateMessageChars,

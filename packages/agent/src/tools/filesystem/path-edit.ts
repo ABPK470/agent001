@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../application/core/governance.js"
 import type { AgentHost } from "../../application/shell/runtime.js"
 import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith, safePathWith } from "../filesystem-security.js"
 

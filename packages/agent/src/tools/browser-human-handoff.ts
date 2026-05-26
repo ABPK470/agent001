@@ -17,7 +17,7 @@ import { HUMAN_HANDOFF_REASON_VALUES, HumanHandoffReason, UserInputStatus } from
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 import { getSession } from "./browse-web/session.js"
 
 const BROWSER_HUMAN_HANDOFF_DESCRIPTION =

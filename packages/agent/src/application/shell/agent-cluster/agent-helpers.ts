@@ -8,7 +8,7 @@ import { MessageRole } from "../../../domain/enums/message.js"
 import { CoherentGenerationTraceKind } from "../../../domain/enums/planner-trace.js"
 import { truncateMessages } from "../../../memory/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../types.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
 import type { VerifierDecision } from "../../core/planner.js"
 import {
     buildCoherentVerificationPipelineResult,

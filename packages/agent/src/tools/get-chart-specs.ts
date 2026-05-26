@@ -14,7 +14,7 @@
  */
 
 import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../application/shell/loop.js"
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 export const getChartSpecsTool: Tool = {
   name: "get_chart_specs",

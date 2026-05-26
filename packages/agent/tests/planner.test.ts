@@ -9,7 +9,7 @@ import { assessPlannerDecision, buildLegacyRetryPlan, buildRepairPlan, compareRe
 import { ToolFailureCircuitBreaker } from "../src/application/core/recovery.js"
 import * as delegationDecision from "../src/application/shell/delegation-cluster/decision/index.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
-import type { LLMClient, Tool } from "../src/types.js"
+import type { LLMClient, Tool } from "../src/domain/agent-types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 

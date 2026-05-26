@@ -625,8 +625,8 @@ export async function executeRunImpl(
       //   - last 6 messages only (oldest fall off)
       //   - each line truncated to 240 chars
       // <sibling_progress> rides in `system_runtime` which is already
-      // droppable under token pressure (see DROP_PRIORITY in
-      // packages/agent/src/types.ts), so this is the second line of
+      // droppable under token pressure (see DROP_PRIORITY in the
+      // agent domain types), so this is the second line of
       // defence, not the primary one.
       const recent = bus.history().slice(-6)
       if (recent.length === 0) return ""

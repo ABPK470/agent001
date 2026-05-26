@@ -19,7 +19,7 @@
  * agent never silently swallows note writes.
  */
 
-import type { Tool } from "../types.js"
+import type { Tool } from "../domain/agent-types.js"
 
 /** Allowed values for the optional `category` field. Free-form is intentionally
  * NOT allowed so consolidation and retrieval can rely on a small vocabulary. */
