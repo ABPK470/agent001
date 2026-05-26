@@ -1,4 +1,4 @@
-export * from "../memory/tokens.js"; /**
+/**
  * Token estimation — single source of truth.
  *
  * Replaces ad-hoc `Math.ceil(chars / 4)` sites scattered across the

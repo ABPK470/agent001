@@ -1,4 +1,4 @@
-export * from "../../memory/context-management/index.js"; /**
+/**
  * Context management — progressive compaction and budget-aware truncation.
  *
  * Two-phase approach to keeping context relevant within LLM token budgets:

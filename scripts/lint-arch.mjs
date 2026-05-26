@@ -93,6 +93,7 @@ const SETTER_ALLOWLIST = new Set([
   "packages/agent/src/sync/sync-run-sink.ts",
   "packages/agent/src/sync/environments.ts",
   "packages/agent/src/sync/orchestrator/contract-deploy.ts",
+  "packages/agent/src/application/shell/tenant-config.ts",
   "packages/agent/src/tenant/config.ts",
   "packages/agent/src/tools/search-files.ts",
   "packages/agent/src/tools/fetch-url/index.ts",

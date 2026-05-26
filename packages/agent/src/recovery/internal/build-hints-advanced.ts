@@ -8,7 +8,7 @@
  * @module
  */
 
-import { SHELL_BUILTIN_COMMANDS } from "../../constants.js"
+import { SHELL_BUILTIN_COMMANDS } from "../../domain/agent-constants.js"
 import type { ToolCallRecord } from "../../tools/index.js"
 import { extractToolFailureText, parseToolResultObject } from "../../tools/index.js"
 import {

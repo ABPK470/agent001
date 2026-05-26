@@ -6,7 +6,7 @@
  */
 
 import { MessageRole } from "../../domain/enums/message.js"
-import * as log from "../../logger.js"
+import * as log from "../../internal/index.js"
 import type { PostRoundContext } from "../post-round/index.js"
 
 const COHERENT_READ_ONLY_ROUND_LIMIT = 1

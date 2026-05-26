@@ -8,7 +8,7 @@
 
 import sql from "mssql"
 import type { AgentHost, RunContext } from "../application/shell/runtime.js"
-import { getTenantConfig } from "../tenant/config.js"
+import { getTenantConfig } from "../application/shell/tenant-config.js"
 import type { Tool } from "../types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"

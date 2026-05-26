@@ -5,7 +5,7 @@
  * extension, recovery hint injection, and post-delegation verification.
  */
 
-import * as log from "../../logger.js"
+import * as log from "../../internal/index.js"
 import { buildRecoveryHints } from "../../recovery/index.js"
 import type { ToolCallRecord } from "../../tools/index.js"
 import {

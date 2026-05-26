@@ -1,4 +1,4 @@
-export * from "../../memory/context-compaction/extract-state.js"; /**
+/**
  * extractCompactionState — walk a slice of messages and synthesise the
  * structured ArtifactCompactionState used by the resume anchor.
  *

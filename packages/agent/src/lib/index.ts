@@ -37,12 +37,12 @@ export {
     RECOVERY_HINT_PREFIX,
     SAFE_RETRY_TOOLS,
     VERIFICATION_TOOLS
-} from "../constants.js"
+} from "../domain/agent-constants.js"
 export {
     ChatBudgetExceededError, DROP_PRIORITY,
     NEVER_DROP_SECTIONS,
     SECTION_WEIGHTS
-} from "../types.js"
+} from "../domain/agent-types.js"
 export type {
     AgentConfig,
     ChatCallUsageRecord,
@@ -55,7 +55,7 @@ export type {
     Tool,
     ToolCall,
     ToolKillManager
-} from "../types.js"
+} from "../domain/agent-types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
 export * from "@mia/sync"
@@ -85,8 +85,8 @@ export {
     loadTenantConfigFromEnv,
     resetTenantConfig,
     setTenantConfig
-} from "../tenant/config.js"
-export type { TenantConfig } from "../tenant/config.js"
+} from "../application/shell/tenant-config.js"
+export type { TenantConfig } from "../application/shell/tenant-config.js"
 
 // Renamed re-export preserved for back-compat with @mia/server.
 export { getPool as getMssqlPool } from "../tools/index.js"

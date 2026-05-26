@@ -1,8 +1,8 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../doctrine/fix-hints.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
-import { getTenantConfig } from "../../tenant/config.js"
 import type { CatalogAccessor } from "../catalog/index.js"
 import {
     _resetCatalogQueriesCache,

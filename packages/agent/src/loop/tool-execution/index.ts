@@ -15,10 +15,10 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js
  * @module
  */
 
-import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
-import { compactAtWriteTime } from "../../context/index.js"
+import { READ_ONLY_TOOL_NAMES } from "../../domain/agent-constants.js"
 import { MessageRole } from "../../domain/enums/message.js"
-import * as log from "../../logger.js"
+import * as log from "../../internal/index.js"
+import { compactAtWriteTime } from "../../memory/index.js"
 import type { ToolCallRecord } from "../../tools/index.js"
 import {
     buildSemanticToolCallKey, didToolCallFail, enrichToolResultMetadata as enrichResult,
