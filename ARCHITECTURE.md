@@ -103,6 +103,6 @@ If you need the shortest useful orientation path:
 
 1. `docs/doctrine.md`
 2. `docs/P&A_refactor.md`
-3. `packages/agent/src/lib/index.ts`
+3. `packages/agent/src/index.ts`
 4. `packages/server/src/index.ts`
 5. `packages/sync/src/index.ts`

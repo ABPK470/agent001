@@ -7,7 +7,7 @@ import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "
  * remediation, and verification-driven fallback routing.
  */
 
-import * as log from "../../../logger.js"
+import * as log from "../../../internal/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../types.js"
 import type { AgentLoopState } from "../../shell/loop.js"

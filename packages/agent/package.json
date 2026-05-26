@@ -4,7 +4,7 @@
     "description": "A real AI agent with tools — LLM decides what to do, calls tools, observes results, repeats until done.",
     "type": "module",
     "exports": {
-        ".": "./src/lib/index.ts",
+        ".": "./src/index.ts",
         "./application": "./src/application/index.ts",
         "./application/core": "./src/application/core/index.ts",
         "./application/core/clarify": "./src/application/core/clarify.ts",

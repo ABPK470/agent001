@@ -104,7 +104,7 @@ Model adapters implementing the `LLMClient` contract.
 
 ## Public API
 
-The main public barrel is `src/lib/index.ts`.
+The main public barrel is `src/index.ts`.
 
 Key exports:
 
@@ -132,7 +132,7 @@ The old ambient runtime pattern is gone from the active path:
 If you are new to the package, read in this order:
 
 1. `docs/doctrine.md`
-2. `src/lib/index.ts`
+2. `src/index.ts`
 3. `src/application/shell/agent.ts` and `src/application/shell/agent-cluster/`
 4. `src/application/shell/loop.ts` and `src/application/shell/loop-cluster/`
 5. `src/types.ts`

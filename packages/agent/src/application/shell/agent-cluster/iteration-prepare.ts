@@ -5,12 +5,12 @@
  * @module
  */
 
-import type { AgentLoopState } from "../loop.js"
 import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../logger.js"
+import * as log from "../../../internal/index.js"
 import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, truncateMessages } from "../../../memory/index.js"
 import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../../../tools/index.js"
 import type { AgentConfig, Message, Tool } from "../../../types.js"
+import type { AgentLoopState } from "../loop.js"
 
 /**
  * Maximum number of `hint: true` system messages retained in history.

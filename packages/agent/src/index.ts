@@ -7,15 +7,15 @@
  */
 
 // ── Core ────────────────────────────────────────────────────────────
-export { Agent } from "../application/shell/agent.js"
-export { configureAgent, makeRunContext } from "../application/shell/runtime.js"
+export { Agent } from "./application/shell/agent.js"
+export { configureAgent, makeRunContext } from "./application/shell/runtime.js"
 export type {
     AgentHost, AttachmentMetadata,
     AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
     BrowserContextReader as BrowserContextProvider, CredentialReader as BrowserCredentialProvider,
     BrowserGuard,
     HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, RunContext, ShellClient
-} from "../application/shell/runtime.js"
+} from "./application/shell/runtime.js"
 
 // ── Types & constants ───────────────────────────────────────────────
 export {
@@ -37,12 +37,12 @@ export {
     RECOVERY_HINT_PREFIX,
     SAFE_RETRY_TOOLS,
     VERIFICATION_TOOLS
-} from "../domain/agent-constants.js"
+} from "./domain/agent-constants.js"
 export {
     ChatBudgetExceededError, DROP_PRIORITY,
     NEVER_DROP_SECTIONS,
     SECTION_WEIGHTS
-} from "../domain/agent-types.js"
+} from "./domain/agent-types.js"
 export type {
     AgentConfig,
     ChatCallUsageRecord,
@@ -55,27 +55,27 @@ export type {
     Tool,
     ToolCall,
     ToolKillManager
-} from "../domain/agent-types.js"
+} from "./domain/agent-types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────
 export * from "@mia/sync"
-export * from "../application/core/clarify.js"
-export * from "../application/core/doctrine.js"
-export * from "../application/core/governance.js"
-export * from "../application/core/recovery.js"
-export * from "../application/shell/delegation.js"
-export * from "../application/shell/loop.js"
-export * from "../domain/index.js"
+export * from "./application/core/clarify.js"
+export * from "./application/core/doctrine.js"
+export * from "./application/core/governance.js"
+export * from "./application/core/recovery.js"
+export * from "./application/shell/delegation.js"
+export * from "./application/shell/loop.js"
+export * from "./domain/index.js"
 export {
     DiscoverySource,
     ENV_ACCESS_MODES,
     EnvAccessMode,
     EnvRole,
     isEnvAccessMode
-} from "../domain/index.js"
-export * from "../llm/index.js"
-export * from "../memory/index.js"
-export * from "../tools/index.js"
+} from "./domain/index.js"
+export * from "./llm/index.js"
+export * from "./memory/index.js"
+export * from "./tools/index.js"
 
 // ── Tenant configuration ────────────────────────────────────────────
 export {
@@ -85,11 +85,11 @@ export {
     loadTenantConfigFromEnv,
     resetTenantConfig,
     setTenantConfig
-} from "../application/shell/tenant-config.js"
-export type { TenantConfig } from "../application/shell/tenant-config.js"
+} from "./application/shell/tenant-config.js"
+export type { TenantConfig } from "./application/shell/tenant-config.js"
 
 // Renamed re-export preserved for back-compat with @mia/server.
-export { getPool as getMssqlPool } from "../tools/index.js"
+export { getPool as getMssqlPool } from "./tools/index.js"
 
 // ── Planner public surface (curated subset; planner has its own index) ─
 export {
@@ -110,4 +110,4 @@ export {
     type InternalFailureHit,
     type PlatformUnconfiguredHit,
     type PolishFailureInput
-} from "../application/core/planner.js"
+} from "./application/core/planner.js"

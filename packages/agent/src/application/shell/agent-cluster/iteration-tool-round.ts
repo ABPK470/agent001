@@ -6,7 +6,7 @@
  */
 
 import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../logger.js"
+import * as log from "../../../internal/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
 import type { Message, Tool } from "../../../types.js"
 import type { AgentLoopState } from "../loop.js"

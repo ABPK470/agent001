@@ -92,7 +92,7 @@ The single shipped feature for Fork 1 in this branch. All sub-features are requi
 
 ## F1.1 — Proposer pass (deterministic discovery)
 
-**What**: Function `runProposerPass(envPair)` in new `packages/agent/src/sync/proposer/pass.ts`. Pure code, no LLM.
+**What**: Function `runProposerPass(envPair)` in `packages/sync/src/proposer/pass.ts`. Pure code, no LLM.
 
 **Complete requirements**
 - Discovers three kinds of findings, all required:
@@ -119,7 +119,7 @@ The single shipped feature for Fork 1 in this branch. All sub-features are requi
 
 ## F1.3 — Risk annotator (this is the LLM's job)
 
-**What**: `annotateProposal(proposalId)` in `packages/agent/src/sync/proposer/annotate.ts`. Where the agent earns its place.
+**What**: `annotateProposal(proposalId)` in `packages/sync/src/proposer/annotate.ts`. Where the agent earns its place.
 
 **Complete requirements**
 - Inputs to the model: the proposal payload, the lineage subgraph for the entity from `lineage.json`, the entity's last 90 days of audit_log activity, the last 5 executions of similar (same entity type, same env-pair) syncs and their outcomes, current calendar (is this a known change-freeze window?), and the recipe `executionOrder` + table list

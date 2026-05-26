@@ -59,7 +59,7 @@ async function main() {
         packages: "external",
         // Resolve workspace packages as part of the bundle
         alias: {
-            "@mia/agent": resolve(ROOT, "packages/agent/src/lib/index.ts"),
+            "@mia/agent": resolve(ROOT, "packages/agent/src/index.ts"),
             "@mia/sync": resolve(ROOT, "packages/sync/src/index.ts"),
             "@mia/shared-enums": resolve(ROOT, "packages/shared-enums/src/index.ts"),
             "@mia/shared-types": resolve(ROOT, "packages/shared-types/src/index.ts"),

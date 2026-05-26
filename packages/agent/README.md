@@ -5,7 +5,7 @@ verify loops with tool use, memory, and recovery.
 
 ## Public surface
 
-The package barrel is [`src/lib/index.ts`](src/lib/index.ts). **Outside this package,
+The package barrel is [`src/index.ts`](src/index.ts). **Outside this package,
 import only from `@mia/agent`** — never reach into
 `packages/agent/src/<cluster>/<file>.js` directly.
 
@@ -14,9 +14,10 @@ Headline exports:
 - `configureAgent()` / `makeRunContext()` — explicit host and per-run
   wiring for tools, ports, and run-scoped state.
 - `Agent` — a single run. Wraps the loop and planner routing.
-- Constants in `constants.ts` — budgets, limits, retry caps.
-- Cluster barrels for `domain/`, `tools/`, `planner/`, `loop/`, `sync/`,
-  `governance/`, `recovery/`, `delegation/`, `context/`.
+- Constants and shared runtime types from `domain/agent-constants.ts` and
+  `src/types.ts`.
+- Cluster barrels for the proposal-aligned `application/`, `domain/`, `tools/`,
+  `memory/`, `llm/`, and `internal/` surfaces.
 
 ## Layout
 

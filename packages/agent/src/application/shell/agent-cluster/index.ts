@@ -16,14 +16,14 @@
  *   - agent-loop-state.ts — mutable state for the tool loop
  */
 
+import { LLMCallPhase } from "../../../domain/enums/llm.js"
+import { MessageRole } from "../../../domain/enums/message.js"
+import * as log from "../../../internal/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../types.js"
 import { attemptPlannerRouting } from "../../core/planner-routing.js"
 import type { PlannerContext, VerifierDecision } from "../../core/planner.js"
 import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "../loop.js"
-import { LLMCallPhase } from "../../../domain/enums/llm.js"
-import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../logger.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../types.js"
 import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent-helpers.js"
 import { prepareIterationContext } from "./iteration-prepare.js"
 import { executeToolCallsBranch } from "./iteration-tool-round.js"

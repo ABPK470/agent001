@@ -6,7 +6,7 @@ import { VerifierOutcome } from "../../../domain/index.js"
  */
 
 import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../logger.js"
+import * as log from "../../../internal/index.js"
 import type { PlannerContext, PlannerResult, SubagentTaskStep } from "../planner.js"
 import { executePlannerPath } from "../planner.js"
 import type { PlannerRoutingContext } from "./index.js"

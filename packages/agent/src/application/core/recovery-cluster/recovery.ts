@@ -14,7 +14,7 @@
  * @module
  */
 
-import { MAX_RUNTIME_SYSTEM_HINTS } from "../../../constants.js"
+import { MAX_RUNTIME_SYSTEM_HINTS } from "../../../domain/agent-constants.js"
 import {
     didToolCallFail,
     type ToolCallRecord,
