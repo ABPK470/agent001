@@ -2,8 +2,9 @@
  * Functional-core compatibility barrel for the new `application/core` split.
  */
 
-export * from "../../clarify/index.js"
-export * from "../../doctrine/index.js"
-export * from "../../planner/index.js"
-export * from "../../planner-routing/index.js"
-export * from "../../recovery/index.js"
+export * from "./clarify.js"
+export * from "./doctrine.js"
+export * from "./planner-routing.js"
+export * from "./planner.js"
+export * from "./recovery.js"
+

@@ -5,4 +5,4 @@
  * lives under `orchestrator/` and is surfaced via `application/shell/` first.
  */
 
-export {}
+export { }
