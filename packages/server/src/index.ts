@@ -43,6 +43,7 @@ import { bootstrapAdminFromEnv } from "./adapters/auth/users.js"
 import { serverBrowserCredentialProvider } from "./adapters/browser/credential-provider.js"
 import { serverBrowserHandoffProvider } from "./adapters/browser/handoff-provider.js"
 import { serverBrowserContextProvider } from "./adapters/browser/provider.js"
+import { createLlmCompletionAdapter } from "./adapters/llm/index.js"
 import { buildLlmClient } from "./adapters/llm/registry.js"
 import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
 import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
@@ -92,7 +93,6 @@ import { touchSession } from "./db/sessions.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
 import { dispatchNotification } from "./notifications/router.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
-import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
 import { startScheduler, stopScheduler } from "./proposer/scheduler.js"
 import { getRunProfile } from "./run-workspace.js"
 import { setupMssql } from "./setup-mssql.js"
@@ -219,7 +219,7 @@ async function main() {
   // the cron-style scheduler. The port is rebuilt on hot-swap via
   // `registerLlmRoutes` below (kept in a holder so the running
   // scheduler picks up the new client).
-  const llmPortHolder = { current: llmClientAsCompletionPort(llm) }
+  const llmPortHolder = { current: createLlmCompletionAdapter(llm) }
   startScheduler({ host: bootHost, llm: () => llmPortHolder.current })
   // Graceful shutdown — drain in-flight proposer runs before exit.
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
@@ -664,7 +664,7 @@ async function buildApp(opts: AppOpts) {
   registerMemoryRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
-    llmPortHolder.current = llmClientAsCompletionPort(newClient)
+    llmPortHolder.current = createLlmCompletionAdapter(newClient)
     console.log("LLM client hot-swapped")
   })
   // F1 — reconciliation proposer + approvals + evidence + metrics + notification routes
