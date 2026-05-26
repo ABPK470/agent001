@@ -14,7 +14,7 @@
  */
 
 import { DatabricksClient, type LLMClient } from "@mia/agent"
-import type { DbLlmConfig } from "../db/index.js"
+import type { DbLlmConfig } from "../adapters/persistence/sqlite.js"
 import { CopilotChatClient } from "./copilot-chat.js"
 import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js"
 

@@ -3,9 +3,9 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { canAccessRun } from "../adapters/auth/access.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import { canAccessRun } from "../auth/access.js"
-import * as db from "../db/index.js"
 
 /** Returns true if the request's session may see/mutate this notification. */
 function canSee(session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,

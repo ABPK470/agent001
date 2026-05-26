@@ -1,28 +1,27 @@
 import {
-  computeAutoDetectedExcludeDirs,
-  configureAgent,
-  createEngineServices,
-  EventType,
-  PolicyEffect,
-  PolicyRole,
-  RunStatus,
-  type LLMClient,
-  type Message,
-  type Tool
+    computeAutoDetectedExcludeDirs,
+    configureAgent,
+    createEngineServices,
+    EventType,
+    PolicyEffect,
+    PolicyRole,
+    RunStatus,
+    type LLMClient,
+    type Message,
+    type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
+import type { CurrentSession } from "../adapters/auth/context.js"
+import { cleanupExpiredCache, migrateMemory } from "../adapters/persistence/index.js"
 import { AgentBus } from "../agent-bus.js"
-import type { CurrentSession } from "../auth/context.js"
 import type { MessageRouter } from "../channels/router.js"
 import * as db from "../db/index.js"
 import { migrateEffects } from "../effects/index.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast } from "../event-broadcaster.js"
-import { migrateMemory } from "../memory/index.js"
 import { RunPriority, RunQueue } from "../queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "../run-workspace.js"
-import { cleanupExpiredCache } from "../tool-cache.js"
 import { filterToolsForVisitor, getAllTools } from "../tools.js"
 import { ClarificationsRegistry } from "./clarifications-state.js"
 import { createNotification, saveTrace } from "./persistence.js"

@@ -10,8 +10,8 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { loginAndSetCookie } from "../auth/identity.js"
-import { AuthError, registerLocalUser, verifyLocalLogin } from "../auth/users.js"
+import { loginAndSetCookie } from "../adapters/auth/identity.js"
+import { AuthError, registerLocalUser, verifyLocalLogin } from "../adapters/auth/users.js"
 
 function localRegistrationEnabled(): boolean {
   const raw = process.env["MIA_ALLOW_LOCAL_REGISTRATION"]

@@ -3,15 +3,6 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import {
-    getEffectStats,
-    getFileHistory,
-    getRunEffects,
-    getRunSnapshots,
-    previewRollback,
-    rollbackRun,
-} from "../effects/index.js"
 import {
     clearAllMemories,
     consolidate,
@@ -22,7 +13,16 @@ import {
     searchEntries,
     searchProcedures,
     type MemoryTier,
-} from "../memory/index.js"
+} from "../adapters/persistence/memory.js"
+import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
+import {
+    getEffectStats,
+    getFileHistory,
+    getRunEffects,
+    getRunSnapshots,
+    previewRollback,
+    rollbackRun,
+} from "../effects/index.js"
 import {
     compareTrajectories,
     loadTrajectory,

@@ -9,7 +9,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { getOwnerUsage, getRetentionPolicy } from "../attachments/index.js"
+import { getOwnerUsage, getRetentionPolicy } from "../adapters/persistence/attachments.js"
 import { getRunProfile } from "../run-workspace.js"
 
 export function registerProfileRoutes(app: FastifyInstance): void {

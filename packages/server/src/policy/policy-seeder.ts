@@ -32,7 +32,7 @@ import {
     withPermissionDefaults,
     type SyncEnvironment,
 } from "@mia/sync"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 
 // ── Environment overrides (DB on top of JSON) ────────────────────

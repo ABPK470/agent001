@@ -14,7 +14,7 @@
 
 import { isPolicyEffect, PolicyEffect } from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   // Admin governance changes are not agent runs; persist them as

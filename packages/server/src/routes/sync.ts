@@ -24,7 +24,7 @@ import {
     type ExecuteProgress,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 
 interface PreviewBody {
   entityType: EntityType

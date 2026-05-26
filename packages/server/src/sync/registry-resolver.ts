@@ -23,7 +23,7 @@ import {
 import {
     getEntityDefinition,
     resolveScd2Strategy,
-} from "../db/index.js"
+} from "../adapters/persistence/sqlite.js"
 
 const resolver: RecipeResolver = {
   resolve({ tenantId, entityId }) {

@@ -12,8 +12,8 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import { getDb } from "../db/connection.js"
 import { listSessions, listUserHistory, listUsersWithStats } from "../db/sessions.js"
 
 export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {

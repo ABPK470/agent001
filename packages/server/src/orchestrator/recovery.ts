@@ -1,5 +1,5 @@
 import { EventType } from "@mia/agent"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { broadcast } from "../event-broadcaster.js"
 import { createNotification } from "./persistence.js"

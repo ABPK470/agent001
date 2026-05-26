@@ -23,13 +23,13 @@
 
 import type { CatalogGraph } from "@mia/agent"
 import {
-  buildResolvedFacts,
-  getTenantConfig,
-  listLargeObjects,
-  persistedMirrorOf,
-  type LargeObjectFact,
+    buildResolvedFacts,
+    getTenantConfig,
+    listLargeObjects,
+    persistedMirrorOf,
+    type LargeObjectFact,
 } from "@mia/agent"
-import { listTableVerdicts } from "../memory/index.js"
+import { listTableVerdicts } from "../adapters/persistence/memory.js"
 
 /**
  * Maximum number of catalog-derived large objects to include in the

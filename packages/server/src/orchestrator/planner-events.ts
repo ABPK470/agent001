@@ -1,6 +1,6 @@
 import type { EngineServices } from "@mia/agent"
 import { EventType, PipelineStatus } from "@mia/agent"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { AuditActor } from "../enums/audit.js"
 import { broadcast, broadcastTraceLoose } from "../event-broadcaster.js"
 

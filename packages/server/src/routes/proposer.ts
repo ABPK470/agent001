@@ -17,7 +17,7 @@
 
 import type { AgentHost, LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/agent"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { runProposer } from "../proposer/runner.js"
 import {
     deleteSchedule, listSchedules, upsertSchedule,

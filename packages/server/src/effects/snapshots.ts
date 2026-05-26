@@ -1,9 +1,9 @@
+import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"
 import type { Effect, FileSnapshot } from "./types.js"
-import { EventType } from "@mia/agent"
 
 // ── Hashing utility (also used by tracker and rollback) ──────────
 

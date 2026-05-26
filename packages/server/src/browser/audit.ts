@@ -5,7 +5,7 @@
  * @module
  */
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 export interface AuditEntry {
   id: number

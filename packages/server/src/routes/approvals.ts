@@ -20,7 +20,7 @@
 import type { RiskTier } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"
 
 const DEFAULT_TENANT_ID = "_default"

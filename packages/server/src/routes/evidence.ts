@@ -16,13 +16,13 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import { createReadStream, existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
-import { getDb } from "../db/connection.js"
-import type { Signer } from "../evidence/signer.js"
+import type { Signer } from "../adapters/persistence/evidence.js"
 import {
     getEvidenceByPlan, listEvidence,
+    verifyEvidence,
     type EvidenceIndexRow,
-} from "../evidence/storage.js"
-import { verifyEvidence } from "../evidence/verifier-core.js"
+} from "../adapters/persistence/evidence.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

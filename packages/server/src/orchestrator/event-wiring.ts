@@ -1,6 +1,6 @@
 import type { DomainEvent, EngineServices } from "@mia/agent"
 import { EventType } from "@mia/agent"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { NotificationActionType } from "../enums/notifications.js"
 import { TrajectoryEventKind } from "../enums/trajectory.js"
 import { broadcast, toBroadcastData } from "../event-broadcaster.js"

@@ -21,7 +21,7 @@
 
 import { randomUUID } from "node:crypto"
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 export interface PolicyRule {
   id: string

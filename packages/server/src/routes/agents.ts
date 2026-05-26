@@ -11,8 +11,8 @@
 
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
+import * as db from "../adapters/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import * as db from "../db/index.js"
 import { listAvailableTools } from "../tools.js"
 
 export function registerAgentRoutes(

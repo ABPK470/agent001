@@ -19,9 +19,9 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { AttachmentScope } from "../enums/attachments.js"
 import { Buffer } from "node:buffer"
-import { auditAttachmentDeleted, getAttachment, listAttachments, listAttachmentTags, QuotaExceededError, readAttachmentBlob, softDeleteAttachment, uploadAttachment, type AttachmentRow } from "../attachments/index.js"
+import { auditAttachmentDeleted, getAttachment, listAttachments, listAttachmentTags, QuotaExceededError, readAttachmentBlob, softDeleteAttachment, uploadAttachment, type AttachmentRow } from "../adapters/persistence/attachments.js"
+import { AttachmentScope } from "../enums/attachments.js"
 
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 

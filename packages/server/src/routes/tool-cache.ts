@@ -6,7 +6,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { cleanupExpiredCache, clearSessionCache, getCacheStats } from "../tool-cache.js"
+import { cleanupExpiredCache, clearSessionCache, getCacheStats } from "../adapters/persistence/tool-cache.js"
 
 export function registerToolCacheRoutes(app: FastifyInstance): void {
   /** Disk-usage stats. Anyone can call this; it returns aggregate counts only. */

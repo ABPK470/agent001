@@ -32,7 +32,7 @@ import {
     type SyncEnvironment,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { refreshEnvDerivedPolicies } from "../policy/policy-seeder.js"
 
 const VALID_OPS: EnvOperation[] = [

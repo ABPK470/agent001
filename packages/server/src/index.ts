@@ -38,14 +38,18 @@ import {
     configurePlanStore,
 } from "@mia/sync"
 import Fastify from "fastify"
+import { registerIdentity } from "./adapters/auth/identity.js"
+import { bootstrapAdminFromEnv } from "./adapters/auth/users.js"
+import { serverBrowserCredentialProvider } from "./adapters/browser/credential-provider.js"
+import { serverBrowserHandoffProvider } from "./adapters/browser/handoff-provider.js"
+import { serverBrowserContextProvider } from "./adapters/browser/provider.js"
+import { buildLlmClient } from "./adapters/llm/registry.js"
+import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
+import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
+import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
+import { initSandbox } from "./adapters/sandbox/index.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
-import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
-import { registerIdentity } from "./auth/identity.js"
-import { bootstrapAdminFromEnv } from "./auth/users.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import { serverBrowserCredentialProvider } from "./browser/credential-provider.js"
-import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
-import { serverBrowserContextProvider } from "./browser/provider.js"
 import {
     MessageQueue,
     MessageRouter,
@@ -55,21 +59,8 @@ import {
     listChannelConfigs,
     migrateChannels,
 } from "./channels/index.js"
-import {
-    clearTransactionalData,
-    getDb, getDbPath, getDbStats, getLlmConfig,
-    getSyncRunPlanJson,
-    listFreezeWindowDefinitionsForTenant,
-    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    normaliseUnknownRunStatuses,
-    pruneOldData,
-    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
-} from "./db/index.js"
 import { touchSession } from "./db/sessions.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
-import { tryBuildSignerFromEnv } from "./evidence/signer.js"
-import { buildLlmClient } from "./llm/registry.js"
-import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
 import { dispatchNotification } from "./notifications/router.js"
 import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
 import { llmClientAsCompletionPort } from "./proposer/llm-port.js"
@@ -104,7 +95,6 @@ import {
     registerWebhookRoutes,
 } from "./routes/index.js"
 import { getRunProfile } from "./run-workspace.js"
-import { initSandbox } from "./sandbox/index.js"
 import { setupMssql } from "./setup-mssql.js"
 import { bootstrapEntityRegistryFromYaml } from "./sync/entity-bootstrap.js"
 import { createRegistryRecipeResolver } from "./sync/registry-resolver.js"

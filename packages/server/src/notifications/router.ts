@@ -13,7 +13,7 @@
 
 import { EventType } from "@mia/shared-enums"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"
 import { deliverEmail } from "./adapters/email.js"
 import { deliverSlack } from "./adapters/slack.js"

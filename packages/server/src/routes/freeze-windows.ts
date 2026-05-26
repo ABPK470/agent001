@@ -17,7 +17,7 @@ import {
     listFreezeWindowsForTenant,
     saveAdminAudit,
     upsertFreezeWindow,
-} from "../db/index.js"
+} from "../adapters/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

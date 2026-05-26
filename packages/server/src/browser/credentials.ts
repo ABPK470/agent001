@@ -15,8 +15,8 @@
 import { randomUUID } from "node:crypto"
 import { CredentialKind } from "../enums/credentials.js"
 
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { open, openJson, seal, sealJson } from "../crypto/vault.js"
-import { getDb } from "../db/connection.js"
 
 export { CredentialKind }
 

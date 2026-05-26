@@ -8,7 +8,7 @@
  *   channel_configs   — registered channel credentials (encrypted at rest TBD)
  */
 
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import type { QueueStore } from "./queue.js"
 import type { ConversationStore } from "./router.js"
 import type { ChannelConfig, ChannelType, Conversation, DeliveryStatus, OutboundMessage } from "./types.js"

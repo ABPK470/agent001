@@ -15,7 +15,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
-import { getEntityDefinition, saveEntityDefinition } from "../db/index.js"
+import { getEntityDefinition, saveEntityDefinition } from "../adapters/persistence/sqlite.js"
 import { parseEntitiesYaml } from "./entity-yaml.js"
 
 const DEFAULT_TENANT_ID = "_default"

@@ -34,7 +34,7 @@ import type {
     EntityRegistryYamlImportResponse,
 } from "@mia/shared-types"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../db/index.js"
+import * as db from "../adapters/persistence/sqlite.js"
 import { broadcast } from "../event-broadcaster.js"
 import { bootstrapEntityRegistryFromYaml } from "../sync/entity-bootstrap.js"
 import {

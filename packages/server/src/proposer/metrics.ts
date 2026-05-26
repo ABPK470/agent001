@@ -17,7 +17,7 @@
  *   mia_notification_log_total{status, channel}
  */
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 export function renderPrometheusMetrics(): string {
   const lines: string[] = []

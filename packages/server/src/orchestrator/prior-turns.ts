@@ -17,7 +17,7 @@
  * internal delegation chatter does not pollute the anchor.
  */
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import type { DbRun } from "../db/runs.js"
 import { truncateAtBoundary } from "../memory/scoring.js"
 

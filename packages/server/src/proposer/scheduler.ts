@@ -18,7 +18,7 @@
  */
 
 import type { AgentHost, LlmCompletionPort } from "@mia/agent"
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { runProposer } from "./runner.js"
 
 export interface ProposerScheduleRow {

@@ -11,8 +11,8 @@
  * @module
  */
 
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { open, seal } from "../crypto/vault.js"
-import { getDb } from "../db/connection.js"
 
 export interface ProxyConfig {
   ownerUpn: string
