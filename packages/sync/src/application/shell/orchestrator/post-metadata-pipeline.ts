@@ -371,11 +371,9 @@ async function runHandleDependencies(
   telemetryContext?: SyncTelemetryContext,
 ): Promise<void> {
   const objectType = entityType.toLowerCase()
-  const actionName = `${objectType}Sync`
   const req = pool.request()
   req.input("id", sqlMod.VarChar(50), String(entityId))
   req.input("objectName", sqlMod.VarChar(100), objectType)
-  req.input("actionName", sqlMod.VarChar(100), actionName)
 
   await trackedExecute(
     host,
