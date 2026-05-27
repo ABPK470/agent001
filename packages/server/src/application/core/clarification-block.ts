@@ -26,10 +26,14 @@ function renderFinding(f: AmbiguityFinding): string {
   const candidates = f.candidates && f.candidates.length > 0
     ? `  candidates: ${f.candidates.slice(0, 6).join(", ")}\n`
     : ""
+  const uiOptions = f.uiOptions && f.uiOptions.length > 0
+    ? `  ui options: ${f.uiOptions.slice(0, 6).join(", ")}\n`
+    : ""
   return [
     `${sev} [${f.kind}] subject="${f.subject}" (source: ${f.source})`,
     `  reasoning: ${f.reasoning}`,
     candidates,
+    uiOptions,
     `  suggested question: ${f.suggestedQuestion}`,
   ].join("\n").replace(/\n+$/g, "")
 }
@@ -61,7 +65,8 @@ export function buildClarificationBlock(input: ClarificationBlockInput): string 
       "before proceeding) or a ⚠ WARN (call ask_user when you cannot",
       "confidently disambiguate from context). One ask_user call per finding;",
       "use the suggested question or a clearer phrasing — do NOT batch all",
-      "questions into a single call.",
+      "questions into a single call. `candidates` are reasoning context only;",
+      "do NOT copy them into ask_user options unless explicit `ui options` are present.",
       "",
       bullets,
       "</must_clarify>",

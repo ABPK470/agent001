@@ -37,6 +37,19 @@ describe("ClarificationsRegistry", () => {
     expect(match?.subject).toBe("Revenue")
   })
 
+  it("matchQuestion preserves uiOptions for closed-choice findings", () => {
+    const reg = new ClarificationsRegistry()
+    reg.recordEmitted("r1", 0, [mkFinding({
+      kind: "output-format",
+      severity: "warn",
+      subject: "overview",
+      suggestedQuestion: "How would you like the overview delivered?",
+      uiOptions: ["short narrative", "data table", "chart"],
+    })])
+    const match = reg.matchQuestion("r1", "How would you like the overview delivered?")
+    expect(match?.uiOptions).toEqual(["short narrative", "data table", "chart"])
+  })
+
   it("matchQuestion returns null when the question is unrelated", () => {
     const reg = new ClarificationsRegistry()
     reg.recordEmitted("r1", 0, [mkFinding()])

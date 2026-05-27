@@ -10,6 +10,7 @@ export interface ClarificationMatch {
   readonly kind: AmbiguityFinding["kind"]
   readonly subject: string
   readonly suggestedQuestion: string
+  readonly uiOptions?: readonly string[]
   readonly round: number
 }
 

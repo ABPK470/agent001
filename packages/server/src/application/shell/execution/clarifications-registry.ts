@@ -49,7 +49,7 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
     for (const f of findings) {
       byId.set(f.id, {
         findingId: f.id, kind: f.kind, subject: f.subject,
-        suggestedQuestion: f.suggestedQuestion, round,
+        suggestedQuestion: f.suggestedQuestion, uiOptions: f.uiOptions, round,
       })
     }
     this.emitted.set(runId, [...byId.values()])

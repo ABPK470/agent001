@@ -150,6 +150,24 @@ describe("schemaMatchDetector", () => {
     expect(findings).toEqual([])
   })
 
+  it("ignores request-meta words around an explicit qualified object", () => {
+    const cat = catalogFrom([
+      table("gate", "Content", [col("title", "nvarchar"), col("description", "nvarchar")]),
+      table("archive", "ChequeInterestColumnsMonthly", [col("name", "nvarchar")]),
+      table("ext", "ChequeInterestColumnsMonthly", [col("name", "nvarchar")]),
+      table("fact", "ChequeInterestColumnsMonthly", [col("name", "nvarchar")]),
+      table("archive", "SalesCreditsAROGoLiveDates", [col("name", "nvarchar")]),
+      table("list", "SalesCreditsAROGoLiveDates", [col("name", "nvarchar")]),
+    ])
+
+    const findings = schemaMatchDetector.detect(ctx({
+      goal: "connect to our UAT env and find out what are the columns for gate.Content table. Use live / true db table not some residual / pre-saved knowledge",
+      catalog: cat,
+    }))
+
+    expect(findings).toEqual([])
+  })
+
   // Production regression — 22 May 2026. Goal "use publish.Revenue" fired
   // TWO blocking findings ("publish" matched 1341 catalog objects;
   // "revenue" matched 562) even though the user typed the fully-qualified

@@ -1,3 +1,5 @@
+import { appendMirrorSpan, cloneMirrorSpan, markMirrorStatus } from "./mirror-trace.js"
+import { enforceClarificationUiOptions } from "./ask-user-options.js"
 import {
     Agent,
     cancelRun,
@@ -421,12 +423,13 @@ export async function executeRunImpl(
     delegateCtx,
     govern: (tool, opts) => governTool(tool, services, state, { signal: controller.signal, ...(opts ?? {}) }),
     askUserResolve: (question, options, sensitive) => {
-      boundSaveTrace(runId, { kind: TrajectoryEventKind.UserInputRequest, question, options, sensitive })
-      broadcast({ type: EventType.UserInputRequired, data: { runId, question, options: options ?? [], sensitive } })
       // If this question fuzzy-matches a clarification finding we recently
       // emitted to the agent, stash it as pending so respondToRun() can
       // record the answer as a ResolvedClarification.
       const match = ctx.clarifications.matchQuestion(runId, question)
+      const effectiveOptions = enforceClarificationUiOptions(options, match)
+      boundSaveTrace(runId, { kind: TrajectoryEventKind.UserInputRequest, question, options: effectiveOptions, sensitive })
+      broadcast({ type: EventType.UserInputRequired, data: { runId, question, options: effectiveOptions ?? [], sensitive } })
       if (match) ctx.clarifications.setPending(runId, match, question)
       return new Promise<string>((resolve) => {
         ctx.pendingInputs.set(runId, { resolve })

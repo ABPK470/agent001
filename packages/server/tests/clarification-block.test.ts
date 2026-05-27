@@ -48,6 +48,25 @@ describe("buildClarificationBlock", () => {
     expect(block).toContain("candidates: publish.Revenue, mart.RevenueRecognition")
   })
 
+  it("tells the agent not to copy candidates into ask_user options", () => {
+    const block = buildClarificationBlock({ findings: [mkFinding()], resolved: [] })
+    expect(block).toContain("`candidates` are reasoning context only")
+    expect(block).toContain("do NOT copy them into ask_user options")
+  })
+
+  it("renders ui options only when a finding explicitly provides them", () => {
+    const block = buildClarificationBlock({
+      findings: [mkFinding({
+        kind: "output-format",
+        severity: "warn",
+        subject: "overview",
+        uiOptions: ["short narrative", "data table", "chart"],
+      })],
+      resolved: [],
+    })
+    expect(block).toContain("ui options: short narrative, data table, chart")
+  })
+
   it("omits candidates line when not provided", () => {
     const block = buildClarificationBlock({
       findings: [mkFinding({ candidates: undefined })],

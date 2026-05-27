@@ -33,6 +33,7 @@ export const outputFormatDetector: Detector = {
       subject,
       reasoning: `Goal asks to "${subject}" but specifies no output format.`,
       candidates: ["short narrative", "data table", "chart (bar/line/pie)", "bullet list"],
+      uiOptions: ["short narrative", "data table", "chart (bar/line/pie)", "bullet list"],
       suggestedQuestion: `How would you like the "${subject}" delivered — a short narrative, a data table, a chart, or a bullet list?`,
       source: "detector" as const,
     }]

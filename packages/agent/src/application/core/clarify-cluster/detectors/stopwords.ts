@@ -28,8 +28,8 @@ export const STOPWORDS: ReadonlySet<string> = new Set([
   "please", "thanks", "thank", "hi", "hello", "hey", "ok",
   "use", "using", "keep",
   "want", "need", "like", "see", "know", "let", "make",
-  "rows", "row", "data", "table", "column", "value", "values", "name", "names",
-  "result", "results", "report", "query", "queries", "database",
+  "rows", "row", "data", "table", "tables", "column", "columns", "value", "values", "name", "names",
+  "result", "results", "report", "query", "queries", "database", "db", "env", "environment",
   // numerals & quantifiers
   "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
   "first", "second", "third", "last", "next", "previous", "current",
@@ -37,7 +37,7 @@ export const STOPWORDS: ReadonlySet<string> = new Set([
   "more", "less", "much", "many", "few", "several", "both", "either", "neither",
   // common adjectives that are not business terms
   "new", "old", "good", "bad", "high", "low", "big", "small", "long", "short",
-  "simple", "concise",
+  "simple", "concise", "actual", "live",
   "open", "closed", "active", "inactive", "real", "true", "false",
   // misc
   "now", "today", "yesterday", "tomorrow", "soon", "later", "ago",

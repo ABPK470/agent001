@@ -16,8 +16,8 @@
 //                      answers a previously-emitted question, keyed by the
 //                      finding's stable id so the same subject never re-asks.
 
-import type { CatalogGraph } from "../../../tools/index.js"
 import type { Message } from "../../../domain/agent-types.js"
+import type { CatalogGraph } from "../../../tools/index.js"
 import type { TenantConfig } from "../../shell/tenant-config.js"
 
 // ── Finding ──────────────────────────────────────────────────────
@@ -71,6 +71,11 @@ export interface AmbiguityFinding {
   readonly reasoning: string
   /** Plausible interpretations the agent (or user) can pick from. */
   readonly candidates?: readonly string[]
+  /**
+   * Optional closed-set choices safe to expose as ask_user options.
+   * Omit for open-ended ambiguities where the user should answer freely.
+   */
+  readonly uiOptions?: readonly string[]
   /**
    * Suggested question text the agent may use verbatim when calling
    * ask_user. Phrased as a direct question to the end user.
