@@ -70,6 +70,8 @@ export const PostMetadataActionKind = {
   MetaRefresh: "metaRefresh",
   PipelineStart: "pipelineStart",
   HandleDependencies: "handleDependencies",
+  SyncDate: "syncDate",
+  DeployDate: "deployDate",
 } as const
 export type PostMetadataActionKind =
   (typeof PostMetadataActionKind)[keyof typeof PostMetadataActionKind]

@@ -53,7 +53,6 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
           srcPool,
           plan: input.plan,
           planId,
-          isContract: true,
           entityId,
           entityType,
           onProgress,
@@ -82,7 +81,24 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
       case PostMetadataActionKind.PipelineRegister: {
         step("pipeline-register", "Registering pipeline on target Agent service")
         await callStep("pipeline-register", async () => {
-          await runPipelineRegister(host, input.plan.target, entityId)
+          const pipelineId = entityType === "contract"
+            ? await resolveContractPipelineId(host, tgtPool, input.plan.target, entityId, input.telemetryContext)
+            : entityId
+          await runPipelineRegister(host, input.plan.target, pipelineId)
+        })
+        break
+      }
+      case PostMetadataActionKind.MetaRefresh: {
+        step("meta-refresh", "Refreshing Gate metadata on target Gate service")
+        await callStep("meta-refresh", async () => {
+          await runMetaRefresh(host, input.plan.target)
+        })
+        break
+      }
+      case PostMetadataActionKind.PipelineStart: {
+        step("pipeline-start", "Starting target Agent pipeline for list content population")
+        await callStep("pipeline-start", async () => {
+          await runPipelineStartByName(host, input.plan.target, "All Lists content item population")
         })
         break
       }
@@ -93,32 +109,53 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         })
         break
       }
+      case PostMetadataActionKind.SyncDate: {
+        step("set-sync-date", "Updating sync date on source")
+        await callStep("set-sync-date", async () => {
+          await runAuditCheckDirect(host, srcPool, {
+            action: "syncDate",
+            id: entityId,
+            objType: auditObjectType(entityType),
+          }, input.plan.source, undefined, input.telemetryContext)
+        })
+        break
+      }
+      case PostMetadataActionKind.DeployDate: {
+        step("set-deploy-date", "Updating deployment date on target")
+        await callStep("set-deploy-date", async () => {
+          await runAuditCheckDirect(host, tgtPool, {
+            action: "deployDate",
+            id: entityId,
+            objType: auditObjectType(entityType),
+          }, input.plan.target, undefined, input.telemetryContext)
+        })
+        break
+      }
       default:
         break
     }
   }
 
-  if (!input.plan.recipeSnapshot.postMetadataActions.some((action) => action.kind === PostMetadataActionKind.ContractDeploy)) {
-    step("set-sync-date", "Updating sync date on source")
-    await callStep("set-sync-date", async () => {
-      await runAuditCheckDirect(host, srcPool, {
-        action: "syncDate",
-        id: entityId,
-        objType: entityType,
-      }, input.plan.source, undefined, input.telemetryContext)
-    })
-
-    step("set-deploy-date", "Updating deployment date on target")
-    await callStep("set-deploy-date", async () => {
-      await runAuditCheckDirect(host, tgtPool, {
-        action: "deployDate",
-        id: entityId,
-        objType: entityType,
-      }, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
-
   return { stepWarnings }
+}
+
+function auditObjectType(entityType: string): string {
+  switch (entityType) {
+    case "contract":
+      return "Contract"
+    case "dataset":
+      return "Dataset"
+    case "rule":
+      return "Rule"
+    case "content":
+      return "Content"
+    case "pipelineActivity":
+      return "Pipeline"
+    case "gateMetadata":
+      return "MetaTable"
+    default:
+      return entityType
+  }
 }
 
 async function runDatasetDeploy(
@@ -216,6 +253,53 @@ async function runPipelineRegister(
   }
 }
 
+async function runMetaRefresh(
+  host: AgentHost,
+  environmentName: string,
+): Promise<void> {
+  const environment = getEnvironment(host, environmentName)
+  const baseUrl = environment.gateServiceBaseUrl?.trim()
+  if (!baseUrl) {
+    throw new Error(
+      `Environment "${environmentName}" is missing gateServiceBaseUrl; gate metadata refresh cannot run.`,
+    )
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/meta/refresh`, {
+    method: "GET",
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Gate metadata refresh failed with ${response.status}: ${body || response.statusText}`)
+  }
+}
+
+async function runPipelineStartByName(
+  host: AgentHost,
+  environmentName: string,
+  pipelineName: string,
+): Promise<void> {
+  const environment = getEnvironment(host, environmentName)
+  const baseUrl = environment.agentServiceBaseUrl?.trim()
+  if (!baseUrl) {
+    throw new Error(
+      `Environment "${environmentName}" is missing agentServiceBaseUrl; pipeline start cannot run.`,
+    )
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/pipeline/start`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: pipelineName }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Pipeline start failed with ${response.status}: ${body || response.statusText}`)
+  }
+}
+
 async function resolveRuleInputDatasetId(
   host: AgentHost,
   pool: ConnectionPool,
@@ -245,6 +329,37 @@ async function resolveRuleInputDatasetId(
   }
 
   return datasetId
+}
+
+async function resolveContractPipelineId(
+  host: AgentHost,
+  pool: ConnectionPool,
+  connection: string,
+  contractId: string | number,
+  telemetryContext?: SyncTelemetryContext,
+): Promise<number> {
+  const numericContractId = typeof contractId === "number" ? contractId : Number(contractId)
+  if (!Number.isFinite(numericContractId)) {
+    throw new Error(`Contract pipeline lookup requires a numeric contract id; got ${String(contractId)}.`)
+  }
+
+  const req = pool.request()
+  req.input("contractId", sqlMod.Int, numericContractId)
+  const result = await trackedQuery<{ pipelineId: number | null }>(
+    host,
+    req,
+    "SELECT pipelineId FROM core.Pipeline WHERE contractId = @contractId",
+    `postMetadata.resolveContractPipelineId(${numericContractId})`,
+    connection,
+    telemetryContext,
+  )
+
+  const pipelineId = result.recordset?.[0]?.pipelineId
+  if (typeof pipelineId !== "number") {
+    throw new Error(`Contract ${numericContractId} does not have a target pipelineId after metadata sync.`)
+  }
+
+  return pipelineId
 }
 
 async function runHandleDependencies(

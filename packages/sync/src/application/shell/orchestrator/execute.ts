@@ -12,6 +12,7 @@
  */
 
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
+import { PostMetadataActionKind } from "../../../domain/enums.js"
 import { getEnvironment } from "../../../domain/environments.js"
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
 import { EventType, getPool, SyncOperationType, SyncProgressKind, SyncRunStatus } from "../../../ports/index.js"
@@ -162,8 +163,9 @@ async function executeSyncInner(
 
   const entityId = plan.entity.id
   const entityType = plan.recipeSnapshot.entityType
-  const isContract = entityType === "contract"
-
+  const hasContractDeploy = plan.recipeSnapshot.postMetadataActions.some(
+    (action) => action.kind === PostMetadataActionKind.ContractDeploy,
+  )
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
 
   // Helper: emit a step progress event
@@ -193,18 +195,20 @@ async function executeSyncInner(
     // ═══════════════════════════════════════════════════════════
 
     // ── Step 1: Audit pre-check ──
-    stepEmit("audit-check", "Pre-sync audit check")
-    await preTxContractStep("audit-check", async () => {
-      await runAuditCheckDirect(opts.host, tgtPool, {
-        action: "syncOrNot",
-        objType: entityType === "contract" ? "Contract" : entityType,
-        id: entityId,
-      }, plan.target, undefined, telemetryContext)
-    })
+    if (hasContractDeploy) {
+      stepEmit("audit-check", "Pre-sync audit check")
+      await preTxContractStep("audit-check", async () => {
+        await runAuditCheckDirect(opts.host, tgtPool, {
+          action: "syncOrNot",
+          objType: "Contract",
+          id: entityId,
+        }, plan.target, undefined, telemetryContext)
+      })
+    }
 
     // ── Step 2: Lock entity for sync ──
-    stepEmit("lock", `Locking ${entityType}`)
-    if (isContract) {
+    if (hasContractDeploy) {
+      stepEmit("lock", `Locking ${entityType}`)
       await preTxContractStep("lock", async () => {
         await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target, undefined, telemetryContext)
       })
@@ -262,7 +266,7 @@ async function executeSyncInner(
   } catch (e) {
     // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
     // helper already rolled back the tx and re-enabled FKs on failure.
-    if (isContract) {
+    if (hasContractDeploy) {
       try { await setContractLockDirect(opts.host, tgtPool, Number(entityId), false, plan.target, undefined, telemetryContext) }
       catch { /* best-effort */ }
     }

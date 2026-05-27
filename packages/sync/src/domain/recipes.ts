@@ -263,14 +263,22 @@ export function resolvePostMetadataActions(
 
   switch (recipe.entityType) {
     case "contract":
-      return [{ kind: PostMetadataActionKind.ContractDeploy }]
+      return [
+        { kind: PostMetadataActionKind.PipelineRegister },
+        { kind: PostMetadataActionKind.ContractDeploy },
+      ]
     case "dataset":
-      return [{ kind: PostMetadataActionKind.DatasetDeploy }]
+      return [
+        { kind: PostMetadataActionKind.DatasetDeploy },
+        { kind: PostMetadataActionKind.SyncDate },
+      ]
     case "rule":
       return [
         { kind: PostMetadataActionKind.DatasetDeploy },
         { kind: PostMetadataActionKind.RulesDeploy },
         { kind: PostMetadataActionKind.HandleDependencies },
+        { kind: PostMetadataActionKind.SyncDate },
+        { kind: PostMetadataActionKind.DeployDate },
       ]
     case "pipelineActivity":
       return [{ kind: PostMetadataActionKind.PipelineRegister }]

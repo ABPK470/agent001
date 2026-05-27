@@ -13,8 +13,8 @@
 
 import { type ConnectionPool } from "mssql"
 import { EventType, SyncProgressKind, type AgentHost } from "../../../ports/index.js"
-import { type SyncPlan } from "../plan-store.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
+import { type SyncPlan } from "../plan-store.js"
 import {
     createDataset,
     createDatasetFKs,
@@ -34,7 +34,6 @@ export interface ContractPipelineInput {
   srcPool: ConnectionPool
   plan: SyncPlan
   planId: string
-  isContract: boolean
   entityId: string | number
   entityType: string
   onProgress: (p: ExecuteProgress) => void
@@ -48,7 +47,7 @@ export interface StepWarning {
 }
 
 export async function runContractPipeline(input: ContractPipelineInput): Promise<{ stepWarnings: StepWarning[] }> {
-  const { tgtPool, srcPool, planId, isContract, entityId, entityType, onProgress } = input
+  const { tgtPool, srcPool, planId, entityId, onProgress } = input
   const host = input.host
   const stepWarnings: StepWarning[] = []
 
@@ -74,110 +73,78 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
 
   // ── Step 8: Undeploy contract on target — contract only ──
   // Resolve contractName once for all subsequent heavy steps.
-  let contractName: string | undefined
-  if (isContract) {
-    contractName = await resolveContractName(host, tgtPool, Number(entityId), input.plan.target, input.telemetryContext)
-  }
+  const contractName = await resolveContractName(host, tgtPool, Number(entityId), input.plan.target, input.telemetryContext)
 
-  if (isContract) {
-    step("undeploy", "Undeploying contract on target")
-    await callDirectStep("undeploy", async () => {
-      await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target)
-    }, "undeploy")
-  }
-
-  if (isContract) {
-    step("undeploy", "Undeploying contract on target")
-    await callDirectStep("undeploy", async () => {
-      await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("undeploy", "Undeploying contract on target")
+  await callDirectStep("undeploy", async () => {
+    await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 9: Unlock after undeploy ──
-  if (isContract) {
-    step("unlock-after-undeploy", "Unlocking after undeploy")
-    await callDirectStep("unlock-after-undeploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("unlock-after-undeploy", "Unlocking after undeploy")
+  await callDirectStep("unlock-after-undeploy", async () => {
+    await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 10: Second audit check before deploy ──
-  if (isContract) {
-    step("audit-check-2", "Pre-deploy audit check")
-    await callDirectStep("audit-check-2", async () => {
-      await runAuditCheckDirect(host, tgtPool, {
-        action: "syncOrNot",
-        objType: "Contract",
-        id: entityId,
-      }, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("audit-check-2", "Pre-deploy audit check")
+  await callDirectStep("audit-check-2", async () => {
+    await runAuditCheckDirect(host, tgtPool, {
+      action: "syncOrNot",
+      objType: "Contract",
+      id: entityId,
+    }, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 11: Lock for deployment ──
-  if (isContract) {
-    step("lock-for-deploy", "Locking for deployment")
-    await callDirectStep("lock-for-deploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("lock-for-deploy", "Locking for deployment")
+  await callDirectStep("lock-for-deploy", async () => {
+    await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 12: Deploy pre-script ──
-  if (isContract) {
-    step("deploy-pre-script", "Running pre-deployment scripts")
-    await callDirectStep("deploy-pre-script", async () => {
-      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run preScript", input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("deploy-pre-script", "Running pre-deployment scripts")
+  await callDirectStep("deploy-pre-script", async () => {
+    await runContractDeploymentScriptsDirect(host, tgtPool, contractName, "Run preScript", input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Steps 13-17: Create datasets — contract only ──
-  if (isContract) {
-    for (const dsType of ["stage", "archive", "list", "dim", "fact"] as const) {
-      step(`create-dataset-${dsType}`, `Creating ${dsType} dataset`)
-      await callDirectStep(`create-dataset-${dsType}`, async () => {
-        await createDataset(host, tgtPool, Number(entityId), contractName!, dsType, input.plan.target, undefined, input.telemetryContext)
-      })
-    }
+  for (const dsType of ["stage", "archive", "list", "dim", "fact"] as const) {
+    step(`create-dataset-${dsType}`, `Creating ${dsType} dataset`)
+    await callDirectStep(`create-dataset-${dsType}`, async () => {
+      await createDataset(host, tgtPool, Number(entityId), contractName, dsType, input.plan.target, undefined, input.telemetryContext)
+    })
   }
 
   // ── Step 18: Create foreign keys ──
-  if (isContract) {
-    step("create-fks", "Creating foreign keys")
-    await callDirectStep("create-fks", async () => {
-      await createDatasetFKs(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("create-fks", "Creating foreign keys")
+  await callDirectStep("create-fks", async () => {
+    await createDatasetFKs(host, tgtPool, contractName, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 19: Deploy ETL2 custom transformation ──
-  if (isContract) {
-    step("deploy-etl", "Deploying ETL custom transformations")
-    await callDirectStep("deploy-etl", async () => {
-      await deployETL(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("deploy-etl", "Deploying ETL custom transformations")
+  await callDirectStep("deploy-etl", async () => {
+    await deployETL(host, tgtPool, contractName, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 20: Deploy routine ──
-  if (isContract) {
-    step("deploy-routine", "Deploying routines")
-    await callDirectStep("deploy-routine", async () => {
-      await deployRoutine(host, tgtPool, contractName!, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("deploy-routine", "Deploying routines")
+  await callDirectStep("deploy-routine", async () => {
+    await deployRoutine(host, tgtPool, contractName, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 21: Deploy post-script ──
-  if (isContract) {
-    step("deploy-post-script", "Running post-deployment scripts")
-    await callDirectStep("deploy-post-script", async () => {
-      await runContractDeploymentScriptsDirect(host, tgtPool, contractName!, "Run postScript", input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("deploy-post-script", "Running post-deployment scripts")
+  await callDirectStep("deploy-post-script", async () => {
+    await runContractDeploymentScriptsDirect(host, tgtPool, contractName, "Run postScript", input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 22: Unlock after deployment ──
-  if (isContract) {
-    step("unlock-after-deploy", "Unlocking after deployment")
-    await callDirectStep("unlock-after-deploy", async () => {
-      await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
-    })
-  }
+  step("unlock-after-deploy", "Unlocking after deployment")
+  await callDirectStep("unlock-after-deploy", async () => {
+    await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
+  })
 
   // ── Step 23: Set sync date at source ──
   step("set-sync-date", "Updating sync date on source")
@@ -185,7 +152,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     await runAuditCheckDirect(host, srcPool, {
       action: "syncDate",
       id: entityId,
-      objType: isContract ? "Contract" : entityType,
+      objType: "Contract",
     }, input.plan.source, undefined, input.telemetryContext)
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
@@ -201,7 +168,7 @@ export async function runContractPipeline(input: ContractPipelineInput): Promise
     await runAuditCheckDirect(host, tgtPool, {
       action: "deployDate",
       id: entityId,
-      objType: isContract ? "Contract" : entityType,
+      objType: "Contract",
     }, input.plan.target, undefined, input.telemetryContext)
   } catch (e) { console.warn(`[sync.execute] deployDate update failed:`, e) }
 

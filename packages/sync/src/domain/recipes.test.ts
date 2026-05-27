@@ -4,17 +4,27 @@ import { PostMetadataActionKind } from "./enums.js"
 import { resolvePostMetadataActions } from "./recipes.js"
 
 describe("resolvePostMetadataActions", () => {
-  it("maps dataset to dataset deploy", () => {
-    expect(resolvePostMetadataActions({ entityType: "dataset", legacyPipelineId: 792 })).toEqual([
-      { kind: PostMetadataActionKind.DatasetDeploy },
+  it("maps contract to pipeline register then contract deploy", () => {
+    expect(resolvePostMetadataActions({ entityType: "contract", legacyPipelineId: 788 })).toEqual([
+      { kind: PostMetadataActionKind.PipelineRegister },
+      { kind: PostMetadataActionKind.ContractDeploy },
     ])
   })
 
-  it("maps rule to dataset deploy, rules deploy, then dependency handling", () => {
+  it("maps dataset to dataset deploy", () => {
+    expect(resolvePostMetadataActions({ entityType: "dataset", legacyPipelineId: 792 })).toEqual([
+      { kind: PostMetadataActionKind.DatasetDeploy },
+      { kind: PostMetadataActionKind.SyncDate },
+    ])
+  })
+
+  it("maps rule to dataset deploy, rules deploy, dependency handling, then dates", () => {
     expect(resolvePostMetadataActions({ entityType: "rule", legacyPipelineId: 791 })).toEqual([
       { kind: PostMetadataActionKind.DatasetDeploy },
       { kind: PostMetadataActionKind.RulesDeploy },
       { kind: PostMetadataActionKind.HandleDependencies },
+      { kind: PostMetadataActionKind.SyncDate },
+      { kind: PostMetadataActionKind.DeployDate },
     ])
   })
 
