@@ -9,7 +9,7 @@
       "displayName": "Content",
       "rootTable": "gate.Content",
       "rootKeyColumn": "contentId",
-      "rootNameColumn": "name",
+      "rootNameColumn": "title",
       "selfJoinColumn": "parentContentId",
       "legacyPipelineId": 692,
       "legacyEntrySproc": "core.uspSyncContentObjectsTran",

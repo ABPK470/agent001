@@ -23,6 +23,20 @@
 import { readFileSync } from "node:fs"
 import { isDeepStrictEqual } from "node:util"
 
+export interface CatalogBootstrapMetadata {
+  largeObjects: ReadonlyArray<string>
+  canonicalQualifiedNames: Readonly<Record<string, string>>
+  unionBranchCounts: Readonly<Record<string, number>>
+  highCardinalityKeys: Readonly<Record<string, ReadonlyArray<string>>>
+}
+
+export const DEFAULT_CATALOG_BOOTSTRAP: CatalogBootstrapMetadata = Object.freeze({
+  largeObjects: [],
+  canonicalQualifiedNames: Object.freeze({}),
+  unionBranchCounts: Object.freeze({}),
+  highCardinalityKeys: Object.freeze({}),
+})
+
 // ── Schema ──────────────────────────────────────────────────────
 
 export interface TenantConfig {
@@ -49,6 +63,12 @@ export interface TenantConfig {
    * Default: null (no mirror convention).
    */
   mirrorSchema: string | null
+
+  /**
+   * Optional pre-catalog metadata for deployments/tests that need known
+   * object hints before a live catalog is loaded.
+   */
+  catalogBootstrap: CatalogBootstrapMetadata
 
   /**
    * Routing keywords for prompt section selection. Used by
@@ -108,6 +128,7 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
   unionBranchThreshold: 8,
   schemaRanking: [],
   mirrorSchema: null,
+  catalogBootstrap: DEFAULT_CATALOG_BOOTSTRAP,
   routingKeywords: { schemas: [], domain: [], sync: [] },
   preAggregationTokens: [
     // Snapshot / point-in-time / pre-averaged columns whose row values
@@ -183,6 +204,7 @@ function mergeWithDefaults(o: Partial<TenantConfig>): TenantConfig {
     unionBranchThreshold: o.unionBranchThreshold ?? DEFAULT_TENANT_CONFIG.unionBranchThreshold,
     schemaRanking: o.schemaRanking ?? DEFAULT_TENANT_CONFIG.schemaRanking,
     mirrorSchema: o.mirrorSchema ?? DEFAULT_TENANT_CONFIG.mirrorSchema,
+    catalogBootstrap: o.catalogBootstrap ?? DEFAULT_TENANT_CONFIG.catalogBootstrap,
     routingKeywords: o.routingKeywords ?? DEFAULT_TENANT_CONFIG.routingKeywords,
     preAggregationTokens: o.preAggregationTokens ?? DEFAULT_TENANT_CONFIG.preAggregationTokens,
     aliasFamilies: o.aliasFamilies ?? DEFAULT_TENANT_CONFIG.aliasFamilies,

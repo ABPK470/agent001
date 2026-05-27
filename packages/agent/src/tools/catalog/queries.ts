@@ -17,6 +17,7 @@
 // All accessors are pure and synchronous — they read in-memory catalog
 // data only. No SQL is issued from this module.
 
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import type { CatalogGraph } from "./graph/index.js"
 import type { CatalogTable } from "./types.js"
 
@@ -94,7 +95,7 @@ export function canonicalQualifiedName(
 ): string {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
-  if (!catalog) return qualifiedName
+  if (!catalog) return getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
   return getTableCI(catalog, qualifiedName)?.qualifiedName ?? qualifiedName
 }
 
@@ -191,10 +192,9 @@ function currentUnionIndex(accessor: CatalogAccessor, threshold: number): Map<st
  * Sources, in order:
  *   1. Live catalog: rowCount ≥ threshold (table) OR viewSourceRows ≥ threshold (view).
  *
- * NO bootstrap fallback set. Pre-catalog → returns false. Callers that
- * need a guarantee during early startup should defer the check until the
- * catalog has loaded; the validator's `isUnsafeScan` shape check still
- * fires regardless.
+ * Before a live catalog is loaded, fall back to a tiny bootstrap allowlist
+ * of canonical known-huge UNION views so deep-profile and doctrine guards
+ * still protect the agent during early startup and unit tests.
  */
 export function isLargeObject(
   qualifiedName: string,
@@ -203,7 +203,7 @@ export function isLargeObject(
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? LARGE_OBJECT_ROW_THRESHOLD
   const idx = currentLargeIndex(accessor, threshold)
-  if (!idx) return false
+  if (!idx) return getTenantConfig().catalogBootstrap.largeObjects.includes(qualifiedName.toLowerCase())
   return idx.has(qualifiedName.toLowerCase())
 }
 
@@ -217,7 +217,7 @@ export function listLargeObjects(
 ): ReadonlySet<string> {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? LARGE_OBJECT_ROW_THRESHOLD
-  return currentLargeIndex(accessor, threshold) ?? new Set()
+  return currentLargeIndex(accessor, threshold) ?? new Set(getTenantConfig().catalogBootstrap.largeObjects)
 }
 
 /**
@@ -233,7 +233,7 @@ export function unionBranchCount(
 ): number {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
-  if (!catalog) return 0
+  if (!catalog) return getTenantConfig().catalogBootstrap.unionBranchCounts[qualifiedName.toLowerCase()] ?? 0
   const tbl = getTableCI(catalog, qualifiedName)
   if (!tbl || tbl.type !== "VIEW") return 0
   if (tbl.viewDefinition) return countUnionBranchesInDefinition(tbl.viewDefinition)
@@ -261,7 +261,9 @@ export function isExpensiveUnionView(
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? UNION_BRANCH_THRESHOLD
   const idx = currentUnionIndex(accessor, threshold)
-  if (!idx) return false
+  if (!idx) {
+    return (getTenantConfig().catalogBootstrap.unionBranchCounts[qualifiedName.toLowerCase()] ?? 0) >= threshold
+  }
   return idx.has(qualifiedName.toLowerCase())
 }
 
@@ -271,7 +273,10 @@ export function listExpensiveUnionViews(
 ): ReadonlyMap<string, number> {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? UNION_BRANCH_THRESHOLD
-  return currentUnionIndex(accessor, threshold) ?? new Map()
+  return currentUnionIndex(accessor, threshold)
+    ?? new Map(
+      Object.entries(getTenantConfig().catalogBootstrap.unionBranchCounts).filter(([, branches]) => branches >= threshold),
+    )
 }
 
 // ── Key-column primitives ───────────────────────────────────────
@@ -307,7 +312,7 @@ export function highCardinalityKeyColumns(
 ): string[] {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
-  if (!catalog) return []
+  if (!catalog) return [...(getTenantConfig().catalogBootstrap.highCardinalityKeys[qualifiedName.toLowerCase()] ?? [])]
   const tbl = getTableCI(catalog, qualifiedName)
   if (!tbl) return []
   const minIncoming = options.minTargetIncomingFks ?? 3
@@ -413,7 +418,11 @@ export function persistedMirrorOf(
   const mirrorSchema = options.mirrorSchema ?? null
   if (!mirrorSchema) return null
   const catalog = accessor()
-  if (!catalog) return null
+  if (!catalog) {
+    const base = getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
+    const mirrorName = `${mirrorSchema}.${base}`
+    return getTenantConfig().catalogBootstrap.canonicalQualifiedNames[mirrorName.toLowerCase()] ? mirrorName : null
+  }
   const mirrorName = `${mirrorSchema}.${qualifiedName}`
   return getTableCI(catalog, mirrorName) ? mirrorName : null
 }

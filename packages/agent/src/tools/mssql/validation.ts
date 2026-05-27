@@ -5,18 +5,18 @@ import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import type { CatalogAccessor } from "../catalog/index.js"
 import {
-    _resetCatalogQueriesCache,
-    calendarDimensionTable,
-    canonicalQualifiedName,
-    isLargeObject as catalogIsLargeObject,
-    dateGrainColumn,
-    highCardinalityKeyColumns,
-    isExpensiveUnionView,
-    listLargeObjects,
-    listSchemas,
-    persistedMirrorOf,
-    primaryKeyColumns,
-    unionBranchCount,
+  _resetCatalogQueriesCache,
+  calendarDimensionTable,
+  canonicalQualifiedName,
+  isLargeObject as catalogIsLargeObject,
+  dateGrainColumn,
+  highCardinalityKeyColumns,
+  isExpensiveUnionView,
+  listLargeObjects,
+  listSchemas,
+  persistedMirrorOf,
+  primaryKeyColumns,
+  unionBranchCount,
 } from "../catalog/queries.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */

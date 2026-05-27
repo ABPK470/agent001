@@ -29,6 +29,8 @@ describe("tenant config defaults", () => {
   it("ships an empty mirror schema and empty schema ranking by default", () => {
     const c = getTenantConfig()
     expect(c.mirrorSchema).toBeNull()
+    expect(c.catalogBootstrap.largeObjects).toEqual([])
+    expect(c.catalogBootstrap.canonicalQualifiedNames).toEqual({})
     expect(c.schemaRanking).toEqual([])
     expect(c.routingKeywords.schemas).toEqual([])
     expect(c.routingKeywords.domain).toEqual([])
@@ -45,7 +47,22 @@ describe("setTenantConfig", () => {
     setTenantConfig({ mirrorSchema: "myMirror" })
     const c = getTenantConfig()
     expect(c.mirrorSchema).toBe("myMirror")
+    expect(c.catalogBootstrap.largeObjects).toEqual([])
     expect(c.largeObjectRows).toBe(DEFAULT_TENANT_CONFIG.largeObjectRows)
+  })
+
+  it("accepts explicit catalog bootstrap metadata", () => {
+    setTenantConfig({
+      catalogBootstrap: {
+        largeObjects: ["publish.revenue"],
+        canonicalQualifiedNames: { "publish.revenue": "publish.Revenue" },
+        unionBranchCounts: { "publish.revenue": 12 },
+        highCardinalityKeys: { "publish.revenue": ["pkClient"] },
+      },
+    })
+    const c = getTenantConfig()
+    expect(c.catalogBootstrap.largeObjects).toEqual(["publish.revenue"])
+    expect(c.catalogBootstrap.unionBranchCounts).toEqual({ "publish.revenue": 12 })
   })
 
   it("deep-freezes nested arrays", () => {

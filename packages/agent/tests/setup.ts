@@ -15,6 +15,34 @@ beforeAll(() => {
   setTenantConfig({
     ...getTenantConfig(),
     mirrorSchema: "persistedview",
+    catalogBootstrap: {
+      largeObjects: [
+        "publish.revenue",
+        "publish.balances",
+        "fact.unotranspose",
+        "persistedview.publish.revenue",
+        "persistedview.publish.balances",
+      ],
+      canonicalQualifiedNames: {
+        "publish.revenue": "publish.Revenue",
+        "publish.balances": "publish.Balances",
+        "fact.unotranspose": "fact.UnoTranspose",
+        "persistedview.publish.revenue": "persistedView.publish.Revenue",
+        "persistedview.publish.balances": "persistedView.publish.Balances",
+      },
+      unionBranchCounts: {
+        "publish.revenue": 59,
+        "publish.balances": 24,
+        "persistedview.publish.revenue": 59,
+        "persistedview.publish.balances": 24,
+      },
+      highCardinalityKeys: {
+        "publish.revenue": ["pkClient", "pkBranch", "pkAccount"],
+        "publish.balances": ["pkClient", "pkBranch", "pkAccount"],
+        "persistedview.publish.revenue": ["pkClient", "pkBranch", "pkAccount"],
+        "persistedview.publish.balances": ["pkClient", "pkBranch", "pkAccount"],
+      },
+    },
     schemaRanking: { publish: 50, persistedview: 45, fact: 20, dim: 20, list: 5, archive: -20, etl: -20 },
   })
 })

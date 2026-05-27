@@ -71,6 +71,7 @@ export * from "./tools/index.js"
 
 // ── Tenant configuration ────────────────────────────────────────────
 export {
+    DEFAULT_CATALOG_BOOTSTRAP,
     DEFAULT_TENANT_CONFIG,
     getTenantConfig,
     isDefaultTenantConfig,
@@ -78,7 +79,7 @@ export {
     resetTenantConfig,
     setTenantConfig
 } from "./application/shell/tenant-config.js"
-export type { TenantConfig } from "./application/shell/tenant-config.js"
+export type { CatalogBootstrapMetadata, TenantConfig } from "./application/shell/tenant-config.js"
 
 // ── Planner public surface (curated subset; planner has its own index) ─
 export {

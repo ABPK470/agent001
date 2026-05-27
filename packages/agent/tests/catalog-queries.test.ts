@@ -6,6 +6,7 @@
  * so the fixtures must prove that.
  */
 import { beforeEach, describe, expect, it } from "vitest"
+import { resetTenantConfig } from "../src/application/shell/tenant-config.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import {
     _resetCatalogQueriesCache,
@@ -70,7 +71,10 @@ function buildGraph(
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
-beforeEach(() => _resetCatalogQueriesCache())
+beforeEach(() => {
+  resetTenantConfig()
+  _resetCatalogQueriesCache()
+})
 
 describe("isLargeObject", () => {
   it("returns false when no catalog is loaded (no silent fallback)", () => {

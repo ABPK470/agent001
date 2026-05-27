@@ -10,18 +10,69 @@
  */
 
 import sqlMod from "mssql"
-import { getPool, type AgentHost } from "../../../ports/index.js"
 import {
-    getRecipe,
-    loadSyncRecipes,
-    type EntityType,
-    type SyncRecipe,
+  getRecipe,
+  loadSyncRecipes,
+  type EntityType,
+  type SyncRecipe,
 } from "../../../domain/recipes.js"
+import { getPool, type AgentHost } from "../../../ports/index.js"
 import { projectRoot, qtable } from "./db-helpers.js"
 
 export interface EntitySearchResult {
   id: string | number
   name: string | null
+}
+
+function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Error {
+  const detail = columns.length > 0
+    ? ` Available columns on ${recipe.rootTable}: ${columns.join(", ")}.`
+    : ` No readable columns were returned for ${recipe.rootTable}.`
+  return new Error(
+    `Sync recipe configuration error for ${recipe.entityType}: ` +
+    `rootNameColumn "${recipe.rootNameColumn ?? "<null>"}" does not exist on ${recipe.rootTable}.` +
+    detail,
+  )
+}
+
+async function resolveDisplayColumn(
+  host: AgentHost,
+  source: string,
+  recipe: SyncRecipe,
+): Promise<string> {
+  if (!recipe.rootNameColumn) {
+    throw new Error(
+      `Sync recipe configuration error for ${recipe.entityType}: rootNameColumn is required for ${recipe.rootTable}.`,
+    )
+  }
+  const [schema, table] = recipe.rootTable.split(".")
+  if (!schema || !table) {
+    throw new Error(
+      `Sync recipe configuration error for ${recipe.entityType}: rootTable "${recipe.rootTable}" must be schema-qualified.`,
+    )
+  }
+  const { pool } = await getPool(host, source)
+  const result = await pool.request()
+    .input("schema", sqlMod.NVarChar(128), schema)
+    .input("table", sqlMod.NVarChar(128), table)
+    .query(`
+      SELECT c.name
+      FROM sys.columns c
+      INNER JOIN sys.objects o ON o.object_id = c.object_id
+      INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE s.name = @schema
+        AND o.name = @table
+        AND o.type IN ('U', 'V')
+      ORDER BY c.column_id
+    `)
+
+  const columns = result.recordset
+    .map((row: Record<string, unknown>) => String(row.name ?? ""))
+    .filter((name) => name.length > 0)
+  const lowerToActual = new Map(columns.map((name) => [name.toLowerCase(), name]))
+  const requested = lowerToActual.get(recipe.rootNameColumn.toLowerCase())
+  if (requested) return requested
+  throw invalidRootNameColumnError(recipe, columns)
 }
 
 /**
@@ -36,7 +87,7 @@ export async function searchEntities(
   limit = 200,
 ): Promise<EntitySearchResult[]> {
   const recipe = getRecipe(loadSyncRecipes(host, projectRoot(host)), entityType)
-  if (!recipe.rootNameColumn) return []
+  const displayColumn = await resolveDisplayColumn(host, source, recipe)
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const r = await pool.request()
@@ -45,10 +96,10 @@ export async function searchEntities(
     .query(`
       SELECT TOP (@limit)
         [${recipe.rootKeyColumn}] AS id,
-        [${recipe.rootNameColumn}] AS name
+        [${displayColumn}] AS name
       FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
-      WHERE [${recipe.rootNameColumn}] LIKE @q
-      ORDER BY [${recipe.rootNameColumn}]
+      WHERE [${displayColumn}] LIKE @q
+      ORDER BY [${displayColumn}]
     `)
   return r.recordset.map((row: Record<string, unknown>) => ({
     id: row.id as string | number,
@@ -62,18 +113,14 @@ export async function fetchEntityDisplayName(
   entityId: string | number,
   source: string,
 ): Promise<string | null> {
-  if (!recipe.rootNameColumn) return null
-  try {
-    const { pool } = await getPool(host, source)
-    const r = await pool.request().query(`
-      SELECT TOP 1 [${recipe.rootNameColumn}] AS displayName
-      FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
-      WHERE [${recipe.rootKeyColumn}] = ${typeof entityId === "number" ? entityId : `'${String(entityId).replace(/'/g, "''")}'`}
-    `)
-    return (r.recordset[0]?.displayName as string | undefined) ?? null
-  } catch {
-    return null
-  }
+  const displayColumn = await resolveDisplayColumn(host, source, recipe)
+  const { pool } = await getPool(host, source)
+  const r = await pool.request().query(`
+    SELECT TOP 1 [${displayColumn}] AS displayName
+    FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
+    WHERE [${recipe.rootKeyColumn}] = ${typeof entityId === "number" ? entityId : `'${String(entityId).replace(/'/g, "''")}'`}
+  `)
+  return (r.recordset[0]?.displayName as string | undefined) ?? null
 }
 
 /**
