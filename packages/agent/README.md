@@ -18,21 +18,21 @@ Headline exports:
   `src/types.ts`.
 - Cluster barrels for the proposal-aligned `application/`, `domain/`, `tools/`,
   `memory/`, `llm/`, and `internal/` surfaces.
+- Sync features are owned by `@mia/sync`; import them from that package,
+  not from `@mia/agent`.
 
 ## Layout
 
 | Folder | Purpose |
 | --- | --- |
-| `agent/` | Per-iteration helpers used by `agent.ts`. Not a barrel. |
+| `application/core/` | Stateless planner, doctrine, clarify, and recovery logic. |
+| `application/shell/` | Stateful loop and runtime wiring, including `Agent` and `configureAgent()`. |
 | `domain/` | Domain model: enums, policy, models, learner. Cluster barrel via `domain/index.ts`. |
-| `planner/`, `planner-routing/` | Planner-first routing + coherent generation. |
-| `loop/` | Direct tool-loop fallback. |
+| `ports/` | Contracts for host/runtime dependencies exposed by the agent package. |
 | `tools/` | Concrete tool implementations. |
-| `tool-helpers/` | Reusable bits used by multiple tool implementations. (Note: tool-internal helpers live under `tools/_helpers/`.) |
-| `delegation/`, `governance/`, `recovery/` | Cross-cutting concerns. |
-| `sync/` | Sync-recipe + ABI introspection cluster. |
-| `context/` | Context compaction and budgeting. |
-| `internal/` | Package-private utilities (json, paths). Not exported. |
+| `memory/` | Context compaction, budgeting, and transcript state. |
+| `llm/` | Model adapters implementing the `LLMClient` contract. |
+| `internal/` | Package-private utilities. |
 
 ## Where things go
 
@@ -42,4 +42,4 @@ Headline exports:
 - **Reusable helper for tools** → `tool-helpers/`.
 - **A pure function with no domain meaning** → `internal/`.
 - **Anything callers outside the package need** → must be re-exported
-  through `lib/index.ts`.
+  through `src/index.ts`.

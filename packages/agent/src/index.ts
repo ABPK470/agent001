@@ -65,13 +65,6 @@ export * from "./application/core/recovery.js"
 export * from "./application/shell/delegation.js"
 export * from "./application/shell/loop.js"
 export * from "./domain/index.js"
-export {
-    DiscoverySource,
-    ENV_ACCESS_MODES,
-    EnvAccessMode,
-    EnvRole,
-    isEnvAccessMode
-} from "./domain/index.js"
 export * from "./llm/index.js"
 export * from "./memory/index.js"
 export * from "./tools/index.js"

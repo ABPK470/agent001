@@ -60,38 +60,34 @@ The system-level split is now:
 - `@mia/sync` is a sibling package for sync preview/execute, environments,
   recipes, plan storage, and sync tools
 
-`@mia/agent` re-exports the sync public surface from `@mia/sync`, but the sync
-implementation no longer lives under the agent package boundary.
+`@mia/agent` no longer re-exports sync-owned APIs; sync callers should bind to
+`@mia/sync` directly.
 
 ## Main clusters in `src/`
 
-### `agent/`, `loop/`
+### `application/shell/`
 
 Own the think → act → observe loop. These modules orchestrate one run and call
 the tool layer, planner, and governance helpers.
 
-### `context/`
+### `memory/`
 
 Token budgeting, truncation, and compaction. This is where long transcripts are
 made small enough for the model.
 
-### `planner/`
+### `application/core/`
 
 Structured execution pipeline for complex goals: generate, parse, validate,
 execute, verify, and repair.
 
-### `recovery/`
-
-Failure detectors, hints, retries, and loop-stuck mitigation.
-
-### `delegation/`
-
-Sub-agent spawning, delegation validation, and escalation.
-
-### `governance/` and `domain/`
+### `domain/`
 
 Run policy, audit/event semantics, quality checks, and the core domain types
 used across the execution loop.
+
+### `ports/`
+
+Contracts for host/runtime dependencies that the server and tools satisfy.
 
 ### `tools/`
 
@@ -112,9 +108,9 @@ Key exports:
 - `Agent`
 - tool and model contracts from `types.ts`
 - curated cluster barrels
-- sync re-exports from `@mia/sync`
 
-Consumers should import from `@mia/agent`, not from deep source paths.
+Consumers should import agent-owned APIs from `@mia/agent` and sync-owned APIs
+from `@mia/sync`, not from deep source paths.
 
 ## What changed in the refactor
 

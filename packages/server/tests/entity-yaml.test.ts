@@ -7,7 +7,7 @@
  * so we ignore them when comparing.
  */
 
-import type { EntityDefinition } from "@mia/agent"
+import type { EntityDefinition } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 import {
     formatEntitiesYaml,
