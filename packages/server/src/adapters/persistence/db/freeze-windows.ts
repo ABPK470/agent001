@@ -9,7 +9,7 @@
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 
-import { DEFAULT_TENANT_ID, type FreezeWindowDefinition } from "@mia/sync"
+import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
 import { getDb } from "./connection.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
@@ -124,6 +124,7 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
   })
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
+  if (args.tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
   return fresh
 }
 
@@ -131,6 +132,7 @@ export function deleteFreezeWindow(tenantId: string, id: string): boolean {
   const info = getDb().prepare(
     `DELETE FROM freeze_windows WHERE tenant_id = ? AND id = ?`,
   ).run(tenantId, id)
+  if (info.changes > 0 && tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
   return info.changes > 0
 }
 
@@ -155,4 +157,10 @@ export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_I
     startsAt:    r.startsAt,
     endsAt:      r.endsAt,
   }))
+}
+
+export function refreshFreezeWindowRegistry(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
+  const defs = listFreezeWindowDefinitionsForTenant(tenantId)
+  if (tenantId === DEFAULT_TENANT_ID) installFreezeWindowRegistry(defs)
+  return defs
 }

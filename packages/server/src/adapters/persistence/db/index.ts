@@ -211,6 +211,7 @@ export {
     getFreezeWindow,
     listFreezeWindowDefinitionsForTenant,
     listFreezeWindowsForTenant,
+    refreshFreezeWindowRegistry,
     upsertFreezeWindow,
     type FreezeWindowRecord,
     type UpsertFreezeWindowArgs

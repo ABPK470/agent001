@@ -1,15 +1,10 @@
 /**
- * Contract door for the new `ports/` cluster.
- *
- * This barrel is intentionally type-focused at the start. It lets the new
- * structure become importable without moving the existing implementation files
- * yet.
+ * Sync ports door.
  */
 
-export type { EnvAccessMode, EnvOperation, EnvRole, LoadSyncEnvironmentsResult, SyncEnvironment } from "../environments.js"
+export { getMssqlConfig, getPool, type MssqlEntry } from "../adapters/mssql/index.js"
 export type {
     SyncPlan,
-    SyncPlanChangeType,
     SyncPlanConflict,
     SyncPlanGraph,
     SyncPlanGraphNode,
@@ -17,6 +12,18 @@ export type {
     SyncPlanTable,
     SyncPlanTableCounts,
     SyncPlanTotals
-} from "../plan-store.js"
-export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "../sync-events.js"
-export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "../sync-run-sink.js"
+} from "../application/shell/plan-store.js"
+export * from "../domain/enums.js"
+export type { EnvAccessMode, EnvRole } from "../domain/enums.js"
+export type { EnvOperation, LoadSyncEnvironmentsResult, SyncEnvironment } from "../domain/environments.js"
+export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "./events.js"
+export type {
+    AgentHost,
+    MssqlHost,
+    SyncHost,
+    Tool,
+    ToolResultArtifactState,
+    ToolResultEnvelope
+} from "./host.js"
+export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "./run-sink.js"
+

@@ -2,20 +2,21 @@
  * Sync subsystem — public API.
  *
  * Outside this folder, import from `@mia/sync` or `./index.js` only.
- * Files inside this package (including `diff-engine/` and `orchestrator/`)
+ * Files inside this package (including `domain/*` and `application/*`)
  * are private implementation details.
  */
 
-export * from "./catalog-drift.js"
-export * from "./diff-engine/index.js"
-export * from "./entity-registry/index.js"
-export * from "./environments.js"
-export * from "./governance/freeze-windows.js"
-export * from "./orchestrator/index.js"
-export * from "./plan-store.js"
-export * from "./proposer/index.js"
-export * from "./recipes.js"
-export * from "./sync-events.js"
-export * from "./sync-run-sink.js"
-export * from "./tools.js"
+export * from "./adapters/mssql/index.js"
+export * from "./application/index.js"
+export * from "./domain/index.js"
+export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "./ports/events.js"
+export type {
+    AgentHost,
+    MssqlHost,
+    SyncHost,
+    Tool,
+    ToolResultArtifactState,
+    ToolResultEnvelope
+} from "./ports/host.js"
+export type { SyncRunFinishInput, SyncRunSink, SyncRunStartInput } from "./ports/run-sink.js"
 

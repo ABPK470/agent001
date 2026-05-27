@@ -1,5 +1,8 @@
 /**
- * Stateful-shell compatibility barrel for sync application flow.
+ * Stateful-shell door for sync runtime flow.
  */
 
-export * from "../../orchestrator/index.js"
+export * from "./orchestrator/index.js"
+export * from "./plan-store.js"
+export * from "./tools.js"
+

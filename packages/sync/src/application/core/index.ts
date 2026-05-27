@@ -1,5 +1,5 @@
 /**
- * Functional-core compatibility barrel for sync application flow.
+ * Functional-core door for sync application flow.
  */
 
-export * from "../../proposer/index.js"
+export * from "./proposer/index.js"

@@ -13,8 +13,8 @@
 
 import {
     type EntityDefinition,
-    listFreezeWindows as listAgentFreezeWindows,
 } from "@mia/agent"
+import { listFreezeWindows as listAgentFreezeWindows } from "@mia/sync"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"

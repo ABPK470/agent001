@@ -158,6 +158,7 @@ class HostSandboxBackend implements SandboxBackend {
       let truncated = false
       let timedOut = false
       let settled = false
+      let timeoutEscalation: NodeJS.Timeout | null = null
 
       const collect = (which: "stdout" | "stderr") => (chunk: Buffer | string) => {
         const text = typeof chunk === "string" ? chunk : chunk.toString("utf8")
@@ -192,8 +193,13 @@ class HostSandboxBackend implements SandboxBackend {
         if (settled) return
         timedOut = true
         killTree("SIGTERM")
-        // Escalate if the tree refuses to exit promptly.
-        setTimeout(() => { if (!settled) killTree("SIGKILL") }, 1_000).unref()
+        // Escalate even if the top-level shell exits quickly: descendants can
+        // outlive the shell, so the group kill must not depend on `close`.
+        timeoutEscalation = setTimeout(() => {
+          killTree("SIGKILL")
+          timeoutEscalation = null
+        }, 250)
+        timeoutEscalation.unref()
       }, timeout)
       timer.unref()
 
@@ -207,6 +213,10 @@ class HostSandboxBackend implements SandboxBackend {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        if (timeoutEscalation) {
+          clearTimeout(timeoutEscalation)
+          timeoutEscalation = null
+        }
         options.signal?.removeEventListener("abort", onAbort)
         const trailer = truncated ? `\n[output truncated at ${MAX_OUTPUT_BYTES} bytes]` : ""
         resolvePromise({
