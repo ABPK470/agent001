@@ -2,7 +2,7 @@
  * Mymi DB explorer transport routes.
  */
 
-import { getCatalog, getMssqlConfig, getMssqlPool, type AgentHost } from "@mia/agent"
+import { getCatalog, getMssqlConfig, getPool, type AgentHost } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
 
 type QS = { Querystring: { db?: string } }
@@ -26,7 +26,7 @@ function fmtTypeDetail(dataType: string, maxLength: number | null): string | nul
 
 export function registerMymiRoutes(app: FastifyInstance, host: AgentHost): void {
 	async function acquirePoolH(db: string) {
-		return getMssqlPool(host, db)
+		return getPool(host, db)
 	}
 
 	app.get("/api/mymi/databases", async () =>

@@ -34,16 +34,16 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   // _migrate re-enables foreign_keys after the hard-reset; turn it off
   // again so this suite can use synthetic runIds without seeding parents.
   // Cascade behaviour is verified by dedicated FK tests.
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/memory/index.js")
+  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
   migrateMemory()
-  return await import("../src/memory/index.js")
+  return await import("../src/adapters/persistence/memory/index.js")
 }
 
 describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
@@ -229,7 +229,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
   it("anonymous episodic memory is scoped by sid instead of the shared null-UPN pool", async () => {
     const mem = await setupMemory()
-    const { getDb } = await import("../src/db/index.js")
+    const { getDb } = await import("../src/adapters/persistence/db/index.js")
 
     mem.ingestRunTurns({
       id: "anon-a", goal: "draft deployment checklist", answer: "Session A answer",
@@ -286,7 +286,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
   it("memory_vectors mirrors upn/shared and SQL filter prevents cross-tenant rows", async () => {
     const mem = await setupMemory()
-    const { getDb } = await import("../src/db/index.js")
+    const { getDb } = await import("../src/adapters/persistence/db/index.js")
 
     // Insert a few entries for two tenants and stamp synthetic embeddings
     // directly so the test does not depend on Ollama being reachable.
@@ -513,7 +513,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const { fileURLToPath } = await import("node:url")
     const { dirname, join } = await import("node:path")
     const here = dirname(fileURLToPath(import.meta.url))
-    const src = readFileSync(join(here, "..", "src", "orchestrator", "run-executor.ts"), "utf8")
+    const src = readFileSync(join(here, "..", "src", "application", "shell", "execution", "run-executor.ts"), "utf8")
 
     // Collect every retrieveContext({...}) call's sessionId / upn assignment.
     const retrieveCalls = [...src.matchAll(/retrieveContext\([^)]*?\{([\s\S]*?)\}\s*\)/g)]

@@ -11,8 +11,8 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { extractGoalClasses } from "../src/memory/goal-class.js"
-import { searchProcedures, storeProcedural } from "../src/memory/procedural.js"
+import { extractGoalClasses } from "../src/adapters/persistence/memory/goal-class.js"
+import { searchProcedures, storeProcedural } from "../src/adapters/persistence/memory/procedural.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -24,14 +24,14 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   // _migrate re-enables foreign_keys after the hard-reset; turn it off
   // again so this suite can use synthetic runIds without seeding the
   // runs table. Cascade behaviour is covered by dedicated FK tests.
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/memory/index.js")
+  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
   migrateMemory()
 })
 

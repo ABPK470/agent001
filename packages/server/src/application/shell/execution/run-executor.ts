@@ -271,7 +271,7 @@ export async function executeRunImpl(
   if (shouldUseMemory) {
     try {
       const result = await retrieveContext(goal, {
-        sessionId: activeRun?.sessionId ?? agentId ?? "default",
+        sessionId: activeRun?.sessionId ?? undefined,
         runId,
         upn: activeRun?.ownerUpn ?? null,
       })

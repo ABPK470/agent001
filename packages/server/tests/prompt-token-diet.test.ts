@@ -16,9 +16,9 @@ import type { AgentHost, Tool } from "@mia/agent"
 import { configureAgent, resetTenantConfig, setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/application/core/decide-sections.js"
+import { buildToolContext } from "../src/application/core/prompt/builder.js"
 import { buildSystemMessages } from "../src/application/core/system-messages.js"
-import { buildToolContext } from "../src/prompt-builder.js"
-import type { RunWorkspaceContext } from "../src/run-workspace.js"
+import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const RW: RunWorkspaceContext = {
   runId:         "run-x",

@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe("browser context store", () => {
   it("is idempotent per upn and round-trips storage state", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
     _migrate(testDb)
     seedTestUsers(testDb);
     _setDb(testDb)

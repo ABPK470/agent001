@@ -6,7 +6,7 @@
 
 import type { AmbiguityFinding } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { ClarificationsRegistry } from "../src/orchestrator/clarifications-state.js"
+import { ClarificationsRegistry } from "../src/application/shell/execution/clarifications-registry.js"
 
 function mkFinding(over: Partial<AmbiguityFinding> = {}): AmbiguityFinding {
   return {

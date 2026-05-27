@@ -11,7 +11,7 @@
 import type { CatalogColumn, CatalogTable } from "@mia/agent"
 import { CatalogGraph } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { buildResolvedFactsBlock, extractObjectTokens } from "../src/orchestrator/resolved-facts-block.js"
+import { buildResolvedFactsBlock, extractObjectTokens } from "../src/application/core/data-blocks/resolved-facts-block.js"
 
 function col(name: string): CatalogColumn { return { name, dataType: "int", nullable: false } as CatalogColumn }
 function table(qualified: string, columns: string[]): CatalogTable {

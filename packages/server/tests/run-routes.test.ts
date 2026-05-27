@@ -26,7 +26,7 @@ async function buildApp(session: CurrentSession | null) {
   registerRunRoutes(app, {
     startRun,
     getRunWorkspaceDiff: () => null,
-  } as unknown as import("../src/orchestrator/index.js").AgentOrchestrator)
+  } as unknown as import("../src/application/shell/agent-orchestrator.js").AgentOrchestrator)
 
   await app.ready()
   return { app, startRun }

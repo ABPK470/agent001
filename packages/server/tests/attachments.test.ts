@@ -40,9 +40,9 @@ describe("attachments DB layer", () => {
     // MIA_DATA_DIR. The attachment storage module reads the env at module
     // load time; vitest gives every test a fresh module graph here because
     // each beforeEach mutates env *before* the dynamic import.
-    const { _setDb, _migrate } = await import("../src/db/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
     const { uploadAttachment, normalizeName, listAttachments, getAttachment, resolveStorageUri }
-      = await import("../src/attachments/index.js")
+      = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -81,9 +81,9 @@ describe("attachments DB layer", () => {
   })
 
   it("filters by run, soft-deletes, and records imports", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
     const { uploadAttachment, listAttachments, softDeleteAttachment, recordAttachmentImport, listAttachmentImports }
-      = await import("../src/attachments/index.js")
+      = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);

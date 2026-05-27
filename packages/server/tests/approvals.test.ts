@@ -6,7 +6,7 @@
  * defaults, and HMAC token issue + consume + replay protection.
  */
 
-import { RiskTier } from "@mia/agent"
+import { RiskTier } from "@mia/sync"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -34,14 +34,14 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   // _migrate re-enables FKs; the approval state-machine tests don't
   // exercise referential integrity — disable to avoid materialising a
   // full proposal fixture for every test.
   testDb.pragma("foreign_keys = OFF")
-  return import("../src/db/approvals.js")
+  return import("../src/adapters/persistence/db/approvals.js")
 }
 
 const SECRET = "x".repeat(48)

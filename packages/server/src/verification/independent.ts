@@ -20,7 +20,7 @@
  */
 
 import {
-    getMssqlPool,
+    getPool,
     type AgentHost,
 } from "@mia/agent"
 import { canonicalJsonStringify, tryResolveRecipe } from "@mia/sync"
@@ -141,8 +141,8 @@ async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
   if (!schema || !name) throw new Error(`bad table id "${i.table}"`)
   const qt = `[${schema}].[${name}]`
 
-  const { pool: srcPool } = await getMssqlPool(i.host, i.source)
-  const { pool: tgtPool } = await getMssqlPool(i.host, i.target)
+  const { pool: srcPool } = await getPool(i.host, i.source)
+  const { pool: tgtPool } = await getPool(i.host, i.target)
 
   const where = i.predicate.trim() ? `WHERE ${i.predicate}` : ""
   const countSql = `SELECT COUNT_BIG(*) AS n FROM ${qt} WITH (NOLOCK) ${where}`

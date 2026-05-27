@@ -13,10 +13,10 @@
 import type { Tool } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
+import type { PriorTurn } from "../src/application/core/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../src/application/core/system-messages.js"
-import { ClarificationsRegistry } from "../src/orchestrator/clarifications-state.js"
-import type { PriorTurn } from "../src/orchestrator/prior-turns.js"
-import type { RunWorkspaceContext } from "../src/run-workspace.js"
+import { ClarificationsRegistry } from "../src/application/shell/execution/clarifications-registry.js"
+import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const RW: RunWorkspaceContext = {
   runId:         "run-x",

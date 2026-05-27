@@ -12,7 +12,7 @@ import {
     getRunWorkspaceRoot,
     prepareRunWorkspace,
     shouldUseIsolatedWorkspace,
-} from "../src/run-workspace.js"
+} from "../src/application/shell/workspace/run-workspace.js"
 
 const createdDirs: string[] = []
 

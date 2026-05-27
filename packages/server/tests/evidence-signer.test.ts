@@ -2,10 +2,10 @@
  * F1.8 — HMAC signer + envelope round-trip tests.
  */
 
-import { buildEnvelope, envelopeBodyBytes, envelopeBodyHash, recomputeHashChain } from "../src/evidence/index.js"
-import { buildHmacSigner } from "../src/evidence/signers/hmac.js"
-import type { EnvelopeHeader } from "../src/evidence/envelope.js"
 import { describe, expect, it } from "vitest"
+import type { EnvelopeHeader } from "../src/adapters/persistence/evidence/envelope.js"
+import { buildEnvelope, envelopeBodyBytes, envelopeBodyHash, recomputeHashChain } from "../src/adapters/persistence/evidence/index.js"
+import { buildHmacSigner } from "../src/adapters/persistence/evidence/signers/hmac.js"
 
 function header(): EnvelopeHeader {
   return {

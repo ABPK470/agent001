@@ -13,8 +13,8 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { loadKnownObjects, renderKnownObjectsBlock } from "../src/orchestrator/known-objects.js"
-import type { PriorTurn } from "../src/orchestrator/prior-turns.js"
+import { loadKnownObjects, renderKnownObjectsBlock } from "../src/application/core/data-blocks/known-objects.js"
+import type { PriorTurn } from "../src/application/core/data-blocks/prior-turns.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -26,10 +26,10 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  const { migrateMemory } = await import("../src/memory/index.js")
+  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
   migrateMemory()
 })
 

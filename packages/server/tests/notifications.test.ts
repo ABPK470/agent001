@@ -16,7 +16,7 @@ import {
     migrateNotifications,
     saveNotification,
     type DbNotification,
-} from "../src/db/index.js"
+} from "../src/adapters/persistence/db/index.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 // ── Helper: in-memory DB ─────────────────────────────────────────

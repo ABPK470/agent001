@@ -24,17 +24,17 @@ afterEach(() => {
 })
 
 async function setupDb() {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/memory/index.js")
+  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
   migrateMemory()
-  return await import("../src/orchestrator/tool-result-persister.js")
+  return await import("../src/application/shell/execution/tool-result-persister.js")
 }
 
 async function loadPriorResultsForSession(sessionId: string) {
-  const { loadPriorResults } = await import("../src/orchestrator/prior-results-block.js")
+  const { loadPriorResults } = await import("../src/application/core/data-blocks/prior-results-block.js")
   return loadPriorResults({ sessionId })
 }
 

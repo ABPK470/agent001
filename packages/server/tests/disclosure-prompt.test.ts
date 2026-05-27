@@ -18,7 +18,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { buildSystemMessages } from "../src/application/core/system-messages.js"
-import type { RunWorkspaceContext } from "../src/run-workspace.js"
+import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const created: string[] = []
 

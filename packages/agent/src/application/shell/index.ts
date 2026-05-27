@@ -1,5 +1,5 @@
 /**
- * Stateful-shell compatibility barrel for the new `application/shell` split.
+ * Stateful-shell public barrel.
  *
  * This barrel stays curated so it does not flatten overlapping symbols from
  * lower-level shell entrypoints into one namespace.

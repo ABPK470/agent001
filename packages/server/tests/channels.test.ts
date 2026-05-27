@@ -7,13 +7,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { QueueStore } from "../src/channels/queue.js"
-import { MessageQueue } from "../src/channels/queue.js"
-import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/channels/retry.js"
-import type { ConversationStore, RunTrigger } from "../src/channels/router.js"
-import { MessageRouter } from "../src/channels/router.js"
-import { TeamsChannel } from "../src/channels/teams.js"
-import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/channels/types.js"
+import type { QueueStore } from "../src/api/channels/queue.js"
+import { MessageQueue } from "../src/api/channels/queue.js"
+import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/api/channels/retry.js"
+import type { ConversationStore, RunTrigger } from "../src/api/channels/router.js"
+import { MessageRouter } from "../src/api/channels/router.js"
+import { TeamsChannel } from "../src/api/channels/teams.js"
+import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/api/channels/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 

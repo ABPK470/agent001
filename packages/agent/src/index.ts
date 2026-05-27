@@ -6,7 +6,7 @@
  * through here or through the cluster's `index.ts`.
  */
 
-// ── Core ────────────────────────────────────────────────────────────
+// ── Runtime Shell ───────────────────────────────────────────────────
 export { Agent } from "./application/shell/agent.js"
 export { configureAgent, makeRunContext } from "./application/shell/runtime.js"
 export type {
@@ -86,9 +86,6 @@ export {
     setTenantConfig
 } from "./application/shell/tenant-config.js"
 export type { TenantConfig } from "./application/shell/tenant-config.js"
-
-// Renamed re-export preserved for back-compat with @mia/server.
-export { getPool as getMssqlPool } from "./tools/index.js"
 
 // ── Planner public surface (curated subset; planner has its own index) ─
 export {

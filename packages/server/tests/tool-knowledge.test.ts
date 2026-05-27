@@ -32,13 +32,13 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/memory/index.js")
+  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
   migrateMemory()
-  return await import("../src/memory/index.js")
+  return await import("../src/adapters/persistence/memory/index.js")
 }
 
 const FP_A = { cols: 5, type: "T" as const, csum: "deadbeef" }

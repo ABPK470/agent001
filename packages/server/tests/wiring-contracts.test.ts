@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest"
 const here = dirname(fileURLToPath(import.meta.url))
 const SERVER_ROOT = join(here, "..")
 const SRC_ROOT = join(SERVER_ROOT, "src")
-const RUN_EXECUTOR = join(SRC_ROOT, "orchestrator", "run-executor.ts")
+const RUN_EXECUTOR = join(SRC_ROOT, "application", "shell", "execution", "run-executor.ts")
 
 // ── Shared helpers ────────────────────────────────────────────────
 
@@ -294,11 +294,6 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
   // The "default" tail is the legacy global anonymous bucket; flagged for
   // the C9 invariant — see plan-test-coverage-deepening.md D3.
   {
-    file: "orchestrator/run-executor.ts",
-    match: "activeRun?.sessionId ?? agentId ?? \"default\"",
-    reason: "Memory read fallback chain mirrors ingestion.ts:152; the trailing 'default' bucket is documented in C9 (plan D3) — needs explicit user decision before tightening.",
-  },
-  {
     file: "memory/ingestion.ts",
     match: "run.sessionId ?? run.agentId ?? \"default\"",
     reason: "Memory write fallback chain — the contract that retrieval mirrors. Tail 'default' bucket is the C9/D3 open question.",
@@ -316,22 +311,22 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
     reason: "actor_upn column on sync_runs is display-only for the history UI; isolation is enforced by separate fk/owner columns.",
   },
   {
-    file: "routes/policies.ts",
+    file: "api/policies.ts",
     match: "req.session?.upn ?? \"unknown\"",
     reason: "Audit log actor field — display-only, not used as a tenancy/key column.",
   },
   {
-    file: "routes/sync-environments.ts",
+    file: "api/sync-environments.ts",
     match: "req.session?.upn ?? \"unknown\"",
     reason: "Audit log actor field — display-only, not used as a tenancy/key column.",
   },
   {
-    file: "routes/freeze-windows.ts",
+    file: "api/freeze-windows.ts",
     match: "req.session?.upn ?? \"unknown\"",
     reason: "Audit log actor field — display-only, not used as a tenancy/key column. Sibling of routes/policies.ts and routes/sync-environments.ts.",
   },
   {
-    file: "routes/sync.ts",
+    file: "api/sync.ts",
     match: "req.session?.upn ?? req.session?.displayName ?? \"anonymous\"",
     reason: "Audit log actor display string only. Real isolation uses actorUpn (which stays null) on the same call sites.",
   },

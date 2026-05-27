@@ -14,7 +14,7 @@
  */
 
 import {
-    getMssqlPool,
+    getPool,
     type AgentHost,
 } from "@mia/agent"
 import {
@@ -98,7 +98,7 @@ async function sampleRootIds(
 ): Promise<readonly (string | number)[]> {
   const [schema, name] = table.split(".")
   if (!schema || !name) throw new Error(`Invalid table name: ${table}`)
-  const { pool } = await getMssqlPool(host, conn)
+  const { pool } = await getPool(host, conn)
   const req = pool.request()
   const sql = `SELECT TOP (${Math.max(1, Math.min(limit, 500))}) [${keyCol}] AS id
                  FROM [${schema}].[${name}] WITH (NOLOCK)

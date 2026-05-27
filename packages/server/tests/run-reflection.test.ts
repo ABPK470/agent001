@@ -5,7 +5,7 @@ import {
     extractObservedQnames,
     runReflectionTurn,
     type ReflectionStep,
-} from "../src/orchestrator/run-reflection.js"
+} from "../src/application/core/coordination/run-reflection.js"
 
 // ── helpers ──────────────────────────────────────────────────────
 

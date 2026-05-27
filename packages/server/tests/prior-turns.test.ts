@@ -22,7 +22,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { loadPriorTurns, PRIOR_TURN_ANSWER_MAX_CHARS } from "../src/orchestrator/prior-turns.js"
+import { loadPriorTurns, PRIOR_TURN_ANSWER_MAX_CHARS } from "../src/application/core/data-blocks/prior-turns.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database
@@ -36,7 +36,7 @@ beforeEach(async () => {
   db = new Database(":memory:")
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _setDb(db)
   _migrate(db)
 })

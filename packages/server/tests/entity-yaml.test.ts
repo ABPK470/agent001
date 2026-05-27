@@ -14,7 +14,7 @@ import {
     formatEntityYaml,
     parseEntitiesYaml,
     parseEntityYaml,
-} from "../src/sync/entity-yaml.js"
+} from "../src/adapters/sync/entity-yaml.js"
 
 const FULL_DEF: EntityDefinition = {
   id:             "contract",

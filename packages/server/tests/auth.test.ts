@@ -28,7 +28,7 @@ const ORIGINAL_REG     = process.env["MIA_ALLOW_LOCAL_REGISTRATION"]
 const ORIGINAL_SECRET  = process.env["MIA_SESSION_SECRET"]
 
 async function buildApp(): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   const { registerIdentity }   = await import("../src/auth/identity.js")
   const { registerAuthRoutes } = await import("../src/api/auth.js")
   const { registerLocalUser }  = await import("../src/auth/users.js")
@@ -242,7 +242,7 @@ describe("auth — gate", () => {
       expect(before.json()).toEqual({ upn: "harry" })
 
       // Server-side revoke — kill the row.
-      const { deleteSessionsForUser } = await import("../src/db/sessions.js")
+      const { deleteSessionsForUser } = await import("../src/adapters/persistence/db/sessions.js")
       deleteSessionsForUser("harry")
 
       const after = await app.inject({
@@ -291,7 +291,7 @@ describe("auth — SSO header path", () => {
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ upn: "sso.user@corp", displayName: "SSO User" })
 
-      const { findUserByUpn } = await import("../src/db/users.js")
+      const { findUserByUpn } = await import("../src/adapters/persistence/db/users.js")
       const row = findUserByUpn("sso.user@corp")
       expect(row?.source).toBe("sso")
       expect(row?.password_hash).toBeNull()

@@ -16,7 +16,7 @@ function resolveTenant(req: FastifyRequest): string {
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
 	try {
 		saveAdminAudit({
-			actor: req.session?.upn ?? "unknown",
+			actor: req.session.upn,
 			action,
 			detail: JSON.stringify(detail),
 			timestamp: new Date().toISOString(),

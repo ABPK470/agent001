@@ -13,7 +13,7 @@ import {
     PROVENANCE_KEYS,
     provenanceMultiplier,
     stampProvenance,
-} from "../src/memory/provenance.js"
+} from "../src/adapters/persistence/memory/provenance.js"
 
 const now = new Date("2026-05-21T12:00:00Z")
 function isoDaysAgo(days: number): string {

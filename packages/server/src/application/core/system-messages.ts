@@ -3,7 +3,7 @@ import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, buildPromptVars, CHART_CATALOG
 import { getAttachment, type AttachmentRow } from "../../adapters/persistence/attachments.js"
 import type { DbToolResult } from "../../adapters/persistence/sqlite.js"
 import type { ClarificationsPort } from "../../ports/clarifications.js"
-import type { RunWorkspaceContext } from "../../run-workspace.js"
+import type { RunWorkspaceContext } from "../shell/workspace/run-workspace.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import { renderKnownObjectsBlock, type CandidateVerdictRow, type KnownObjectRow } from "./data-blocks/known-objects.js"
 import { renderPriorResultsBlock } from "./data-blocks/prior-results-block.js"
