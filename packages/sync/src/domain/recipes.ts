@@ -40,7 +40,16 @@ export const BUNDLED_ENTITY_IDS = [
 ] as const
 
 /** How a given table was discovered as part of an entity's dependency closure. */
-import { DiscoverySource, SyncRecipeDiscrepancyKind } from "./enums.js"
+import {
+    DiscoverySource,
+    PostMetadataActionKind,
+    SyncRecipeDiscrepancyKind,
+    type PostMetadataActionKind as PostMetadataActionKindValue,
+} from "./enums.js"
+
+export interface SyncPostMetadataAction {
+  kind: PostMetadataActionKindValue
+}
 
 export interface SyncRecipeTable {
   /** Schema-qualified name e.g. `core.ContractColumn`. */
@@ -108,6 +117,8 @@ export interface SyncRecipe {
   executionOrder: string[]
   /** Reverse — children first, parents last — used for delete-on-target operations. */
   reverseOrder: string[]
+  /** Ordered actions that run after metadata commit. */
+  postMetadataActions: SyncPostMetadataAction[]
   /**
    * Per-table SCD2 archive table (e.g. `coreArchive.Contract` for `core.Contract`).
    * Populated by convention (`{schema}Archive.{name}`) when not explicitly set.
@@ -170,6 +181,7 @@ export function loadSyncRecipes(host: AgentHost, projectRoot: string, relPath = 
     for (const [, recipe] of Object.entries(parsed.recipes)) {
       if (!recipe) continue
       recipe.tables = recipe.tables.map(normalizeRecipeTable)
+      recipe.postMetadataActions = normalizePostMetadataActions(recipe)
       if (!Array.isArray(recipe.archiveTables)) {
         recipe.archiveTables = recipe.tables.map((t) => deriveArchiveTable(t.name))
       }
@@ -240,6 +252,45 @@ function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
     userControllable,
     enabledByDefault,
   }
+}
+
+export function resolvePostMetadataActions(
+  recipe: Pick<SyncRecipe, "entityType" | "legacyPipelineId"> & { postMetadataActions?: SyncPostMetadataAction[] | null },
+): SyncPostMetadataAction[] {
+  if (Array.isArray(recipe.postMetadataActions) && recipe.postMetadataActions.length > 0) {
+    return recipe.postMetadataActions.map((action) => ({ kind: action.kind }))
+  }
+
+  switch (recipe.entityType) {
+    case "contract":
+      return [{ kind: PostMetadataActionKind.ContractDeploy }]
+    case "dataset":
+      return [{ kind: PostMetadataActionKind.DatasetDeploy }]
+    case "rule":
+      return [
+        { kind: PostMetadataActionKind.DatasetDeploy },
+        { kind: PostMetadataActionKind.RulesDeploy },
+        { kind: PostMetadataActionKind.HandleDependencies },
+      ]
+    case "pipelineActivity":
+      return [{ kind: PostMetadataActionKind.PipelineRegister }]
+    case "gateMetadata":
+      return [
+        { kind: PostMetadataActionKind.MetaRefresh },
+        { kind: PostMetadataActionKind.PipelineStart },
+      ]
+    case "content":
+      return [{ kind: PostMetadataActionKind.HandleDependencies }]
+    default:
+      if (recipe.legacyPipelineId === 792) {
+        return [{ kind: PostMetadataActionKind.DatasetDeploy }]
+      }
+      return []
+  }
+}
+
+function normalizePostMetadataActions(recipe: SyncRecipe): SyncPostMetadataAction[] {
+  return resolvePostMetadataActions(recipe)
 }
 
 function isRecipeTableEnabled(table: SyncRecipeTable, enabledOptional: Set<string>): boolean {

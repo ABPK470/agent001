@@ -9,6 +9,7 @@
       "role": "both",
       "linkedServiceName": "ABI - SYNC",
       "agentServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5005/etl",
       "ringOrder": 0,
       "syncAllowlist": []
     },
@@ -19,6 +20,7 @@
       "role": "both",
       "linkedServiceName": "ABI - SYNC",
       "agentServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5005/etl",
       "ringOrder": 1,
       "syncAllowlist": []
     },
@@ -29,6 +31,7 @@
       "role": "target",
       "linkedServiceName": "ABI - SYNC",
       "agentServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5005/etl",
       "ringOrder": 2,
       "syncAllowlist": []
     }

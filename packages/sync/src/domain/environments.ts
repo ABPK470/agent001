@@ -49,6 +49,12 @@ export interface SyncEnvironment {
    */
   agentServiceBaseUrl?: string | null
   /**
+   * Direct base URL of the MyMI ETL service for this environment, used for
+   * dataset/rule deployment callbacks after metadata sync. Example:
+   * `http://host:5005/etl`.
+   */
+  etlServiceBaseUrl?: string | null
+  /**
    * UPN allowlist for sync_execute on this environment. Empty = open to all
    * authenticated users. Cross-checked against `mia_sid` cookie identity.
    */
@@ -147,6 +153,7 @@ export function withPermissionDefaults(
     role:               (e.role ?? EnvRole.Both),
     ringOrder:          typeof e.ringOrder === "number" ? e.ringOrder : 0,
     agentServiceBaseUrl:e.agentServiceBaseUrl ?? null,
+    etlServiceBaseUrl:  e.etlServiceBaseUrl ?? null,
     syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
     defaultAccessMode,
     allowedOperations,
@@ -177,6 +184,7 @@ export function loadSyncEnvironments(
         role: (e.role ?? EnvRole.Both),
         ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
         agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
+        etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
         syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
         defaultAccessMode: e.defaultAccessMode,
         allowedOperations: e.allowedOperations,

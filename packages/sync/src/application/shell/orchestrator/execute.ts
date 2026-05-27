@@ -12,19 +12,19 @@
  */
 
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
-import { EventType, getPool, SyncOperationType, SyncProgressKind, SyncRunStatus } from "../../../ports/index.js"
 import { getEnvironment } from "../../../domain/environments.js"
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
-import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
+import { EventType, getPool, SyncOperationType, SyncProgressKind, SyncRunStatus } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
+import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
 import { getSyncRunSink } from "../run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
 import { runAuditCheckDirect, setContractLockDirect } from "./contract-deploy.js"
 import { DRIFT_ABORT_PCT } from "./db-helpers.js"
 import { revalidatePlanDrift } from "./drift.js"
-import { runContractPipeline } from "./execute-pipeline.js"
 import { runMetadataSync } from "./metadata-sync.js"
+import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 import type { ExecuteOptions, ExecuteProgress } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 
@@ -226,10 +226,11 @@ async function executeSyncInner(
     })
     stepEmit("sync-metadata-done", "Metadata sync committed")
 
-    // ── Steps 5-23: Post-tx contract pipeline ──
-    const { stepWarnings: pipelineWarnings } = await runContractPipeline({
-      host: opts.host, tgtPool, srcPool, plan, planId, isContract,
+    // ── Post-commit actions + date stamping ──
+    const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
+      host: opts.host, tgtPool, srcPool, plan, planId,
       entityId, entityType, onProgress, telemetryContext,
+      userUpn: opts.userUpn,
     })
     stepWarnings.push(...pipelineWarnings)
 

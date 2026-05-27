@@ -62,6 +62,23 @@ export const isSyncRecipeDiscrepancyKind = (value: unknown): value is SyncRecipe
   typeof value === "string"
   && (SYNC_RECIPE_DISCREPANCY_KINDS as readonly string[]).includes(value)
 
+export const PostMetadataActionKind = {
+  ContractDeploy: "contractDeploy",
+  DatasetDeploy: "datasetDeploy",
+  RulesDeploy: "rulesDeploy",
+  PipelineRegister: "pipelineRegister",
+  MetaRefresh: "metaRefresh",
+  PipelineStart: "pipelineStart",
+  HandleDependencies: "handleDependencies",
+} as const
+export type PostMetadataActionKind =
+  (typeof PostMetadataActionKind)[keyof typeof PostMetadataActionKind]
+export const POST_METADATA_ACTION_KINDS: ReadonlyArray<PostMetadataActionKind> =
+  Object.values(PostMetadataActionKind)
+export const isPostMetadataActionKind = (value: unknown): value is PostMetadataActionKind =>
+  typeof value === "string"
+  && (POST_METADATA_ACTION_KINDS as readonly string[]).includes(value)
+
 export const ToolOutcomeSeverity = {
   Info: "info",
   Recoverable: "recoverable",

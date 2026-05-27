@@ -8,17 +8,9 @@
 
 import { randomUUID } from "node:crypto"
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
-import { EventType, SyncOperationType, type AgentHost } from "../../../ports/index.js"
 import { buildDependencyGraph, diffTable } from "../../../domain/diff-engine/index.js"
 import { tryResolveRecipe } from "../../../domain/entity-registry/resolver.js"
 import { getEnvironment } from "../../../domain/environments.js"
-import {
-    allocPlanId,
-    savePlan,
-    type SyncPlan,
-    type SyncPlanTable,
-    type SyncPlanTotals,
-} from "../plan-store.js"
 import {
     getRecipe,
     instantiatePredicate,
@@ -29,7 +21,15 @@ import {
     type SyncRecipe,
     type SyncRecipeTable,
 } from "../../../domain/recipes.js"
+import { EventType, SyncOperationType, type AgentHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
+import {
+    allocPlanId,
+    savePlan,
+    type SyncPlan,
+    type SyncPlanTable,
+    type SyncPlanTotals,
+} from "../plan-store.js"
 import { fetchPkColumns } from "./apply.js"
 import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db-helpers.js"
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
@@ -238,6 +238,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         tables: recipe.tables.map((t: SyncRecipeTable) => ({ name: t.name, scopeColumn: t.scopeColumn, predicate: t.predicate })),
         executionOrder: recipe.executionOrder,
         reverseOrder: recipe.reverseOrder,
+        postMetadataActions: recipe.postMetadataActions.map((action) => ({ kind: action.kind })),
         enabledOptionalTables: recipe.tables.filter((table) => table.userControllable).map((table) => table.name),
       },
       entityPolicies: resolvedPolicies,

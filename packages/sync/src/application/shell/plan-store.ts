@@ -13,8 +13,8 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
+import type { EntityType, SyncPostMetadataAction } from "../../domain/recipes.js"
 import { SyncPlanChangeType, type AgentHost } from "../../ports/index.js"
-import type { EntityType } from "../../domain/recipes.js"
 
 export interface SyncPlanTableCounts {
   insert: number
@@ -120,7 +120,7 @@ export interface SyncPlan {
   warnings: string[]
   estimatedDurationSec: number
   /** Recipe snapshot used — included so execute reproduces preview exactly. */
-  recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+  recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; postMetadataActions: SyncPostMetadataAction[]; enabledOptionalTables?: string[] }
   /**
    * Governance policy snapshot pulled from the entity registry at plan
    * time. Threads through into the execute preflight so freeze windows
