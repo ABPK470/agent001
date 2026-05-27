@@ -1,5 +1,3 @@
-import { appendMirrorSpan, cloneMirrorSpan, markMirrorStatus } from "./mirror-trace.js"
-import { enforceClarificationUiOptions } from "./ask-user-options.js"
 import {
     Agent,
     cancelRun,
@@ -65,6 +63,7 @@ import { decideSections, filterToolsByGoal } from "../../core/decide-sections.js
 import { buildSystemMessages } from "../../core/system-messages.js"
 import { RunPriority } from "../queue/run-queue.js"
 import { prepareRunWorkspace } from "../workspace/run-workspace.js"
+import { enforceClarificationUiOptions } from "./ask-user-options.js"
 import { createNotification, persistAuditLog, persistRun, persistTokenUsage, saveTrace } from "./persistence.js"
 import { persistToolResult } from "./tool-result-persister.js"
 import { captureRunWorkspaceDiff, wrapWithEffects } from "./workspace-effects.js"
