@@ -98,6 +98,33 @@ function resolveCwd(sandboxRoot: string, sub?: string): string {
   return candidate
 }
 
+function collectPosixDescendantPids(rootPid: number): number[] {
+  const ps = spawnSync("ps", ["-Ao", "pid=,ppid="], { encoding: "utf8", windowsHide: true })
+  if (ps.status !== 0 || typeof ps.stdout !== "string") return []
+
+  const childrenByParent = new Map<number, number[]>()
+  for (const line of ps.stdout.split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s*$/)
+    if (!match) continue
+    const pid = Number(match[1])
+    const parentPid = Number(match[2])
+    const siblings = childrenByParent.get(parentPid)
+    if (siblings) siblings.push(pid)
+    else childrenByParent.set(parentPid, [pid])
+  }
+
+  const descendants: number[] = []
+  const pending = [...(childrenByParent.get(rootPid) ?? [])]
+  while (pending.length > 0) {
+    const pid = pending.pop()
+    if (pid === undefined) continue
+    descendants.push(pid)
+    const children = childrenByParent.get(pid)
+    if (children) pending.push(...children)
+  }
+  return descendants.sort((left, right) => right - left)
+}
+
 // ── Host backend (cross-platform Node child_process) ─────────────────
 
 class HostSandboxBackend implements SandboxBackend {
@@ -185,6 +212,9 @@ class HostSandboxBackend implements SandboxBackend {
         } else {
           // POSIX: negative pid → process group kill.
           try { process.kill(-child.pid, signal) } catch { /* ignore ESRCH */ }
+          for (const descendantPid of collectPosixDescendantPids(child.pid)) {
+            try { process.kill(descendantPid, signal) } catch { /* ignore ESRCH */ }
+          }
         }
         try { child.kill(signal) } catch { /* ignore */ }
       }
@@ -213,7 +243,10 @@ class HostSandboxBackend implements SandboxBackend {
         if (settled) return
         settled = true
         clearTimeout(timer)
-        if (timeoutEscalation) {
+        // Keep the timeout escalation alive after the shell exits: a
+        // descendant can survive the shell's close event briefly, and the
+        // follow-up group SIGKILL is what makes the tree kill deterministic.
+        if (timeoutEscalation && !timedOut) {
           clearTimeout(timeoutEscalation)
           timeoutEscalation = null
         }
@@ -233,6 +266,9 @@ class HostSandboxBackend implements SandboxBackend {
         finish(1)
       })
       child.on("close", (code, signal) => {
+        if (timedOut) {
+          killTree("SIGKILL")
+        }
         const exitCode = typeof code === "number"
           ? code
           : signal
