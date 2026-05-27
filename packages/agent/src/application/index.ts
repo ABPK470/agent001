@@ -1,9 +1,10 @@
 /**
- * Additive door for the new `application/` cluster.
+ * Public door for the agent application layer.
  *
- * This split makes the functional-core vs shell distinction visible from the
- * tree before callers open a file.
+ * This split keeps the functional-core vs shell distinction visible from the
+ * package surface.
  */
 
 export * from "./core/index.js"
 export * from "./shell/index.js"
+

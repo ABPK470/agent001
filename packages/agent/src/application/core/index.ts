@@ -1,5 +1,5 @@
 /**
- * Functional-core compatibility barrel for the new `application/core` split.
+ * Public door for agent functional-core orchestration.
  */
 
 export * from "./clarify.js"

@@ -2,11 +2,10 @@
  * host/index.ts — public door for the host cluster.
  *
  * Outside callers (server entrypoint, CLI, tests, future tool migrations)
- * import only from `@mia/agent/host` — never from `./ports.js` or
- * `./host.js` directly. See docs/doctrine.md §7 for the cluster-door
- * rule.
+ * import only from `@mia/agent` — never from these runtime-cluster files
+ * directly. See docs/doctrine.md §7 for the cluster-door rule.
  *
- * Phase 2 surface — additive. No existing code references this yet.
+ * Canonical runtime-cluster surface for host construction helpers.
  */
 
 export { configureAgent } from "./configure.js"

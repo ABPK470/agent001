@@ -1,5 +1,5 @@
 /**
- * Stateful-shell compatibility barrel for server application flow.
+ * Public door for server stateful shell orchestration.
  */
 
 export * from "./agent-orchestrator.js"

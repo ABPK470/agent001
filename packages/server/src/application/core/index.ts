@@ -1,5 +1,5 @@
 /**
- * Functional-core compatibility barrel for server application flow.
+ * Public door for server functional-core coordination logic.
  */
 
 export * from "./clarification-block.js"
