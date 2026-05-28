@@ -125,14 +125,16 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
         <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
           <Activity className="h-3 w-3" /> run snapshot
         </h4>
-        <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
-          <DetailRow label="status" value={<span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${statusTone(run.status)}`}>{run.status}</span>} />
-          <DetailRow label="actor" value={run.actorUpn ?? "system"} />
-          <DetailRow label="started" value={formatDateTime(run.startedAt)} />
-          <DetailRow label="finished" value={run.finishedAt ? formatDateTime(run.finishedAt) : "running"} />
-          <DetailRow label="duration" value={run.durationMs == null ? "—" : `${Math.round(run.durationMs / 1000)}s`} />
-          <DetailRow label="error" value={run.error ?? "—"} />
-        </dl>
+        <div className="overflow-x-auto">
+          <dl className="grid min-w-[320px] grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
+            <DetailRow label="status" value={<span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${statusTone(run.status)}`}>{run.status}</span>} />
+            <DetailRow label="actor" value={run.actorUpn ?? "system"} />
+            <DetailRow label="started" value={formatDateTime(run.startedAt)} />
+            <DetailRow label="finished" value={run.finishedAt ? formatDateTime(run.finishedAt) : "running"} />
+            <DetailRow label="duration" value={run.durationMs == null ? "—" : `${Math.round(run.durationMs / 1000)}s`} />
+            <DetailRow label="error" value={run.error ?? "—"} />
+          </dl>
+        </div>
       </section>
 
       {busy && <div className="rounded-lg border border-border-subtle bg-panel px-4 py-3 text-text-muted">Loading persisted plan…</div>}
@@ -143,12 +145,14 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
           <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             <Eye className="h-3 w-3" /> compiled plan
           </h4>
-          <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
-            <DetailRow label="definition" value={executionContract.definitionId} />
-            <DetailRow label="version" value={executionContract.definitionVersion} />
-            <DetailRow label="schemas" value={executionContract.allowedSchemas.join(", ") || "—"} />
-            <DetailRow label="steps" value={String(executionContract.steps.length)} />
-          </dl>
+          <div className="overflow-x-auto">
+            <dl className="grid min-w-[320px] grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
+              <DetailRow label="definition" value={executionContract.definitionId} />
+              <DetailRow label="version" value={executionContract.definitionVersion} />
+              <DetailRow label="schemas" value={executionContract.allowedSchemas.join(", ") || "—"} />
+              <DetailRow label="steps" value={String(executionContract.steps.length)} />
+            </dl>
+          </div>
           <div className="mt-3 space-y-2">
             {executionContract.steps.map((step, index) => (
               <div key={step.id} className="rounded border border-border-subtle bg-overlay-1/40 px-3 py-2">
@@ -169,14 +173,16 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
           <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             <ShieldCheck className="h-3 w-3" /> governance decision
           </h4>
-          <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
-            <DetailRow label="evaluated" value={formatDateTime(governance.evaluatedAt)} />
-            <DetailRow label="approval policy" value={governance.governance.approvalPolicyId ?? "none"} />
-            <DetailRow label="risk multiplier" value={String(governance.governance.riskMultiplier)} />
-            <DetailRow label="target role" value={governance.targetEnvironment.role} />
-            <DetailRow label="actor allowed" value={governance.targetEnvironment.actorAllowed === null ? "not evaluated" : (governance.targetEnvironment.actorAllowed ? "yes" : "no")} />
-            <DetailRow label="freeze refs" value={governance.governance.freezeWindowIds.join(", ") || "none"} />
-          </dl>
+          <div className="overflow-x-auto">
+            <dl className="grid min-w-[320px] grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
+              <DetailRow label="evaluated" value={formatDateTime(governance.evaluatedAt)} />
+              <DetailRow label="approval policy" value={governance.governance.approvalPolicyId ?? "none"} />
+              <DetailRow label="risk multiplier" value={String(governance.governance.riskMultiplier)} />
+              <DetailRow label="target role" value={governance.targetEnvironment.role} />
+              <DetailRow label="actor allowed" value={governance.targetEnvironment.actorAllowed === null ? "not evaluated" : (governance.targetEnvironment.actorAllowed ? "yes" : "no")} />
+              <DetailRow label="freeze refs" value={governance.governance.freezeWindowIds.join(", ") || "none"} />
+            </dl>
+          </div>
           {governance.warnings.length > 0 && (
             <div className="mt-3 rounded border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
               {governance.warnings.map((warning) => <div key={warning}>• {warning}</div>)}

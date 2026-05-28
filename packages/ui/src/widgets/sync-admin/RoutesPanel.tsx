@@ -7,8 +7,9 @@
 
 import { Hash, Mail, MessageSquare, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
+import { useContainerSize } from "../../hooks/useContainerSize"
 import { useMe } from "../../hooks/useMe"
 import { timeAgo } from "../../util"
 import { HelpBanner, PanelChrome } from "./shared"
@@ -38,6 +39,8 @@ const DEFAULT_DRAFT: Draft = {
 }
 
 export function RoutesPanel(): JSX.Element {
+  const layoutRef = useRef<HTMLDivElement>(null)
+  const { width } = useContainerSize(layoutRef)
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
   const [items, setItems] = useState<Route[]>([])
@@ -45,6 +48,7 @@ export function RoutesPanel(): JSX.Element {
   const [err,   setErr]   = useState<string | null>(null)
   const [ok,    setOk]    = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT)
+  const compactForm = width > 0 && width < 980
 
   useEffect(() => { void refresh() }, [])
 
@@ -80,61 +84,63 @@ export function RoutesPanel(): JSX.Element {
       subtitle="Where sync events get delivered — by event type and channel."
       busy={busy} onRefresh={refresh} err={err} ok={ok} onClearErr={() => setErr(null)}
     >
-      <HelpBanner>
-        Each route says: <em>"when this event happens and matches this filter, post to this target via this channel."</em>{" "}
-        Use filters to scope to a single risk tier, environment, or entity.
-      </HelpBanner>
+      <div ref={layoutRef} className="min-w-0">
+        <HelpBanner>
+          Each route says: <em>"when this event happens and matches this filter, post to this target via this channel."</em>{" "}
+          Use filters to scope to a single risk tier, environment, or entity.
+        </HelpBanner>
 
-      {isAdmin && (
-        <div className="mx-5 mt-4 rounded-lg border border-border-subtle bg-panel p-3">
-          <div className="grid grid-cols-[1.4fr_110px_1.6fr_1.4fr_auto_auto] items-center gap-2 text-xs">
-            <input className="input font-mono" placeholder="event type (e.g. sync.approval.requested)" value={draft.eventType} onChange={(e) => setDraft({ ...draft, eventType: e.target.value })} />
-            <select className="input" value={draft.channel} onChange={(e) => setDraft({ ...draft, channel: e.target.value as Channel })}>
-              <option value="email">email</option>
-              <option value="teams">teams</option>
-              <option value="slack">slack</option>
-            </select>
-            <input className="input" placeholder="email address or webhook URL" value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
-            <input className="input font-mono" placeholder='{"riskTier":["high"]}' value={draft.filter} onChange={(e) => setDraft({ ...draft, filter: e.target.value })} />
-            <label className="flex items-center gap-1.5 text-[11px] text-text-muted">
-              <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
-              on
-            </label>
-            <button onClick={() => void save()} className="flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-[11px] text-text-on-accent hover:bg-accent-hover">
-              <Plus className="h-3 w-3" /> add route
-            </button>
+        {isAdmin && (
+          <div className="mx-5 mt-4 rounded-lg border border-border-subtle bg-panel p-3">
+            <div className={compactForm ? "grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" : "grid grid-cols-[1.4fr_110px_1.6fr_1.4fr_auto_auto] items-center gap-2 text-xs"}>
+              <input className="input min-w-0 font-mono" placeholder="event type (e.g. sync.approval.requested)" value={draft.eventType} onChange={(e) => setDraft({ ...draft, eventType: e.target.value })} />
+              <select className="input min-w-0" value={draft.channel} onChange={(e) => setDraft({ ...draft, channel: e.target.value as Channel })}>
+                <option value="email">email</option>
+                <option value="teams">teams</option>
+                <option value="slack">slack</option>
+              </select>
+              <input className={`input min-w-0 ${compactForm ? "sm:col-span-2" : ""}`} placeholder="email address or webhook URL" value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
+              <input className={`input min-w-0 font-mono ${compactForm ? "sm:col-span-2" : ""}`} placeholder='{"riskTier":["high"]}' value={draft.filter} onChange={(e) => setDraft({ ...draft, filter: e.target.value })} />
+              <label className="flex min-h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[11px] text-text-muted">
+                <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+                enabled
+              </label>
+              <button onClick={() => void save()} className={`flex min-h-10 items-center justify-center gap-1 rounded bg-accent px-3 py-1.5 text-[11px] text-text-on-accent hover:bg-accent-hover ${compactForm ? "sm:justify-self-start" : ""}`}>
+                <Plus className="h-3 w-3" /> add route
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="px-5 py-4">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wider text-text-muted">
-              <th className="px-2 py-1.5">event</th><th>channel</th><th>target</th><th>filter</th><th>enabled</th><th>updated</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && (
-              <tr><td colSpan={7} className="px-2 py-6 text-center text-text-faint">No routes configured.</td></tr>
-            )}
-            {items.map((r) => (
-              <tr key={r.id} className="border-t border-border-subtle">
-                <td className="px-2 py-1.5 font-mono">{r.event_type}</td>
-                <td><ChannelBadge channel={r.channel} /></td>
-                <td className="max-w-[220px] truncate" title={r.target}>{r.target}</td>
-                <td className="max-w-[200px] truncate font-mono text-[11px]" title={r.filter_json}>{r.filter_json}</td>
-                <td>{r.enabled ? "✓" : "—"}</td>
-                <td className="text-text-muted" title={r.updated_at}>{timeAgo(r.updated_at)}</td>
-                <td>{isAdmin && (
-                  <button onClick={() => void remove(r)} className="text-rose-300 hover:text-rose-200">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}</td>
+        <div className="overflow-x-auto px-5 py-4">
+          <table className="min-w-[860px] w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-text-muted">
+                <th className="px-2 py-1.5">event</th><th>channel</th><th>target</th><th>filter</th><th>enabled</th><th>updated</th><th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.length === 0 && (
+                <tr><td colSpan={7} className="px-2 py-6 text-center text-text-faint">No routes configured.</td></tr>
+              )}
+              {items.map((r) => (
+                <tr key={r.id} className="border-t border-border-subtle">
+                  <td className="px-2 py-1.5 font-mono">{r.event_type}</td>
+                  <td><ChannelBadge channel={r.channel} /></td>
+                  <td className="max-w-[220px] truncate" title={r.target}>{r.target}</td>
+                  <td className="max-w-[200px] truncate font-mono text-[11px]" title={r.filter_json}>{r.filter_json}</td>
+                  <td>{r.enabled ? "✓" : "—"}</td>
+                  <td className="text-text-muted" title={r.updated_at}>{timeAgo(r.updated_at)}</td>
+                  <td>{isAdmin && (
+                    <button onClick={() => void remove(r)} className="text-rose-300 hover:text-rose-200">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </PanelChrome>
   )

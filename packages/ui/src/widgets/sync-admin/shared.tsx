@@ -10,6 +10,8 @@
 
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, X } from "lucide-react"
 import type { JSX, ReactNode } from "react"
+import { useRef } from "react"
+import { useContainerSize } from "../../hooks/useContainerSize"
 
 export interface PanelChromeProps {
   title:    string
@@ -28,14 +30,18 @@ export interface PanelChromeProps {
 export function PanelChrome({
   title, subtitle, actions, busy, onRefresh, err, ok, onClearErr, children,
 }: PanelChromeProps): JSX.Element {
+  const ref = useRef<HTMLElement>(null)
+  const { width } = useContainerSize(ref)
+  const compact = width > 0 && width < 640
+
   return (
-    <section className="flex h-full flex-col bg-canvas text-text">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-panel px-5">
-        <div className="min-w-0">
+    <section ref={ref} className="flex h-full min-w-0 flex-col bg-canvas text-text">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border-subtle bg-panel px-5 py-3">
+        <div className={`min-w-0 ${compact ? "w-full" : "flex-1"}`}>
           <h2 className="truncate text-sm font-semibold leading-tight">{title}</h2>
-          {subtitle && <p className="truncate text-[11px] leading-tight text-text-muted">{subtitle}</p>}
+          {subtitle && <p className={`${compact ? "mt-1 whitespace-normal" : "truncate"} text-[11px] leading-tight text-text-muted`}>{subtitle}</p>}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className={`flex min-w-0 items-center gap-1.5 ${compact ? "w-full flex-wrap" : "justify-end"}`}>
           {actions}
           {onRefresh && (
             <button
@@ -89,10 +95,14 @@ export function HelpBanner({ children }: { children: ReactNode }): JSX.Element {
 }
 
 export function SplitView({ list, detail }: { list: ReactNode; detail: ReactNode }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const { width } = useContainerSize(ref)
+  const stacked = width > 0 && width < 860
+
   return (
-    <div className="grid h-full grid-cols-[320px_1fr] overflow-hidden">
-      <div className="overflow-y-auto border-r border-border-subtle bg-panel">{list}</div>
-      <div className="overflow-y-auto">{detail}</div>
+    <div ref={ref} className={stacked ? "flex h-full min-w-0 flex-col overflow-hidden" : "grid h-full min-w-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] overflow-hidden"}>
+      <div className={stacked ? "max-h-[34%] min-h-[160px] overflow-y-auto border-b border-border-subtle bg-panel" : "min-w-0 overflow-y-auto border-r border-border-subtle bg-panel"}>{list}</div>
+      <div className="min-w-0 overflow-y-auto">{detail}</div>
     </div>
   )
 }

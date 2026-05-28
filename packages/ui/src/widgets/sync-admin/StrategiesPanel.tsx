@@ -163,15 +163,17 @@ function StrategyDetail({ s, isAdmin, onEdit }: {
             stored on the strategy but not consumed by the engine today
           </span>
         </h4>
-        <dl className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-1.5 font-mono text-text-faint">
-          <Ref label="isLockedCol"          value={s.isLockedCol} />
-          <Ref label="syncDateCol"          value={s.syncDateCol} />
-          <Ref label="deployDateCol"        value={s.deployDateCol} />
-          <Ref label="identityHandling"     value={s.identityHandling === "none" ? null : s.identityHandling} />
-          <Ref label="excludedFromDiffCols" value={s.excludedFromDiffCols.length === 0 ? null : s.excludedFromDiffCols.join(", ")} />
-          <Ref label="onInsert"             value={objCount(s.onInsert)} />
-          <Ref label="onUpdate"             value={objCount(s.onUpdate)} />
-        </dl>
+        <div className="overflow-x-auto">
+          <dl className="grid min-w-[340px] grid-cols-[160px_1fr] gap-x-4 gap-y-1.5 font-mono text-text-faint">
+            <Ref label="isLockedCol"          value={s.isLockedCol} />
+            <Ref label="syncDateCol"          value={s.syncDateCol} />
+            <Ref label="deployDateCol"        value={s.deployDateCol} />
+            <Ref label="identityHandling"     value={s.identityHandling === "none" ? null : s.identityHandling} />
+            <Ref label="excludedFromDiffCols" value={s.excludedFromDiffCols.length === 0 ? null : s.excludedFromDiffCols.join(", ")} />
+            <Ref label="onInsert"             value={objCount(s.onInsert)} />
+            <Ref label="onUpdate"             value={objCount(s.onUpdate)} />
+          </dl>
+        </div>
       </section>
     </div>
   )

@@ -142,13 +142,15 @@ function FreezeDetail({ w, isAdmin, onEdit, onDelete }: {
       </header>
       {w.description && <p className="text-text-muted">{w.description}</p>}
       <section className="rounded-lg border border-border-subtle bg-panel p-4">
-        <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-1.5 font-mono">
-          <DetailRow label="startsAt"  value={fmt(w.startsAt)} />
-          <DetailRow label="endsAt"    value={fmt(w.endsAt)}   />
-          <DetailRow label="createdBy" value={w.createdBy} />
-          <DetailRow label="createdAt" value={fmt(w.createdAt)} />
-          <DetailRow label="updatedAt" value={fmt(w.updatedAt)} />
-        </dl>
+        <div className="overflow-x-auto">
+          <dl className="grid min-w-[300px] grid-cols-[120px_1fr] gap-x-4 gap-y-1.5 font-mono">
+            <DetailRow label="startsAt"  value={fmt(w.startsAt)} />
+            <DetailRow label="endsAt"    value={fmt(w.endsAt)}   />
+            <DetailRow label="createdBy" value={w.createdBy} />
+            <DetailRow label="createdAt" value={fmt(w.createdAt)} />
+            <DetailRow label="updatedAt" value={fmt(w.updatedAt)} />
+          </dl>
+        </div>
       </section>
     </div>
   )

@@ -16,7 +16,8 @@ import {
     Calendar, Clock, Database, GitBranch, LayoutDashboard, Mail, ShieldAlert, ShieldCheck,
 } from "lucide-react"
 import type { JSX } from "react"
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { useContainerSize, widgetBreakpoint } from "../../hooks/useContainerSize"
 import { ApprovalsPanel } from "./ApprovalsPanel"
 import { EnvironmentsPanel } from "./EnvironmentsPanel"
 import { FreezeWindowsPanel } from "./FreezeWindowsPanel"
@@ -53,9 +54,46 @@ const NAV: readonly NavItem[] = [
 ]
 
 export function SyncAdminShell({ initial = "overview" }: { initial?: Section }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const { width } = useContainerSize(ref)
   const [section, setSection] = useState<Section>(initial)
+  const breakpoint = widgetBreakpoint(width)
+  const compactNav = breakpoint === "xs" || breakpoint === "sm" || breakpoint === "md"
+
   return (
-    <div className="flex h-full overflow-hidden bg-canvas text-text">
+    <div ref={ref} className={`flex h-full min-w-0 overflow-hidden bg-canvas text-text ${compactNav ? "flex-col" : ""}`}>
+      {compactNav ? (
+        <div className="shrink-0 border-b border-border-subtle bg-panel">
+          <header className="flex min-h-12 items-center px-4 py-2">
+            <h1 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sync Operations</h1>
+          </header>
+          <div className="overflow-x-auto px-2 pb-2">
+            <div className="flex min-w-max gap-1">
+              {NAV.map((n) => {
+                const Icon = n.icon
+                const active = n.id === section
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => setSection(n.id)}
+                    className={[
+                      "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] whitespace-nowrap transition-colors",
+                      active
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
+                    ].join(" ")}
+                    title={n.hint}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">{n.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
       <nav className="flex w-52 shrink-0 flex-col border-r border-border-subtle bg-panel">
         <header className="flex h-14 shrink-0 items-center border-b border-border-subtle px-4">
           <h1 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sync Operations</h1>
@@ -85,6 +123,7 @@ export function SyncAdminShell({ initial = "overview" }: { initial?: Section }):
           })}
         </ul>
       </nav>
+      )}
 
       <div className="flex-1 min-w-0">
         {section === "overview"     && <OverviewPanel onJump={setSection} />}
