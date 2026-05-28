@@ -12,4 +12,6 @@ export * from "./entity-registry/index.js"
 export * from "./enums.js"
 export * from "./environments.js"
 export * from "./governance/freeze-windows.js"
+export * from "./published-definitions.js"
 export * from "./recipes.js"
+

@@ -2,9 +2,10 @@
  * EntityRegistry — runtime entity-registry admin surface.
  *
  *   ┌────────────────────────────────────────────────────────────────┐
- *   │ Toolbar: refresh · count · [admin: re-seed · import · new]     │
+ *   │ Toolbar: refresh · count · [admin: import · new]               │
  *   ├──────────────┬─────────────────────────────────────────────────┤
- *   │ Entity list  │ Tabs: Overview / Tables / History / YAML        │
+ *   │ Entity list  │ Tabs: Overview / Tables / History / YAML /      │
+ *   │              │       Authoring                                 │
  *   │ (panel)      │ [admin: edit · retire on header row]            │
  *   │              │                                                  │
  *   └──────────────┴─────────────────────────────────────────────────┘
@@ -34,17 +35,18 @@ import { useStore } from "../store"
 import type {
     EntityRegistryDefinition,
     EntityRegistryHistoryEntry,
+    EntityRegistrySyncDefinitionStatusResponse,
 } from "../types"
+import { EntityAuthoring } from "./entity-registry/EntityAuthoring"
 import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistory } from "./entity-registry/EntityHistory"
 import { EntityImportModal } from "./entity-registry/EntityImportModal"
 import { EntityList } from "./entity-registry/EntityList"
 import { EntityOverview } from "./entity-registry/EntityOverview"
-import { EntityReseedModal } from "./entity-registry/EntityReseedModal"
 import { EntityTables } from "./entity-registry/EntityTables"
 import { EntityYaml } from "./entity-registry/EntityYaml"
 
-const TABS = ["overview", "tables", "history", "yaml"] as const
+const TABS = ["overview", "tables", "history", "yaml", "authoring"] as const
 type Tab = typeof TABS[number]
 
 interface Banner { kind: "error" | "success"; text: string }
@@ -58,9 +60,10 @@ export function EntityRegistry(): JSX.Element {
   const [tab, setTab]               = useState<Tab>("overview")
   const [history, setHistory]       = useState<EntityRegistryHistoryEntry[]>([])
   const [yamlText, setYamlText]     = useState<string>("")
+  const [authoringStatus, setAuthoringStatus] = useState<EntityRegistrySyncDefinitionStatusResponse | null>(null)
   const [busy, setBusy]             = useState(false)
   const [banner, setBanner]         = useState<Banner | null>(null)
-  const [modal, setModal]           = useState<null | { kind: "import" } | { kind: "reseed" } | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
+  const [modal, setModal]           = useState<null | { kind: "import" } | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -72,7 +75,9 @@ export function EntityRegistry(): JSX.Element {
     setBusy(true)
     try {
       const res = await api.listEntityRegistry({ includeRetired: true })
+      const status = await api.getEntityRegistrySyncDefinitionStatus()
       setItems(res.items)
+      setAuthoringStatus(status)
       if (!opts.keepSelection && !selectedId && res.items.length > 0) {
         setSelectedId(res.items[0]!.id)
       }
@@ -131,7 +136,6 @@ export function EntityRegistry(): JSX.Element {
         count={items.length}
         isAdmin={isAdmin}
         onRefresh={() => void refreshList({ keepSelection: true })}
-        onReseed={() => setModal({ kind: "reseed" })}
         onImport={() => setModal({ kind: "import" })}
         onNew={() => setModal({ kind: "new" })}
       />
@@ -215,6 +219,13 @@ export function EntityRegistry(): JSX.Element {
                 {tab === "tables"   && <EntityTables  def={selected} />}
                 {tab === "history"  && <EntityHistory entries={history} />}
                 {tab === "yaml"     && <EntityYaml    yaml={yamlText} entityId={selected.id} />}
+                {tab === "authoring" && (
+                  <EntityAuthoring
+                    def={selected}
+                    status={authoringStatus}
+                    onMessage={setBanner}
+                  />
+                )}
               </div>
             </>
           )}
@@ -225,12 +236,6 @@ export function EntityRegistry(): JSX.Element {
         <EntityImportModal
           onClose={() => setModal(null)}
           onImported={() => { setBanner({ kind: "success", text: "Import committed" }); void refreshList({ keepSelection: true }) }}
-        />
-      )}
-      {modal?.kind === "reseed" && (
-        <EntityReseedModal
-          onClose={() => setModal(null)}
-          onCompleted={() => { setBanner({ kind: "success", text: "Re-seed completed" }); void refreshList({ keepSelection: true }) }}
         />
       )}
       {modal?.kind === "new" && (
@@ -260,12 +265,11 @@ interface ToolbarProps {
   count: number
   isAdmin: boolean
   onRefresh: () => void
-  onReseed: () => void
   onImport: () => void
   onNew: () => void
 }
 
-function Toolbar({ busy, count, isAdmin, onRefresh, onReseed, onImport, onNew }: ToolbarProps): JSX.Element {
+function Toolbar({ busy, count, isAdmin, onRefresh, onImport, onNew }: ToolbarProps): JSX.Element {
   const baseBtn = "flex items-center gap-1.5 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50"
   return (
     <div className="flex items-center gap-2 border-b border-border-subtle bg-panel px-4 py-2">
@@ -280,9 +284,6 @@ function Toolbar({ busy, count, isAdmin, onRefresh, onReseed, onImport, onNew }:
         </button>
         {isAdmin && (
           <>
-            <button type="button" onClick={onReseed} disabled={busy} className={baseBtn}>
-              <RefreshCcw className="h-3 w-3" /> Re-seed
-            </button>
             <button type="button" onClick={onImport} disabled={busy} className={baseBtn}>
               <Upload className="h-3 w-3" /> Import YAML
             </button>

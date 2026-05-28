@@ -21,6 +21,10 @@ const VALID_ENTITY_TYPES = new Set<EntityType>([
   "content",
 ])
 
+function normalizeCatalogName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
 // ── compare_catalogs ─────────────────────────────────────────────
 
 function buildCompareCatalogsTool(host: AgentHost): Tool { return {
@@ -101,11 +105,11 @@ async function fetchSchema(host: AgentHost, connection: string): Promise<{ table
   const tables = new Set<string>()
   const cols = new Map<string, Map<string, string>>()
   for (const row of r.recordset as Array<{ TABLE_SCHEMA: string; TABLE_NAME: string; COLUMN_NAME: string; DATA_TYPE: string; CHARACTER_MAXIMUM_LENGTH: number | null }>) {
-    const qn = `${row.TABLE_SCHEMA}.${row.TABLE_NAME}`
+    const qn = normalizeCatalogName(`${row.TABLE_SCHEMA}.${row.TABLE_NAME}`)
     tables.add(qn)
     if (!cols.has(qn)) cols.set(qn, new Map())
     const type = row.CHARACTER_MAXIMUM_LENGTH ? `${row.DATA_TYPE}(${row.CHARACTER_MAXIMUM_LENGTH})` : row.DATA_TYPE
-    cols.get(qn)!.set(row.COLUMN_NAME, type)
+    cols.get(qn)!.set(normalizeCatalogName(row.COLUMN_NAME), type)
   }
   return { tables, cols }
 }

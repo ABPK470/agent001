@@ -1,16 +1,14 @@
 /**
  * Recipe projector — pure transform from a versioned `EntityDefinition`
- * + a resolved `Scd2Strategy` into the runtime `SyncRecipe` shape that
- * the orchestrator already knows how to execute.
+ * + a resolved `Scd2Strategy` into the legacy `SyncRecipe` compatibility
+ * shape.
  *
  * Why a projector?
- *   The orchestrator was built against the hand-curated
- *   `deploy/mssql/sync-recipes.json` (one `SyncRecipe` per entity type).
- *   Rather than rewrite the orchestrator to consume `EntityDefinition`
- *   directly, we project the registry into the legacy shape and
- *   snapshot it into the run record. Snapshotting means later edits
- *   to the entity registry can't retroactively change what a past run
- *   executed.
+ *   This is now a compatibility seam for registry-driven flows and
+ *   migration tooling. The primary runtime path uses published sync
+ *   definitions compiled in-repo; this projector remains useful where a
+ *   registry definition still needs to be compared or transformed into
+ *   the older recipe-shaped contract.
  *
  * Pure, IO-free, deterministic — `projectRecipe(def, strategy)` always
  * produces byte-identical output for the same inputs (modulo

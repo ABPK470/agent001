@@ -12,8 +12,7 @@
  */
 
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
-import { PostMetadataActionKind } from "../../../domain/enums.js"
-import { getEnvironment } from "../../../domain/environments.js"
+import { assertSupportedSyncDirection, getEnvironment } from "../../../domain/environments.js"
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
 import { EventType, getPool, SyncOperationType, SyncProgressKind, SyncRunStatus } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
@@ -36,8 +35,11 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   if (planTooOldToExecute(plan)) throw new Error(`Plan ${planId} is older than 1 hour — re-preview before executing.`)
 
   // Safety: target writeEnabled
+  const sourceEnv = getEnvironment(opts.host, plan.source)
   const targetEnv = getEnvironment(opts.host, plan.target)
+  if (sourceEnv.role === "target") throw new Error(`Source "${sourceEnv.name}" is target-only.`)
   if (targetEnv.role === "source") throw new Error(`Target "${targetEnv.name}" is source-only.`)
+  assertSupportedSyncDirection(sourceEnv, targetEnv)
   // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
   if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
     throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)
@@ -46,18 +48,18 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
     throw new Error(`User ${opts.userUpn ?? "<anonymous>"} is not in sync allowlist for "${targetEnv.name}".`)
   }
 
+  if (!plan.executionContract) {
+    throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
+  }
+
   // Hard refusal on catalog drift (preview surfaces it as warning; execute treats it as fatal).
-  // Allowed-schemas set is derived from the recipe snapshot so we don't depend
-  // on the legacy Mymi-only hardcoded allowlist.
-  const allowedSchemas = Array.from(new Set(plan.recipeSnapshot.tables.map((t) => {
-    const ix = t.name.indexOf(".")
-    return ix > 0 ? t.name.slice(0, ix) : ""
-  }).filter((s) => s.length > 0)))
+  // Allowed schemas are now snapshotted into the compiled execution contract.
+  const allowedSchemas = plan.executionContract.allowedSchemas
   const drift = await detectCatalogDrift(
     opts.host,
     plan.source,
     plan.target,
-    plan.recipeSnapshot.tables.map((t) => t.name),
+    plan.executionContract.metadata.tables.map((t) => t.name),
     allowedSchemas,
   )
   if (!drift.catalogCompatible) {
@@ -68,11 +70,12 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
     )
   }
 
-  // Governance: evaluate entity-registry freeze windows. Soft block — the
-  // operator can override (audited) via opts.overrideFreezeWindow. When
-  // no windows are configured this is a no-op.
-  if (plan.entityPolicies && plan.entityPolicies.freezeWindowIds.length > 0) {
-    const ev = evaluateFreezeWindows(plan.entityPolicies.freezeWindowIds)
+  // Governance: evaluate the snapshotted definition governance against the
+  // current freeze-window registry. Soft block — the operator can override
+  // (audited) via opts.overrideFreezeWindow. When no windows are configured
+  // this is a no-op.
+  if (plan.executionContract.governance.freezeWindowIds.length > 0) {
+    const ev = evaluateFreezeWindows(plan.executionContract.governance.freezeWindowIds)
     if (ev.active && !opts.overrideFreezeWindow) {
       const names = ev.activeWindows.map((w) => `${w.id} (${w.displayName})`).join(", ")
       throw new Error(
@@ -81,7 +84,7 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
       )
     }
     if (ev.unknownIds.length > 0) {
-      console.warn(`[sync.govern] entity references freeze windows with no registered definition: ${ev.unknownIds.join(", ")}`)
+      console.warn(`[sync.govern] definition references freeze windows with no registered definition: ${ev.unknownIds.join(", ")}`)
     }
   }
 
@@ -123,6 +126,10 @@ export async function executeSync(planId: string, opts: ExecuteOptions): Promise
   emit(opts.host, EventType.SyncExecuteStarted, {
     planId, source: plan.source, target: plan.target,
     actor: opts.userUpn ?? null,
+    definitionId: plan.executionContract.definitionId,
+    definitionPublishedVersion: plan.executionContract.definitionPublishedVersion,
+    decisionLogCount: plan.decisionLog?.length ?? 0,
+    governanceDecision: plan.governanceDecision ?? null,
     totals: plan.totals,
   })
 
@@ -143,8 +150,13 @@ async function executeSyncInner(
   execT0: number,
   telemetryContext: SyncTelemetryContext,
 ): Promise<{ planId: string; success: boolean; error?: string }> {
+  const executionContract = plan.executionContract
+  if (!executionContract) {
+    throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
+  }
+
   // Load PK columns once
-  const pkByTable = await fetchPkColumns(opts.host, plan.source, plan.recipeSnapshot.tables.map((t) => t.name), telemetryContext)
+  const pkByTable = await fetchPkColumns(opts.host, plan.source, executionContract.metadata.tables.map((t) => t.name), telemetryContext)
 
   // Drift re-validation
   const driftPct = await revalidatePlanDrift(opts.host, plan)
@@ -162,10 +174,9 @@ async function executeSyncInner(
   if (!tgtPool) throw new Error(`Target pool unavailable.`)
 
   const entityId = plan.entity.id
-  const entityType = plan.recipeSnapshot.entityType
-  const hasContractDeploy = plan.recipeSnapshot.postMetadataActions.some(
-    (action) => action.kind === PostMetadataActionKind.ContractDeploy,
-  )
+  const entityType = executionContract.definitionId
+  const flowSteps = executionContract.flow.steps
+  const lockStepPresent = flowSteps.some((step) => step.kind === "targetLock")
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
 
   // Helper: emit a step progress event
@@ -177,70 +188,76 @@ async function executeSyncInner(
   // Pre-tx contract setup helper (audit-check / lock).
   // These sprocs run before tx.begin() so a sproc-level failure
   // doesn't poison the metadata-sync transaction.
-  async function preTxContractStep(stepName: string, fn: () => Promise<void>): Promise<void> {
+  async function preTxStep(stepName: string, fn: () => Promise<void>): Promise<boolean> {
     try {
       await fn()
+      return true
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
       console.warn(`[sync.execute] ${stepName} failed:`, e)
       stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
       onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} failed`, error: errMsg })
       emit(opts.host, EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
+      return false
     }
   }
 
   try {
-    // ═══════════════════════════════════════════════════════════
-    // High-level execute lifecycle.
-    //
-    // Only the pre-tx audit/lock steps below are contract-specific, and
-    // they run only when the recipe explicitly includes ContractDeploy.
-    // The post-commit sequence is action-driven per entity recipe via
-    // runPostMetadataPipeline(); it is not one legacy "pipeline 788"
-    // applied uniformly to every entity type.
-    // ═══════════════════════════════════════════════════════════
+    const postMetadataSteps = []
+    let metadataApplied = { insert: 0, update: 0, delete: 0 }
+    let metadataStepSeen = false
 
-    // ── Step 1: Audit pre-check ──
-    if (hasContractDeploy) {
-      stepEmit("audit-check", "Pre-sync audit check")
-      await preTxContractStep("audit-check", async () => {
-        await runAuditCheckDirect(opts.host, tgtPool, {
-          action: "syncOrNot",
-          objType: "Contract",
-          id: entityId,
-        }, plan.target, undefined, telemetryContext)
-      })
+    for (const stepDef of flowSteps) {
+      if (metadataStepSeen) {
+        postMetadataSteps.push(stepDef)
+        continue
+      }
+
+      switch (stepDef.kind) {
+        case "auditCheck": {
+          stepEmit(stepDef.id, stepDef.description)
+          await preTxStep(stepDef.id, async () => {
+            await runAuditCheckDirect(opts.host, tgtPool, {
+              action: "syncOrNot",
+              objType: auditObjectType(entityType),
+              id: entityId,
+            }, plan.target, undefined, telemetryContext)
+          })
+          break
+        }
+        case "targetLock": {
+          stepEmit(stepDef.id, stepDef.description)
+          await preTxStep(stepDef.id, async () => {
+            await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target, undefined, telemetryContext)
+          })
+          break
+        }
+        case "metadataSync": {
+          const upsertTables = executionContract.metadata.executionOrder.filter((tn) => {
+            const tr = plan.tables.find((t) => t.table === tn)
+            return tr && tr.counts.insert + tr.counts.update > 0
+          })
+          const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables, telemetryContext)
+          stepEmit(stepDef.id, stepDef.description)
+          const { applied } = await runMetadataSync({
+            host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool, telemetryContext,
+          })
+          metadataApplied = applied
+          metadataStepSeen = true
+          stepEmit(`${stepDef.id}-done`, "Metadata sync committed")
+          break
+        }
+        default:
+          postMetadataSteps.push(stepDef)
+          break
+      }
     }
 
-    // ── Step 2: Lock entity for sync ──
-    if (hasContractDeploy) {
-      stepEmit("lock", `Locking ${entityType}`)
-      await preTxContractStep("lock", async () => {
-        await setContractLockDirect(opts.host, tgtPool, Number(entityId), true, plan.target, undefined, telemetryContext)
-      })
-    }
-
-    // Pre-flight: batch-probe target triggers BEFORE tx.begin() so the
-    // per-table maybeArchive() probe doesn't block on Sch-S waits while
-    // the tx holds Sch-M locks (~60s lock_timeout × N tables).
-    const upsertTables = plan.recipeSnapshot.executionOrder.filter((tn) => {
-      const tr = plan.tables.find((t) => t.table === tn)
-      return tr && tr.counts.insert + tr.counts.update > 0
-    })
-    const triggerCache = await probeTriggers(opts.host, tgtPool, planId, plan.target, upsertTables, telemetryContext)
-
-    // ── Step 4: Sync metadata in transaction ──
-    stepEmit("sync-metadata", "Syncing metadata rows")
-    const { applied: appliedTotals } = await runMetadataSync({
-      host: opts.host, plan, planId, pkByTable, triggerCache, onProgress, target: plan.target, tgtPool, telemetryContext,
-    })
-    stepEmit("sync-metadata-done", "Metadata sync committed")
-
-    // ── Post-commit actions + date stamping ──
     const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
       host: opts.host, tgtPool, srcPool, plan, planId,
       entityId, entityType, onProgress, telemetryContext,
       userUpn: opts.userUpn,
+      steps: postMetadataSteps,
     })
     stepWarnings.push(...pipelineWarnings)
 
@@ -255,7 +272,14 @@ async function executeSyncInner(
       ? stepWarnings.map((w) => `${w.step}: ${w.error}`).join("; ")
       : undefined
     onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
-    emit(opts.host, EventType.SyncExecuteCompleted, { planId, durationMs: Date.now() - execT0, applied: appliedTotals, warnings: stepWarnings })
+    emit(opts.host, EventType.SyncExecuteCompleted, {
+      planId,
+      definitionId: executionContract.definitionId,
+      definitionPublishedVersion: executionContract.definitionPublishedVersion,
+      durationMs: Date.now() - execT0,
+      applied: metadataApplied,
+      warnings: stepWarnings,
+    })
     try {
       getSyncRunSink(opts.host).finish({
         planId,
@@ -263,7 +287,7 @@ async function executeSyncInner(
         // pipeline didn't complete cleanly — never show this as success.
         status: hasStepFailures ? SyncRunStatus.Failed : SyncRunStatus.Success,
         error: stepErrorSummary,
-        executeTotals: appliedTotals,
+        executeTotals: metadataApplied,
         driftDetectedPct: driftPct,
         durationMs: Date.now() - execT0,
       })
@@ -272,7 +296,7 @@ async function executeSyncInner(
   } catch (e) {
     // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
     // helper already rolled back the tx and re-enabled FKs on failure.
-    if (hasContractDeploy) {
+    if (lockStepPresent) {
       try { await setContractLockDirect(opts.host, tgtPool, Number(entityId), false, plan.target, undefined, telemetryContext) }
       catch { /* best-effort */ }
     }
@@ -280,9 +304,34 @@ async function executeSyncInner(
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[sync.execute] plan ${planId} failed:`, e)
     onProgress({ type: SyncProgressKind.Failed, error: msg })
-    emit(opts.host, EventType.SyncExecuteFailed, { planId, error: msg, durationMs: Date.now() - execT0 })
+    emit(opts.host, EventType.SyncExecuteFailed, {
+      planId,
+      definitionId: executionContract.definitionId,
+      definitionPublishedVersion: executionContract.definitionPublishedVersion,
+      error: msg,
+      durationMs: Date.now() - execT0,
+    })
     try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
     catch { /* ignore */ }
     return { planId, success: false, error: msg }
+  }
+}
+
+function auditObjectType(entityType: string): string {
+  switch (entityType) {
+    case "contract":
+      return "Contract"
+    case "dataset":
+      return "Dataset"
+    case "rule":
+      return "Rule"
+    case "content":
+      return "Content"
+    case "pipelineActivity":
+      return "Pipeline"
+    case "gateMetadata":
+      return "MetaTable"
+    default:
+      return entityType
   }
 }

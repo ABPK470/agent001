@@ -16,6 +16,81 @@ import { resolve } from "node:path"
 import type { EntityType, SyncPostMetadataAction } from "../../domain/recipes.js"
 import { SyncPlanChangeType, type AgentHost } from "../../ports/index.js"
 
+export interface SyncExecutionContractStep {
+  id: string
+  phase: "pre-transaction" | "metadata" | "post-metadata" | "post-commit"
+  kind: string
+  title: string
+  description: string
+  bindingRef?: string | null
+  policyRef?: string | null
+}
+
+export interface SyncExecutionContract {
+  definitionId: string
+  definitionPublishedVersion: string
+  definitionPublishedAt: string
+  governance: {
+    approvalPolicyId: string | null
+    freezeWindowIds: string[]
+    riskMultiplier: number
+  }
+  bindings: {
+    serviceProfileRef: string
+    environmentPolicyRef: string
+  }
+  allowedSchemas: string[]
+  metadata: {
+    rootTable: string
+    rootKeyColumn: string
+    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
+    executionOrder: string[]
+    reverseOrder: string[]
+  }
+  flow: {
+    steps: SyncExecutionContractStep[]
+  }
+  provenance: {
+    kind: "manual" | "legacy-migration"
+    sourceArtifact?: string | null
+    sourceVersion?: string | null
+  }
+}
+
+export interface SyncGovernanceDecision {
+  evaluatedAt: string
+  governance: {
+    approvalPolicyId: string | null
+    freezeWindowIds: string[]
+    riskMultiplier: number
+  }
+  freezeWindows: {
+    active: boolean
+    activeWindows: Array<{ id: string; displayName: string; startsAt: string; endsAt: string }>
+    unknownIds: string[]
+  }
+  targetEnvironment: {
+    name: string
+    role: string
+    prodSyncUnlocked: boolean
+    syncAllowlistEnabled: boolean
+    actorUpn: string | null
+    actorAllowed: boolean | null
+  }
+  warnings: string[]
+}
+
+export interface SyncDecisionRecord {
+  id: string
+  recordedAt: string
+  stage: "preview" | "execute"
+  category: "definition" | "flow" | "scope" | "preflight" | "governance" | "execution"
+  severity: "info" | "warning" | "error"
+  title: string
+  summary: string
+  details: Record<string, unknown>
+}
+
 export interface SyncPlanTableCounts {
   insert: number
   update: number
@@ -121,6 +196,12 @@ export interface SyncPlan {
   estimatedDurationSec: number
   /** Recipe snapshot used — included so execute reproduces preview exactly. */
   recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; postMetadataActions: SyncPostMetadataAction[]; enabledOptionalTables?: string[] }
+  /** Explicit compiled execution contract from the published definition. */
+  executionContract?: SyncExecutionContract | null
+  /** First-class explainability record used by history/API/UI surfaces. */
+  decisionLog?: SyncDecisionRecord[] | null
+  /** Preview-time governance evaluation persisted for audit and operator explainability. */
+  governanceDecision?: SyncGovernanceDecision | null
   /**
    * Governance policy snapshot pulled from the entity registry at plan
    * time. Threads through into the execute preflight so freeze windows

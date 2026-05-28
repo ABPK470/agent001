@@ -3,12 +3,18 @@
  */
 
 import { EventType } from "@mia/shared-enums"
-import type { EntityRegistryYamlImportResponse } from "@mia/shared-types"
+import type {
+    EntityRegistrySyncDefinitionExportRequest,
+    EntityRegistrySyncDefinitionExportResponse,
+    EntityRegistrySyncDefinitionStatusResponse,
+    EntityRegistryYamlImportResponse,
+} from "@mia/shared-types"
 import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { bootstrapEntityRegistryFromYaml } from "../adapters/sync/entity-bootstrap.js"
 import { formatEntitiesYaml, formatEntityYaml, parseEntitiesYaml } from "../adapters/sync/entity-yaml.js"
+import { buildSyncDefinitionAuthoringStatus, buildSyncDefinitionDraft, findSyncDefinitionStatus } from "../adapters/sync/sync-definition-authoring.js"
 import { broadcast } from "../event-broadcaster.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -56,6 +62,11 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 		const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
 		reply.header("content-type", "application/yaml; charset=utf-8")
 		return formatEntitiesYaml(defs)
+	})
+
+	app.get("/api/entity-registry/sync-definition-status", async (_req, reply): Promise<EntityRegistrySyncDefinitionStatusResponse | { error: string }> => {
+		if (!projectRoot) { reply.code(500); return { error: "projectRoot not configured" } }
+		return buildSyncDefinitionAuthoringStatus(projectRoot)
 	})
 
 	app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/history", async (req) => db.listEntityDefinitionHistory(resolveTenant(req), req.params.id))
@@ -130,6 +141,31 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 		}
 
 		return { ok: errors.length === 0, saved, skipped, errors, dryRun }
+	})
+
+	app.post<{ Params: { id: string }; Body: EntityRegistrySyncDefinitionExportRequest }>("/api/entity-registry/entities/:id/export-sync-definition", async (req, reply): Promise<EntityRegistrySyncDefinitionExportResponse | { error: string }> => {
+		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+		if (!projectRoot) { reply.code(500); return { error: "projectRoot not configured" } }
+		const tenantId = resolveTenant(req)
+		const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
+		if (!def) { reply.code(404); return { error: `entity not found: ${req.params.id}` } }
+		const exported = buildSyncDefinitionDraft(def, req.body ?? {})
+		const outputPath = `sync-definitions/entities/${def.id}.json`
+		audit(req, "entity_registry.sync_definition_exported", {
+			tenantId,
+			id: def.id,
+			flowPreset: exported.flowPreset,
+			outputPath,
+		})
+		return {
+			tenantId,
+			entityId: def.id,
+			outputPath,
+			flowPreset: exported.flowPreset,
+			warnings: exported.warnings,
+			draft: exported.draft,
+			status: findSyncDefinitionStatus(projectRoot, def.id),
+		}
 	})
 
 	app.post("/api/entity-registry/reseed", async (req, reply) => {

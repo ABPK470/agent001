@@ -4,7 +4,7 @@ import { PostMetadataActionKind } from "../../../domain/enums.js"
 import { getEnvironment } from "../../../domain/environments.js"
 import { EventType, SyncProgressKind, type AgentHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
-import { type SyncPlan } from "../plan-store.js"
+import { type SyncExecutionContractStep, type SyncPlan } from "../plan-store.js"
 import { runAuditCheckDirect } from "./contract-deploy.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 import { runContractPipeline, type StepWarning } from "./execute-pipeline.js"
@@ -21,6 +21,7 @@ export interface PostMetadataPipelineInput {
   onProgress: (p: ExecuteProgress) => void
   telemetryContext?: SyncTelemetryContext
   userUpn?: string | null
+  steps?: SyncExecutionContractStep[]
 }
 
 export async function runPostMetadataPipeline(input: PostMetadataPipelineInput): Promise<{ stepWarnings: StepWarning[] }> {
@@ -44,9 +45,13 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
     emit(host, EventType.SyncExecuteStep, { planId, step: name })
   }
 
-  for (const action of input.plan.recipeSnapshot.postMetadataActions) {
-    switch (action.kind) {
-      case PostMetadataActionKind.ContractDeploy: {
+  const entries = input.steps ?? input.plan.recipeSnapshot.postMetadataActions.map((action) => ({ kind: action.kind }))
+
+  for (const entry of entries) {
+    const kind = entry.kind
+    switch (kind) {
+      case PostMetadataActionKind.ContractDeploy:
+      case "contractDeploy": {
         const { stepWarnings: contractWarnings } = await runContractPipeline({
           host,
           tgtPool,
@@ -61,9 +66,11 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         stepWarnings.push(...contractWarnings)
         break
       }
-      case PostMetadataActionKind.DatasetDeploy: {
-        step("dataset-deploy", "Deploying dataset on target ETL service")
-        await callStep("dataset-deploy", async () => {
+      case PostMetadataActionKind.DatasetDeploy:
+      case "datasetDeploy": {
+        const stepName = "id" in entry ? entry.id : "dataset-deploy"
+        step(stepName, "Deploying dataset on target ETL service")
+        await callStep(stepName, async () => {
           const datasetId = entityType === "rule"
             ? await resolveRuleInputDatasetId(host, tgtPool, input.plan.target, entityId, input.telemetryContext)
             : entityId
@@ -71,16 +78,20 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         })
         break
       }
-      case PostMetadataActionKind.RulesDeploy: {
-        step("rules-deploy", "Deploying rules on target ETL service")
-        await callStep("rules-deploy", async () => {
+      case PostMetadataActionKind.RulesDeploy:
+      case "rulesDeploy": {
+        const stepName = "id" in entry ? entry.id : "rules-deploy"
+        step(stepName, "Deploying rules on target ETL service")
+        await callStep(stepName, async () => {
           await runRulesDeploy(host, input.plan.target, entityId, userUpn)
         })
         break
       }
-      case PostMetadataActionKind.PipelineRegister: {
-        step("pipeline-register", "Registering pipeline on target Agent service")
-        await callStep("pipeline-register", async () => {
+      case PostMetadataActionKind.PipelineRegister:
+      case "pipelineRegister": {
+        const stepName = "id" in entry ? entry.id : "pipeline-register"
+        step(stepName, "Registering pipeline on target Agent service")
+        await callStep(stepName, async () => {
           const pipelineId = entityType === "contract"
             ? await resolveContractPipelineId(host, tgtPool, input.plan.target, entityId, input.telemetryContext)
             : entityId
@@ -88,30 +99,38 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         })
         break
       }
-      case PostMetadataActionKind.MetaRefresh: {
-        step("meta-refresh", "Refreshing Gate metadata on target Gate service")
-        await callStep("meta-refresh", async () => {
+      case PostMetadataActionKind.MetaRefresh:
+      case "metaRefresh": {
+        const stepName = "id" in entry ? entry.id : "meta-refresh"
+        step(stepName, "Refreshing Gate metadata on target Gate service")
+        await callStep(stepName, async () => {
           await runMetaRefresh(host, input.plan.target)
         })
         break
       }
-      case PostMetadataActionKind.PipelineStart: {
-        step("pipeline-start", "Starting target Agent pipeline for list content population")
-        await callStep("pipeline-start", async () => {
+      case PostMetadataActionKind.PipelineStart:
+      case "pipelineStart": {
+        const stepName = "id" in entry ? entry.id : "pipeline-start"
+        step(stepName, "Starting target Agent pipeline for list content population")
+        await callStep(stepName, async () => {
           await runPipelineStartByName(host, input.plan.target, "All Lists content item population")
         })
         break
       }
-      case PostMetadataActionKind.HandleDependencies: {
-        step("handle-dependencies", `Refreshing ${entityType} dependencies on target`)
-        await callStep("handle-dependencies", async () => {
+      case PostMetadataActionKind.HandleDependencies:
+      case "handleDependencies": {
+        const stepName = "id" in entry ? entry.id : "handle-dependencies"
+        step(stepName, `Refreshing ${entityType} dependencies on target`)
+        await callStep(stepName, async () => {
           await runHandleDependencies(host, tgtPool, input.plan.target, entityType, entityId, input.telemetryContext)
         })
         break
       }
-      case PostMetadataActionKind.SyncDate: {
-        step("set-sync-date", "Updating sync date on source")
-        await callStep("set-sync-date", async () => {
+      case PostMetadataActionKind.SyncDate:
+      case "syncDate": {
+        const stepName = "id" in entry ? entry.id : "set-sync-date"
+        step(stepName, "Updating sync date on source")
+        await callStep(stepName, async () => {
           await runAuditCheckDirect(host, srcPool, {
             action: "syncDate",
             id: entityId,
@@ -120,9 +139,11 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         })
         break
       }
-      case PostMetadataActionKind.DeployDate: {
-        step("set-deploy-date", "Updating deployment date on target")
-        await callStep("set-deploy-date", async () => {
+      case PostMetadataActionKind.DeployDate:
+      case "deployDate": {
+        const stepName = "id" in entry ? entry.id : "set-deploy-date"
+        step(stepName, "Updating deployment date on target")
+        await callStep(stepName, async () => {
           await runAuditCheckDirect(host, tgtPool, {
             action: "deployDate",
             id: entityId,

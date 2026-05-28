@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "pipelineActivity",
+  "displayName": "Pipeline & Activities",
+  "description": "Pipeline & Activities sync definition migrated from legacy recipe bundle.",
+  "rootTable": "core.Pipeline",
+  "idColumn": "pipelineId",
+  "labelColumn": "name",
+  "selfJoinColumn": null,
+  "legacy": {
+    "pipelineId": 798,
+    "entrySproc": "core.uspSyncPipelineObjectsTran"
+  },
+  "governance": {
+    "approvalPolicyId": null,
+    "freezeWindowIds": [],
+    "riskMultiplier": 1
+  },
+  "strategy": {
+    "strategyId": "mymi-scd2",
+    "strategyVersion": "latest"
+  },
+  "bindings": {
+    "serviceProfileRef": "default",
+    "environmentPolicyRef": "default"
+  },
+  "ownership": {
+    "team": "sync-platform",
+    "owner": null,
+    "reviewStatus": "legacy-review-required",
+    "notes": [
+      "Bootstrapped from legacy sync-recipes.json.",
+      "Pipeline activity still contains inferred step scope that needs review."
+    ]
+  },
+  "metadata": {
+    "tables": [
+      {
+        "name": "core.Pipeline",
+        "scopeColumn": "pipelineId",
+        "predicate": "pipelineId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Step",
+        "scopeColumn": "pipelineId",
+        "predicate": "pipelineId = {id}",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncPipelineObjectsTran body."
+      },
+      {
+        "name": "core.Activity",
+        "scopeColumn": "pipelineId",
+        "predicate": "pipelineId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      }
+    ],
+    "executionOrder": [
+      "core.Activity",
+      "core.Pipeline",
+      "core.Step"
+    ],
+    "reverseOrder": [
+      "core.Step",
+      "core.Pipeline",
+      "core.Activity"
+    ],
+    "discrepancies": []
+  },
+  "executionFlow": {
+    "steps": [
+      {
+        "id": "metadata-sync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected pipeline activity scope."
+      },
+      {
+        "id": "pipeline-register",
+        "phase": "post-metadata",
+        "kind": "pipelineRegister",
+        "title": "Pipeline register",
+        "description": "Register the target pipeline with the agent service."
+      }
+    ]
+  },
+  "provenance": {
+    "kind": "legacy-migration",
+    "sourceArtifact": "deploy/mssql/sync-recipes.json",
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "id": "contract",
+  "displayName": "Contract",
+  "description": "Contract sync definition migrated from legacy recipe bundle.",
+  "rootTable": "core.Contract",
+  "idColumn": "contractId",
+  "labelColumn": "name",
+  "selfJoinColumn": null,
+  "legacy": {
+    "pipelineId": 788,
+    "entrySproc": "core.uspSyncCoreObjectsTran"
+  },
+  "governance": {
+    "approvalPolicyId": null,
+    "freezeWindowIds": [],
+    "riskMultiplier": 1
+  },
+  "strategy": {
+    "strategyId": "mymi-scd2",
+    "strategyVersion": "latest"
+  },
+  "bindings": {
+    "serviceProfileRef": "default",
+    "environmentPolicyRef": "default"
+  },
+  "ownership": {
+    "team": "sync-platform",
+    "owner": null,
+    "reviewStatus": "legacy-review-required",
+    "notes": [
+      "Bootstrapped from legacy sync-recipes.json.",
+      "Contract still contains inferred rule and step scope that require deliberate review."
+    ]
+  },
+  "metadata": {
+    "tables": [
+      {
+        "name": "core.Contract",
+        "scopeColumn": "contractId",
+        "predicate": "contractId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Pipeline",
+        "scopeColumn": "contractId",
+        "predicate": "contractId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.ContractColumn",
+        "scopeColumn": "contractId",
+        "predicate": "contractId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Dataset",
+        "scopeColumn": "contractId",
+        "predicate": "contractId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Step",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      },
+      {
+        "name": "core.Activity",
+        "scopeColumn": "pipelineId",
+        "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE contractId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetColumn",
+        "scopeColumn": "datasetId",
+        "predicate": "datasetId IN (SELECT datasetId FROM [core].[Dataset] WHERE contractId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetMapping",
+        "scopeColumn": "datasetId_Left",
+        "predicate": "datasetId_Left IN (SELECT datasetId FROM [core].[Dataset] WHERE contractId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Rule",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Dataset] p WHERE p.datasetId = [core].[Rule].inputDatasetId AND p.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      },
+      {
+        "name": "core.DatasetMappingColumn",
+        "scopeColumn": "datasetMappingId",
+        "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN (SELECT datasetId FROM core.Dataset WHERE contractId = {id}) )",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleColumn",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId AND _p1.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      },
+      {
+        "name": "core.RuleCondition",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId AND _p1.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      },
+      {
+        "name": "core.RuleLink",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId AND _p1.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      },
+      {
+        "name": "core.RuleConditionValue",
+        "scopeColumn": null,
+        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId INNER JOIN [core].[Dataset] _p2 ON _p2.datasetId = _p1.lookupDatasetId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p2.contractId = {id})",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+      }
+    ],
+    "executionOrder": [
+      "core.ContractColumn",
+      "core.Contract",
+      "core.DatasetMappingColumn",
+      "core.DatasetMapping",
+      "core.DatasetColumn",
+      "core.Dataset",
+      "core.Activity",
+      "core.Pipeline",
+      "core.Step",
+      "core.Rule",
+      "core.RuleColumn",
+      "core.RuleCondition",
+      "core.RuleLink",
+      "core.RuleConditionValue"
+    ],
+    "reverseOrder": [
+      "core.RuleConditionValue",
+      "core.RuleLink",
+      "core.RuleCondition",
+      "core.RuleColumn",
+      "core.Rule",
+      "core.Step",
+      "core.Pipeline",
+      "core.Activity",
+      "core.Dataset",
+      "core.DatasetColumn",
+      "core.DatasetMapping",
+      "core.DatasetMappingColumn",
+      "core.Contract",
+      "core.ContractColumn"
+    ],
+    "discrepancies": []
+  },
+  "executionFlow": {
+    "steps": [
+      {
+        "id": "audit-check",
+        "phase": "pre-transaction",
+        "kind": "auditCheck",
+        "title": "Audit check",
+        "description": "Validate target state before contract sync."
+      },
+      {
+        "id": "target-lock",
+        "phase": "pre-transaction",
+        "kind": "targetLock",
+        "title": "Target lock",
+        "description": "Lock the target contract deployment window."
+      },
+      {
+        "id": "metadata-sync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected contract scope."
+      },
+      {
+        "id": "pipeline-register",
+        "phase": "post-metadata",
+        "kind": "pipelineRegister",
+        "title": "Pipeline register",
+        "description": "Register affected pipelines with the target agent service."
+      },
+      {
+        "id": "contract-deploy",
+        "phase": "post-metadata",
+        "kind": "contractDeploy",
+        "title": "Contract deploy",
+        "description": "Run the contract deployment sequence on the target environment."
+      }
+    ]
+  },
+  "provenance": {
+    "kind": "legacy-migration",
+    "sourceArtifact": "deploy/mssql/sync-recipes.json",
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
+  }
+}

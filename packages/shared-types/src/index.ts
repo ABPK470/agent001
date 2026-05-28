@@ -497,6 +497,7 @@ export interface SyncEnvironment {
   role: "source" | "target" | "both"
   ringOrder: number
   syncAllowlist: string[]
+  allowedSyncTargets: string[] | null
 }
 
 export interface SyncRecipeTable {
@@ -599,6 +600,167 @@ export interface SyncPlan {
   warnings: string[]
   estimatedDurationSec: number
   recipeSnapshot: { entityType: SyncEntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+  executionContract?: CompiledSyncPlanContract | null
+  decisionLog?: CompiledSyncDecisionRecord[] | null
+  governanceDecision?: CompiledSyncGovernanceDecision | null
+}
+
+export type AuthoredSyncFlowPhase =
+  | "pre-transaction"
+  | "metadata"
+  | "post-metadata"
+  | "post-commit"
+
+export type AuthoredSyncFlowKind =
+  | "metadataSync"
+  | "auditCheck"
+  | "targetLock"
+  | "contractDeploy"
+  | "datasetDeploy"
+  | "rulesDeploy"
+  | "pipelineRegister"
+  | "metaRefresh"
+  | "pipelineStart"
+  | "handleDependencies"
+  | "syncDate"
+  | "deployDate"
+
+export interface AuthoredSyncDefinitionGovernance {
+  approvalPolicyId: string | null
+  freezeWindowIds: string[]
+  riskMultiplier: number
+}
+
+export interface AuthoredSyncDefinitionStrategyRef {
+  strategyId: string
+  strategyVersion: number | "latest"
+}
+
+export interface AuthoredSyncDefinitionBindingRefs {
+  serviceProfileRef: string
+  environmentPolicyRef: string
+}
+
+export interface AuthoredSyncDefinitionOwnership {
+  team: string
+  owner: string | null
+  reviewStatus: "legacy-review-required" | "reviewed"
+  notes: string[]
+}
+
+export interface AuthoredSyncFlowStep {
+  id: string
+  phase: AuthoredSyncFlowPhase
+  kind: AuthoredSyncFlowKind
+  title: string
+  description: string
+  bindingRef?: string | null
+  policyRef?: string | null
+}
+
+export interface AuthoredSyncDefinitionTable {
+  name: string
+  scopeColumn: string | null
+  predicate: string
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
+  verified: boolean
+  groundedByPipeline: boolean
+  enabledByDefault: boolean
+  userControllable: boolean
+  note?: string
+}
+
+export interface AuthoredSyncDefinitionDiscrepancy {
+  table: string
+  kind: "leak" | "implicit" | "drift"
+  note: string
+}
+
+export interface AuthoredSyncDefinition {
+  schemaVersion: 1
+  id: string
+  displayName: string
+  description: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  selfJoinColumn: string | null
+  legacy: {
+    pipelineId: number | null
+    entrySproc: string | null
+  }
+  governance: AuthoredSyncDefinitionGovernance
+  strategy: AuthoredSyncDefinitionStrategyRef
+  bindings: AuthoredSyncDefinitionBindingRefs
+  ownership: AuthoredSyncDefinitionOwnership
+  metadata: {
+    tables: AuthoredSyncDefinitionTable[]
+    executionOrder: string[]
+    reverseOrder: string[]
+    discrepancies: AuthoredSyncDefinitionDiscrepancy[]
+  }
+  executionFlow: {
+    steps: AuthoredSyncFlowStep[]
+  }
+  provenance: {
+    kind: "manual" | "legacy-migration"
+    sourceArtifact?: string | null
+    sourceVersion?: string | null
+  }
+}
+
+export interface PublishedSyncDefinition extends AuthoredSyncDefinition {
+  publishedAt: string
+  publishedVersion: string
+}
+
+export interface CompiledSyncPlanStep {
+  id: string
+  phase: AuthoredSyncFlowPhase
+  kind: AuthoredSyncFlowKind
+  title: string
+  description: string
+  bindingRef?: string | null
+  policyRef?: string | null
+}
+
+export interface CompiledSyncPlanContract {
+  definitionId: string
+  definitionVersion: string
+  steps: CompiledSyncPlanStep[]
+  governance: AuthoredSyncDefinitionGovernance
+  bindings: AuthoredSyncDefinitionBindingRefs
+  allowedSchemas: string[]
+}
+
+export interface CompiledSyncGovernanceDecision {
+  evaluatedAt: string
+  governance: AuthoredSyncDefinitionGovernance
+  freezeWindows: {
+    active: boolean
+    activeWindows: Array<{ id: string; displayName: string; startsAt: string; endsAt: string }>
+    unknownIds: string[]
+  }
+  targetEnvironment: {
+    name: string
+    role: string
+    prodSyncUnlocked: boolean
+    syncAllowlistEnabled: boolean
+    actorUpn: string | null
+    actorAllowed: boolean | null
+  }
+  warnings: string[]
+}
+
+export interface CompiledSyncDecisionRecord {
+  id: string
+  recordedAt: string
+  stage: "preview" | "execute"
+  category: "definition" | "flow" | "scope" | "preflight" | "governance" | "execution"
+  severity: "info" | "warning" | "error"
+  title: string
+  summary: string
+  details: Record<string, unknown>
 }
 
 export interface SyncExecuteProgress {
@@ -812,6 +974,68 @@ export interface EntityRegistryYamlImportResponse {
   dryRun: boolean
 }
 
+export type EntityRegistrySyncFlowPreset =
+  | "contract"
+  | "dataset"
+  | "rule"
+  | "pipelineActivity"
+  | "gateMetadata"
+  | "content"
+  | "metadata-only"
+
+export interface EntityRegistrySyncDefinitionExportRequest {
+  flowPreset?: EntityRegistrySyncFlowPreset
+  serviceProfileRef?: string
+  environmentPolicyRef?: string
+}
+
+export interface EntityRegistrySyncDefinitionStatusLayer {
+  id: "compatibility-recipe-export" | "entity-registry-projector" | "entity-registry-yaml-bootstrap"
+  title: string
+  runtimeAuthority: boolean
+  status: "migration" | "cleanup-required"
+  description: string
+}
+
+export interface EntityRegistrySyncDefinitionStatusItem {
+  id: string
+  displayName: string
+  definitionPath: string
+  provenanceKind: "manual" | "legacy-migration"
+  ownershipTeam: string
+  ownershipOwner: string | null
+  reviewStatus: "legacy-review-required" | "reviewed"
+  sourceArtifact: string | null
+  sourceVersion: string | null
+  unverifiedTableCount: number
+  cleanupWarnings: string[]
+}
+
+export interface EntityRegistrySyncDefinitionStatusResponse {
+  runtimeAuthority: {
+    sourceDirectory: string
+    publishedBundlePath: string
+    compatibilityExportPath: string
+  }
+  draftExport: {
+    route: string
+    defaultOutputDirectory: string
+    supportedFlowPresets: EntityRegistrySyncFlowPreset[]
+  }
+  compatibilityLayers: EntityRegistrySyncDefinitionStatusLayer[]
+  definitions: EntityRegistrySyncDefinitionStatusItem[]
+}
+
+export interface EntityRegistrySyncDefinitionExportResponse {
+  tenantId: string
+  entityId: string
+  outputPath: string
+  flowPreset: EntityRegistrySyncFlowPreset
+  warnings: string[]
+  draft: AuthoredSyncDefinition
+  status: EntityRegistrySyncDefinitionStatusItem | null
+}
+
 // ── Freeze windows (governance) ─────────────────────────────────
 
 /**
@@ -895,6 +1119,7 @@ export interface SyncEnvironmentAdmin {
   denyDdl: boolean
   approvalRequiredOperations: EnvOperation[]
   syncAllowlist: string[]
+  allowedSyncTargets: string[] | null
   override: { fields: Record<string, unknown>; updatedAt: string; updatedBy: string | null } | null
 }
 

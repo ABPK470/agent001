@@ -460,6 +460,26 @@ export const api = {
       },
     )
   },
+  exportEntityRegistrySyncDefinition: (
+    id: string,
+    payload?: import("./types").EntityRegistrySyncDefinitionExportRequest,
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistrySyncDefinitionExportResponse>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}/export-sync-definition${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload ?? {}),
+      },
+    )
+  },
+  getEntityRegistrySyncDefinitionStatus: () =>
+    json<import("./types").EntityRegistrySyncDefinitionStatusResponse>(
+      "/api/entity-registry/sync-definition-status",
+    ),
   reseedEntityRegistry: () => {
     return json<{ imported: number; skipped: number; errors: string[] }>(
       `/api/entity-registry/reseed`,

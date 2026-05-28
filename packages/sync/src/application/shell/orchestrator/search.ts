@@ -10,11 +10,10 @@
  */
 
 import sqlMod from "mssql"
+import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
 import {
-  getRecipe,
-  loadSyncRecipes,
-  type EntityType,
-  type SyncRecipe,
+    type EntityType,
+    type SyncRecipe,
 } from "../../../domain/recipes.js"
 import { getPool, type AgentHost } from "../../../ports/index.js"
 import { projectRoot, qtable } from "./db-helpers.js"
@@ -86,7 +85,7 @@ export async function searchEntities(
   query: string,
   limit = 200,
 ): Promise<EntitySearchResult[]> {
-  const recipe = getRecipe(loadSyncRecipes(host, projectRoot(host)), entityType)
+  const recipe = definitionToSyncRecipe(getPublishedSyncDefinition(host, projectRoot(host), entityType))
   const displayColumn = await resolveDisplayColumn(host, source, recipe)
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
@@ -109,7 +108,7 @@ export async function searchEntities(
 
 export async function fetchEntityDisplayName(
   host: AgentHost,
-  recipe: ReturnType<typeof getRecipe>,
+  recipe: SyncRecipe,
   entityId: string | number,
   source: string,
 ): Promise<string | null> {

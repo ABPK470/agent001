@@ -50,8 +50,6 @@ import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, get
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
 import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
-import { bootstrapEntityRegistryFromYaml } from "./adapters/sync/entity-bootstrap.js"
-import { createRegistryRecipeResolver } from "./adapters/sync/registry-resolver.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
     MessageQueue,
@@ -126,7 +124,7 @@ async function main() {
       try {
         recordSyncRunPreview({
           planId: plan.planId,
-          entityType: plan.recipeSnapshot.entityType,
+          entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
           entityId: plan.entity.id,
           entityDisplayName: plan.entity.displayName,
           source: plan.source,
@@ -158,7 +156,6 @@ async function main() {
     syncRunSink,
     syncEnvironments: syncEnvironments.environments,
     syncDbProjectRoot: _projectRoot,
-    syncRecipeResolver: createRegistryRecipeResolver(),
     syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
   })
   const mssqlSummary = mssqlSetup.summary
@@ -187,17 +184,6 @@ async function main() {
   applyEnvOverrides(bootHost)
   seedDefaultPoliciesIfMissing(bootHost)
   configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
-  // Bootstrap: import seed YAMLs from deploy/mssql/entities/ into the
-  // `_default` tenant on first boot (idempotent — files that already
-  // exist as registry rows are skipped).
-  try {
-    const seeded = bootstrapEntityRegistryFromYaml(_projectRoot)
-    if (seeded.imported > 0) {
-      console.log(`[entity-registry] seeded ${seeded.imported} entity definition(s) from deploy/mssql/entities/`)
-    }
-  } catch (e) {
-    console.warn("[entity-registry] bootstrap from deploy/mssql/entities/ failed:", e instanceof Error ? e.message : e)
-  }
   const llm = await buildLlmAndCatalog(bootHost, mssqlSummary)
 
   // ── F1 evidence signer ────────────────────────────────────────

@@ -19,9 +19,10 @@ import {
     annotateProposal,
     detectCatalogDrift,
     emptyCounts,
+    getPublishedSyncRecipe,
+    listPublishedSyncDefinitionsForHost,
     rankProposals,
     runProposerPass,
-    tryResolveRecipe,
     type EntityDescriptor,
     type EnvPair,
     type LlmCompletionPort,
@@ -31,7 +32,6 @@ import {
     type ProposerPassResult,
     type RankableProposal,
 } from "@mia/sync"
-import { listEntityDefinitions } from "../../../adapters/persistence/entity-defs.js"
 import {
     createProposerRun,
     finishProposerRun,
@@ -123,19 +123,16 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
   return {
     now: () => new Date().toISOString(),
     listEntities: async (_envPair) => {
-      const defs = listEntityDefinitions(tenantId, { includeRetired: false })
-      const descriptors: EntityDescriptor[] = []
-      for (const d of defs) {
-        const resolved = tryResolveRecipe({ tenantId, entityId: d.id })
-        if (!resolved) continue
-        descriptors.push({ id: d.id, label: d.displayName ?? d.id, defVersion: d.version })
-      }
-      return descriptors
+      void tenantId
+      return listPublishedSyncDefinitionsForHost(host).map<EntityDescriptor>((definition) => ({
+        id: definition.id,
+        label: definition.displayName ?? definition.id,
+        defVersion: null,
+      }))
     },
     probeCatalogDrift: async (envPair, ent) => {
-      const resolved = tryResolveRecipe({ tenantId, entityId: ent.id })
-      if (!resolved) return { issues: [] }
-      const recipe = resolved.recipe
+      void tenantId
+      const recipe = getPublishedSyncRecipe(host, ent.id)
       const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))
       try {
         const r = await detectCatalogDrift(host, envPair.source, envPair.target, recipe.tables.map((t) => t.name), allowedSchemas)

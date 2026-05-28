@@ -36,6 +36,10 @@ interface SchemaSnapshot {
   cols: Map<string, Map<string, string>>
 }
 
+function normalizeCatalogName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
 function isTransientCatalogDriftError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const msg = e.message.toLowerCase()
@@ -97,13 +101,13 @@ async function fetchSchema(host: AgentHost, connection: string, schemas: readonl
   const tables = new Set<string>()
   const cols = new Map<string, Map<string, string>>()
   for (const row of rows) {
-    const qn = `${row.TABLE_SCHEMA}.${row.TABLE_NAME}`
+    const qn = normalizeCatalogName(`${row.TABLE_SCHEMA}.${row.TABLE_NAME}`)
     tables.add(qn)
     if (!cols.has(qn)) cols.set(qn, new Map())
     const type = row.CHARACTER_MAXIMUM_LENGTH
       ? `${row.DATA_TYPE}(${row.CHARACTER_MAXIMUM_LENGTH})`
       : row.DATA_TYPE
-    cols.get(qn)!.set(row.COLUMN_NAME, type)
+    cols.get(qn)!.set(normalizeCatalogName(row.COLUMN_NAME), type)
   }
   return { tables, cols }
 }
@@ -126,7 +130,9 @@ export async function detectCatalogDrift(
   restrictTables?: Iterable<string>,
   allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST,
 ): Promise<CatalogDriftResult> {
-  const restrict = restrictTables ? new Set(restrictTables) : null
+  const restrict = restrictTables
+    ? new Set(Array.from(restrictTables, (name) => normalizeCatalogName(name)))
+    : null
   const schemaSet = new Set<string>(allowedSchemas)
   if (restrict) {
     for (const qn of restrict) {
@@ -151,7 +157,7 @@ export async function detectCatalogDrift(
     const sc = src.cols.get(t) ?? new Map<string, string>()
     const tc = tgt.cols.get(t) ?? new Map<string, string>()
     for (const [c, ty] of sc) {
-      const tt = tc.get(c)
+      const tt = tc.get(normalizeCatalogName(c))
       if (!tt) issues.push(`${t}.${c}: missing on target`)
       else if (tt !== ty) issues.push(`${t}.${c}: type mismatch (source=${ty}, target=${tt})`)
     }

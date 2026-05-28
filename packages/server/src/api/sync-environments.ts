@@ -3,17 +3,22 @@
  */
 
 import { type AgentHost } from "@mia/agent"
-import { ENV_ACCESS_MODES, getEnvironments, isEnvAccessMode, replaceEnvironments, withPermissionDefaults, type EnvOperation, type SyncEnvironment } from "@mia/sync"
+import { ENV_ACCESS_MODES, ENV_ROLES, getEnvironments, isEnvAccessMode, isEnvRole, type EnvOperation, type SyncEnvironment } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { refreshEnvDerivedPolicies } from "../domain/policy/policy-seeder.js"
+import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js"
 
 const VALID_OPS: EnvOperation[] = ["query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml"]
 
-type Editable = Pick<SyncEnvironment, "defaultAccessMode" | "allowedOperations" | "denyDml" | "denyDdl" | "approvalRequiredOperations" | "syncAllowlist">
+type Editable = Pick<SyncEnvironment, "role" | "defaultAccessMode" | "allowedOperations" | "denyDml" | "denyDdl" | "approvalRequiredOperations" | "syncAllowlist" | "allowedSyncTargets">
 
 function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
 	const out: Partial<Editable> = {}
+	if (body["role"] !== undefined) {
+		if (!isEnvRole(body["role"])) return `role must be one of ${ENV_ROLES.join("|")}`
+		out.role = body["role"]
+	}
 	if (body["defaultAccessMode"] !== undefined) {
 		if (!isEnvAccessMode(body["defaultAccessMode"])) return `defaultAccessMode must be one of ${ENV_ACCESS_MODES.join("|")}`
 		out.defaultAccessMode = body["defaultAccessMode"]
@@ -40,6 +45,10 @@ function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
 		if (!Array.isArray(body["syncAllowlist"])) return "syncAllowlist must be an array of UPN strings"
 		out.syncAllowlist = body["syncAllowlist"].map(String)
 	}
+	if (body["allowedSyncTargets"] !== undefined) {
+		if (body["allowedSyncTargets"] !== null && !Array.isArray(body["allowedSyncTargets"])) return "allowedSyncTargets must be null or an array of environment names"
+		out.allowedSyncTargets = body["allowedSyncTargets"] === null ? null : (body["allowedSyncTargets"] as unknown[]).map(String)
+	}
 	return out
 }
 
@@ -51,18 +60,10 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
 	}
 }
 
-function refreshRegistryFor(host: AgentHost, name: string): void {
-	const override = db.getSyncEnvOverride(name)
-	if (!override) return
-	let parsed: Partial<SyncEnvironment>
-	try { parsed = JSON.parse(override.overrides_json) as Partial<SyncEnvironment> } catch { return }
-	const next = getEnvironments(host).map((env) => env.name === name ? withPermissionDefaults({ ...env, ...parsed, name: env.name }) : env)
-	replaceEnvironments(host, next)
-}
-
 export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {
 	app.get("/api/sync-environments", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+		rebuildLiveSyncEnvironments(host)
 		const overrides = new Map(db.listSyncEnvOverrides().map((row) => [row.name, row]))
 		return getEnvironments(host).map((env) => {
 			const o = overrides.get(env.name)
@@ -80,6 +81,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
 				denyDdl: env.denyDdl,
 				approvalRequiredOperations: env.approvalRequiredOperations,
 				syncAllowlist: env.syncAllowlist,
+				allowedSyncTargets: env.allowedSyncTargets,
 				override: o ? { fields: parsed, updatedAt: o.updated_at, updatedBy: o.updated_by } : null,
 			}
 		})
@@ -98,7 +100,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
 		}
 		const merged = { ...prevParsed, ...sanitised }
 		db.saveSyncEnvOverride({ name: req.params.name, overrides_json: JSON.stringify(merged), updated_at: new Date().toISOString(), updated_by: req.session.upn })
-		refreshRegistryFor(host, req.params.name)
+		rebuildLiveSyncEnvironments(host)
 		refreshEnvDerivedPolicies(host, req.params.name)
 		audit(req, "sync_env.update", { name: req.params.name, fields: sanitised })
 		return { ok: true }
@@ -107,6 +109,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
 	app.delete<{ Params: { name: string } }>("/api/sync-environments/:name", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		db.deleteSyncEnvOverride(req.params.name)
+		rebuildLiveSyncEnvironments(host)
 		refreshEnvDerivedPolicies(host, req.params.name)
 		audit(req, "sync_env.reset", { name: req.params.name })
 		return { ok: true }

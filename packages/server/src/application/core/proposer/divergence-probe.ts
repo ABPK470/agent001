@@ -19,8 +19,8 @@ import {
 } from "@mia/agent"
 import {
     emptyCounts,
+    getPublishedSyncRecipe,
     previewSync,
-    tryResolveRecipe,
     type DivergentEntityRow,
     type EnvPair,
     type ProposalCounts,
@@ -40,9 +40,13 @@ const DEFAULT_SAMPLE_SIZE = 25
 export async function probeRowDivergence(
   i: ProbeRowDivergenceInput,
 ): Promise<readonly DivergentEntityRow[]> {
-  const resolved = tryResolveRecipe({ tenantId: i.tenantId, entityId: i.entityId })
-  if (!resolved) return []
-  const recipe = resolved.recipe
+  void i.tenantId
+  let recipe
+  try {
+    recipe = getPublishedSyncRecipe(i.host, i.entityId)
+  } catch {
+    return []
+  }
 
   // Sample candidate IDs from the source root table.
   const candidates = await sampleRootIds(

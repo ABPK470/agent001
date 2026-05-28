@@ -1,7 +1,7 @@
 /**
  * YAML tab — server-rendered, syntax-friendly pre block + download +
- * copy-to-clipboard convenience. Bulk export (all entities) is handled
- * in the toolbar; this tab is single-entity.
+ * copy-to-clipboard convenience for the registry draft format. The
+ * authoring tab covers repo-definition draft export.
  */
 
 import { Copy, Download } from "lucide-react"

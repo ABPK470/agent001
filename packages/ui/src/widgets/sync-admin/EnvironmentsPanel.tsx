@@ -88,6 +88,7 @@ function EnvDetail({ env }: { env: SyncEnvironment }): JSX.Element {
         <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5 font-mono">
           <DetailRow label="role"             value={<RoleBadge role={env.role} />} />
           <DetailRow label="ringOrder"        value={String(env.ringOrder)} />
+          <DetailRow label="allowed targets"  value={env.allowedSyncTargets && env.allowedSyncTargets.length > 0 ? env.allowedSyncTargets.join(", ") : "none"} />
         </dl>
       </section>
 

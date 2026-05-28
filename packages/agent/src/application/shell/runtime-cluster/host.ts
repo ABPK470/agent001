@@ -18,7 +18,6 @@
 
 import type {
     FreezeWindowDefinition,
-    RecipeResolver,
     SyncEnvironment,
     SyncEventSink,
     SyncPlan,
@@ -93,7 +92,6 @@ export interface SyncHost {
   eventSink: SyncEventSink
   runSink: SyncRunSink
   recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
-  recipeResolver: RecipeResolver | null
   freezeWindowsReader: () => readonly FreezeWindowDefinition[]
   environments: Map<string, SyncEnvironment>
   /** Plan disk root + in-memory cache. Both fields mutable at runtime. */

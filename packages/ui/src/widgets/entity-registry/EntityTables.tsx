@@ -2,7 +2,9 @@
  * Tables tab — dense data grid showing every EntityTable + ALL enriched
  * recipe fields (scopeColumn, source, groundedByPipeline, enabledByDefault,
  * userControllable, archive, note). This is the panel that proves the
- * registry has full fidelity with `deploy/mssql/sync-recipes.json`.
+ * registry-compatible table model has full fidelity with the published
+ * sync-definition projection used to generate the legacy recipe-shaped
+ * compatibility bundle.
  */
 
 import { Check, CircleDot, Minus, ShieldAlert, X } from "lucide-react"

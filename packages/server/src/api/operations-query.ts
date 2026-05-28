@@ -28,6 +28,7 @@
 import { EventType, isCancellationEvent, isCompletionEvent, isEventType, isFailureEvent, isSubStepFailureEvent, RunStatus } from "@mia/agent"
 import { SyncRunStatus } from "@mia/shared-enums"
 import * as db from "../adapters/persistence/sqlite.js"
+import { loadPersistedSyncPlanSummary } from "../domain/sync-plan-summary.js"
 import { OperationKind, OperationStatus } from "../enums/operations.js"
 
 // ── Types ────────────────────────────────────────────────────────
@@ -397,28 +398,34 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
 
 function buildSyncPipeline(planId: string, kind: typeof OperationKind.SyncPreview | typeof OperationKind.SyncExecute, events: OperationEvent[]): OperationPipeline {
   const meta = db.getSyncRun?.(planId)
+  const planSummary = loadPersistedSyncPlanSummary(planId)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
   const status: OperationStatus = meta?.status === SyncRunStatus.Success ? OperationStatus.Success
     : meta?.status === SyncRunStatus.Failed ? OperationStatus.Failed
     : inferPipelineStatus(events)
   const endedAt = meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
-  const entityTypeLabel = humanizeEntityType(meta?.entity_type)
-  const entityName = meta?.entity_display_name ?? `${meta?.entity_type ?? "?"}#${meta?.entity_id ?? "?"}`
-  const route = meta ? `${meta.source} → ${meta.target}` : ""
+  const entityType = planSummary?.entityType ?? meta?.entity_type ?? null
+  const entityTypeLabel = humanizeEntityType(planSummary?.definitionId ?? entityType)
+  const entityName = planSummary?.entityName ?? meta?.entity_display_name ?? `${entityType ?? "?"}#${meta?.entity_id ?? "?"}`
+  const route = planSummary?.source && planSummary?.target
+    ? `${planSummary.source} → ${planSummary.target}`
+    : meta ? `${meta.source} → ${meta.target}` : ""
+  const subtitleParts = [route]
+  if (planSummary?.definitionPublishedVersion) subtitleParts.push(`def ${planSummary.definitionPublishedVersion}`)
 
   let activities: OperationActivity[]
   if (kind === OperationKind.SyncPreview) {
-    activities = groupSyncPreviewActivities(events)
+    activities = [...buildDecisionActivities(planSummary, startedAt), ...groupSyncPreviewActivities(events)]
   } else {
-    activities = groupSyncExecuteActivities(events)
+    activities = [...buildDecisionActivities(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
   }
 
   return {
     id: planId,
     kind,
     title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} ${entityTypeLabel} — ${entityName}`,
-    subtitle: route || planId.slice(0, 8),
+    subtitle: subtitleParts.filter(Boolean).join(" · ") || planId.slice(0, 8),
     status,
     startedAt,
     endedAt,
@@ -428,6 +435,23 @@ function buildSyncPipeline(planId: string, kind: typeof OperationKind.SyncPrevie
     error: meta?.error ?? undefined,
     activities,
   }
+}
+
+function buildDecisionActivities(
+  planSummary: ReturnType<typeof loadPersistedSyncPlanSummary>,
+  fallbackTimestamp: string,
+): OperationActivity[] {
+  if (!planSummary || planSummary.decisionLog.length === 0) return []
+  return planSummary.decisionLog.map((decision, index) => ({
+    id: `decision:${decision.id}:${index}`,
+    name: decision.title,
+    status: decision.severity === "error" ? OperationStatus.Failed : OperationStatus.Success,
+    startedAt: decision.recordedAt ?? fallbackTimestamp,
+    endedAt: decision.recordedAt ?? fallbackTimestamp,
+    durationMs: 0,
+    summary: decision.summary,
+    events: [],
+  }))
 }
 
 function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity[] {
@@ -528,7 +552,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   const pushLifecycleActivity = (ev: OperationEvent): void => {
     const type = ev.type
     let name = type.replace(/^sync\.execute\./, "")
-    let status = OperationStatus.Success
+    let status: OperationStatus = OperationStatus.Success
     let summary: string | undefined
     let error: string | undefined
 

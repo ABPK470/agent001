@@ -75,7 +75,6 @@ export interface ConfigureAgentOptions {
   syncRunSink?: AgentHost["sync"]["runSink"]
   syncEnvironments?: ReadonlyArray<SyncEnvironment>
   syncDbProjectRoot?: string
-  syncRecipeResolver?: AgentHost["sync"]["recipeResolver"]
   syncFreezeWindowsReader?: AgentHost["sync"]["freezeWindowsReader"]
 }
 
@@ -96,7 +95,6 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     eventSink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK,
     runSink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK,
     recipes: { bundle: null, loadedFromPath: null },
-    recipeResolver: options.syncRecipeResolver ?? null,
     freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER,
     environments: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])),
     plans: { diskRoot: null, memCache: new Map() },
@@ -111,7 +109,6 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       for (const env of options.syncEnvironments) syncState.environments.set(env.name, env)
     }
     if (options.syncDbProjectRoot !== undefined) syncState.dbProjectRoot = options.syncDbProjectRoot
-    if (options.syncRecipeResolver !== undefined) syncState.recipeResolver = options.syncRecipeResolver
     if (options.syncFreezeWindowsReader) syncState.freezeWindowsReader = options.syncFreezeWindowsReader
   }
 

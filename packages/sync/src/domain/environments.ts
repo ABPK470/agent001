@@ -65,6 +65,12 @@ export interface SyncEnvironment {
    * authenticated users. Cross-checked against `mia_sid` cookie identity.
    */
   syncAllowlist: string[]
+  /**
+   * Optional explicit list of allowed sync targets when this environment is
+   * used as the source. `null` means unrestricted by direction policy; an
+   * empty array means no sync targets are currently allowed.
+   */
+  allowedSyncTargets: string[] | null
   // ── Hosted-mode access control ────────────────────────────────
   /**
    * Default access mode for this environment. UAT and PROD default to
@@ -125,6 +131,23 @@ export function getEnvironment(host: AgentHost, name: string): SyncEnvironment {
   return e
 }
 
+/**
+ * Temporary hard guard for live ABI sync usage: the only supported
+ * direction is UAT -> DEV. Keep this centralized so preview and execute
+ * fail the same way.
+ */
+export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetEnv: SyncEnvironment): void {
+  const allowedTargets = sourceEnv.allowedSyncTargets
+  if (allowedTargets === null) return
+  const target = targetEnv.name.trim().toLowerCase()
+  const normalized = allowedTargets.map((name) => name.trim().toLowerCase())
+  if (normalized.includes(target)) return
+  const rendered = allowedTargets.length > 0 ? allowedTargets.join(", ") : "none"
+  throw new Error(
+    `Unsupported sync direction "${sourceEnv.name} -> ${targetEnv.name}". Allowed targets for ${sourceEnv.name}: ${rendered}.`,
+  )
+}
+
 // ── Permission defaults ──────────────────────────────────────────
 
 /**
@@ -162,6 +185,7 @@ export function withPermissionDefaults(
     etlServiceBaseUrl:  e.etlServiceBaseUrl ?? null,
     gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
     syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+    allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
     defaultAccessMode,
     allowedOperations,
     denyDml,
@@ -194,6 +218,7 @@ export function loadSyncEnvironments(
         etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
         gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
         syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+        allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
         defaultAccessMode: e.defaultAccessMode,
         allowedOperations: e.allowedOperations,
         denyDml: e.denyDml,

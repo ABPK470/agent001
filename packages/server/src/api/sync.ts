@@ -3,9 +3,11 @@
  */
 
 import { type AgentHost } from "@mia/agent"
-import { executeSync, getEnvironments, loadPlan, loadSyncRecipes, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
+import { executeSync, getEnvironments, loadPlan, loadPublishedSyncRecipeBundle, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
+import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
+import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js"
 
 interface PreviewBody {
 	entityType: EntityType
@@ -25,9 +27,13 @@ function auditSync(planId: string, actor: string, actorUpn: string | null, actio
 }
 
 export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, host: AgentHost): void {
-	app.get("/api/sync/environments", async () => getEnvironments(host))
-	app.get("/api/sync/recipes", async () => loadSyncRecipes(host, projectRoot))
+	app.get("/api/sync/environments", async () => {
+		rebuildLiveSyncEnvironments(host)
+		return getEnvironments(host)
+	})
+	app.get("/api/sync/recipes", async () => loadPublishedSyncRecipeBundle(host, projectRoot))
 	app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>("/api/sync/search", async (req, reply) => {
+		rebuildLiveSyncEnvironments(host)
 		const { entityType, source, q, limit } = req.query
 		if (!entityType || !source || !q) {
 			reply.code(400)
@@ -45,8 +51,12 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		const actor = req.session.upn
 		const actorUpn = req.session.upn
 		try {
-			const plan = await previewSync({ host, entityType: req.body.entityType, entityId: req.body.entityId, source: req.body.source, target: req.body.target, force: Boolean(req.body.force), enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : undefined })
-			auditSync(plan.planId, actor, actorUpn, "sync.preview", { entityType: req.body.entityType, entityId: req.body.entityId, source: req.body.source, target: req.body.target, force: Boolean(req.body.force), enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : [], totals: plan.totals, entityPolicies: plan.entityPolicies ?? null })
+			rebuildLiveSyncEnvironments(host)
+			const plan = await previewSync({ host, entityType: req.body.entityType, entityId: req.body.entityId, source: req.body.source, target: req.body.target, force: Boolean(req.body.force), enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : undefined, userUpn: actorUpn })
+			const planSummary = summarizeSyncPlan(plan)
+			auditSync(plan.planId, actor, actorUpn, "sync.preview", planSummary
+				? { ...buildSyncAuditDetail(planSummary, plan.totals), force: Boolean(req.body.force), enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : [] }
+				: { entityType: req.body.entityType, entityId: req.body.entityId, source: req.body.source, target: req.body.target, force: Boolean(req.body.force), enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables) ? req.body.enabledOptionalTables : [], totals: plan.totals })
 			return plan
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error)
@@ -68,8 +78,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 	app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId", async (req, reply) => {
 		const actor = req.session.upn
 		const actorUpn = req.session.upn
+		rebuildLiveSyncEnvironments(host)
 		const plan = loadPlan(host, req.params.planId)
-		const planDetail = plan ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null } : {}
+		const planSummary = plan ? summarizeSyncPlan(plan) : loadPersistedSyncPlanSummary(req.params.planId)
+		const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
 		auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
 		try {
 			const result = await executeSync(req.params.planId, { host, confirm: true, userUpn: actor })
@@ -87,8 +99,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 	app.get<{ Params: { planId: string } }>("/api/sync/execute/:planId/stream", async (req, reply) => {
 		const actor = req.session.upn
 		const actorUpn = req.session.upn
+		rebuildLiveSyncEnvironments(host)
 		const plan = loadPlan(host, req.params.planId)
-		const planDetail = plan ? { entityType: plan.recipeSnapshot.entityType, entityId: plan.entity.id, entityName: plan.entity.displayName, source: plan.source, target: plan.target, totals: plan.totals, entityPolicies: plan.entityPolicies ?? null } : {}
+		const planSummary = plan ? summarizeSyncPlan(plan) : loadPersistedSyncPlanSummary(req.params.planId)
+		const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
 		auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
 		setupSse(reply)
 		const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
@@ -121,11 +135,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 				const previewTotals = { insert: row.preview_inserts, update: row.preview_updates, delete: row.preview_deletes }
 				const executeTotals = row.executed_inserts === null ? null : { insert: row.executed_inserts, update: row.executed_updates, delete: row.executed_deletes }
 				const actor = row.actor_upn
-				const entityDetail = { entityType: row.entity_type, entityId: row.entity_id, entityName: row.entity_display_name, source: row.source, target: row.target }
-				const previewRow = { planId: `sync:${row.plan_id}`, actor, action: "sync.preview", detail: JSON.stringify({ ...entityDetail, totals: previewTotals }), timestamp: row.started_at }
+				const summary = loadPersistedSyncPlanSummary(row.plan_id)
+				const previewDetail = summary ? buildSyncAuditDetail(summary, previewTotals) : { entityType: row.entity_type, entityId: row.entity_id, entityName: row.entity_display_name, source: row.source, target: row.target, totals: previewTotals }
+				const previewRow = { planId: `sync:${row.plan_id}`, actor, action: "sync.preview", detail: JSON.stringify(previewDetail), timestamp: row.started_at }
 				if (row.status === "started" || row.status === "preview") return [previewRow]
 				const execAction = row.status === "success" ? "sync.execute.completed" : "sync.execute.failed"
-				const execRow = { planId: `sync:${row.plan_id}`, actor, action: execAction, detail: JSON.stringify({ ...entityDetail, totals: executeTotals, error: row.error ?? null }), timestamp: row.finished_at ?? row.started_at }
+				const execDetail = summary ? buildSyncAuditDetail(summary, executeTotals, row.error ?? null) : { entityType: row.entity_type, entityId: row.entity_id, entityName: row.entity_display_name, source: row.source, target: row.target, totals: executeTotals, error: row.error ?? null }
+				const execRow = { planId: `sync:${row.plan_id}`, actor, action: execAction, detail: JSON.stringify(execDetail), timestamp: row.finished_at ?? row.started_at }
 				return [previewRow, execRow]
 			})
 		return [...auditRows, ...agentRows].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, limit).map((row) => {

@@ -15,14 +15,8 @@ export {
 export { diffEntityDefinitions } from "./diff.js"
 export { projectRecipe, type ProjectedSyncRecipe } from "./projector.js"
 export {
-    getRecipeResolver,
-    installRecipeResolver,
-    tryResolveRecipe,
-    type RecipeResolver,
-    type ResolvedRecipe,
-    type ResolvedRecipePolicies
-} from "./resolver.js"
-export { resolveEffectiveScd2 } from "./strategy-resolver.js"
+    resolveEffectiveScd2
+} from "./strategy-resolver.js"
 export * from "./types.js"
 export {
     isIdentifier,

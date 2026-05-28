@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const listEvents = vi.fn()
 const getRun = vi.fn()
 const getSyncRun = vi.fn()
+const getSyncRunPlanJson = vi.fn()
 
 vi.mock("../src/adapters/persistence/sqlite.js", () => ({
   listEvents,
   getRun,
   getSyncRun,
+  getSyncRunPlanJson,
 }))
 
 describe("listOperations sync bucketing", () => {
@@ -145,5 +147,70 @@ describe("listOperations sync bucketing", () => {
     ])
     expect(execute.activities[2]?.name).toBe("completed")
     expect(execute.activities[2]?.summary).toBe("0 ins · 0 upd · 0 del")
+  })
+
+  it("renders persisted sync decision records as first-class activities", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncExecuteCompleted,
+        created_at: "2026-05-28T10:00:04.000Z",
+        data: JSON.stringify({ planId: "plan-3", applied: { insert: 1, update: 0, delete: 0 } }),
+      },
+      {
+        type: EventType.SyncExecuteStep,
+        created_at: "2026-05-28T10:00:03.000Z",
+        data: JSON.stringify({ planId: "plan-3", step: "metadata-sync" }),
+      },
+      {
+        type: EventType.SyncExecuteStarted,
+        created_at: "2026-05-28T10:00:00.000Z",
+        data: JSON.stringify({ planId: "plan-3", source: "dev", target: "uat" }),
+      },
+    ])
+
+    getRun.mockReturnValue(undefined)
+    getSyncRun.mockReturnValue({
+      status: "success",
+      finished_at: "2026-05-28T10:00:04.000Z",
+      duration_ms: 4000,
+      entity_display_name: "AccountClientMapping",
+      entity_type: "contract",
+      entity_id: "4539",
+      source: "dev",
+      target: "uat",
+      error: null,
+    })
+    getSyncRunPlanJson.mockReturnValue(JSON.stringify({
+      planId: "plan-3",
+      source: "dev",
+      target: "uat",
+      entity: { type: "contract", id: "4539", displayName: "AccountClientMapping" },
+      executionContract: {
+        definitionId: "contract",
+        definitionPublishedVersion: "2026-05-28T09:59:59.000Z",
+      },
+      decisionLog: [
+        {
+          id: "definition-contract",
+          recordedAt: "2026-05-28T09:59:58.000Z",
+          stage: "preview",
+          category: "definition",
+          severity: "info",
+          title: "Published definition selected",
+          summary: "Using published definition contract@2026-05-28T09:59:59.000Z.",
+        },
+      ],
+      warnings: [],
+    }))
+
+    const { listOperations } = await import("../src/api/operations-query.ts")
+    const result = listOperations({ limit: 50 })
+    const execute = result.operations[0]
+
+    expect(execute.title).toBe("Execute Contract — AccountClientMapping")
+    expect(execute.subtitle).toContain("def 2026-05-28T09:59:59.000Z")
+    expect(execute.activities[0]?.name).toBe("Published definition selected")
+    expect(execute.activities[0]?.summary).toBe("Using published definition contract@2026-05-28T09:59:59.000Z.")
+    expect(execute.activities.some((activity) => activity.name === "metadata-sync")).toBe(true)
   })
 })

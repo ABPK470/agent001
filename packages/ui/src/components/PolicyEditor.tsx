@@ -742,18 +742,22 @@ interface EnvCardProps {
 }
 
 function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
+  const [role, setRole]       = useState(env.role)
   const [mode, setMode]       = useState(env.defaultAccessMode)
   const [denyDml, setDenyDml] = useState(env.denyDml)
   const [denyDdl, setDenyDdl] = useState(env.denyDdl)
   const [allowed, setAllowed] = useState<EnvOperation[]>(env.allowedOperations)
   const [approval, setApproval] = useState<EnvOperation[]>(env.approvalRequiredOperations)
+  const [allowedTargetsText, setAllowedTargetsText] = useState((env.allowedSyncTargets ?? []).join(", "))
 
   const dirty =
+    role !== env.role ||
     mode !== env.defaultAccessMode ||
     denyDml !== env.denyDml ||
     denyDdl !== env.denyDdl ||
     JSON.stringify(allowed.slice().sort())  !== JSON.stringify(env.allowedOperations.slice().sort()) ||
-    JSON.stringify(approval.slice().sort()) !== JSON.stringify(env.approvalRequiredOperations.slice().sort())
+    JSON.stringify(approval.slice().sort()) !== JSON.stringify(env.approvalRequiredOperations.slice().sort()) ||
+    JSON.stringify(parseAllowedTargets(allowedTargetsText)) !== JSON.stringify((env.allowedSyncTargets ?? []).slice().sort())
 
   function toggleOp(list: EnvOperation[], setList: (v: EnvOperation[]) => void, op: EnvOperation): void {
     setList(list.includes(op) ? list.filter((o) => o !== op) : [...list, op])
@@ -785,6 +789,24 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
           <button onClick={onReset} disabled={busy}
             className="text-[12px] text-text-muted hover:text-text disabled:opacity-40">↺ Reset to JSON default</button>
         )}
+      </div>
+
+      <div>
+        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Sync role</label>
+        <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5">
+          {(["source", "target", "both"] as const).map((nextRole) => (
+            <button
+              key={nextRole}
+              type="button"
+              onClick={() => setRole(nextRole)}
+              className={`px-3 py-1 text-[12.5px] rounded-md transition-colors ${
+                role === nextRole
+                  ? "bg-accent/15 text-accent font-medium"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >{nextRole}</button>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -823,6 +845,20 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
         tone="warning"
       />
 
+      <div>
+        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Allowed sync targets when this environment is the source</label>
+        <input
+          type="text"
+          value={allowedTargetsText}
+          onChange={(event) => setAllowedTargetsText(event.target.value)}
+          placeholder="Comma-separated env names. Blank means no targets allowed."
+          className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-[12.5px] text-text"
+        />
+        <p className="mt-1 text-[11px] text-text-muted">
+          Current rule is transparent here. Use a comma-separated list such as <span className="font-mono text-text">dev</span>. Leave blank to block this environment as a sync source.
+        </p>
+      </div>
+
       {lockedDown && (
         <p className="text-[12px] text-text-muted border-l-2 border-error/40 pl-3">
           Read-only mode: every write tool is denied unless explicitly listed under <strong className="text-text">Allowed operations</strong>.
@@ -833,11 +869,13 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
         <button
           disabled={!dirty || busy}
           onClick={() => onSave({
+            role,
             defaultAccessMode:          mode,
             denyDml,
             denyDdl,
             allowedOperations:          allowed,
             approvalRequiredOperations: approval,
+            allowedSyncTargets:         parseAllowedTargets(allowedTargetsText),
           })}
           className="px-3.5 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
         >{busy ? "Saving…" : dirty ? "Save changes" : "Saved"}</button>
@@ -845,6 +883,14 @@ function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
       </div>
     </div>
   )
+}
+
+function parseAllowedTargets(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
 }
 
 // ── Reusable bits ────────────────────────────────────────────────
