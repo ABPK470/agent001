@@ -91,8 +91,9 @@ export interface SyncEnvironment {
   /** Convenience: deny DDL (create/alter/drop/grant/revoke). */
   denyDdl: boolean
   /**
-   * Operations that, when reached, must surface an approval prompt. Default
-   * `["sync_execute"]` for read-only envs.
+   * Legacy hosted-policy field preserved for backward compatibility.
+   * Sync approvals should be configured through the dedicated approval
+   * workflow, not per-environment tool gates.
    */
   approvalRequiredOperations: EnvOperation[]
 }
@@ -173,7 +174,7 @@ export function withPermissionDefaults(
       ? ["query_read", "schema_introspect", "sync_preview"] as EnvOperation[]
       : ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] as EnvOperation[]
   )
-  const approvalRequiredOperations = e.approvalRequiredOperations ?? (["sync_execute"] as EnvOperation[])
+  const approvalRequiredOperations = e.approvalRequiredOperations ?? ([] as EnvOperation[])
 
   return {
     name:               e.name,

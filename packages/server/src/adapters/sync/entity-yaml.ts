@@ -19,11 +19,11 @@
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
 
 import type {
-  EntityDefinition,
-  EntityFkHop,
-  EntityTable,
-  EntityTableScope,
-  Scd2Override,
+    EntityDefinition,
+    EntityFkHop,
+    EntityTable,
+    EntityTableScope,
+    Scd2Override,
 } from "@mia/sync"
 
 // ── Export ──────────────────────────────────────────────────────────
@@ -170,6 +170,21 @@ export function parseEntitiesYaml(text: string): ParseEntityResult[] {
     return [{ ok: false, def: null, error: `yaml-parse-error: ${(e as Error).message}` }]
   }
   return docs.map((r) => shapeAsEntity(r))
+}
+
+export function parseEntitiesJson(text: string): ParseEntityResult[] {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (e) {
+    return [{ ok: false, def: null, error: `json-parse-error: ${(e as Error).message}` }]
+  }
+
+  const docs = Array.isArray(raw) ? raw : [raw]
+  if (docs.length === 0) {
+    return [{ ok: false, def: null, error: "json document contains no entities" }]
+  }
+  return docs.map((entry) => shapeAsEntity(entry))
 }
 
 function shapeAsEntity(raw: unknown): ParseEntityResult {

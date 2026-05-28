@@ -1,5 +1,5 @@
 /**
- * EntityImportModal — admin-only bulk YAML import (single or multi-doc).
+ * EntityImportModal — admin-only bulk YAML or JSON import.
  * Supports dry-run validation before commit.
  */
 
@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Upload } from "lucide-react"
 import type { JSX } from "react"
 import { useState } from "react"
 import { api } from "../../api"
-import type { EntityRegistryYamlImportResponse } from "../../types"
+import type { EntityRegistryImportFormat, EntityRegistryYamlImportResponse } from "../../types"
 import { ModalShell } from "./ModalShell"
 
 export interface EntityImportModalProps {
@@ -16,7 +16,8 @@ export interface EntityImportModalProps {
 }
 
 export function EntityImportModal({ onClose, onImported }: EntityImportModalProps): JSX.Element {
-  const [yaml, setYaml]     = useState("")
+  const [format, setFormat] = useState<EntityRegistryImportFormat>("yaml")
+  const [content, setContent] = useState("")
   const [reason, setReason] = useState("")
   const [busy, setBusy]     = useState(false)
   const [err, setErr]       = useState<string | null>(null)
@@ -24,11 +25,11 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
 
   async function run(dryRun: boolean) {
     setErr(null); setResult(null)
-    if (!yaml.trim())   return setErr("YAML body is required")
+    if (!content.trim()) return setErr(`${format.toUpperCase()} body is required`)
     if (!reason.trim()) return setErr("reason is required")
     setBusy(true)
     try {
-      const r = await api.importEntityRegistryYaml(yaml, reason, { dryRun })
+      const r = await api.importEntityRegistryDocument(content, format, reason, { dryRun })
       setResult(r)
       if (!dryRun && r.ok) onImported()
     } catch (e) {
@@ -40,7 +41,7 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
 
   return (
     <ModalShell
-      title="Import entities from YAML"
+      title="Import entities from YAML or JSON"
       icon={<Upload className="h-4 w-4 text-accent" />}
       onClose={onClose}
       widthClass="max-w-3xl"
@@ -74,20 +75,42 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
       }
     >
       <div className="space-y-3 p-5 text-xs">
+        <div className="space-y-1">
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">Format</span>
+          <div className="inline-flex rounded-lg border border-border-subtle bg-panel p-0.5">
+            {(["yaml", "json"] as const).map((next) => (
+              <button
+                key={next}
+                type="button"
+                onClick={() => setFormat(next)}
+                className={`rounded-md px-3 py-1.5 text-xs transition-colors ${format === next ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text"}`}
+              >
+                {next.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
         <label className="flex flex-col gap-1">
           <span className="text-[10px] uppercase tracking-wider text-text-muted">Reason <span className="text-rose-400">*</span></span>
           <input value={reason} onChange={(e) => setReason(e.target.value)} className="input" placeholder="why this import" />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">YAML (single or multi-doc)</span>
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">{format === "yaml" ? "YAML" : "JSON"} body</span>
           <textarea
-            value={yaml}
-            onChange={(e) => setYaml(e.target.value)}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
             rows={18}
             spellCheck={false}
-            placeholder={"id: my-entity\ntenantId: _default\n..."}
+            placeholder={format === "yaml"
+              ? "id: my-entity\ntenantId: _default\n..."
+              : '{\n  "id": "my-entity",\n  "tenantId": "_default"\n}'}
             className="input font-mono text-[11px]"
           />
+          <p className="text-[11px] text-text-muted">
+            {format === "yaml"
+              ? "Accepts a single entity document or a multi-document YAML stream."
+              : "Accepts either one entity object or an array of entity objects."}
+          </p>
         </label>
         {result && <ResultPanel result={result} />}
       </div>

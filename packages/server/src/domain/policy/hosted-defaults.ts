@@ -31,13 +31,12 @@
 import { DisclosureCategory } from "./disclosure-categories.js"
 
 import {
-  isPolicyDbOperation,
-  PolicyDbEnvironment,
-  PolicyDbOperation,
-  PolicyEffect,
-  PolicyNetwork,
-  PolicyRole,
-  type PolicyRule,
+    PolicyDbEnvironment,
+    PolicyDbOperation,
+    PolicyEffect,
+    PolicyNetwork,
+    PolicyRole,
+    type PolicyRule
 } from "@mia/agent"
 
 const DEFAULT_PRIORITY = 10
@@ -284,7 +283,6 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
  *   - one DENY rule per `denyDml` / `denyDdl` flag (priority above defaults
  *     so a deployment that opts in to read-only beats the loose `mssql_*`
  *     allow rules already in {@link hostedDefaultPolicyRules}),
- *   - one REQUIRE_APPROVAL rule per entry in `approvalRequiredOperations`,
  *   - one ALLOW rule per non-trivial entry in `allowedOperations` (so a
  *     DEV opt-in for `dml` actually fires under the conjunctive matcher).
  *
@@ -294,16 +292,14 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
  * deployment that explicitly says "PROD allows DML" can still be
  * overridden by a per-deployment `denyDml: true` flag.
  */
-const PER_ENV_DENY_PRIORITY     = DEFAULT_PRIORITY + 75
-const PER_ENV_APPROVAL_PRIORITY = DEFAULT_PRIORITY + 50
-const PER_ENV_ALLOW_PRIORITY    = DEFAULT_PRIORITY + 25
+const PER_ENV_DENY_PRIORITY  = DEFAULT_PRIORITY + 75
+const PER_ENV_ALLOW_PRIORITY = DEFAULT_PRIORITY + 25
 
 interface EnvLike {
   name: string
   denyDml: boolean
   denyDdl: boolean
   allowedOperations: ReadonlyArray<string>
-  approvalRequiredOperations: ReadonlyArray<string>
 }
 
 export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): PolicyRule[] {
@@ -361,21 +357,6 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
         },
       })
     }
-
-    for (const op of e.approvalRequiredOperations) {
-      if (!isPolicyDbOperation(op)) continue
-      rules.push({
-        name:       `env_${envKey}_approval_${op}`,
-        effect:     PolicyEffect.RequireApproval,
-        condition:  "selectors",
-        parameters: {
-          priority: PER_ENV_APPROVAL_PRIORITY,
-          reason:   `${envKey}.approvalRequiredOperations: ${op} requires confirmation`,
-          selectors: { tool: "mssql_*", dbEnvironment: envKey, dbOperation: op },
-        },
-      })
-    }
-
     // Explicit per-env allow for DEV widenings (e.g. `allowedOperations: ["dml"]`).
     // We do NOT emit allow rules for `query_read` / `schema_introspect` /
     // `sync_preview` — those are already covered by the cross-env defaults

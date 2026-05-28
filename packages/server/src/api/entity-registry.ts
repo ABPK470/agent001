@@ -4,6 +4,7 @@
 
 import { EventType } from "@mia/shared-enums"
 import type {
+    EntityRegistryDocumentImportRequest,
     EntityRegistrySyncDefinitionExportRequest,
     EntityRegistrySyncDefinitionExportResponse,
     EntityRegistrySyncDefinitionStatusResponse,
@@ -13,7 +14,7 @@ import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } fro
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { bootstrapEntityRegistryFromYaml } from "../adapters/sync/entity-bootstrap.js"
-import { formatEntitiesYaml, formatEntityYaml, parseEntitiesYaml } from "../adapters/sync/entity-yaml.js"
+import { formatEntitiesYaml, formatEntityYaml, parseEntitiesJson, parseEntitiesYaml } from "../adapters/sync/entity-yaml.js"
 import { buildSyncDefinitionAuthoringStatus, buildSyncDefinitionDraft, findSyncDefinitionStatus } from "../adapters/sync/sync-definition-authoring.js"
 import { broadcast } from "../event-broadcaster.js"
 
@@ -31,6 +32,46 @@ function audit(req: FastifyRequest, action: string, detail: Record<string, unkno
 	} catch (error) {
 		console.warn("[entity-registry] audit_log write failed:", error instanceof Error ? error.message : error)
 	}
+}
+
+function importEntitiesFromText(args: {
+	tenantId: string
+	actor: string
+	reason: string
+	content: string
+	format: "yaml" | "json"
+	dryRun: boolean
+}): EntityRegistryYamlImportResponse {
+	const parsed = args.format === "json" ? parseEntitiesJson(args.content) : parseEntitiesYaml(args.content)
+	const saved: EntityRegistryYamlImportResponse["saved"] = []
+	const skipped: EntityRegistryYamlImportResponse["skipped"] = []
+	const errors: EntityRegistryYamlImportResponse["errors"] = []
+
+	for (const item of parsed) {
+		if (!item.ok || !item.def) {
+			errors.push({ id: null, error: item.error ?? "unknown parse error" })
+			continue
+		}
+		const existing = db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
+		const created = existing === null
+		if (args.dryRun) {
+			saved.push({ id: item.def.id, version: existing ? existing.version + 1 : 1, created })
+			continue
+		}
+		try {
+			const result = db.saveEntityDefinition({ tenantId: args.tenantId, def: { ...item.def, tenantId: args.tenantId }, actor: args.actor, reason: args.reason })
+			saved.push({ id: result.id, version: result.version, created })
+			broadcast({ type: EventType.EntityRegistryImported, data: { tenantId: args.tenantId, id: result.id, version: result.version, created, actor: args.actor } })
+		} catch (error) {
+			if (error instanceof db.EntityRegistryValidationError) {
+				errors.push({ id: item.def.id, error: error.result })
+			} else {
+				errors.push({ id: item.def.id, error: (error as Error).message })
+			}
+		}
+	}
+
+	return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun }
 }
 
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
@@ -101,46 +142,47 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 		return result
 	})
 
+	app.post<{ Body: EntityRegistryDocumentImportRequest }>("/api/entity-registry/entities/import", async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
+		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+		if (typeof req.body?.content !== "string" || req.body.content.trim() === "") { reply.code(400); return { error: "'content' body is required" } }
+		if (req.body.format !== "yaml" && req.body.format !== "json") { reply.code(400); return { error: "'format' must be 'yaml' or 'json'" } }
+		if (!req.body.reason || req.body.reason.trim() === "") { reply.code(400); return { error: "'reason' is required" } }
+		const tenantId = resolveTenant(req)
+		const dryRun = Boolean(req.body.dryRun)
+		const result = importEntitiesFromText({
+			tenantId,
+			actor: req.session.upn,
+			reason: req.body.reason,
+			content: req.body.content,
+			format: req.body.format,
+			dryRun,
+		})
+
+		if (!dryRun) {
+			audit(req, "entity_registry.imported", { tenantId, format: req.body.format, savedCount: result.saved.length, errorCount: result.errors.length })
+		}
+
+		return result
+	})
+
 	app.post<{ Body: { yaml: string; reason: string; dryRun?: boolean } }>("/api/entity-registry/entities/import-yaml", async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		if (typeof req.body?.yaml !== "string" || req.body.yaml.trim() === "") { reply.code(400); return { error: "'yaml' body is required" } }
 		if (!req.body.reason || req.body.reason.trim() === "") { reply.code(400); return { error: "'reason' is required" } }
 		const tenantId = resolveTenant(req)
 		const dryRun = Boolean(req.body.dryRun)
-		const parsed = parseEntitiesYaml(req.body.yaml)
-		const saved: EntityRegistryYamlImportResponse["saved"] = []
-		const skipped: EntityRegistryYamlImportResponse["skipped"] = []
-		const errors: EntityRegistryYamlImportResponse["errors"] = []
-
-		for (const item of parsed) {
-			if (!item.ok || !item.def) {
-				errors.push({ id: null, error: item.error ?? "unknown parse error" })
-				continue
-			}
-			const existing = db.getEntityDefinition(tenantId, item.def.id, { includeRetired: true })
-			const created = existing === null
-			if (dryRun) {
-				saved.push({ id: item.def.id, version: existing ? existing.version + 1 : 1, created })
-				continue
-			}
-			try {
-				const result = db.saveEntityDefinition({ tenantId, def: { ...item.def, tenantId }, actor: req.session.upn, reason: req.body.reason })
-				saved.push({ id: result.id, version: result.version, created })
-				broadcast({ type: EventType.EntityRegistryImported, data: { tenantId, id: result.id, version: result.version, created, actor: req.session.upn } })
-			} catch (error) {
-				if (error instanceof db.EntityRegistryValidationError) {
-					errors.push({ id: item.def.id, error: error.result })
-				} else {
-					errors.push({ id: item.def.id, error: (error as Error).message })
-				}
-			}
-		}
-
+		const result = importEntitiesFromText({
+			tenantId,
+			actor: req.session.upn,
+			reason: req.body.reason,
+			content: req.body.yaml,
+			format: "yaml",
+			dryRun,
+		})
 		if (!dryRun) {
-			audit(req, "entity_registry.imported", { tenantId, savedCount: saved.length, errorCount: errors.length })
+			audit(req, "entity_registry.imported", { tenantId, format: "yaml", savedCount: result.saved.length, errorCount: result.errors.length })
 		}
-
-		return { ok: errors.length === 0, saved, skipped, errors, dryRun }
+		return result
 	})
 
 	app.post<{ Params: { id: string }; Body: EntityRegistrySyncDefinitionExportRequest }>("/api/entity-registry/entities/:id/export-sync-definition", async (req, reply): Promise<EntityRegistrySyncDefinitionExportResponse | { error: string }> => {

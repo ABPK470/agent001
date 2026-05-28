@@ -20,9 +20,8 @@ import {
     ScrollText,
     Settings,
     Shield,
-    ShieldCheck,
     Ship,
-    X,
+    X
 } from "lucide-react"
 import type { ComponentType } from "react"
 import { useIsMobile } from "../hooks/useIsMobile"
@@ -53,9 +52,8 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
   { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: Database },
   { type: "sync-proposals", label: "Sync Proposals", desc: "Review reconciliation proposals, annotations, and ranking", Icon: GitMerge },
-  { type: "sync-approvals", label: "Sync Approvals", desc: "Grant, reject, or bypass approvals before promote-to-production", Icon: ShieldCheck },
   { type: "sync-evidence",  label: "Sync Evidence",  desc: "Signed evidence envelopes — download and verify",            Icon: FileText },
-  { type: "sync-admin",     label: "Sync Admin",     desc: "Schedules, approval policies, notification routes",          Icon: Settings },
+  { type: "sync-admin",     label: "Sync Admin",     desc: "Runs, approvals, environments, schedules, approval policies, and notifications", Icon: Settings },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

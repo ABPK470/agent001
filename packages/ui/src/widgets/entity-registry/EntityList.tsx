@@ -21,7 +21,7 @@ export function EntityList({ items, selectedId, onSelect }: EntityListProps): JS
   if (items.length === 0) {
     return (
       <div className="p-4 text-xs text-text-muted">
-        No entities yet. Use <span className="font-mono text-text">Import YAML</span> in the toolbar or save a new draft entity.
+        No entities yet. Use <span className="font-mono text-text">Import YAML / JSON</span> in the toolbar or save a new draft entity.
       </div>
     )
   }

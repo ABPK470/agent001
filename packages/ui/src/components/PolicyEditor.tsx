@@ -8,7 +8,6 @@
 import {
     AlertTriangle,
     Brain,
-    Check,
     ChevronDown,
     ChevronRight,
     Cpu,
@@ -33,7 +32,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
-import type { EnvOperation, PolicyRule, SyncEnvironmentAdmin, ToolInfo } from "../types"
+import type { PolicyRule, ToolInfo } from "../types"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
 
 interface Props {
@@ -89,11 +88,7 @@ const SSRF_BLOCKED = [
   "*.local", "*.internal",
 ]
 
-type Tab = "tools" | "rules" | "envs" | "model" | "security"
-
-const ALL_OPS: EnvOperation[] = [
-  "query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml",
-]
+type Tab = "tools" | "rules" | "model" | "security"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
@@ -131,11 +126,6 @@ export function PolicyEditor({ onClose }: Props) {
   const [llmActiveProvider, setLlmActiveProvider] = useState("")
   const [llmActiveModel, setLlmActiveModel] = useState("")
 
-  // Environments tab state
-  const [envs, setEnvs] = useState<SyncEnvironmentAdmin[]>([])
-  const [envSavingName, setEnvSavingName] = useState<string | null>(null)
-  const [envError, setEnvError] = useState<string | null>(null)
-
   const loadRules = useCallback(async () => {
     try {
       const [data, toolList] = await Promise.all([api.listPolicies(), api.listTools()])
@@ -149,35 +139,6 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
-
-  const loadEnvs = useCallback(async () => {
-    try { setEnvs(await api.listSyncEnvironments()) } catch { setEnvError("Failed to load environments") }
-  }, [])
-  useEffect(() => { loadEnvs() }, [loadEnvs])
-
-
-  async function saveEnv(name: string, fields: Record<string, unknown>): Promise<void> {
-    setEnvSavingName(name); setEnvError(null)
-    try {
-      await api.updateSyncEnvironment(name, fields)
-      await loadEnvs()
-    } catch {
-      setEnvError(`Failed to update ${name}`)
-    } finally {
-      setEnvSavingName(null)
-    }
-  }
-  async function resetEnv(name: string): Promise<void> {
-    setEnvSavingName(name); setEnvError(null)
-    try {
-      await api.resetSyncEnvironment(name)
-      await loadEnvs()
-    } catch {
-      setEnvError(`Failed to reset ${name}`)
-    } finally {
-      setEnvSavingName(null)
-    }
-  }
 
   // Load workspace path
   useEffect(() => {
@@ -291,7 +252,6 @@ export function PolicyEditor({ onClose }: Props) {
   const TABS: { id: Tab; label: string }[] = [
     { id: "tools", label: "Tool Permissions" },
     { id: "rules", label: `Selector Rules (${rules.length})` },
-    { id: "envs", label: `Environments (${envs.length})` },
     { id: "model", label: "Model" },
     { id: "security", label: "Security" },
   ]
@@ -338,7 +298,6 @@ export function PolicyEditor({ onClose }: Props) {
           <p className="text-[12.5px] text-text-muted leading-relaxed">
             {tab === "tools"    && <><strong className="text-text">Tool Permissions</strong> — coarse-grained on/off for every tool, regardless of arguments. Sets simple <code className="font-mono">action:&lt;tool&gt;</code> rules. For nuanced control (per-environment, per-command, per-path) use <em>Selector Rules</em>.</>}
             {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on selectors (tool, path, command regex, dbEnvironment, scope, etc.) and resolves by priority. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
-            {tab === "envs"     && <><strong className="text-text">Sync Environments</strong> — per-environment MSSQL access mode. Edits here become DB overrides on top of <code className="font-mono">deploy/mssql/sync-environments.json</code> and re-derive the env-scoped selector rules. Applies to the next run start (no restart).</>}
             {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
             {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards, SQL engine invariants). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
           </p>
@@ -403,28 +362,6 @@ export function PolicyEditor({ onClose }: Props) {
               onReload={loadRules}
               onDelete={handleDelete}
             />
-          ) : tab === "envs" ? (
-            /* ── Environments tab ─────────────────────────── */
-            <div className="space-y-3">
-              <p className="text-sm text-text-muted">
-                Per-environment access control for hosted MSSQL operations. The JSON config in
-                <code className="font-mono text-text"> deploy/mssql/sync-environments.json</code> is the bootstrap;
-                edits here are stored as overrides that win at merge time. <span className="text-warning">Changes apply to the next run start (no restart needed).</span>
-              </p>
-              {envError && <div className="px-3 py-2 bg-error/10 text-error text-[13px] rounded-lg">{envError}</div>}
-              {envs.map((e) => (
-                <EnvCard
-                  key={e.name}
-                  env={e}
-                  busy={envSavingName === e.name}
-                  onSave={(fields) => saveEnv(e.name, fields)}
-                  onReset={() => resetEnv(e.name)}
-                />
-              ))}
-              {envs.length === 0 && (
-                <div className="text-text-muted text-[13px] text-center py-6">No sync environments configured.</div>
-              )}
-            </div>
           ) : tab === "model" ? (
             /* ── Model tab ────────────────────────────────── */
             <div className="space-y-4">
@@ -727,219 +664,6 @@ export function PolicyEditor({ onClose }: Props) {
             </div>
           )}
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Env permission card ──────────────────────────────────────────
-
-interface EnvCardProps {
-  env:    SyncEnvironmentAdmin
-  busy:   boolean
-  onSave: (fields: Record<string, unknown>) => void
-  onReset: () => void
-}
-
-function EnvCard({ env, busy, onSave, onReset }: EnvCardProps) {
-  const [role, setRole]       = useState(env.role)
-  const [mode, setMode]       = useState(env.defaultAccessMode)
-  const [denyDml, setDenyDml] = useState(env.denyDml)
-  const [denyDdl, setDenyDdl] = useState(env.denyDdl)
-  const [allowed, setAllowed] = useState<EnvOperation[]>(env.allowedOperations)
-  const [approval, setApproval] = useState<EnvOperation[]>(env.approvalRequiredOperations)
-  const [allowedTargetsText, setAllowedTargetsText] = useState((env.allowedSyncTargets ?? []).join(", "))
-
-  const dirty =
-    role !== env.role ||
-    mode !== env.defaultAccessMode ||
-    denyDml !== env.denyDml ||
-    denyDdl !== env.denyDdl ||
-    JSON.stringify(allowed.slice().sort())  !== JSON.stringify(env.allowedOperations.slice().sort()) ||
-    JSON.stringify(approval.slice().sort()) !== JSON.stringify(env.approvalRequiredOperations.slice().sort()) ||
-    JSON.stringify(parseAllowedTargets(allowedTargetsText)) !== JSON.stringify((env.allowedSyncTargets ?? []).slice().sort())
-
-  function toggleOp(list: EnvOperation[], setList: (v: EnvOperation[]) => void, op: EnvOperation): void {
-    setList(list.includes(op) ? list.filter((o) => o !== op) : [...list, op])
-  }
-
-  const lockedDown = mode === "read_only"
-  const ROLE_TINT: Record<SyncEnvironmentAdmin["role"], string> = {
-    source: "text-info bg-info/10",
-    target: "text-warning bg-warning/10",
-    both:   "text-text-muted bg-overlay-3",
-  }
-
-  return (
-    <div className="px-4 py-4 rounded-xl bg-overlay-2 border border-border-subtle space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2.5">
-          <span className="text-[15px] font-semibold text-text font-mono tracking-tight">{env.name}</span>
-          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${ROLE_TINT[env.role]}`}>{env.role}</span>
-          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${lockedDown ? "bg-error/10 text-error" : "bg-success/10 text-success"}`}>
-            {lockedDown ? "read-only" : "read-write"}
-          </span>
-          {env.override && (
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/10 text-warning">
-              override by {env.override.updatedBy ?? "?"}
-            </span>
-          )}
-        </div>
-        {env.override && (
-          <button onClick={onReset} disabled={busy}
-            className="text-[12px] text-text-muted hover:text-text disabled:opacity-40">↺ Reset to JSON default</button>
-        )}
-      </div>
-
-      <div>
-        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Sync role</label>
-        <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5">
-          {(["source", "target", "both"] as const).map((nextRole) => (
-            <button
-              key={nextRole}
-              type="button"
-              onClick={() => setRole(nextRole)}
-              className={`px-3 py-1 text-[12.5px] rounded-md transition-colors ${
-                role === nextRole
-                  ? "bg-accent/15 text-accent font-medium"
-                  : "text-text-muted hover:text-text"
-              }`}
-            >{nextRole}</button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Default access mode</label>
-        <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5">
-          {(["read_only","read_write"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className={`px-3 py-1 text-[12.5px] rounded-md transition-colors ${
-                mode === m
-                  ? m === "read_only" ? "bg-error/15 text-error font-medium" : "bg-success/15 text-success font-medium"
-                  : "text-text-muted hover:text-text"
-              }`}
-            >{m === "read_only" ? "Read only" : "Read / write"}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <CheckPill label="Block DML (INSERT / UPDATE / DELETE)" checked={denyDml} onChange={setDenyDml} tone="error" />
-        <CheckPill label="Block DDL (CREATE / ALTER / DROP)"   checked={denyDdl} onChange={setDenyDdl} tone="error" />
-      </div>
-
-      <OpsChipGroup
-        label="Allowed operations"
-        ops={allowed}
-        onToggle={(op) => toggleOp(allowed, setAllowed, op)}
-        tone="success"
-      />
-      <OpsChipGroup
-        label="Operations requiring approval"
-        ops={approval}
-        onToggle={(op) => toggleOp(approval, setApproval, op)}
-        tone="warning"
-      />
-
-      <div>
-        <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">Allowed sync targets when this environment is the source</label>
-        <input
-          type="text"
-          value={allowedTargetsText}
-          onChange={(event) => setAllowedTargetsText(event.target.value)}
-          placeholder="Comma-separated env names. Blank means no targets allowed."
-          className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-[12.5px] text-text"
-        />
-        <p className="mt-1 text-[11px] text-text-muted">
-          Current rule is transparent here. Use a comma-separated list such as <span className="font-mono text-text">dev</span>. Leave blank to block this environment as a sync source.
-        </p>
-      </div>
-
-      {lockedDown && (
-        <p className="text-[12px] text-text-muted border-l-2 border-error/40 pl-3">
-          Read-only mode: every write tool is denied unless explicitly listed under <strong className="text-text">Allowed operations</strong>.
-        </p>
-      )}
-
-      <div className="flex items-center gap-3 pt-1 border-t border-border-subtle">
-        <button
-          disabled={!dirty || busy}
-          onClick={() => onSave({
-            role,
-            defaultAccessMode:          mode,
-            denyDml,
-            denyDdl,
-            allowedOperations:          allowed,
-            approvalRequiredOperations: approval,
-            allowedSyncTargets:         parseAllowedTargets(allowedTargetsText),
-          })}
-          className="px-3.5 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-        >{busy ? "Saving…" : dirty ? "Save changes" : "Saved"}</button>
-        {dirty && <span className="text-[12px] text-warning">● unsaved changes</span>}
-      </div>
-    </div>
-  )
-}
-
-function parseAllowedTargets(value: string): string[] {
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right))
-}
-
-// ── Reusable bits ────────────────────────────────────────────────
-
-function CheckPill({ label, checked, onChange, tone = "accent" }: {
-  label: string; checked: boolean; onChange: (v: boolean) => void; tone?: "accent" | "error" | "warning" | "success"
-}) {
-  const toneCls = checked
-    ? tone === "error"   ? "bg-error/10 text-error border-error/30"
-    : tone === "warning" ? "bg-warning/10 text-warning border-warning/30"
-    : tone === "success" ? "bg-success/10 text-success border-success/30"
-    :                      "bg-accent/10 text-accent border-accent/30"
-    : "bg-overlay-2 text-text-muted border-border-subtle hover:text-text"
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full border text-[12.5px] transition-colors ${toneCls}`}
-    >
-      <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${checked ? "bg-current border-current" : "border-current/50"}`}>
-        {checked && <Check size={10} className="text-surface" strokeWidth={3} />}
-      </span>
-      {label}
-    </button>
-  )
-}
-
-function OpsChipGroup({ label, ops, onToggle, tone }: {
-  label: string; ops: EnvOperation[]; onToggle: (op: EnvOperation) => void; tone: "success" | "warning"
-}) {
-  return (
-    <div>
-      <label className="text-[11px] uppercase tracking-wider text-text-muted block mb-1.5">{label}</label>
-      <div className="flex flex-wrap gap-1.5">
-        {ALL_OPS.map((op) => {
-          const on = ops.includes(op)
-          const cls = on
-            ? tone === "success"
-              ? "bg-success/10 text-success border-success/30"
-              : "bg-warning/10 text-warning border-warning/30"
-            : "bg-surface text-text-muted border-border-subtle hover:text-text hover:border-border"
-          return (
-            <button key={op} type="button" onClick={() => onToggle(op)}
-              className={`text-[12px] px-2.5 py-1 rounded-full border font-mono transition-colors ${cls}`}>
-              {on && <Check size={10} className="inline -mt-0.5 mr-1" strokeWidth={3} />}
-              {op}
-            </button>
-          )
-        })}
       </div>
     </div>
   )

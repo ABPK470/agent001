@@ -13,10 +13,11 @@
  */
 
 import {
-    Calendar, Clock, Database, GitBranch, LayoutDashboard, Mail, ShieldCheck,
+    Calendar, Clock, Database, GitBranch, LayoutDashboard, Mail, ShieldAlert, ShieldCheck,
 } from "lucide-react"
 import type { JSX } from "react"
 import { useState } from "react"
+import { ApprovalsPanel } from "./ApprovalsPanel"
 import { EnvironmentsPanel } from "./EnvironmentsPanel"
 import { FreezeWindowsPanel } from "./FreezeWindowsPanel"
 import { OverviewPanel } from "./OverviewPanel"
@@ -29,6 +30,7 @@ import { StrategiesPanel } from "./StrategiesPanel"
 export type Section =
   | "overview"
   | "runs"
+  | "approvals"
   | "environments"
   | "schedules"
   | "policies"
@@ -41,6 +43,7 @@ interface NavItem { id: Section; label: string; icon: typeof Database; hint: str
 const NAV: readonly NavItem[] = [
   { id: "overview",     label: "Overview",        icon: LayoutDashboard, hint: "everything at a glance" },
   { id: "runs",         label: "Runs",            icon: Clock,           hint: "plans · gates · evidence" },
+  { id: "approvals",    label: "Approvals",       icon: ShieldAlert,     hint: "grant · reject · bypass" },
   { id: "environments", label: "Environments",    icon: Database,        hint: "DEV · UAT · PROD" },
   { id: "schedules",    label: "Schedules",       icon: Clock,           hint: "cron-driven proposers" },
   { id: "policies",     label: "Approval policies",icon: ShieldCheck,    hint: "who must sign off" },
@@ -86,6 +89,7 @@ export function SyncAdminShell({ initial = "overview" }: { initial?: Section }):
       <div className="flex-1 min-w-0">
         {section === "overview"     && <OverviewPanel onJump={setSection} />}
         {section === "runs"         && <RunsPanel />}
+        {section === "approvals"    && <ApprovalsPanel />}
         {section === "environments" && <EnvironmentsPanel />}
         {section === "schedules"    && <SchedulesPanel />}
         {section === "policies"     && <PoliciesPanel />}

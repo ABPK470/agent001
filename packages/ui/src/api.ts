@@ -462,6 +462,18 @@ export const api = {
       },
     )
   },
+  importEntityRegistryDocument: (content: string, format: import("./types").EntityRegistryImportFormat, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ content, format, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
   exportEntityRegistrySyncDefinition: (
     id: string,
     payload?: import("./types").EntityRegistrySyncDefinitionExportRequest,

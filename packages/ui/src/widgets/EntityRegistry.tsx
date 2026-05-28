@@ -46,7 +46,7 @@ import { EntityOverview } from "./entity-registry/EntityOverview"
 import { EntityTables } from "./entity-registry/EntityTables"
 import { EntityYaml } from "./entity-registry/EntityYaml"
 
-const TABS = ["overview", "tables", "history", "yaml", "authoring"] as const
+const TABS = ["overview", "tables", "history", "document", "authoring"] as const
 type Tab = typeof TABS[number]
 
 interface Banner { kind: "error" | "success"; text: string }
@@ -106,7 +106,7 @@ export function EntityRegistry(): JSX.Element {
     if (tab === "history") {
       void api.getEntityRegistryHistory(selectedId).then(setHistory).catch((e) =>
         setBanner({ kind: "error", text: String(e) }))
-    } else if (tab === "yaml") {
+    } else if (tab === "document") {
       void api.getEntityRegistryYaml(selectedId).then(setYamlText).catch((e) =>
         setBanner({ kind: "error", text: String(e) }))
     }
@@ -186,7 +186,7 @@ export function EntityRegistry(): JSX.Element {
                           : "border-transparent text-text-muted hover:text-text",
                       ].join(" ")}
                     >
-                      {t === "tables" ? `Tables (${(selected.tables ?? []).length})` : t[0]!.toUpperCase() + t.slice(1)}
+                      {t === "tables" ? `Tables (${(selected.tables ?? []).length})` : t === "document" ? "Document" : t[0]!.toUpperCase() + t.slice(1)}
                     </button>
                   ))}
                 </nav>
@@ -218,7 +218,7 @@ export function EntityRegistry(): JSX.Element {
                 {tab === "overview" && <EntityOverview def={selected} />}
                 {tab === "tables"   && <EntityTables  def={selected} />}
                 {tab === "history"  && <EntityHistory entries={history} />}
-                {tab === "yaml"     && <EntityYaml    yaml={yamlText} entityId={selected.id} />}
+                {tab === "document" && <EntityYaml yaml={yamlText} def={selected} entityId={selected.id} />}
                 {tab === "authoring" && (
                   <EntityAuthoring
                     def={selected}
@@ -285,7 +285,7 @@ function Toolbar({ busy, count, isAdmin, onRefresh, onImport, onNew }: ToolbarPr
         {isAdmin && (
           <>
             <button type="button" onClick={onImport} disabled={busy} className={baseBtn}>
-              <Upload className="h-3 w-3" /> Import YAML
+              <Upload className="h-3 w-3" /> Import YAML / JSON
             </button>
             <button
               type="button"

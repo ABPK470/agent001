@@ -33,7 +33,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "scd2-strategies": "SCD2 Strategies",
   "freeze-windows":  "Freeze Windows",
   "sync-proposals": "Sync Proposals",
-  "sync-approvals": "Sync Approvals",
+  "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
 }

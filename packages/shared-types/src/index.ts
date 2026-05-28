@@ -966,6 +966,16 @@ export interface EntityRegistryYamlImportRequest {
   dryRun?: boolean
 }
 
+export type EntityRegistryImportFormat = "yaml" | "json"
+
+export interface EntityRegistryDocumentImportRequest {
+  content: string
+  format: EntityRegistryImportFormat
+  reason: string
+  /** When true the server validates + diffs but does NOT persist. */
+  dryRun?: boolean
+}
+
 export interface EntityRegistryYamlImportResponse {
   ok: boolean
   saved: Array<{ id: string; version: number; created: boolean }>

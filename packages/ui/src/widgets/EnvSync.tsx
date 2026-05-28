@@ -738,7 +738,7 @@ function Loading({ children }: { children: React.ReactNode }) {
   return <div className="flex-1 flex items-center justify-center gap-2 text-text-muted text-sm"><Loader2 size={14} className="animate-spin" />{children}</div>
 }
 
-function Empty({ envs, blocker, srcEnv, tgtEnv, hasRecipes }: {
+function Empty({ envs, blocker, srcEnv, tgtEnv, hasDefinitions }: {
   envs: SyncEnvironment[]; blocker: string | null
   srcEnv: SyncEnvironment | null; tgtEnv: SyncEnvironment | null; hasDefinitions: boolean
 }) {
