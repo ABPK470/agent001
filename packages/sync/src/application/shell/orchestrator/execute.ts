@@ -2,8 +2,8 @@
  * `executeSync` — top-level orchestration of a saved SyncPlan.
  *
  * Wires together drift re-validation, the in-tx metadata sync
- * (`runMetadataSync`), and the post-tx contract pipeline
- * (`runContractPipeline`). Owns: pre-flight safety rails, run-sink
+ * (`runMetadataSync`), and the post-metadata action dispatcher
+ * (`runPostMetadataPipeline`). Owns: pre-flight safety rails, run-sink
  * lifecycle, explicit SQL telemetry attribution, and the
  * outer try/catch that translates throws into `sync.execute.failed`
  * events and unlocks the entity.
@@ -191,7 +191,13 @@ async function executeSyncInner(
 
   try {
     // ═══════════════════════════════════════════════════════════
-    // Pipeline lifecycle — mirrors pipeline 788 activity sequence
+    // High-level execute lifecycle.
+    //
+    // Only the pre-tx audit/lock steps below are contract-specific, and
+    // they run only when the recipe explicitly includes ContractDeploy.
+    // The post-commit sequence is action-driven per entity recipe via
+    // runPostMetadataPipeline(); it is not one legacy "pipeline 788"
+    // applied uniformly to every entity type.
     // ═══════════════════════════════════════════════════════════
 
     // ── Step 1: Audit pre-check ──

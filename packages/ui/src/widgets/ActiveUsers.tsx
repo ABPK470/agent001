@@ -105,6 +105,7 @@ export function ActiveUsers(): ReactNode {
   const [activeRuns, setActiveRuns] = useState<ActiveRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const connected = useStore((s) => s.connected)
 
   // Table state
   const [filter, setFilter] = useState("")
@@ -184,6 +185,13 @@ export function ActiveUsers(): ReactNode {
   useEffect(() => { historyRef.current = history }, [history])
   useEffect(() => { loadHistoryRef.current = loadHistory }, [loadHistory])
 
+  const refreshExpandedHistory = useCallback(() => {
+    const exp = expandedRef.current
+    if (!exp) return
+    const offset = historyRef.current[exp]?.offset ?? 0
+    void loadHistoryRef.current(exp, offset)
+  }, [])
+
   // SSE-driven refresh: count the lifecycle events we care about and re-run
   // the fetch whenever that count changes. No polling — the only periodic
   // refresh in this widget used to be a 5s setInterval; it has been removed.
@@ -191,12 +199,29 @@ export function ActiveUsers(): ReactNode {
 
   useEffect(() => {
     void refresh()
-    const exp = expandedRef.current
-    if (exp) {
-      const offset = historyRef.current[exp]?.offset ?? 0
-      void loadHistoryRef.current(exp, offset)
+    refreshExpandedHistory()
+  }, [refresh, refreshTick, refreshExpandedHistory])
+
+  useEffect(() => {
+    if (!connected) return
+    void refresh()
+    refreshExpandedHistory()
+  }, [connected, refresh, refreshExpandedHistory])
+
+  useEffect(() => {
+    const refreshVisibleData = () => {
+      if (document.visibilityState !== "visible") return
+      void refresh()
+      refreshExpandedHistory()
     }
-  }, [refresh, refreshTick])
+
+    const interval = window.setInterval(refreshVisibleData, 30_000)
+    document.addEventListener("visibilitychange", refreshVisibleData)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", refreshVisibleData)
+    }
+  }, [refresh, refreshExpandedHistory])
 
   // ── Derived data ─────────────────────────────────────────────
 

@@ -97,9 +97,11 @@ export function listOperations(opts: ListOperationsOpts = {}): {
   })
 
   // ── Pass 1: split into per-correlation buckets ─────────────────
-  // Key is `runId` if present, otherwise `planId`, otherwise a per-minute
-  // system bucket. Sync events with runId fold into the agent run.
-  type Bucket = { kind: OperationKind; key: string; events: OperationEvent[] }
+  // Standalone sync pipelines take precedence over agent-run bucketing.
+  // Without this, a preview+execute pair for the same plan collapses into a
+  // single entry, and agent-triggered sync traces disappear inside the parent
+  // run pipeline.
+  type Bucket = { kind: OperationKind; key: string; events: OperationEvent[]; planId?: string }
   const buckets = new Map<string, Bucket>()
 
   for (const ev of chrono) {
@@ -108,12 +110,18 @@ export function listOperations(opts: ListOperationsOpts = {}): {
 
     let kind: OperationKind
     let key: string
-    if (runId) {
+    let bucketPlanId: string | undefined
+    if (planId && ev.type.startsWith("sync.execute")) {
+      kind = OperationKind.SyncExecute
+      key = `plan:${planId}:execute`
+      bucketPlanId = planId
+    } else if (planId && ev.type.startsWith("sync.preview")) {
+      kind = OperationKind.SyncPreview
+      key = `plan:${planId}:preview`
+      bucketPlanId = planId
+    } else if (runId) {
       kind = OperationKind.AgentRun
       key = `run:${runId}`
-    } else if (planId) {
-      kind = ev.type.startsWith("sync.execute") ? OperationKind.SyncExecute : OperationKind.SyncPreview
-      key = `plan:${planId}`
     } else {
       kind = OperationKind.System
       // bucket per minute
@@ -121,7 +129,10 @@ export function listOperations(opts: ListOperationsOpts = {}): {
     }
 
     let b = buckets.get(key)
-    if (!b) { b = { kind, key, events: [] }; buckets.set(key, b) }
+    if (!b) {
+      b = { kind, key, events: [], ...(bucketPlanId ? { planId: bucketPlanId } : {}) }
+      buckets.set(key, b)
+    }
     b.events.push(ev)
   }
 
@@ -132,7 +143,7 @@ export function listOperations(opts: ListOperationsOpts = {}): {
       const runId = b.key.slice(4)
       operations.push(buildAgentRunPipeline(runId, b.events))
     } else if (b.kind === OperationKind.SyncPreview || b.kind === OperationKind.SyncExecute) {
-      const planId = b.key.slice(5)
+      const planId = b.planId ?? b.key.slice(5)
       operations.push(buildSyncPipeline(planId, b.kind, b.events))
     } else {
       operations.push(buildSystemPipeline(b.key, b.events))
@@ -190,6 +201,21 @@ function durationOf(start: string, end: string | null): number | null {
   const a = Date.parse(start)
   const b = Date.parse(end)
   return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, b - a) : null
+}
+
+function humanizeEntityType(value: string | null | undefined): string {
+  if (!value) return "Entity"
+  switch (value) {
+    case "pipelineActivity": return "Pipeline Activity"
+    case "gateMetadata": return "Gate Metadata"
+    default:
+      return value
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase())
+  }
 }
 
 function inferPipelineStatus(events: OperationEvent[]): OperationStatus {
@@ -377,6 +403,7 @@ function buildSyncPipeline(planId: string, kind: typeof OperationKind.SyncPrevie
     : meta?.status === SyncRunStatus.Failed ? OperationStatus.Failed
     : inferPipelineStatus(events)
   const endedAt = meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
+  const entityTypeLabel = humanizeEntityType(meta?.entity_type)
   const entityName = meta?.entity_display_name ?? `${meta?.entity_type ?? "?"}#${meta?.entity_id ?? "?"}`
   const route = meta ? `${meta.source} → ${meta.target}` : ""
 
@@ -390,7 +417,7 @@ function buildSyncPipeline(planId: string, kind: typeof OperationKind.SyncPrevie
   return {
     id: planId,
     kind,
-    title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} — ${entityName}`,
+    title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} ${entityTypeLabel} — ${entityName}`,
     subtitle: route || planId.slice(0, 8),
     status,
     startedAt,
@@ -474,10 +501,9 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   //   - Each `sync.execute.step` opens a new activity that absorbs subsequent
   //     SQL / probe events until the next step or table.start.
   //   - Each `sync.execute.table.start` opens a table activity, table.done closes it.
-  //   - Phase events outside (started/completed/failed/drift.revalidated) →
-  //     "phases" activity at start.
+  //   - Execute lifecycle events (`started`, `completed`, `failed`, etc.) become
+  //     their own top-level activities so the UI shows them alongside the steps.
   const activities: OperationActivity[] = []
-  const phaseEvents: OperationEvent[] = []
   let currentStep: OperationActivity | null = null
   let currentTable: { name: string; act: OperationActivity } | null = null
 
@@ -490,8 +516,79 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     }
   }
 
+  const closeTable = (endTs: string): void => {
+    if (currentTable) {
+      currentTable.act.endedAt = endTs
+      currentTable.act.durationMs = durationOf(currentTable.act.startedAt, endTs)
+      if (currentTable.act.status === OperationStatus.Running) currentTable.act.status = OperationStatus.Success
+      currentTable = null
+    }
+  }
+
+  const pushLifecycleActivity = (ev: OperationEvent): void => {
+    const type = ev.type
+    let name = type.replace(/^sync\.execute\./, "")
+    let status = OperationStatus.Success
+    let summary: string | undefined
+    let error: string | undefined
+
+    if (type === EventType.SyncExecuteStarted) {
+      status = OperationStatus.Success
+      const source = strField(ev.data, "source")
+      const target = strField(ev.data, "target")
+      summary = source && target ? `${source} → ${target}` : undefined
+    } else if (type === EventType.SyncExecuteCompleted) {
+      status = OperationStatus.Success
+      const applied = ev.data["applied"] as Record<string, unknown> | undefined
+      if (applied) {
+        summary = `${applied["insert"] ?? 0} ins · ${applied["update"] ?? 0} upd · ${applied["delete"] ?? 0} del`
+      }
+    } else if (type === EventType.SyncExecuteFailed) {
+      status = OperationStatus.Failed
+      error = strField(ev.data, "error") ?? undefined
+      summary = error
+    } else if (type === EventType.SyncExecuteDriftRevalidated) {
+      status = OperationStatus.Success
+      const maxDriftPct = numField(ev.data, "maxDriftPct")
+      summary = maxDriftPct != null ? `max drift ${(maxDriftPct * 100).toFixed(1)}%` : undefined
+    } else if (type === EventType.SyncExecuteArchiveSkipped) {
+      status = OperationStatus.Success
+      summary = strField(ev.data, "reason") ?? undefined
+    } else if (type === EventType.SyncExecuteArchiveProbeBatch) {
+      status = OperationStatus.Success
+      const tables = Array.isArray(ev.data["tables"]) ? (ev.data["tables"] as unknown[]).length : null
+      const durationMs = numField(ev.data, "durationMs")
+      summary = [tables != null ? `${tables} tables` : null, durationMs != null ? `${durationMs}ms` : null].filter(Boolean).join(" · ") || undefined
+    }
+
+    activities.push({
+      id: `elifecycle:${activities.length}`,
+      name,
+      status,
+      startedAt: ev.timestamp,
+      endedAt: ev.timestamp,
+      durationMs: 0,
+      ...(summary ? { summary } : {}),
+      ...(error ? { error } : {}),
+      events: [ev],
+    })
+  }
+
   for (const ev of events) {
     const t = ev.type
+    if (
+      t === EventType.SyncExecuteStarted
+      || t === EventType.SyncExecuteCompleted
+      || t === EventType.SyncExecuteFailed
+      || t === EventType.SyncExecuteDriftRevalidated
+      || t === EventType.SyncExecuteArchiveSkipped
+      || t === EventType.SyncExecuteArchiveProbeBatch
+    ) {
+      closeTable(ev.timestamp)
+      closeStep(ev.timestamp)
+      pushLifecycleActivity(ev)
+      continue
+    }
     if (t === EventType.SyncExecuteStep) {
       closeStep(ev.timestamp)
       const stepName = strField(ev.data, "step") ?? "step"
@@ -561,6 +658,10 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       currentTable = null
       continue
     }
+    if (t === EventType.SyncExecuteTableDone) {
+      pushLifecycleActivity(ev)
+      continue
+    }
 
     // Sub-event under whichever activity is currently open
     if (currentTable) {
@@ -572,26 +673,12 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       continue
     }
 
-    phaseEvents.push(ev)
+    pushLifecycleActivity(ev)
   }
 
   // Close any leftover open step at the timestamp of last event
   if (currentStep) {
     closeStep(events[events.length - 1].timestamp)
-  }
-
-  if (phaseEvents.length > 0) {
-    const start = phaseEvents[0].timestamp
-    const end = phaseEvents[phaseEvents.length - 1].timestamp
-    activities.unshift({
-      id: "phases",
-      name: "phases",
-      status: inferPipelineStatus(phaseEvents),
-      startedAt: start,
-      endedAt: end,
-      durationMs: durationOf(start, end),
-      events: phaseEvents,
-    })
   }
 
   return activities

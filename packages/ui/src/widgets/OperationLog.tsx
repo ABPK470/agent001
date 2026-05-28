@@ -8,8 +8,8 @@
 
 import { ChevronRight, Database, Loader2, Search, Settings, VenetianMask, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { OperationActivity, OperationEvent, OperationKind, OperationPipeline, OperationStatus, OperationsResponse } from "../api"
-import { api } from "../api"
+import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
+import { api, OperationKind, OperationStatus } from "../api"
 import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Visuals ──────────────────────────────────────────────────────
@@ -79,6 +79,81 @@ function matchesPipeline(p: OperationPipeline, needle: string): boolean {
     ...p.activities.flatMap(a => a.events.map(e => e.type)),
   ].join(" ").toLowerCase()
   return hay.includes(needle)
+}
+
+function humanizeToken(value: string): string {
+  return value
+    .replace(/[_\.]+/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
+  "audit-check": "Run pre-deploy validation on the target metadata.",
+  lock: "Lock the contract while deployment is in progress.",
+  "sync-metadata": "Apply metadata row changes on the target environment.",
+  "sync-metadata-done": "Metadata transaction committed successfully.",
+  "pipeline-register": "Register or refresh the pipeline in the Agent service.",
+  undeploy: "Remove previously deployed artifacts marked for replacement.",
+  "unlock-after-undeploy": "Release the contract lock after undeploy completes.",
+  "audit-check-2": "Re-run validation after undeploy before redeploying.",
+  "lock-for-deploy": "Acquire the deployment lock for the build phase.",
+  "deploy-pre-script": "Run pre-deployment SQL scripts.",
+  "create-dataset-stage": "Create or alter stage datasets.",
+  "create-dataset-archive": "Create or alter archive datasets.",
+  "create-dataset-list": "Create or alter list datasets.",
+  "create-dataset-dim": "Create or alter dimension datasets.",
+  "create-dataset-fact": "Create or alter fact datasets.",
+  "create-fks": "Reconcile foreign keys for deployed datasets.",
+  "deploy-etl": "Create or update ETL procedures, views, and functions.",
+  "deploy-routine": "Create or update routines and triggers.",
+  "handle-dependencies": "Refresh dependent objects after metadata changes.",
+  "meta-refresh": "Refresh gate metadata on the target service.",
+  "pipeline-start": "Trigger the registered pipeline on the target service.",
+  "sync-date": "Stamp the target row sync date.",
+  "deploy-date": "Stamp the target row deploy date.",
+  "contract-deploy": "Run the full contract deployment sequence.",
+  "dataset-deploy": "Trigger dataset deployment in ETL.",
+  "rules-deploy": "Trigger rule deployment in ETL.",
+}
+
+function formatActivityName(pipelineKind: OperationKind, activity: OperationActivity): string {
+  if (pipelineKind !== OperationKind.SyncExecute) return activity.name
+  if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
+  if (activity.name.includes(" (")) return activity.name
+  return humanizeToken(activity.name)
+}
+
+function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
+  if (activity.summary) return activity.summary
+  if (pipelineKind === OperationKind.SyncExecute) {
+    return EXEC_STEP_DESCRIPTIONS[activity.name] ?? undefined
+  }
+  return undefined
+}
+
+function formatEventLabel(ev: OperationEvent): string {
+  switch (ev.type) {
+    case "sync.preview.completed": return "Preview complete"
+    case "sync.preview.table.start": return "Table scan"
+    case "sync.preview.table.done": return "Table diff"
+    case "sync.preview.table.failed": return "Table failed"
+    case "sync.execute.started": return "Execute started"
+    case "sync.execute.step": return "Step"
+    case "sync.execute.step.failed": return "Step failed"
+    case "sync.execute.table.start": return "Table apply"
+    case "sync.execute.table.done": return "Table done"
+    case "sync.execute.sql": return "SQL"
+    case "sync.execute.archive.probe": return "Archive probe"
+    case "sync.execute.archive.probe.batch": return "Archive probe batch"
+    case "sync.execute.archive.skipped": return "Archive skipped"
+    case "sync.execute.drift.revalidated": return "Drift check"
+    case "sync.execute.completed": return "Execute complete"
+    case "sync.execute.failed": return "Execute failed"
+    default: return ev.type
+  }
 }
 
 export function OperationLog() {
@@ -162,18 +237,6 @@ export function OperationLog() {
     if (needle && !histResults && !matchesPipeline(p, needle)) return false
     return true
   }), [nonSystem, kindView, statuses, needle, histResults])
-
-  // ── Day grouping ──────────────────────────────────────────────
-  const byDay = useMemo(() => {
-    const groups: Array<{ label: string; items: OperationPipeline[] }> = []
-    let cur: { label: string; items: OperationPipeline[] } | null = null
-    for (const p of filtered) {
-      const label = dayLabel(p.startedAt)
-      if (!cur || cur.label !== label) { cur = { label, items: [] }; groups.push(cur) }
-      cur.items.push(p)
-    }
-    return groups
-  }, [filtered])
 
   return (
     <div ref={rootRef} className="h-full flex flex-col gap-2.5 overflow-hidden text-text">
@@ -264,47 +327,101 @@ export function OperationLog() {
           </div>
         )}
 
-        {!histLoading && byDay.map(group => {
-          const collapsed = collapsedDays.has(group.label)
-          return (
-            <div key={group.label} className="mb-3">
-              {/* Collapsible day header */}
-              <button
-                className="sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-[10px] uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80 transition-colors text-left"
-                onClick={() => toggleDay(group.label)}
-              >
-                <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
-                {group.label}
-                <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{group.items.length}</span>
-              </button>
-              {!collapsed && (
-                <div className="space-y-1">
-                  {group.items.map(p => (
-                    <PipelineRow
-                      key={p.id}
-                      pipeline={p}
-                      expanded={expanded.has(p.id)}
-                      onToggle={() => togglePipeline(p.id)}
-                      actExpanded={actExpanded}
-                      toggleActivity={toggleActivity}
-                      evExpanded={evExpanded}
-                      toggleEvent={toggleEvent}
-                      compact={compact}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {!histLoading && filtered.length > 0 && (
+          <OperationPipelineList
+            pipelines={filtered}
+            compact={compact}
+            expanded={expanded}
+            togglePipeline={togglePipeline}
+            actExpanded={actExpanded}
+            toggleActivity={toggleActivity}
+            evExpanded={evExpanded}
+            toggleEvent={toggleEvent}
+            collapsedDays={collapsedDays}
+            toggleDay={toggleDay}
+          />
+        )}
       </div>
     </div>
   )
 }
 
+export function OperationPipelineList({
+  pipelines,
+  compact,
+  expanded,
+  togglePipeline,
+  actExpanded,
+  toggleActivity,
+  evExpanded,
+  toggleEvent,
+  collapsedDays,
+  toggleDay,
+  onOpenSyncPlan,
+}: {
+  pipelines: OperationPipeline[]
+  compact: boolean
+  expanded: Set<string>
+  togglePipeline: (id: string) => void
+  actExpanded: Set<string>
+  toggleActivity: (key: string) => void
+  evExpanded: Set<string>
+  toggleEvent: (key: string) => void
+  collapsedDays: Set<string>
+  toggleDay: (label: string) => void
+  onOpenSyncPlan?: (planId: string) => void
+}) {
+  const byDay = useMemo(() => {
+    const groups: Array<{ label: string; items: OperationPipeline[] }> = []
+    let cur: { label: string; items: OperationPipeline[] } | null = null
+    for (const p of pipelines) {
+      const label = dayLabel(p.startedAt)
+      if (!cur || cur.label !== label) { cur = { label, items: [] }; groups.push(cur) }
+      cur.items.push(p)
+    }
+    return groups
+  }, [pipelines])
+
+  return <>
+    {byDay.map(group => {
+      const collapsed = collapsedDays.has(group.label)
+      return (
+        <div key={group.label} className="mb-3">
+          <button
+            className="sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-[10px] uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80 transition-colors text-left"
+            onClick={() => toggleDay(group.label)}
+          >
+            <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+            {group.label}
+            <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{group.items.length}</span>
+          </button>
+          {!collapsed && (
+            <div className="space-y-1">
+              {group.items.map(p => (
+                <PipelineRow
+                  key={p.id}
+                  pipeline={p}
+                  expanded={expanded.has(p.id)}
+                  onToggle={() => togglePipeline(p.id)}
+                  actExpanded={actExpanded}
+                  toggleActivity={toggleActivity}
+                  evExpanded={evExpanded}
+                  toggleEvent={toggleEvent}
+                  compact={compact}
+                  onOpenSyncPlan={onOpenSyncPlan}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    })}
+  </>
+}
+
 // ── Pipeline row ─────────────────────────────────────────────────
 
-function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact }: {
+function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onOpenSyncPlan }: {
   pipeline: OperationPipeline
   expanded: boolean
   onToggle: () => void
@@ -313,6 +430,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   evExpanded: Set<string>
   toggleEvent: (key: string) => void
   compact: boolean
+  onOpenSyncPlan?: (planId: string) => void
 }) {
   const km = KIND_META[pipeline.kind]
   const sm = STATUS_META[pipeline.status]
@@ -345,6 +463,16 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
       {expanded && (
         <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">
+          {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute) && (
+            <div className="px-2.5 py-1">
+              <button
+                className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
+                onClick={() => onOpenSyncPlan(pipeline.id)}
+              >
+                view plan {pipeline.id.slice(0, 8)}
+              </button>
+            </div>
+          )}
           {pipeline.error && (
             <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-[12px] text-error break-all">
               {pipeline.error}
@@ -359,6 +487,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
               <ActivityRow
                 key={a.id}
                 activity={a}
+                pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
                 expanded={actExpanded.has(key)}
                 onToggle={() => toggleActivity(key)}
@@ -375,8 +504,9 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineId, expanded, onToggle, evExpanded, toggleEvent }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, evExpanded, toggleEvent }: {
   activity: OperationActivity
+  pipelineKind: OperationKind
   pipelineId: string
   expanded: boolean
   onToggle: () => void
@@ -386,6 +516,8 @@ function ActivityRow({ activity, pipelineId, expanded, onToggle, evExpanded, tog
   const sm = STATUS_META[activity.status]
   const StatusIcon = activity.status === "failed" ? XCircle
     : activity.status === "running" ? Loader2 : null
+  const renderedName = formatActivityName(pipelineKind, activity)
+  const renderedSummary = defaultActivitySummary(pipelineKind, activity)
 
   return (
     <div className="rounded border border-border-subtle">
@@ -402,9 +534,9 @@ function ActivityRow({ activity, pipelineId, expanded, onToggle, evExpanded, tog
           />
         )}
         {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
-        <span className="min-w-0 truncate text-[12px] text-text font-mono">{activity.name}</span>
-        {activity.summary && (
-          <span className="shrink-0 text-[11px] text-text-muted/70 truncate max-w-[18rem]">{activity.summary}</span>
+        <span className="min-w-0 truncate text-[12px] text-text font-mono">{renderedName}</span>
+        {renderedSummary && (
+          <span className="shrink-0 text-[11px] text-text-muted/70 truncate max-w-[18rem]">{renderedSummary}</span>
         )}
         <div className="flex-1 min-w-0" />
         <span className="shrink-0 text-[11px] text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
@@ -446,6 +578,7 @@ function EventRow({ ev, expanded, onToggle }: {
   const hasData = ev.data && Object.keys(ev.data).length > 0
   const isError = !!ev.data["error"]
   const summary = pickEventSummary(ev)
+  const label = formatEventLabel(ev)
   return (
     <div>
       <button
@@ -459,7 +592,7 @@ function EventRow({ ev, expanded, onToggle }: {
           className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData ? "" : "invisible"}`}
         />
         <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
-        <span className={`shrink-0 font-mono ${isError ? "text-error" : "text-text-muted/70"}`}>{ev.type}</span>
+        <span className={`shrink-0 font-mono ${isError ? "text-error" : "text-text-muted/70"}`}>{label}</span>
         {summary && <span className={`min-w-0 break-all ${isError ? "text-error" : "text-text-muted"}`}>{summary}</span>}
       </button>
       {expanded && hasData && (
@@ -473,6 +606,47 @@ function EventRow({ ev, expanded, onToggle }: {
 
 // Pull a one-line summary from an event's data payload for inline display.
 function pickEventSummary(ev: OperationEvent): string {
+  if (ev.type === "sync.execute.step") {
+    const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : ""
+    return EXEC_STEP_DESCRIPTIONS[step] ?? humanizeToken(step)
+  }
+  if (ev.type === "sync.execute.step.failed") {
+    const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : "step"
+    const error = typeof ev.data["error"] === "string" ? String(ev.data["error"]) : "unknown error"
+    return `${humanizeToken(step)} — ${error}`
+  }
+  if (ev.type === "sync.execute.started") {
+    return `${ev.data["source"] ?? "?"} → ${ev.data["target"] ?? "?"}`
+  }
+  if (ev.type === "sync.execute.completed") {
+    const applied = ev.data["applied"]
+    if (applied && typeof applied === "object") {
+      const counts = applied as Record<string, unknown>
+      return `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
+    }
+  }
+  if (ev.type === "sync.preview.completed") {
+    const totals = ev.data["totals"]
+    if (totals && typeof totals === "object") {
+      const counts = totals as Record<string, unknown>
+      return `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
+    }
+  }
+  if (ev.type === "sync.execute.table.start") {
+    const table = ev.data["table"] ?? "table"
+    const op = ev.data["op"] ?? "apply"
+    const rows = ev.data["rowsTotal"]
+    return `${table} · ${op}${rows != null ? ` · ${rows} rows` : ""}`
+  }
+  if (ev.type === "sync.execute.table.done") {
+    return `${ev.data["table"] ?? "table"} · ${ev.data["rowsApplied"] ?? "?"} rows applied`
+  }
+  if (ev.type === "sync.execute.sql") {
+    const label = ev.data["label"] ?? "query"
+    const rowCount = ev.data["rowCount"] ?? "?"
+    const durationMs = ev.data["durationMs"] ?? "?"
+    return `${label} · ${rowCount} rows · ${durationMs}ms`
+  }
   const d = ev.data
   const parts: string[] = []
   for (const key of ["table", "step", "tool", "label", "sproc", "message", "rowsApplied", "rowCount", "durationMs", "error"]) {
