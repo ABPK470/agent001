@@ -434,7 +434,6 @@ function createHost(): AgentHost {
         start: vi.fn(),
         finish: vi.fn(),
       },
-      recipes: { bundle: null, loadedFromPath: null },
       environments: new Map([
         ["DEV", {
           name: "DEV",

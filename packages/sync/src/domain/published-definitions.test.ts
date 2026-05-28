@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "../ports/host.js"
 import {
+    definitionToSyncRecipe,
     getPublishedSyncRecipe,
     loadPublishedSyncDefinitionBundle,
-    loadPublishedSyncRecipeBundle,
 } from "./published-definitions.js"
 
 function createHost(projectRoot: string): AgentHost {
@@ -23,7 +23,6 @@ function createHost(projectRoot: string): AgentHost {
         start: () => {},
         finish: () => {},
       },
-      recipes: { bundle: null, loadedFromPath: null },
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: projectRoot,
@@ -55,17 +54,17 @@ afterEach(() => {
 })
 
 describe("published sync definition compatibility projection", () => {
-  it("projects the published definition bundle into the recipe-shaped API bundle", () => {
+  it("projects a published definition into the runtime recipe shape", () => {
     const projectRoot = resolve(process.cwd(), "../..")
     const host = createHost(projectRoot)
 
     const definitions = loadPublishedSyncDefinitionBundle(host, projectRoot)
-    const recipes = loadPublishedSyncRecipeBundle(host, projectRoot)
+    const contractDefinition = definitions.definitions.contract
 
-    expect(recipes.introspectedFrom).toBe(`published-definitions@${definitions.publishedVersion}`)
-    expect(recipes.generatedAt).toBe(definitions.publishedAt)
-    expect(recipes.recipes.contract?.generatedAt).toBe(definitions.definitions.contract?.publishedAt)
-    expect(recipes.recipes.contract?.rootTable).toBe(definitions.definitions.contract?.rootTable)
+    expect(contractDefinition).toBeTruthy()
+    const recipe = definitionToSyncRecipe(contractDefinition!)
+    expect(recipe.generatedAt).toBe(contractDefinition?.publishedAt)
+    expect(recipe.rootTable).toBe(contractDefinition?.rootTable)
   })
 
   it("resolves optional-table semantics from the published definition authority", () => {

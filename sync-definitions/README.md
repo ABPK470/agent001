@@ -18,12 +18,9 @@ These files define:
 
 ## What Is Not Authoritative
 
-- `deploy/mssql/sync-recipes.json`
-- `deploy/mssql/entities/_all.yaml`
 - runtime registry projection fallbacks
 
-Those artifacts may still exist for compatibility or migration, but they are not
-the source to edit.
+Those artifacts are migration inputs, not the source to edit.
 
 ## Current Workflow
 
@@ -37,13 +34,9 @@ npm run sync:definitions:compile -- --write
 3. The compiler validates the repo-authored definitions and regenerates:
 
 - `sync-definitions/published/definitions.bundle.json`
-- `deploy/mssql/sync-recipes.json`
 
 `sync-definitions/published/definitions.bundle.json` is the published runtime
 definition bundle.
-
-`deploy/mssql/sync-recipes.json` remains a compatibility artifact for surfaces
-that still consume the legacy recipe shape.
 
 ## Draft Authoring Workflow
 
@@ -52,7 +45,7 @@ repo-owned definition instead of hand-rebuilding it:
 
 ```bash
 npm run sync:definitions:scaffold -- \
-	--input deploy/mssql/entities/_all.yaml \
+	--input path/to/entities.yaml \
 	--entity contract
 ```
 
@@ -68,7 +61,7 @@ To write directly to a repo definition file:
 
 ```bash
 npm run sync:definitions:scaffold -- \
-	--input deploy/mssql/entities/_all.yaml \
+	--input path/to/entities.yaml \
 	--entity contract \
 	--write --force
 ```
@@ -96,17 +89,6 @@ from stored entity definitions:
 Use the API route when the draft source is already in the registry DB. Use the
 scaffold script when the starting point is YAML on disk.
 
-## Bootstrap
-
-To re-seed the repo definitions from the legacy recipe bundle during migration:
-
-```bash
-npm run sync:definitions:compile -- --bootstrap-from-bundle --write
-```
-
-Use this only as a migration/bootstrap helper. Do not treat the legacy recipe
-bundle as the long-term source of truth.
-
 ## Validation Rules
 
 The compiler currently enforces:
@@ -127,7 +109,6 @@ What is complete now is the source-of-truth and runtime boundary:
 - humans edit repo definitions
 - compiler validates them
 - published definition bundle is generated
-- compatibility recipe artifact is generated
 - preview/execute runtime consumes the published definition bundle
 
 Some helper/API surfaces may still read the compatibility recipe artifact during

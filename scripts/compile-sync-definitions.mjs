@@ -7,8 +7,6 @@ const ROOT = resolve(HERE, "..")
 const DEFINITIONS_DIR = resolve(ROOT, "sync-definitions", "entities")
 const PUBLISHED_DIR = resolve(ROOT, "sync-definitions", "published")
 const PUBLISHED_BUNDLE = resolve(PUBLISHED_DIR, "definitions.bundle.json")
-const SOURCE_BUNDLE = resolve(ROOT, "deploy", "mssql", "sync-recipes.json")
-const OUTPUT_BUNDLE = SOURCE_BUNDLE
 
 const FLOW_PRESETS = {
   contract: [
@@ -62,27 +60,12 @@ const FLOW_PRESETS = {
   ],
 }
 
-const POST_METADATA_KIND_MAP = new Map([
-  ["contractDeploy", "contractDeploy"],
-  ["datasetDeploy", "datasetDeploy"],
-  ["rulesDeploy", "rulesDeploy"],
-  ["pipelineRegister", "pipelineRegister"],
-  ["metaRefresh", "metaRefresh"],
-  ["pipelineStart", "pipelineStart"],
-  ["handleDependencies", "handleDependencies"],
-  ["syncDate", "syncDate"],
-  ["deployDate", "deployDate"],
-])
-
 main()
 
 function main() {
   const args = new Set(process.argv.slice(2))
-  const shouldBootstrap = args.has("--bootstrap-from-bundle")
   const shouldWrite = args.has("--write")
   const shouldCheck = args.has("--check")
-
-  if (shouldBootstrap) bootstrapDefinitionsFromBundle()
 
   const definitions = loadDefinitions()
   const result = validateDefinitions(definitions)
@@ -93,17 +76,13 @@ function main() {
   }
   for (const warning of result.warnings) console.warn(`WARN ${warning}`)
 
-  const bundle = compileBundle(definitions)
   const published = compilePublishedBundle(definitions)
-  const serialized = `${JSON.stringify(bundle, null, 2)}\n`
   const publishedSerialized = `${JSON.stringify(published, null, 2)}\n`
 
   if (shouldWrite) {
     mkdirSync(PUBLISHED_DIR, { recursive: true })
     writeFileSync(PUBLISHED_BUNDLE, publishedSerialized)
-    writeFileSync(OUTPUT_BUNDLE, serialized)
     console.log(`Wrote published definition bundle to ${PUBLISHED_BUNDLE}`)
-    console.log(`Wrote compatibility bundle to ${OUTPUT_BUNDLE}`)
   } else if (shouldCheck) {
     const currentPublished = JSON.parse(readFileSync(PUBLISHED_BUNDLE, "utf-8"))
     if (JSON.stringify(normalizePublishedBundleForCheck(currentPublished)) !== JSON.stringify(normalizePublishedBundleForCheck(published))) {
@@ -111,14 +90,7 @@ function main() {
       process.exitCode = 1
       return
     }
-    const current = JSON.parse(readFileSync(OUTPUT_BUNDLE, "utf-8"))
-    if (JSON.stringify(normalizeBundleForCheck(current)) !== JSON.stringify(normalizeBundleForCheck(bundle))) {
-      console.error(`ERROR compiled bundle is stale: ${OUTPUT_BUNDLE}`)
-      process.exitCode = 1
-      return
-    }
     console.log(`Published definition bundle is up to date: ${PUBLISHED_BUNDLE}`)
-    console.log(`Compatibility bundle is up to date: ${OUTPUT_BUNDLE}`)
   } else {
     process.stdout.write(publishedSerialized)
   }
@@ -126,72 +98,6 @@ function main() {
 
 function step(id, phase, kind, title, description, extra = {}) {
   return { id, phase, kind, title, description, ...extra }
-}
-
-function bootstrapDefinitionsFromBundle() {
-  mkdirSync(DEFINITIONS_DIR, { recursive: true })
-  const raw = JSON.parse(readFileSync(SOURCE_BUNDLE, "utf-8"))
-  const recipes = raw.recipes ?? {}
-  const entityIds = Object.keys(recipes).sort()
-  for (const entityId of entityIds) {
-    const recipe = recipes[entityId]
-    if (!recipe) continue
-    const filePath = resolve(DEFINITIONS_DIR, `${entityId}.json`)
-    const definition = {
-      schemaVersion: 1,
-      id: entityId,
-      displayName: recipe.displayName,
-      description: `${recipe.displayName} sync definition migrated from legacy recipe bundle.`,
-      rootTable: recipe.rootTable,
-      idColumn: recipe.rootKeyColumn,
-      labelColumn: recipe.rootNameColumn ?? null,
-      selfJoinColumn: recipe.selfJoinColumn ?? null,
-      legacy: {
-        pipelineId: recipe.legacyPipelineId ?? null,
-        entrySproc: recipe.legacyEntrySproc ?? null,
-      },
-      governance: {
-        approvalPolicyId: null,
-        freezeWindowIds: [],
-        riskMultiplier: 1,
-      },
-      strategy: {
-        strategyId: "mymi-scd2",
-        strategyVersion: "latest",
-      },
-      bindings: {
-        serviceProfileRef: "default",
-        environmentPolicyRef: "default",
-      },
-      ownership: {
-        team: "sync-platform",
-        owner: null,
-        reviewStatus: "legacy-review-required",
-        notes: [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Review table scope, provenance, and execution ownership before treating as fully curated.",
-        ],
-      },
-      metadata: {
-        tables: recipe.tables,
-        executionOrder: recipe.executionOrder,
-        reverseOrder: recipe.reverseOrder,
-        discrepancies: recipe.discrepancies ?? [],
-      },
-      executionFlow: {
-        steps: FLOW_PRESETS[entityId] ?? [
-          step("metadata-sync", "metadata", "metadataSync", "Metadata sync", `Apply transactional metadata changes for ${entityId}.`),
-        ],
-      },
-      provenance: {
-        kind: "legacy-migration",
-        sourceArtifact: "deploy/mssql/sync-recipes.json",
-        sourceVersion: raw.generatedAt ?? null,
-      },
-    }
-    writeFileSync(filePath, `${JSON.stringify(definition, null, 2)}\n`)
-  }
-  console.log(`Bootstrapped ${entityIds.length} sync definition file(s) into ${DEFINITIONS_DIR}`)
 }
 
 function loadDefinitions() {
@@ -299,20 +205,6 @@ function compilePublishedBundle(items) {
   }
 }
 
-function normalizeBundleForCheck(bundle) {
-  const normalizedRecipes = {}
-  for (const [entityId, recipe] of Object.entries(bundle.recipes ?? {})) {
-    normalizedRecipes[entityId] = recipe
-      ? { ...recipe, generatedAt: "<normalized>" }
-      : recipe
-  }
-  return {
-    ...bundle,
-    generatedAt: "<normalized>",
-    recipes: normalizedRecipes,
-  }
-}
-
 function normalizePublishedBundleForCheck(bundle) {
   const normalizedDefinitions = {}
   for (const [entityId, definition] of Object.entries(bundle.definitions ?? {})) {
@@ -325,29 +217,6 @@ function normalizePublishedBundleForCheck(bundle) {
     publishedAt: "<normalized>",
     publishedVersion: "<normalized>",
     definitions: normalizedDefinitions,
-  }
-}
-
-function compileDefinition(definition, generatedAt) {
-  const postMetadataActions = definition.executionFlow.steps
-    .filter((entry) => entry.phase === "post-metadata" && POST_METADATA_KIND_MAP.has(entry.kind))
-    .map((entry) => ({ kind: POST_METADATA_KIND_MAP.get(entry.kind) }))
-
-  return {
-    entityType: definition.id,
-    displayName: definition.displayName,
-    rootTable: definition.rootTable,
-    rootKeyColumn: definition.idColumn,
-    rootNameColumn: definition.labelColumn,
-    selfJoinColumn: definition.selfJoinColumn,
-    legacyPipelineId: definition.legacy.pipelineId,
-    legacyEntrySproc: definition.legacy.entrySproc,
-    tables: definition.metadata.tables,
-    executionOrder: definition.metadata.executionOrder,
-    reverseOrder: definition.metadata.reverseOrder,
-    postMetadataActions,
-    discrepancies: definition.metadata.discrepancies,
-    generatedAt,
   }
 }
 

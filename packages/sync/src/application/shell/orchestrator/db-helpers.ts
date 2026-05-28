@@ -28,7 +28,7 @@ export const PREVIEW_TABLE_CONCURRENCY = Math.max(
 /** Maximum tolerated drift between preview and current source row counts. */
 export const DRIFT_ABORT_PCT = 0.05
 
-/** Configure the project root used to load sync-recipes.json. */
+/** Configure the project root used to load published sync definitions. */
 export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {
   host.sync.dbProjectRoot = projectRoot
 }

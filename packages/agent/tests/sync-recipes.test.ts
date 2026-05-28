@@ -1,4 +1,4 @@
-import { getRecipe, loadPublishedSyncRecipeBundle, selectRecipeTables, type SyncRecipe } from "@mia/sync"
+import { getPublishedSyncRecipe, selectRecipeTables, type SyncRecipe } from "@mia/sync"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { configureAgent } from "../src/application/shell/runtime.js"
@@ -52,9 +52,8 @@ describe("selectRecipeTables", () => {
 
 describe("deployed sync recipes", () => {
   it("marks gateMetadata FK-only tables as optional and default-off", () => {
-    const host = configureAgent({})
-    const bundle = loadPublishedSyncRecipeBundle(host, resolve(process.cwd(), "../.."))
-    const recipe = getRecipe(bundle, "gateMetadata")
+    const host = configureAgent({ syncDbProjectRoot: resolve(process.cwd(), "../..") })
+    const recipe = getPublishedSyncRecipe(host, "gateMetadata")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual([
       "gate.Content",
@@ -65,9 +64,8 @@ describe("deployed sync recipes", () => {
   })
 
   it("marks content FK-only tables as optional and default-off", () => {
-    const host = configureAgent({})
-    const bundle = loadPublishedSyncRecipeBundle(host, resolve(process.cwd(), "../.."))
-    const recipe = getRecipe(bundle, "content")
+    const host = configureAgent({ syncDbProjectRoot: resolve(process.cwd(), "../..") })
+    const recipe = getPublishedSyncRecipe(host, "content")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual(["gate.UserGroupPermission"])
     expect(optionalTables.every((table) => table.enabledByDefault === false)).toBe(true)

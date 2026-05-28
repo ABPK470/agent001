@@ -30,7 +30,6 @@ function createHost(): AgentHost {
         start: () => {},
         finish: () => {},
       },
-      recipes: { bundle: null, loadedFromPath: null },
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: null,

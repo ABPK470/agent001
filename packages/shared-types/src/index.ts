@@ -734,7 +734,6 @@ export interface PublishSyncDefinitionsResponse {
   publishedVersion: string
   definitionCount: number
   publishedBundlePath: string
-  compatibilityBundlePath: string
   stdout: string[]
   stderr: string[]
 }

@@ -8,7 +8,7 @@ import { resolve } from "node:path"
 import { promisify } from "node:util"
 
 import { type AgentHost } from "@mia/agent"
-import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, loadPublishedSyncRecipeBundle, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
+import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
@@ -16,14 +16,12 @@ import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js
 
 const execFileAsync = promisify(execFile)
 const PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
-const COMPATIBILITY_BUNDLE_PATH = "deploy/mssql/sync-recipes.json"
 
 interface PublishSyncDefinitionsResponse {
 	publishedAt: string
 	publishedVersion: string
 	definitionCount: number
 	publishedBundlePath: string
-	compatibilityBundlePath: string
 	stdout: string[]
 	stderr: string[]
 }
@@ -88,7 +86,6 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 				publishedVersion: bundle.publishedVersion,
 				definitionCount,
 				publishedBundlePath: PUBLISHED_DEFINITIONS_PATH,
-				compatibilityBundlePath: COMPATIBILITY_BUNDLE_PATH,
 				stdout: stdoutLines,
 				stderr: stderrLines,
 			}
@@ -107,7 +104,6 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 			}
 		}
 	})
-	app.get("/api/sync/recipes", async () => loadPublishedSyncRecipeBundle(host, projectRoot))
 	app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>("/api/sync/search", async (req, reply) => {
 		rebuildLiveSyncEnvironments(host)
 		const { entityType, source, q, limit } = req.query

@@ -13,8 +13,8 @@
  *   - Detection is case-insensitive and tolerant of bracket/quote noise
  *     (`[publish].[Revenue]` and `publish.revenue` both match).
  *   - Mirror existence is decided ONLY by live catalog membership, never
- *     by lineage.json — lineage describes shape, the catalog describes
- *     what currently exists in the environment.
+ *     by a static lineage artifact — lineage describes shape, the catalog
+ *     describes what currently exists in the environment.
  *   - When neither goal nor catalog contributes any large objects, we
  *     return an empty string so the caller skips the section entirely.
  *

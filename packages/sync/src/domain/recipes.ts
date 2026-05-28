@@ -1,10 +1,7 @@
 /**
  * Sync recipes — curated, per-entity-type sync metadata.
  *
- * Output of the introspection script (`scripts/introspect-sync-pipelines.mjs`)
- * which reverse-engineers ABI's legacy stored-procedure sync pipelines (788,
- * 692, 780, 791, 792, 798) into a declarative recipe consumed by the runtime
- * sync engine.
+ * Compatibility recipe types projected from published sync definitions.
  *
  * Each recipe describes:
  *   - the root entity table (e.g. `core.Contract`)
@@ -14,10 +11,6 @@
  *   - reconciliation flags (verified / fk-only / pipeline-only) for transparency
  *   - the matching `coreArchive` / `gateArchive` tables (if any)
  */
-
-import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
-import type { AgentHost } from "../ports/index.js"
 
 /**
  * Identifier for a sync entity. Originally a closed string union
@@ -145,71 +138,12 @@ export interface ActiveSyncRecipeSelection {
   reverseOrder: string[]
 }
 
-// ── Loading ──────────────────────────────────────────────────────
-
-const DEFAULT_RECIPES_PATH = "deploy/mssql/sync-recipes.json"
-
-// The recipe bundle cache lives on the supplied host so sync stays free of
-// ambient runtime state.
-
-/**
- * Load the sync-recipes bundle from disk. Caches in memory.
- *
- * @param projectRoot Absolute project root.
- * @param relPath     Optional override; defaults to `deploy/mssql/sync-recipes.json`.
- * @returns The bundle, or an empty placeholder if the file does not exist.
- */
-export function loadSyncRecipes(host: AgentHost, projectRoot: string, relPath = DEFAULT_RECIPES_PATH): SyncRecipeBundle {
-  const recipes = host.sync.recipes
-  if (recipes.bundle && recipes.loadedFromPath === relPath) return recipes.bundle
-  const full = resolve(projectRoot, relPath)
-  if (!existsSync(full)) {
-    const bundle = emptyBundle()
-    recipes.bundle = bundle
-    recipes.loadedFromPath = relPath
-    return bundle
-  }
-  try {
-    const raw = readFileSync(full, "utf-8")
-    const parsed = JSON.parse(raw) as SyncRecipeBundle
-    if (parsed.version !== 1) {
-      throw new Error(`Unsupported sync-recipes version: ${parsed.version}`)
-    }
-    // Populate archiveTables by convention when missing.
-    for (const [, recipe] of Object.entries(parsed.recipes)) {
-      if (!recipe) continue
-      recipe.tables = recipe.tables.map(normalizeRecipeTable)
-      recipe.postMetadataActions = normalizePostMetadataActions(recipe)
-      if (!Array.isArray(recipe.archiveTables)) {
-        recipe.archiveTables = recipe.tables.map((t) => deriveArchiveTable(t.name))
-      }
-    }
-    recipes.bundle = parsed
-    recipes.loadedFromPath = relPath
-    return parsed
-  } catch (e) {
-    console.warn(`Failed to load sync-recipes from ${full}:`, e instanceof Error ? e.message : e)
-    const bundle = emptyBundle()
-    recipes.bundle = bundle
-    recipes.loadedFromPath = relPath
-    return bundle
-  }
-}
-
-/** Force a reload on next call (e.g. after the introspection script ran). */
-export function clearSyncRecipesCache(host: AgentHost): void {
-  host.sync.recipes.bundle = null
-  host.sync.recipes.loadedFromPath = null
-}
-
 /** Return a recipe by entity type. Throws if unknown or not introspected yet. */
 export function getRecipe(bundle: SyncRecipeBundle, type: EntityType): SyncRecipe {
   const r = bundle.recipes[type]
   if (!r) {
     throw new Error(
-      `No sync recipe defined for entity type "${type}". ` +
-      `Run the introspection script (scripts/introspect-sync-pipelines.mjs) ` +
-      `against a live source DB to populate deploy/mssql/sync-recipes.json.`,
+      `No sync recipe defined for entity type "${type}" in the published definitions projection.`,
     )
   }
   return r
@@ -229,17 +163,6 @@ export function selectRecipeTables(
   }
 }
 
-function emptyBundle(): SyncRecipeBundle {
-  return {
-    version: 1,
-    generatedAt: new Date(0).toISOString(),
-    introspectedFrom: null,
-    // Recipes is a string-keyed map now; entries are populated by the
-    // introspector + entity registry. Empty initial map is fine.
-    recipes: {},
-  }
-}
-
 function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
   const groundedByPipeline = table.groundedByPipeline ?? table.source !== DiscoverySource.FkOnly
   const userControllable = table.userControllable ?? !groundedByPipeline
@@ -250,11 +173,6 @@ function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
     userControllable,
     enabledByDefault,
   }
-}
-
-function normalizePostMetadataActions(recipe: SyncRecipe): SyncPostMetadataAction[] {
-  if (!Array.isArray(recipe.postMetadataActions)) return []
-  return recipe.postMetadataActions.map((action) => ({ kind: action.kind }))
 }
 
 function isRecipeTableEnabled(table: SyncRecipeTable, enabledOptional: Set<string>): boolean {

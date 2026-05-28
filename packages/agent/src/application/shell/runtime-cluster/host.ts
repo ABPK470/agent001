@@ -21,7 +21,6 @@ import type {
     SyncEnvironment,
     SyncEventSink,
     SyncPlan,
-    SyncRecipeBundle,
     SyncRunSink,
 } from "@mia/sync"
 import type {
@@ -91,7 +90,6 @@ export interface CatalogHost {
 export interface SyncHost {
   eventSink: SyncEventSink
   runSink: SyncRunSink
-  recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
   freezeWindowsReader: () => readonly FreezeWindowDefinition[]
   environments: Map<string, SyncEnvironment>
   /** Plan disk root + in-memory cache. Both fields mutable at runtime. */

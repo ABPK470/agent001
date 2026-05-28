@@ -2,7 +2,7 @@
  * Entity registry types — Phase 0 of the config uplift.
  *
  * `EntityDefinition` replaces the compile-time `EntityType` union and the
- * static `deploy/mssql/sync-recipes.json`. It is runtime data: created and
+ * static recipe-era metadata files. It is runtime data: created and
  * edited by tenant admins via the wizard UI, versioned (every edit produces
  * a new immutable version), referenced by every Plan / EvidenceEnvelope by
  * `entityDefVersionId` so "what did the system think this entity was when
@@ -152,8 +152,8 @@ export type EntityTableProvenance =
 
 /**
  * How an `EntityTable` row was discovered / validated. Mirrors the fields in
- * `sync-recipes.json` so the registry is a faithful superset of the
- * introspection output and round-trips losslessly.
+ * the legacy recipe-era model so the registry remains a faithful superset of
+ * the historical introspection output.
  */
 export type EntityTableSource =
   | "fk+pipeline"   // both FK graph and legacy pipeline agree

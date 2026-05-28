@@ -3,7 +3,7 @@ import { resolve } from "node:path"
 
 import type { AgentHost } from "../ports/index.js"
 import { PostMetadataActionKind, type PostMetadataActionKind as PostMetadataActionKindValue } from "./enums.js"
-import { deriveArchiveTable, type SyncRecipe, type SyncRecipeBundle, type SyncRecipeDiscrepancy, type SyncRecipeTable } from "./recipes.js"
+import { deriveArchiveTable, type SyncRecipe, type SyncRecipeDiscrepancy, type SyncRecipeTable } from "./recipes.js"
 
 const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
@@ -161,25 +161,6 @@ export function listPublishedSyncDefinitionsForHost(host: AgentHost): PublishedS
 
 export function getPublishedSyncRecipe(host: AgentHost, entityId: string): SyncRecipe {
   return definitionToSyncRecipe(getPublishedSyncDefinitionForHost(host, entityId))
-}
-
-export function loadPublishedSyncRecipeBundle(
-  host: AgentHost,
-  projectRoot: string,
-): SyncRecipeBundle {
-  const bundle = loadPublishedSyncDefinitionBundle(host, projectRoot)
-  const recipes = Object.fromEntries(
-    Object.entries(bundle.definitions).map(([entityId, definition]) => [
-      entityId,
-      definition ? definitionToSyncRecipe(definition) : null,
-    ]),
-  ) as SyncRecipeBundle["recipes"]
-  return {
-    version: 1,
-    generatedAt: bundle.publishedAt,
-    introspectedFrom: `published-definitions@${bundle.publishedVersion}`,
-    recipes,
-  }
 }
 
 export function definitionToSyncRecipe(definition: PublishedSyncDefinition): SyncRecipe {

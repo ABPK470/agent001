@@ -37,7 +37,6 @@ function createHost(root: string): AgentHost {
     sync: {
       eventSink: () => {},
       runSink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null },
-      recipes: { bundle: null, loadedFromPath: null },
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: root,

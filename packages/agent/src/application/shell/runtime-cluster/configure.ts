@@ -94,7 +94,6 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const syncState = options.syncState ?? {
     eventSink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK,
     runSink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK,
-    recipes: { bundle: null, loadedFromPath: null },
     freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER,
     environments: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])),
     plans: { diskRoot: null, memCache: new Map() },

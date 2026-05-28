@@ -19,7 +19,6 @@ import type {
     SyncEnvironment,
     SyncExecuteProgress,
     SyncPlan,
-    SyncRecipeBundle,
     ToolInfo,
     ViewConfig,
     WorkspaceDiff,
@@ -287,7 +286,6 @@ export const api = {
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
   syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
   publishSyncDefinitions: () => json<PublishSyncDefinitionsResponse>("/api/sync/definitions/publish", { method: "POST" }),
-  syncRecipes: () => json<SyncRecipeBundle>("/api/sync/recipes"),
   syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
     json<Array<{ id: string | number; name: string | null }>>(
       `/api/sync/search?entityType=${encodeURIComponent(params.entityType)}&source=${encodeURIComponent(params.source)}&q=${encodeURIComponent(params.q)}${params.limit ? `&limit=${params.limit}` : ""}`,
@@ -487,12 +485,6 @@ export const api = {
         method: "POST",
         body:   JSON.stringify({ content, format, reason, dryRun: opts?.dryRun ?? false }),
       },
-    )
-  },
-  reseedEntityRegistry: () => {
-    return json<{ imported: number; skipped: number; errors: string[] }>(
-      `/api/entity-registry/reseed`,
-      { method: "POST" },
     )
   },
   listEntityRegistryStrategies: (opts?: { tenant?: string }) => {

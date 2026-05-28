@@ -33,7 +33,6 @@ function createHost(root: string): AgentHost {
     sync: {
       eventSink: () => {},
       runSink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null },
-      recipes: { bundle: null, loadedFromPath: null },
       definitions: { bundle: null, loadedFromPath: null, loadedFromMtimeMs: null, loadedFromSize: null },
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
@@ -71,12 +70,10 @@ beforeEach(() => {
   mkdirSync(join(projectRoot, "scripts"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
-  mkdirSync(join(projectRoot, "deploy", "mssql"), { recursive: true })
   writeFileSync(
     join(projectRoot, "scripts", "compile-sync-definitions.mjs"),
     readFileSync(join(import.meta.dirname, "../../..", "scripts", "compile-sync-definitions.mjs"), "utf-8"),
   )
-  writeFileSync(join(projectRoot, "deploy", "mssql", "sync-recipes.json"), JSON.stringify({ version: 1, generatedAt: null, introspectedFrom: null, recipes: {} }, null, 2))
   writeFileSync(join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"), JSON.stringify({
     schemaVersion: 1,
     id: "pipelineActivity",
@@ -143,11 +140,9 @@ describe("sync routes", () => {
     const publishBody = publish.json() as {
       definitionCount: number
       publishedBundlePath: string
-      compatibilityBundlePath: string
     }
     expect(publishBody.definitionCount).toBe(1)
     expect(publishBody.publishedBundlePath).toBe("sync-definitions/published/definitions.bundle.json")
-    expect(publishBody.compatibilityBundlePath).toBe("deploy/mssql/sync-recipes.json")
 
     const publishedBundle = JSON.parse(readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")) as {
       definitions: Record<string, { id: string; publishedVersion: string }>

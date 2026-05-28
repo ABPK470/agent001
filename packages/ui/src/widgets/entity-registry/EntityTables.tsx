@@ -3,8 +3,7 @@
  * recipe fields (scopeColumn, source, groundedByPipeline, enabledByDefault,
  * userControllable, archive, note). This is the panel that proves the
  * registry-compatible table model has full fidelity with the published
- * sync-definition projection used to generate the legacy recipe-shaped
- * compatibility bundle.
+ * sync-definition projection used by preview and execute.
  */
 
 import { Check, CircleDot, Minus, ShieldAlert, X } from "lucide-react"

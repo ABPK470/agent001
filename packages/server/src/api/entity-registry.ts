@@ -17,7 +17,6 @@ import type {
 import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
-import { bootstrapEntityRegistryFromYaml } from "../adapters/sync/entity-bootstrap.js"
 import { formatEntitiesYaml, formatEntityYaml, parseEntitiesJson, parseEntitiesYaml } from "../adapters/sync/entity-yaml.js"
 import { broadcast } from "../event-broadcaster.js"
 
@@ -230,22 +229,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 			audit(req, "entity_registry.imported", { tenantId, format: "yaml", savedCount: result.saved.length, errorCount: result.errors.length })
 		}
 		return result
-	})
-
-	app.post("/api/entity-registry/reseed", async (req, reply) => {
-		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
-		if (!projectRoot) { reply.code(500); return { error: "projectRoot not configured" } }
-		try {
-			const result = bootstrapEntityRegistryFromYaml(projectRoot)
-			audit(req, "entity_registry.reseeded", { imported: result.imported, skipped: result.skipped, errors: result.errors.length })
-			if (result.imported > 0) {
-				broadcast({ type: EventType.EntityRegistryImported, data: { tenantId: DEFAULT_TENANT_ID, actor: req.session.upn, imported: result.imported, source: "reseed" } })
-			}
-			return result
-		} catch (error) {
-			reply.code(500)
-			return { error: (error as Error).message }
-		}
 	})
 
 	app.get("/api/entity-registry/strategies", async (req) => {

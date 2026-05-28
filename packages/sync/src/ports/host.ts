@@ -2,7 +2,6 @@ import type sql from "mssql"
 import type { SyncPlan } from "../application/shell/plan-store.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
-import type { SyncRecipeBundle } from "../domain/recipes.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
 
@@ -46,7 +45,6 @@ export interface MssqlHost {
 export interface SyncHost {
   eventSink: SyncEventSink
   runSink: SyncRunSink
-  recipes: { bundle: SyncRecipeBundle | null; loadedFromPath: string | null }
   environments: Map<string, SyncEnvironment>
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
   dbProjectRoot: string | null
