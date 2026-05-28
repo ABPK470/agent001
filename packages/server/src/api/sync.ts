@@ -3,7 +3,7 @@
  */
 
 import { type AgentHost } from "@mia/agent"
-import { executeSync, getEnvironments, loadPlan, loadPublishedSyncRecipeBundle, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
+import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, loadPublishedSyncRecipeBundle, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
@@ -31,6 +31,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		rebuildLiveSyncEnvironments(host)
 		return getEnvironments(host)
 	})
+	app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
 	app.get("/api/sync/recipes", async () => loadPublishedSyncRecipeBundle(host, projectRoot))
 	app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>("/api/sync/search", async (req, reply) => {
 		rebuildLiveSyncEnvironments(host)

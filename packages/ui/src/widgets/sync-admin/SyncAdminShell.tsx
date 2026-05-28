@@ -22,11 +22,13 @@ import { FreezeWindowsPanel } from "./FreezeWindowsPanel"
 import { OverviewPanel } from "./OverviewPanel"
 import { PoliciesPanel } from "./PoliciesPanel"
 import { RoutesPanel } from "./RoutesPanel"
+import { RunsPanel } from "./RunsPanel"
 import { SchedulesPanel } from "./SchedulesPanel"
 import { StrategiesPanel } from "./StrategiesPanel"
 
 export type Section =
   | "overview"
+  | "runs"
   | "environments"
   | "schedules"
   | "policies"
@@ -38,6 +40,7 @@ interface NavItem { id: Section; label: string; icon: typeof Database; hint: str
 
 const NAV: readonly NavItem[] = [
   { id: "overview",     label: "Overview",        icon: LayoutDashboard, hint: "everything at a glance" },
+  { id: "runs",         label: "Runs",            icon: Clock,           hint: "plans · gates · evidence" },
   { id: "environments", label: "Environments",    icon: Database,        hint: "DEV · UAT · PROD" },
   { id: "schedules",    label: "Schedules",       icon: Clock,           hint: "cron-driven proposers" },
   { id: "policies",     label: "Approval policies",icon: ShieldCheck,    hint: "who must sign off" },
@@ -82,6 +85,7 @@ export function SyncAdminShell({ initial = "overview" }: { initial?: Section }):
 
       <div className="flex-1 min-w-0">
         {section === "overview"     && <OverviewPanel onJump={setSection} />}
+        {section === "runs"         && <RunsPanel />}
         {section === "environments" && <EnvironmentsPanel />}
         {section === "schedules"    && <SchedulesPanel />}
         {section === "policies"     && <PoliciesPanel />}

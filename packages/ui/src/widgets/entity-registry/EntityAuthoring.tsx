@@ -36,6 +36,14 @@ export function EntityAuthoring({ def, status, onMessage }: EntityAuthoringProps
     () => status?.definitions.find((entry) => entry.id === def.id) ?? null,
     [status, def.id],
   )
+  const authored = !!definitionStatus
+  const reviewed = definitionStatus?.reviewStatus === "reviewed"
+  const cleanupCount = definitionStatus?.cleanupWarnings.length ?? 0
+  const publishability = !authored
+    ? "draft-required"
+    : reviewed && cleanupCount === 0
+      ? "ready-for-curation"
+      : "cleanup-required"
 
   async function generateDraft() {
     setBusy(true)
@@ -83,8 +91,28 @@ export function EntityAuthoring({ def, status, onMessage }: EntityAuthoringProps
         </div>
         <div className="space-y-3 text-xs">
           <p className="text-text-muted">
-            Generate the authoritative repo-definition draft for <span className="font-mono text-text">{def.id}</span> directly from the stored Entity Registry record.
+            Generate the repo-owned draft for <span className="font-mono text-text">{def.id}</span> directly from the stored Entity Registry record. Runtime behavior changes only after the authored definition is reviewed and compiled/published.
           </p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <StatusCard
+              label="runtime authority"
+              value="repo definition"
+              detail="sync-definitions/entities/*.json"
+              tone="neutral"
+            />
+            <StatusCard
+              label="current authored state"
+              value={authored ? (reviewed ? "reviewed" : "review pending") : "not authored"}
+              detail={authored ? `${cleanupCount} cleanup warning${cleanupCount === 1 ? "" : "s"}` : "generate draft first"}
+              tone={publishability === "ready-for-curation" ? "good" : publishability === "cleanup-required" ? "warn" : "neutral"}
+            />
+            <StatusCard
+              label="next boundary"
+              value={authored ? "curate + publish" : "generate draft"}
+              detail={authored ? "review ownership, warnings, flow, then compile/publish" : "create the repo definition draft from registry state"}
+              tone="neutral"
+            />
+          </div>
           <label className="block space-y-1">
             <span className="text-text-muted">Flow preset</span>
             <select
@@ -136,6 +164,9 @@ export function EntityAuthoring({ def, status, onMessage }: EntityAuthoringProps
             </div>
           </div>
         </div>
+        <div className="mb-3 rounded border border-border-subtle bg-canvas px-3 py-2 text-[11px] text-text-muted">
+          Publishability posture: <span className="text-text">{publishability === "ready-for-curation" ? "ready for compile/publish review" : publishability === "cleanup-required" ? "authored but still needs cleanup" : "draft not created yet"}</span>
+        </div>
         {definitionStatus?.cleanupWarnings.length ? (
           <div className="mb-3 rounded border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] text-amber-200">
             {definitionStatus.cleanupWarnings.map((warning) => (
@@ -179,4 +210,31 @@ export function EntityAuthoring({ def, status, onMessage }: EntityAuthoringProps
 function defaultPreset(entityId: string, status: EntityRegistrySyncDefinitionStatusResponse | null): EntityRegistrySyncFlowPreset {
   const presets = status?.draftExport.supportedFlowPresets ?? []
   return (presets.includes(entityId as EntityRegistrySyncFlowPreset) ? entityId : "metadata-only") as EntityRegistrySyncFlowPreset
+}
+
+function StatusCard({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string
+  value: string
+  detail: string
+  tone: "neutral" | "good" | "warn"
+}): JSX.Element {
+  const cls =
+    tone === "good"
+      ? "border-emerald-500/30 bg-emerald-500/5"
+      : tone === "warn"
+        ? "border-amber-500/30 bg-amber-500/5"
+        : "border-border-subtle bg-canvas"
+
+  return (
+    <div className={`rounded border px-3 py-2 ${cls}`}>
+      <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">{label}</div>
+      <div className="mt-1 text-text">{value}</div>
+      <div className="mt-1 text-[11px] text-text-muted">{detail}</div>
+    </div>
+  )
 }

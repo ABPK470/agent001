@@ -27,6 +27,7 @@ import {
     Search,
     ShieldAlert,
     ShieldCheck,
+    ShieldQuestion,
     Ship,
     X,
     XCircle
@@ -39,13 +40,12 @@ import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type {
     OperationPipeline,
+    PublishedSyncDefinition,
     SyncEntityType,
     SyncEnvironment,
     SyncExecuteProgress,
     SyncPlan,
     SyncPlanTable,
-    SyncRecipe,
-    SyncRecipeBundle,
 } from "../types"
 import { timeAgo } from "../util"
 
@@ -55,17 +55,17 @@ const ENTITY_TYPES: SyncEntityType[] = [
   "contract", "dataset", "rule", "pipelineActivity", "gateMetadata", "content",
 ]
 
-function recipeDefaultOptionalTables(recipe: SyncRecipe | null): string[] {
-  if (!recipe) return []
-  return recipe.tables
+function definitionDefaultOptionalTables(definition: PublishedSyncDefinition | null): string[] {
+  if (!definition) return []
+  return definition.metadata.tables
     .filter((table) => table.userControllable && table.enabledByDefault)
     .map((table) => table.name)
 }
 
-function normalizeOptionalTableSelection(recipe: SyncRecipe | null, selected: string[] | null): string[] {
-  if (!recipe) return Array.isArray(selected) ? [...selected] : []
-  const allowed = new Set(recipe.tables.filter((table) => table.userControllable).map((table) => table.name))
-  const base = Array.isArray(selected) ? selected : recipeDefaultOptionalTables(recipe)
+function normalizeOptionalTableSelection(definition: PublishedSyncDefinition | null, selected: string[] | null): string[] {
+  if (!definition) return Array.isArray(selected) ? [...selected] : []
+  const allowed = new Set(definition.metadata.tables.filter((table) => table.userControllable).map((table) => table.name))
+  const base = Array.isArray(selected) ? selected : definitionDefaultOptionalTables(definition)
   return base.filter((tableName, index, arr) => allowed.has(tableName) && arr.indexOf(tableName) === index)
 }
 
@@ -73,7 +73,7 @@ type ExecState =
   | { kind: "idle" }
   | { kind: "running"; events: SyncExecuteProgress[] }
   | { kind: "done"; success: boolean; events: SyncExecuteProgress[]; error?: string }
-type ModalKind = null | "recipe" | "history"
+type ModalKind = null | "definition" | "history"
 
 // ── Module-level exec store ──────────────────────────────────────
 // Survives component unmounts (view switches). The SSE stream keeps
@@ -160,7 +160,7 @@ const DIFF = {
 
 export function EnvSync() {
   const [envs, setEnvs] = useState<SyncEnvironment[]>([])
-  const [recipes, setRecipes] = useState<SyncRecipeBundle | null>(null)
+  const [definitions, setDefinitions] = useState<PublishedSyncDefinition[]>([])
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalKind>(null)
   /** Badge shown on the History button when an agent-triggered sync arrives and history hasn't been reviewed. */
@@ -205,15 +205,15 @@ export function EnvSync() {
 
   const srcEnv = useMemo(() => envs.find((e) => e.name === source) ?? null, [envs, source])
   const tgtEnv = useMemo(() => envs.find((e) => e.name === target) ?? null, [envs, target])
-  const recipe: SyncRecipe | null = recipes?.recipes[entityType] ?? null
+  const definition = useMemo(() => definitions.find((entry) => entry.id === entityType) ?? null, [definitions, entityType])
   const enabledOptionalTables = useMemo(
-    () => normalizeOptionalTableSelection(recipe, form.enabledOptionalTables),
-    [recipe, form.enabledOptionalTables],
+    () => normalizeOptionalTableSelection(definition, form.enabledOptionalTables),
+    [definition, form.enabledOptionalTables],
   )
   const formSig = `${source}|${target}|${entityType}|${entityId}|${force}|${searchMode}|${[...enabledOptionalTables].sort().join(",")}`
 
   useEffect(() => {
-    if (!recipe) return
+    if (!definition) return
     if (!Array.isArray(form.enabledOptionalTables)) return
     if (
       enabledOptionalTables.length === form.enabledOptionalTables.length &&
@@ -222,7 +222,7 @@ export function EnvSync() {
       return
     }
     setForm({ enabledOptionalTables })
-  }, [enabledOptionalTables, form.enabledOptionalTables, recipe, setForm])
+  }, [definition, enabledOptionalTables, form.enabledOptionalTables, setForm])
 
   const [searchErr, setSearchErr] = useState<string | null>(null)
 
@@ -273,10 +273,10 @@ export function EnvSync() {
 
   useEffect(() => {
     let dead = false
-    Promise.all([api.syncEnvironments(), api.syncRecipes()])
-      .then(([e, r]) => {
+    Promise.all([api.syncEnvironments(), api.syncDefinitions()])
+      .then(([e, d]) => {
         if (dead) return
-        setEnvs(e); setRecipes(r)
+        setEnvs(e); setDefinitions(d)
         const p: Partial<typeof form> = {}
         if (e.length >= 1 && !source) p.source = e[0].name
         if (e.length >= 2 && !target) p.target = e[1].name
@@ -310,15 +310,17 @@ export function EnvSync() {
       // Show entity display name in the search input if available.
       const entityName = p.entity.displayName ?? null
       const entityIdStr = String(p.entity.id)
+      const planEntityType = getPlanEntityType(p) ?? form.entityType
       setForm({
         source: p.source,
         target: p.target,
-        entityType: p.recipeSnapshot?.entityType ?? form.entityType,
+        entityType: planEntityType,
         entityId: entityIdStr,
         enabledOptionalTables: p.recipeSnapshot?.enabledOptionalTables ?? null,
       })
       if (entityName) setDisplayLabel(`${entityName} (${entityIdStr})`)
-      planSigRef.current = `${p.source}|${p.target}|${p.recipeSnapshot?.entityType ?? form.entityType}|${entityIdStr}|false|id|${[...normalizeOptionalTableSelection(recipes?.recipes[p.recipeSnapshot?.entityType ?? form.entityType] ?? null, p.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
+      const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
+      planSigRef.current = `${p.source}|${p.target}|${planEntityType}|${entityIdStr}|false|id|${[...normalizeOptionalTableSelection(hydratedDefinition, p.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
       // Mark history as having new data (skip on the very first mount hydration)
       if (!isFirstMountRef.current) setHasNewAgentSync(true)
     }).catch((e) => {
@@ -374,8 +376,8 @@ export function EnvSync() {
   const blocker =
     !source || !target ? "Pick source + target"
     : source === target ? "Source ≠ target"
-    : !entityId.trim() ? `Enter ${searchMode === "name" ? (recipe?.rootNameColumn ?? "name") : (recipe?.rootKeyColumn ?? "id")}`
-    : !recipe ? "No recipe" : null
+    : !entityId.trim() ? `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
+    : !definition ? "No published definition" : null
   const canPreview = !blocker && !previewing
 
   async function onPreview() {
@@ -422,7 +424,7 @@ export function EnvSync() {
   const srcOpts: ListboxOption<string>[] = envs.filter((e) => e.role !== "target").map((e) => ({ value: e.name, label: e.displayName.toUpperCase(), dot: dot(e.color) }))
   const tgtOpts: ListboxOption<string>[] = envs.filter((e) => e.role !== "source").map((e) => ({ value: e.name, label: e.displayName.toUpperCase(), dot: dot(e.color) }))
   const entOpts: ListboxOption<SyncEntityType>[] = ENTITY_TYPES.map((t) => ({
-    value: t, label: recipes?.recipes[t]?.displayName ?? t, disabled: !recipes?.recipes[t],
+    value: t, label: definitions.find((entry) => entry.id === t)?.displayName ?? t, disabled: !definitions.find((entry) => entry.id === t),
   }))
 
   const hasPlan = !!plan
@@ -477,7 +479,7 @@ export function EnvSync() {
                 onChange={(e) => onSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && onPreview()}
                 onFocus={() => { if (searchMode === "name" && searchResults.length) setSearchOpen(true) }}
-                placeholder={searchMode === "id" ? (recipe?.rootKeyColumn ?? "id") : (recipe?.rootNameColumn ?? "name")}
+                placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
                 className={`w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded border border-border-subtle outline-none focus:border-accent placeholder:text-text-muted/40 ${displayLabel ? "" : "font-mono"}`}
               />
               {searchLoading && (
@@ -527,10 +529,10 @@ export function EnvSync() {
                         </button>
                       )}
                       <button
-                        onClick={() => { setModal("recipe"); setMoreOpen(false) }}
+                        onClick={() => { setModal("definition"); setMoreOpen(false) }}
                         className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text-muted hover:text-text hover:bg-overlay-2 transition-colors"
                       >
-                        <BookOpen size={14} /> Recipe
+                        <BookOpen size={14} /> Definition
                       </button>
                       <button
                         onClick={() => { setModal("history"); setMoreOpen(false); setHasNewAgentSync(false) }}
@@ -555,9 +557,9 @@ export function EnvSync() {
                   </button>
                 )}
                 <button
-                  onClick={() => setModal("recipe")}
+                  onClick={() => setModal("definition")}
                   className="text-text-muted/60 hover:text-text p-1.5 rounded hover:bg-elevated transition-colors shrink-0"
-                  title="Recipe"
+                  title="Definition"
                 >
                   <BookOpen size={16} />
                 </button>
@@ -660,14 +662,14 @@ export function EnvSync() {
           blocker={blocker}
           srcEnv={srcEnv}
           tgtEnv={tgtEnv}
-          hasRecipes={!!recipes?.introspectedFrom}
+          hasDefinitions={definitions.length > 0}
         />
       )}
 
       {/* ── Modals ────────────────────────────────────────────── */}
-      {modal === "recipe" && (
-        <ModalShell title="Sync Recipe" subtitle={recipe?.displayName} icon={<BookOpen size={20} className="text-text-muted" />} onClose={() => setModal(null)}>
-          <RecipeContent recipes={recipes} entityType={entityType} />
+      {modal === "definition" && (
+        <ModalShell title={plan ? "Compiled Plan" : "Definition Reference"} subtitle={plan ? (plan.executionContract?.definitionId ?? definition?.displayName ?? entityType) : (definition?.displayName ?? entityType)} icon={<BookOpen size={20} className="text-text-muted" />} onClose={() => setModal(null)}>
+          <DefinitionContent plan={plan} definition={definition} />
         </ModalShell>
       )}
       {modal === "history" && (
@@ -738,7 +740,7 @@ function Loading({ children }: { children: React.ReactNode }) {
 
 function Empty({ envs, blocker, srcEnv, tgtEnv, hasRecipes }: {
   envs: SyncEnvironment[]; blocker: string | null
-  srcEnv: SyncEnvironment | null; tgtEnv: SyncEnvironment | null; hasRecipes: boolean
+  srcEnv: SyncEnvironment | null; tgtEnv: SyncEnvironment | null; hasDefinitions: boolean
 }) {
   if (envs.length < 2) {
     return (
@@ -755,7 +757,7 @@ function Empty({ envs, blocker, srcEnv, tgtEnv, hasRecipes }: {
     <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
       <Ship size={20} className="text-text-muted opacity-40" />
       <p className="text-sm text-text-muted">{blocker ?? "Select entity and click Preview"}</p>
-      {!hasRecipes && <p className="text-xs text-warning">No recipe bundle loaded</p>}
+      {!hasDefinitions && <p className="text-xs text-warning">No published definitions loaded</p>}
       {srcEnv && tgtEnv && !blocker && (
         <p className="text-xs text-text-muted font-mono">{srcEnv.displayName} → {tgtEnv.displayName}</p>
       )}
@@ -835,6 +837,8 @@ function PlanView({ plan, expanded, setExpanded, exec }: {
           </div>
         </div>
       )}
+
+      <PlanExplainabilitySections plan={plan} />
 
       {/* ── Table rows — scrollable, fills remaining space ── */}
       <div className="rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
@@ -1220,8 +1224,25 @@ function HistoryPlanRow({
   onOpen?: (planId: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [plan, setPlan] = useState<SyncPlan | null>(null)
+  const [planErr, setPlanErr] = useState<string | null>(null)
   const statusTone = historyGroupTone(group.status)
   const sections = splitHistoryEvents(group)
+
+  useEffect(() => {
+    if (!open || plan || planErr) return
+    let cancelled = false
+    api.syncPlan(group.planId)
+      .then((next) => {
+        if (cancelled || next.error) return
+        setPlan(next)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setPlanErr(error instanceof Error ? error.message : String(error))
+      })
+    return () => { cancelled = true }
+  }, [group.planId, open, plan, planErr])
 
   return (
     <div className="border-b border-border/40">
@@ -1273,6 +1294,13 @@ function HistoryPlanRow({
             <HistoryKv label="Started" value={formatHistoryDateTime(group.firstAt)} />
             <HistoryKv label="Updated" value={formatHistoryDateTime(group.lastAt)} />
           </div>
+
+          {plan && <PlanExplainabilitySections plan={plan} compact />}
+          {planErr && (
+            <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-warning">
+              Could not load persisted plan details: {planErr}
+            </div>
+          )}
 
           <div className="space-y-3">
             {sections.preview.length > 0 && (
@@ -1391,26 +1419,36 @@ function formatHistoryDateTime(value: string): string {
   })
 }
 
-// ── Recipe (modal content) ───────────────────────────────────────
+// ── Definition / compatibility detail modal ──────────────────────
 
-function RecipeContent({ recipes, entityType }: { recipes: SyncRecipeBundle | null; entityType: SyncEntityType }) {
+function DefinitionContent({ plan, definition }: { plan: SyncPlan | null; definition: PublishedSyncDefinition | null }) {
+  if (plan) {
+    return (
+      <div className="space-y-4 p-5">
+        <PlanExplainabilitySections plan={plan} compact={false} />
+        <PublishedDefinitionContent definition={definition} />
+      </div>
+    )
+  }
+  return <PublishedDefinitionContent definition={definition} />
+}
+
+function PublishedDefinitionContent({ definition }: { definition: PublishedSyncDefinition | null }) {
   const enabledOptionalTablesRaw = useStore((s) => s.envSyncForm.enabledOptionalTables)
   const setForm = useStore((s) => s.setEnvSyncForm)
-  if (!recipes) return <Loading>Loading recipes…</Loading>
-  const recipe = recipes.recipes[entityType]
-  if (!recipe) return (
+  if (!definition) return (
     <div className="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
       <BookOpen size={24} className="opacity-30" />
-      <p className="text-sm">No recipe for <span className="font-mono text-text">{entityType}</span></p>
-      <p className="text-xs">Run the introspection script to generate recipes.</p>
+      <p className="text-sm">No published definition loaded.</p>
+      <p className="text-xs">Compile and publish the repo definitions to make this entity available for sync.</p>
     </div>
   )
 
-  const verified = recipe.tables.filter((t) => t.verified).length
-  const total = recipe.tables.length
+  const verified = definition.metadata.tables.filter((t) => t.verified).length
+  const total = definition.metadata.tables.length
   const allVerified = verified === total
-  const optionalTables = recipe.tables.filter((table) => table.userControllable)
-  const enabledOptionalTables = normalizeOptionalTableSelection(recipe, enabledOptionalTablesRaw)
+  const optionalTables = definition.metadata.tables.filter((table) => table.userControllable)
+  const enabledOptionalTables = normalizeOptionalTableSelection(definition, enabledOptionalTablesRaw)
   const enabledOptional = new Set(enabledOptionalTables)
 
   function toggleOptionalTable(tableName: string) {
@@ -1422,23 +1460,29 @@ function RecipeContent({ recipes, entityType }: { recipes: SyncRecipeBundle | nu
 
   return (
     <div className="pb-4">
+      <div className="px-5 pt-4">
+        <div className="rounded-lg border border-border-subtle bg-overlay-1/40 px-3 py-2.5 text-[11px] text-text-muted">
+          This is the published runtime definition used to compile preview plans. Pre-preview controls in EnvSync are now sourced from this published definition rather than the old recipe bundle.
+        </div>
+      </div>
+
       {/* ── Identity section ──────────────────────────── */}
       <div className="px-5 py-4 border-b border-border/40">
         <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
           <div className="flex items-center gap-2">
             <Database size={13} className="text-text-muted/50 shrink-0" />
             <span className="text-text-muted">Root table</span>
-            <span className="font-mono text-text ml-auto">{recipe.rootTable}</span>
+            <span className="font-mono text-text ml-auto">{definition.rootTable}</span>
           </div>
           <div className="flex items-center gap-2">
             <Key size={13} className="text-text-muted/50 shrink-0" />
             <span className="text-text-muted">Primary key</span>
-            <span className="font-mono text-text ml-auto">{recipe.rootKeyColumn}</span>
+            <span className="font-mono text-text ml-auto">{definition.idColumn}</span>
           </div>
           <div className="flex items-center gap-2">
             <Ship size={13} className="text-text-muted/50 shrink-0" />
-            <span className="text-text-muted">Legacy sproc</span>
-            <span className="font-mono text-text ml-auto text-xs">{recipe.legacyEntrySproc ?? "—"}</span>
+            <span className="text-text-muted">Published version</span>
+            <span className="font-mono text-text ml-auto text-xs">{definition.publishedVersion}</span>
           </div>
           <div className="flex items-center gap-2">
             {allVerified
@@ -1475,10 +1519,10 @@ function RecipeContent({ recipes, entityType }: { recipes: SyncRecipeBundle | nu
             <span className="w-16 text-center">Status</span>
             <span className="w-20 text-center">Use</span>
           </div>
-          {recipe.tables.map((t, i) => (
+          {definition.metadata.tables.map((t, i) => (
             <div
               key={t.name}
-              className={`grid grid-cols-[2rem_1fr_auto_auto_auto_auto] gap-2 px-3 py-2 items-center text-sm ${i < recipe.tables.length - 1 ? "border-b border-border/20" : ""} hover:bg-elevated/20 transition-colors`}
+              className={`grid grid-cols-[2rem_1fr_auto_auto_auto_auto] gap-2 px-3 py-2 items-center text-sm ${i < definition.metadata.tables.length - 1 ? "border-b border-border/20" : ""} hover:bg-elevated/20 transition-colors`}
               title={t.predicate}
             >
               <span className="font-mono text-text-muted/40 text-right tabular-nums text-xs">{i + 1}</span>
@@ -1514,15 +1558,15 @@ function RecipeContent({ recipes, entityType }: { recipes: SyncRecipeBundle | nu
       </div>
 
       {/* ── Discrepancies ─────────────────────────────── */}
-      {recipe.discrepancies.length > 0 && (
+      {definition.metadata.discrepancies.length > 0 && (
         <div className="px-5 pt-4">
           <div className="border border-warning/30 rounded overflow-hidden">
             <div className="px-3 py-2 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
               <AlertTriangle size={13} className="text-warning" />
-              <span className="text-sm text-warning font-medium">{recipe.discrepancies.length} discrepanc{recipe.discrepancies.length === 1 ? "y" : "ies"}</span>
+              <span className="text-sm text-warning font-medium">{definition.metadata.discrepancies.length} discrepanc{definition.metadata.discrepancies.length === 1 ? "y" : "ies"}</span>
             </div>
             <div className="px-3 py-2 space-y-2">
-              {recipe.discrepancies.map((d, i) => (
+              {definition.metadata.discrepancies.map((d, i) => (
                 <div key={i} className="text-sm flex items-start gap-2">
                   <span className="text-warning font-mono text-xs bg-warning/10 px-1.5 py-0.5 rounded shrink-0 mt-0.5">{d.kind}</span>
                   <div>
@@ -1538,11 +1582,169 @@ function RecipeContent({ recipes, entityType }: { recipes: SyncRecipeBundle | nu
 
       {/* ── Footer ────────────────────────────────────── */}
       <div className="px-5 pt-3 flex items-center justify-between text-xs text-text-muted/40">
-        <span className="font-mono">pipeline {recipe.legacyPipelineId ?? "—"}</span>
-        <span>Generated {recipe.generatedAt ? new Date(recipe.generatedAt).toLocaleDateString() : "—"}</span>
+        <span className="font-mono">owner {definition.ownership.team}{definition.ownership.owner ? ` · ${definition.ownership.owner}` : ""}</span>
+        <span>Published {definition.publishedAt ? new Date(definition.publishedAt).toLocaleDateString() : "—"}</span>
       </div>
     </div>
   )
+}
+
+function PlanExplainabilitySections({ plan, compact = false }: { plan: SyncPlan; compact?: boolean }) {
+  const definitionId = plan.executionContract?.definitionId ?? getPlanEntityType(plan) ?? plan.entity.type
+  const definitionVersion = plan.executionContract?.definitionVersion ?? "compat"
+  const flowSteps = plan.executionContract?.steps ?? []
+  const decisionLog = plan.decisionLog ?? []
+  const governanceWarnings = plan.governanceDecision?.warnings ?? []
+  const allowedSchemas = plan.executionContract?.allowedSchemas ?? []
+
+  return (
+    <div className={`grid gap-3 ${compact ? "lg:grid-cols-2" : "xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]"}`}>
+      <section className="rounded-lg border border-border-subtle bg-panel px-4 py-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <BookOpen className="h-3 w-3" /> Definition contract
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <ExplainKv label="definition" value={definitionId} mono />
+          <ExplainKv label="version" value={definitionVersion} mono />
+          <ExplainKv label="entity" value={plan.entity.displayName ?? String(plan.entity.id)} />
+          <ExplainKv label="route" value={`${plan.source} → ${plan.target}`} mono />
+          <ExplainKv label="schemas" value={allowedSchemas.length > 0 ? allowedSchemas.join(", ") : "derived at preview"} mono />
+          <ExplainKv label="steps" value={flowSteps.length > 0 ? String(flowSteps.length) : "compat"} mono />
+        </div>
+
+        {flowSteps.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted/55">compiled flow</div>
+            {flowSteps.map((step, index) => (
+              <div key={step.id} className="rounded border border-border-subtle bg-overlay-1/60 px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-text-muted/45">{index + 1}</span>
+                  <span className="font-medium text-text">{step.title}</span>
+                  <span className="ml-auto rounded border border-border-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted">{step.phase}</span>
+                </div>
+                <div className="mt-1 text-text-muted">{step.description}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <section className="rounded-lg border border-border-subtle bg-panel px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <ShieldCheck className="h-3 w-3" /> Governance decision
+          </div>
+          {plan.governanceDecision ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ExplainKv label="evaluated" value={formatHistoryDateTime(plan.governanceDecision.evaluatedAt)} />
+                <ExplainKv label="target role" value={plan.governanceDecision.targetEnvironment.role} mono />
+                <ExplainKv label="approval policy" value={plan.governanceDecision.governance.approvalPolicyId ?? "none"} mono />
+                <ExplainKv label="risk multiplier" value={String(plan.governanceDecision.governance.riskMultiplier)} mono />
+                <ExplainKv label="freeze windows" value={plan.governanceDecision.governance.freezeWindowIds.length > 0 ? plan.governanceDecision.governance.freezeWindowIds.join(", ") : "none"} mono />
+                <ExplainKv label="actor allowed" value={plan.governanceDecision.targetEnvironment.actorAllowed === null ? "not evaluated" : (plan.governanceDecision.targetEnvironment.actorAllowed ? "yes" : "no")} />
+              </div>
+
+              {(plan.governanceDecision.freezeWindows.activeWindows.length > 0 || governanceWarnings.length > 0 || plan.governanceDecision.freezeWindows.unknownIds.length > 0) && (
+                <div className="mt-3 space-y-2">
+                  {plan.governanceDecision.freezeWindows.activeWindows.length > 0 && (
+                    <ExplainList
+                      title="active freeze windows"
+                      items={plan.governanceDecision.freezeWindows.activeWindows.map((window) => `${window.id} (${window.displayName})`)}
+                      tone="warning"
+                    />
+                  )}
+                  {plan.governanceDecision.freezeWindows.unknownIds.length > 0 && (
+                    <ExplainList
+                      title="unknown references"
+                      items={plan.governanceDecision.freezeWindows.unknownIds}
+                      tone="warning"
+                    />
+                  )}
+                  {governanceWarnings.length > 0 && (
+                    <ExplainList title="warnings" items={governanceWarnings} tone="warning" />
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2 rounded border border-border-subtle bg-overlay-1/40 px-3 py-2 text-xs text-text-muted">
+              <ShieldQuestion className="h-3 w-3" /> No explicit governance decision was persisted for this plan.
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border-subtle bg-panel px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <Clock className="h-3 w-3" /> Decision log
+          </div>
+          {decisionLog.length > 0 ? (
+            <div className="space-y-2">
+              {decisionLog.map((decision) => (
+                <div key={decision.id} className="rounded border border-border-subtle bg-overlay-1/60 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${decisionTone(decision.severity)}`}>
+                      {decision.severity}
+                    </span>
+                    <span className="font-medium text-text">{decision.title}</span>
+                    <span className="ml-auto text-[10px] uppercase tracking-wide text-text-muted/55">{decision.category}</span>
+                  </div>
+                  <div className="mt-1 text-text-muted">{decision.summary}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded border border-border-subtle bg-overlay-1/40 px-3 py-2 text-xs text-text-muted">
+              No persisted decision records were found for this plan.
+            </div>
+          )}
+        </section>
+      </section>
+    </div>
+  )
+}
+
+function ExplainKv({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded border border-border-subtle bg-overlay-1/40 px-3 py-2 min-w-0">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted/55">{label}</div>
+      <div className={`mt-1 text-sm text-text break-all ${mono ? "font-mono" : ""}`}>{value}</div>
+    </div>
+  )
+}
+
+function ExplainList({ title, items, tone }: { title: string; items: string[]; tone: "warning" | "neutral" }) {
+  const cls = tone === "warning"
+    ? "border-warning/20 bg-warning/5 text-warning"
+    : "border-border-subtle bg-overlay-1/40 text-text-muted"
+  return (
+    <div className={`rounded border px-3 py-2 text-xs ${cls}`}>
+      <div className="mb-1 uppercase tracking-[0.16em] text-[10px]">{title}</div>
+      <div className="space-y-1">
+        {items.map((item) => <div key={item}>• {item}</div>)}
+      </div>
+    </div>
+  )
+}
+
+function decisionTone(severity: string): string {
+  switch (severity) {
+    case "error":
+      return "bg-error/15 text-error"
+    case "warning":
+      return "bg-warning/15 text-warning"
+    default:
+      return "bg-accent/15 text-accent"
+  }
+}
+
+function getPlanEntityType(plan: SyncPlan): SyncEntityType | null {
+  const candidate = plan.executionContract?.definitionId ?? plan.recipeSnapshot?.entityType ?? plan.entity.type
+  return isSyncEntityType(candidate) ? candidate : null
+}
+
+function isSyncEntityType(value: string): value is SyncEntityType {
+  return ENTITY_TYPES.includes(value as SyncEntityType)
 }
 
 // ── Execution modal ──────────────────────────────────────────────

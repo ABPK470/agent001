@@ -1,13 +1,10 @@
 /**
  * EnvironmentsPanel — DEV/UAT/PROD + any tenant-defined targets.
  *
- * Today environments are file-seeded (`deploy/mssql/sync-environments.json`)
- * and exposed read-only via `GET /api/sync/environments`. This panel
- * surfaces the resolved set so operators can see what's wired up
- * without grepping JSON files.
- *
- * Live editing of environments will land when the admin write-path
- * (currently agent-only) gets HTTP routes.
+ * Environments are file-seeded (`deploy/mssql/sync-environments.json`) and
+ * merged with runtime admin overrides exposed via the sync-environments API.
+ * This panel surfaces the resolved live registry so operators can see what is
+ * active without grepping JSON files or restarting the server.
  */
 
 import { Database, Lock, Shield } from "lucide-react"
@@ -46,7 +43,7 @@ export function EnvironmentsPanel(): JSX.Element {
     >
       {items.length === 0 ? (
         <Empty title="No environments configured">
-          Add entries to <code>deploy/mssql/sync-environments.json</code> and restart the server.
+          Add entries to <code>deploy/mssql/sync-environments.json</code> or save runtime overrides in Sync Admin.
         </Empty>
       ) : (
         <SplitView
@@ -110,9 +107,7 @@ function EnvDetail({ env }: { env: SyncEnvironment }): JSX.Element {
       <div className="flex items-start gap-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px] text-text-muted">
         <Lock className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" />
         <span>
-          Environment definitions are read-only here. Edit{" "}
-          <code className="font-mono">deploy/mssql/sync-environments.json</code> and restart the
-          server to change them.
+          This panel is read-only, but the environment registry itself is live. Changes saved through Sync Admin or baseline JSON edits are reflected without a server restart.
         </span>
       </div>
     </div>

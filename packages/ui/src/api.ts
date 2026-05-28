@@ -6,6 +6,7 @@ import type {
     AgentDefinition,
     Notification,
     PolicyRule,
+    PublishedSyncDefinition,
     RollbackPreview,
     RollbackResult,
     Run,
@@ -281,6 +282,7 @@ export const api = {
 
   // ── ABI Environment Sync ────────────────────────────────────
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
+  syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
   syncRecipes: () => json<SyncRecipeBundle>("/api/sync/recipes"),
   syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
     json<Array<{ id: string | number; name: string | null }>>(

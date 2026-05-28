@@ -20,6 +20,7 @@ import { Empty, HelpBanner, PanelChrome } from "./shared"
 
 interface Counts {
   envs:      number
+  runs:      number
   strategies:number
   freezes:   { active: number; scheduled: number; past: number }
   schedules: { enabled: number; disabled: number }
@@ -27,7 +28,7 @@ interface Counts {
   routes:    { enabled: number; disabled: number }
 }
 
-const EMPTY: Counts = { envs: 0, strategies: 0, freezes: { active: 0, scheduled: 0, past: 0 }, schedules: { enabled: 0, disabled: 0 }, policies: 0, routes: { enabled: 0, disabled: 0 } }
+const EMPTY: Counts = { envs: 0, runs: 0, strategies: 0, freezes: { active: 0, scheduled: 0, past: 0 }, schedules: { enabled: 0, disabled: 0 }, policies: 0, routes: { enabled: 0, disabled: 0 } }
 
 export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX.Element {
   const [counts, setCounts] = useState<Counts>(EMPTY)
@@ -41,8 +42,9 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
   async function load(): Promise<void> {
     setBusy(true); setErr(null)
     try {
-      const [envs, strats, frz, sched, pols, rts] = await Promise.all([
+      const [envs, runs, strats, frz, sched, pols, rts] = await Promise.all([
         api.syncEnvironments(),
+        api.syncRuns(100),
         api.listEntityRegistryStrategies(),
         api.listFreezeWindows(),
         api.listProposerSchedules(),
@@ -63,6 +65,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
       for (const r of rts as unknown as Array<{ enabled: number }>) (r.enabled ? routes.enabled++ : routes.disabled++)
       setCounts({
         envs:       envs.length,
+        runs:       runs.length,
         strategies: strats.items.length,
         freezes, schedules, routes,
         policies:   (pols as unknown[]).length,
@@ -87,6 +90,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
 
       <div className="grid grid-cols-2 gap-3 px-5 py-4 md:grid-cols-3">
         <Card icon={Database}    title="Environments"        primary={counts.envs}                      secondary="DEV · UAT · PROD + custom" onClick={() => onJump("environments")} />
+        <Card icon={Clock}       title="Runs"                primary={counts.runs}                      secondary="latest compiled plans" onClick={() => onJump("runs")} />
         <Card icon={Clock}       title="Schedules"           primary={counts.schedules.enabled}          secondary={`${counts.schedules.disabled} disabled`} onClick={() => onJump("schedules")} />
         <Card icon={ShieldCheck} title="Approval policies"   primary={counts.policies}                   secondary="per risk tier" onClick={() => onJump("policies")} />
         <Card icon={Mail}        title="Notification routes" primary={counts.routes.enabled}             secondary={`${counts.routes.disabled} disabled`} onClick={() => onJump("routes")} />
