@@ -1163,7 +1163,12 @@ export type EnvOperation =
 export interface SyncEnvironmentAdmin {
   name: string
   displayName: string
+  color: string
   role: "source" | "target" | "both"
+  ringOrder: number
+  agentServiceBaseUrl: string | null
+  etlServiceBaseUrl: string | null
+  gateServiceBaseUrl: string | null
   defaultAccessMode: EnvAccessMode
   allowedOperations: EnvOperation[]
   denyDml: boolean
@@ -1171,7 +1176,28 @@ export interface SyncEnvironmentAdmin {
   approvalRequiredOperations: EnvOperation[]
   syncAllowlist: string[]
   allowedSyncTargets: string[] | null
-  override: { fields: Record<string, unknown>; updatedAt: string; updatedBy: string | null } | null
+  updatedAt: string
+  updatedBy: string | null
+}
+
+export type SyncDefinitionAdminReviewStatus = "legacy-review-required" | "reviewed"
+
+export interface SyncDefinitionAdminItem {
+  id: string
+  displayName: string
+  entityVersion: number
+  tableCount: number
+  flowPreset: EntityRegistrySyncFlowPreset
+  serviceProfileRef: string
+  environmentPolicyRef: string
+  ownershipTeam: string
+  ownershipOwner: string | null
+  reviewStatus: SyncDefinitionAdminReviewStatus
+  ownershipNotes: string[]
+  updatedAt: string
+  updatedBy: string | null
+  publishedVersion: string | null
+  publishedAt: string | null
 }
 
 // ── Notifications ────────────────────────────────────────────────

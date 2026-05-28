@@ -1,15 +1,11 @@
 /**
- * Policy & environment seeding/merging glue.
+ * Policy seeding glue.
  *
- * Bridges the DB-persisted operator config with the in-memory rule
- * engine and the JSON-bootstrapped sync-environment registry.
+ * Bridges the DB-persisted sync-environment registry with the in-memory
+ * rule engine.
  *
- * Two responsibilities:
- *   1. {@link applyEnvOverrides} — after `setupEnvironments()` loads the
- *      JSON config, merge any per-env operator overrides from
- *      `sync_environment_overrides` on top, re-applying
- *      `withPermissionDefaults()` so missing fields stay sensible.
- *   2. {@link seedDefaultPoliciesIfMissing} — on server boot, write the
+ * Responsibilities:
+ *   1. {@link seedDefaultPoliciesIfMissing} — on server boot, write the
  *      hosted-default and per-env-derived rule sets into `policy_rules`
  *      with provenance (`source = 'hosted_default' | 'env_derived'`) so
  *      the admin UI can list them, and the operator can edit/delete them
@@ -28,40 +24,9 @@ import {
 } from "@mia/agent"
 import {
     getEnvironments,
-    replaceEnvironments,
-    withPermissionDefaults,
-    type SyncEnvironment,
 } from "@mia/sync"
 import * as db from "../../adapters/persistence/sqlite.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
-
-// ── Environment overrides (DB on top of JSON) ────────────────────
-
-/**
- * Read every row from `sync_environment_overrides`, merge each on top of
- * the matching loaded environment, and replace the registry.
- *
- * Safe to call multiple times — it always re-reads the current registry
- * via `getEnvironments()` so calling it after a hot edit picks up the
- * latest JSON-loaded baseline.
- */
-export function applyEnvOverrides(host: AgentHost): void {
-  const overrides = new Map<string, Partial<SyncEnvironment>>()
-  for (const row of db.listSyncEnvOverrides()) {
-    try {
-      overrides.set(row.name, JSON.parse(row.overrides_json) as Partial<SyncEnvironment>)
-    } catch (e) {
-      console.warn(`[policy-seeder] invalid override JSON for env "${row.name}":`, e instanceof Error ? e.message : e)
-    }
-  }
-  if (overrides.size === 0) return
-  const merged = getEnvironments(host).map((e) => {
-    const o = overrides.get(e.name)
-    return o ? withPermissionDefaults({ ...e, ...o, name: e.name }) : e
-  })
-  replaceEnvironments(host, merged)
-  console.log(`[policy-seeder] applied ${overrides.size} sync-env override(s): ${Array.from(overrides.keys()).join(", ")}`)
-}
 
 // ── Policy rule seeding ──────────────────────────────────────────
 
@@ -69,8 +34,8 @@ export function applyEnvOverrides(host: AgentHost): void {
  * Insert hosted-default + per-env-derived rules into `policy_rules`
  * for any rule names that don't already exist. Returns counts.
  *
- * Call once at server startup AFTER `applyEnvOverrides()` so the derived
- * rules reflect the merged env config.
+ * Call once at server startup AFTER the persisted env registry is loaded
+ * so the derived rules reflect the live env config.
  */
 export function seedDefaultPoliciesIfMissing(host: AgentHost): { hostedDefault: number; envDerived: number } {
   const now = new Date().toISOString()

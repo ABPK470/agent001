@@ -35,7 +35,6 @@ import {
 } from "@mia/agent"
 import {
     configurePlanStore,
-    loadSyncEnvironments,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
@@ -93,7 +92,9 @@ import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
 import { startScheduler, stopScheduler } from "./application/shell/proposer/scheduler.js"
 import { getRunProfile } from "./application/shell/workspace/run-workspace.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
+import { seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
+import { ensureSyncDefinitionConfigs } from "./domain/sync-definition-admin.js"
+import { loadPersistedSyncEnvironments } from "./domain/sync/live-environments.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
 import { setupMssql } from "./setup-mssql.js"
 
@@ -107,7 +108,8 @@ async function main() {
   const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
 
   const mssqlSetup = setupMssql(_projectRoot)
-  const syncEnvironments = loadSyncEnvironments(_projectRoot, mssqlSetup.configs)
+  const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
+  ensureSyncDefinitionConfigs(_projectRoot)
   const syncEventSink: AgentHost["sync"]["eventSink"] = (ev) => {
     broadcast({ type: ev.type, data: ev.data })
   }
@@ -172,16 +174,13 @@ async function main() {
   // `setBrowser*Provider` ambient setters were removed in cluster 7.
 
   // ── ABI sync subsystem ──
-  if (syncEnvironments.source === "file") {
-    console.log(`ABI environments (from deploy/mssql/sync-environments.json): ${syncEnvironments.summary}`)
+  if (syncEnvironments.source === "db") {
+    console.log(`ABI environments (from persisted DB): ${syncEnvironments.summary}`)
+  } else if (syncEnvironments.source === "file") {
+    console.log(`ABI environments seeded from deploy/mssql/sync-environments.json: ${syncEnvironments.summary}`)
   } else if (syncEnvironments.source === "mssql") {
-    console.log(`ABI environments (auto from MSSQL_DATABASES): ${syncEnvironments.summary}`)
+    console.log(`ABI environments seeded from MSSQL_DATABASES: ${syncEnvironments.summary}`)
   }
-  // Operator overrides on top of JSON config + seed hosted-default and
-  // env-derived policy rules into the DB so the admin UI can show the
-  // full active ruleset (and let admins edit it). Done AFTER
-  // boot env loading so derived rules reflect the merged env config.
-  applyEnvOverrides(bootHost)
   seedDefaultPoliciesIfMissing(bootHost)
   configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
   const llm = await buildLlmAndCatalog(bootHost, mssqlSummary)

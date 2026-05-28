@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
+import type { EntityDefinition } from "@mia/sync"
 import type { CurrentSession } from "../src/auth/context.js"
 
 let testDb: Database.Database
@@ -67,13 +68,8 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-sync-routes-data-"))
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-routes-root-"))
-  mkdirSync(join(projectRoot, "scripts"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
-  writeFileSync(
-    join(projectRoot, "scripts", "compile-sync-definitions.mjs"),
-    readFileSync(join(import.meta.dirname, "../../..", "scripts", "compile-sync-definitions.mjs"), "utf-8"),
-  )
   writeFileSync(join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"), JSON.stringify({
     schemaVersion: 1,
     id: "pipelineActivity",
@@ -128,8 +124,51 @@ afterEach(() => {
 })
 
 describe("sync routes", () => {
-  it("publishes authored definitions and exposes them immediately via runtime definitions", async () => {
+  it("publishes DB-authored definitions and exposes them immediately via runtime definitions", async () => {
     const { app } = await buildApp(adminSession())
+    const { saveEntityDefinition } = await import("../src/adapters/persistence/db/index.js")
+
+    const entityDefinition: EntityDefinition = {
+      tenantId: "_default",
+      id: "pipeline_activity",
+      displayName: "Pipeline Activity",
+      description: "Test definition",
+      rootTable: "core.PipelineActivity",
+      idColumn: "pipelineActivityId",
+      labelColumn: null,
+      selfJoinColumn: null,
+      tables: [
+        {
+          name: "core.PipelineActivity",
+          scope: { kind: "rootPk", column: "pipelineActivityId" },
+          executionOrder: 0,
+          scd2Override: null,
+          verified: true,
+          scopeColumn: "pipelineActivityId",
+          source: "manual",
+          groundedByPipeline: false,
+          enabledByDefault: true,
+          userControllable: false,
+          archiveTable: "coreArchive.PipelineActivity",
+          note: null,
+          provenance: { kind: "manual" },
+        },
+      ],
+      policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+      scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
+      lineageRefs: [],
+      provenance: { kind: "manual" },
+      legacyEntrySproc: null,
+      reverseOrder: ["core.PipelineActivity"],
+      discrepancies: [],
+      version: 1,
+      versionLabel: null,
+      createdBy: "admin@example.com",
+      reason: "seed",
+      createdAt: new Date().toISOString(),
+      retiredAt: null,
+    }
+    saveEntityDefinition({ tenantId: "_default", def: entityDefinition, actor: "admin@example.com", reason: "seed" })
 
     const publish = await app.inject({
       method: "POST",
@@ -147,8 +186,8 @@ describe("sync routes", () => {
     const publishedBundle = JSON.parse(readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")) as {
       definitions: Record<string, { id: string; publishedVersion: string }>
     }
-    expect(publishedBundle.definitions.pipelineActivity?.id).toBe("pipelineActivity")
-    expect(typeof publishedBundle.definitions.pipelineActivity?.publishedVersion).toBe("string")
+    expect(publishedBundle.definitions.pipeline_activity?.id).toBe("pipeline_activity")
+    expect(typeof publishedBundle.definitions.pipeline_activity?.publishedVersion).toBe("string")
 
     const definitions = await app.inject({
       method: "GET",
@@ -157,7 +196,7 @@ describe("sync routes", () => {
     expect(definitions.statusCode).toBe(200)
     const body = definitions.json() as Array<{ id: string; publishedVersion: string }>
     expect(body).toHaveLength(1)
-    expect(body[0]).toMatchObject({ id: "pipelineActivity" })
+    expect(body[0]).toMatchObject({ id: "pipeline_activity" })
     expect(typeof body[0]?.publishedVersion).toBe("string")
 
     await app.close()

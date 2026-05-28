@@ -692,6 +692,30 @@ export function _migrate(db: Database.Database): void {
       updated_by     TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS sync_environments (
+      name       TEXT PRIMARY KEY,
+      body_json  TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_definition_configs (
+      tenant_id              TEXT NOT NULL,
+      entity_id              TEXT NOT NULL,
+      flow_preset            TEXT NOT NULL,
+      service_profile_ref    TEXT NOT NULL,
+      environment_policy_ref TEXT NOT NULL,
+      ownership_team         TEXT NOT NULL,
+      ownership_owner        TEXT,
+      review_status          TEXT NOT NULL
+        CHECK (review_status IN ('legacy-review-required','reviewed')),
+      ownership_notes_json   TEXT NOT NULL DEFAULT '[]',
+      updated_at             TEXT NOT NULL,
+      updated_by             TEXT,
+      PRIMARY KEY (tenant_id, entity_id)
+    );
+
     -- ── Attachments ──────────────────────────────────────────────
     -- session_id and run_id are nullable to support 'workspace_asset'
     -- scope (cross-session / cross-run org assets). Both FKs SET NULL

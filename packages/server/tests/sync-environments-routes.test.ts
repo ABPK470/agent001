@@ -6,7 +6,6 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
-import { loadSyncEnvironments } from "@mia/sync"
 import type { CurrentSession } from "../src/auth/context.js"
 
 let testDb: Database.Database
@@ -42,12 +41,16 @@ function createHost(root: string): AgentHost {
       dbProjectRoot: root,
     },
   } as unknown as AgentHost
-  const loaded = loadSyncEnvironments(root, [
+  return host
+}
+
+async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void> {
+  const { loadPersistedSyncEnvironments } = await import("../src/domain/sync/live-environments.js")
+  const loaded = loadPersistedSyncEnvironments(root, [
     { name: "DEV", server: "dev-sql", database: "mymi", writeEnabled: true, knowledge: null },
     { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null },
   ])
   host.sync.environments = new Map(loaded.environments.map((env) => [env.name, env]))
-  return host
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
@@ -59,6 +62,7 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
   _migrate(testDb)
 
   const host = createHost(projectRoot)
+  await seedLiveEnvironments(projectRoot, host)
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
     ;(req as unknown as { session: CurrentSession }).session = session
@@ -115,7 +119,7 @@ afterEach(() => {
 })
 
 describe("sync-environment routes", () => {
-  it("restores the JSON baseline immediately after resetting an override", async () => {
+  it("updates persisted environments directly instead of writing transient overrides", async () => {
     const { app, host } = await buildApp(adminSession())
 
     const update = await app.inject({
@@ -127,37 +131,26 @@ describe("sync-environment routes", () => {
     expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
     expect(host.sync.environments.get("UAT")?.role).toBe("source")
 
-    const reset = await app.inject({
+    const remove = await app.inject({
       method: "DELETE",
       url: "/api/sync-environments/UAT",
     })
-    expect(reset.statusCode).toBe(200)
+    expect(remove.statusCode).toBe(200)
 
     const response = await app.inject({
       method: "GET",
       url: "/api/sync-environments",
     })
     expect(response.statusCode).toBe(200)
-    const body = response.json() as Array<{
-      name: string
-      role: string
-      allowedSyncTargets: string[] | null
-      override: null | { fields: Record<string, unknown> }
-    }>
+    const body = response.json() as Array<{ name: string }>
     const uat = body.find((env) => env.name === "UAT")
-    expect(uat).toMatchObject({
-      name: "UAT",
-      role: "both",
-      allowedSyncTargets: ["DEV"],
-      override: null,
-    })
-    expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
-    expect(host.sync.environments.get("UAT")?.role).toBe("both")
+    expect(uat).toBeUndefined()
+    expect(host.sync.environments.get("UAT")).toBeUndefined()
 
     await app.close()
   })
 
-  it("reflects baseline file edits on the next admin read without restart", async () => {
+  it("does not drift when the legacy JSON file changes after DB seeding", async () => {
     const { app, host } = await buildApp(adminSession())
 
     writeFileSync(join(projectRoot, "deploy", "mssql", "sync-environments.json"), JSON.stringify({
@@ -198,11 +191,11 @@ describe("sync-environment routes", () => {
     const uat = body.find((env) => env.name === "UAT")
     expect(uat).toMatchObject({
       name: "UAT",
-      role: "source",
-      allowedSyncTargets: ["DEV", "PROD"],
+      role: "both",
+      allowedSyncTargets: ["DEV"],
     })
-    expect(host.sync.environments.get("UAT")?.role).toBe("source")
-    expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
+    expect(host.sync.environments.get("UAT")?.role).toBe("both")
+    expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
 
     await app.close()
   })

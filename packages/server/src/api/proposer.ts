@@ -3,11 +3,13 @@
  */
 
 import type { AgentHost } from "@mia/agent"
+import { EventType } from "@mia/shared-enums"
 import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { runProposer } from "../application/shell/proposer/runner.js"
 import { deleteSchedule, listSchedules, upsertSchedule } from "../application/shell/proposer/scheduler.js"
+import { broadcast } from "../event-broadcaster.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -75,7 +77,9 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
 	app.post<{ Body: { source: string; target: string; cron: string; enabled?: boolean } }>("/api/proposer/schedules", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		try {
-			return upsertSchedule({ tenantId: resolveTenant(req), source: req.body.source, target: req.body.target, cron: req.body.cron, enabled: req.body.enabled !== false, actor: req.session.upn })
+			const row = upsertSchedule({ tenantId: resolveTenant(req), source: req.body.source, target: req.body.target, cron: req.body.cron, enabled: req.body.enabled !== false, actor: req.session.upn })
+			broadcast({ type: EventType.SyncProposerScheduleSaved, data: { tenantId: row.tenant_id, source: row.source, target: row.target, enabled: row.enabled, actor: req.session.upn } })
+			return row
 		} catch (error) {
 			reply.code(400)
 			return { error: error instanceof Error ? error.message : String(error) }
@@ -84,6 +88,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
 	app.delete<{ Params: { tenant: string; source: string; target: string } }>("/api/proposer/schedules/:tenant/:source/:target", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		deleteSchedule(req.params.tenant, req.params.source, req.params.target)
+		broadcast({ type: EventType.SyncProposerScheduleDeleted, data: { tenantId: req.params.tenant, source: req.params.source, target: req.params.target, actor: req.session.upn } })
 		return { ok: true }
 	})
 }

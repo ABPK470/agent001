@@ -1,9 +1,7 @@
 /**
  * EntityRegistry — runtime entity-registry admin surface.
  *
- *   ┌────────────────────────────────────────────────────────────────┐
- *   │ Toolbar: refresh · count · [admin: import · new]               │
- *   ├──────────────┬─────────────────────────────────────────────────┤
+ *   ┌──────────────┬─────────────────────────────────────────────────┐
  *   │ Entity list  │ Tabs: Overview / Tables / History / Registry    │
  *   │              │       Doc                                        │
  *   │ (panel)      │ [admin: edit · retire on header row]            │
@@ -11,23 +9,20 @@
  *   └──────────────┴─────────────────────────────────────────────────┘
  *
  * Composition: this file is the shell — state, layout, SSE wiring,
- * toolbar, and tab routing only. Each tab and modal lives in its own
+ * tab routing only. Each tab and modal lives in its own
  * file under `./entity-registry/` so individual files stay tight and
  * focused. All admin writes require a reason captured in-form.
  */
 
 import {
-  AlertTriangle,
-  Archive,
-  CheckCircle2,
-  FilePlus2,
-  Loader2,
-  Package2,
-  Pencil,
-  RefreshCcw,
-  Trash2,
-  Upload,
-  X,
+    AlertTriangle,
+    Archive,
+    CheckCircle2,
+    FilePlus2,
+    Pencil,
+    Trash2,
+    Upload,
+    X,
 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -35,8 +30,8 @@ import { api } from "../api"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type {
-  EntityRegistryDefinition,
-  EntityRegistryHistoryEntry,
+    EntityRegistryDefinition,
+    EntityRegistryHistoryEntry,
 } from "../types"
 import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistory } from "./entity-registry/EntityHistory"
@@ -128,12 +123,6 @@ export function EntityRegistry(): JSX.Element {
   // ── Render ──────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col bg-canvas text-text">
-      <Toolbar
-        busy={busy}
-        count={items.length}
-        onRefresh={() => void refreshList({ keepSelection: true })}
-      />
-
       {banner && (
         <div
           className={[
@@ -216,17 +205,32 @@ export function EntityRegistry(): JSX.Element {
                   </nav>
 
                   <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
-                    {isAdmin && !selected.retiredAt && (
+                    {isAdmin && (
                       <button
                         type="button"
                         onClick={() => setModal({ kind: "edit", def: selected })}
-                        disabled={busy}
-                        className="flex items-center gap-1.5 rounded border border-border-subtle px-3 py-2 text-xs text-text-muted hover:bg-overlay-2 hover:text-text"
+                        disabled={busy || Boolean(selected.retiredAt)}
+                        title={selected.retiredAt ? "Retired entities are read-only." : undefined}
+                        className={[
+                          "flex items-center gap-1.5 rounded border px-3 py-2 text-xs transition-colors disabled:cursor-default disabled:opacity-50",
+                          selected.retiredAt
+                            ? "border-border-subtle text-text-muted"
+                            : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
+                        ].join(" ")}
                       >
                         <Pencil className="h-3 w-3" /> Edit
                       </button>
                     )}
-                    {isAdmin && !selected.retiredAt && (
+                    {isAdmin && (selected.retiredAt ? (
+                      <button
+                        type="button"
+                        disabled
+                        title="Retired entities are read-only and kept for history/reference."
+                        className="flex items-center gap-1.5 rounded border border-border-subtle px-3 py-2 text-xs text-text-muted opacity-70"
+                      >
+                        <Archive className="h-3 w-3" /> Retired
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => void doRetire()}
@@ -235,15 +239,7 @@ export function EntityRegistry(): JSX.Element {
                       >
                         <Trash2 className="h-3 w-3" /> Retire
                       </button>
-                    )}
-                    {selected.retiredAt && (
-                      <div className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-overlay-2 px-2.5 py-1 text-[11px] text-text-muted">
-                        <span className="inline-flex items-center gap-1">
-                          <Archive className="h-3 w-3" /> retired
-                        </span>
-                        <span className="hidden sm:inline">read-only: kept for history and reference</span>
-                      </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               </div>
@@ -281,35 +277,6 @@ export function EntityRegistry(): JSX.Element {
           onSaved={(id, v) => { setBanner({ kind: "success", text: `Saved ${id} · v${v}` }); void refreshList({ keepSelection: true }) }}
         />
       )}
-    </div>
-  )
-}
-
-// ── Toolbar (kept local — tightly coupled to the shell) ─────────
-
-interface ToolbarProps {
-  busy: boolean
-  count: number
-  onRefresh: () => void
-}
-
-function Toolbar({ busy, count, onRefresh }: ToolbarProps): JSX.Element {
-  const baseBtn = "flex items-center gap-1.5 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50"
-  return (
-    <div className="flex items-center gap-3 border-b border-border-subtle bg-panel px-4 py-3">
-      <div>
-        <h1 className="text-sm font-semibold text-text">Entity Registry</h1>
-        <p className="text-xs text-text-muted">Saved registry records and version history.</p>
-      </div>
-      <div className="ml-auto flex items-center gap-1.5">
-        <button type="button" onClick={onRefresh} disabled={busy} className={baseBtn}>
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
-          Refresh
-        </button>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-canvas px-2.5 py-1 text-xs text-text-muted">
-          <Package2 className="h-3 w-3" /> {count} entit{count === 1 ? "y" : "ies"}
-        </span>
-      </div>
     </div>
   )
 }

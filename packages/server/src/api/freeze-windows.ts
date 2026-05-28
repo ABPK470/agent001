@@ -2,8 +2,10 @@
  * Freeze-window transport routes.
  */
 
+import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { deleteFreezeWindow, FreezeWindowValidationError, listFreezeWindowsForTenant, saveAdminAudit, upsertFreezeWindow } from "../adapters/persistence/sqlite.js"
+import { broadcast } from "../event-broadcaster.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -50,6 +52,7 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
 				actor: req.session.upn,
 			})
 			audit(req, "freeze_window.upserted", { tenantId, id: record.id, startsAt: record.startsAt, endsAt: record.endsAt })
+			broadcast({ type: EventType.FreezeWindowUpserted, data: { tenantId, id: record.id, startsAt: record.startsAt, endsAt: record.endsAt, actor: req.session.upn } })
 			return record
 		} catch (error) {
 			if (error instanceof FreezeWindowValidationError) {
@@ -67,6 +70,7 @@ export function registerFreezeWindowRoutes(app: FastifyInstance): void {
 		const ok = deleteFreezeWindow(tenantId, req.params.id)
 		if (!ok) { reply.code(404); return { error: `freeze_window not found: ${req.params.id}` } }
 		audit(req, "freeze_window.deleted", { tenantId, id: req.params.id })
+		broadcast({ type: EventType.FreezeWindowDeleted, data: { tenantId, id: req.params.id, actor: req.session.upn } })
 		return { ok: true }
 	})
 }

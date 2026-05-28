@@ -6,11 +6,12 @@
  * Cards double as quick-jump links into the matching detail panel.
  */
 
+import { EventType } from "@mia/shared-enums"
 import {
     Activity, Calendar, ChevronRight, Clock, Database, GitBranch, Mail, Shield, ShieldCheck,
 } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
 import { useStore } from "../../store"
 import type { SseEvent } from "../../types"
@@ -35,11 +36,33 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
   const [busy,   setBusy]   = useState(true)
   const [err,    setErr]    = useState<string | null>(null)
 
+  const loadingRef = useRef(false)
+  const queuedRef = useRef(false)
+  const lastLiveTickRef = useRef<number | null>(null)
+
   const log = useStore((s) => s.sseEventLog)
+  const liveRefreshTick = useStore((s) =>
+    s.sseEventLog.filter((e) => isOverviewRefreshEvent(e.type)).length,
+  )
 
   useEffect(() => { void load() }, [])
 
+  useEffect(() => {
+    if (lastLiveTickRef.current === null) {
+      lastLiveTickRef.current = liveRefreshTick
+      return
+    }
+    if (liveRefreshTick === lastLiveTickRef.current) return
+    lastLiveTickRef.current = liveRefreshTick
+    void load()
+  }, [liveRefreshTick])
+
   async function load(): Promise<void> {
+    if (loadingRef.current) {
+      queuedRef.current = true
+      return
+    }
+    loadingRef.current = true
     setBusy(true); setErr(null)
     try {
       const [envs, runs, strats, frz, sched, pols, rts] = await Promise.all([
@@ -71,17 +94,24 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
         policies:   (pols as unknown[]).length,
       })
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
+    finally {
+      setBusy(false)
+      loadingRef.current = false
+      if (queuedRef.current) {
+        queuedRef.current = false
+        void load()
+      }
+    }
   }
 
   const activity = log
-    .filter((e) => typeof e.type === "string" && (e.type.startsWith("entity_registry.") || e.type.startsWith("sync.") || e.type.startsWith("freeze_window.")))
+    .filter((e) => typeof e.type === "string" && (e.type.startsWith("entity_registry.") || e.type.startsWith("sync.") || e.type.startsWith("sync_env.") || e.type.startsWith("freeze_window.")))
     .slice(-20).reverse()
 
   return (
     <PanelChrome title="Sync Operations Console"
       subtitle="One place to see every piece of the sync platform — environments, schedules, approvals, freeze windows and routing — and what's happening right now."
-      busy={busy} onRefresh={() => void load()} err={err} onClearErr={() => setErr(null)}
+      busy={busy} err={err} onClearErr={() => setErr(null)}
     >
       <HelpBanner>
         Click any card to jump straight into the matching panel. The activity feed below shows live events
@@ -117,6 +147,25 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
   )
 }
 
+function isOverviewRefreshEvent(type: string): boolean {
+  return type === EventType.RunQueued
+    || type === EventType.RunStarted
+    || type === EventType.RunCompleted
+    || type === EventType.RunFailed
+    || type === EventType.RunCancelled
+    || type === EventType.SyncEnvUpdate
+    || type === EventType.SyncEnvReset
+    || type === EventType.EntityRegistryStrategySaved
+    || type === EventType.FreezeWindowUpserted
+    || type === EventType.FreezeWindowDeleted
+    || type === EventType.SyncProposerScheduleSaved
+    || type === EventType.SyncProposerScheduleDeleted
+    || type === EventType.SyncPolicySaved
+    || type === EventType.SyncPolicyDeleted
+    || type === EventType.SyncNotificationRouteSaved
+    || type === EventType.SyncNotificationRouteDeleted
+}
+
 function Card({ icon: Icon, title, primary, secondary, onClick, accent }: {
   icon: typeof Database; title: string; primary: number; secondary: string; onClick: () => void
   accent?: "rose"
@@ -138,6 +187,7 @@ function Card({ icon: Icon, title, primary, secondary, onClick, accent }: {
 
 function EventRow({ e }: { e: SseEvent }): JSX.Element {
   const Icon = e.type.startsWith("freeze_window.")    ? Calendar
+            : e.type.startsWith("sync_env.")          ? Database
             : e.type.startsWith("entity_registry.")   ? GitBranch
             : e.type.startsWith("sync.approval.")     ? Shield
             :                                            Activity

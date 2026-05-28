@@ -2,20 +2,15 @@
  * Sync transport routes.
  */
 
-import { execFile } from "node:child_process"
-import { readFile } from "node:fs/promises"
-import { resolve } from "node:path"
-import { promisify } from "node:util"
-
 import { type AgentHost } from "@mia/agent"
+import { EventType } from "@mia/shared-enums"
 import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
+import { listSyncDefinitionAdminItems, publishSyncDefinitionsFromDb, resetSyncDefinitionConfig, upsertSyncDefinitionConfig } from "../domain/sync-definition-admin.js"
 import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
 import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js"
-
-const execFileAsync = promisify(execFile)
-const PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
+import { broadcast } from "../event-broadcaster.js"
 
 interface PublishSyncDefinitionsResponse {
 	publishedAt: string
@@ -35,6 +30,45 @@ interface PreviewBody {
 	enabledOptionalTables?: string[]
 }
 
+function sanitiseDefinitionConfig(body: Record<string, unknown>): {
+	flowPreset?: string
+	serviceProfileRef?: string
+	environmentPolicyRef?: string
+	ownershipTeam?: string
+	ownershipOwner?: string | null
+	reviewStatus?: "legacy-review-required" | "reviewed"
+	ownershipNotes?: string[]
+} | string {
+	const out: {
+		flowPreset?: string
+		serviceProfileRef?: string
+		environmentPolicyRef?: string
+		ownershipTeam?: string
+		ownershipOwner?: string | null
+		reviewStatus?: "legacy-review-required" | "reviewed"
+		ownershipNotes?: string[]
+	} = {}
+	for (const field of ["flowPreset", "serviceProfileRef", "environmentPolicyRef", "ownershipTeam"] as const) {
+		if (body[field] !== undefined) {
+			if (typeof body[field] !== "string" || body[field].trim() === "") return `${field} must be a non-empty string`
+			out[field] = body[field].trim()
+		}
+	}
+	if (body["ownershipOwner"] !== undefined) {
+		if (body["ownershipOwner"] !== null && typeof body["ownershipOwner"] !== "string") return "ownershipOwner must be null or a string"
+		out.ownershipOwner = typeof body["ownershipOwner"] === "string" ? body["ownershipOwner"].trim() : null
+	}
+	if (body["reviewStatus"] !== undefined) {
+		if (body["reviewStatus"] !== "legacy-review-required" && body["reviewStatus"] !== "reviewed") return "reviewStatus must be legacy-review-required or reviewed"
+		out.reviewStatus = body["reviewStatus"]
+	}
+	if (body["ownershipNotes"] !== undefined) {
+		if (!Array.isArray(body["ownershipNotes"])) return "ownershipNotes must be an array"
+		out.ownershipNotes = (body["ownershipNotes"] as unknown[]).map(String)
+	}
+	return out
+}
+
 function auditSync(planId: string, actor: string, actorUpn: string | null, action: string, detail: Record<string, unknown>): void {
 	try {
 		db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
@@ -49,58 +83,85 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		return getEnvironments(host)
 	})
 	app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
+	app.get("/api/sync-definition-configs", async (req, reply) => {
+		if (!req.session?.isAdmin) {
+			reply.code(403)
+			return { error: "admin only" }
+		}
+		return listSyncDefinitionAdminItems(projectRoot)
+	})
+	app.put<{ Params: { entityId: string }; Body: Record<string, unknown> }>("/api/sync-definition-configs/:entityId", async (req, reply) => {
+		if (!req.session?.isAdmin) {
+			reply.code(403)
+			return { error: "admin only" }
+		}
+		const entity = db.getEntityDefinition("_default", req.params.entityId)
+		if (!entity) {
+			reply.code(404)
+			return { error: `unknown entity \"${req.params.entityId}\"` }
+		}
+		const sanitised = sanitiseDefinitionConfig(req.body ?? {})
+		if (typeof sanitised === "string") {
+			reply.code(400)
+			return { error: sanitised }
+		}
+		const existing = db.getSyncDefinitionConfig("_default", req.params.entityId)
+		upsertSyncDefinitionConfig(projectRoot, {
+			tenant_id: "_default",
+			entity_id: req.params.entityId,
+			flow_preset: sanitised.flowPreset ?? existing?.flow_preset ?? req.params.entityId,
+			service_profile_ref: sanitised.serviceProfileRef ?? existing?.service_profile_ref ?? "default",
+			environment_policy_ref: sanitised.environmentPolicyRef ?? existing?.environment_policy_ref ?? "default",
+			ownership_team: sanitised.ownershipTeam ?? existing?.ownership_team ?? "sync-platform",
+			ownership_owner: sanitised.ownershipOwner ?? existing?.ownership_owner ?? null,
+			review_status: sanitised.reviewStatus ?? existing?.review_status ?? "legacy-review-required",
+			ownership_notes_json: JSON.stringify(sanitised.ownershipNotes ?? (existing ? JSON.parse(existing.ownership_notes_json) as string[] : [])),
+			updated_at: new Date().toISOString(),
+			updated_by: req.session.upn,
+		})
+		broadcast({ type: EventType.SyncDefinitionsPublished, data: { action: "config-updated", entityId: req.params.entityId, actor: req.session.upn } })
+		return { ok: true }
+	})
+	app.delete<{ Params: { entityId: string } }>("/api/sync-definition-configs/:entityId", async (req, reply) => {
+		if (!req.session?.isAdmin) {
+			reply.code(403)
+			return { error: "admin only" }
+		}
+		const reset = resetSyncDefinitionConfig(projectRoot, "_default", req.params.entityId)
+		if (!reset) {
+			reply.code(404)
+			return { error: `unknown entity \"${req.params.entityId}\"` }
+		}
+		broadcast({ type: EventType.SyncDefinitionsPublished, data: { action: "config-reset", entityId: req.params.entityId, actor: req.session.upn } })
+		return { ok: true }
+	})
 	app.post("/api/sync/definitions/publish", async (req, reply): Promise<PublishSyncDefinitionsResponse | { error: string; stdout?: string[]; stderr?: string[] }> => {
 		if (!req.session?.isAdmin) {
 			reply.code(403)
 			return { error: "admin only" }
 		}
 
-		const scriptPath = resolve(projectRoot, "scripts", "compile-sync-definitions.mjs")
 		try {
-			const { stdout, stderr } = await execFileAsync(process.execPath, [scriptPath, "--write"], {
-				cwd: projectRoot,
-				maxBuffer: 1024 * 1024,
-			})
-			const rawBundle = await readFile(resolve(projectRoot, PUBLISHED_DEFINITIONS_PATH), "utf-8")
-			const bundle = JSON.parse(rawBundle) as {
-				publishedAt: string
-				publishedVersion: string
-				definitions?: Record<string, unknown>
-			}
-			const definitionCount = Object.keys(bundle.definitions ?? {}).length
-			const stdoutLines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-			const stderrLines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+			const result = publishSyncDefinitionsFromDb(projectRoot)
 			db.saveAdminAudit({
 				actor: req.session.upn,
 				action: "sync.definitions.published",
 				detail: JSON.stringify({
-					publishedAt: bundle.publishedAt,
-					publishedVersion: bundle.publishedVersion,
-					definitionCount,
+					publishedAt: result.publishedAt,
+					publishedVersion: result.publishedVersion,
+					definitionCount: result.definitionCount,
 				}),
 				timestamp: new Date().toISOString(),
 				scope_id: "sync-definitions",
 			})
-			return {
-				publishedAt: bundle.publishedAt,
-				publishedVersion: bundle.publishedVersion,
-				definitionCount,
-				publishedBundlePath: PUBLISHED_DEFINITIONS_PATH,
-				stdout: stdoutLines,
-				stderr: stderrLines,
-			}
+			broadcast({ type: EventType.SyncDefinitionsPublished, data: { action: "published", publishedAt: result.publishedAt, publishedVersion: result.publishedVersion, definitionCount: result.definitionCount, actor: req.session.upn } })
+			return result
 		} catch (error) {
-			const stdoutLines = typeof error === "object" && error && "stdout" in error && typeof error.stdout === "string"
-				? error.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-				: []
-			const stderrLines = typeof error === "object" && error && "stderr" in error && typeof error.stderr === "string"
-				? error.stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-				: []
 			reply.code(400)
 			return {
 				error: error instanceof Error ? error.message : String(error),
-				stdout: stdoutLines,
-				stderr: stderrLines,
+				stdout: [],
+				stderr: [],
 			}
 		}
 	})

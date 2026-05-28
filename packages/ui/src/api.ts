@@ -128,15 +128,32 @@ export const api = {
       method: "DELETE",
     }),
 
-  // Sync-environment overrides (admin)
+  // Sync environments (admin)
   listSyncEnvironments: () => json<import("./types").SyncEnvironmentAdmin[]>("/api/sync-environments"),
+  createSyncEnvironment: (fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>("/api/sync-environments", {
+      method: "POST",
+      body: JSON.stringify(fields),
+    }),
   updateSyncEnvironment: (name: string, fields: Record<string, unknown>) =>
     json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
       method: "PUT",
       body: JSON.stringify(fields),
     }),
-  resetSyncEnvironment: (name: string) =>
+  deleteSyncEnvironment: (name: string) =>
     json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+
+  // Sync definition config (admin)
+  listSyncDefinitionConfigs: () => json<import("./types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
+  updateSyncDefinitionConfig: (entityId: string, fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
+      method: "PUT",
+      body: JSON.stringify(fields),
+    }),
+  resetSyncDefinitionConfig: (entityId: string) =>
+    json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
       method: "DELETE",
     }),
 

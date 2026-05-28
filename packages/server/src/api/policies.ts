@@ -3,8 +3,10 @@
  */
 
 import { isPolicyEffect, PolicyEffect } from "@mia/agent"
+import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
+import { broadcast } from "../event-broadcaster.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
 	try {
@@ -61,6 +63,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
 		})
 
 		audit(req, existing ? "policy.update" : "policy.create", { name, effect, condition })
+		broadcast({ type: EventType.SyncPolicySaved, data: { name, effect, condition, actor: req.session.upn, created: !existing } })
 		reply.code(existing ? 200 : 201)
 		return { ok: true }
 	})
@@ -70,6 +73,7 @@ export function registerPolicyRoutes(app: FastifyInstance): void {
 		const before = db.listPolicyRules().find((rule) => rule.name === req.params.name)
 		db.deletePolicyRule(req.params.name)
 		audit(req, "policy.delete", { name: req.params.name, source: before?.source ?? null })
+		broadcast({ type: EventType.SyncPolicyDeleted, data: { name: req.params.name, actor: req.session.upn, source: before?.source ?? null } })
 		return { ok: true }
 	})
 }

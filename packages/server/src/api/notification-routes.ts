@@ -2,7 +2,9 @@
  * Notification route management transport routes.
  */
 
+import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
+import { broadcast } from "../event-broadcaster.js"
 import { deleteNotificationRoute, listNotificationLog, listNotificationRoutes, upsertNotificationRoute, type NotificationChannel, type NotificationFilter } from "./notifications/router.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -19,7 +21,7 @@ export function registerNotificationRouteRoutes(app: FastifyInstance): void {
 	app.post<{ Body: { id?: string; eventType: string; filter: NotificationFilter; channel: NotificationChannel; target: string; enabled?: boolean } }>("/api/notification-routes", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		try {
-			return upsertNotificationRoute({
+			const route = upsertNotificationRoute({
 				id: req.body.id,
 				tenantId: resolveTenant(req),
 				eventType: req.body.eventType,
@@ -29,6 +31,8 @@ export function registerNotificationRouteRoutes(app: FastifyInstance): void {
 				enabled: req.body.enabled !== false,
 				actor: req.session.upn,
 			})
+			broadcast({ type: EventType.SyncNotificationRouteSaved, data: { id: route.id, tenantId: route.tenantId, eventType: route.eventType, enabled: route.enabled, actor: req.session.upn } })
+			return route
 		} catch (error) {
 			reply.code(400)
 			return { error: error instanceof Error ? error.message : String(error) }
@@ -38,6 +42,7 @@ export function registerNotificationRouteRoutes(app: FastifyInstance): void {
 	app.delete<{ Params: { id: string } }>("/api/notification-routes/:id", async (req, reply) => {
 		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
 		deleteNotificationRoute(req.params.id)
+		broadcast({ type: EventType.SyncNotificationRouteDeleted, data: { id: req.params.id, actor: req.session.upn } })
 		return { ok: true }
 	})
 

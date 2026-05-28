@@ -146,6 +146,17 @@ export const EventType = {
   SyncEnvUpdate: "sync_env.update",
   SyncEnvReset: "sync_env.reset",
 
+  // Sync Admin — overview maintenance
+  FreezeWindowUpserted: "freeze_window.upserted",
+  FreezeWindowDeleted: "freeze_window.deleted",
+  SyncProposerScheduleSaved: "sync.proposer.schedule.saved",
+  SyncProposerScheduleDeleted: "sync.proposer.schedule.deleted",
+  SyncPolicySaved: "sync.policy.saved",
+  SyncPolicyDeleted: "sync.policy.deleted",
+  SyncNotificationRouteSaved: "sync.notification.route.saved",
+  SyncNotificationRouteDeleted: "sync.notification.route.deleted",
+  SyncDefinitionsPublished: "sync.definitions.published",
+
   // Entity registry (Phase 0 config uplift)
   EntityRegistrySaved: "entity_registry.saved",
   EntityRegistryRetired: "entity_registry.retired",
@@ -236,6 +247,7 @@ export const EventNamespace = {
   Planner: "planner",
   Sync: "sync",
   SyncEnv: "sync_env",
+  FreezeWindow: "freeze_window",
   Memory: "memory",
   Procedural: "procedural",
   Attachment: "attachment",
@@ -259,6 +271,7 @@ const NAMESPACE_PREFIX: ReadonlyArray<readonly [string, EventNamespace]> = [
   ["delegation.",         EventNamespace.Delegation],
   ["planner.",            EventNamespace.Planner],
   ["sync_env.",           EventNamespace.SyncEnv],
+  ["freeze_window.",      EventNamespace.FreezeWindow],
   ["sync.",               EventNamespace.Sync],
   ["memory.",             EventNamespace.Memory],
   ["procedural.",         EventNamespace.Procedural],

@@ -110,6 +110,28 @@ export interface DbSyncEnvOverride {
   updated_by:     string | null
 }
 
+export interface DbSyncEnvironment {
+  name: string
+  body_json: string
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface DbSyncDefinitionConfig {
+  tenant_id: string
+  entity_id: string
+  flow_preset: string
+  service_profile_ref: string
+  environment_policy_ref: string
+  ownership_team: string
+  ownership_owner: string | null
+  review_status: "legacy-review-required" | "reviewed"
+  ownership_notes_json: string
+  updated_at: string
+  updated_by: string | null
+}
+
 export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
   return getDb()
     .prepare("SELECT * FROM sync_environment_overrides ORDER BY name")
@@ -131,4 +153,87 @@ export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
 
 export function deleteSyncEnvOverride(name: string): void {
   getDb().prepare("DELETE FROM sync_environment_overrides WHERE name = ?").run(name)
+}
+
+export function countSyncEnvironments(): number {
+  const row = getDb().prepare("SELECT COUNT(*) AS count FROM sync_environments").get() as { count: number }
+  return row.count
+}
+
+export function listSyncEnvironments(): DbSyncEnvironment[] {
+  return getDb()
+    .prepare("SELECT * FROM sync_environments ORDER BY name")
+    .all() as DbSyncEnvironment[]
+}
+
+export function getSyncEnvironment(name: string): DbSyncEnvironment | undefined {
+  return getDb()
+    .prepare("SELECT * FROM sync_environments WHERE name = ?")
+    .get(name) as DbSyncEnvironment | undefined
+}
+
+export function saveSyncEnvironment(row: DbSyncEnvironment): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO sync_environments (name, body_json, created_at, updated_at, updated_by)
+    VALUES (@name, @body_json, COALESCE((SELECT created_at FROM sync_environments WHERE name = @name), @created_at), @updated_at, @updated_by)
+  `).run(row)
+}
+
+export function deleteSyncEnvironment(name: string): void {
+  getDb().prepare("DELETE FROM sync_environments WHERE name = ?").run(name)
+}
+
+export function countSyncDefinitionConfigs(tenantId: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM sync_definition_configs WHERE tenant_id = ?")
+    .get(tenantId) as { count: number }
+  return row.count
+}
+
+export function listSyncDefinitionConfigs(tenantId: string): DbSyncDefinitionConfig[] {
+  return getDb()
+    .prepare("SELECT * FROM sync_definition_configs WHERE tenant_id = ? ORDER BY entity_id")
+    .all(tenantId) as DbSyncDefinitionConfig[]
+}
+
+export function getSyncDefinitionConfig(tenantId: string, entityId: string): DbSyncDefinitionConfig | undefined {
+  return getDb()
+    .prepare("SELECT * FROM sync_definition_configs WHERE tenant_id = ? AND entity_id = ?")
+    .get(tenantId, entityId) as DbSyncDefinitionConfig | undefined
+}
+
+export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
+  getDb().prepare(`
+    INSERT OR REPLACE INTO sync_definition_configs (
+      tenant_id,
+      entity_id,
+      flow_preset,
+      service_profile_ref,
+      environment_policy_ref,
+      ownership_team,
+      ownership_owner,
+      review_status,
+      ownership_notes_json,
+      updated_at,
+      updated_by
+    ) VALUES (
+      @tenant_id,
+      @entity_id,
+      @flow_preset,
+      @service_profile_ref,
+      @environment_policy_ref,
+      @ownership_team,
+      @ownership_owner,
+      @review_status,
+      @ownership_notes_json,
+      @updated_at,
+      @updated_by
+    )
+  `).run(row)
+}
+
+export function deleteSyncDefinitionConfig(tenantId: string, entityId: string): void {
+  getDb()
+    .prepare("DELETE FROM sync_definition_configs WHERE tenant_id = ? AND entity_id = ?")
+    .run(tenantId, entityId)
 }
