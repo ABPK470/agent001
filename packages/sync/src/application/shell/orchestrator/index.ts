@@ -8,7 +8,7 @@
  * Implementation lives in:
  *  - orchestrator/preview.ts         — previewSync, PreviewInput
  *  - orchestrator/execute.ts         — executeSync, ExecuteOptions, ExecuteProgress
- *  - orchestrator/execute-pipeline.ts — post-tx contract sproc choreography
+ *  - orchestrator/post-metadata-pipeline.ts — post-metadata step dispatcher
  *  - orchestrator/metadata-sync.ts   — in-tx FK toggle + MERGE/DELETE loop
  *  - orchestrator/apply.ts           — applyInsertsUpdates / applyDeletes / fetchPkColumns
  *  - orchestrator/archive.ts         — trigger probing + archive emission

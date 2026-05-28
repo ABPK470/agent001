@@ -366,7 +366,6 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         tables: recipe.tables.map((t: SyncRecipeTable) => ({ name: t.name, scopeColumn: t.scopeColumn, predicate: t.predicate })),
         executionOrder: recipe.executionOrder,
         reverseOrder: recipe.reverseOrder,
-        postMetadataActions: recipe.postMetadataActions.map((action) => ({ kind: action.kind })),
         enabledOptionalTables: recipe.tables.filter((table) => table.userControllable).map((table) => table.name),
       },
       executionContract: {
@@ -399,6 +398,10 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             description: step.description,
             bindingRef: step.bindingRef ?? null,
             policyRef: step.policyRef ?? null,
+            subjectRef: step.subjectRef ?? null,
+            objectName: step.objectName ?? null,
+            auditObjectType: step.auditObjectType ?? null,
+            pipelineName: step.pipelineName ?? null,
           })),
         },
         provenance: {

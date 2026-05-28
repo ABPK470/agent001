@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "publishedAt": "2026-05-28T10:30:42.378Z",
-  "publishedVersion": "2026-05-28T10:30:42.378Z",
+  "publishedAt": "2026-05-28T16:30:17.168Z",
+  "publishedVersion": "2026-05-28T16:30:17.168Z",
   "definitions": {
     "content": {
       "schemaVersion": 1,
@@ -122,7 +122,8 @@
             "phase": "post-metadata",
             "kind": "handleDependencies",
             "title": "Handle dependencies",
-            "description": "Refresh downstream content dependency state."
+            "description": "Refresh downstream content dependency state.",
+            "objectName": "content"
           }
         ]
       },
@@ -131,8 +132,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     },
     "contract": {
       "schemaVersion": 1,
@@ -359,7 +360,8 @@
             "phase": "pre-transaction",
             "kind": "auditCheck",
             "title": "Audit check",
-            "description": "Validate target state before contract sync."
+            "description": "Validate target state before contract sync.",
+            "auditObjectType": "Contract"
           },
           {
             "id": "target-lock",
@@ -380,14 +382,130 @@
             "phase": "post-metadata",
             "kind": "pipelineRegister",
             "title": "Pipeline register",
-            "description": "Register affected pipelines with the target agent service."
+            "description": "Register affected pipelines with the target agent service.",
+            "subjectRef": "contractPipelineId"
           },
           {
-            "id": "contract-deploy",
+            "id": "contract-undeploy",
             "phase": "post-metadata",
-            "kind": "contractDeploy",
-            "title": "Contract deploy",
-            "description": "Run the contract deployment sequence on the target environment."
+            "kind": "contractUndeploy",
+            "title": "Contract undeploy",
+            "description": "Undeploy the target contract before redeployment."
+          },
+          {
+            "id": "contract-unlock-after-undeploy",
+            "phase": "post-metadata",
+            "kind": "targetUnlock",
+            "title": "Unlock after undeploy",
+            "description": "Unlock the contract after undeploy."
+          },
+          {
+            "id": "audit-check-2",
+            "phase": "post-metadata",
+            "kind": "auditCheck",
+            "title": "Pre-deploy audit check",
+            "description": "Run a second contract audit check before deployment.",
+            "auditObjectType": "Contract"
+          },
+          {
+            "id": "contract-lock-for-deploy",
+            "phase": "post-metadata",
+            "kind": "targetLock",
+            "title": "Lock for deploy",
+            "description": "Lock the contract for deployment."
+          },
+          {
+            "id": "contract-pre-script",
+            "phase": "post-metadata",
+            "kind": "contractPreScript",
+            "title": "Pre-deploy script",
+            "description": "Run contract pre-deployment scripts."
+          },
+          {
+            "id": "contract-create-dataset-stage",
+            "phase": "post-metadata",
+            "kind": "contractCreateStageDataset",
+            "title": "Create stage dataset",
+            "description": "Create the stage dataset."
+          },
+          {
+            "id": "contract-create-dataset-archive",
+            "phase": "post-metadata",
+            "kind": "contractCreateArchiveDataset",
+            "title": "Create archive dataset",
+            "description": "Create the archive dataset."
+          },
+          {
+            "id": "contract-create-dataset-list",
+            "phase": "post-metadata",
+            "kind": "contractCreateListDataset",
+            "title": "Create list dataset",
+            "description": "Create the list dataset."
+          },
+          {
+            "id": "contract-create-dataset-dim",
+            "phase": "post-metadata",
+            "kind": "contractCreateDimDataset",
+            "title": "Create dim dataset",
+            "description": "Create the dimension dataset."
+          },
+          {
+            "id": "contract-create-dataset-fact",
+            "phase": "post-metadata",
+            "kind": "contractCreateFactDataset",
+            "title": "Create fact dataset",
+            "description": "Create the fact dataset."
+          },
+          {
+            "id": "contract-create-fks",
+            "phase": "post-metadata",
+            "kind": "contractCreateDatasetFks",
+            "title": "Create dataset FKs",
+            "description": "Reconcile contract dataset foreign keys."
+          },
+          {
+            "id": "contract-deploy-etl",
+            "phase": "post-metadata",
+            "kind": "contractDeployEtl",
+            "title": "Deploy ETL",
+            "description": "Deploy ETL custom transformations."
+          },
+          {
+            "id": "contract-deploy-routine",
+            "phase": "post-metadata",
+            "kind": "contractDeployRoutine",
+            "title": "Deploy routines",
+            "description": "Deploy contract routines."
+          },
+          {
+            "id": "contract-post-script",
+            "phase": "post-metadata",
+            "kind": "contractPostScript",
+            "title": "Post-deploy script",
+            "description": "Run contract post-deployment scripts."
+          },
+          {
+            "id": "contract-unlock-after-deploy",
+            "phase": "post-metadata",
+            "kind": "targetUnlock",
+            "title": "Unlock after deploy",
+            "description": "Unlock the contract after deployment."
+          },
+          {
+            "id": "set-sync-date",
+            "phase": "post-metadata",
+            "kind": "syncDate",
+            "title": "Sync date",
+            "description": "Stamp the contract sync date.",
+            "auditObjectType": "Contract"
+          },
+          {
+            "id": "set-deploy-date",
+            "phase": "post-metadata",
+            "kind": "deployDate",
+            "title": "Deploy date",
+            "description": "Stamp the contract deploy date.",
+            "auditObjectType": "Contract"
           }
         ]
       },
@@ -396,8 +514,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     },
     "dataset": {
       "schemaVersion": 1,
@@ -614,7 +732,8 @@
             "phase": "post-metadata",
             "kind": "syncDate",
             "title": "Sync date",
-            "description": "Stamp the dataset sync date after deployment."
+            "description": "Stamp the dataset sync date after deployment.",
+            "auditObjectType": "Dataset"
           }
         ]
       },
@@ -623,8 +742,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     },
     "gateMetadata": {
       "schemaVersion": 1,
@@ -778,7 +897,8 @@
             "phase": "post-metadata",
             "kind": "pipelineStart",
             "title": "Pipeline start",
-            "description": "Start the downstream gate refresh pipeline."
+            "description": "Start the downstream gate refresh pipeline.",
+            "pipelineName": "All Lists content item population"
           }
         ]
       },
@@ -787,8 +907,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     },
     "pipelineActivity": {
       "schemaVersion": 1,
@@ -894,8 +1014,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     },
     "rule": {
       "schemaVersion": 1,
@@ -1087,7 +1207,8 @@
             "phase": "post-metadata",
             "kind": "datasetDeploy",
             "title": "Dataset deploy",
-            "description": "Deploy datasets required by the rule on the target ETL service."
+            "description": "Deploy datasets required by the rule on the target ETL service.",
+            "subjectRef": "ruleInputDatasetId"
           },
           {
             "id": "rules-deploy",
@@ -1101,21 +1222,24 @@
             "phase": "post-metadata",
             "kind": "handleDependencies",
             "title": "Handle dependencies",
-            "description": "Refresh direct dependency state after rule deployment."
+            "description": "Refresh direct dependency state after rule deployment.",
+            "objectName": "rule"
           },
           {
             "id": "sync-date",
             "phase": "post-metadata",
             "kind": "syncDate",
             "title": "Sync date",
-            "description": "Stamp the rule sync date."
+            "description": "Stamp the rule sync date.",
+            "auditObjectType": "Rule"
           },
           {
             "id": "deploy-date",
             "phase": "post-metadata",
             "kind": "deployDate",
             "title": "Deploy date",
-            "description": "Stamp the rule deploy date."
+            "description": "Stamp the rule deploy date.",
+            "auditObjectType": "Rule"
           }
         ]
       },
@@ -1124,8 +1248,8 @@
         "sourceArtifact": "deploy/mssql/sync-recipes.json",
         "sourceVersion": "2026-05-10T11:19:07.694Z"
       },
-      "publishedAt": "2026-05-28T10:30:42.378Z",
-      "publishedVersion": "2026-05-28T10:30:42.378Z"
+      "publishedAt": "2026-05-28T16:30:17.168Z",
+      "publishedVersion": "2026-05-28T16:30:17.168Z"
     }
   }
 }

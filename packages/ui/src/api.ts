@@ -4,9 +4,12 @@
 
 import type {
     AgentDefinition,
+    EntityRegistrySyncDefinitionScaffoldRequest,
+    EntityRegistrySyncDefinitionScaffoldResponse,
     Notification,
     PolicyRule,
     PublishedSyncDefinition,
+    PublishSyncDefinitionsResponse,
     RollbackPreview,
     RollbackResult,
     Run,
@@ -283,6 +286,7 @@ export const api = {
   // ── ABI Environment Sync ────────────────────────────────────
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
   syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
+  publishSyncDefinitions: () => json<PublishSyncDefinitionsResponse>("/api/sync/definitions/publish", { method: "POST" }),
   syncRecipes: () => json<SyncRecipeBundle>("/api/sync/recipes"),
   syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
     json<Array<{ id: string | number; name: string | null }>>(
@@ -432,6 +436,17 @@ export const api = {
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
+  getEntityRegistrySyncDefinitionScaffold: (id: string, opts?: { tenant?: string } & EntityRegistrySyncDefinitionScaffoldRequest) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.flowPreset) p.set("flowPreset", opts.flowPreset)
+    if (opts?.serviceProfileRef) p.set("serviceProfileRef", opts.serviceProfileRef)
+    if (opts?.environmentPolicyRef) p.set("environmentPolicyRef", opts.environmentPolicyRef)
+    const qs = p.toString()
+    return json<EntityRegistrySyncDefinitionScaffoldResponse>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}/scaffold-sync-definition${qs ? `?${qs}` : ""}`,
+    )
+  },
   saveEntityRegistry: (def: import("./types").EntityRegistryDefinition, reason: string, opts?: { tenant?: string; versionLabel?: string }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
@@ -474,26 +489,6 @@ export const api = {
       },
     )
   },
-  exportEntityRegistrySyncDefinition: (
-    id: string,
-    payload?: import("./types").EntityRegistrySyncDefinitionExportRequest,
-    opts?: { tenant?: string },
-  ) => {
-    const p = new URLSearchParams()
-    if (opts?.tenant) p.set("tenant", opts.tenant)
-    const qs = p.toString()
-    return json<import("./types").EntityRegistrySyncDefinitionExportResponse>(
-      `/api/entity-registry/entities/${encodeURIComponent(id)}/export-sync-definition${qs ? `?${qs}` : ""}`,
-      {
-        method: "POST",
-        body: JSON.stringify(payload ?? {}),
-      },
-    )
-  },
-  getEntityRegistrySyncDefinitionStatus: () =>
-    json<import("./types").EntityRegistrySyncDefinitionStatusResponse>(
-      "/api/entity-registry/sync-definition-status",
-    ),
   reseedEntityRegistry: () => {
     return json<{ imported: number; skipped: number; errors: string[] }>(
       `/api/entity-registry/reseed`,

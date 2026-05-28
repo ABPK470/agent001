@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-28T10:30:42.377Z",
+  "generatedAt": "2026-05-28T16:30:17.167Z",
   "introspectedFrom": null,
   "_comment": "Compiled from repo-authored sync definition files in sync-definitions/entities. Do not edit by hand.",
   "recipes": {
@@ -86,7 +86,7 @@
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     },
     "contract": {
       "entityType": "contract",
@@ -282,11 +282,14 @@
           "kind": "pipelineRegister"
         },
         {
-          "kind": "contractDeploy"
+          "kind": "syncDate"
+        },
+        {
+          "kind": "deployDate"
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     },
     "dataset": {
       "entityType": "dataset",
@@ -462,7 +465,7 @@
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     },
     "gateMetadata": {
       "entityType": "gateMetadata",
@@ -575,7 +578,7 @@
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     },
     "pipelineActivity": {
       "entityType": "pipelineActivity",
@@ -635,7 +638,7 @@
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     },
     "rule": {
       "entityType": "rule",
@@ -802,7 +805,7 @@
         }
       ],
       "discrepancies": [],
-      "generatedAt": "2026-05-28T10:30:42.377Z"
+      "generatedAt": "2026-05-28T16:30:17.167Z"
     }
   }
 }

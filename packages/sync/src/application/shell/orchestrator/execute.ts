@@ -28,6 +28,11 @@ import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 import type { ExecuteOptions, ExecuteProgress } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 
+function requireAuditObjectType(step: { id: string; auditObjectType?: string | null }): string {
+  if (typeof step.auditObjectType === "string" && step.auditObjectType.trim().length > 0) return step.auditObjectType
+  throw new Error(`Execution contract step ${step.id} is missing auditObjectType.`)
+}
+
 export async function executeSync(planId: string, opts: ExecuteOptions): Promise<{ planId: string; success: boolean; error?: string }> {
   if (!opts.confirm) throw new Error("executeSync requires explicit confirm=true.")
   const plan = loadPlan(opts.host, planId)
@@ -219,7 +224,7 @@ async function executeSyncInner(
           await preTxStep(stepDef.id, async () => {
             await runAuditCheckDirect(opts.host, tgtPool, {
               action: "syncOrNot",
-              objType: auditObjectType(entityType),
+              objType: requireAuditObjectType(stepDef),
               id: entityId,
             }, plan.target, undefined, telemetryContext)
           })
@@ -314,24 +319,5 @@ async function executeSyncInner(
     try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }
     catch { /* ignore */ }
     return { planId, success: false, error: msg }
-  }
-}
-
-function auditObjectType(entityType: string): string {
-  switch (entityType) {
-    case "contract":
-      return "Contract"
-    case "dataset":
-      return "Dataset"
-    case "rule":
-      return "Rule"
-    case "content":
-      return "Content"
-    case "pipelineActivity":
-      return "Pipeline"
-    case "gateMetadata":
-      return "MetaTable"
-    default:
-      return entityType
   }
 }

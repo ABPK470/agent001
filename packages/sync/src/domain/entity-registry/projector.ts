@@ -32,7 +32,6 @@ import type {
     SyncRecipe,
     SyncRecipeTable,
 } from "../recipes.js"
-import { resolvePostMetadataActions } from "../recipes.js"
 import { resolveEffectiveScd2 } from "./strategy-resolver.js"
 import type {
     EffectiveScd2,
@@ -106,10 +105,7 @@ export function projectRecipe(args: {
     tables,
     executionOrder:  orderedNames,
     reverseOrder:    [...orderedNames].reverse(),
-    postMetadataActions: resolvePostMetadataActions({
-      entityType: def.id,
-      legacyPipelineId: def.provenance.kind === "legacy-migration" ? def.provenance.legacyPipelineId : null,
-    }),
+    postMetadataActions: [],
     archiveTables,
     discrepancies:   collectDiscrepancies(sortedTables),
     generatedAt,

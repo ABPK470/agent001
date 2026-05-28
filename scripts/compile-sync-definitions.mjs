@@ -12,24 +12,40 @@ const OUTPUT_BUNDLE = SOURCE_BUNDLE
 
 const FLOW_PRESETS = {
   contract: [
-    step("audit-check", "pre-transaction", "auditCheck", "Audit check", "Validate target state before contract sync."),
+    step("audit-check", "pre-transaction", "auditCheck", "Audit check", "Validate target state before contract sync.", { auditObjectType: "Contract" }),
     step("target-lock", "pre-transaction", "targetLock", "Target lock", "Lock the target contract deployment window."),
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected contract scope."),
-    step("pipeline-register", "post-metadata", "pipelineRegister", "Pipeline register", "Register affected pipelines with the target agent service."),
-    step("contract-deploy", "post-metadata", "contractDeploy", "Contract deploy", "Run the contract deployment sequence on the target environment."),
+    step("pipeline-register", "post-metadata", "pipelineRegister", "Pipeline register", "Register affected pipelines with the target agent service.", { subjectRef: "contractPipelineId" }),
+    step("contract-undeploy", "post-metadata", "contractUndeploy", "Contract undeploy", "Undeploy the target contract before redeployment."),
+    step("contract-unlock-after-undeploy", "post-metadata", "targetUnlock", "Unlock after undeploy", "Unlock the contract after undeploy."),
+    step("audit-check-2", "post-metadata", "auditCheck", "Pre-deploy audit check", "Run a second contract audit check before deployment.", { auditObjectType: "Contract" }),
+    step("contract-lock-for-deploy", "post-metadata", "targetLock", "Lock for deploy", "Lock the contract for deployment."),
+    step("contract-pre-script", "post-metadata", "contractPreScript", "Pre-deploy script", "Run contract pre-deployment scripts."),
+    step("contract-create-dataset-stage", "post-metadata", "contractCreateStageDataset", "Create stage dataset", "Create the stage dataset."),
+    step("contract-create-dataset-archive", "post-metadata", "contractCreateArchiveDataset", "Create archive dataset", "Create the archive dataset."),
+    step("contract-create-dataset-list", "post-metadata", "contractCreateListDataset", "Create list dataset", "Create the list dataset."),
+    step("contract-create-dataset-dim", "post-metadata", "contractCreateDimDataset", "Create dim dataset", "Create the dimension dataset."),
+    step("contract-create-dataset-fact", "post-metadata", "contractCreateFactDataset", "Create fact dataset", "Create the fact dataset."),
+    step("contract-create-fks", "post-metadata", "contractCreateDatasetFks", "Create dataset FKs", "Reconcile contract dataset foreign keys."),
+    step("contract-deploy-etl", "post-metadata", "contractDeployEtl", "Deploy ETL", "Deploy ETL custom transformations."),
+    step("contract-deploy-routine", "post-metadata", "contractDeployRoutine", "Deploy routines", "Deploy contract routines."),
+    step("contract-post-script", "post-metadata", "contractPostScript", "Post-deploy script", "Run contract post-deployment scripts."),
+    step("contract-unlock-after-deploy", "post-metadata", "targetUnlock", "Unlock after deploy", "Unlock the contract after deployment."),
+    step("set-sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the contract sync date.", { auditObjectType: "Contract" }),
+    step("set-deploy-date", "post-metadata", "deployDate", "Deploy date", "Stamp the contract deploy date.", { auditObjectType: "Contract" }),
   ],
   dataset: [
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected dataset scope."),
     step("dataset-deploy", "post-metadata", "datasetDeploy", "Dataset deploy", "Deploy the dataset using the target ETL service."),
-    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the dataset sync date after deployment."),
+    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the dataset sync date after deployment.", { auditObjectType: "Dataset" }),
   ],
   rule: [
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected rule scope."),
-    step("dataset-deploy", "post-metadata", "datasetDeploy", "Dataset deploy", "Deploy datasets required by the rule on the target ETL service."),
+    step("dataset-deploy", "post-metadata", "datasetDeploy", "Dataset deploy", "Deploy datasets required by the rule on the target ETL service.", { subjectRef: "ruleInputDatasetId" }),
     step("rules-deploy", "post-metadata", "rulesDeploy", "Rules deploy", "Deploy the rule package on the target ETL service."),
-    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh direct dependency state after rule deployment."),
-    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the rule sync date."),
-    step("deploy-date", "post-metadata", "deployDate", "Deploy date", "Stamp the rule deploy date."),
+    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh direct dependency state after rule deployment.", { objectName: "rule" }),
+    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the rule sync date.", { auditObjectType: "Rule" }),
+    step("deploy-date", "post-metadata", "deployDate", "Deploy date", "Stamp the rule deploy date.", { auditObjectType: "Rule" }),
   ],
   pipelineActivity: [
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected pipeline activity scope."),
@@ -38,11 +54,11 @@ const FLOW_PRESETS = {
   gateMetadata: [
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected gate metadata scope."),
     step("meta-refresh", "post-metadata", "metaRefresh", "Meta refresh", "Refresh target gate metadata."),
-    step("pipeline-start", "post-metadata", "pipelineStart", "Pipeline start", "Start the downstream gate refresh pipeline."),
+    step("pipeline-start", "post-metadata", "pipelineStart", "Pipeline start", "Start the downstream gate refresh pipeline.", { pipelineName: "All Lists content item population" }),
   ],
   content: [
     step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected content scope."),
-    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh downstream content dependency state."),
+    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh downstream content dependency state.", { objectName: "content" }),
   ],
 }
 
@@ -108,8 +124,8 @@ function main() {
   }
 }
 
-function step(id, phase, kind, title, description) {
-  return { id, phase, kind, title, description }
+function step(id, phase, kind, title, description, extra = {}) {
+  return { id, phase, kind, title, description, ...extra }
 }
 
 function bootstrapDefinitionsFromBundle() {

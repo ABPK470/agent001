@@ -188,7 +188,8 @@
         "phase": "post-metadata",
         "kind": "datasetDeploy",
         "title": "Dataset deploy",
-        "description": "Deploy datasets required by the rule on the target ETL service."
+        "description": "Deploy datasets required by the rule on the target ETL service.",
+        "subjectRef": "ruleInputDatasetId"
       },
       {
         "id": "rules-deploy",
@@ -202,21 +203,24 @@
         "phase": "post-metadata",
         "kind": "handleDependencies",
         "title": "Handle dependencies",
-        "description": "Refresh direct dependency state after rule deployment."
+        "description": "Refresh direct dependency state after rule deployment.",
+        "objectName": "rule"
       },
       {
         "id": "sync-date",
         "phase": "post-metadata",
         "kind": "syncDate",
         "title": "Sync date",
-        "description": "Stamp the rule sync date."
+        "description": "Stamp the rule sync date.",
+        "auditObjectType": "Rule"
       },
       {
         "id": "deploy-date",
         "phase": "post-metadata",
         "kind": "deployDate",
         "title": "Deploy date",
-        "description": "Stamp the rule deploy date."
+        "description": "Stamp the rule deploy date.",
+        "auditObjectType": "Rule"
       }
     ]
   },

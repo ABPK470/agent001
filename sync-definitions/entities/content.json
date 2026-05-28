@@ -117,7 +117,8 @@
         "phase": "post-metadata",
         "kind": "handleDependencies",
         "title": "Handle dependencies",
-        "description": "Refresh downstream content dependency state."
+        "description": "Refresh downstream content dependency state.",
+        "objectName": "content"
       }
     ]
   },

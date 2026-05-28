@@ -615,7 +615,18 @@ export type AuthoredSyncFlowKind =
   | "metadataSync"
   | "auditCheck"
   | "targetLock"
-  | "contractDeploy"
+  | "targetUnlock"
+  | "contractUndeploy"
+  | "contractPreScript"
+  | "contractCreateStageDataset"
+  | "contractCreateArchiveDataset"
+  | "contractCreateListDataset"
+  | "contractCreateDimDataset"
+  | "contractCreateFactDataset"
+  | "contractCreateDatasetFks"
+  | "contractDeployEtl"
+  | "contractDeployRoutine"
+  | "contractPostScript"
   | "datasetDeploy"
   | "rulesDeploy"
   | "pipelineRegister"
@@ -656,6 +667,10 @@ export interface AuthoredSyncFlowStep {
   description: string
   bindingRef?: string | null
   policyRef?: string | null
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
 }
 
 export interface AuthoredSyncDefinitionTable {
@@ -714,6 +729,37 @@ export interface PublishedSyncDefinition extends AuthoredSyncDefinition {
   publishedVersion: string
 }
 
+export interface PublishSyncDefinitionsResponse {
+  publishedAt: string
+  publishedVersion: string
+  definitionCount: number
+  publishedBundlePath: string
+  compatibilityBundlePath: string
+  stdout: string[]
+  stderr: string[]
+}
+
+export type SyncDefinitionFlowPreset =
+  | "contract"
+  | "dataset"
+  | "rule"
+  | "pipelineActivity"
+  | "gateMetadata"
+  | "content"
+  | "metadata-only"
+
+export interface EntityRegistrySyncDefinitionScaffoldRequest {
+  flowPreset?: SyncDefinitionFlowPreset
+  serviceProfileRef?: string
+  environmentPolicyRef?: string
+}
+
+export interface EntityRegistrySyncDefinitionScaffoldResponse {
+  suggestedPath: string
+  definition: AuthoredSyncDefinition
+  stderr: string[]
+}
+
 export interface CompiledSyncPlanStep {
   id: string
   phase: AuthoredSyncFlowPhase
@@ -722,6 +768,10 @@ export interface CompiledSyncPlanStep {
   description: string
   bindingRef?: string | null
   policyRef?: string | null
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
 }
 
 export interface CompiledSyncPlanContract {
@@ -782,37 +832,18 @@ export interface SyncExecuteProgress {
 
 export type EntityRegistryProvenanceKind = "bundled" | "imported" | "manual" | "agent"
 
-export interface EntityRegistryProvenance {
-  kind: EntityRegistryProvenanceKind
-  templateId?: string | null
-  sourcePath?: string | null
-  importBatchId?: string | null
-}
-
-export interface EntityRegistryFkHop {
-  table: string
-  fromColumn: string
-  toColumn: string
-}
-
 export type EntityRegistryTableScope =
   | { kind: "rootPk"; column: string }
-  | { kind: "fkPath"; through: EntityRegistryFkHop[] }
+  | { kind: "fkPath"; through: Array<{ table: string; fromColumn: string; toColumn: string }> }
   | { kind: "sql"; predicate: string }
 
-export interface EntityRegistryScd2Override {
-  validFromCol?: string | null
-  validToCol?: string | null
-  isLockedCol?: string | null
-  syncDateCol?: string | null
-  deployDateCol?: string | null
-  identityHandling?: "none" | "setIdentityInsertOn" | "skipIdentityCols"
-  excludedFromDiffCols?: string[]
-  onInsert?: Record<string, string>
-  onUpdate?: Record<string, string>
-}
-
-export type EntityRegistryTableSource = "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
+export type EntityRegistryProvenance =
+  | { kind: "manual" }
+  | { kind: "bundled" }
+  | { kind: "agent"; runId?: string | null }
+  | { kind: "imported"; sourceManifestId?: string; source?: string }
+  | { kind: "template"; templateId: string; templateVersion?: number; entityId?: string }
+  | { kind: "legacy-migration"; legacyPipelineId: number | null }
 
 export interface EntityRegistryTable {
   name: string
@@ -823,9 +854,8 @@ export interface EntityRegistryTable {
   archiveTable: string | null
   note: string | null
   provenance: EntityRegistryProvenance
-  // Enriched (additive, nullable)
   scopeColumn: string | null
-  source: EntityRegistryTableSource | null
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual" | null
   groundedByPipeline: boolean | null
   enabledByDefault: boolean | null
   userControllable: boolean | null
@@ -839,8 +869,20 @@ export interface EntityRegistryPolicies {
 
 export interface EntityRegistryLineageRef {
   object: string
-  kind: "view-source" | "sproc-input" | "etl-source" | "publish-target"
+  kind: "view-source" | "report-source" | "downstream-consumer"
   note: string | null
+}
+
+export interface EntityRegistryScd2Override {
+  validFromCol?: string | null
+  validToCol?: string | null
+  isLockedCol?: string | null
+  syncDateCol?: string | null
+  deployDateCol?: string | null
+  identityHandling?: "none" | "setIdentityInsertOn" | "preserveSequence"
+  excludedFromDiffCols?: string[]
+  onInsert?: Record<string, string>
+  onUpdate?: Record<string, string>
 }
 
 export interface EntityRegistryStrategyRef {

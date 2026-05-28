@@ -5,7 +5,7 @@
  *   │ Toolbar: refresh · count · [admin: import · new]               │
  *   ├──────────────┬─────────────────────────────────────────────────┤
  *   │ Entity list  │ Tabs: Overview / Tables / History / Registry    │
- *   │              │       Doc / Sync JSON Preview                   │
+ *   │              │       Doc                                        │
  *   │ (panel)      │ [admin: edit · retire on header row]            │
  *   │              │                                                  │
  *   └──────────────┴─────────────────────────────────────────────────┘
@@ -37,9 +37,7 @@ import { useStore } from "../store"
 import type {
   EntityRegistryDefinition,
   EntityRegistryHistoryEntry,
-  EntityRegistrySyncDefinitionStatusResponse,
 } from "../types"
-import { EntityAuthoring } from "./entity-registry/EntityAuthoring"
 import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistory } from "./entity-registry/EntityHistory"
 import { EntityImportModal } from "./entity-registry/EntityImportModal"
@@ -48,7 +46,7 @@ import { EntityOverview } from "./entity-registry/EntityOverview"
 import { EntityTables } from "./entity-registry/EntityTables"
 import { EntityYaml } from "./entity-registry/EntityYaml"
 
-const TABS = ["overview", "tables", "history", "document", "authoring"] as const
+const TABS = ["overview", "tables", "history", "document"] as const
 type Tab = typeof TABS[number]
 
 interface Banner { kind: "error" | "success"; text: string }
@@ -62,7 +60,6 @@ export function EntityRegistry(): JSX.Element {
   const [tab, setTab]               = useState<Tab>("overview")
   const [history, setHistory]       = useState<EntityRegistryHistoryEntry[]>([])
   const [yamlText, setYamlText]     = useState<string>("")
-  const [authoringStatus, setAuthoringStatus] = useState<EntityRegistrySyncDefinitionStatusResponse | null>(null)
   const [busy, setBusy]             = useState(false)
   const [banner, setBanner]         = useState<Banner | null>(null)
   const [modal, setModal]           = useState<null | { kind: "import" } | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
@@ -77,9 +74,7 @@ export function EntityRegistry(): JSX.Element {
     setBusy(true)
     try {
       const res = await api.listEntityRegistry({ includeRetired: true })
-      const status = await api.getEntityRegistrySyncDefinitionStatus()
       setItems(res.items)
-      setAuthoringStatus(status)
       if (!opts.keepSelection && !selectedId && res.items.length > 0) {
         setSelectedId(res.items[0]!.id)
       }
@@ -215,9 +210,7 @@ export function EntityRegistry(): JSX.Element {
                           ? `Tables (${(selected.tables ?? []).length})`
                           : t === "document"
                             ? "Registry Doc"
-                            : t === "authoring"
-                              ? "Sync JSON"
-                              : t[0]!.toUpperCase() + t.slice(1)}
+                            : t[0]!.toUpperCase() + t.slice(1)}
                       </button>
                     ))}
                   </nav>
@@ -259,16 +252,7 @@ export function EntityRegistry(): JSX.Element {
                 {tab === "overview" && <EntityOverview def={selected} />}
                 {tab === "tables"   && <EntityTables  def={selected} />}
                 {tab === "history"  && <EntityHistory entries={history} />}
-                {tab === "document" && <EntityYaml yaml={yamlText} def={selected} entityId={selected.id} />}
-                {tab === "authoring" && (
-                  <EntityAuthoring
-                    def={selected}
-                    status={authoringStatus}
-                    readOnly={Boolean(selected.retiredAt)}
-                    onMessage={setBanner}
-                    onEdit={() => setModal({ kind: "edit", def: selected })}
-                  />
-                )}
+                {tab === "document" && <EntityYaml yaml={yamlText} def={selected} entityId={selected.id} isAdmin={isAdmin} />}
               </div>
             </>
           )}
@@ -315,7 +299,7 @@ function Toolbar({ busy, count, onRefresh }: ToolbarProps): JSX.Element {
     <div className="flex items-center gap-3 border-b border-border-subtle bg-panel px-4 py-3">
       <div>
         <h1 className="text-sm font-semibold text-text">Entity Registry</h1>
-        <p className="text-xs text-text-muted">Saved registry records, version history, and preview-only sync JSON export.</p>
+        <p className="text-xs text-text-muted">Saved registry records and version history.</p>
       </div>
       <div className="ml-auto flex items-center gap-1.5">
         <button type="button" onClick={onRefresh} disabled={busy} className={baseBtn}>

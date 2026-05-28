@@ -150,7 +150,8 @@
         "phase": "post-metadata",
         "kind": "pipelineStart",
         "title": "Pipeline start",
-        "description": "Start the downstream gate refresh pipeline."
+        "description": "Start the downstream gate refresh pipeline.",
+        "pipelineName": "All Lists content item population"
       }
     ]
   },

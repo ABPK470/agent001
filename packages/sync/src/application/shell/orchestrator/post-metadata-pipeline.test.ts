@@ -3,10 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { PostMetadataActionKind } from "../../../domain/enums.js"
 import type { AgentHost } from "../../../ports/host.js"
-import type { SyncPlan } from "../plan-store.js"
-import { runAuditCheckDirect } from "./contract-deploy.js"
+import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
+import {
+    createDataset,
+    createDatasetFKs,
+    deployETL,
+    deployRoutine,
+    resolveContractName,
+    runAuditCheckDirect,
+    runContractDeploymentScriptsDirect,
+    setContractLockDirect,
+    undeployMarkedContract,
+} from "./contract-deploy.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
-import { runContractPipeline } from "./execute-pipeline.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 
 vi.mock("./db-helpers.js", () => ({
@@ -15,28 +24,46 @@ vi.mock("./db-helpers.js", () => ({
 }))
 
 vi.mock("./contract-deploy.js", () => ({
+  createDataset: vi.fn(),
+  createDatasetFKs: vi.fn(),
+  deployETL: vi.fn(),
+  deployRoutine: vi.fn(),
+  resolveContractName: vi.fn(),
   runAuditCheckDirect: vi.fn(),
-}))
-
-vi.mock("./execute-pipeline.js", () => ({
-  runContractPipeline: vi.fn(),
+  runContractDeploymentScriptsDirect: vi.fn(),
+  setContractLockDirect: vi.fn(),
+  undeployMarkedContract: vi.fn(),
 }))
 
 describe("runPostMetadataPipeline", () => {
   const trackedQueryMock = vi.mocked(trackedQuery)
   const trackedExecuteMock = vi.mocked(trackedExecute)
+  const createDatasetMock = vi.mocked(createDataset)
+  const createDatasetFKsMock = vi.mocked(createDatasetFKs)
+  const deployETLMock = vi.mocked(deployETL)
+  const deployRoutineMock = vi.mocked(deployRoutine)
+  const resolveContractNameMock = vi.mocked(resolveContractName)
   const runAuditCheckDirectMock = vi.mocked(runAuditCheckDirect)
-  const runContractPipelineMock = vi.mocked(runContractPipeline)
+  const runContractDeploymentScriptsDirectMock = vi.mocked(runContractDeploymentScriptsDirect)
+  const setContractLockDirectMock = vi.mocked(setContractLockDirect)
+  const undeployMarkedContractMock = vi.mocked(undeployMarkedContract)
   const fetchMock = vi.fn<typeof fetch>()
 
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal("fetch", fetchMock)
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }))
+    createDatasetMock.mockResolvedValue({} as never)
+    createDatasetFKsMock.mockResolvedValue({} as never)
+    deployETLMock.mockResolvedValue({} as never)
+    deployRoutineMock.mockResolvedValue({} as never)
+    resolveContractNameMock.mockResolvedValue("AccountClientMapping")
     trackedExecuteMock.mockResolvedValue({} as never)
     trackedQueryMock.mockResolvedValue({ recordset: [] } as never)
     runAuditCheckDirectMock.mockResolvedValue({} as never)
-    runContractPipelineMock.mockResolvedValue({ stepWarnings: [] })
+    runContractDeploymentScriptsDirectMock.mockResolvedValue({} as never)
+    setContractLockDirectMock.mockResolvedValue({} as never)
+    undeployMarkedContractMock.mockResolvedValue({} as never)
   })
 
   afterEach(() => {
@@ -195,14 +222,34 @@ describe("runPostMetadataPipeline", () => {
     ])
   })
 
-  it("registers the contract pipeline before contract deployment", async () => {
+  it("runs the expanded explicit contract flow after metadata", async () => {
     trackedQueryMock.mockResolvedValueOnce({ recordset: [{ pipelineId: 3525 }] } as never)
-    const progress = await runForEntity("contract", 788, [
-      PostMetadataActionKind.PipelineRegister,
-      PostMetadataActionKind.ContractDeploy,
-    ])
+    const { progress } = await runScenario({
+      entityType: "contract",
+      entityId: 788,
+      steps: contractSteps(),
+    })
 
-    expect(stepNames(progress)).toEqual(["pipeline-register"])
+    expect(stepNames(progress)).toEqual([
+      "pipeline-register",
+      "contract-undeploy",
+      "contract-unlock-after-undeploy",
+      "audit-check-2",
+      "contract-lock-for-deploy",
+      "contract-pre-script",
+      "contract-create-dataset-stage",
+      "contract-create-dataset-archive",
+      "contract-create-dataset-list",
+      "contract-create-dataset-dim",
+      "contract-create-dataset-fact",
+      "contract-create-fks",
+      "contract-deploy-etl",
+      "contract-deploy-routine",
+      "contract-post-script",
+      "contract-unlock-after-deploy",
+      "set-sync-date",
+      "set-deploy-date",
+    ])
     expect(trackedQueryMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -215,7 +262,14 @@ describe("runPostMetadataPipeline", () => {
       "https://agent.example/pipeline/register",
       expect.objectContaining({ body: JSON.stringify({ pipelineId: 3525 }) }),
     )
-    expect(runContractPipelineMock).toHaveBeenCalledOnce()
+    expect(resolveContractNameMock).toHaveBeenCalledOnce()
+    expect(undeployMarkedContractMock).toHaveBeenCalledOnce()
+    expect(setContractLockDirectMock).toHaveBeenCalledTimes(3)
+    expect(createDatasetMock).toHaveBeenCalledTimes(5)
+    expect(createDatasetFKsMock).toHaveBeenCalledOnce()
+    expect(deployETLMock).toHaveBeenCalledOnce()
+    expect(deployRoutineMock).toHaveBeenCalledOnce()
+    expect(runContractDeploymentScriptsDirectMock).toHaveBeenCalledTimes(2)
   })
 
   it("records a failed step and continues to later actions", async () => {
@@ -250,24 +304,50 @@ async function runForEntity(
 async function runScenario(input: {
   entityType: string
   entityId: string | number
-  actions: PostMetadataActionKind[]
+  actions?: PostMetadataActionKind[]
+  steps?: SyncExecutionContractStep[]
 }) {
   const progress: Array<Record<string, unknown>> = []
   const host = createHost()
+  const steps = input.steps ?? createSteps(input.entityType, input.actions ?? [])
 
   const result = await runPostMetadataPipeline({
     host,
     srcPool: createPool(),
     tgtPool: createPool(),
-    plan: createPlan(input.entityType, input.actions),
+    plan: createPlan(input.entityType, input.actions ?? []),
     planId: "plan-1",
     entityId: input.entityId,
     entityType: input.entityType,
+    steps,
     onProgress: (entry) => progress.push(entry as unknown as Record<string, unknown>),
     userUpn: "user@example.com",
   })
 
   return { progress, result }
+}
+
+function contractSteps(): SyncExecutionContractStep[] {
+  return [
+    { id: "pipeline-register", phase: "post-metadata", kind: "pipelineRegister", title: "Pipeline register", description: "Register affected pipelines with the target agent service.", subjectRef: "contractPipelineId" },
+    { id: "contract-undeploy", phase: "post-metadata", kind: "contractUndeploy", title: "Contract undeploy", description: "Undeploy the target contract before redeployment." },
+    { id: "contract-unlock-after-undeploy", phase: "post-metadata", kind: "targetUnlock", title: "Unlock after undeploy", description: "Unlock the contract after undeploy." },
+    { id: "audit-check-2", phase: "post-metadata", kind: "auditCheck", title: "Pre-deploy audit check", description: "Run a second contract audit check before deployment.", auditObjectType: "Contract" },
+    { id: "contract-lock-for-deploy", phase: "post-metadata", kind: "targetLock", title: "Lock for deploy", description: "Lock the contract for deployment." },
+    { id: "contract-pre-script", phase: "post-metadata", kind: "contractPreScript", title: "Pre-deploy script", description: "Run contract pre-deployment scripts." },
+    { id: "contract-create-dataset-stage", phase: "post-metadata", kind: "contractCreateStageDataset", title: "Create stage dataset", description: "Create the stage dataset." },
+    { id: "contract-create-dataset-archive", phase: "post-metadata", kind: "contractCreateArchiveDataset", title: "Create archive dataset", description: "Create the archive dataset." },
+    { id: "contract-create-dataset-list", phase: "post-metadata", kind: "contractCreateListDataset", title: "Create list dataset", description: "Create the list dataset." },
+    { id: "contract-create-dataset-dim", phase: "post-metadata", kind: "contractCreateDimDataset", title: "Create dim dataset", description: "Create the dimension dataset." },
+    { id: "contract-create-dataset-fact", phase: "post-metadata", kind: "contractCreateFactDataset", title: "Create fact dataset", description: "Create the fact dataset." },
+    { id: "contract-create-fks", phase: "post-metadata", kind: "contractCreateDatasetFks", title: "Create dataset FKs", description: "Reconcile contract dataset foreign keys." },
+    { id: "contract-deploy-etl", phase: "post-metadata", kind: "contractDeployEtl", title: "Deploy ETL", description: "Deploy ETL custom transformations." },
+    { id: "contract-deploy-routine", phase: "post-metadata", kind: "contractDeployRoutine", title: "Deploy routines", description: "Deploy contract routines." },
+    { id: "contract-post-script", phase: "post-metadata", kind: "contractPostScript", title: "Post-deploy script", description: "Run contract post-deployment scripts." },
+    { id: "contract-unlock-after-deploy", phase: "post-metadata", kind: "targetUnlock", title: "Unlock after deploy", description: "Unlock the contract after deployment." },
+    { id: "set-sync-date", phase: "post-metadata", kind: "syncDate", title: "Sync date", description: "Stamp the contract sync date.", auditObjectType: "Contract" },
+    { id: "set-deploy-date", phase: "post-metadata", kind: "deployDate", title: "Deploy date", description: "Stamp the contract deploy date.", auditObjectType: "Contract" },
+  ]
 }
 
 function stepNames(progress: Array<Record<string, unknown>>): string[] {
@@ -295,8 +375,50 @@ function createPlan(entityType: string, actions: PostMetadataActionKind[]): Sync
       tables: [],
       executionOrder: [],
       reverseOrder: [],
-      postMetadataActions: actions.map((kind) => ({ kind })),
     },
+  }
+}
+
+function createSteps(entityType: string, actions: PostMetadataActionKind[]): SyncExecutionContractStep[] {
+  return actions.map((kind, index) => ({
+    id: stepId(kind),
+    phase: "post-metadata",
+    kind,
+    title: kind,
+    description: kind,
+    subjectRef: kind === PostMetadataActionKind.DatasetDeploy && entityType === "rule"
+      ? "ruleInputDatasetId"
+      : kind === PostMetadataActionKind.PipelineRegister && entityType === "contract"
+        ? "contractPipelineId"
+        : "entityId",
+    objectName: kind === PostMetadataActionKind.HandleDependencies ? entityType.toLowerCase() : null,
+    auditObjectType: kind === PostMetadataActionKind.SyncDate || kind === PostMetadataActionKind.DeployDate
+      ? ({ dataset: "Dataset", rule: "Rule", content: "Content", pipelineActivity: "Pipeline", gateMetadata: "MetaTable", contract: "Contract" }[entityType] ?? entityType)
+      : null,
+    pipelineName: kind === PostMetadataActionKind.PipelineStart ? "All Lists content item population" : null,
+  }))
+}
+
+function stepId(kind: PostMetadataActionKind): string {
+  switch (kind) {
+    case PostMetadataActionKind.DatasetDeploy:
+      return "dataset-deploy"
+    case PostMetadataActionKind.RulesDeploy:
+      return "rules-deploy"
+    case PostMetadataActionKind.PipelineRegister:
+      return "pipeline-register"
+    case PostMetadataActionKind.MetaRefresh:
+      return "meta-refresh"
+    case PostMetadataActionKind.PipelineStart:
+      return "pipeline-start"
+    case PostMetadataActionKind.HandleDependencies:
+      return "handle-dependencies"
+    case PostMetadataActionKind.SyncDate:
+      return "set-sync-date"
+    case PostMetadataActionKind.DeployDate:
+      return "set-deploy-date"
+    default:
+      return String(kind)
   }
 }
 

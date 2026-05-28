@@ -42,13 +42,11 @@ export const BUNDLED_ENTITY_IDS = [
 /** How a given table was discovered as part of an entity's dependency closure. */
 import {
     DiscoverySource,
-    PostMetadataActionKind,
     SyncRecipeDiscrepancyKind,
-    type PostMetadataActionKind as PostMetadataActionKindValue,
 } from "./enums.js"
 
 export interface SyncPostMetadataAction {
-  kind: PostMetadataActionKindValue
+  kind: import("./enums.js").PostMetadataActionKind
 }
 
 export interface SyncRecipeTable {
@@ -254,51 +252,9 @@ function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
   }
 }
 
-export function resolvePostMetadataActions(
-  recipe: Pick<SyncRecipe, "entityType" | "legacyPipelineId"> & { postMetadataActions?: SyncPostMetadataAction[] | null },
-): SyncPostMetadataAction[] {
-  if (Array.isArray(recipe.postMetadataActions) && recipe.postMetadataActions.length > 0) {
-    return recipe.postMetadataActions.map((action) => ({ kind: action.kind }))
-  }
-
-  switch (recipe.entityType) {
-    case "contract":
-      return [
-        { kind: PostMetadataActionKind.PipelineRegister },
-        { kind: PostMetadataActionKind.ContractDeploy },
-      ]
-    case "dataset":
-      return [
-        { kind: PostMetadataActionKind.DatasetDeploy },
-        { kind: PostMetadataActionKind.SyncDate },
-      ]
-    case "rule":
-      return [
-        { kind: PostMetadataActionKind.DatasetDeploy },
-        { kind: PostMetadataActionKind.RulesDeploy },
-        { kind: PostMetadataActionKind.HandleDependencies },
-        { kind: PostMetadataActionKind.SyncDate },
-        { kind: PostMetadataActionKind.DeployDate },
-      ]
-    case "pipelineActivity":
-      return [{ kind: PostMetadataActionKind.PipelineRegister }]
-    case "gateMetadata":
-      return [
-        { kind: PostMetadataActionKind.MetaRefresh },
-        { kind: PostMetadataActionKind.PipelineStart },
-      ]
-    case "content":
-      return [{ kind: PostMetadataActionKind.HandleDependencies }]
-    default:
-      if (recipe.legacyPipelineId === 792) {
-        return [{ kind: PostMetadataActionKind.DatasetDeploy }]
-      }
-      return []
-  }
-}
-
 function normalizePostMetadataActions(recipe: SyncRecipe): SyncPostMetadataAction[] {
-  return resolvePostMetadataActions(recipe)
+  if (!Array.isArray(recipe.postMetadataActions)) return []
+  return recipe.postMetadataActions.map((action) => ({ kind: action.kind }))
 }
 
 function isRecipeTableEnabled(table: SyncRecipeTable, enabledOptional: Set<string>): boolean {

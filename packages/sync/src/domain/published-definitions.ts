@@ -33,6 +33,10 @@ export interface PublishedSyncDefinitionStep {
   description: string
   bindingRef?: string | null
   policyRef?: string | null
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
 }
 
 export interface PublishedSyncDefinition {
@@ -201,8 +205,6 @@ export function definitionToSyncRecipe(definition: PublishedSyncDefinition): Syn
 
 function toPostMetadataAction(kind: string): Array<{ kind: PostMetadataActionKindValue }> {
   switch (kind) {
-    case "contractDeploy":
-      return [{ kind: PostMetadataActionKind.ContractDeploy }]
     case "datasetDeploy":
       return [{ kind: PostMetadataActionKind.DatasetDeploy }]
     case "rulesDeploy":

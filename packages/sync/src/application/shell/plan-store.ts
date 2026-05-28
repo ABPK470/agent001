@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
-import type { EntityType, SyncPostMetadataAction } from "../../domain/recipes.js"
+import type { EntityType } from "../../domain/recipes.js"
 import { SyncPlanChangeType, type AgentHost } from "../../ports/index.js"
 
 export interface SyncExecutionContractStep {
@@ -24,6 +24,10 @@ export interface SyncExecutionContractStep {
   description: string
   bindingRef?: string | null
   policyRef?: string | null
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
 }
 
 export interface SyncExecutionContract {
@@ -195,7 +199,7 @@ export interface SyncPlan {
   warnings: string[]
   estimatedDurationSec: number
   /** Recipe snapshot used — included so execute reproduces preview exactly. */
-  recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; postMetadataActions: SyncPostMetadataAction[]; enabledOptionalTables?: string[] }
+  recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
   /** Explicit compiled execution contract from the published definition. */
   executionContract?: SyncExecutionContract | null
   /** First-class explainability record used by history/API/UI surfaces. */

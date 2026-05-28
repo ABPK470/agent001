@@ -213,7 +213,8 @@
         "phase": "post-metadata",
         "kind": "syncDate",
         "title": "Sync date",
-        "description": "Stamp the dataset sync date after deployment."
+        "description": "Stamp the dataset sync date after deployment.",
+        "auditObjectType": "Dataset"
       }
     ]
   },

@@ -88,20 +88,13 @@ This keeps the authoring split explicit:
 - `sync-definitions/entities/*.json` remains the only authoritative runtime
 	source after review and compile/publish.
 
-The separate Entity Registry workspace can now export the same draft shape
-directly from stored entity definitions:
+The separate Entity Registry workspace can export the same draft shape directly
+from stored entity definitions:
 
-- `POST /api/entity-registry/entities/:id/export-sync-definition`
-- `GET /api/entity-registry/sync-definition-status`
+- `GET /api/entity-registry/entities/:id/scaffold-sync-definition`
 
-Use the export route when the source of truth for the draft is already in the
-registry DB. Use the scaffold script when the starting point is YAML on disk.
-
-The status route makes the remaining migration debt explicit:
-
-- which repo definitions still carry `legacy-migration` provenance
-- which authored definitions still contain unverified tables
-- which compatibility layers remain in tree but are no longer runtime authority
+Use the API route when the draft source is already in the registry DB. Use the
+scaffold script when the starting point is YAML on disk.
 
 ## Bootstrap
 

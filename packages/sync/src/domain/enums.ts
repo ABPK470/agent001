@@ -63,7 +63,6 @@ export const isSyncRecipeDiscrepancyKind = (value: unknown): value is SyncRecipe
   && (SYNC_RECIPE_DISCREPANCY_KINDS as readonly string[]).includes(value)
 
 export const PostMetadataActionKind = {
-  ContractDeploy: "contractDeploy",
   DatasetDeploy: "datasetDeploy",
   RulesDeploy: "rulesDeploy",
   PipelineRegister: "pipelineRegister",

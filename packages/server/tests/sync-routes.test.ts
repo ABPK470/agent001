@@ -1,0 +1,170 @@
+import Database from "better-sqlite3"
+import Fastify, { type FastifyInstance } from "fastify"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+
+import type { AgentHost } from "@mia/agent"
+import type { CurrentSession } from "../src/auth/context.js"
+
+let testDb: Database.Database
+let dataDir: string
+let projectRoot: string
+const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
+
+function adminSession(): CurrentSession {
+  return {
+    sid: "sid-admin",
+    displayName: "Admin User",
+    upn: "admin@example.com",
+    isAdmin: true,
+    ip: "127.0.0.1",
+    userAgent: "vitest",
+  }
+}
+
+function createHost(root: string): AgentHost {
+  return {
+    mssql: {
+      databases: new Map(),
+      defaultConnection: { value: "DEV" },
+    },
+    sync: {
+      eventSink: () => {},
+      runSink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null },
+      recipes: { bundle: null, loadedFromPath: null },
+      definitions: { bundle: null, loadedFromPath: null, loadedFromMtimeMs: null, loadedFromSize: null },
+      environments: new Map(),
+      plans: { diskRoot: null, memCache: new Map() },
+      dbProjectRoot: root,
+    },
+  } as unknown as AgentHost
+}
+
+async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { registerSyncRoutes } = await import("../src/api/sync.js")
+  const { seedUser, seedSession } = await import("./_fk-helpers.js")
+
+  _setDb(testDb)
+  _migrate(testDb)
+
+  const host = createHost(projectRoot)
+  const app = Fastify({ logger: false })
+  app.addHook("onRequest", async (req) => {
+    ;(req as unknown as { session: CurrentSession }).session = session
+    seedUser(testDb, session.upn, {
+      displayName: session.displayName,
+      isAdmin: session.isAdmin,
+    })
+    seedSession(testDb, session.sid, session.upn)
+  })
+  registerSyncRoutes(app, projectRoot, host)
+  await app.ready()
+  return { app, host }
+}
+
+beforeEach(() => {
+  dataDir = mkdtempSync(join(tmpdir(), "mia-sync-routes-data-"))
+  projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-routes-root-"))
+  mkdirSync(join(projectRoot, "scripts"), { recursive: true })
+  mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
+  mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
+  mkdirSync(join(projectRoot, "deploy", "mssql"), { recursive: true })
+  writeFileSync(
+    join(projectRoot, "scripts", "compile-sync-definitions.mjs"),
+    readFileSync(join(import.meta.dirname, "../../..", "scripts", "compile-sync-definitions.mjs"), "utf-8"),
+  )
+  writeFileSync(join(projectRoot, "deploy", "mssql", "sync-recipes.json"), JSON.stringify({ version: 1, generatedAt: null, introspectedFrom: null, recipes: {} }, null, 2))
+  writeFileSync(join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"), JSON.stringify({
+    schemaVersion: 1,
+    id: "pipelineActivity",
+    displayName: "Pipeline Activity",
+    description: "Test definition",
+    rootTable: "core.PipelineActivity",
+    idColumn: "pipelineActivityId",
+    labelColumn: null,
+    selfJoinColumn: null,
+    legacy: { pipelineId: null, entrySproc: null },
+    governance: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+    strategy: { strategyId: "mymi-scd2", strategyVersion: "latest" },
+    bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
+    ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: ["test"] },
+    metadata: {
+      tables: [
+        {
+          name: "core.PipelineActivity",
+          scopeColumn: "pipelineActivityId",
+          predicate: "pipelineActivityId = {id}",
+          source: "manual",
+          verified: true,
+          groundedByPipeline: false,
+          enabledByDefault: true,
+          userControllable: false,
+        },
+      ],
+      executionOrder: ["core.PipelineActivity"],
+      reverseOrder: ["core.PipelineActivity"],
+      discrepancies: [],
+    },
+    executionFlow: {
+      steps: [
+        { id: "metadata-sync", phase: "metadata", kind: "metadataSync", title: "Metadata sync", description: "Apply metadata." },
+        { id: "pipeline-register", phase: "post-metadata", kind: "pipelineRegister", title: "Pipeline register", description: "Register pipeline." },
+      ],
+    },
+    provenance: { kind: "manual", sourceArtifact: "test", sourceVersion: "1" },
+  }, null, 2))
+  process.env["MIA_DATA_DIR"] = dataDir
+  testDb = new Database(":memory:")
+  testDb.pragma("journal_mode = WAL")
+  testDb.pragma("foreign_keys = ON")
+})
+
+afterEach(() => {
+  testDb.close()
+  rmSync(dataDir, { recursive: true, force: true })
+  rmSync(projectRoot, { recursive: true, force: true })
+  if (ORIGINAL_DATA_DIR === undefined) delete process.env["MIA_DATA_DIR"]
+  else process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
+})
+
+describe("sync routes", () => {
+  it("publishes authored definitions and exposes them immediately via runtime definitions", async () => {
+    const { app } = await buildApp(adminSession())
+
+    const publish = await app.inject({
+      method: "POST",
+      url: "/api/sync/definitions/publish",
+    })
+
+    expect(publish.statusCode).toBe(200)
+    const publishBody = publish.json() as {
+      definitionCount: number
+      publishedBundlePath: string
+      compatibilityBundlePath: string
+    }
+    expect(publishBody.definitionCount).toBe(1)
+    expect(publishBody.publishedBundlePath).toBe("sync-definitions/published/definitions.bundle.json")
+    expect(publishBody.compatibilityBundlePath).toBe("deploy/mssql/sync-recipes.json")
+
+    const publishedBundle = JSON.parse(readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")) as {
+      definitions: Record<string, { id: string; publishedVersion: string }>
+    }
+    expect(publishedBundle.definitions.pipelineActivity?.id).toBe("pipelineActivity")
+    expect(typeof publishedBundle.definitions.pipelineActivity?.publishedVersion).toBe("string")
+
+    const definitions = await app.inject({
+      method: "GET",
+      url: "/api/sync/definitions",
+    })
+    expect(definitions.statusCode).toBe(200)
+    const body = definitions.json() as Array<{ id: string; publishedVersion: string }>
+    expect(body).toHaveLength(1)
+    expect(body[0]).toMatchObject({ id: "pipelineActivity" })
+    expect(typeof body[0]?.publishedVersion).toBe("string")
+
+    await app.close()
+  })
+})

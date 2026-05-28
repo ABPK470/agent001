@@ -2,12 +2,31 @@
  * Sync transport routes.
  */
 
+import { execFile } from "node:child_process"
+import { readFile } from "node:fs/promises"
+import { resolve } from "node:path"
+import { promisify } from "node:util"
+
 import { type AgentHost } from "@mia/agent"
 import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, loadPublishedSyncRecipeBundle, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
 import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
 import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js"
+
+const execFileAsync = promisify(execFile)
+const PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
+const COMPATIBILITY_BUNDLE_PATH = "deploy/mssql/sync-recipes.json"
+
+interface PublishSyncDefinitionsResponse {
+	publishedAt: string
+	publishedVersion: string
+	definitionCount: number
+	publishedBundlePath: string
+	compatibilityBundlePath: string
+	stdout: string[]
+	stderr: string[]
+}
 
 interface PreviewBody {
 	entityType: EntityType
@@ -32,6 +51,62 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		return getEnvironments(host)
 	})
 	app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
+	app.post("/api/sync/definitions/publish", async (req, reply): Promise<PublishSyncDefinitionsResponse | { error: string; stdout?: string[]; stderr?: string[] }> => {
+		if (!req.session?.isAdmin) {
+			reply.code(403)
+			return { error: "admin only" }
+		}
+
+		const scriptPath = resolve(projectRoot, "scripts", "compile-sync-definitions.mjs")
+		try {
+			const { stdout, stderr } = await execFileAsync(process.execPath, [scriptPath, "--write"], {
+				cwd: projectRoot,
+				maxBuffer: 1024 * 1024,
+			})
+			const rawBundle = await readFile(resolve(projectRoot, PUBLISHED_DEFINITIONS_PATH), "utf-8")
+			const bundle = JSON.parse(rawBundle) as {
+				publishedAt: string
+				publishedVersion: string
+				definitions?: Record<string, unknown>
+			}
+			const definitionCount = Object.keys(bundle.definitions ?? {}).length
+			const stdoutLines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+			const stderrLines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+			db.saveAdminAudit({
+				actor: req.session.upn,
+				action: "sync.definitions.published",
+				detail: JSON.stringify({
+					publishedAt: bundle.publishedAt,
+					publishedVersion: bundle.publishedVersion,
+					definitionCount,
+				}),
+				timestamp: new Date().toISOString(),
+				scope_id: "sync-definitions",
+			})
+			return {
+				publishedAt: bundle.publishedAt,
+				publishedVersion: bundle.publishedVersion,
+				definitionCount,
+				publishedBundlePath: PUBLISHED_DEFINITIONS_PATH,
+				compatibilityBundlePath: COMPATIBILITY_BUNDLE_PATH,
+				stdout: stdoutLines,
+				stderr: stderrLines,
+			}
+		} catch (error) {
+			const stdoutLines = typeof error === "object" && error && "stdout" in error && typeof error.stdout === "string"
+				? error.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+				: []
+			const stderrLines = typeof error === "object" && error && "stderr" in error && typeof error.stderr === "string"
+				? error.stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+				: []
+			reply.code(400)
+			return {
+				error: error instanceof Error ? error.message : String(error),
+				stdout: stdoutLines,
+				stderr: stderrLines,
+			}
+		}
+	})
 	app.get("/api/sync/recipes", async () => loadPublishedSyncRecipeBundle(host, projectRoot))
 	app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>("/api/sync/search", async (req, reply) => {
 		rebuildLiveSyncEnvironments(host)
