@@ -1,7 +1,7 @@
 /**
- * Entity document tab — operator-friendly copy/download surface for the
- * registry document in either YAML or JSON. The authoring tab covers
- * repo-definition draft export.
+ * Registry document tab — operator-friendly copy/download surface for the
+ * saved entity-registry record in either YAML or JSON. The authoring tab
+ * only previews a separate sync-definition export and does not persist it.
  */
 
 import { Copy, Download } from "lucide-react"
@@ -54,7 +54,7 @@ export function EntityYaml({ yaml, def, entityId }: EntityYamlProps): JSX.Elemen
           ))}
         </div>
         <span className="text-text-muted">
-          Registry document for <span className="font-mono text-text">{entityId}</span>
+          Saved registry record for <span className="font-mono text-text">{entityId}</span>
         </span>
         <button
           type="button"
@@ -74,8 +74,8 @@ export function EntityYaml({ yaml, def, entityId }: EntityYamlProps): JSX.Elemen
       </div>
       <div className="rounded-lg border border-border-subtle bg-panel px-3 py-2 text-[11px] leading-6 text-text-muted">
         {format === "yaml"
-          ? "YAML is the human-friendly registry document shape."
-          : "JSON is the exact structured entity payload, suitable for copy/paste, export, or bulk re-import."}
+          ? "This is the saved entity-registry document in YAML form. Importing YAML/JSON like this creates or updates the registry record stored by the server."
+          : "This is the same saved registry record in JSON form. It is not the sync-definition export used by the Sync JSON tab."}
       </div>
       <pre className="flex-1 overflow-auto rounded-lg border border-border-subtle bg-panel p-3 font-mono text-[11px] leading-relaxed text-text">{content || "…"}</pre>
     </div>

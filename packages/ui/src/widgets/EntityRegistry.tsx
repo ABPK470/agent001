@@ -4,8 +4,8 @@
  *   ┌────────────────────────────────────────────────────────────────┐
  *   │ Toolbar: refresh · count · [admin: import · new]               │
  *   ├──────────────┬─────────────────────────────────────────────────┤
- *   │ Entity list  │ Tabs: Overview / Tables / History / YAML /      │
- *   │              │       Authoring                                 │
+ *   │ Entity list  │ Tabs: Overview / Tables / History / Registry    │
+ *   │              │       Doc / Sync JSON Preview                   │
  *   │ (panel)      │ [admin: edit · retire on header row]            │
  *   │              │                                                  │
  *   └──────────────┴─────────────────────────────────────────────────┘
@@ -17,15 +17,17 @@
  */
 
 import {
-    AlertTriangle,
-    CheckCircle2,
-    FilePlus2,
-    Loader2,
-    Pencil,
-    RefreshCcw,
-    Trash2,
-    Upload,
-    X,
+  AlertTriangle,
+  Archive,
+  CheckCircle2,
+  FilePlus2,
+  Loader2,
+  Package2,
+  Pencil,
+  RefreshCcw,
+  Trash2,
+  Upload,
+  X,
 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -33,9 +35,9 @@ import { api } from "../api"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type {
-    EntityRegistryDefinition,
-    EntityRegistryHistoryEntry,
-    EntityRegistrySyncDefinitionStatusResponse,
+  EntityRegistryDefinition,
+  EntityRegistryHistoryEntry,
+  EntityRegistrySyncDefinitionStatusResponse,
 } from "../types"
 import { EntityAuthoring } from "./entity-registry/EntityAuthoring"
 import { EntityEditModal } from "./entity-registry/EntityEditModal"
@@ -134,10 +136,7 @@ export function EntityRegistry(): JSX.Element {
       <Toolbar
         busy={busy}
         count={items.length}
-        isAdmin={isAdmin}
         onRefresh={() => void refreshList({ keepSelection: true })}
-        onImport={() => setModal({ kind: "import" })}
-        onNew={() => setModal({ kind: "new" })}
       />
 
       {banner && (
@@ -160,8 +159,33 @@ export function EntityRegistry(): JSX.Element {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-panel">
-          <EntityList items={items} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setTab("overview") }} />
+        <aside className="flex w-80 shrink-0 flex-col border-r border-border-subtle bg-panel">
+          <div className="border-b border-border-subtle px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              {/* <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Entities</div>
+                <div className="mt-1 text-sm text-text">{items.length} entit{items.length === 1 ? "y" : "ies"}</div>
+              </div> */}
+              {isAdmin && (
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <button type="button" onClick={() => setModal({ kind: "import" })} disabled={busy} className="flex items-center gap-1.5 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50">
+                    <Upload className="h-3 w-3" /> Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModal({ kind: "new" })}
+                    disabled={busy}
+                    className="flex items-center gap-1.5 rounded bg-accent px-2.5 py-1 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:opacity-50"
+                  >
+                    <FilePlus2 className="h-3 w-3" /> New
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <EntityList items={items} selectedId={selectedId} onSelect={(id) => { setSelectedId(id) }} />
+          </div>
         </aside>
 
         <main className="flex flex-1 flex-col overflow-hidden">
@@ -172,49 +196,66 @@ export function EntityRegistry(): JSX.Element {
           )}
           {selected && (
             <>
-              <div className="flex items-center border-b border-border-subtle bg-panel">
-                <nav className="flex items-center gap-0.5 px-4">
-                  {TABS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTab(t)}
-                      className={[
-                        "border-b-2 px-3 py-2.5 text-xs font-medium transition-colors",
-                        tab === t
-                          ? "border-accent text-text"
-                          : "border-transparent text-text-muted hover:text-text",
-                      ].join(" ")}
-                    >
-                      {t === "tables" ? `Tables (${(selected.tables ?? []).length})` : t === "document" ? "Document" : t[0]!.toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </nav>
-                <div className="ml-auto flex items-center gap-1.5 pr-4">
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setModal({ kind: "edit", def: selected })}
-                      disabled={busy}
-                      className="flex items-center gap-1 rounded border border-border-subtle px-2 py-1 text-xs text-text-muted hover:bg-overlay-2 hover:text-text"
-                    >
-                      <Pencil className="h-3 w-3" /> Edit
-                    </button>
-                  )}
-                  {isAdmin && !selected.retiredAt && (
-                    <button
-                      type="button"
-                      onClick={() => void doRetire()}
-                      disabled={busy}
-                      className="flex items-center gap-1 rounded border border-rose-500/40 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10"
-                    >
-                      <Trash2 className="h-3 w-3" /> Retire
-                    </button>
-                  )}
+              <div className="border-b border-border-subtle bg-panel px-4 py-3">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <nav className="flex flex-wrap items-center gap-2">
+                    {TABS.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTab(t)}
+                        className={[
+                          "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                          tab === t
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
+                        ].join(" ")}
+                      >
+                        {t === "tables"
+                          ? `Tables (${(selected.tables ?? []).length})`
+                          : t === "document"
+                            ? "Registry Doc"
+                            : t === "authoring"
+                              ? "Sync JSON"
+                              : t[0]!.toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </nav>
+
+                  <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
+                    {isAdmin && !selected.retiredAt && (
+                      <button
+                        type="button"
+                        onClick={() => setModal({ kind: "edit", def: selected })}
+                        disabled={busy}
+                        className="flex items-center gap-1.5 rounded border border-border-subtle px-3 py-2 text-xs text-text-muted hover:bg-overlay-2 hover:text-text"
+                      >
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
+                    )}
+                    {isAdmin && !selected.retiredAt && (
+                      <button
+                        type="button"
+                        onClick={() => void doRetire()}
+                        disabled={busy}
+                        className="flex items-center gap-1.5 rounded border border-rose-500/40 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10"
+                      >
+                        <Trash2 className="h-3 w-3" /> Retire
+                      </button>
+                    )}
+                    {selected.retiredAt && (
+                      <div className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-overlay-2 px-2.5 py-1 text-[11px] text-text-muted">
+                        <span className="inline-flex items-center gap-1">
+                          <Archive className="h-3 w-3" /> retired
+                        </span>
+                        <span className="hidden sm:inline">read-only: kept for history and reference</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto p-4">
+              <div className="flex-1 overflow-auto bg-canvas p-4">
                 {tab === "overview" && <EntityOverview def={selected} />}
                 {tab === "tables"   && <EntityTables  def={selected} />}
                 {tab === "history"  && <EntityHistory entries={history} />}
@@ -223,7 +264,9 @@ export function EntityRegistry(): JSX.Element {
                   <EntityAuthoring
                     def={selected}
                     status={authoringStatus}
+                    readOnly={Boolean(selected.retiredAt)}
                     onMessage={setBanner}
+                    onEdit={() => setModal({ kind: "edit", def: selected })}
                   />
                 )}
               </div>
@@ -263,40 +306,25 @@ export function EntityRegistry(): JSX.Element {
 interface ToolbarProps {
   busy: boolean
   count: number
-  isAdmin: boolean
   onRefresh: () => void
-  onImport: () => void
-  onNew: () => void
 }
 
-function Toolbar({ busy, count, isAdmin, onRefresh, onImport, onNew }: ToolbarProps): JSX.Element {
+function Toolbar({ busy, count, onRefresh }: ToolbarProps): JSX.Element {
   const baseBtn = "flex items-center gap-1.5 rounded border border-border-subtle px-2.5 py-1 text-xs text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50"
   return (
-    <div className="flex items-center gap-2 border-b border-border-subtle bg-panel px-4 py-2">
-      <h1 className="text-sm font-semibold text-text">Entity Registry</h1>
-      <span className="text-xs text-text-muted">
-        {count} entit{count === 1 ? "y" : "ies"}
-      </span>
+    <div className="flex items-center gap-3 border-b border-border-subtle bg-panel px-4 py-3">
+      <div>
+        <h1 className="text-sm font-semibold text-text">Entity Registry</h1>
+        <p className="text-xs text-text-muted">Saved registry records, version history, and preview-only sync JSON export.</p>
+      </div>
       <div className="ml-auto flex items-center gap-1.5">
         <button type="button" onClick={onRefresh} disabled={busy} className={baseBtn}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
           Refresh
         </button>
-        {isAdmin && (
-          <>
-            <button type="button" onClick={onImport} disabled={busy} className={baseBtn}>
-              <Upload className="h-3 w-3" /> Import YAML / JSON
-            </button>
-            <button
-              type="button"
-              onClick={onNew}
-              disabled={busy}
-              className="flex items-center gap-1.5 rounded bg-accent px-2.5 py-1 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:opacity-50"
-            >
-              <FilePlus2 className="h-3 w-3" /> New entity
-            </button>
-          </>
-        )}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-canvas px-2.5 py-1 text-xs text-text-muted">
+          <Package2 className="h-3 w-3" /> {count} entit{count === 1 ? "y" : "ies"}
+        </span>
       </div>
     </div>
   )
