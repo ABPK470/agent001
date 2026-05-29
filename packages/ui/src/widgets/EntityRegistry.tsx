@@ -37,10 +37,10 @@ import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistory } from "./entity-registry/EntityHistory"
 import { EntityImportModal } from "./entity-registry/EntityImportModal"
 import { EntityList } from "./entity-registry/EntityList"
-import { ModalShell } from "./entity-registry/ModalShell"
 import { EntityOverview } from "./entity-registry/EntityOverview"
 import { EntityTables } from "./entity-registry/EntityTables"
 import { EntityYaml } from "./entity-registry/EntityYaml"
+import { ModalShell } from "./entity-registry/ModalShell"
 
 const TABS = ["overview", "tables", "history", "document"] as const
 type Tab = typeof TABS[number]

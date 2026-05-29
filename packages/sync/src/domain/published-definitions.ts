@@ -8,7 +8,6 @@ import { deriveArchiveTable, type SyncRecipe, type SyncRecipeDiscrepancy, type S
 const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
 export interface PublishedSyncDefinitionGovernance {
-  approvalPolicyId: string | null
   freezeWindowIds: string[]
   riskMultiplier: number
 }
@@ -31,8 +30,6 @@ export interface PublishedSyncDefinitionStep {
   kind: string
   title: string
   description: string
-  bindingRef?: string | null
-  policyRef?: string | null
   subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
   objectName?: string | null
   auditObjectType?: string | null

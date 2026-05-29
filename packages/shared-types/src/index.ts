@@ -637,7 +637,6 @@ export type AuthoredSyncFlowKind =
   | "deployDate"
 
 export interface AuthoredSyncDefinitionGovernance {
-  approvalPolicyId: string | null
   freezeWindowIds: string[]
   riskMultiplier: number
 }
@@ -665,8 +664,6 @@ export interface AuthoredSyncFlowStep {
   kind: AuthoredSyncFlowKind
   title: string
   description: string
-  bindingRef?: string | null
-  policyRef?: string | null
   subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
   objectName?: string | null
   auditObjectType?: string | null
@@ -765,8 +762,6 @@ export interface CompiledSyncPlanStep {
   kind: AuthoredSyncFlowKind
   title: string
   description: string
-  bindingRef?: string | null
-  policyRef?: string | null
   subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
   objectName?: string | null
   auditObjectType?: string | null
@@ -861,7 +856,6 @@ export interface EntityRegistryTable {
 }
 
 export interface EntityRegistryPolicies {
-  approvalPolicyId: string | null
   freezeWindowIds: string[]
   riskMultiplier: number
 }
@@ -1042,6 +1036,7 @@ export interface SyncDefinitionRuntimeOption<T extends string = string> {
 
 export interface SyncDefinitionRuntimeOptions {
   flowPresets: SyncDefinitionRuntimeOption<EntityRegistrySyncFlowPreset>[]
+  flowPresetTemplates: Record<EntityRegistrySyncFlowPreset, AuthoredSyncFlowStep[]>
   serviceProfiles: SyncDefinitionRuntimeOption[]
   environmentPolicies: SyncDefinitionRuntimeOption[]
 }
@@ -1200,6 +1195,7 @@ export interface SyncDefinitionAdminItem {
   entityVersion: number
   tableCount: number
   flowPreset: EntityRegistrySyncFlowPreset
+  executionSteps: AuthoredSyncFlowStep[]
   serviceProfileRef: string
   environmentPolicyRef: string
   ownershipTeam: string

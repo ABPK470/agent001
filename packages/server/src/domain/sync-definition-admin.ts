@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { resolve } from "node:path"
 
 import type {
-    AuthoredSyncDefinition,
-    EntityRegistrySyncFlowPreset,
-    PublishedSyncDefinition,
+  AuthoredSyncDefinition,
+  AuthoredSyncFlowStep,
+  EntityRegistrySyncFlowPreset,
+  PublishedSyncDefinition,
   SyncDefinitionRuntimeOptions,
 } from "@mia/shared-types"
 import type { EntityDefinition } from "@mia/sync"
@@ -123,6 +124,7 @@ export interface SyncDefinitionAdminItem {
   entityVersion: number
   tableCount: number
   flowPreset: EntityRegistrySyncFlowPreset
+  executionSteps: AuthoredSyncFlowStep[]
   serviceProfileRef: string
   environmentPolicyRef: string
   ownershipTeam: string
@@ -142,6 +144,9 @@ export function listSyncDefinitionRuntimeOptions(): SyncDefinitionRuntimeOptions
       label: FLOW_PRESET_DETAILS[id].label,
       description: FLOW_PRESET_DETAILS[id].description,
     })),
+    flowPresetTemplates: Object.fromEntries(
+      (Object.keys(FLOW_PRESETS) as EntityRegistrySyncFlowPreset[]).map((id) => [id, FLOW_PRESETS[id]]),
+    ) as SyncDefinitionRuntimeOptions["flowPresetTemplates"],
     serviceProfiles: SERVICE_PROFILE_OPTIONS,
     environmentPolicies: ENVIRONMENT_POLICY_OPTIONS,
   }
@@ -171,10 +176,12 @@ function defaultFlowPreset(entityId: string): EntityRegistrySyncFlowPreset {
 
 function defaultConfigForEntity(entity: EntityDefinition): db.DbSyncDefinitionConfig {
   const now = new Date().toISOString()
+  const flowPreset = defaultFlowPreset(entity.id)
   return {
     tenant_id: entity.tenantId,
     entity_id: entity.id,
-    flow_preset: defaultFlowPreset(entity.id),
+    flow_preset: flowPreset,
+    execution_steps_json: JSON.stringify(FLOW_PRESETS[flowPreset]),
     service_profile_ref: "default",
     environment_policy_ref: "default",
     ownership_team: "sync-platform",
@@ -197,6 +204,17 @@ function inferFlowPreset(entityId: string, definition: Partial<AuthoredSyncDefin
   return defaultFlowPreset(entityId)
 }
 
+function resolveExecutionSteps(config: Pick<db.DbSyncDefinitionConfig, "execution_steps_json" | "flow_preset">, entityId: string): AuthoredSyncFlowStep[] {
+  try {
+    const parsed = JSON.parse(config.execution_steps_json) as unknown
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as AuthoredSyncFlowStep[]
+  } catch {
+    // fall through to preset-derived default
+  }
+  const preset = (config.flow_preset in FLOW_PRESETS ? config.flow_preset : defaultFlowPreset(entityId)) as EntityRegistrySyncFlowPreset
+  return FLOW_PRESETS[preset]
+}
+
 function seedFromRepoDefinition(projectRoot: string, entity: EntityDefinition): db.DbSyncDefinitionConfig | null {
   const path = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR, `${entity.id}.json`)
   if (!existsSync(path)) return null
@@ -206,6 +224,7 @@ function seedFromRepoDefinition(projectRoot: string, entity: EntityDefinition): 
     return {
       ...base,
       flow_preset: inferFlowPreset(entity.id, parsed),
+      execution_steps_json: JSON.stringify(parsed.executionFlow?.steps ?? resolveExecutionSteps(base, entity.id)),
       service_profile_ref: parsed.bindings?.serviceProfileRef ?? base.service_profile_ref,
       environment_policy_ref: parsed.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
       ownership_team: parsed.ownership?.team ?? base.ownership_team,
@@ -232,7 +251,7 @@ function composeDefinition(
   publishedAt: string,
   publishedVersion: string,
 ): PublishedSyncDefinition {
-  const flowPreset = (config.flow_preset in FLOW_PRESETS ? config.flow_preset : defaultFlowPreset(entity.id)) as EntityRegistrySyncFlowPreset
+  const executionSteps = resolveExecutionSteps(config, entity.id)
   const executionOrder = entity.tables
     .slice()
     .sort((left, right) => Number(left.executionOrder ?? 0) - Number(right.executionOrder ?? 0))
@@ -253,7 +272,6 @@ function composeDefinition(
       entrySproc: entity.legacyEntrySproc ?? null,
     },
     governance: {
-      approvalPolicyId: entity.policies.approvalPolicyId,
       freezeWindowIds: entity.policies.freezeWindowIds,
       riskMultiplier: entity.policies.riskMultiplier,
     },
@@ -288,7 +306,7 @@ function composeDefinition(
       discrepancies: entity.discrepancies.map((note) => ({ table: entity.rootTable, kind: "drift", note })),
     },
     executionFlow: {
-      steps: FLOW_PRESETS[flowPreset],
+      steps: executionSteps,
     },
     provenance: {
 	      kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
@@ -334,6 +352,7 @@ export function listSyncDefinitionAdminItems(projectRoot: string, tenantId = DEF
       entityVersion: entity.version,
       tableCount: entity.tables.length,
       flowPreset: (config.flow_preset in FLOW_PRESETS ? config.flow_preset : defaultFlowPreset(entity.id)) as EntityRegistrySyncFlowPreset,
+      executionSteps: resolveExecutionSteps(config, entity.id),
       serviceProfileRef: config.service_profile_ref,
       environmentPolicyRef: config.environment_policy_ref,
       ownershipTeam: config.ownership_team,

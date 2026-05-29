@@ -16,9 +16,59 @@ import { ChevronDown, FileCode2, Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { useState } from "react"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import type { EntityRegistrySyncFlowPreset } from "../../types"
+import type { AuthoredSyncFlowStep, EntityRegistrySyncFlowPreset } from "../../types"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
 import { StrategySelect } from "./StrategySelect"
+
+const FLOW_PHASE_OPTIONS: ListboxOption<AuthoredSyncFlowStep["phase"]>[] = [
+  { value: "pre-transaction", label: "Pre-transaction" },
+  { value: "metadata", label: "Metadata" },
+  { value: "post-metadata", label: "Post-metadata" },
+  { value: "post-commit", label: "Post-commit" },
+]
+
+const FLOW_KIND_OPTIONS: ListboxOption<AuthoredSyncFlowStep["kind"]>[] = [
+  "metadataSync",
+  "auditCheck",
+  "targetLock",
+  "targetUnlock",
+  "contractUndeploy",
+  "contractPreScript",
+  "contractCreateStageDataset",
+  "contractCreateArchiveDataset",
+  "contractCreateListDataset",
+  "contractCreateDimDataset",
+  "contractCreateFactDataset",
+  "contractCreateDatasetFks",
+  "contractDeployEtl",
+  "contractDeployRoutine",
+  "contractPostScript",
+  "datasetDeploy",
+  "rulesDeploy",
+  "pipelineRegister",
+  "metaRefresh",
+  "pipelineStart",
+  "handleDependencies",
+  "syncDate",
+  "deployDate",
+].map((value) => ({ value, label: value }))
+
+const SUBJECT_REF_OPTIONS: ListboxOption<NonNullable<AuthoredSyncFlowStep["subjectRef"]>>[] = [
+  { value: "entityId", label: "Entity id" },
+  { value: "ruleInputDatasetId", label: "Rule input dataset id" },
+  { value: "contractPipelineId", label: "Contract pipeline id" },
+]
+
+const AUDIT_OBJECT_TYPE_OPTIONS: ListboxOption<string>[] = [
+  { value: "Contract", label: "Contract" },
+  { value: "Dataset", label: "Dataset" },
+  { value: "Rule", label: "Rule" },
+]
+
+const OBJECT_NAME_OPTIONS: ListboxOption<string>[] = [
+  { value: "content", label: "content" },
+  { value: "rule", label: "rule" },
+]
 
 // ── Form ──────────────────────────────────────────────────────────
 
@@ -33,12 +83,13 @@ export interface FormSurfaceProps {
   selfJoinColumn: string;  onSelfJoinColumn: (v: string) => void
   strategyId: string;      onStrategyId: (v: string) => void
   strategyVersion: number | "latest"; onStrategyVersion: (v: number | "latest") => void
-  approvalPolicyId: string | null;    onApprovalPolicyId: (v: string | null) => void
   freezeWindowIds: readonly string[]; onFreezeWindowIds: (v: string[]) => void
   riskMultiplier: string;  onRiskMultiplier: (v: string) => void
   tablesJson: string;      onTablesJson: (v: string) => void
   flowPreset: EntityRegistrySyncFlowPreset; onFlowPreset: (v: EntityRegistrySyncFlowPreset) => void
   flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  executionSteps: AuthoredSyncFlowStep[]; onExecutionSteps: (v: AuthoredSyncFlowStep[]) => void
+  rootTable: string
   serviceProfileRef: string; onServiceProfileRef: (v: string) => void
   serviceProfileOptions: ListboxOption<string>[]
   environmentPolicyRef: string; onEnvironmentPolicyRef: (v: string) => void
@@ -130,6 +181,7 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
         title="Sync behavior"
         summary={summary([
           ["mode", p.flowPreset],
+          ["steps", `${p.executionSteps.length}`],
           ["service", p.serviceProfileRef || "default"],
           ["env", p.environmentPolicyRef || "default"],
         ])}
@@ -140,17 +192,23 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
             <Loader2 className="h-3 w-3 animate-spin" /> loading current runtime config…
           </div>
         ) : (
-          <Grid2>
-            <Field label="Sync behavior">
-              <Listbox value={p.flowPreset} options={p.flowPresetOptions} onChange={p.onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
-            </Field>
-            <Field label="Service profile">
-              <Listbox value={p.serviceProfileRef} options={p.serviceProfileOptions} onChange={p.onServiceProfileRef} className="w-full" ariaLabel="Service profile" />
-            </Field>
-            <Field label="Environment rules">
-              <Listbox value={p.environmentPolicyRef} options={p.environmentPolicyOptions} onChange={p.onEnvironmentPolicyRef} className="w-full" ariaLabel="Environment rules" />
-            </Field>
-          </Grid2>
+          <>
+            <Grid2>
+              <Field label="Sync behavior">
+                <Listbox value={p.flowPreset} options={p.flowPresetOptions} onChange={p.onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
+              </Field>
+              <Field label="Service profile">
+                <Listbox value={p.serviceProfileRef} options={p.serviceProfileOptions} onChange={p.onServiceProfileRef} className="w-full" ariaLabel="Service profile" />
+              </Field>
+              <Field label="Environment rules">
+                <Listbox value={p.environmentPolicyRef} options={p.environmentPolicyOptions} onChange={p.onEnvironmentPolicyRef} className="w-full" ariaLabel="Environment rules" />
+              </Field>
+            </Grid2>
+            <div className="mt-3 rounded-lg border border-border-subtle bg-panel/40 p-3">
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-text-muted">Execution steps</div>
+              <FormSurfaceExecutionSteps executionSteps={p.executionSteps} onExecutionSteps={p.onExecutionSteps} rootTable={p.rootTable} />
+            </div>
+          </>
         )}
       </Disclosure>
 
@@ -158,21 +216,12 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
         title="Sync policies"
         summary={summary([
           ["risk×",         p.riskMultiplier],
-          p.approvalPolicyId ? ["approval", p.approvalPolicyId] : null,
           p.freezeWindowIds.length ? ["freezes", `${p.freezeWindowIds.length}`] : null,
         ])}
       >
         <Grid2>
           <Field label="Risk multiplier">
             <input value={p.riskMultiplier} onChange={(e) => p.onRiskMultiplier(e.target.value)} className="input" />
-          </Field>
-          <Field label="Approval policy id">
-            <input
-              value={p.approvalPolicyId ?? ""}
-              onChange={(e) => p.onApprovalPolicyId(e.target.value.trim() === "" ? null : e.target.value)}
-              placeholder="(leave blank)"
-              className="input font-mono"
-            />
           </Field>
         </Grid2>
         <div className="mt-3">
@@ -306,6 +355,159 @@ function Field({ label, children, mono }: {
       {children}
     </label>
   )
+}
+
+export function FormSurfaceExecutionSteps({
+  executionSteps,
+  onExecutionSteps,
+  rootTable,
+}: {
+  executionSteps: AuthoredSyncFlowStep[]
+  onExecutionSteps: (value: AuthoredSyncFlowStep[]) => void
+  rootTable: string
+}): JSX.Element {
+  function patchStep(index: number, patch: Partial<AuthoredSyncFlowStep>): void {
+    onExecutionSteps(executionSteps.map((step, current) => current === index ? normalizeStep({ ...step, ...patch }, rootTable) : step))
+  }
+
+  function removeStep(index: number): void {
+    onExecutionSteps(executionSteps.filter((_, current) => current !== index))
+  }
+
+  function addStep(): void {
+    const next = executionSteps.length + 1
+    onExecutionSteps([
+      ...executionSteps,
+      normalizeStep({
+        id: `step-${next}`,
+        phase: "metadata",
+        kind: "metadataSync",
+        title: `Step ${next}`,
+        description: "",
+      }, rootTable),
+    ])
+  }
+
+  return (
+    <div className="space-y-3">
+      {executionSteps.length === 0 && (
+        <div className="text-[11px] text-text-muted">No execution steps defined yet.</div>
+      )}
+      {executionSteps.map((step, index) => (
+        <div key={`${step.id}-${index}`} className="rounded-lg border border-border-subtle bg-panel p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[11px] font-medium text-text">Step {index + 1}</div>
+            <button type="button" onClick={() => removeStep(index)} className="rounded border border-border-subtle px-2 py-1 text-[10px] text-text-muted hover:bg-overlay-2 hover:text-text">Remove</button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="id" mono>
+              <input value={step.id} onChange={(e) => patchStep(index, { id: e.target.value })} className="input" />
+            </Field>
+            <Field label="phase">
+              <Listbox value={step.phase} options={FLOW_PHASE_OPTIONS} onChange={(phase) => patchStep(index, { phase })} className="w-full" ariaLabel={`Execution step ${index + 1} phase`} />
+            </Field>
+            <Field label="kind">
+              <Listbox value={step.kind} options={FLOW_KIND_OPTIONS} onChange={(kind) => patchStep(index, { kind })} className="w-full" ariaLabel={`Execution step ${index + 1} kind`} />
+            </Field>
+            {usesSubjectRef(step.kind) && (
+              <Field label="subject ref">
+                <Listbox
+                  value={(step.subjectRef ?? defaultSubjectRef(step.kind)) as NonNullable<AuthoredSyncFlowStep["subjectRef"]>}
+                  options={SUBJECT_REF_OPTIONS}
+                  onChange={(subjectRef) => patchStep(index, { subjectRef })}
+                  className="w-full"
+                  ariaLabel={`Execution step ${index + 1} subject ref`}
+                />
+              </Field>
+            )}
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="title">
+              <input value={step.title} onChange={(e) => patchStep(index, { title: e.target.value })} className="input" />
+            </Field>
+            {usesAuditObjectType(step.kind) && (
+              <Field label="Audit object type">
+                <Listbox
+                  value={step.auditObjectType ?? defaultAuditObjectType(step.kind)}
+                  options={AUDIT_OBJECT_TYPE_OPTIONS}
+                  onChange={(auditObjectType) => patchStep(index, { auditObjectType })}
+                  className="w-full"
+                  ariaLabel={`Execution step ${index + 1} audit object type`}
+                />
+              </Field>
+            )}
+            {usesObjectName(step.kind) && (
+              <Field label="Object name">
+                <Listbox
+                  value={step.objectName ?? defaultObjectName(step.kind)}
+                  options={OBJECT_NAME_OPTIONS}
+                  onChange={(objectName) => patchStep(index, { objectName })}
+                  className="w-full"
+                  ariaLabel={`Execution step ${index + 1} object name`}
+                />
+              </Field>
+            )}
+            {usesPipelineName(step.kind) && (
+              <Field label="Pipeline name">
+                <input value={step.pipelineName ?? derivePipelineName(rootTable)} readOnly className="input bg-panel/50 text-text-muted" />
+              </Field>
+            )}
+          </div>
+          <div className="mt-3">
+            <Field label="description">
+              <textarea value={step.description} onChange={(e) => patchStep(index, { description: e.target.value })} rows={3} className="input" />
+            </Field>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={addStep} className="rounded border border-border-subtle px-2 py-1 text-[11px] text-text-muted hover:bg-overlay-2 hover:text-text">Add step</button>
+    </div>
+  )
+}
+
+function usesSubjectRef(kind: AuthoredSyncFlowStep["kind"]): boolean {
+  return kind === "datasetDeploy" || kind === "pipelineRegister"
+}
+
+function defaultSubjectRef(kind: AuthoredSyncFlowStep["kind"]): NonNullable<AuthoredSyncFlowStep["subjectRef"]> {
+  if (kind === "pipelineRegister") return "contractPipelineId"
+  return "entityId"
+}
+
+function usesAuditObjectType(kind: AuthoredSyncFlowStep["kind"]): boolean {
+  return kind === "auditCheck" || kind === "syncDate" || kind === "deployDate"
+}
+
+function defaultAuditObjectType(kind: AuthoredSyncFlowStep["kind"]): string {
+  if (kind === "auditCheck") return "Contract"
+  return "Dataset"
+}
+
+function usesObjectName(kind: AuthoredSyncFlowStep["kind"]): boolean {
+  return kind === "handleDependencies"
+}
+
+function defaultObjectName(kind: AuthoredSyncFlowStep["kind"]): string {
+  return kind === "handleDependencies" ? "content" : ""
+}
+
+function usesPipelineName(kind: AuthoredSyncFlowStep["kind"]): boolean {
+  return kind === "pipelineStart"
+}
+
+function derivePipelineName(rootTable: string): string {
+  const tableName = rootTable.trim().split(".").filter(Boolean).at(-1) ?? "Entity"
+  return `Synchronize ${tableName}`
+}
+
+function normalizeStep(step: AuthoredSyncFlowStep, rootTable: string): AuthoredSyncFlowStep {
+  return {
+    ...step,
+    ...(usesSubjectRef(step.kind) ? { subjectRef: step.subjectRef ?? defaultSubjectRef(step.kind) } : { subjectRef: undefined }),
+    ...(usesObjectName(step.kind) ? { objectName: step.objectName ?? defaultObjectName(step.kind) } : { objectName: undefined }),
+    ...(usesAuditObjectType(step.kind) ? { auditObjectType: step.auditObjectType ?? defaultAuditObjectType(step.kind) } : { auditObjectType: undefined }),
+    ...(usesPipelineName(step.kind) ? { pipelineName: step.pipelineName ?? derivePipelineName(rootTable) } : { pipelineName: undefined }),
+  }
 }
 
 // ── Summary helpers ───────────────────────────────────────────────

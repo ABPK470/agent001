@@ -21,9 +21,9 @@ import type { JSX } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import type { EntityRegistryDefinition, EntityRegistrySyncFlowPreset, SyncDefinitionAdminItem, SyncDefinitionRuntimeOptions } from "../../types"
+import type { AuthoredSyncFlowStep, EntityRegistryDefinition, EntityRegistrySyncFlowPreset, SyncDefinitionAdminItem, SyncDefinitionRuntimeOptions } from "../../types"
 import { deriveDisplayName, deriveEntityId, deriveIdColumn } from "./derive"
-import { FormSurface, YamlSurface } from "./EntityEditSurfaces"
+import { FormSurface, FormSurfaceExecutionSteps, YamlSurface } from "./EntityEditSurfaces"
 import { ModalShell } from "./ModalShell"
 
 export interface EntityEditModalProps {
@@ -48,6 +48,7 @@ const FLOW_PRESET_LABELS: Record<EntityRegistrySyncFlowPreset, string> = {
 }
 const DEFAULT_RUNTIME_OPTIONS: SyncDefinitionRuntimeOptions = {
   flowPresets: FLOW_PRESETS.map((preset) => ({ id: preset, label: FLOW_PRESET_LABELS[preset], description: null })),
+  flowPresetTemplates: Object.fromEntries(FLOW_PRESETS.map((preset) => [preset, []])) as SyncDefinitionRuntimeOptions["flowPresetTemplates"],
   serviceProfiles: [{ id: "default", label: "Default service routing", description: "Use the standard environment-resolved service endpoints." }],
   environmentPolicies: [{ id: "default", label: "Default environment rules", description: "Apply the standard environment access and allowlist checks." }],
 }
@@ -64,7 +65,6 @@ scd2:
   strategyVersion: latest
 tables: []
 policies:
-  approvalPolicyId: null
   freezeWindowIds: []
   riskMultiplier: 1
 provenance:
@@ -82,7 +82,7 @@ function emptyDef(): EntityRegistryDefinition {
     labelColumn:      null,
     selfJoinColumn:   null,
     tables:           [],
-    policies:         { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1.0 },
+    policies:         { freezeWindowIds: [], riskMultiplier: 1.0 },
     scd2:             { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
     lineageRefs:      [],
     provenance:       { kind: "manual" },
@@ -117,7 +117,6 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   const [selfJoinColumn, setSelfJoinColumn] = useState(seed.selfJoinColumn ?? "")
   const [strategyId,     setStrategyId]     = useState(seed.scd2.strategyId)
   const [strategyVersion, setStrategyVersion] = useState<number | "latest">(seed.scd2.strategyVersion ?? "latest")
-  const [approvalPolicyId, setApprovalPolicyId] = useState<string | null>(seed.policies.approvalPolicyId ?? null)
   const [freezeWindowIds, setFreezeWindowIds]   = useState<readonly string[]>(seed.policies.freezeWindowIds ?? [])
   const [riskMultiplier, setRiskMultiplier] = useState(String(seed.policies.riskMultiplier))
   const [tablesJson,     setTablesJson]     = useState(JSON.stringify(seed.tables, null, 2))
@@ -128,6 +127,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   const [runtimeLoading, setRuntimeLoading] = useState(true)
   const [runtimeOptions, setRuntimeOptions] = useState<SyncDefinitionRuntimeOptions>(DEFAULT_RUNTIME_OPTIONS)
   const [flowPreset, setFlowPreset] = useState<EntityRegistrySyncFlowPreset>(defaultRuntimeFlowPreset(seed.id))
+  const [executionSteps, setExecutionSteps] = useState<AuthoredSyncFlowStep[]>([])
   const [serviceProfileRef, setServiceProfileRef] = useState("default")
   const [environmentPolicyRef, setEnvironmentPolicyRef] = useState("default")
 
@@ -171,7 +171,9 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
         const config = rows.find((row) => row.id === seed.id)
         if (config) hydrateRuntimeConfig(config, options)
         else {
-          setFlowPreset(pickRuntimeValue(options.flowPresets, defaultRuntimeFlowPreset(seed.id), "metadata-only"))
+          const selectedPreset = pickRuntimeValue(options.flowPresets, defaultRuntimeFlowPreset(seed.id), "metadata-only")
+          setFlowPreset(selectedPreset)
+          setExecutionSteps(cloneSteps(options.flowPresetTemplates[selectedPreset] ?? []))
           setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, "default"))
           setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, "default"))
         }
@@ -241,7 +243,6 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
       tables,
       policies: {
         ...seed.policies,
-        approvalPolicyId,
         freezeWindowIds: [...freezeWindowIds],
         riskMultiplier:  riskNum,
       },
@@ -250,6 +251,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     const r = await api.saveEntityRegistry(def, reason, versionLabel.trim() ? { versionLabel } : undefined)
     await api.updateSyncDefinitionConfig(r.id, {
       flowPreset,
+      executionSteps,
       serviceProfileRef,
       environmentPolicyRef,
     })
@@ -272,6 +274,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     if (!saved) throw new Error("import returned no saved entity")
     await api.updateSyncDefinitionConfig(saved.id, {
       flowPreset,
+      executionSteps,
       serviceProfileRef,
       environmentPolicyRef,
     })
@@ -346,12 +349,12 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
           selfJoinColumn={selfJoinColumn} onSelfJoinColumn={setSelfJoinColumn}
           strategyId={strategyId}         onStrategyId={setStrategyId}
           strategyVersion={strategyVersion} onStrategyVersion={setStrategyVersion}
-          approvalPolicyId={approvalPolicyId} onApprovalPolicyId={setApprovalPolicyId}
           freezeWindowIds={freezeWindowIds}   onFreezeWindowIds={setFreezeWindowIds}
           riskMultiplier={riskMultiplier} onRiskMultiplier={setRiskMultiplier}
           tablesJson={tablesJson}         onTablesJson={setTablesJson}
-          flowPreset={flowPreset}         onFlowPreset={setFlowPreset}
+          flowPreset={flowPreset}         onFlowPreset={setFlowPresetChange}
           flowPresetOptions={flowPresetOptions}
+          executionSteps={executionSteps} onExecutionSteps={setExecutionSteps}
           serviceProfileRef={serviceProfileRef} onServiceProfileRef={setServiceProfileRef}
           serviceProfileOptions={serviceProfileOptions}
           environmentPolicyRef={environmentPolicyRef} onEnvironmentPolicyRef={setEnvironmentPolicyRef}
@@ -372,8 +375,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
           <div className="border-t border-border-subtle px-6 py-4">
             <RuntimeConfigSection
               flowPreset={flowPreset}
-              onFlowPreset={setFlowPreset}
+              onFlowPreset={setFlowPresetChange}
               flowPresetOptions={flowPresetOptions}
+              executionSteps={executionSteps}
+              onExecutionSteps={setExecutionSteps}
+              rootTable={rootTable}
               serviceProfileRef={serviceProfileRef}
               onServiceProfileRef={setServiceProfileRef}
               serviceProfileOptions={serviceProfileOptions}
@@ -389,10 +395,21 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   )
 
   function hydrateRuntimeConfig(config: SyncDefinitionAdminItem, options: SyncDefinitionRuntimeOptions): void {
-    setFlowPreset(pickRuntimeValue(options.flowPresets, config.flowPreset, "metadata-only"))
+    const selectedPreset = pickRuntimeValue(options.flowPresets, config.flowPreset, "metadata-only")
+    setFlowPreset(selectedPreset)
+    setExecutionSteps(cloneSteps(config.executionSteps.length > 0 ? config.executionSteps : (options.flowPresetTemplates[selectedPreset] ?? [])))
     setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, config.serviceProfileRef))
     setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, config.environmentPolicyRef))
   }
+
+  function setFlowPresetChange(value: EntityRegistrySyncFlowPreset): void {
+    setFlowPreset(value)
+    setExecutionSteps(cloneSteps(runtimeOptions.flowPresetTemplates[value] ?? []))
+  }
+}
+
+function cloneSteps(steps: AuthoredSyncFlowStep[]): AuthoredSyncFlowStep[] {
+  return steps.map((step) => ({ ...step }))
 }
 
 function pickRuntimeValue<T extends string>(
@@ -440,6 +457,9 @@ function RuntimeConfigSection({
   flowPreset,
   onFlowPreset,
   flowPresetOptions,
+  executionSteps,
+  onExecutionSteps,
+  rootTable,
   serviceProfileRef,
   onServiceProfileRef,
   serviceProfileOptions,
@@ -451,6 +471,9 @@ function RuntimeConfigSection({
   flowPreset: EntityRegistrySyncFlowPreset
   onFlowPreset: (value: EntityRegistrySyncFlowPreset) => void
   flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  executionSteps: AuthoredSyncFlowStep[]
+  onExecutionSteps: (value: AuthoredSyncFlowStep[]) => void
+  rootTable: string
   serviceProfileRef: string
   onServiceProfileRef: (value: string) => void
   serviceProfileOptions: ListboxOption<string>[]
@@ -484,6 +507,10 @@ function RuntimeConfigSection({
               <span className="text-[10px] uppercase tracking-wider text-text-muted">Environment rules</span>
               <Listbox value={environmentPolicyRef} options={environmentPolicyOptions} onChange={onEnvironmentPolicyRef} className="w-full" ariaLabel="Environment rules" />
             </label>
+          </div>
+          <div className="rounded-lg border border-border-subtle bg-panel/40 p-3">
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-text-muted">Execution steps</div>
+            <FormSurfaceExecutionSteps executionSteps={executionSteps} onExecutionSteps={onExecutionSteps} rootTable={rootTable} />
           </div>
         </div>
       )}

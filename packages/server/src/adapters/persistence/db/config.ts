@@ -122,6 +122,7 @@ export interface DbSyncDefinitionConfig {
   tenant_id: string
   entity_id: string
   flow_preset: string
+  execution_steps_json: string
   service_profile_ref: string
   environment_policy_ref: string
   ownership_team: string
@@ -208,6 +209,7 @@ export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
       tenant_id,
       entity_id,
       flow_preset,
+      execution_steps_json,
       service_profile_ref,
       environment_policy_ref,
       ownership_team,
@@ -220,6 +222,7 @@ export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
       @tenant_id,
       @entity_id,
       @flow_preset,
+      @execution_steps_json,
       @service_profile_ref,
       @environment_policy_ref,
       @ownership_team,

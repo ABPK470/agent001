@@ -196,8 +196,6 @@ export interface EntityTable {
 }
 
 export interface EntityPolicies {
-  /** Approval policy id (references approval-policy registry; null = use env default). */
-  approvalPolicyId: string | null
   /** Freeze windows that apply on top of env-level windows. */
   freezeWindowIds: string[]
   /**

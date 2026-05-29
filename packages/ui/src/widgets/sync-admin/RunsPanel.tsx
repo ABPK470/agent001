@@ -176,7 +176,6 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
           <div className="overflow-x-auto">
             <dl className="grid min-w-[320px] grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
               <DetailRow label="evaluated" value={formatDateTime(governance.evaluatedAt)} />
-              <DetailRow label="approval policy" value={governance.governance.approvalPolicyId ?? "none"} />
               <DetailRow label="risk multiplier" value={String(governance.governance.riskMultiplier)} />
               <DetailRow label="target role" value={governance.targetEnvironment.role} />
               <DetailRow label="actor allowed" value={governance.targetEnvironment.actorAllowed === null ? "not evaluated" : (governance.targetEnvironment.actorAllowed ? "yes" : "no")} />

@@ -67,7 +67,6 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
   out["tables"] = def.tables.map((t) => orderTable(t))
 
   out["policies"] = {
-    approvalPolicyId: def.policies.approvalPolicyId,
     freezeWindowIds:  def.policies.freezeWindowIds,
     riskMultiplier:   def.policies.riskMultiplier,
   }
@@ -219,7 +218,6 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
     selfJoinColumn: typeof r["selfJoinColumn"] === "string" ? r["selfJoinColumn"] : null,
     tables,
     policies: {
-      approvalPolicyId: (policiesRaw["approvalPolicyId"] as string | null) ?? null,
       freezeWindowIds:  Array.isArray(policiesRaw["freezeWindowIds"])
         ? (policiesRaw["freezeWindowIds"] as unknown[]).map(String)
         : [],

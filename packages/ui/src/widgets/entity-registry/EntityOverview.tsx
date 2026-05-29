@@ -56,7 +56,6 @@ export function EntityOverview({ def }: EntityOverviewProps): JSX.Element {
   ]
   const scd2AndPolicy: Row[] = [
     { label: "SCD2 strategy",    value: `${def.scd2.strategyId} · v${String(def.scd2.strategyVersion)}`, mono: true },
-    { label: "Approval policy",  value: def.policies.approvalPolicyId ?? "—" },
     { label: "Freeze windows",   value: freezeWindows.join(", ") || "—" },
     { label: "Risk multiplier",  value: `${def.policies.riskMultiplier}×` },
   ]

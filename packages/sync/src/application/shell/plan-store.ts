@@ -22,8 +22,6 @@ export interface SyncExecutionContractStep {
   kind: string
   title: string
   description: string
-  bindingRef?: string | null
-  policyRef?: string | null
   subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
   objectName?: string | null
   auditObjectType?: string | null
@@ -35,7 +33,6 @@ export interface SyncExecutionContract {
   definitionPublishedVersion: string
   definitionPublishedAt: string
   governance: {
-    approvalPolicyId: string | null
     freezeWindowIds: string[]
     riskMultiplier: number
   }
@@ -64,7 +61,6 @@ export interface SyncExecutionContract {
 export interface SyncGovernanceDecision {
   evaluatedAt: string
   governance: {
-    approvalPolicyId: string | null
     freezeWindowIds: string[]
     riskMultiplier: number
   }
@@ -213,7 +209,6 @@ export interface SyncPlan {
    * `null` when the entity has no registry record (legacy JSON path).
    */
   entityPolicies?: {
-    approvalPolicyId: string | null
     freezeWindowIds: string[]
     riskMultiplier: number
     sourceEntityVersion: number | null

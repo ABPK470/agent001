@@ -704,6 +704,7 @@ export function _migrate(db: Database.Database): void {
       tenant_id              TEXT NOT NULL,
       entity_id              TEXT NOT NULL,
       flow_preset            TEXT NOT NULL,
+      execution_steps_json   TEXT NOT NULL DEFAULT '[]',
       service_profile_ref    TEXT NOT NULL,
       environment_policy_ref TEXT NOT NULL,
       ownership_team         TEXT NOT NULL,
@@ -1173,6 +1174,11 @@ export function _migrate(db: Database.Database): void {
       PRIMARY KEY (tenant_id, source, target)
     );
   `)
+
+  const syncDefinitionConfigColumns = db.prepare("PRAGMA table_info(sync_definition_configs)").all() as Array<{ name: string }>
+  if (!syncDefinitionConfigColumns.some((column) => column.name === "execution_steps_json")) {
+    db.exec("ALTER TABLE sync_definition_configs ADD COLUMN execution_steps_json TEXT NOT NULL DEFAULT '[]';")
+  }
 
   // Historical builds forced admin actions into a fake `__admin__` run to
   // satisfy the `audit_log.run_id -> runs.id` foreign key. Migrate that

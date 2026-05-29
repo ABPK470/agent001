@@ -115,7 +115,6 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     const governanceDecision = {
       evaluatedAt: createdAt,
       governance: {
-        approvalPolicyId: definition.governance.approvalPolicyId,
         freezeWindowIds: [...definition.governance.freezeWindowIds],
         riskMultiplier: definition.governance.riskMultiplier,
       },
@@ -373,7 +372,6 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         definitionPublishedVersion: definition.publishedVersion,
         definitionPublishedAt: definition.publishedAt,
         governance: {
-          approvalPolicyId: definition.governance.approvalPolicyId,
           freezeWindowIds: [...definition.governance.freezeWindowIds],
           riskMultiplier: definition.governance.riskMultiplier,
         },
@@ -396,8 +394,6 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             kind: step.kind,
             title: step.title,
             description: step.description,
-            bindingRef: step.bindingRef ?? null,
-            policyRef: step.policyRef ?? null,
             subjectRef: step.subjectRef ?? null,
             objectName: step.objectName ?? null,
             auditObjectType: step.auditObjectType ?? null,
@@ -413,7 +409,6 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       decisionLog,
       governanceDecision,
       entityPolicies: {
-        approvalPolicyId: definition.governance.approvalPolicyId,
         freezeWindowIds: [...definition.governance.freezeWindowIds],
         riskMultiplier: definition.governance.riskMultiplier,
         sourceEntityVersion: null,

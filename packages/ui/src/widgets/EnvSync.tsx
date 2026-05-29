@@ -1639,7 +1639,6 @@ function PlanExplainabilitySections({ plan, compact = false }: { plan: SyncPlan;
               <div className="grid gap-2 sm:grid-cols-2">
                 <ExplainKv label="evaluated" value={formatHistoryDateTime(plan.governanceDecision.evaluatedAt)} />
                 <ExplainKv label="target role" value={plan.governanceDecision.targetEnvironment.role} mono />
-                <ExplainKv label="approval policy" value={plan.governanceDecision.governance.approvalPolicyId ?? "none"} mono />
                 <ExplainKv label="risk multiplier" value={String(plan.governanceDecision.governance.riskMultiplier)} mono />
                 <ExplainKv label="freeze windows" value={plan.governanceDecision.governance.freezeWindowIds.length > 0 ? plan.governanceDecision.governance.freezeWindowIds.join(", ") : "none"} mono />
                 <ExplainKv label="actor allowed" value={plan.governanceDecision.targetEnvironment.actorAllowed === null ? "not evaluated" : (plan.governanceDecision.targetEnvironment.actorAllowed ? "yes" : "no")} />

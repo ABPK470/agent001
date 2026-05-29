@@ -36,8 +36,8 @@ import {
     type Scd2Strategy,
     type ValidationResult,
 } from "@mia/sync"
-import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 import { getDb } from "./connection.js"
+import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -91,14 +91,6 @@ function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefi
 //                                            (tenant → _default → bundled)
 // - policies.freezeWindowIds[]            → in-process registry (which
 //                                            mirrors freeze_windows DB)
-// - policies.approvalPolicyId             → not validated; the underlying
-//                                            approval_policies table is
-//                                            keyed by (env, risk_tier),
-//                                            not by id, so this field is
-//                                            reserved for a future
-//                                            approval_policy_sets table.
-//                                            Null is the only sensible
-//                                            value today.
 function validateEntityReferences(tenantId: string, def: EntityDefinition): ValidationResult {
   const errors: ValidationResult["errors"]   = []
   const warnings: ValidationResult["warnings"] = []
@@ -127,19 +119,6 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
       }
     }
   }
-
-  // approvalPolicyId — schema gap: the approval_policies table is keyed
-  // by (target_env, risk_tier), so a single string id has no row to
-  // match. Today we accept null; non-null values pass with a warning so
-  // operator intent isn't lost while the policy-set table lands.
-  if (def.policies.approvalPolicyId !== null) {
-    warnings.push({
-      path:    "policies.approvalPolicyId",
-      code:    "approval_policy_unresolved",
-      message: `approvalPolicyId "${def.policies.approvalPolicyId}" is preserved verbatim; the approval gate currently resolves policy by (target_env, risk_tier) at sync time, not by this id.`,
-    })
-  }
-
   return { ok: errors.length === 0, errors, warnings }
 }
 

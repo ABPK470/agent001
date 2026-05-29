@@ -4,6 +4,7 @@
 
 import { type AgentHost } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
+import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
@@ -34,6 +35,7 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 	flowPreset?: string
 	serviceProfileRef?: string
 	environmentPolicyRef?: string
+	executionSteps?: AuthoredSyncFlowStep[]
 	ownershipTeam?: string
 	ownershipOwner?: string | null
 	reviewStatus?: "legacy-review-required" | "reviewed"
@@ -43,6 +45,7 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 		flowPreset?: string
 		serviceProfileRef?: string
 		environmentPolicyRef?: string
+		executionSteps?: AuthoredSyncFlowStep[]
 		ownershipTeam?: string
 		ownershipOwner?: string | null
 		reviewStatus?: "legacy-review-required" | "reviewed"
@@ -53,6 +56,29 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 			if (typeof body[field] !== "string" || body[field].trim() === "") return `${field} must be a non-empty string`
 			out[field] = body[field].trim()
 		}
+	}
+	if (body["executionSteps"] !== undefined) {
+		if (!Array.isArray(body["executionSteps"])) return "executionSteps must be an array"
+		out.executionSteps = (body["executionSteps"] as unknown[]).map((raw, index) => {
+			if (!raw || typeof raw !== "object") throw new Error(`executionSteps[${index}] must be an object`)
+			const step = raw as Record<string, unknown>
+			const id = asRequiredString(step.id, `executionSteps[${index}].id`)
+			const phase = asRequiredString(step.phase, `executionSteps[${index}].phase`) as AuthoredSyncFlowStep["phase"]
+			const kind = asRequiredString(step.kind, `executionSteps[${index}].kind`) as AuthoredSyncFlowStep["kind"]
+			const title = asRequiredString(step.title, `executionSteps[${index}].title`)
+			const description = asRequiredString(step.description, `executionSteps[${index}].description`)
+			return {
+				id,
+				phase,
+				kind,
+				title,
+				description,
+				...(typeof step.subjectRef === "string" && step.subjectRef.trim() ? { subjectRef: step.subjectRef.trim() as AuthoredSyncFlowStep["subjectRef"] } : {}),
+				...(typeof step.objectName === "string" && step.objectName.trim() ? { objectName: step.objectName.trim() } : {}),
+				...(typeof step.auditObjectType === "string" && step.auditObjectType.trim() ? { auditObjectType: step.auditObjectType.trim() } : {}),
+				...(typeof step.pipelineName === "string" && step.pipelineName.trim() ? { pipelineName: step.pipelineName.trim() } : {}),
+			} satisfies AuthoredSyncFlowStep
+		})
 	}
 	if (body["ownershipOwner"] !== undefined) {
 		if (body["ownershipOwner"] !== null && typeof body["ownershipOwner"] !== "string") return "ownershipOwner must be null or a string"
@@ -67,6 +93,11 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 		out.ownershipNotes = (body["ownershipNotes"] as unknown[]).map(String)
 	}
 	return out
+}
+
+function asRequiredString(value: unknown, field: string): string {
+	if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string`)
+	return value.trim()
 }
 
 function auditSync(planId: string, actor: string, actorUpn: string | null, action: string, detail: Record<string, unknown>): void {
@@ -130,6 +161,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 			tenant_id: "_default",
 			entity_id: req.params.entityId,
 			flow_preset: sanitised.flowPreset ?? existing?.flow_preset ?? req.params.entityId,
+			execution_steps_json: JSON.stringify(sanitised.executionSteps ?? (existing ? JSON.parse(existing.execution_steps_json) as AuthoredSyncFlowStep[] : [])),
 			service_profile_ref: sanitised.serviceProfileRef ?? existing?.service_profile_ref ?? "default",
 			environment_policy_ref: sanitised.environmentPolicyRef ?? existing?.environment_policy_ref ?? "default",
 			ownership_team: sanitised.ownershipTeam ?? existing?.ownership_team ?? "sync-platform",
