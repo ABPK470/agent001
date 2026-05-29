@@ -2,6 +2,7 @@
 
 import type { DomainEvent } from "./events.js"
 import type { AgentRun, AuditEntry, ExecutionRecord, Step } from "./models.js"
+import type { HostedPolicyContext } from "./policy-context.js"
 
 // ── Repositories ─────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ export interface ExecutionRecordRepository {
 // ── Services ─────────────────────────────────────────────────────
 
 export interface PolicyEvaluator {
-  evaluatePreStep(run: AgentRun, step: Step): Promise<string | null>
+  evaluatePreStep(run: AgentRun, step: Step, ctx?: HostedPolicyContext | null): Promise<string | null>
 }
 
 export interface EventBus {

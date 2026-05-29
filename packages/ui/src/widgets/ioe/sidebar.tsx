@@ -263,7 +263,7 @@ export function ComparePanel({
   const [runA, setRunA] = useState<string>("")
   const [runB, setRunB] = useState<string>("")
 
-  const completedRuns = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed)
+  const completedRuns = runs.filter((r) => r.status === RunStatus.Completed || r.status === RunStatus.Failed || r.status === RunStatus.Crashed || r.status === RunStatus.Cancelled)
 
   return (
     <div className="text-[13px] px-3 py-2 space-y-3">

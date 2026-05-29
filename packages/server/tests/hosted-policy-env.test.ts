@@ -19,14 +19,13 @@ import {
     PolicyEffect,
     PolicyViolationError,
     RulePolicyEvaluator,
-    runWithPolicyContext,
-    withPermissionDefaults,
     type AgentRun,
     type HostedPolicyContext,
     type Step,
 } from "@mia/agent"
+import { withPermissionDefaults } from "@mia/sync"
 import { describe, expect, it } from "vitest"
-import { policyRulesFromEnvironments } from "../src/policy/hosted-defaults.js"
+import { policyRulesFromEnvironments } from "../src/domain/policy/hosted-defaults.js"
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {
@@ -58,15 +57,13 @@ async function evaluate(
   step: Step,
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
-  return runWithPolicyContext(HOSTED, async () => {
-    try {
-      const approval = await ev.evaluatePreStep(run, step)
-      return { approval }
-    } catch (err) {
-      if (err instanceof PolicyViolationError) return { approval: null, error: err }
-      throw err
-    }
-  })
+  try {
+    const approval = await ev.evaluatePreStep(run, step, HOSTED)
+    return { approval }
+  } catch (err) {
+    if (err instanceof PolicyViolationError) return { approval: null, error: err }
+    throw err
+  }
 }
 
 // ── Fact extraction ──────────────────────────────────────────────
@@ -116,7 +113,13 @@ describe("policyRulesFromEnvironments", () => {
     const denies = rules.filter((r) => r.effect === PolicyEffect.Deny).map((r) => r.name).sort()
     expect(denies).toContain("env_uat_deny_dml")
     expect(denies).toContain("env_uat_deny_ddl")
-    // Per-env approval for sync_execute is the single approval default.
+    const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
+    expect(approvals).toHaveLength(0)
+  })
+
+  it("emits approval rules only when approvalRequiredOperations is explicitly configured", () => {
+    const env = withPermissionDefaults({ name: "uat", approvalRequiredOperations: ["sync_execute"] })
+    const rules = policyRulesFromEnvironments([env])
     const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
     expect(approvals).toContain("env_uat_approval_sync_execute")
   })
@@ -147,7 +150,7 @@ describe("withPermissionDefaults", () => {
     expect(e.defaultAccessMode).toBe("read_only")
     expect(e.denyDml).toBe(true)
     expect(e.denyDdl).toBe(true)
-    expect(e.approvalRequiredOperations).toContain("sync_execute")
+    expect(e.approvalRequiredOperations).toEqual([])
   })
 
   it("prod is read-only with DML+DDL denied by default", () => {

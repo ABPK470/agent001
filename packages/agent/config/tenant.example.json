@@ -1,0 +1,29 @@
+{
+  "_comment": "Example tenant config. Copy to deploy/tenant.json and set MIA_TENANT_CONFIG=deploy/tenant.json. Every key is optional; omitted keys fall back to DEFAULT_TENANT_CONFIG in src/tenant/config.ts.",
+  "largeObjectRows": 10000000,
+  "unionBranchThreshold": 8,
+  "schemaRanking": [
+    { "schema": "publish", "weight": 50 },
+    { "schema": "persistedview", "weight": 45 },
+    { "schema": "fact", "weight": 20 },
+    { "schema": "dim", "weight": 20 },
+    { "schema": "list", "weight": 5 },
+    { "schema": "archive", "weight": -20 },
+    { "schema": "etl", "weight": -20 }
+  ],
+  "mirrorSchema": "persistedview",
+  "routingKeywords": {
+    "schemas": ["publish", "persistedview", "fact", "dim"],
+    "domain": ["revenue", "balance", "transaction"]
+  },
+  "preAggregationTokens": ["MTD", "YTD", "QTD", "WTD"],
+  "aliasFamilies": [
+    { "prefix": "Sum", "aggregate": "SUM" },
+    { "prefix": "Total", "aggregate": "SUM" },
+    { "prefix": "Avg", "aggregate": "AVG" },
+    { "prefix": "Mean", "aggregate": "AVG" },
+    { "prefix": "Min", "aggregate": "MIN" },
+    { "prefix": "Max", "aggregate": "MAX" },
+    { "prefix": "Count", "aggregate": "COUNT" }
+  ]
+}

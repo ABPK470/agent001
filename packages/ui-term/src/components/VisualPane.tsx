@@ -618,9 +618,10 @@ function formatAnswer(
 
     // Markdown table row: | col | col | ...
     if (trimmed.startsWith("|")) {
+      // Split on unescaped `|` only; cells may contain `\|` (escaped by formatter).
       const cols = trimmed
-        .split("|")
-        .map((c) => stripMd(c))
+        .split(/(?<!\\)\|/)
+        .map((c) => stripMd(c).replace(/\\\|/g, "|"))
         .filter((c) => c.length > 0)
       if (cols.length >= 2) {
         // Two-col tables: "  name  ·  value" — clean key/value style

@@ -205,6 +205,10 @@ export function DebugInspector() {
       response: responses[i] ?? null,
     }))
   }, [trace])
+  const sqlQualityEntries = useMemo(
+    () => trace.filter((e) => e.kind === "planner-sql-quality") as Array<Extract<TraceEntry, { kind: "planner-sql-quality" }>>,
+    [trace],
+  )
 
   // Summary stats
   const stats = useMemo(() => {
@@ -225,7 +229,7 @@ export function DebugInspector() {
     return text.toLowerCase().includes(search.toLowerCase())
   }, [search])
 
-  const hasDebugData = systemPrompt || toolsResolved || llmCalls.length > 0
+  const hasDebugData = systemPrompt || toolsResolved || llmCalls.length > 0 || sqlQualityEntries.length > 0
 
   return (
     <div className="flex flex-col h-full gap-2">
@@ -338,6 +342,45 @@ export function DebugInspector() {
             <LlmCallEntry key={i} call={call} index={i} />
           )
         })}
+
+        {(filter === "all") && sqlQualityEntries.length > 0 && (
+          <Section
+            label="SQL Quality"
+            badge={`${sqlQualityEntries.length} entries`}
+            badgeColor="text-warning/70"
+            defaultOpen
+          >
+            <div className="space-y-1.5">
+              {sqlQualityEntries
+                .filter((entry) => matchesSearch(JSON.stringify(entry)))
+                .map((entry, index) => {
+                  const notes: string[] = []
+                  if (entry.validationCode) notes.push(`blocked=${entry.validationCode}`)
+                  if (entry.missingPersistedMirrorCandidates.length > 0) notes.push(`mirror=${entry.missingPersistedMirrorCandidates.join(",")}`)
+                  const overusedRefs = entry.largeObjectRefs.filter((ref) => ref.count > 2)
+                  if (overusedRefs.length > 0) notes.push(overusedRefs.map((ref) => `${ref.name}×${ref.count}`).join(", "))
+                  if (entry.tempScalarSubqueryCount > 0) notes.push(`temp-subq=${entry.tempScalarSubqueryCount}`)
+                  return (
+                    <div key={`${entry.toolCallId}-${index}`} className="border border-border/30 rounded px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[13px] font-mono font-semibold ${entry.phase === "blocked" ? "text-error" : entry.validationOk ? "text-success" : "text-warning"}`}>
+                          {entry.phase}
+                        </span>
+                        <span className="text-[13px] font-mono text-text-muted">{entry.toolName}</span>
+                        <span className="text-[12px] text-text-muted/40">iter {entry.iteration + 1}</span>
+                      </div>
+                      <div className="text-[13px] text-text-secondary mt-1">
+                        {notes.join(" · ") || "ok"}
+                      </div>
+                      <pre className="text-[12px] font-mono text-text-muted whitespace-pre-wrap break-words mt-1">
+                        {entry.sqlPreview}
+                      </pre>
+                    </div>
+                  )
+                })}
+            </div>
+          </Section>
+        )}
       </div>
     </div>
   )

@@ -1,13 +1,39 @@
 import sql from "mssql"
-import type { Tool } from "../../types.js"
-import { getMssqlKillSignal, getPool } from "./connection.js"
-import { decorateMssqlError } from "./error-hints.js"
+import { readToolTraceContext } from "../../application/shell/loop.js"
+import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
+import type { Tool } from "../../domain/agent-types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
+import type { CatalogGraph } from "../catalog/graph/index.js"
+import { getPool } from "./connection.js"
+import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
+import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
-import { getQueryWarnings, validateQuery } from "./validation.js"
+import { emitMssqlQualityTrace } from "./trace.js"
+import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
+
+function catalogAccessorFor(host: AgentHost, connectionName: string): () => CatalogGraph | null {
+  return () => {
+    const exact = host.catalog.instances.get(connectionName)
+    if (exact) return exact
+    if (connectionName === "default" && host.catalog.instances.size > 0) {
+      return host.catalog.instances.values().next().value ?? null
+    }
+    return null
+  }
+}
+
+function recordDoctrineLesson(run: RunContext | undefined, lesson: { subject: string; claim: string; evidence?: string; category?: string } | null | undefined): void {
+  if (!lesson) return
+  try {
+    run?.memory?.writeNote?.(lesson)
+  } catch {
+    // Memory write failures must never block the validator response.
+  }
+}
 
 // ── The tool ─────────────────────────────────────────────────────
 
-export const mssqlTool: Tool = {
+function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
   name: "query_mssql",
   description:
     "Execute a T-SQL query against Microsoft SQL Server (T-SQL only — no QUALIFY, LIMIT, ILIKE, ::, DATE_TRUNC; use TOP / OFFSET-FETCH / LIKE / CAST / DATEADD). " +
@@ -58,11 +84,13 @@ export const mssqlTool: Tool = {
     if (!query) return "Error: query cannot be empty."
 
     const connectionName = args.connection ? String(args.connection).trim() : "default"
+    const accessor = catalogAccessorFor(host, connectionName)
+    const toolTrace = readToolTraceContext(args)
 
     let pool: sql.ConnectionPool
     let writeEnabled: boolean
     try {
-      const result = await getPool(connectionName)
+      const result = await getPool(host, connectionName)
       pool = result.pool
       writeEnabled = result.entry.writeEnabled
     } catch (err) {
@@ -70,8 +98,26 @@ export const mssqlTool: Tool = {
     }
 
     // Validate before executing
-    const error = validateQuery(query, writeEnabled)
-    if (error) return error
+    const validation = validateQueryDetailed(query, writeEnabled, {
+      accessor,
+      profiledTables: run?.mssqlProfileCalls ?? null,
+    })
+    if (!validation.ok) {
+      emitMssqlQualityTrace({
+        toolMode: "query",
+        phase: "blocked",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation,
+      }, toolTrace)
+      // Gap 2: route the doctrine lesson (if any) to the per-run memory
+      // writer so the rationale survives beyond this turn. Fire-and-forget
+      // because the writer is synchronous and a failure (null hook, dedup
+      // rejection) must not mask the original block error.
+      recordDoctrineLesson(run, validation.lesson)
+      return validation.error ?? "Query blocked"
+    }
 
     try {
       // Optional database switch
@@ -84,7 +130,7 @@ export const mssqlTool: Tool = {
       }
 
       const request = pool.request()
-      const killSignal = getMssqlKillSignal()
+      const killSignal = run?.signal ?? null
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }
@@ -95,25 +141,63 @@ export const mssqlTool: Tool = {
 
       // If a specific database is requested, prefix with USE
       const fullQuery = db ? `USE [${db}];\n${query}` : query
+      const startedAt = Date.now()
 
       try {
         const result = await request.query(fullQuery)
-        const body = formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
-        const warn = getQueryWarnings(query)
-        return warn ? `${warn}\n${body}` : body
+        const recordsets = Array.isArray(result.recordsets)
+          ? result.recordsets as sql.IRecordSet<unknown>[]
+          : Object.values(result.recordsets) as sql.IRecordSet<unknown>[]
+        const rowCount = recordsets.reduce((sum, recordset) => sum + recordset.length, 0)
+        emitMssqlQualityTrace({
+          toolMode: "query",
+          phase: "executed",
+          query,
+          connection: connectionName,
+          database: db,
+          validation,
+          durationMs: Date.now() - startedAt,
+          rowCount,
+        }, toolTrace)
+        const body = formatResults(recordsets, result.rowsAffected)
+        const warn = getQueryWarnings(query, {
+          branchAccessor: accessor as () => { getUnionParents(qualifiedName: string): string[]; getUnionBranches(qualifiedName: string): string[] } | null,
+          profiledTables: run?.mssqlProfileCalls ?? null,
+        })
+        // Phase 6: dim-join NULL rot heuristic. Scan the first recordset's
+        // *Name/*Description columns; if ≥ 50% of rows are NULL, prepend a
+        // join-key warning so the agent re-verifies the join before trusting
+        // the row labels.
+        const firstSet = (recordsets[0] ?? []) as ReadonlyArray<Record<string, unknown>>
+        const dimBanner = renderDimJoinNullBanner(detectDimJoinNullRot(firstSet))
+        const banners = [dimBanner, warn].filter((s): s is string => !!s).join("\n")
+        return banners ? `${banners}\n${body}` : body
       } finally {
         killSignal?.removeEventListener("abort", onKill)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return `SQL Error: ${decorateMssqlError(msg)}`
+      emitMssqlQualityTrace({
+        toolMode: "query",
+        phase: "failed",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation,
+        error: msg,
+      }, toolTrace)
+      // Fix #3 (2026-05-23): for `Invalid column name 'X'`, append the actual
+      // FROM/JOIN tables' columns ranked by similarity to X. Decoration runs
+      // *after* so the generic "stop guessing" lesson trails the concrete map.
+      const enriched = enrichInvalidColumnError(host, msg, query, connectionName)
+      return `SQL Error: ${decorateMssqlError(enriched)}`
     }
   },
-}
+} }
 
 // ── Schema explorer (convenience tool) ───────────────────────────
 
-export const mssqlSchemaTool: Tool = {
+function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool { return {
   name: "explore_mssql_schema",
   description:
     "Explore the MSSQL database schema — list tables/views in a schema, or get exact column names and types for a table. " +
@@ -150,7 +234,7 @@ export const mssqlSchemaTool: Tool = {
 
     let pool: sql.ConnectionPool
     try {
-      const result = await getPool(connectionName)
+      const result = await getPool(host, connectionName)
       pool = result.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -158,7 +242,7 @@ export const mssqlSchemaTool: Tool = {
 
     try {
       const request = pool.request()
-      const killSignal = getMssqlKillSignal()
+      const killSignal = run?.signal ?? null
 
       // If a kill signal fires while the query is running, cancel it immediately
       const onKill = (): void => { request.cancel() }
@@ -174,6 +258,35 @@ export const mssqlSchemaTool: Tool = {
           const parts = tableName.split(".")
           const schema = parts.length > 1 ? parts[0] : null
           const table = parts.length > 1 ? parts[1] : parts[0]
+
+          // ── Gap 1: cache check before hitting MSSQL ───────────────
+          //
+          // explore_mssql_schema(table='schema.X') is the single most-
+          // repeated discovery call across runs (trace evidence: same
+          // table re-explored on every memory-recalled goal). When the
+          // table is schema-qualified we can build a catalog fingerprint
+          // and consult `tool_knowledge` exactly like profile_data does.
+          //
+          // Cross-serve: if our own cache misses, try the profile_data
+          // fast cache for the same qname — its payload includes the
+          // column list verbatim, so we can hand it back with a tiny
+          // banner. This makes the FIRST run's profile_data() also
+          // satisfy the SECOND run's explore_mssql_schema(). Tables
+          // explored without a schema prefix or not in the catalog
+          // fall through to the live path unchanged.
+          if (schema) {
+            const qn = `${schema}.${table}`
+            const fp = fingerprintForQname(host, qn, connectionName)
+            const own = tryServeFromCache(host, "explore_mssql_schema", qn, "columns", connectionName, fp)
+            if (own !== null) return own
+            const cross = tryServeFromCache(host, "profile_data", qn, "fast", connectionName, fp)
+            if (cross !== null) {
+              return [
+                `[explore_mssql_schema cross-served from profile_data(fast) cache — payload includes columns]`,
+                cross,
+              ].join("\n")
+            }
+          }
 
           request.input("table", sql.NVarChar, table)
           if (schema) {
@@ -212,8 +325,82 @@ export const mssqlSchemaTool: Tool = {
 
           if (!result.recordset.length) return `No columns found for ${tableName}. Try with schema prefix (e.g. 'agent.${table}', 'core.${table}').`
           const label = schema ? `${schema}.${table}` : result.recordset[0].TABLE_SCHEMA + "." + table
-          return `Columns for ${label}:\n` +
+          let payload = `Columns for ${label}:\n` +
             formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+
+          // ── Surrogate-key value ranges ──────────────────────────
+          //
+          // Root-cause fix: a recurring class of LLM bug is to treat
+          // a numeric surrogate key (e.g. dim.month.pkMonth) as if it
+          // encoded a meaningful business value (YYYYMM). The model
+          // sees `pkMonth (int, NOT NULL)` and writes
+          // `WHERE pkMonth = 202504`. The validator passes — int = int —
+          // but the table only carries pkMonth values in roughly [1..600],
+          // so the query silently returns zero rows.
+          //
+          // Closing this gap at the discovery layer: for columns whose
+          // names match the surrogate-key shape (pk*, fk*, *Id, *Key,
+          // *_id, *_key, *Sk, *_sk) we issue a best-effort lookup
+          // against sys.dm_db_stats_histogram and append a tight
+          // "Value ranges (surrogate keys):" section to the payload.
+          // The model then sees `pkMonth: 1..612` and cannot confuse
+          // the column with a YYYYMM filter. The section is cached
+          // alongside the columns block, so the prevention carries
+          // forward into <known_objects>.
+          //
+          // dm_db_stats_histogram requires VIEW DATABASE STATE; the
+          // try/catch silently degrades when the permission is absent
+          // or the table has no auto-stats yet.
+          const surrogateLikeNames = (result.recordset as Array<{ COLUMN_NAME: string; DATA_TYPE: string }>)
+            .filter((c) => isSurrogateLikeColumn(c.COLUMN_NAME) && isIntegerLikeType(c.DATA_TYPE))
+            .map((c) => c.COLUMN_NAME)
+          if (schema && surrogateLikeNames.length > 0) {
+            try {
+              const rangeReq = pool.request()
+                .input("schemaName", sql.NVarChar, schema)
+                .input("tableName", sql.NVarChar, table)
+              const rangeRes = await rangeReq.query(`
+                DECLARE @oid INT = OBJECT_ID(QUOTENAME(@schemaName) + '.' + QUOTENAME(@tableName));
+                IF @oid IS NULL
+                  SELECT TOP 0 CAST(NULL AS NVARCHAR(128)) AS column_name,
+                               CAST(NULL AS NVARCHAR(400)) AS min_val,
+                               CAST(NULL AS NVARCHAR(400)) AS max_val;
+                ELSE
+                  SELECT c.name AS column_name,
+                         MIN(CAST(h.range_high_key AS NVARCHAR(400))) AS min_val,
+                         MAX(CAST(h.range_high_key AS NVARCHAR(400))) AS max_val
+                  FROM sys.stats s
+                  CROSS APPLY sys.dm_db_stats_histogram(s.object_id, s.stats_id) h
+                  JOIN sys.stats_columns sc
+                    ON sc.object_id = s.object_id AND sc.stats_id = s.stats_id AND sc.stats_column_id = 1
+                  JOIN sys.columns c
+                    ON c.object_id = s.object_id AND c.column_id = sc.column_id
+                  WHERE s.object_id = @oid
+                  GROUP BY c.name
+              `)
+              const wantSet = new Set(surrogateLikeNames.map((n) => n.toLowerCase()))
+              const rows = (rangeRes.recordset as Array<{ column_name: string; min_val: string | null; max_val: string | null }>)
+                .filter((r) => wantSet.has(r.column_name.toLowerCase()) && r.min_val !== null && r.max_val !== null)
+              if (rows.length > 0) {
+                const lines = rows.map((r) => `  ${r.column_name}: ${r.min_val}..${r.max_val}`)
+                payload += `\n\nValue ranges (surrogate keys, from sys.stats histogram):\n` +
+                  lines.join("\n") +
+                  `\n  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value.`
+              }
+            } catch {
+              // Best-effort: missing VIEW DATABASE STATE or no auto-stats — silently skip.
+            }
+          }
+          // Gap 1: persist the live result so the next call can short-circuit.
+          // Only persist when we have a real schema-qualified qname AND a
+          // fingerprint (the latter is a no-op when the catalog is unaware
+          // of this object — correct, since we cannot validate freshness).
+          if (schema) {
+            const qn = `${schema}.${table}`
+            const fp = fingerprintForQname(host, qn, connectionName)
+            if (fp) persistToCache(host, "explore_mssql_schema", qn, "columns", connectionName, payload, fp)
+          }
+          return payload
         }
 
         // Search for tables/views by name pattern
@@ -272,4 +459,70 @@ export const mssqlSchemaTool: Tool = {
       return `SQL Error: ${decorateMssqlError(msg)}`
     }
   },
+} }
+
+// ── Surrogate-shape helpers (used by explore_mssql_schema) ───────
+//
+// A column is "surrogate-key-shaped" when its NAME signals a synthetic
+// identifier — i.e. its values don't encode any business attribute. We
+// keep this list intentionally narrow so non-surrogate columns (Amount,
+// Date, Year, MonthNo, …) never get range-decorated and the surrogate
+// hint section in the payload stays compact and unambiguous.
+function isSurrogateLikeColumn(name: string): boolean {
+  const n = name.trim()
+  if (/^(pk|fk|sk)[A-Z_]/.test(n)) return true        // pkMonth, fkClient, sk_account
+  if (/^(pk|fk|sk)$/i.test(n)) return true            // bare pk / fk / sk
+  if (/(Id|Key|Sk)$/.test(n) && n.length > 2) return true // CustomerId, AccountKey, BranchSk
+  if (/_(id|key|sk)$/i.test(n)) return true           // customer_id, account_key
+  return false
+}
+
+function isIntegerLikeType(dataType: string): boolean {
+  const t = dataType.trim().toLowerCase()
+  return t === "int" || t === "bigint" || t === "smallint" || t === "tinyint" || t === "numeric" || t === "decimal"
+}
+
+// ── Host-bound factories (Phase 4 acceptance — cluster 8b) ──────
+//
+// The connection registry now lives on `host.mssql.databases`. The
+// factories below capture the host at composition time; the legacy
+// ambient `mssqlTool` / `mssqlSchemaTool` exports throw on `execute`
+// so any forgotten ambient call site fails loudly. We expose static
+// `name` / `description` / `parameters` so callers (CLI listers,
+// prompt generators) can introspect without building a host.
+
+const QUERY_MSSQL_DEF = (() => {
+  // Build once with a throwaway host purely to expose the static shape.
+  // The throwaway is never executed because the ambient export below
+  // also throws — `createMssqlTool(host)` is the only valid path.
+  const stub = {} as AgentHost
+  const t = buildQueryMssqlTool(stub)
+  return { name: t.name, description: t.description, parameters: t.parameters }
+})()
+const SCHEMA_MSSQL_DEF = (() => {
+  const stub = {} as AgentHost
+  const t = buildSchemaMssqlTool(stub)
+  return { name: t.name, description: t.description, parameters: t.parameters }
+})()
+
+export const mssqlTool: Tool = {
+  ...QUERY_MSSQL_DEF,
+  async execute(_args) {
+    throw new Error("mssqlTool must be built via createMssqlTool(host)")
+  },
+}
+
+export const mssqlSchemaTool: Tool = {
+  ...SCHEMA_MSSQL_DEF,
+  async execute(_args) {
+    throw new Error("mssqlSchemaTool must be built via createMssqlSchemaTool(host)")
+  },
+}
+
+export function createMssqlTool(host: AgentHost, run?: RunContext): Tool {
+  return buildQueryMssqlTool(host, run)
+}
+
+export function createMssqlSchemaTool(host: AgentHost, run?: RunContext): Tool {
+  return buildSchemaMssqlTool(host, run)
 }

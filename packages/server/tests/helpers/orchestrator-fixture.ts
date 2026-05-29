@@ -96,7 +96,7 @@ interface Fixture {
   /** Fresh in-memory DB for this test. */
   db: Database.Database
   /** Memory module (lazily imported after DB is wired). */
-  mem: typeof import("../../src/memory/index.js")
+  mem: typeof import("../../src/adapters/persistence/memory/index.js")
   /** Run a single turn end-to-end at the same abstraction level run-executor uses. */
   simulateTurn(inputs: TurnInputs): Promise<SimulatedTurn>
   /** Just retrieve context, mirroring run-executor.ts:300 EXACTLY. */
@@ -124,12 +124,12 @@ export async function buildFixture(): Promise<Fixture> {
   // synthetic runIds that don't exist in the runs table.
   db.pragma("foreign_keys = OFF")
 
-  const { _setDb, _migrate } = await import("../../src/db/index.js")
+  const { _setDb, _migrate } = await import("../../src/adapters/persistence/db/index.js")
   _setDb(db)
   _migrate(db)
   db.pragma("foreign_keys = OFF")
 
-  const mem = await import("../../src/memory/index.js")
+  const mem = await import("../../src/adapters/persistence/memory/index.js")
   mem.migrateMemory()
 
   const cleanup = (): void => {

@@ -2,16 +2,24 @@ export {
     closeMssqlPool,
     getDefaultMssqlConnectionName,
     getMssqlConfig,
-    getMssqlKillSignal,
     getPool,
-    runWithMssqlKillSignal,
     setDefaultMssqlConnection,
     setMssqlConfig,
     setMssqlConfigs,
     setMssqlWriteEnabled
 } from "./connection.js"
-export { exportQueryToFileTool } from "./export-tool.js"
+export { createExportQueryToFileTool, exportQueryToFileTool } from "./export-tool.js"
 export { formatResults } from "./formatter.js"
-export { mssqlSchemaTool, mssqlTool } from "./tools.js"
-export { hasWhereClause, isUnsafeScan, referencedLargeObjects, validateQuery } from "./validation.js"
+export { createMssqlSchemaTool, createMssqlTool, mssqlSchemaTool, mssqlTool } from "./tools.js"
+export {
+    countReferencedLargeObjects,
+    countTempScalarSubqueriesByTemp,
+    detectWideUnionViewTopnWithoutBranchAggregation,
+    findAggregateSemanticIssues,
+    hasWhereClause,
+    isUnsafeScan,
+    referencedLargeObjects,
+    validateQuery,
+    validateTempTableBatch
+} from "./validation.js"
 

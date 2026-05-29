@@ -26,8 +26,8 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { createSession, deleteSession, getSessionWithUser, touchSession } from "../db/sessions.js"
-import { sessionAls, type CurrentSession } from "./context.js"
+import { createSession, deleteSession, getSessionWithUser } from "../adapters/persistence/sessions.js"
+import type { CurrentSession } from "./context.js"
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSid, verifySid } from "./session.js"
 import { upsertSsoUser } from "./users.js"
 
@@ -120,7 +120,14 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
   if (sid) {
     const row = getSessionWithUser(sid)
     if (row) {
-      try { touchSession(sid) } catch { /* observability only; never fail the request */ }
+      // NOTE: we intentionally do NOT call touchSession() here. Bumping
+      // last_seen_at on every HTTP request would mark every open tab as
+      // "online" forever (background widgets poll, SSE keepalives fire,
+      // etc.). Instead liveness is driven by the SSE stream lifecycle:
+      // index.ts touches the session while /api/events/stream is
+      // connected and stops touching when the client disconnects, so
+      // `last_seen_at` ages out within the 60 s window naturally. No
+      // polling endpoint, no extra request noise in the logs.
       return {
         sid:         row.sid,
         upn:         row.upn,
@@ -180,7 +187,6 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
     const session = tryResolveSession(req, reply)
     if (session) {
       req.session = session
-      sessionAls.enterWith({ session })
       return
     }
 

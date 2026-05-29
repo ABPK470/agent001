@@ -76,79 +76,18 @@ export interface ImplicitEdge {
   tables: string[]                // all tables sharing this column+type
 }
 
-// ── Lineage types ────────────────────────────────────────────────
-
-/** A dimension key column → dimension table mapping. */
-export interface LineageDimJoin {
-  column: string                  // e.g. "pkClient"
-  dimTable: string                // e.g. "dim.Client"
-  dimRows: string                 // e.g. "~26M"
-  note: string                    // e.g. "ALWAYS filter — never full scan"
-}
-
-/** A single source feeding into a critical view. */
-export interface LineageSource {
-  qualifiedName: string           // e.g. "publish.MappingTransactionalBankingRules"
-  businessArea: string            // e.g. "Transactional Banking"
-  group: string                   // e.g. "Retail & Business Banking"
-  filter: string                  // e.g. "pkProduct IS NOT NULL AND Amount <> 0"
-}
-
-/** Full lineage map for a critical view (e.g. publish.Revenue). */
-export interface ViewLineage {
-  view: string                    // "publish.Revenue"
-  description: string             // "All client revenue across every business line"
-  outputColumns: string[]         // column names in the view's output
-  dimJoins: LineageDimJoin[]      // dimension key mappings
-  sources: LineageSource[]        // all contributing tables/views
-}
-
-/**
- * A business concept node — derived from view lineage, models semantic relationships.
- * Concept nodes bridge tables that share a business purpose even without FK connections.
- * e.g. fact.CommissionAllocation and publish.MappingTransactionalBanking both belong
- * to the concept "Revenue" because they are both sources feeding publish.Revenue.
- */
-export interface ConceptNode {
-  concept: string           // e.g. "Revenue" (derived from source view name)
-  sourceView: string        // e.g. "publish.Revenue" — the canonical aggregating view
-  description: string       // from ViewLineage.description
-  tables: string[]          // qualified names of all contributing source tables
-  businessGroups: string[]  // unique business group names from sources
-}
-
-/** Edge type in a concept-aware path. */
-export type ConceptPathEdge =
-  | { type: "fk"; fromColumn: string; toColumn: string }
-  | { type: "implicit"; column: string; dataType: string }
-  | { type: "concept"; concept: string; via: string }  // via = source view
-
-/** One step in a concept-aware path. */
-export interface ConceptPathStep {
-  from: string
-  edge: ConceptPathEdge
-  to: string
-}
-
-/** Result of a concept-aware path search. */
-export interface ConceptPathResult {
-  steps: ConceptPathStep[]
-  totalHops: number
-  conceptsUsed: string[]  // concept names traversed
-}
-
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
 export interface CatalogSnapshot {
   /**
-   * Version 6: view definitions from sys.sql_modules stored in CatalogTable.viewDefinition.
-   * Previous: version 5 = dynamic sys catalog (all sys objects from live DB, no curated filter).
+   * Version 7: lineage and concept-graph subsystem removed; snapshot no
+   * longer carries `lineage` entries. Previous: 6 added `viewDefinition`;
+   * 5 added dynamic sys catalog; ≤4 are legacy shapes.
    */
-  version: 1 | 2 | 3 | 4 | 5 | 6
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7
   builtAt: string
   source: string
   tables: CatalogTable[]
   implicitEdges: ImplicitEdge[]
-  lineage?: ViewLineage[]
   viewSourceRows?: Array<{ name: string; sourceRows: number }>
   /** Added in version 4 — sys.* catalog entries from live DB columns (all objects, no filter). */
   sysCatalog?: SysEntry[]

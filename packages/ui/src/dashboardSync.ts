@@ -7,7 +7,7 @@
  */
 
 import { api } from "./api"
-import { useStore } from "./store"
+import { useStore, WIDGET_DEFAULTS } from "./store"
 import type { ViewConfig } from "./types"
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -24,19 +24,70 @@ function scheduleSave() {
   }, DEBOUNCE_MS)
 }
 
+/**
+ * Flush any pending debounced save immediately.
+ * Call this before logout so layout changes made within the debounce window
+ * are not lost when the session ends.
+ */
+export function flushDashboardSave(): void {
+  if (!timer) return
+  clearTimeout(timer)
+  timer = null
+  const { views, activeViewId } = useStore.getState()
+  api.saveDashboardState({ views, activeViewId }).catch(() => {
+    // Server unreachable — localStorage already has it
+  })
+}
+
+/** Backstop normaliser for layouts persisted **before** `updateLayouts` was
+ *  fixed to enforce minW/minH at save time. New saves always include the
+ *  current defaults, but legacy server/localStorage payloads from older
+ *  versions may still contain undersized items — this clamps them on load
+ *  so a one-time refresh fixes any stale state without manual cleanup. */
+function normalizeViewLayouts(views: ViewConfig[]): ViewConfig[] {
+  return views.map((view) => ({
+    ...view,
+    layouts: {
+      ...view.layouts,
+      lg: (view.layouts["lg"] ?? []).map((item) => {
+        const widget = view.widgets.find((w) => w.id === item.i)
+        if (!widget) return item
+        const defaults = WIDGET_DEFAULTS[widget.type as keyof typeof WIDGET_DEFAULTS]
+        if (!defaults) return item
+        return {
+          ...item,
+          minW: defaults.minW,
+          minH: defaults.minH,
+          w: Math.max(item.w, defaults.minW),
+          h: Math.max(item.h, defaults.minH),
+        }
+      }),
+    },
+  }))
+}
+
 /** Load dashboard state from server and apply it. If the server has no
  *  state for this user (new visitor), reset to a clean default view and
  *  clear stale localStorage from a prior user on the same browser. */
 let _suppressSave = false
+/**
+ * Monotonically-increasing counter. Each call to restoreDashboardState()
+ * captures the current value; if a newer call supersedes this one before
+ * the fetch resolves, the stale response is silently discarded instead of
+ * overwriting the newer user's layout.
+ */
+let _restoreVersion = 0
 
 export async function restoreDashboardState(): Promise<void> {
-
+  const myVersion = ++_restoreVersion
   try {
     const state = await api.getDashboardState() as { views: ViewConfig[]; activeViewId: string } | null
+    // Another identity change happened while we were fetching — discard.
+    if (myVersion !== _restoreVersion) return
     if (state?.views?.length) {
       _suppressSave = true   // don't echo the server's own data back as a save
       useStore.setState({
-        views: state.views,
+        views: normalizeViewLayouts(state.views),
         activeViewId: state.activeViewId,
       })
       _suppressSave = false
@@ -44,8 +95,17 @@ export async function restoreDashboardState(): Promise<void> {
       // Fresh user: wipe whatever the previous browser user left behind.
       try { localStorage.removeItem("mia-dashboard") } catch { /* ignore */ }
       _suppressSave = true
+      // Seed a default view containing the term-chat widget so the
+      // first paint matches the login screen's chat surface. Revert: replace
+      // widgets/layouts with [] / {} for the original empty canvas.
+      const widgetId = "default-term-chat"
       useStore.setState({
-        views: [{ id: "default", name: "Main", widgets: [], layouts: {} }],
+        views: [{
+          id: "default",
+          name: "Main",
+          widgets: [{ id: widgetId, type: "term-chat" }],
+          layouts: { lg: [{ i: widgetId, x: 0, y: 0, w: 12, h: 12, minW: 2, minH: 2 }] },
+        }],
         activeViewId: "default",
       })
       _suppressSave = false

@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -43,7 +44,7 @@ import {
     type LlmConfig,
     type UsageData
 } from "./ioe/constants"
-import { EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
+import { BusFeedPanel, EditorTabs, LlmCallsPanel, MapPanel, ToolTimelinePanel, exportAgentLoop } from "./ioe/editors"
 import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
     ComparePanel,
@@ -78,6 +79,10 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 export function OperatorEnvironment() {
+  // ── Auth / role (Phase E.5 — gates admin-only UI surfaces) ───
+  const { me } = useMe()
+  const isAdmin = me?.isAdmin ?? false
+
   // ── Store ─────────────────────────────────────────────────────
   const connected = useStore((s) => s.connected)
   const runs = useStore((s) => s.runs) ?? []
@@ -88,6 +93,9 @@ export function OperatorEnvironment() {
   const logs = useStore((s) => s.logs)
   const audit = useStore((s) => s.audit)
   const trace = useStore((s) => s.trace)
+  const busMessages = useStore((s) => s.busMessages)
+  const helpUnread = useStore((s) => s.helpUnread)
+  const ackBusHelp = useStore((s) => s.ackBusHelp)
   const liveUsage = useStore((s) => s.liveUsage)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
@@ -189,6 +197,11 @@ export function OperatorEnvironment() {
   const isRunning = activeRun?.status === RunStatus.Running
   const isFailed = activeRun?.status === RunStatus.Failed
   const isCancelled = activeRun?.status === RunStatus.Cancelled
+  // Crashed = the server died mid-run (recovery.ts marks any Running/Pending/
+  // Planning rows as Crashed on boot). It's terminal, so the loop is
+  // guaranteed not to be alive. Treat it exactly like Failed/Cancelled —
+  // user-controlled RESUME (if a checkpoint exists) or RE-RUN.
+  const isCrashed = activeRun?.status === RunStatus.Crashed
   const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
 
   const currentIteration = useMemo(() => {
@@ -456,6 +469,12 @@ export function OperatorEnvironment() {
     if (tab === EditorTab.LlmCalls) return <LlmCallsPanel trace={trace} />
     if (tab === EditorTab.Map)
       return <MapPanel trace={trace} run={activeRun} agents={agents} />
+    if (tab === EditorTab.Bus) {
+      // Phase E.5: bus feed is admin-only. Non-admin selects fall back
+      // to the trace panel (the default tab they would otherwise see).
+      if (!isAdmin) return <LlmCallsPanel trace={trace} />
+      return <BusFeedPanel messages={busMessages} helpUnread={helpUnread} onAck={ackBusHelp} />
+    }
     // Fallback for old persisted "trace" → show tool-timeline
     return <ToolTimelinePanel steps={steps} />
   }
@@ -644,8 +663,8 @@ export function OperatorEnvironment() {
             )}
             <div className="flex items-center gap-1 flex-wrap justify-end">
               {isRunning && <ActionBtn label="CANCEL" color={C.coral} onClick={handleCancel} />}
-              {(isFailed || isCancelled) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
-              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && (
+              {(isFailed || isCancelled || isCrashed) && <ActionBtn label="RESUME" color={C.peach} onClick={handleResume} />}
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled || isCrashed) && (
                 <ActionBtn label="RE-RUN" color={C.accent} onClick={handleRerun} />
               )}
               {pendingWorkspaceChanges > 0 && (
@@ -655,7 +674,7 @@ export function OperatorEnvironment() {
                   onClick={handleApplyWorkspace}
                 />
               )}
-              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled) && !rolledBack && (
+              {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled || isCrashed) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
               )}
               {rollbackMsg && (
@@ -728,6 +747,9 @@ export function OperatorEnvironment() {
                   onChange={setEditorTab}
                   trace={trace}
                   stepCount={steps.length}
+                  busCount={busMessages.length}
+                  helpUnread={helpUnread}
+                  isAdmin={isAdmin}
                 />
                 <div className="flex-1" />
                 {editorTab === EditorTab.LlmCalls && trace.length > 0 && (
@@ -767,6 +789,9 @@ export function OperatorEnvironment() {
                       onChange={setEditorRightTab}
                       trace={trace}
                       stepCount={steps.length}
+                      busCount={busMessages.length}
+                      helpUnread={helpUnread}
+                      isAdmin={isAdmin}
                     />
                     <div className="flex-1" />
                     {editorRightTab === EditorTab.LlmCalls && trace.length > 0 && (

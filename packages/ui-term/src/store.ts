@@ -305,11 +305,52 @@ function emptyRun(id: string, goal = "", status = "pending", createdAt = new Dat
   }
 }
 
+function summarizeSqlQualityEvent(entry: Record<string, unknown>): string {
+  const notes: string[] = []
+  const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
+  const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
+    ? (entry["missingPersistedMirrorCandidates"] as string[])
+    : []
+  const tempScalarSubqueryCount = Number(entry["tempScalarSubqueryCount"] ?? 0)
+  const largeObjectRefs = Array.isArray(entry["largeObjectRefs"])
+    ? (entry["largeObjectRefs"] as Array<{ name?: string; count?: number }>).filter((ref) => Number(ref.count ?? 0) > 2)
+    : []
+
+  if (validationCode) notes.push(`blocked by ${validationCode}`)
+  if (missingMirrors.length > 0) notes.push(`missed mirror ${missingMirrors.join(", ")}`)
+  if (largeObjectRefs.length > 0) notes.push(largeObjectRefs.map((ref) => `${ref.name ?? "object"} ${Number(ref.count ?? 0)}x`).join(", "))
+  if (tempScalarSubqueryCount > 0) notes.push(`temp subqueries ${tempScalarSubqueryCount}`)
+  if (notes.length > 0) return notes.join(" · ")
+  return String(entry["phase"] ?? "checked")
+}
+
 function toTranscriptRow(e: SseEvent, state?: State): TranscriptRow | null {
   const runId = String(e.data["runId"] ?? "")
   if (!runId) return null
   const id = `${e.type}:${e.timestamp}:${e.data["seq"] ?? Math.random()}`
   const ts = e.timestamp
+
+  if (e.type === "debug.trace") {
+    const entry = e.data["entry"] as Record<string, unknown> | undefined
+    if ((entry?.["kind"] as string | undefined) === "planner-sql-quality") {
+      const text = `SQL quality — ${summarizeSqlQualityEvent(entry)}`
+      const blocked = typeof entry["validationCode"] === "string" || entry["phase"] === "blocked"
+      return { id, runId, kind: blocked ? "tool-error" : "info", text, timestamp: ts }
+    }
+    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+      const before = Number(entry["totalBeforeChars"] ?? 0)
+      const after = Number(entry["totalAfterChars"] ?? 0)
+      const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+      const tail = dropped.length > 0 ? ` · dropped=${dropped.join(",")}` : ""
+      return {
+        id,
+        runId,
+        kind: "info",
+        text: `Prompt budget · ${before.toLocaleString()} → ${after.toLocaleString()} chars${tail}`,
+        timestamp: ts,
+      }
+    }
+  }
 
   switch (e.type) {
     case "run.started": {

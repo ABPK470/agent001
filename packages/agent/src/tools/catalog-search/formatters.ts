@@ -1,4 +1,4 @@
-import type { CatalogFK, CatalogTable, SysEntry, ViewLineage } from "../catalog/index.js"
+import type { CatalogFK, CatalogTable, SysEntry } from "../catalog/index.js"
 
 // ── Formatters ───────────────────────────────────────────────────
 
@@ -15,7 +15,6 @@ export function fmtTable(
   matchedCols?: string[],
   catalog?: {
     getImplicitJoins(key: string, limit?: number): { column: string; dataType: string; tables: string[] }[]
-    getTableConcepts(key: string): { concept: string; sourceView: string }[]
   },
 ): string {
   if (!t) return "(unknown table)"
@@ -37,16 +36,22 @@ export function fmtTable(
 
   lines.push(`  ${t.qualifiedName} (${badges.join(", ")})`)
 
-  // Column names: PKs first, then all non-PK — show enough to judge the table's content
+  // Column names: PKs first, then all non-PK — show enough to judge the table's content.
+  // Cap raised from 15 to 40 because hallucinated column names (e.g. inventing
+  // `VolumeUSDMTD` when only `VolumeMTD` exists) were directly caused by the model
+  // not seeing the real currency/period variants hidden behind "(+N more)". 40 covers
+  // every typical curated fact/dim in this warehouse; the very wide audit views
+  // (>40 cols) still truncate, but those rarely participate in metric SELECTs.
+  const COLUMN_DISPLAY_CAP = 40
   const pks = t.columns.filter((c) => c.isPK)
   const nonPk = t.columns.filter((c) => !c.isPK)
-  const shown = [...pks, ...nonPk].slice(0, 15)
+  const shown = [...pks, ...nonPk].slice(0, COLUMN_DISPLAY_CAP)
   const colStr = shown.map((c) => {
     const flags: string[] = []
     if (c.isPK) flags.push("PK")
     return `${c.name}${flags.length ? " (" + flags.join(", ") + ")" : ""}`
   }).join(", ")
-  lines.push(`    Columns: ${colStr}${colCount > 15 ? ` (+${colCount - 15} more)` : ""}`)
+  lines.push(`    Columns: ${colStr}${colCount > COLUMN_DISPLAY_CAP ? ` (+${colCount - COLUMN_DISPLAY_CAP} more)` : ""}`)
 
   // Highlight matched columns if any
   if (matchedCols && matchedCols.length > 0) {
@@ -63,12 +68,6 @@ export function fmtTable(
     lines.push(`    Referenced by: ${fkIn} other tables`)
   }
 
-  // Business concepts — semantic context derived from lineage; reveals relationships beyond FK structure
-  const concepts = catalog?.getTableConcepts(t.qualifiedName) ?? []
-  if (concepts.length > 0) {
-    lines.push(`    Concepts: ${concepts.map((c) => `${c.concept} (via ${c.sourceView})`).join(", ")}`)
-  }
-
   return lines.join("\n")
 }
 
@@ -76,43 +75,6 @@ export function fmtPath(path: CatalogFK[]): string {
   return path.map((fk) =>
     `  ${fk.fromSchema}.${fk.fromTable}.${fk.fromColumn} → ${fk.toSchema}.${fk.toTable}.${fk.toColumn}`,
   ).join("\n")
-}
-
-export function fmtLineage(l: ViewLineage): string {
-  const lines = [
-    `LINEAGE MAP: ${l.view}`,
-    l.description,
-    "",
-    `Output columns (${l.outputColumns.length}): ${l.outputColumns.join(", ")}`,
-    "",
-    `Dimension Joins (${l.dimJoins.length}):`,
-  ]
-  for (const d of l.dimJoins) {
-    lines.push(`  ${d.column} → ${d.dimTable} (${d.dimRows}) — ${d.note}`)
-  }
-
-  // Group sources by business group
-  const groups = new Map<string, typeof l.sources>()
-  for (const s of l.sources) {
-    if (!groups.has(s.group)) groups.set(s.group, [])
-    groups.get(s.group)!.push(s)
-  }
-
-  lines.push("", `Sources (${l.sources.length} total):`)
-  for (const [group, sources] of groups) {
-    lines.push(``, `  ▸ ${group} (${sources.length}):`)
-    for (const s of sources) {
-      lines.push(`    ${s.qualifiedName} — ${s.businessArea}`)
-      if (s.filter && s.filter !== "all rows") lines.push(`      filter: ${s.filter}`)
-    }
-  }
-
-  lines.push(
-    "",
-    "To drill deeper into any source: inspect_definition(object='MappingName', schema='publish')",
-    "To query this view: always filter by pkMonth + pkClient (both are high-cardinality).",
-  )
-  return lines.join("\n")
 }
 
 /**
@@ -123,9 +85,12 @@ export function fmtSysEntry(entry: SysEntry): string {
   const lines: string[] = []
   lines.push(`  [SYS] ${entry.qualifiedName}`)
   if (entry.columns.length > 0) {
-    const shown = entry.columns.slice(0, 15)
+    // Match fmtTable cap so the model sees the real surface of a sys.* view
+    // instead of guessing a column name that fell off the end at 15.
+    const SYS_COLUMN_DISPLAY_CAP = 40
+    const shown = entry.columns.slice(0, SYS_COLUMN_DISPLAY_CAP)
     const colStr = shown.map((c) => `${c.name} (${c.dataType})`).join(", ")
-    lines.push(`    Columns: ${colStr}${entry.columns.length > 15 ? ` (+${entry.columns.length - 15} more)` : ""}`)
+    lines.push(`    Columns: ${colStr}${entry.columns.length > SYS_COLUMN_DISPLAY_CAP ? ` (+${entry.columns.length - SYS_COLUMN_DISPLAY_CAP} more)` : ""}`)
   }
   lines.push(`    ⇒ Query with: query_mssql({ query: "SELECT ... FROM ${entry.qualifiedName} ..." })`)
   return lines.join("\n")

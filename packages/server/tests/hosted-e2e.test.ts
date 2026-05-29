@@ -13,7 +13,7 @@
  *      and that the audit event log captured every step in order
  */
 
-import { importAttachmentTool, listAttachmentsTool, promoteAttachmentTool, readAttachmentTool, runWithPolicyContext, setAttachmentService, type HostedPolicyContext } from "@mia/agent"
+import { configureAgent, createImportAttachmentTool, createListAttachmentsTool, createPromoteAttachmentTool, createReadAttachmentTool, type HostedPolicyContext } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -59,14 +59,19 @@ function ctx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
 
 describe("hosted-mode end-to-end happy path", () => {
   it("upload → list → read → import → produce → promote, with audit", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { uploadAttachment, serverAttachmentService, getAttachment, listAttachments }
-      = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { createServerAttachmentService, uploadAttachment, getAttachment, listAttachments }
+      = await import("../src/adapters/persistence/attachments/index.js")
     const { subscribeToEvents } = await import("../src/event-broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)
 
-    setAttachmentService(serverAttachmentService)
+    const attachmentService = createServerAttachmentService(() => ctx())
+    const host = configureAgent({ attachments: attachmentService })
+    const listAttachmentsTool   = createListAttachmentsTool(host)
+    const readAttachmentTool    = createReadAttachmentTool(host)
+    const importAttachmentTool  = createImportAttachmentTool(host)
+    const promoteAttachmentTool = createPromoteAttachmentTool(host)
     // Seed FK parents required by the attachments table.
     const { seedSession, seedRun } = await import("./_fk-helpers.js")
     seedSession(testDb, "sid-alice", "alice@example.com")
@@ -88,30 +93,28 @@ describe("hosted-mode end-to-end happy path", () => {
 
     try {
       // 2-5. agent runs inside its hosted policy context.
-      await runWithPolicyContext(ctx(), async () => {
-        // The agent typically supplies its run id when listing across scopes;
-        // here we list without filter so it sees its own run + session uploads.
-        const list = await listAttachmentsTool.execute({})
-        expect(String(list)).toContain(uploaded.id)
+      // The agent typically supplies its run id when listing across scopes;
+      // here we list without filter so it sees its own run + session uploads.
+      const list = await listAttachmentsTool.execute({})
+      expect(String(list)).toContain(uploaded.id)
 
-        const read = await readAttachmentTool.execute({ id: uploaded.id })
-        expect(String(read)).toContain("a,b")
+      const read = await readAttachmentTool.execute({ id: uploaded.id })
+      expect(String(read)).toContain("a,b")
 
-        const importRes = await importAttachmentTool.execute({
-          id: uploaded.id, destination: "inputs/data.csv",
-        })
-        expect(String(importRes)).toContain("Imported")
-        expect(readFileSync(join(sandboxRoot, "inputs/data.csv"), "utf8")).toContain("a,b")
-
-        // Agent produces a derived report inside the sandbox.
-        writeFileSync(join(sandboxRoot, "report.md"), "# summary\n2 rows\n")
-
-        const promoteRes = await promoteAttachmentTool.execute({
-          sandboxPath: "report.md",
-          purposeTag:  "final-report",
-        })
-        expect(String(promoteRes)).toContain("Promoted")
+      const importRes = await importAttachmentTool.execute({
+        id: uploaded.id, destination: "inputs/data.csv",
       })
+      expect(String(importRes)).toContain("Imported")
+      expect(readFileSync(join(sandboxRoot, "inputs/data.csv"), "utf8")).toContain("a,b")
+
+      // Agent produces a derived report inside the sandbox.
+      writeFileSync(join(sandboxRoot, "report.md"), "# summary\n2 rows\n")
+
+      const promoteRes = await promoteAttachmentTool.execute({
+        sandboxPath: "report.md",
+        purposeTag:  "final-report",
+      })
+      expect(String(promoteRes)).toContain("Promoted")
     } finally {
       unsub()
     }

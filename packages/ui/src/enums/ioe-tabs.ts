@@ -24,6 +24,7 @@ export const EditorTab = {
   ToolTimeline: "tool-timeline",
   LlmCalls:     "llm-calls",
   Map:          "map",
+  Bus:          "bus",
 } as const
 
 export type EditorTab = (typeof EditorTab)[keyof typeof EditorTab]

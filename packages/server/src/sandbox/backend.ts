@@ -28,8 +28,8 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { SandboxBackendKind } from "../enums/sandbox.js"
 import { resolve, sep } from "node:path"
+import { SandboxBackendKind } from "../enums/sandbox.js"
 import { getSandbox } from "./index.js"
 import type { SandboxResult } from "./types.js"
 
@@ -98,10 +98,52 @@ function resolveCwd(sandboxRoot: string, sub?: string): string {
   return candidate
 }
 
+function collectPosixDescendantPids(rootPid: number): number[] {
+  const ps = spawnSync("ps", ["-Ao", "pid=,ppid="], { encoding: "utf8", windowsHide: true })
+  if (ps.status !== 0 || typeof ps.stdout !== "string") return []
+
+  const childrenByParent = new Map<number, number[]>()
+  for (const line of ps.stdout.split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s*$/)
+    if (!match) continue
+    const pid = Number(match[1])
+    const parentPid = Number(match[2])
+    const siblings = childrenByParent.get(parentPid)
+    if (siblings) siblings.push(pid)
+    else childrenByParent.set(parentPid, [pid])
+  }
+
+  const descendants: number[] = []
+  const pending = [...(childrenByParent.get(rootPid) ?? [])]
+  while (pending.length > 0) {
+    const pid = pending.pop()
+    if (pid === undefined) continue
+    descendants.push(pid)
+    const children = childrenByParent.get(pid)
+    if (children) pending.push(...children)
+  }
+  return descendants.sort((left, right) => right - left)
+}
+
+function collectPosixProcessGroupPids(groupPid: number): number[] {
+  const ps = spawnSync("ps", ["-Ao", "pid=,pgid="], { encoding: "utf8", windowsHide: true })
+  if (ps.status !== 0 || typeof ps.stdout !== "string") return []
+
+  const members: number[] = []
+  for (const line of ps.stdout.split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s*$/)
+    if (!match) continue
+    const pid = Number(match[1])
+    const pgid = Number(match[2])
+    if (pgid === groupPid) members.push(pid)
+  }
+  return members.sort((left, right) => right - left)
+}
+
 // ── Host backend (cross-platform Node child_process) ─────────────────
 
 class HostSandboxBackend implements SandboxBackend {
-  readonly kind = SandboxBackendKind.Host as const
+  readonly kind = SandboxBackendKind.Host
 
   async available(): Promise<boolean> {
     return true
@@ -158,6 +200,8 @@ class HostSandboxBackend implements SandboxBackend {
       let truncated = false
       let timedOut = false
       let settled = false
+      let timeoutEscalation: NodeJS.Timeout | null = null
+      const knownDescendantPids = new Set<number>()
 
       const collect = (which: "stdout" | "stderr") => (chunk: Buffer | string) => {
         const text = typeof chunk === "string" ? chunk : chunk.toString("utf8")
@@ -182,8 +226,17 @@ class HostSandboxBackend implements SandboxBackend {
           try { spawnSync("taskkill", ["/pid", String(child.pid), "/f", "/t"], { windowsHide: true }) }
           catch { /* fall through to child.kill below */ }
         } else {
+          for (const descendantPid of collectPosixDescendantPids(child.pid)) {
+            knownDescendantPids.add(descendantPid)
+          }
+          for (const groupPid of collectPosixProcessGroupPids(child.pid)) {
+            knownDescendantPids.add(groupPid)
+          }
           // POSIX: negative pid → process group kill.
           try { process.kill(-child.pid, signal) } catch { /* ignore ESRCH */ }
+          for (const descendantPid of knownDescendantPids) {
+            try { process.kill(descendantPid, signal) } catch { /* ignore ESRCH */ }
+          }
         }
         try { child.kill(signal) } catch { /* ignore */ }
       }
@@ -192,8 +245,13 @@ class HostSandboxBackend implements SandboxBackend {
         if (settled) return
         timedOut = true
         killTree("SIGTERM")
-        // Escalate if the tree refuses to exit promptly.
-        setTimeout(() => { if (!settled) killTree("SIGKILL") }, 1_000).unref()
+        // Escalate even if the top-level shell exits quickly: descendants can
+        // outlive the shell, so the group kill must not depend on `close`.
+        timeoutEscalation = setTimeout(() => {
+          killTree("SIGKILL")
+          timeoutEscalation = null
+        }, 250)
+        timeoutEscalation.unref()
       }, timeout)
       timer.unref()
 
@@ -207,6 +265,13 @@ class HostSandboxBackend implements SandboxBackend {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        // Keep the timeout escalation alive after the shell exits: a
+        // descendant can survive the shell's close event briefly, and the
+        // follow-up group SIGKILL is what makes the tree kill deterministic.
+        if (timeoutEscalation && !timedOut) {
+          clearTimeout(timeoutEscalation)
+          timeoutEscalation = null
+        }
         options.signal?.removeEventListener("abort", onAbort)
         const trailer = truncated ? `\n[output truncated at ${MAX_OUTPUT_BYTES} bytes]` : ""
         resolvePromise({
@@ -223,6 +288,9 @@ class HostSandboxBackend implements SandboxBackend {
         finish(1)
       })
       child.on("close", (code, signal) => {
+        if (timedOut) {
+          killTree("SIGKILL")
+        }
         const exitCode = typeof code === "number"
           ? code
           : signal
@@ -264,7 +332,7 @@ function sanitizeEnv(env?: Record<string, string>): Record<string, string> | und
 // ── Docker backend (wraps existing DockerSandbox) ────────────────────
 
 class DockerSandboxBackend implements SandboxBackend {
-  readonly kind = SandboxBackendKind.Docker as const
+  readonly kind = SandboxBackendKind.Docker
 
   async available(): Promise<boolean> {
     return getSandbox().isDockerAvailable()

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "_comment": "ABI sync environments. Roles stay general-purpose; current direction policy is restricted by allowedSyncTargets.",
+  "environments": [
+    {
+      "name": "dev",
+      "displayName": "DEV",
+      "color": "blue",
+      "role": "both",
+      "agentServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5005/etl",
+      "gateServiceBaseUrl": "https://zaprnbmapp1171.corp.dsarena.com/gate",
+      "ringOrder": 0,
+      "syncAllowlist": [],
+      "allowedSyncTargets": []
+    },
+    {
+      "name": "uat",
+      "displayName": "UAT",
+      "color": "teal",
+      "role": "both",
+      "agentServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5005/etl",
+      "gateServiceBaseUrl": "https://zaprnbmapp1172.corp.dsarena.com/gate",
+      "ringOrder": 1,
+      "syncAllowlist": [],
+      "allowedSyncTargets": ["dev"]
+    },
+    {
+      "name": "prod",
+      "displayName": "PROD",
+      "color": "indigo",
+      "role": "both",
+      "agentServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5010/agent",
+      "etlServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5005/etl",
+      "gateServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com/gate",
+      "ringOrder": 2,
+      "syncAllowlist": [],
+      "allowedSyncTargets": []
+    }
+  ]
+}

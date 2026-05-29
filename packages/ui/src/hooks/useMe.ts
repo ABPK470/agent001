@@ -13,6 +13,12 @@
  * the SPA never reads or threads sid. Every per-user effect dependency
  * collapses to `[me?.upn]` — that's the structural guarantee we paid
  * for in commits 1-4.
+ *
+ * Liveness ("online" indicator in the Active Users widget) is NOT
+ * driven from here. It is a side-effect of the SSE event stream
+ * (`/api/events/stream`): while that connection is open the server
+ * keeps `sessions.last_seen_at` fresh; when it closes the row ages
+ * out within the 60 s online window. No polling endpoint exists.
  */
 
 import { useCallback, useEffect, useState } from "react"

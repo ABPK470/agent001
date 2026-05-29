@@ -3,12 +3,13 @@
  *
  * Outside this folder, import from `./tools/index.js` only.
  * Each file here exports one or more `Tool` objects plus per-tool
- * configuration helpers (setX) that today are still module-globals.
+ * host/run-bound factory helpers.
  *
  * Note: per-tool subdirectories (browse-web/, catalog/, mssql/, etc.)
  * are private implementation details — do not import them directly.
  */
 
+export * from "./_helpers/index.js"
 export * from "./ask-user.js"
 export * from "./attachments.js"
 export * from "./browse-web/index.js"
@@ -29,9 +30,11 @@ export * from "./mssql-inspector/index.js"
 export * from "./mssql-profiler.js"
 export * from "./mssql-relationships/index.js"
 export * from "./mssql/index.js"
+export * from "./note.js"
+export * from "./recall/index.js"
+export * from "./record-table-verdict.js"
 export * from "./search-files.js"
 export * from "./shell/index.js"
-export * from "./sync-tools.js"
 export * from "./think.js"
 export * from "./web-search/index.js"
 

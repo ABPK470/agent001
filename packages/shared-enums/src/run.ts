@@ -19,6 +19,12 @@ export const RunStatus = {
   Completed: "completed",
   Failed: "failed",
   Cancelled: "cancelled",
+  /** Terminal. Set on boot for any non-terminal row when the server
+   *  restarted mid-run. Distinct from Failed (an agent-level error)
+   *  so the UI can label it accurately and the user knows the loop
+   *  was interrupted by an external event, not a logic failure.
+   *  Resumable from checkpoint, never auto-resumed. */
+  Crashed: "crashed",
 } as const
 
 export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus]

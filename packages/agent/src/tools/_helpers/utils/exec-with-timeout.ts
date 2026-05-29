@@ -6,8 +6,8 @@
  * @module
  */
 
-import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../constants.js"
-import type { ToolResultEnvelope } from "../../../types.js"
+import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../domain/agent-constants.js"
+import type { ToolResultEnvelope } from "../../../domain/agent-types.js"
 import {
     didToolCallFail,
     extractToolFailureText,

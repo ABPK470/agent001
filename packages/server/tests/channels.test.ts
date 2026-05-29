@@ -7,13 +7,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { QueueStore } from "../src/channels/queue.js"
-import { MessageQueue } from "../src/channels/queue.js"
-import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/channels/retry.js"
-import type { ConversationStore, RunTrigger } from "../src/channels/router.js"
-import { MessageRouter } from "../src/channels/router.js"
-import { TeamsChannel } from "../src/channels/teams.js"
-import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/channels/types.js"
+import type { QueueStore } from "../src/api/channels/queue.js"
+import { MessageQueue } from "../src/api/channels/queue.js"
+import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/api/channels/retry.js"
+import type { ConversationStore, RunTrigger } from "../src/api/channels/router.js"
+import { MessageRouter } from "../src/api/channels/router.js"
+import { TeamsChannel } from "../src/api/channels/teams.js"
+import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/api/channels/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -341,7 +341,17 @@ describe("MessageRouter", () => {
 
     expect(result.runId).toBe("run-001")
     expect(result.conversationId).toBeTruthy()
-    expect(trigger.startRun).toHaveBeenCalledWith("What's the weather?")
+    expect(trigger.startRun).toHaveBeenCalledTimes(1)
+    const [goal, session] = vi.mocked(trigger.startRun).mock.calls[0] ?? []
+    expect(goal).toBe("What's the weather?")
+    expect(session).toMatchObject({
+      displayName: "Alice",
+      isAdmin: false,
+      ip: "teams:inbound",
+      userAgent: "teams:channel",
+    })
+    expect(session?.sid).toMatch(/^channel:teams:[0-9a-f]{24}$/)
+    expect(session?.upn).toBe(session?.sid)
 
     // Conversation was created
     const convs = router.listConversations()
@@ -368,6 +378,34 @@ describe("MessageRouter", () => {
 
     expect(result1.conversationId).toBe(result2.conversationId)
     expect(router.listConversations()).toHaveLength(1)
+  })
+
+  it("stamps the same synthetic continuity identity for repeated inbound messages from one sender", () => {
+    const senderId = JSON.stringify({ serviceUrl: "https://smba.example.com/", conversationId: "c1", userId: "u1" })
+    router.handleInbound({
+      platformMessageId: "activity-1",
+      channelType: "teams",
+      senderId,
+      senderName: "Alice",
+      text: "first",
+      raw: {},
+      receivedAt: new Date(),
+    })
+    router.handleInbound({
+      platformMessageId: "activity-2",
+      channelType: "teams",
+      senderId,
+      senderName: "Alice",
+      text: "second",
+      raw: {},
+      receivedAt: new Date(),
+    })
+
+    const firstSession = vi.mocked(trigger.startRun).mock.calls[0]?.[1]
+    const secondSession = vi.mocked(trigger.startRun).mock.calls[1]?.[1]
+    expect(firstSession?.sid).toBeTruthy()
+    expect(secondSession?.sid).toBe(firstSession?.sid)
+    expect(secondSession?.upn).toBe(firstSession?.upn)
   })
 
   it("sends reply through the queue on run completion", async () => {

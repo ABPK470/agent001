@@ -11,8 +11,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import { buildSystemMessages } from "../src/orchestrator/system-messages.js"
-import type { RunWorkspaceContext } from "../src/run-workspace.js"
+import { buildSystemMessages } from "../src/application/core/system-messages.js"
+import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const created: string[] = []
 
@@ -68,7 +68,7 @@ describe("hosted prompt redaction", () => {
     expect(joined).toMatch(/UAT and PROD are read-only/i)
   })
 
-  it("developer profile prompt keeps the workspace path and tree", async () => {
+  it("developer admin prompt keeps the workspace path and tree", async () => {
     const sourceRoot = await createWorkspaceWithSecrets()
 
     const runWorkspace: RunWorkspaceContext = {
@@ -87,10 +87,42 @@ describe("hosted prompt redaction", () => {
       runWorkspace,
       perTier:      emptyTier(),
       runId:        "run-2",
+      isAdmin:      true,
     })
 
     const joined = messages.map((m) => m.content).join("\n---\n")
     expect(joined).toContain(`Workspace: ${sourceRoot}`)
+    expect(joined).toContain("secret-internal")
+    expect(joined).toMatch(/Structure:\n/)
+    expect(joined).not.toContain("Hosted runtime:")
+  })
+
+  it("developer non-admin prompt omits the workspace path and tree", async () => {
+    const sourceRoot = await createWorkspaceWithSecrets()
+
+    const runWorkspace: RunWorkspaceContext = {
+      runId:         "run-3",
+      sourceRoot,
+      executionRoot: sourceRoot,
+      taskType:      "analysis_or_chat",
+      isolated:      false,
+      profile:       "developer",
+    }
+
+    const messages = await buildSystemMessages({
+      goal:         "summarize the dataset",
+      systemPrompt: undefined,
+      allTools:     [] as Tool[],
+      runWorkspace,
+      perTier:      emptyTier(),
+      runId:        "run-3",
+      isAdmin:      false,
+    })
+
+    const joined = messages.map((m) => m.content).join("\n---\n")
+    expect(joined).not.toContain(`Workspace: ${sourceRoot}`)
+    expect(joined).not.toContain("secret-internal")
+    expect(joined).not.toMatch(/Structure:\n/)
     expect(joined).not.toContain("Hosted runtime:")
   })
 })

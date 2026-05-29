@@ -30,11 +30,15 @@ export const TrajectoryEventKind = {
   DelegationParallelEnd:       "delegation-parallel-end",
   SystemPrompt:                "system-prompt",
   ToolsResolved:               "tools-resolved",
+  ToolsFiltered:               "tools-filtered",
   LlmRequest:                  "llm-request",
   LlmResponse:                 "llm-response",
   PlannerValidationRemediated: "planner-validation-remediated",
   UserInputRequest:            "user-input-request",
   UserInputResponse:           "user-input-response",
+  ClarificationDetected:       "clarification-detected",
+  ClarificationResolved:       "clarification-resolved",
+  ClarificationLlmPlannerInvoked: "clarification-llm-planner-invoked",
 } as const
 
 export type TrajectoryEventKind = (typeof TrajectoryEventKind)[keyof typeof TrajectoryEventKind]

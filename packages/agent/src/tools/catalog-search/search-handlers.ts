@@ -4,11 +4,17 @@
  * @module
  */
 
-import type { CatalogGraph, ViewLineage } from "../catalog/index.js"
+import type { TableVerdictsReader } from "../../application/shell/runtime.js"
+import type { CatalogGraph } from "../catalog/index.js"
 import { fmtSysEntry, fmtTable } from "./formatters.js"
 
-export function handleSearch(catalog: CatalogGraph, query: string, schemaFilter?: string): string {
-  let hits = catalog.search(query)
+export function handleSearch(
+  catalog: CatalogGraph,
+  query: string,
+  schemaFilter?: string,
+  tableVerdicts?: TableVerdictsReader | null,
+): string {
+  let hits = catalog.search(query, 15, tableVerdicts)
   const sysHits = catalog.searchSys(query)
 
   if (schemaFilter) {
@@ -53,17 +59,6 @@ export function handleSearch(catalog: CatalogGraph, query: string, schemaFilter?
       "Results ranked by: name match + schema tier (publish ★) + row volume + column richness + FK centrality + join connectivity.",
       "Pick the highest-ranked table in the best schema tier. If unsure, compare column lists above.",
       "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5.",
-    )
-  }
-
-  const lineageHints = hits.slice(0, 5)
-    .map((h) => catalog.getLineage(h.table.qualifiedName))
-    .filter((l): l is ViewLineage => l !== null)
-  if (lineageHints.length > 0) {
-    lines.push(
-      "",
-      ` LINEAGE AVAILABLE: ${lineageHints.map((l) => l.view).join(", ")}`,
-      `  Use search_catalog(lineage='${lineageHints[0].view}') to see all ${lineageHints[0].sources.length} source views, dimension joins, and business areas.`,
     )
   }
 

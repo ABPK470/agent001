@@ -1,3 +1,4 @@
+import { PolicyRole } from "@mia/agent"
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -11,7 +12,7 @@ import {
     getRunWorkspaceRoot,
     prepareRunWorkspace,
     shouldUseIsolatedWorkspace,
-} from "../src/run-workspace.js"
+} from "../src/application/shell/workspace/run-workspace.js"
 
 const createdDirs: string[] = []
 
@@ -116,12 +117,17 @@ describe("run-workspace", () => {
       await writeFile(join(sourceRoot, "src", "secret.ts"), "export const s = 1\n")
       await writeFile(join(sourceRoot, "README.md"), "# real workspace\n")
 
+      // Isolation is gated by `role` (the security boundary), not by
+      // `profile` or AGENT_HOSTED_MODE. See run-workspace.ts: HostedUser
+      // role always gets an empty sandbox, Admin role never does —
+      // regardless of deployment env. The deprecated `profile` param
+      // only feeds the legacy admin-codegen copy path.
       const ctx = await prepareRunWorkspace({
         runId:      "run-hosted-1",
         sourceRoot,
         goal:       "Read MSSQL stats",  // analysis-style goal; would normally not isolate
         resume:     false,
-        profile:    "hosted",
+        role:       PolicyRole.HostedUser,
       })
       createdDirs.push(ctx.executionRoot)
 
@@ -152,7 +158,7 @@ describe("run-workspace", () => {
         sourceRoot,
         goal:    "follow up question",
         resume:  true,
-        profile: "hosted",
+        role:    PolicyRole.HostedUser,
       })
       createdDirs.push(ctx.executionRoot)
       expect(ctx.isolated).toBe(true)

@@ -3,9 +3,9 @@
  */
 
 import type {
-  Run,
-  Step,
-  TraceEntry,
+    Run,
+    Step,
+    TraceEntry,
 } from "../../types"
 
 // ── Design tokens ────────────────────────────────────────────────
@@ -253,6 +253,18 @@ export function buildDagNodes(trace: TraceEntry[]): DagNode[] {
       })
       continue
     }
+    if (e.kind === "planner-sql-quality") {
+      nodes.push({
+        id: `sql-quality-${i}`,
+        type: "answer",
+        label: "SQL",
+        detail: `${e.phase} · ${e.toolMode} · ${e.largeObjectRefs.map((ref) => `${ref.name}×${ref.count}`).join(" · ") || "no large refs"}`,
+        expanded: `SQL quality\nconnection: ${e.connection}\nvalidation: ${e.validationCode ?? "ok"}\nmissed mirrors: ${e.missingPersistedMirrorCandidates.join(", ") || "none"}\ntemp scalar subqueries: ${e.tempScalarSubqueryCount}\npreview:\n${e.sqlPreview}`,
+        status: e.phase === "blocked" ? "error" : e.validationOk ? "done" : "running",
+        depth: delegationDepth,
+      })
+      continue
+    }
     if (typeof e.kind === "string" && e.kind.startsWith("planner-")) continue
 
     if (e.kind === "iteration") {
@@ -371,6 +383,7 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-step-end") items.push({ text: `STEP ${e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? "✓" : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? "⚠" : "✗"} ${e.stepName} (${e.durationMs}ms${e.acceptanceState ? ` · ${e.acceptanceState}` : ""})`, color: e.acceptanceState === "accepted" || (e.status === "completed" && !e.acceptanceState) ? C.success : e.acceptanceState === "pending_verification" || e.acceptanceState === "repair_required" ? C.warning : C.coral })
     else if (e.kind === "planner-pipeline-end") items.push({ text: `PIPE ◀ ${e.status} ${e.completedSteps}/${e.totalSteps}`, color: e.status === "completed" ? C.success : C.coral })
     else if (e.kind === "planner-validation-remediated") items.push({ text: `PLAN ✓ validation auto-remediated (${e.diagnostics.length})`, color: C.warning })
+    else if (e.kind === "planner-sql-quality") items.push({ text: `SQL ${e.phase} ${e.validationCode ?? "ok"}${e.missingPersistedMirrorCandidates.length ? ` · mirror ${e.missingPersistedMirrorCandidates.join(",")}` : ""}${e.tempScalarSubqueryCount > 0 ? ` · temp-subq ${e.tempScalarSubqueryCount}` : ""}`, color: e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
     else if (e.kind === "planner-repair-plan") items.push({ text: `REPAIR ${e.rerunOrder.join(" → ") || "none"}`, color: C.plum })
     else if (e.kind === "planner-repair-compatibility") items.push({ text: `COMPAT ${e.activePath} ${e.diverged ? "Δ" : "="}`, color: e.diverged ? C.warning : C.success })
@@ -415,6 +428,19 @@ export function buildProblems(trace: TraceEntry[], steps: Step[]): Problem[] {
     } else if (e.kind === "planner-repair-plan") {
       for (const task of e.tasks) {
         if (task.mode === "blocked") addProblem({ text: `${task.stepName}: repair blocked`, source: "planner" })
+      }
+    } else if (e.kind === "planner-sql-quality") {
+      if (e.missingPersistedMirrorCandidates.length > 0) {
+        addProblem({ text: `SQL missed persisted mirror: ${e.missingPersistedMirrorCandidates.join(", ")}`, source: "sql" })
+      }
+      for (const ref of e.largeObjectRefs) {
+        if (ref.count > 2) addProblem({ text: `SQL large object overused: ${ref.name} referenced ${ref.count}×`, source: "sql" })
+      }
+      if (e.tempScalarSubqueryCount > 0) {
+        addProblem({ text: `SQL temp scalar subqueries: ${e.tempScalarSubqueryCount}`, source: "sql" })
+      }
+      if (e.validationCode) {
+        addProblem({ text: `SQL validation: ${e.validationCode}`, source: "sql" })
       }
     }
   }

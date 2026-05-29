@@ -1,9 +1,8 @@
-import { AgentRuntime } from "../../agent-runtime.js"
-import { Agent } from "../../agent/index.js"
-import { READ_ONLY_TOOL_NAMES } from "../../constants.js"
+import { Agent } from "../../application/shell/agent.js"
+import { READ_ONLY_TOOL_NAMES } from "../../domain/agent-constants.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate/index.js"
 import type { ChildSpec } from "./helpers.js"
 
@@ -68,12 +67,35 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // Children are workers — no delegation tools. Just their execution tools.
   childTools = childTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
 
-  // Inject extra tools (e.g., bus messaging tools)
+  // Each spawned child gets its OWN run id so bus messages, telemetry, and
+  // queue slots can be attributed to the actual publisher rather than the
+  // parent. Generated unconditionally (the older code only generated this
+  // inside `if (ctx.acquireSlot)`, which left the bus / iteration hook
+  // without an identity for unqueued runs).
+  const childRunId = `delegate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const childAgentName = resolvedAgent?.name ?? "Child Agent"
+
+  // Inject extra tools (e.g., bus messaging tools).
+  // Two paths, in priority order:
+  //  1. `buildChildTools(childRunId, childAgentName)` — preferred. Used by
+  //     the orchestrator to mint per-child bus tools so each child publishes
+  //     under its OWN identity (Phase B.3).
+  //  2. `extraChildTools` — legacy/static. A flat list of tools shared
+  //     across all children. Tools from path (1) override same-named ones
+  //     from path (2).
+  const builtPerChild = ctx.buildChildTools ? ctx.buildChildTools(childRunId, childAgentName) : []
+  const builtPerChildNames = new Set(builtPerChild.map(t => t.name))
   if (ctx.extraChildTools) {
     const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
     childTools = [
-      ...childTools.filter(t => !extraNames.has(t.name)),
-      ...ctx.extraChildTools,
+      ...childTools.filter(t => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
+      ...ctx.extraChildTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
+    ]
+  } else if (builtPerChild.length > 0) {
+    childTools = [
+      ...childTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
     ]
   }
 
@@ -85,10 +107,10 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     ...(resolvedAgent ? { agentId: resolvedAgent.id, agentName: resolvedAgent.name } : {}),
   })
 
-  // Optionally acquire a queue slot
+  // Optionally acquire a queue slot using the same child run id we just
+  // generated, so the queue and the bus see the child as one entity.
   let releaseSlot: (() => void) | undefined
   if (ctx.acquireSlot) {
-    const childRunId = `delegate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     releaseSlot = await ctx.acquireSlot(childRunId)
   }
 
@@ -112,21 +134,11 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   // Buffer LLM request/response events so they emit AFTER the iteration marker
   let pendingLlmEvents: Record<string, unknown>[] = []
 
-  // Per-child AgentRuntime — inherits shared infrastructure (mssql pools,
-  // executors, catalog cache, sync sinks) from the parent's runtime, but has
-  // its own browse-web sessions and kill signals so concurrent siblings
-  // cannot interfere with one another.
-  const childRuntime = new AgentRuntime({
-    inheritFrom: AgentRuntime.current(),
-    signal: ctx.signal,
-  })
-
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     systemPrompt: effectivePrompt,
     verbose: false,
     signal: ctx.signal,
-    runtime: childRuntime,
     onThinking: (content, _toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: DelegationTraceKind.Iteration,
@@ -143,6 +155,18 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         })
       }
       ctx.onChildUsage?.(child.usage, child.llmCalls)
+      // Phase B.3: notify the orchestrator of the iteration boundary so it
+      // can auto-publish a Status to the bus on this child's behalf. The
+      // hook is fired EVERY iteration; throttling (e.g. every Nth) is the
+      // orchestrator's responsibility.
+      ctx.onChildIteration?.({
+        childRunId,
+        childAgentName,
+        iteration: iteration + 1,
+        maxIterations: maxIter,
+        content: content ? content.slice(0, 200) : null,
+        toolNames: _toolCalls.map((c) => c.name),
+      })
     },
     onStep: (_messages, _iteration) => {
       ctx.onChildUsage?.(child.usage, child.llmCalls)
@@ -214,7 +238,6 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
 
     return `Delegation failed: ${errMsg}`
   } finally {
-    await childRuntime.dispose()
     releaseSlot?.()
   }
 }

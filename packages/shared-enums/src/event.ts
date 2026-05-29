@@ -64,6 +64,13 @@ export const EventType = {
   ApiRequest: "api.request",
   LogDetail: "log.detail",
   EventsConnected: "events.connected",
+  // Periodic dashboard refresh signal — emitted by a single global server
+  // timer (NOT once per client). Lightweight payload-free tick used by
+  // SSE-driven dashboards (e.g. ActiveUsers) to refresh aggregates whose
+  // freshness depends on session liveness (last_seen_at) rather than on
+  // run/agent/tool lifecycle events. Replaces the per-tab 5s polling that
+  // used to keep "Last seen" current.
+  SessionPresenceTick: "session.presence.tick",
 
   // Delegation (engine-side)
   DelegationStarted: "delegation.started",
@@ -139,6 +146,41 @@ export const EventType = {
   SyncEnvUpdate: "sync_env.update",
   SyncEnvReset: "sync_env.reset",
 
+  // Sync Admin — overview maintenance
+  FreezeWindowUpserted: "freeze_window.upserted",
+  FreezeWindowDeleted: "freeze_window.deleted",
+  SyncProposerScheduleSaved: "sync.proposer.schedule.saved",
+  SyncProposerScheduleDeleted: "sync.proposer.schedule.deleted",
+  SyncPolicySaved: "sync.policy.saved",
+  SyncPolicyDeleted: "sync.policy.deleted",
+  SyncNotificationRouteSaved: "sync.notification.route.saved",
+  SyncNotificationRouteDeleted: "sync.notification.route.deleted",
+  SyncDefinitionsPublished: "sync.definitions.published",
+
+  // Entity registry (Phase 0 config uplift)
+  EntityRegistrySaved: "entity_registry.saved",
+  EntityRegistryRetired: "entity_registry.retired",
+  EntityRegistryStrategySaved: "entity_registry.strategy.saved",
+  EntityRegistryImported: "entity_registry.imported",
+
+  // Reconciliation Proposer (Phase 1)
+  SyncProposerRunStarted:    "sync.proposer.run.started",
+  SyncProposerRunCompleted:  "sync.proposer.run.completed",
+  SyncProposerRunFailed:     "sync.proposer.run.failed",
+  SyncProposalCreated:       "sync.proposal.created",
+  SyncProposalAnnotated:     "sync.proposal.annotated",
+  SyncProposalStatusChanged: "sync.proposal.status.changed",
+  SyncApprovalRequested:     "sync.approval.requested",
+  SyncApprovalGranted:       "sync.approval.granted",
+  SyncApprovalRejected:      "sync.approval.rejected",
+  SyncApprovalExpired:       "sync.approval.expired",
+  SyncApprovalBypassed:      "sync.approval.bypassed",
+  SyncEvidenceSealed:        "sync.evidence.sealed",
+  SyncVerificationCompleted: "sync.verification.completed",
+  SyncVerificationFailed:    "sync.verification.failed",
+  SyncNotificationDelivered: "sync.notification.delivered",
+  SyncNotificationFailed:    "sync.notification.failed",
+
   // Memory
   MemoryIngested: "memory.ingested",
   MemoryFiltered: "memory.filtered",
@@ -169,6 +211,10 @@ export const EventType = {
   MessageDelivered: "message.delivered",
   MessageFailed: "message.failed",
   ConversationMessage: "conversation.message",
+
+  // Inter-agent bus (sibling / parent coordination during a run tree)
+  AgentBusMessage: "agent.bus.message",
+  AgentHelpRequested: "agent.help.requested",
 
   // Cross-cutting
   Audit: "audit",
@@ -201,6 +247,7 @@ export const EventNamespace = {
   Planner: "planner",
   Sync: "sync",
   SyncEnv: "sync_env",
+  FreezeWindow: "freeze_window",
   Memory: "memory",
   Procedural: "procedural",
   Attachment: "attachment",
@@ -224,6 +271,7 @@ const NAMESPACE_PREFIX: ReadonlyArray<readonly [string, EventNamespace]> = [
   ["delegation.",         EventNamespace.Delegation],
   ["planner.",            EventNamespace.Planner],
   ["sync_env.",           EventNamespace.SyncEnv],
+  ["freeze_window.",      EventNamespace.FreezeWindow],
   ["sync.",               EventNamespace.Sync],
   ["memory.",             EventNamespace.Memory],
   ["procedural.",         EventNamespace.Procedural],

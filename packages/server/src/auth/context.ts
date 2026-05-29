@@ -1,9 +1,8 @@
 /**
- * AsyncLocalStorage session context — lets deep code (db helpers, tools,
- * loggers) read the current request's session without explicit threading.
+ * Request/session types plus the per-run AbortController map.
  *
- * Every HTTP request runs inside `als.run({ session }, handler)`. Anywhere
- * downstream, `getCurrentSession()` returns the session or null.
+ * The authenticated HTTP boundary decorates `req.session`; downstream code
+ * that needs session facts must capture and pass them explicitly.
  *
  * Also hosts the per-run AbortController map; tools register a per-run
  * `AbortSignal` here, and `runWithMssqlKillSignal` (in `@mia/agent`)
@@ -11,8 +10,6 @@
  * `setMssqlKillSignal()` was deleted in agent Phase 2 — this is the only
  * supported path now.
  */
-
-import { AsyncLocalStorage } from "node:async_hooks"
 
 /**
  * v19: identity is always resolved (no anon). `upn` is the canonical
@@ -26,17 +23,6 @@ export interface CurrentSession {
   isAdmin: boolean
   ip: string
   userAgent: string
-}
-
-/** @internal — exported so the request hook can call enterWith(). Use getCurrentSession() instead in app code. */
-export const sessionAls = new AsyncLocalStorage<{ session: CurrentSession }>()
-
-export function runWithSession<T>(session: CurrentSession, fn: () => T): T {
-  return sessionAls.run({ session }, fn)
-}
-
-export function getCurrentSession(): CurrentSession | null {
-  return sessionAls.getStore()?.session ?? null
 }
 
 // ── Per-run kill signals (provided to tools via runWithMssqlKillSignal) ──

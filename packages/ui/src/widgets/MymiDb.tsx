@@ -5,19 +5,17 @@
  *  - Global cross-schema search (objects + columns)
  *  - Schema sidebar with size bars and row stats
  *  - Object list with relative size fill bars, row counts, column counts
- *  - Detail panel with 4 tabs: Preview | Columns | Relations | Lineage
+ *  - Detail panel with 3 tabs: Preview | Columns | Relations
  *  - FK relation graph (text-based, inbound + outbound)
- *  - Data lineage from lineage.json / core.vDatasetLineage
+ *  - Live preview of table contents (limit 100 rows)
  */
 
 import {
     AlertCircle,
-    ArrowRight,
     ChevronRight,
     Database,
     Download,
     Eye,
-    GitMerge,
     Key,
     Layers,
     LayoutList,
@@ -28,11 +26,11 @@ import {
     Search,
     Table2,
     X
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api";
-import { Listbox, type ListboxOption } from "../components/Listbox";
-import { useContainerSize } from "../hooks/useContainerSize";
+} from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { api } from "../api"
+import { Listbox, type ListboxOption } from "../components/Listbox"
+import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -58,7 +56,7 @@ type SearchResult = {
   columnName: string | null; columnType: string | null
 }
 
-type DetailTab = "preview" | "columns" | "relations" | "lineage"
+type DetailTab = "preview" | "columns" | "relations"
 
 type ModelObject = {
   schema: string; name: string; isTable: boolean
@@ -202,10 +200,6 @@ export function MymiDb() {
   const [relLoading, setRelLoading]     = useState(false)
   const [relViewMode, setRelViewMode]   = useState<"list" | "visual">("visual")
 
-  const [lineage, setLineage]           = useState<Record<string, unknown> | null>(null)
-  const [lineageLoading, setLineageLoading] = useState(false)
-  const [lineageViewMode, setLineageViewMode] = useState<"list" | "visual">("visual")
-
   // ── Search state ─────────────────────────────────────────────
   const [searchQuery, setSearchQuery]   = useState("")
   const [searchSchemas, setSearchSchemas] = useState<Set<string>>(new Set())
@@ -287,12 +281,6 @@ export function MymiDb() {
         .then(setRelations)
         .catch(() => {})
         .finally(() => setRelLoading(false))
-    } else if (activeTab === "lineage") {
-      setLineageLoading(true); setLineage(null)
-      api.mymiLineage(activeSchema, activeObject.name, activeDb)
-        .then(setLineage)
-        .catch(() => {})
-        .finally(() => setLineageLoading(false))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeObject, activeSchema, activeTab, activeDb])
@@ -344,7 +332,6 @@ export function MymiDb() {
     { key: "preview",   label: "Preview",   Icon: Table2 },
     { key: "columns",   label: "Columns",   Icon: Layers },
     { key: "relations", label: "Relations", Icon: Link2 },
-    { key: "lineage",   label: "Lineage",   Icon: GitMerge },
   ]
 
   return (
@@ -888,39 +875,6 @@ export function MymiDb() {
                       )}
                     </>
                   )}
-
-                  {/* ── Lineage tab ──────────────────────────── */}
-                  {activeTab === "lineage" && (
-                    <>
-                      {lineageLoading && <Spinner />}
-                      {!lineageLoading && lineage && (
-                        <div className="flex flex-col flex-1 min-h-0">
-                          <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-border/30">
-                            <button
-                              onClick={() => setLineageViewMode("visual")}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                lineageViewMode === "visual" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
-                              }`}
-                            >
-                              <Network size={11} /> Visual
-                            </button>
-                            <button
-                              onClick={() => setLineageViewMode("list")}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
-                                lineageViewMode === "list" ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
-                              }`}
-                            >
-                              <LayoutList size={11} /> List
-                            </button>
-                          </div>
-                          {lineageViewMode === "visual"
-                            ? <LineageGraph lineage={lineage} />
-                            : <LineageView lineage={lineage} />
-                          }
-                        </div>
-                      )}
-                    </>
-                  )}
                 </div>
               </>
             )}
@@ -1255,315 +1209,6 @@ function RelationsList({ relations, centerSchema, centerName }: {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── LineageGraph ──────────────────────────────────────────────────
-// SVG flow diagram: source nodes on the left, center view on the right
-// (or parent views on the right for reverse lineage).
-
-function LineageGraph({ lineage }: { lineage: Record<string, unknown> }) {
-  const source = lineage["source"] as string
-
-  // For non-catalog/non-parents cases, fall back to list view
-  if (source === "none" || source === "convention" || source === "viewDefinition") {
-    return <LineageView lineage={lineage} />
-  }
-
-  const BOX_W = 170, BOX_H = 44, ROW_GAP = 10, COL_GAP = 110
-  const object = lineage["object"] as string
-  const centerLabel = object.includes(".") ? object.split(".").pop()! : object
-  const centerSchema = object.includes(".") ? object.split(".")[0] : ""
-
-  let nodes: string[] = []
-  let isReverse = false
-
-  if (source === "parents") {
-    const parents = lineage["parents"] as Array<{ view: string; businessArea: string }>
-    nodes = (parents ?? []).map((p) => p.view)
-    isReverse = true
-  } else {
-    // catalog or auto — sources array
-    const sources = lineage["sources"] as Array<Record<string, unknown>>
-    nodes = (sources ?? []).map((s) => s["qualifiedName"] as string)
-  }
-
-  if (nodes.length === 0) return <LineageView lineage={lineage} />
-
-  const total = nodes.length
-  const svgH = Math.max(total * (BOX_H + ROW_GAP) + ROW_GAP * 2, BOX_H + ROW_GAP * 4)
-  const svgW = BOX_W * 2 + COL_GAP + 60
-
-  const leftX  = 10
-  const rightX = leftX + BOX_W + COL_GAP
-  const centerY = svgH / 2
-  function nodeY(i: number) {
-    const blockH = total * BOX_H + (total - 1) * ROW_GAP
-    return svgH / 2 - blockH / 2 + i * (BOX_H + ROW_GAP)
-  }
-
-  // Color per schema — uses semantic accent (purple), info (blue),
-  // error (red), warning (yellow), and muted (slate) tokens so the
-  // diagram theme-flips with the rest of the UI.
-  const schemaColor = (q: string) => {
-    const s = q.includes(".") ? q.split(".")[0].toLowerCase() : ""
-    if (s === "publish" || s === "persistedview") return { fill: "color-mix(in oklab, var(--color-accent) 12%, transparent)", stroke: "color-mix(in oklab, var(--color-accent) 50%, transparent)", text: "var(--color-accent)" }
-    if (s === "fact")    return { fill: "color-mix(in oklab, var(--color-error) 10%, transparent)",  stroke: "color-mix(in oklab, var(--color-error) 40%, transparent)",  text: "var(--color-error)" }
-    if (s === "dim")     return { fill: "color-mix(in oklab, var(--color-info) 10%, transparent)",   stroke: "color-mix(in oklab, var(--color-info) 40%, transparent)",   text: "var(--color-info)" }
-    if (s === "etl")     return { fill: "color-mix(in oklab, var(--color-warning) 10%, transparent)",stroke: "color-mix(in oklab, var(--color-warning) 40%, transparent)",text: "var(--color-warning)" }
-    return { fill: "color-mix(in oklab, var(--color-text-muted) 8%, transparent)", stroke: "color-mix(in oklab, var(--color-text-muted) 35%, transparent)", text: "var(--color-text-secondary)" }
-  }
-
-  return (
-    <div className="flex-1 overflow-auto p-2">
-      <div className="text-[10px] text-text-muted px-2 pb-2 flex items-center gap-4">
-        {isReverse
-          ? <span>This object is a <span className="text-text font-semibold">source</span> — consumed by the views on the right</span>
-          : <span>Sources flowing into <span className="font-mono text-accent">{object}</span></span>
-        }
-      </div>
-      <svg width={svgW} height={svgH} className="font-mono overflow-visible" style={{ minWidth: svgW }}>
-        <defs>
-          <marker id="lgArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="color-mix(in oklab, var(--color-accent) 70%, transparent)" />
-          </marker>
-        </defs>
-
-        {/* Center node */}
-        {(() => {
-          const c = schemaColor(object)
-          const cx = isReverse ? leftX : rightX
-          return (
-            <g>
-              <rect x={cx} y={centerY - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
-                fill="color-mix(in oklab, var(--color-accent) 20%, transparent)" stroke="color-mix(in oklab, var(--color-accent) 60%, transparent)" strokeWidth={1.5} />
-              <text x={cx + BOX_W / 2} y={centerY - 5} textAnchor="middle" fontSize={11} fill="var(--color-accent)" fontWeight="600">
-                {centerLabel.length > 20 ? centerLabel.slice(0, 19) + "…" : centerLabel}
-              </text>
-              <text x={cx + BOX_W / 2} y={centerY + 10} textAnchor="middle" fontSize={9} fill="var(--color-text-muted)">
-                {centerSchema}
-              </text>
-            </g>
-          )
-        })()}
-
-        {/* Source / parent nodes + edges */}
-        {nodes.map((q, i) => {
-          const c = schemaColor(q)
-          const label = q.includes(".") ? q.split(".").pop()! : q
-          const schema = q.includes(".") ? q.split(".")[0] : ""
-          const ny = nodeY(i)
-          const nx = isReverse ? rightX : leftX
-
-          // Edge: source-node right edge → center-node left edge
-          // (reversed when this object is a source consumed by parents)
-          const sx = isReverse ? (leftX + BOX_W) : (nx + BOX_W)
-          const sy = isReverse ? centerY : (ny + BOX_H / 2)
-          const ex = isReverse ? rightX : rightX
-          const ey = isReverse ? (ny + BOX_H / 2) : centerY
-          const mx = (sx + ex) / 2
-
-          return (
-            <g key={q}>
-              <path d={`M ${sx} ${sy} C ${mx} ${sy}, ${mx} ${ey}, ${ex} ${ey}`}
-                fill="none" stroke="color-mix(in oklab, var(--color-accent) 35%, transparent)" strokeWidth={1.5} markerEnd="url(#lgArrow)" />
-              <rect x={nx} y={ny} width={BOX_W} height={BOX_H} rx={8}
-                fill={c.fill} stroke={c.stroke} strokeWidth={1} />
-              <text x={nx + BOX_W / 2} y={ny + 14} textAnchor="middle" fontSize={10} fill={c.text} fontWeight="500">
-                {label.length > 20 ? label.slice(0, 19) + "…" : label}
-              </text>
-              <text x={nx + BOX_W / 2} y={ny + 27} textAnchor="middle" fontSize={8.5} fill="var(--color-text-muted)">
-                {schema}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-    </div>
-  )
-}
-
-function LineageView({ lineage }: { lineage: Record<string, unknown> }) {
-  const source = lineage["source"] as string
-
-  if (source === "none") {
-    const obj = lineage["object"] as string | undefined
-    const isTable = obj ? !obj.toLowerCase().startsWith("publish.") && !obj.toLowerCase().startsWith("view") : false
-    return <Empty msg={
-      isTable
-        ? "This is a base table — it is a data source, not derived from anything."
-        : "No lineage data found. The view SQL could not be resolved by SQL Server."
-    } />
-  }
-
-  // Reverse lineage: this object is a source consumed by other views
-  if (source === "parents") {
-    const parents  = lineage["parents"]  as Array<{ view: string; businessArea: string }>
-    const concepts = lineage["concepts"] as Array<{ concept: string; sourceView: string; description: string }>
-    return (
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        <div className="text-xs text-text-muted">
-          This object is a <span className="text-text font-semibold">source</span> consumed by other views — it has no forward lineage of its own.
-        </div>
-
-        {parents.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
-              Consumed by ({parents.length} view{parents.length !== 1 ? "s" : ""})
-            </div>
-            <div className="space-y-0.5">
-              {parents.map((p, i) => (
-                <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-elevated/30 text-xs">
-                  <span className="font-mono text-accent">{p.view}</span>
-                  {p.businessArea && <span className="text-text-muted">— {p.businessArea}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {concepts.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2">
-              Business Concepts ({concepts.length})
-            </div>
-            <div className="space-y-2">
-              {concepts.map((c, i) => (
-                <div key={i} className="rounded-lg border border-border/40 bg-base/50 px-3 py-2">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-semibold text-text">★ {c.concept}</span>
-                    <span className="text-[10px] text-text-muted font-mono ml-1">via {c.sourceView}</span>
-                  </div>
-                  {c.description && <p className="text-[11px] text-text-muted leading-relaxed">{c.description}</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (source === "convention") {
-    const conv = lineage["convention"] as Record<string, unknown>
-    return (
-      <div className="p-4 space-y-3">
-        <p className="text-xs text-text-muted">{lineage["description"] as string}</p>
-        <div className="grid grid-cols-3 gap-3">
-          {Object.entries(conv).map(([k, v]) => (
-            <div key={k} className="bg-base rounded-lg p-2">
-              <div className="text-[10px] text-text-muted uppercase tracking-wider">{k.replace(/([A-Z])/g, " $1").trim()}</div>
-              <div className="text-xs font-mono text-text mt-0.5">{v as string ?? "–"}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  // View SQL definition — shown when sys.sql_expression_dependencies has no resolvable deps
-  // but sys.sql_modules has the raw CREATE VIEW text. True definition, zero guessing.
-  if (source === "viewDefinition") {
-    const sql = lineage["viewDefinition"] as string
-    const object = lineage["object"] as string
-    // Extract just the body after AS — skip the CREATE VIEW header line
-    const bodyMatch = sql.match(/\bAS\b[\s\S]*/i)
-    const body = bodyMatch ? bodyMatch[0].replace(/^AS\s*/i, "").trim() : sql
-    return (
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        <div className="text-xs text-text-muted">
-          SQL definition for <span className="font-mono text-accent">{object}</span>.
-          {" "}Dependencies could not be resolved by the SQL Server catalog — showing raw T-SQL.
-        </div>
-        <pre className="text-[11px] font-mono text-text bg-base rounded-lg p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed border border-border/40">{body}</pre>
-      </div>
-    )
-  }
-
-  // source === "catalog"
-  const sources  = lineage["sources"]   as Array<Record<string, unknown>>
-  const dimJoins = lineage["dimJoins"]  as Array<Record<string, unknown>>
-  const outCols  = lineage["outputColumns"] as string[]
-  const desc     = lineage["description"] as string | null
-  const object   = lineage["object"] as string
-
-  // Group sources by group
-  const grouped = new Map<string, Array<Record<string, unknown>>>()
-  for (const s of (sources ?? [])) {
-    const g = (s["group"] as string) ?? "Other"
-    if (!grouped.has(g)) grouped.set(g, [])
-    grouped.get(g)!.push(s)
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto p-3 space-y-4">
-      <div>
-        <div className="text-xs font-semibold text-text mb-1">{object}</div>
-        {desc && <p className="text-xs text-text-muted leading-relaxed">{desc}</p>}
-      </div>
-
-      {outCols?.length > 0 && (
-        <div>
-          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-            Output Columns ({outCols.length})
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {outCols.map((c) => (
-              <span key={c} className="px-1.5 py-0.5 rounded bg-base text-[10px] font-mono text-text-muted">{c}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {grouped.size > 0 && (
-        <div>
-          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-            Sources ({sources.length})
-          </div>
-          <div className="space-y-3">
-            {[...grouped.entries()].map(([group, srcs]) => (
-              <div key={group}>
-                <div className="text-[11px] text-text-muted font-semibold mb-1 pl-1 border-l-2 border-accent/40 pl-2">{group}</div>
-                <div className="space-y-0.5">
-                  {srcs.map((s, i) => (
-                    <div key={i} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-elevated/30 text-xs">
-                      <span className="font-mono text-accent">{s["qualifiedName"] as string}</span>
-                      {s["businessArea"] && (
-                        <span className="text-text-muted shrink-0">— {s["businessArea"] as string}</span>
-                      )}
-                      {s["filter"] && (
-                        <span className="ml-auto text-[10px] text-text-muted font-mono shrink-0 truncate max-w-[200px]" title={s["filter"] as string}>
-                          WHERE {s["filter"] as string}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {dimJoins?.length > 0 && (
-        <div>
-          <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-            Dimension Joins ({dimJoins.length})
-          </div>
-          <div className="space-y-0.5">
-            {dimJoins.map((d, i) => (
-              <div key={i} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-elevated/30 text-xs">
-                <span className="font-mono text-text">{d["column"] as string}</span>
-                <ArrowRight size={10} className="text-text-muted shrink-0" />
-                <span className="font-mono text-accent">{d["dimTable"] as string}</span>
-                {d["dimRows"] && <span className="text-text-muted">({d["dimRows"] as string})</span>}
-                {d["note"] && <span className="ml-auto text-[10px] text-text-muted">{d["note"] as string}</span>}
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>

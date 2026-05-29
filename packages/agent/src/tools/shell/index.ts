@@ -15,17 +15,14 @@
  */
 
 import { execFile } from "node:child_process"
-import { currentRuntime } from "../../agent-runtime.js"
-import type { Tool } from "../../types.js"
+import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
+import type { Tool } from "../../domain/agent-types.js"
 
-/** Workspace directory — shell commands run here. */
-// State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes while preserving the existing singleton
-// shape. The state can be migrated into AgentRuntime sub-runtimes later.
-
-export function setShellCwd(cwd: string): void {
-  currentRuntime().shell.cwd = cwd
-}
+/** Workspace directory — shell commands run here.
+ *  Source: `host.shell.cwd` (built per-run by the server from the run workspace).
+ *  No ambient `setShellCwd` setter exists — the run-executor builds the host
+ *  with `shellCwd: runWorkspace.executionRoot` and threads it into the
+ *  closure-factory `createShellTool(host)`. */
 
 /** Result from a shell execution (matches sandbox interface). */
 export interface ShellExecResult {
@@ -37,33 +34,18 @@ export interface ShellExecResult {
 }
 
 /**
- * Optional executor injected by the server.
- * When set, commands route through Docker sandbox instead of host shell.
+ * Optional executor injected by the host.
+ * When present (host.shell.client), commands route through the Docker sandbox
+ * instead of the host shell. No ambient `setShellExecutor` setter exists
+ * — wire the client via `configureAgent({ shellClient })` in the server boot.
  */
 export type ShellExecutor = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
 
-/** Inject a sandbox executor (called once at server startup). */
-export function setShellExecutor(executor: ShellExecutor): void {
-  currentRuntime().shell.executor = executor
-}
-
 /**
  * Whether the sandbox is in strict mode ("all").
- * When true, commands run in Docker and only the minimal deny list applies.
- * The agent can freely run `node game.js`, `npm install`, `python script.py`, etc.
+ * Source: `host.shell.sandboxStrict`. When true, only CONTAINER_RULES apply,
+ * so the agent can freely run `node game.js`, `npm install`, etc.
  */
-
-/** Set by the server when sandbox mode is "all". */
-export function setShellSandboxStrict(strict: boolean): void {
-  currentRuntime().shell.sandboxStrict = strict
-}
-
-/** Abort signal — set per-run so child processes can be killed on cancel. */
-
-/** Inject the run's AbortSignal so child processes are killed on cancel. */
-export function setShellSignal(signal: AbortSignal | null): void {
-  currentRuntime().shell.killSignal = signal
-}
 
 /** Default per-command timeout. Bumped from 30s → 120s so package installs,
  *  Playwright browser downloads, large test runs, and big git clones can
@@ -104,17 +86,17 @@ import { CONTAINER_RULES, HOST_ONLY_RULES } from "./deny-rules.js"
 
 /**
  * Check if a command is blocked.
- * When currentRuntime().shell.sandboxStrict is true (mode="all"), only CONTAINER_RULES apply.
+ * When `sandboxStrict` is true (mode="all"), only CONTAINER_RULES apply.
  * Otherwise, both CONTAINER_RULES and HOST_ONLY_RULES apply.
  */
-function isBlocked(command: string): string | null {
+function isBlocked(command: string, sandboxStrict: boolean): string | null {
   for (const rule of CONTAINER_RULES) {
     if (rule.pattern.test(command)) {
       return rule.label
     }
   }
   // In strict sandbox mode, skip host-only rules — the container is the sandbox
-  if (currentRuntime().shell.sandboxStrict) return null
+  if (sandboxStrict) return null
   for (const rule of HOST_ONLY_RULES) {
     if (rule.pattern.test(command)) {
       return rule.label
@@ -133,39 +115,75 @@ function safeEnv(): Record<string, string> {
   return env
 }
 
+// ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
+
+const SHELL_TOOL_DESCRIPTION =
+  "Run a shell command and return its output (stdout + stderr). " +
+  "Use this for: running scripts, checking system info, " +
+  "installing packages, running tests, git operations, etc. " +
+  "Commands run in the workspace directory. " +
+  "Commands time out after 120 seconds by default; pass `timeout_ms` (max 600000) for slower work like large installs or builds."
+
+const SHELL_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    command:    { type: "string", description: "The shell command to run" },
+    timeout_ms: { type: "number", description: `Optional per-call timeout in ms. Default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.` },
+  },
+  required: ["command"],
+} as const
+
 export const shellTool: Tool = {
   name: "run_command",
-  description:
-    "Run a shell command and return its output (stdout + stderr). " +
-    "Use this for: running scripts, checking system info, " +
-    "installing packages, running tests, git operations, etc. " +
-    "Commands run in the workspace directory. " +
-    "Commands time out after 120 seconds by default; pass `timeout_ms` (max 600000) for slower work like large installs or builds.",
-  parameters: {
-    type: "object",
-    properties: {
-      command:    { type: "string", description: "The shell command to run" },
-      timeout_ms: { type: "number", description: `Optional per-call timeout in ms. Default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.` },
-    },
-    required: ["command"],
+  description: SHELL_TOOL_DESCRIPTION,
+  parameters: SHELL_TOOL_PARAMETERS,
+  async execute() {
+    throw new Error("shellTool must be built via createShellTool(host); ambient execute is no longer supported.")
   },
+}
 
-  async execute(args) {
+/**
+ * Factory variant bound to `host.shell.{cwd,client,sandboxStrict}` and optional run context.
+ */
+export function createShellTool(host: AgentHost, run?: RunContext): Tool {
+  return {
+    name: "run_command",
+    description: SHELL_TOOL_DESCRIPTION,
+    parameters: SHELL_TOOL_PARAMETERS,
+    async execute(args) {
+      return runShell(args, {
+        cwd: host.shell.cwd,
+        executor: host.shell.client,
+        sandboxStrict: host.shell.sandboxStrict,
+        killSignal: run?.signal ?? null,
+      })
+    },
+  }
+}
+
+// ── Shared body ──────────────────────────────────────────────────
+
+interface ShellCtx {
+  cwd: string
+  executor: ShellExecutor | null
+  sandboxStrict: boolean
+  killSignal: AbortSignal | null
+}
+
+async function runShell(args: Record<string, unknown>, ctx: ShellCtx): Promise<string> {
     const command   = String(args.command)
     const requested = typeof args["timeout_ms"] === "number" ? Number(args["timeout_ms"]) : DEFAULT_TIMEOUT_MS
     const timeoutMs = Math.max(1_000, Math.min(MAX_TIMEOUT_MS, Number.isFinite(requested) ? requested : DEFAULT_TIMEOUT_MS))
 
-    const blocked = isBlocked(command)
+    const blocked = isBlocked(command, ctx.sandboxStrict)
     if (blocked) {
       return `Error: Command blocked for safety (matched: "${blocked}"). This command is not allowed.`
     }
 
-    const shell = currentRuntime().shell
-
     // Route through sandbox executor if available
-    if (shell.executor) {
+    if (ctx.executor) {
       try {
-        const result = await shell.executor(command, shell.cwd, shell.killSignal ?? undefined)
+        const result = await ctx.executor(command, ctx.cwd, ctx.killSignal ?? undefined)
         return formatResult(result)
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -180,12 +198,12 @@ export const shellTool: Tool = {
         {
           timeout: timeoutMs,
           maxBuffer: 1024 * 1024, // 1MB
-          cwd: shell.cwd,
+          cwd: ctx.cwd,
           env: safeEnv(),
-          ...(shell.killSignal ? { signal: shell.killSignal } : {}),
+          ...(ctx.killSignal ? { signal: ctx.killSignal } : {}),
         },
         (error, stdout, stderr) => {
-          const parts: string[] = []         
+          const parts: string[] = []
           if (stdout) parts.push(stdout)
           if (stderr) parts.push(`[stderr] ${stderr}`)
           if (error && error.killed) {
@@ -200,7 +218,6 @@ export const shellTool: Tool = {
         },
       )
     })
-  },
 }
 
 /** Format a ShellExecResult into a string for the agent. */

@@ -26,30 +26,30 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
     EventType,
-    buildCatalog, closeMssqlPool, configurePlanStore, configureSyncOrchestrator, getMssqlConfig, loadLineage,
-    setAttachmentService,
-    setBasePath,
-    setBrowserCheckCwd,
-    setBrowserCheckExecutor,
-    setBrowserContextProvider,
-    setBrowserCredentialProvider,
-    setBrowserHandoffProvider,
-    setSearchBasePath,
-    setShellCwd,
-    setShellExecutor,
-    setShellSandboxStrict,
-    setSyncEventSink,
-    setSyncRunSink,
-    setupEnvironments
+    buildCatalog, closeMssqlPool,
+    configureAgent,
+    getMssqlConfig,
+    type AgentHost,
+    type BrowserClient,
+    type ShellClient,
 } from "@mia/agent"
+import {
+    configurePlanStore,
+} from "@mia/sync"
 import Fastify from "fastify"
-import { pruneExpiredAttachments, serverAttachmentService } from "./attachments/index.js"
-import { registerIdentity } from "./auth/identity.js"
-import { bootstrapAdminFromEnv } from "./auth/users.js"
-import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import { serverBrowserCredentialProvider } from "./browser/credential-provider.js"
-import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
-import { serverBrowserContextProvider } from "./browser/provider.js"
+import { registerIdentity } from "./adapters/auth/identity.js"
+import { bootstrapAdminFromEnv } from "./adapters/auth/users.js"
+import { serverBrowserCredentialProvider } from "./adapters/browser/credential-provider.js"
+import { serverBrowserHandoffProvider } from "./adapters/browser/handoff-provider.js"
+import { serverBrowserContextProvider } from "./adapters/browser/provider.js"
+import { createLlmCompletionAdapter } from "./adapters/llm/index.js"
+import { buildLlmClient } from "./adapters/llm/registry.js"
+import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
+import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
+import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
+import { touchSession } from "./adapters/persistence/sessions.js"
+import { initSandbox } from "./adapters/sandbox/index.js"
+import { registerAuthRoutes } from "./api/auth.js"
 import {
     MessageQueue,
     MessageRouter,
@@ -58,45 +58,44 @@ import {
     TeamsChannel,
     listChannelConfigs,
     migrateChannels,
-} from "./channels/index.js"
-import {
-    clearTransactionalData,
-    getDb, getDbPath, getDbStats, getLlmConfig,
-    getSyncRunPlanJson,
-    migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains,
-    normaliseUnknownRunStatuses,
-    pruneOldData,
-    recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest,
-} from "./db/index.js"
-import { addSseClient, broadcast, toBroadcastData } from "./event-broadcaster.js"
-import { buildLlmClient } from "./llm/registry.js"
-import { migrateMemory, prune as pruneMemory } from "./memory/index.js"
-import { AgentOrchestrator } from "./orchestrator/index.js"
-import { applyEnvOverrides, seedDefaultPoliciesIfMissing } from "./policy/policy-seeder.js"
-import { registerAuthRoutes } from "./routes/auth.js"
+} from "./api/channels/index.js"
 import {
     registerAdminRoutes,
     registerAgentRoutes,
+    registerApprovalRoutes,
     registerAttachmentRoutes,
     registerBrowserRoutes,
+    registerEntityRegistryRoutes,
     registerEventRoutes,
+    registerEvidenceRoutes,
+    registerFreezeWindowRoutes,
     registerLayoutRoutes,
     registerLlmRoutes,
     registerMemoryRoutes,
+    registerMetricsRoutes,
     registerMymiRoutes,
+    registerNotificationRouteRoutes,
     registerNotificationRoutes,
     registerOperationRoutes,
     registerPolicyRoutes,
     registerProfileRoutes,
+    registerProposerRoutes,
     registerRunRoutes,
     registerSyncEnvironmentRoutes,
     registerSyncRoutes,
     registerToolCacheRoutes,
     registerUsageRoutes,
     registerWebhookRoutes,
-} from "./routes/index.js"
-import { getRunProfile } from "./run-workspace.js"
-import { initSandbox } from "./sandbox/index.js"
+} from "./api/http-routes.js"
+import { dispatchNotification } from "./api/notifications/router.js"
+import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
+import { startScheduler, stopScheduler } from "./application/shell/proposer/scheduler.js"
+import { getRunProfile } from "./application/shell/workspace/run-workspace.js"
+import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
+import { seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
+import { ensureSyncDefinitionConfigs } from "./domain/sync-definition-admin.js"
+import { loadPersistedSyncEnvironments } from "./domain/sync/live-environments.js"
+import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
 import { setupMssql } from "./setup-mssql.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
@@ -106,45 +105,15 @@ async function main() {
   initDatabase()
 
   let currentWorkspace = resolveWorkspace()
-  const sandbox = await configureSandbox(() => currentWorkspace)
-  const mssqlSummary = setupMssql(_projectRoot)
+  const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
 
-  // Bridge agent-side attachment tools to the server's repo + sandbox.
-  // Installed once on the root runtime; per-run runtimes inherit it by
-  // reference. The service resolves the active runId / sandboxRoot from
-  // HostedPolicyContext at call time, so a single instance is safe for
-  // every concurrent run.
-  setAttachmentService(serverAttachmentService)
-
-  // Bridge agent-side browse_web tool to per-tenant persistent browser
-  // contexts (cookies / localStorage) stored under ~/.mia/browser-contexts/.
-  // Anonymous sessions get null and stay ephemeral.
-  setBrowserContextProvider(serverBrowserContextProvider)
-
-  // Bridge agent-side browser_auto_login tool to vault-encrypted credentials.
-  // Refused for anonymous tenants by the provider itself.
-  setBrowserCredentialProvider(serverBrowserCredentialProvider)
-
-  // Bridge agent-side browser_human_handoff tool to the in-process handoff registry.
-  setBrowserHandoffProvider(serverBrowserHandoffProvider)
-
-  // ── ABI sync subsystem ──
-  await setupEnvironments(_projectRoot)
-  // Operator overrides on top of JSON config + seed hosted-default and
-  // env-derived policy rules into the DB so the admin UI can show the
-  // full active ruleset (and let admins edit it). Done AFTER
-  // setupEnvironments so derived rules reflect the merged env config.
-  applyEnvOverrides()
-  seedDefaultPoliciesIfMissing()
-  configurePlanStore(resolve(_projectRoot, "packages/server/data/sync-plans"))
-  configureSyncOrchestrator(_projectRoot)
-  // Fan sync events out via broadcast(): SSE for live UI, event_log table
-  // for replay & webhook drains. See orchestrator.ts → "Event sink" comment
-  // for the full list of emitted event types.
-  setSyncEventSink((ev) => broadcast({ type: ev.type, data: ev.data }))
-  // Persist every executeSync() invocation as a SyncRun row in SQLite for
-  // the audit trail / "active syncs" dashboard / drift forensics.
-  setSyncRunSink({
+  const mssqlSetup = setupMssql(_projectRoot)
+  const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
+  ensureSyncDefinitionConfigs(_projectRoot)
+  const syncEventSink: AgentHost["sync"]["eventSink"] = (ev) => {
+    broadcast({ type: ev.type, data: ev.data })
+  }
+  const syncRunSink: AgentHost["sync"]["runSink"] = {
     start: (i) => {
       try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
     },
@@ -157,12 +126,12 @@ async function main() {
       try {
         recordSyncRunPreview({
           planId: plan.planId,
-          entityType: plan.recipeSnapshot.entityType,
+          entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
           entityId: plan.entity.id,
           entityDisplayName: plan.entity.displayName,
           source: plan.source,
           target: plan.target,
-          actorUpn: null, // not known here; recordSyncRunStart sets it on execute
+          actorUpn: null,
           previewTotals: plan.totals,
           planJson: JSON.stringify(plan),
         })
@@ -174,11 +143,124 @@ async function main() {
         return json ? JSON.parse(json) : null
       } catch (e) { console.warn("[sync] getSyncRunPlanJson failed:", e); return null }
     },
+  }
+
+  // Shared catalog registry: same Map threaded into the boot host and every
+  // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
+  const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
+  const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
+  const bootHost: AgentHost = configureAgent({
+    mssqlConfigs: mssqlSetup.configs,
+    mssqlDefaultConnectionName: mssqlSetup.defaultConnectionName,
+    catalogInstances,
+    catalogDefaultCachePath,
+    syncEventSink,
+    syncRunSink,
+    syncEnvironments: syncEnvironments.environments,
+    syncDbProjectRoot: _projectRoot,
+    syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
+  })
+  const mssqlSummary = mssqlSetup.summary
+
+  // Bridge agent-side attachment tools to the server's repo + sandbox.
+  // Installed via the AgentHost composition root (see `configureAgent`
+  // call below). The service resolves the active runId / sandboxRoot from
+  // HostedPolicyContext at call time, so a single instance is safe for
+  // every concurrent run.
+
+  // Browse-web persistent-context, credential, and human-handoff backends
+  // are wired exclusively via `configureAgent({ browserContextReader,
+  // browserCredentialReader, browserHandoffStore })` below — the legacy
+  // `setBrowser*Provider` ambient setters were removed in cluster 7.
+
+  // ── ABI sync subsystem ──
+  if (syncEnvironments.source === "db") {
+    console.log(`ABI environments (from persisted DB): ${syncEnvironments.summary}`)
+  } else if (syncEnvironments.source === "file") {
+    console.log(`ABI environments seeded from deploy/sync/sync-environments.json: ${syncEnvironments.summary}`)
+  } else if (syncEnvironments.source === "mssql") {
+    console.log(`ABI environments seeded from MSSQL_DATABASES: ${syncEnvironments.summary}`)
+  }
+  seedDefaultPoliciesIfMissing(bootHost)
+  configurePlanStore(bootHost, resolve(_projectRoot, "packages/server/data/sync-plans"))
+  const llm = await buildLlmAndCatalog(bootHost, mssqlSummary)
+
+  // ── F1 evidence signer ────────────────────────────────────────
+  // Built once at boot. If the operator has not configured a signer
+  // (no env vars set), `tryBuildSignerFromEnv` returns `ok: false` and
+  // evidence sealing routes will fail with a clear error — better than
+  // silently writing unsigned envelopes.
+  const evidenceStorageRoot = resolve(_projectRoot, "packages/server/data/evidence")
+  const signerResult = tryBuildSignerFromEnv()
+  if (!signerResult.ok) {
+    console.warn(`[evidence] signer not configured (kind=${signerResult.error.kind}): ${signerResult.error.message}`)
+  } else {
+    console.log(`[evidence] signer ready: ${signerResult.signer.id} (${signerResult.signer.alg})`)
+  }
+  const evidenceSigner = signerResult.ok ? signerResult.signer : null
+
+  // ── F1 proposer scheduler ─────────────────────────────────────
+  // Build the proposer LLM port from the active LLM client and start
+  // the cron-style scheduler. The port is rebuilt on hot-swap via
+  // `registerLlmRoutes` below (kept in a holder so the running
+  // scheduler picks up the new client).
+  const llmPortHolder = { current: createLlmCompletionAdapter(llm) }
+  startScheduler({ host: bootHost, llm: () => llmPortHolder.current })
+  // Graceful shutdown — drain in-flight proposer runs before exit.
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.on(sig, () => {
+      void stopScheduler(60_000).finally(() => process.exit(0))
+    })
+  }
+
+  // ── F1 notification fan-out ───────────────────────────────────
+  // Every event broadcast through `broadcast()` is also offered to the
+  // notification router; the router will only act when a matching
+  // `notification_routes` row exists for the tenant+eventType.
+  subscribeToEvents((ev) => {
+    try {
+      const data = (ev.data ?? {}) as Record<string, unknown>
+      const tenantId = (typeof data["tenantId"] === "string" ? data["tenantId"] : null) ?? "_default"
+      dispatchNotification({
+        tenantId,
+        eventType:  ev.type,
+        riskTier:   typeof data["riskTier"]   === "string" ? data["riskTier"]   as string : undefined,
+        envPair:    typeof data["envPair"]    === "string" ? data["envPair"]    as string : undefined,
+        entityType: typeof data["entityType"] === "string" ? data["entityType"] as string : undefined,
+        context:    { ...data, eventType: ev.type },
+      })
+    } catch (e) {
+      // never let notification dispatch take down the broadcaster
+      console.warn("[notifications] dispatch failed:", e instanceof Error ? e.message : e)
+    }
   })
 
-  const llm = await buildLlmAndCatalog(mssqlSummary)
-
-  const orchestrator = new AgentOrchestrator({ llm, workspace: currentWorkspace })
+  const orchestrator = new AgentOrchestrator({
+    llm,
+    workspace: currentWorkspace,
+    // Boot deps explicitly threaded into every per-run AgentHost the
+    // orchestrator builds. This is the doctrine-shaped replacement for
+    // the deleted `setActiveAgentHost` / `setBootHostOptions` ambient
+    // setters. Tools migrated to explicit host/run dependencies (filesystem,
+    // search_files, ask_user, attachments, mssql export-tool, shell)
+    // close over the per-run host produced from these deps; tools that
+    // still rely on runtime-owned compatibility shims read from setBrowserCheckCwd /
+    // setBrowserContextProvider / etc. above.
+    bootHostDeps: {
+      attachments: serverAttachmentService,
+      browserContextReader: serverBrowserContextProvider,
+      browserCredentialReader: serverBrowserCredentialProvider,
+      browserHandoffStore: serverBrowserHandoffProvider,
+      shellClient,
+      shellSandboxStrict,
+      browserCheckClient,
+      mssqlDatabases: bootHost.mssql.databases,
+      mssqlDefaultConnection: bootHost.mssql.defaultConnection,
+      catalogInstances: bootHost.catalog.instances,
+      catalogDefaultCachePath: bootHost.catalog.defaultCachePath,
+      syncState: bootHost.sync,
+    },
+  })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
 
@@ -189,12 +271,16 @@ async function main() {
     uiDist,
     getWorkspace: () => currentWorkspace,
     setWorkspace: (w) => { currentWorkspace = w; applyWorkspace(w, orchestrator) },
+    evidenceStorageRoot,
+    evidenceSigner,
+    llmPortHolder,
+    bootHost,
   })
 
   await app.listen({ port: PORT, host: HOST })
   recoverStaleRuns(orchestrator)
   printBanner({ mssqlSummary, channelConfigs, uiDist })
-  registerShutdown({ sandbox, messageQueue })
+  registerShutdown({ sandbox, messageQueue, bootHost })
 }
 
 // ── Bootstrap phase functions ─────────────────────────────────
@@ -206,10 +292,6 @@ function resolveUiDist(): string {
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
-  setBasePath(w)
-  setSearchBasePath(w)
-  setShellCwd(w)
-  setBrowserCheckCwd(w)
   orchestrator.setWorkspace(w)
 }
 
@@ -220,11 +302,11 @@ function recoverStaleRuns(orchestrator: AgentOrchestrator): void {
   }
 }
 
-function registerShutdown({ sandbox, messageQueue }: { sandbox: ReturnType<typeof initSandbox>; messageQueue: MessageQueue }): void {
+function registerShutdown({ sandbox, messageQueue, bootHost }: { sandbox: ReturnType<typeof initSandbox>; messageQueue: MessageQueue; bootHost: AgentHost }): void {
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
     process.on(sig, async () => {
       messageQueue.stop()
-      await closeMssqlPool()
+      await closeMssqlPool(bootHost)
       await sandbox.cleanup()
       process.exit(0)
     })
@@ -281,15 +363,16 @@ function resolveWorkspace(): string {
     return from
   }
   const workspace = resolve(process.env["AGENT_WORKSPACE"] ?? findRepoRoot(process.cwd()))
-  setBasePath(workspace)
-  setSearchBasePath(workspace)
-  setShellCwd(workspace)
-  setBrowserCheckCwd(workspace)
   console.log(`Agent workspace: ${workspace}`)
   return workspace
 }
 
-async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<typeof initSandbox>> {
+async function configureSandbox(getWorkspace: () => string): Promise<{
+  sandbox: ReturnType<typeof initSandbox>
+  shellClient: ShellClient | null
+  shellSandboxStrict: boolean
+  browserCheckClient: BrowserClient | null
+}> {
   const sandboxMode = process.env["SANDBOX_MODE"] === "host"
     ? "host" as const
     : process.env["SANDBOX_MODE"] === "all"
@@ -298,38 +381,45 @@ async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<
   const sandbox = initSandbox({ mode: sandboxMode })
   const dockerReady = await sandbox.isDockerAvailable()
 
+  let shellClient: ShellClient | null = null
+  let shellSandboxStrict = false
+  let browserCheckClient: BrowserClient | null = null
+
   if (dockerReady) {
-    setShellExecutor(async (command, cwd, signal) => {
+    shellClient = async (command, cwd, signal) => {
       return sandbox.exec(command, cwd || getWorkspace(), { signal })
-    })
+    }
     if (sandbox.isStrictMode) {
-      setShellSandboxStrict(true)
+      shellSandboxStrict = true
       console.log("Docker sandbox: STRICT mode (all commands require Docker, relaxed deny list)")
     } else {
       console.log("Docker sandbox: ACTIVE (commands run in isolated containers)")
     }
 
-    // Build browser image in background — don't block startup
-    sandbox.ensureBrowserImage().then((ready) => {
-      if (ready) {
-        setBrowserCheckExecutor(async (htmlPath, clicks, waitMs, cwd) => {
-          const script = buildBrowserScript(htmlPath, clicks, waitMs)
-          const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
-          if (result.stderr === "FALLBACK_TO_HOST") throw new Error("Browser image not available")
-          if (result.exitCode !== 0) {
-            return { report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`, sandboxed: true }
-          }
-          try {
-            return { report: formatBrowserReport(JSON.parse(result.stdout)), sandboxed: true }
-          } catch {
-            return { report: result.stdout || "(no output)", sandboxed: true }
-          }
-        })
-        console.log("Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
-      } else {
-        console.log("Browser sandbox: UNAVAILABLE (browser_check runs on host)")
+    // Build the browser image synchronously at boot. This is one-time on
+    // first run (subsequent boots hit the Docker image cache and return
+    // in milliseconds). We need the client resolved before constructing
+    // the orchestrator so per-run hosts can close over it explicitly
+    // (doctrine §1 — no late-bound module setter).
+    const browserReady = await sandbox.ensureBrowserImage()
+    if (browserReady) {
+      browserCheckClient = async (htmlPath, clicks, waitMs, cwd) => {
+        const script = buildBrowserScript(htmlPath, clicks, waitMs)
+        const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
+        if (result.stderr === "FALLBACK_TO_HOST") throw new Error("Browser image not available")
+        if (result.exitCode !== 0) {
+          return { report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`, sandboxed: true }
+        }
+        try {
+          return { report: formatBrowserReport(JSON.parse(result.stdout)), sandboxed: true }
+        } catch {
+          return { report: result.stdout || "(no output)", sandboxed: true }
+        }
       }
-    })
+      console.log("Browser sandbox: ACTIVE (browser_check runs in isolated containers)")
+    } else {
+      console.log("Browser sandbox: UNAVAILABLE (browser_check runs on host)")
+    }
   } else {
     if (sandbox.isStrictMode) {
       console.error("SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
@@ -338,10 +428,10 @@ async function configureSandbox(getWorkspace: () => string): Promise<ReturnType<
     console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
-  return sandbox
+  return { sandbox, shellClient, shellSandboxStrict, browserCheckClient }
 }
 
-async function buildLlmAndCatalog(mssqlSummary: string) {
+async function buildLlmAndCatalog(host: AgentHost, mssqlSummary: string) {
   const llmCfg = getLlmConfig()
   const llm = buildLlmClient(llmCfg)
   console.log(`LLM: ${llmCfg.provider} / ${llmCfg.model}`)
@@ -350,12 +440,11 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
     try {
       const maxAgeHours = Number(process.env.CATALOG_MAX_AGE_HOURS || 168)
       const baseCachePath = process.env.CATALOG_CACHE_PATH || "./data/catalog-cache.json"
-      const lineagePath = process.env.LINEAGE_FILE || resolve(_projectRoot, "deploy/mssql/lineage.json")
 
       // Build catalog per configured connection so the Mymi DB explorer
       // (and any catalog-backed tool) works against the actual DB the user picks.
       // Cache file name is derived from the connection name to avoid collisions.
-      const configs = getMssqlConfig()
+      const configs = getMssqlConfig(host)
       const conns = configs.length > 0 ? configs.map((c) => c.name) : ["default"]
 
       for (const conn of conns) {
@@ -364,18 +453,11 @@ async function buildLlmAndCatalog(mssqlSummary: string) {
           : baseCachePath.replace(/\.json$/i, `.${conn}.json`)
         console.log(`Loading schema catalog for "${conn}" (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
         try {
-          const catalog = await buildCatalog({ connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
+          const catalog = await buildCatalog(host, { connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
           const s = catalog.stats()
           const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
           const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
           console.log(`Catalog [${conn}] ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs`)
-
-          try {
-            const count = await loadLineage(lineagePath, conn)
-            console.log(`Lineage maps loaded for [${conn}]: ${count} critical view(s)`)
-          } catch {
-            // Non-fatal — lineage file may not exist
-          }
         } catch (e) {
           console.warn(`Failed to build catalog for "${conn}":`, e instanceof Error ? e.message : e)
         }
@@ -392,7 +474,9 @@ function initMessaging(orchestrator: AgentOrchestrator) {
   const queueStore = new SqliteQueueStore()
   const conversationStore = new SqliteConversationStore()
   const messageQueue = new MessageQueue(queueStore)
-  const messageRouter = new MessageRouter(messageQueue, conversationStore, orchestrator)
+  const messageRouter = new MessageRouter(messageQueue, conversationStore, {
+    startRun: (goal, session) => orchestrator.startRun(goal, undefined, session ?? null),
+  })
   orchestrator.setMessageRouter(messageRouter)
 
   const channelConfigs = listChannelConfigs()
@@ -416,10 +500,17 @@ interface AppOpts {
   uiDist: string
   getWorkspace: () => string
   setWorkspace: (w: string) => void
+  // F1 — evidence + proposer wiring built at boot, threaded into routes.
+  evidenceStorageRoot: string
+  evidenceSigner: import("./adapters/persistence/evidence.js").Signer | null
+  llmPortHolder: { current: import("@mia/sync").LlmCompletionPort }
+  /** Boot-level AgentHost (shared mssql Map) for routes that hit DB. */
+  bootHost: AgentHost
 }
 
 async function buildApp(opts: AppOpts) {
-  const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace } = opts
+  const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace,
+          evidenceStorageRoot, evidenceSigner, llmPortHolder, bootHost } = opts
 
   // trustProxy: when behind a corporate HTTPS terminator (proxy-https, IIS,
   // nginx) Fastify needs to honour X-Forwarded-* headers so req.ip reflects
@@ -514,9 +605,26 @@ async function buildApp(opts: AppOpts) {
       sid:     req.session.sid,
       isAdmin: req.session.isAdmin,
     })
-    // Heartbeat every 25s — keeps intermediaries from idle-closing the stream.
+
+    // ── Liveness ────────────────────────────────────────────────
+    // The SSE stream lifecycle IS the online signal. Touch the session
+    // immediately on open and every 25 s while connected; when the
+    // client disconnects we stop touching, and `last_seen_at` ages out
+    // within the 60 s "online" window. No polling endpoint required.
+    // Anonymous SSE connections (no real cookie session) carry an
+    // `anon:<random>` sid that has no row in `sessions`, so skip them.
+    const sid = req.session.sid
+    const isRealSession = typeof sid === "string" && !sid.startsWith("anon:")
+    if (isRealSession) {
+      try { touchSession(sid) } catch { /* observability only */ }
+    }
+    // Heartbeat every 25s — keeps intermediaries from idle-closing the
+    // stream AND doubles as the liveness ping for the session row.
     const heartbeat = setInterval(() => {
       try { reply.raw.write(`: ping\n\n`) } catch { /* dropped */ }
+      if (isRealSession) {
+        try { touchSession(sid) } catch { /* observability only */ }
+      }
     }, 25_000)
     req.raw.on("close", () => { clearInterval(heartbeat); dispose() })
   })
@@ -526,12 +634,13 @@ async function buildApp(opts: AppOpts) {
   registerBrowserRoutes(app)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
-  registerSyncEnvironmentRoutes(app)
+  registerSyncEnvironmentRoutes(app, bootHost)
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)
-  registerMymiRoutes(app)
-  registerSyncRoutes(app, _projectRoot)
+  registerMymiRoutes(app, bootHost)
+  registerSyncRoutes(app, _projectRoot, bootHost)
+  registerEntityRegistryRoutes(app, _projectRoot)
   registerToolCacheRoutes(app)
   registerEventRoutes(app)
   registerOperationRoutes(app)
@@ -540,8 +649,16 @@ async function buildApp(opts: AppOpts) {
   registerMemoryRoutes(app, orchestrator)
   registerLlmRoutes(app, (newClient) => {
     orchestrator.setLlm(newClient)
+    llmPortHolder.current = createLlmCompletionAdapter(newClient)
     console.log("LLM client hot-swapped")
   })
+  // F1 — reconciliation proposer + approvals + evidence + metrics + notification routes
+  registerProposerRoutes(app, { host: bootHost, getLlm: () => llmPortHolder.current })
+  registerApprovalRoutes(app)
+  registerFreezeWindowRoutes(app)
+  registerEvidenceRoutes(app, { storageRoot: evidenceStorageRoot, signer: evidenceSigner })
+  registerMetricsRoutes(app)
+  registerNotificationRouteRoutes(app)
   registerAdminRoutes(app, orchestrator)
 
   app.get("/api/health", async () => ({
@@ -589,6 +706,22 @@ async function buildApp(opts: AppOpts) {
       return { ok: true, ...pruneOldData(req.body ?? {}) }
     },
   )
+
+  // ── Presence tick ────────────────────────────────────────────────
+  // A single global timer that fans out one tiny SSE frame to every
+  // connected dashboard every 30 s. SSE-driven widgets (e.g. ActiveUsers)
+  // listen on `session.*` and re-fetch their aggregates on tick — this
+  // is what keeps the "Last seen" / online indicator fresh now that
+  // per-request `touchSession()` polling and the heartbeat endpoint are
+  // gone. One event per 30 s for the whole server, not per tab.
+  const presenceTickHandle = setInterval(() => {
+    try {
+      broadcast({ type: EventType.SessionPresenceTick, data: {} })
+    } catch { /* observability only */ }
+  }, 30_000)
+  // Don't keep the event loop alive solely for this timer.
+  if (typeof presenceTickHandle.unref === "function") presenceTickHandle.unref()
+  app.addHook("onClose", async () => { clearInterval(presenceTickHandle) })
 
   return app
 }

@@ -18,7 +18,9 @@ function formatRowValue(v: unknown): string {
   if (v === null || v === undefined) return "NULL"
   if (v instanceof Date) return v.toISOString()
   if (typeof v === "object") return JSON.stringify(v)
-  return String(v)
+  // Escape `|` so downstream pipe-table renderers don't split cells on it.
+  // Renderers MUST replace `\|` → `|` after splitting on `|`.
+  return String(v).replace(/\|/g, "\\|")
 }
 
 function renderTable(columns: string[], rows: unknown[]): string[] {

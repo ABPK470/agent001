@@ -20,7 +20,7 @@ import { createPortal } from "react-dom"
 const COLS = 36
 const ROWS = 20
 
-const WORD = "agentMyMI"
+const WORD = "MI:A"
 const SCRAMBLE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*<>?/+="
 
 const STREAM_REVEAL_MS     = 550

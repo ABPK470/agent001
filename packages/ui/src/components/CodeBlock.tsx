@@ -249,7 +249,12 @@ export function parsePipeTable(text: string): ParsedTable | null {
   // Header line must contain " | "
   const headerLine = lines[idx]
   if (!headerLine || !headerLine.includes(" | ")) return null
-  const headers = headerLine.split(" | ").map(h => h.trim())
+  // Split on unescaped " | " only; cells may contain "\|" (escaped by formatter).
+  const splitRow = (line: string): string[] =>
+    line
+      .split(/(?<!\\) \| /)
+      .map((c) => c.trim().replace(/\\\|/g, "|"))
+  const headers = splitRow(headerLine)
   idx++
 
   // Optional separator line (only dashes, plus signs, spaces)
@@ -264,7 +269,10 @@ export function parsePipeTable(text: string): ParsedTable | null {
       truncated = true
       continue
     }
-    rows.push(line.split(" | ").map(c => c.trim()))
+    const cells = splitRow(line)
+    // Drop rows whose cell count doesn't match the header — better to render raw than to corrupt.
+    if (cells.length !== headers.length) continue
+    rows.push(cells)
   }
 
   if (rows.length === 0 && rowCount !== 0) return null

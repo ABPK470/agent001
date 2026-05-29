@@ -128,3 +128,32 @@ export const Q_VIEW_DEFINITIONS = `
     AND m.definition IS NOT NULL
   ORDER BY s.name, o.name
 `
+
+/**
+ * Object-level extended properties used for in-database lineage curation.
+ *
+ * Returns every extended property whose name is `MS_Description`,
+ * `lineage_dim_joins`, or `lineage_feeds`, scoped to user objects only
+ * (is_ms_shipped = 0). One row per (object, property) — column-level
+ * properties (minor_id > 0) are NOT included because the convention
+ * stores everything at the object level as JSON arrays.
+ *
+ * See lineage-extended-properties.ts for the convention contract.
+ */
+export const Q_LINEAGE_PROPERTIES = `
+  SELECT
+    s.name + '.' + o.name        AS qualified_name,
+    o.type                        AS object_type,   -- 'U' | 'V'
+    CAST(ep.name AS NVARCHAR(128)) AS property_name,
+    CAST(ep.value AS NVARCHAR(MAX)) AS property_value
+  FROM sys.extended_properties ep
+  JOIN sys.objects o  ON ep.major_id = o.object_id
+  JOIN sys.schemas s  ON o.schema_id = s.schema_id
+  WHERE ep.class    = 1                              -- OBJECT_OR_COLUMN
+    AND ep.minor_id = 0                              -- object-level only
+    AND o.is_ms_shipped = 0
+    AND o.type IN ('U','V')
+    AND ep.name IN ('MS_Description', 'lineage_dim_joins', 'lineage_feeds')
+  ORDER BY s.name, o.name
+`
+

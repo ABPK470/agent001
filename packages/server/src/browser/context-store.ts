@@ -21,7 +21,7 @@ import { readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { getDb } from "../db/connection.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 
 const DATA_DIR = process.env["MIA_DATA_DIR"] || join(homedir(), ".mia")
 const CONTEXTS_DIR = join(DATA_DIR, "browser-contexts")

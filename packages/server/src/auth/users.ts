@@ -15,9 +15,9 @@ import {
     findUserByUpn,
     findUserByUsername,
     insertUser,
-    setLastLogin,
+    updateLastLoginAt,
     type DbUser,
-} from "../db/users.js"
+} from "../adapters/persistence/users.js"
 import { UserSource } from "../enums/auth.js"
 
 const BCRYPT_ROUNDS = 10  // dev-grade; raise if/when production volume warrants
@@ -43,8 +43,8 @@ export interface SsoUpsertInput {
 export function registerLocalUser(input: RegisterInput): DbUser {
   const username = input.username.trim().toLowerCase()
   if (!username) throw new AuthError("username required", 400)
-  if (!/^[a-z0-9._-]{2,64}$/.test(username)) {
-    throw new AuthError("username must be 2-64 chars, [a-z0-9._-]", 400)
+  if (!/^[A-Za-z0-9._-]{2,64}$/.test(input.username.trim())) {
+    throw new AuthError("username must be 2-64 chars, [A-Za-z0-9._-]", 400)
   }
   if (!input.password || input.password.length < 4) {
     throw new AuthError("password must be at least 4 characters", 400)
@@ -93,7 +93,7 @@ export function verifyLocalLogin(username: string, password: string): DbUser {
   if (!bcrypt.compareSync(password, u.password_hash)) {
     throw new AuthError("invalid credentials", 401)
   }
-  setLastLogin(u.upn)
+  updateLastLoginAt(u.upn)
   return u
 }
 
@@ -108,7 +108,7 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
 
   const existing = findUserByUpn(upn)
   if (existing) {
-    setLastLogin(upn)
+    updateLastLoginAt(upn)
     return existing
   }
   insertUser({

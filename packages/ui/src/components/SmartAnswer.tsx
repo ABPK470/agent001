@@ -209,11 +209,15 @@ function parseBlocks(text: string): Block[] {
         i++
       }
       const isSeparator = (row: string) => /^\|[\s\-|:]+\|$/.test(row.trim())
+      // Split on unescaped `|` only; cells may contain `\|` (escaped by formatter).
       const parseRow = (row: string) =>
-        row.split("|").slice(1, -1).map((c) => c.trim())
+        row.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, "|"))
       const dataLines = tableLines.filter((l) => !isSeparator(l))
       if (dataLines.length >= 2) {
-        blocks.push({ type: "table", headers: parseRow(dataLines[0]), rows: dataLines.slice(1).map(parseRow) })
+        const headers = parseRow(dataLines[0])
+        // Drop rows whose cell count doesn't match the header.
+        const rows = dataLines.slice(1).map(parseRow).filter((r) => r.length === headers.length)
+        blocks.push({ type: "table", headers, rows })
       } else if (dataLines.length === 1) {
         blocks.push({ type: "paragraph", lines: [dataLines[0]] })
       }
@@ -383,7 +387,17 @@ function CompactTable({
 }) {
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
-      <table className="w-full text-[12.5px] leading-6 border-collapse">
+      {/*
+        `w-auto min-w-full`: let the table choose its natural column widths
+        (so 10-column result sets don't get squished into the viewport) but
+        stretch to fill the wrapper when there are only a few short columns.
+        When natural width exceeds the wrapper, the outer `overflow-x-auto`
+        kicks in and the user can scroll horizontally to see every column.
+        With `w-full` (the old value) the table was always pinned at 100 %,
+        cells wrapped aggressively, and trailing columns got clipped — the
+        user reported this as "cut out, not acceptable".
+      */}
+      <table className="w-auto min-w-full text-[12.5px] leading-6 border-collapse">
         {/* <thead className="bg-overlay-hover/40"> */}
         <thead>
           <tr>

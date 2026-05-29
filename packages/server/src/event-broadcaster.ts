@@ -21,7 +21,7 @@
  * fresh instances to avoid shared state.
  *
  * Backend-internal event flow (agent → server) does NOT use this transport.
- * It uses in-process callback injection (`setSyncEventSink`,
+ * It uses in-process callback injection (`configureSyncEventSink`,
  * `engineServices` listeners, `onProgress`) which the server then forwards
  * here via `broadcast(...)`.
  */
@@ -29,7 +29,7 @@
 import { EventType } from "@mia/shared-enums"
 import type { SseEvent, TraceEntry } from "@mia/shared-types"
 import { createHmac } from "node:crypto"
-import { getRun, listWebhookDrains, saveEvent } from "./db/index.js"
+import { getRun, listWebhookDrains, saveEvent } from "./adapters/persistence/sqlite.js"
 
 export type { SseEvent }
 
@@ -111,7 +111,11 @@ export class EventBroadcaster {
 
     // Persist to event_log (skip high-frequency ephemeral events to keep
     // the table compact and avoid blocking between SSE writes).
-    if (msg.type !== EventType.AnswerChunk && msg.type !== EventType.StreamReset) {
+    if (
+      msg.type !== EventType.AnswerChunk &&
+      msg.type !== EventType.StreamReset &&
+      msg.type !== EventType.SessionPresenceTick
+    ) {
       try {
         saveEvent(msg.type, msg.data, msg.timestamp)
       } catch { /* don't break broadcast if DB write fails */ }

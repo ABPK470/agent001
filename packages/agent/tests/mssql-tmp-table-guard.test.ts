@@ -13,9 +13,12 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { findNonTmpMutations, validateQuery } from "../src/tools/mssql/validation.js"
+import { countReferencedLargeObjects, findNonTmpMutations, validateQuery, validateTempTableBatch } from "../src/tools/mssql/validation.js"
+import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
 const RO = false  // writeEnabled = false (read-only mode)
+const catalog = canonicalFixtureCatalog()
+const accessor = () => catalog
 
 describe("findNonTmpMutations", () => {
   it("flags CREATE on a real table", () => {
@@ -99,36 +102,36 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "  GROUP BY r.pkClient;",
       "DROP TABLE #scope;",
     ].join("\n")
-    expect(validateQuery(batch, RO)).toBeNull()
+    expect(validateQuery(batch, RO, { accessor })).toBeNull()
   })
 
   it("allows SELECT INTO #scope as the opening statement", () => {
     const q = "SELECT pkClient INTO #scope FROM dim.Client WHERE pkClient < 100;"
-    expect(validateQuery(q, RO)).toBeNull()
+    expect(validateQuery(q, RO, { accessor })).toBeNull()
   })
 
   it("blocks CREATE on a real table", () => {
-    const err = validateQuery("CREATE TABLE dbo.MyExtract (id int)", RO)
+    const err = validateQuery("CREATE TABLE dbo.MyExtract (id int)", RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
   })
 
   it("blocks INSERT into a real table", () => {
-    const err = validateQuery("INSERT INTO publish.Revenue (x) VALUES (1)", RO)
+    const err = validateQuery("INSERT INTO publish.Revenue (x) VALUES (1)", RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
   })
 
   it("blocks UPDATE on a real table", () => {
-    const err = validateQuery("UPDATE dim.Client SET Name='x' WHERE pkClient=1", RO)
+    const err = validateQuery("UPDATE dim.Client SET Name='x' WHERE pkClient=1", RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
   })
 
   it("blocks DROP on a real table", () => {
-    const err = validateQuery("DROP TABLE dim.Client", RO)
+    const err = validateQuery("DROP TABLE dim.Client", RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
   })
 
   it("blocks global ##temp tables", () => {
-    const err = validateQuery("CREATE TABLE ##leaky (id int)", RO)
+    const err = validateQuery("CREATE TABLE ##leaky (id int)", RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
   })
 
@@ -138,21 +141,108 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "INSERT INTO publish.Revenue (x) VALUES (1);",
       "DROP TABLE #scope;",
     ].join("\n")
-    const err = validateQuery(batch, RO)
+    const err = validateQuery(batch, RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
     expect(err).toMatch(/publish\.Revenue/i)
   })
 
   it("still blocks dangerous primitives (EXEC, OPENROWSET) even on #temp", () => {
-    expect(validateQuery("EXEC sp_who", RO)).toMatch(/dangerous/i)
-    expect(validateQuery("SELECT * FROM OPENROWSET('x','y','z')", RO)).toMatch(/dangerous/i)
+    expect(validateQuery("EXEC sp_who", RO, { accessor })).toMatch(/dangerous/i)
+    expect(validateQuery("SELECT * FROM OPENROWSET('x','y','z')", RO, { accessor })).toMatch(/dangerous/i)
   })
 
   it("preserves pure-SELECT path", () => {
-    expect(validateQuery("SELECT TOP 5 * FROM dim.Date WHERE Year=2025", RO)).toBeNull()
+    expect(validateQuery("SELECT TOP 5 * FROM dim.Date WHERE Year=2025", RO, { accessor })).toBeNull()
   })
 
   it("rejects garbage that is neither read nor a known mutation opener", () => {
-    expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO)).toMatch(/Write operations are disabled/i)
+    expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO, { accessor })).toMatch(/Write operations are disabled/i)
+  })
+
+  it("blocks a temp-table typo that references an uncreated #temp", () => {
+    const batch = [
+      "SET NOCOUNT ON;",
+      "SELECT pkClient INTO #topClients_6b4c9a12 FROM dim.Client WHERE pkClient < 100;",
+      "SELECT pkClient INTO #balLines_6b4c9a12 FROM #topClients_6b4c9a12;",
+      "SELECT COUNT(*) AS c FROM #balLines_6bc49a12;",
+      "DROP TABLE #balLines_6b4c9a12;",
+      "DROP TABLE #topClients_6b4c9a12;",
+    ].join("\n")
+    expect(validateTempTableBatch(batch)).toMatch(/referenced without being created/i)
+    expect(validateQuery(batch, RO, { accessor })).toMatch(/#balLines_6bc49a12/i)
+  })
+
+  it("blocks inconsistent temp suffixes across one batch", () => {
+    const batch = [
+      "CREATE TABLE #scope_a3f91c08 (pkClient int);",
+      "CREATE TABLE #detail_b4c9a120 (pkClient int);",
+      "DROP TABLE #detail_b4c9a120;",
+      "DROP TABLE #scope_a3f91c08;",
+    ].join("\n")
+    const result = validateTempTableBatch(batch)
+    expect(typeof result).toBe("string")
+    expect(result ?? "").toMatch(/inconsistent #temp suffixes/i)
+  })
+
+  it("blocks malformed temp suffixes that are not 8 hex chars", () => {
+    const batch = [
+      "CREATE TABLE #scope_a3f91c08 (pkClient int);",
+      "CREATE TABLE #detail_b4c9a12 (pkClient int);",
+      "DROP TABLE #detail_b4c9a12;",
+      "DROP TABLE #scope_a3f91c08;",
+    ].join("\n")
+    const result = validateTempTableBatch(batch)
+    expect(typeof result).toBe("string")
+    expect(result ?? "").toMatch(/malformed #temp suffix/i)
+  })
+
+  it("counts repeated references to large objects", () => {
+    const counts = countReferencedLargeObjects([
+      "SELECT * FROM publish.Revenue r1",
+      "JOIN publish.Revenue r2 ON r1.pkClient = r2.pkClient",
+      "JOIN publish.Revenue r3 ON r2.pkClient = r3.pkClient",
+    ].join("\n"), accessor)
+    expect(counts.get("publish.revenue")).toBe(3)
+  })
+
+  it("counts repeated references to persisted publish mirrors", () => {
+    const counts = countReferencedLargeObjects([
+      "SELECT * FROM persistedView.[publish.Revenue] r1",
+      "JOIN persistedView.[publish.Revenue] r2 ON r1.pkClient = r2.pkClient",
+      "JOIN persistedView.[publish.Revenue] r3 ON r2.pkClient = r3.pkClient",
+    ].join("\n"), accessor)
+    expect(counts.get("persistedview.publish.revenue")).toBe(3)
+  })
+
+  it("blocks referencing a large view more than twice in one batch", () => {
+    const batch = [
+      "SELECT TOP 10 a.pkClient",
+      "FROM publish.Revenue a WITH (NOLOCK)",
+      "JOIN publish.Revenue b WITH (NOLOCK) ON a.pkClient = b.pkClient",
+      "JOIN publish.Revenue c WITH (NOLOCK) ON b.pkClient = c.pkClient",
+      "WHERE a.pkMonth BETWEEN 202501 AND 202512",
+    ].join("\n")
+    expect(validateQuery(batch, RO, { accessor })).toMatch(/referenced too many times/i)
+    expect(validateQuery(batch, RO, { accessor })).toMatch(/publish\.Revenue/i)
+  })
+
+  it("blocks unfiltered persisted publish mirrors too", () => {
+    const query = "SELECT TOP 5 pkClient FROM persistedView.[publish.Revenue] ORDER BY pkClient"
+    expect(validateQuery(query, RO, { accessor })).toMatch(/full scan/i)
+  })
+
+  it("blocks repeated scalar probes against the same staged temp table", () => {
+    const batch = [
+      "SET NOCOUNT ON;",
+      "SELECT pkClient, pkProduct, RevenueZARMTD INTO #revLines_a3f91c08 FROM publish.Revenue WHERE pkMonth BETWEEN 202501 AND 202512;",
+      "SELECT",
+      "  base.pkClient,",
+      "  (SELECT COUNT(*) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS ProductCount,",
+      "  (SELECT SUM(r.RevenueZARMTD) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS RevenueZAR",
+      "FROM #revLines_a3f91c08 base;",
+      "DROP TABLE #revLines_a3f91c08;",
+    ].join("\n")
+    expect(validateQuery(batch, RO, { accessor })).toMatch(/repeated scalar subqueries/i)
+    expect(validateQuery(batch, RO, { accessor })).toMatch(/aggregate the staged #temp once per business key/i)
   })
 })

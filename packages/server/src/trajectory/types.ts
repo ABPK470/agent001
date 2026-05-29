@@ -3,62 +3,62 @@
 import { TrajectoryEditOperation, TrajectoryEventKind } from "../enums/trajectory.js"
 
 export interface GoalEvent {
-  kind: TrajectoryEventKind.Goal
+  kind: typeof TrajectoryEventKind.Goal
   text: string
 }
 
 export interface ThinkingEvent {
-  kind: TrajectoryEventKind.Thinking
+  kind: typeof TrajectoryEventKind.Thinking
   text: string
 }
 
 export interface ToolCallEvent {
-  kind: TrajectoryEventKind.ToolCall
+  kind: typeof TrajectoryEventKind.ToolCall
   tool: string
   argsSummary: string
   argsFormatted: string
 }
 
 export interface ToolResultEvent {
-  kind: TrajectoryEventKind.ToolResult
+  kind: typeof TrajectoryEventKind.ToolResult
   text: string
 }
 
 export interface ToolErrorEvent {
-  kind: TrajectoryEventKind.ToolError
+  kind: typeof TrajectoryEventKind.ToolError
   text: string
 }
 
 export interface IterationEvent {
-  kind: TrajectoryEventKind.Iteration
+  kind: typeof TrajectoryEventKind.Iteration
   current: number
   max: number
 }
 
 export interface DelegationStartEvent {
-  kind: TrajectoryEventKind.DelegationStart
+  kind: typeof TrajectoryEventKind.DelegationStart
   childGoal: string
   childRunId: string
 }
 
 export interface DelegationEndEvent {
-  kind: TrajectoryEventKind.DelegationEnd
+  kind: typeof TrajectoryEventKind.DelegationEnd
   childRunId: string
   result: string
 }
 
 export interface AnswerEvent {
-  kind: TrajectoryEventKind.Answer
+  kind: typeof TrajectoryEventKind.Answer
   text: string
 }
 
 export interface ErrorEvent {
-  kind: TrajectoryEventKind.Error
+  kind: typeof TrajectoryEventKind.Error
   text: string
 }
 
 export interface UsageEvent {
-  kind: TrajectoryEventKind.Usage
+  kind: typeof TrajectoryEventKind.Usage
   iterationTokens: number
   totalTokens: number
   promptTokens: number
@@ -67,21 +67,21 @@ export interface UsageEvent {
 }
 
 export interface DelegationIterationEvent {
-  kind: TrajectoryEventKind.DelegationIteration
+  kind: typeof TrajectoryEventKind.DelegationIteration
   depth: number
   iteration: number
   maxIterations: number
 }
 
 export interface DelegationParallelStartEvent {
-  kind: TrajectoryEventKind.DelegationParallelStart
+  kind: typeof TrajectoryEventKind.DelegationParallelStart
   depth: number
   taskCount: number
   goals: string[]
 }
 
 export interface DelegationParallelEndEvent {
-  kind: TrajectoryEventKind.DelegationParallelEnd
+  kind: typeof TrajectoryEventKind.DelegationParallelEnd
   depth: number
   taskCount: number
   fulfilled: number
@@ -89,17 +89,17 @@ export interface DelegationParallelEndEvent {
 }
 
 export interface SystemPromptEvent {
-  kind: TrajectoryEventKind.SystemPrompt
+  kind: typeof TrajectoryEventKind.SystemPrompt
   text: string
 }
 
 export interface ToolsResolvedEvent {
-  kind: TrajectoryEventKind.ToolsResolved
+  kind: typeof TrajectoryEventKind.ToolsResolved
   tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }>
 }
 
 export interface LlmRequestEvent {
-  kind: TrajectoryEventKind.LlmRequest
+  kind: typeof TrajectoryEventKind.LlmRequest
   iteration: number
   messageCount: number
   toolCount: number
@@ -107,7 +107,7 @@ export interface LlmRequestEvent {
 }
 
 export interface LlmResponseEvent {
-  kind: TrajectoryEventKind.LlmResponse
+  kind: typeof TrajectoryEventKind.LlmResponse
   iteration: number
   durationMs: number
   content: string | null
@@ -116,19 +116,19 @@ export interface LlmResponseEvent {
 }
 
 export interface PlannerValidationRemediatedEvent {
-  kind: TrajectoryEventKind.PlannerValidationRemediated
+  kind: typeof TrajectoryEventKind.PlannerValidationRemediated
   diagnostics: Array<{ code: string; message: string }>
 }
 
 export interface UserInputRequestEvent {
-  kind: TrajectoryEventKind.UserInputRequest
+  kind: typeof TrajectoryEventKind.UserInputRequest
   question: string
   options?: string[]
   sensitive?: boolean
 }
 
 export interface UserInputResponseEvent {
-  kind: TrajectoryEventKind.UserInputResponse
+  kind: typeof TrajectoryEventKind.UserInputResponse
   text: string
 }
 
@@ -170,6 +170,6 @@ export interface Trajectory {
  *   - inject(seq, ev)  — insert a new event before the given seq
  */
 export type Mutation =
-  | { type: TrajectoryEditOperation.Drop; seq: number }
-  | { type: TrajectoryEditOperation.Replace; seq: number; event: TrajectoryEvent }
-  | { type: TrajectoryEditOperation.Inject; seq: number; event: TrajectoryEvent }
+  | { type: typeof TrajectoryEditOperation.Drop; seq: number }
+  | { type: typeof TrajectoryEditOperation.Replace; seq: number; event: TrajectoryEvent }
+  | { type: typeof TrajectoryEditOperation.Inject; seq: number; event: TrajectoryEvent }

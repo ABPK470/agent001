@@ -1,9 +1,36 @@
-import type { CatalogGraph, ConceptPathResult } from "../catalog/index.js"
-import { fmtLineage, fmtPath, fmtRow } from "./formatters.js"
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
+import type { CatalogGraph, CatalogTable } from "../catalog/index.js"
+import { fmtPath, fmtRow } from "./formatters.js"
+
+/**
+ * Resolve `qualifiedName` to a catalog table, applying the deployment's
+ * `mirrorSchema` doctrine when the bare name doesn't hit.
+ *
+ * Example: in deployments where `mirrorSchema = 'persistedView'`, the wide
+ * curated view `publish.Revenue` is also materialised as the 3-part name
+ * `persistedView.publish.Revenue`. The LLM and most users refer to the
+ * base name (`publish.revenue`); this helper bridges that gap so the
+ * lookup succeeds either way. Case-insensitive throughout.
+ *
+ * Returns the resolved table and the `resolvedVia` annotation so the
+ * caller can surface a short note to the LLM ("resolved via mirror…").
+ */
+function resolveTable(
+  catalog: CatalogGraph,
+  qualifiedName: string,
+): { table: CatalogTable; resolvedVia: "direct" | "mirror" } | null {
+  const direct = catalog.getTable(qualifiedName)
+  if (direct) return { table: direct, resolvedVia: "direct" }
+  const mirrorSchema = getTenantConfig().mirrorSchema
+  if (mirrorSchema && !qualifiedName.toLowerCase().startsWith(mirrorSchema.toLowerCase() + ".")) {
+    const mirrored = catalog.getTable(`${mirrorSchema}.${qualifiedName}`)
+    if (mirrored) return { table: mirrored, resolvedVia: "mirror" }
+  }
+  return null
+}
 
 export function handleStats(catalog: CatalogGraph): string {
   const s = catalog.stats()
-  const lineageViews = catalog.listLineage()
   const lines = [
     `Schema Catalog Summary:`,
     `  Schemas: ${s.schemas} | Tables: ${s.tables} | Views: ${s.views}`,
@@ -22,153 +49,24 @@ export function handleStats(catalog: CatalogGraph): string {
       lines.push(`  ${v.name}: ~${fmtRow(v.sourceRows)} underlying rows`)
     }
   }
-  if (lineageViews.length > 0) {
-    lines.push("", `Lineage maps available: ${lineageViews.join(", ")}`)
-    lines.push("  Use search_catalog(lineage='view') to explore.")
-  }
-  return lines.join("\n")
-}
-
-export function handleLineage(catalog: CatalogGraph, viewName: string): string {
-  const lineage = catalog.getLineage(viewName)
-  if (lineage) return fmtLineage(lineage)
-
-  // Check if the table even exists before giving the "not found" path
-  const tableEntry = catalog.getTable(viewName)
-  const exists = tableEntry != null
-
-  // Check if it's a source in another view's lineage
-  const parents = catalog.getLineageParents(viewName)
-  if (parents.length > 0) {
-    const parentInfo = parents.map((p) => `  ${p.view} (as "${p.businessArea}")`).join("\n")
-    return [
-      `No standalone lineage for '${viewName}' — it is a SOURCE consumed by:`,
-      parentInfo,
-      ``,
-      `NEXT: Use search_catalog(lineage='${parents[0].view}') to see the consuming view's full source map.`,
-    ].join("\n")
-  }
-
-  // Object exists but no lineage entry — escalate to inspect_definition
-  if (exists) {
-    const isView = tableEntry!.type === "VIEW"
-    if (isView) {
-      const hasViewDef = !!tableEntry!.viewDefinition
-      return [
-        `No pre-computed lineage for '${viewName}'.`,
-        hasViewDef
-          ? `The view SQL is cached in the catalog.`
-          : `The view SQL was not captured (possible encryption or restricted permissions).`,
-        ``,
-        `NEXT STEPS (in order):`,
-        `  1. inspect_definition(object='${viewName}') — reads live T-SQL + shows all table/view references with duplicate-join detection.`,
-        `  2. inspect_definition(depends_on='${viewName}') — full transitive dependency tree (what does it ultimately read?).`,
-        `  3. search_catalog(refresh=true) — if catalog is stale, rebuild to pick up new view dependencies.`,
-      ].join("\n")
-    } else {
-      // It's a base table — it's a source, not derived
-      return [
-        `'${viewName}' is a TABLE — base tables don't have forward lineage (they ARE the source).`,
-        ``,
-        `NEXT STEPS:`,
-        `  1. search_catalog(joins='${viewName}') — show all FK + implicit join edges.`,
-        `  2. search_catalog(lineage='<view>') on any view that reads from this table to trace downstream usage.`,
-        tableEntry!.fkIncoming.length > 0
-          ? `  Note: ${tableEntry!.fkIncoming.length} views/tables have FK references INTO this table.`
-          : "",
-      ].filter(Boolean).join("\n")
-    }
-  }
-
-  return `'${viewName}' not found in catalog. Use search_catalog(search='keyword') to find it, or search_catalog(refresh=true) if the object was recently created.`
-}
-
-export function handleConcepts(catalog: CatalogGraph, key: string): string {
-  const t = catalog.getTable(key)
-  if (!t) {
-    const hits = catalog.search(key.replace(".", " "), 3)
-    if (hits.length > 0) {
-      return `Table '${key}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName}`).join("\n")}`
-    }
-    return `Table '${key}' not found in catalog. Use search_catalog(search='keyword') to find it.`
-  }
-  const concepts = catalog.getTableConcepts(key)
-  if (concepts.length === 0) {
-    const allConcepts = catalog.listConcepts()
-    const all = allConcepts.map((c) => `${c.concept} (${c.tables.length} sources)`).join(", ")
-    return all
-      ? `No concept tags for '${key}'. This table doesn't appear as a source in any lineage map.\nLoaded concepts: ${all}`
-      : `No concept tags for '${key}'. No lineage maps are loaded yet.`
-  }
-  const lines = [`Business concepts for ${key} (${concepts.length}):`, ""]
-  for (const c of concepts) {
-    const node = catalog.getConcept(c.concept)
-    lines.push(`  ★ ${c.concept}`)
-    lines.push(`    Aggregated by: ${c.sourceView}`)
-    lines.push(`    ${c.description}`)
-    lines.push(`    ${node?.tables.length ?? "?"} contributing sources across groups: ${node?.businessGroups.join(", ") ?? "unknown"}`)
-    lines.push(`    Use search_catalog(lineage='${c.sourceView}') to see the full source map.`)
-    lines.push(`    Use search_catalog(concept_path=['${key}', '${c.sourceView}']) to trace the join path.`)
-    lines.push("")
-  }
-  return lines.join("\n")
-}
-
-export function handleConceptPath(catalog: CatalogGraph, from: string, to: string): string {
-  const fkPaths = catalog.findPath(from, to)
-  const conceptPaths: ConceptPathResult[] = catalog.findConceptPath(from, to)
-
-  if (fkPaths.length === 0 && conceptPaths.length === 0) {
-    const fromConcepts = catalog.getTableConcepts(from)
-    const toConcepts = catalog.getTableConcepts(to)
-    const lines = [`No path found between ${from} and ${to} (checked FK, implicit join, and concept edges).`, ""]
-    lines.push(fromConcepts.length > 0
-      ? `  ${from} contributes to: ${fromConcepts.map((c) => c.concept).join(", ")}`
-      : `  ${from} has no concept tags (not a source in any lineage map).`)
-    lines.push(toConcepts.length > 0
-      ? `  ${to} contributes to: ${toConcepts.map((c) => c.concept).join(", ")}`
-      : `  ${to} has no concept tags (not a source in any lineage map).`)
-    return lines.join("\n")
-  }
-
-  const lines = [`Concept-aware paths from ${from} to ${to}:`]
-  if (fkPaths.length > 0) {
-    lines.push("", `FK paths (${fkPaths.length} — structural):`)
-    for (let i = 0; i < fkPaths.length; i++) {
-      lines.push(`  Path ${i + 1} (${fkPaths[i].length} hop${fkPaths[i].length !== 1 ? "s" : ""}):`, fmtPath(fkPaths[i]))
-    }
-  }
-  if (conceptPaths.length > 0) {
-    lines.push("", `Concept paths (${conceptPaths.length} — semantic):`, "")
-    for (let i = 0; i < conceptPaths.length; i++) {
-      const p = conceptPaths[i]
-      const label = p.conceptsUsed.length > 0 ? ` via concept: ${p.conceptsUsed.join(", ")}` : ""
-      lines.push(`  Path ${i + 1} (${p.totalHops} hop${p.totalHops !== 1 ? "s" : ""}${label}):`)
-      for (const step of p.steps) {
-        const edgeDesc =
-          step.edge.type === "fk"
-            ? `FK: ${step.edge.fromColumn} → ${step.edge.toColumn}`
-            : step.edge.type === "implicit"
-              ? `implicit join on ${step.edge.column} (${step.edge.dataType})`
-              : `concept: ${step.edge.concept} (via ${step.edge.via})`
-        lines.push(`    ${step.from} ──[${edgeDesc}]──> ${step.to}`)
-      }
-    }
-  }
   return lines.join("\n")
 }
 
 export function handleTable(catalog: CatalogGraph, tableName: string): string {
-  const t = catalog.getTable(tableName)
-  if (!t) {
+  const resolved = resolveTable(catalog, tableName)
+  if (!resolved) {
     const hits = catalog.search(tableName.replace(".", " "), 3)
     if (hits.length > 0) {
       return `Table '${tableName}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName} (${h.table.type})`).join("\n")}`
     }
     return `Table '${tableName}' not found in catalog. Use search_catalog(search='keyword') to find it.`
   }
+  const t = resolved.table
+  const header = resolved.resolvedVia === "mirror"
+    ? `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""}) — resolved via mirror (input was '${tableName}')`
+    : `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`
   const lines = [
-    `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`,
+    header,
     "",
     "Columns:",
   ]
@@ -196,15 +94,19 @@ export function handleTable(catalog: CatalogGraph, tableName: string): string {
 }
 
 export function handleJoins(catalog: CatalogGraph, key: string): string {
-  const t = catalog.getTable(key)
-  if (!t) {
+  const resolved = resolveTable(catalog, key)
+  if (!resolved) {
     const hits = catalog.search(key.replace(".", " "), 3)
     if (hits.length > 0) {
       return `Table '${key}' not found. Did you mean:\n${hits.map((h) => `  ${h.table.qualifiedName}`).join("\n")}`
     }
     return `Table '${key}' not found in catalog.`
   }
-  const lines = [`Join edges for ${t.qualifiedName}:`]
+  const t = resolved.table
+  const header = resolved.resolvedVia === "mirror"
+    ? `Join edges for ${t.qualifiedName} (resolved via mirror from '${key}'):`
+    : `Join edges for ${t.qualifiedName}:`
+  const lines = [header]
 
   if (t.fkOutgoing.length > 0) {
     lines.push("", "FK OUTGOING (this table references):")
@@ -220,11 +122,11 @@ export function handleJoins(catalog: CatalogGraph, key: string): string {
     if (t.fkIncoming.length > 15) lines.push(`  ... +${t.fkIncoming.length - 15} more`)
   }
 
-  const implicit = catalog.getImplicitJoins(key)
+  const implicit = catalog.getImplicitJoins(t.qualifiedName)
   if (implicit.length > 0) {
     lines.push("", `IMPLICIT JOINS (${implicit.length} shared columns with other tables):`)
     for (const edge of implicit) {
-      const others = edge.tables.filter((tk) => tk !== key).slice(0, 8)
+      const others = edge.tables.filter((tk) => tk !== t.qualifiedName).slice(0, 8)
       lines.push(`  ${edge.column} (${edge.dataType}) → ${others.join(", ")}${edge.tables.length > 9 ? ` (+${edge.tables.length - 9} more)` : ""}`)
     }
   }

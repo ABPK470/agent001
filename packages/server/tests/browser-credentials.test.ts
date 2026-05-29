@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 async function bootstrap(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _migrate(testDb)
   _setDb(testDb)
   seedTestUsers(testDb)
@@ -114,8 +114,7 @@ describe("browser credentials store", () => {
   it("server provider generates TOTP codes and refuses cross-tenant", async () => {
     await bootstrap()
     const { createCredential } = await import("../src/browser/credentials.js")
-    const { runWithSession } = await import("../src/auth/context.js")
-    const { serverBrowserCredentialProvider } = await import(
+    const { createServerBrowserCredentialProvider } = await import(
       "../src/browser/credential-provider.js"
     )
 
@@ -128,25 +127,14 @@ describe("browser credentials store", () => {
       payload: { secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", digits: 6, period: 30 },
     })
 
-    const aliceSession = {
-      sid: "s1",
-      displayName: "Alice",
-      upn: "alice@example.com",
-      isAdmin: false,
-      ip: "::1",
-      userAgent: "test",
-    }
-    const bobSession = { ...aliceSession, sid: "s2", upn: "bob@example.com", displayName: "Bob" }
+    const aliceProvider = createServerBrowserCredentialProvider("alice@example.com")
+    const bobProvider = createServerBrowserCredentialProvider("bob@example.com")
 
-    const aliceCode = await runWithSession(aliceSession, () =>
-      serverBrowserCredentialProvider.resolveTotp(meta.id),
-    )
+    const aliceCode = await aliceProvider.resolveTotp(meta.id)
     expect(aliceCode?.code).toMatch(/^\d{6}$/)
     expect(aliceCode?.label).toBe("test-totp")
 
-    const bobCode = await runWithSession(bobSession, () =>
-      serverBrowserCredentialProvider.resolveTotp(meta.id),
-    )
+    const bobCode = await bobProvider.resolveTotp(meta.id)
     expect(bobCode).toBeNull()
   })
 

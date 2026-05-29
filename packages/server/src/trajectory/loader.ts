@@ -1,4 +1,4 @@
-import { getDb } from "../db/index.js"
+import { getDb } from "../adapters/persistence/sqlite.js"
 import { TrajectoryEditOperation } from "../enums/trajectory.js"
 import type { Mutation, Trajectory, TrajectoryEvent } from "./types.js"
 

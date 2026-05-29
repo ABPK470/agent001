@@ -442,12 +442,86 @@ FROM publish.Revenue WITH (NOLOCK)
 WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo   -- resolve from dim.Date first!
 GROUP BY pkClient
 
--- CORRECT: Use persistedView if available — it's a pre-materialized index
-SELECT pkClient, SUM(RevenueZARMTD) AS revenue
-FROM persistedView.[publish.Revenue] WITH (NOLOCK)   -- use search_catalog to verify exact name
-WHERE pkMonth BETWEEN @pkMonthFrom AND @pkMonthTo
-GROUP BY pkClient
+-- CONDITIONAL: use a persisted publish mirror ONLY if that exact mirror exists.
+-- Do NOT assume `persistedView.[publish.Revenue]` exists in every environment.
+-- If no one-to-one persisted publish mirror exists, do NOT blindly substitute
+-- `persistedView.[fact.Revenue]` and expect the same performance shape.
+
+-- FALLBACK FOR publish.Revenue: aggregate inside each source branch first,
+-- then UNION the small grouped results, then take TOP N clients.
+-- This matches the actual lineage shape of publish.Revenue in this repo:
+-- 59 source-mapping views under one UNION ALL.
 ```
+
+### ✅ When no `persistedView.[publish.Revenue]` mirror exists
+
+`publish.Revenue` in this repo is documented as a `UNION ALL` over 59 source-mapping views.
+When there is no one-to-one persisted publish mirror, the best-performing pattern for enterprise
+top-N client discovery is usually:
+
+1. Resolve `pkMonth` from `dim.Date`
+2. Aggregate by `pkClient` inside each revenue branch with the `pkMonth` predicate applied
+3. `UNION ALL` those branch-local aggregates
+4. Group again by `pkClient` and take `TOP N`
+5. Only then fetch detail rows for those clients from `publish.Revenue`
+
+Example skeleton:
+
+```sql
+SET NOCOUNT ON;
+
+SELECT MIN(pkMonth) AS pkMonthFrom, MAX(pkMonth) AS pkMonthTo
+INTO #range_a3f91c08
+FROM dim.Date WITH (NOLOCK)
+WHERE [Year] = 2025;
+
+SELECT TOP 5
+      x.pkClient,
+      SUM(x.RevenueZAR) AS RevenueZAR
+INTO #topClients_a3f91c08
+FROM (
+      SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
+      FROM publish.MappingTransactionalBankingRules WITH (NOLOCK)
+      WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
+                                 AND (SELECT pkMonthTo   FROM #range_a3f91c08)
+         AND pkClient IS NOT NULL
+      GROUP BY pkClient
+
+      UNION ALL
+
+      SELECT pkClient, SUM(RevenueZARMTD) AS RevenueZAR
+      FROM publish.MappingUNOTranspose WITH (NOLOCK)
+      WHERE pkMonth BETWEEN (SELECT pkMonthFrom FROM #range_a3f91c08)
+                                 AND (SELECT pkMonthTo   FROM #range_a3f91c08)
+         AND pkClient IS NOT NULL
+      GROUP BY pkClient
+
+      -- repeat for the required revenue branches
+) x
+GROUP BY x.pkClient
+ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;
+
+SELECT
+      r.pkClient,
+      r.pkProduct,
+      r.pkAccount,
+      r.pkMonth,
+      r.RevenueZARMTD
+INTO #revLines_a3f91c08
+FROM publish.Revenue r WITH (NOLOCK)
+JOIN #range_a3f91c08 rg
+   ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo
+WHERE r.pkClient IN (SELECT pkClient FROM #topClients_a3f91c08);
+
+DROP TABLE #revLines_a3f91c08;
+DROP TABLE #topClients_a3f91c08;
+DROP TABLE #range_a3f91c08;
+```
+
+Why this helps:
+- it shrinks rows inside each branch before the global `UNION ALL`
+- it avoids asking SQL Server to sort or aggregate the fully-expanded 59-branch union first
+- it delays large dim joins until the client set is already tiny
 
 ### ✅ pkMonth lookup pattern
 
@@ -585,7 +659,7 @@ milliseconds) and requires no configuration.
 - Dimension joins — auto-detected from `pk*` column naming (`pkClient` → `dim.Client`, etc.)
 - Source grouping by schema
 
-**Hand-curated additions** (in `deploy/mssql/lineage.json`) add richer context for the two most
+**Hand-curated additions** (in `deploy/mssql/publish-views-curation.json`) add richer context for the two most
 critical views: business area groupings (RBB, UNO, CPA, Africa, IMEX, etc.), filter conditions
 per source, and narrative descriptions. These always overwrite the auto-discovered entries.
 

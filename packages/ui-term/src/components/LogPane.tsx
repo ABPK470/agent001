@@ -160,6 +160,29 @@ function summarize(e: SseEvent): string {
         case "nudge": {
           return `[${entry["tag"]}] ${trunc(String(entry["message"] ?? ""), 180)}`
         }
+        case "planner-sql-quality": {
+          const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
+          const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
+            ? (entry["missingPersistedMirrorCandidates"] as string[])
+            : []
+          const tempScalarSubqueryCount = Number(entry["tempScalarSubqueryCount"] ?? 0)
+          const largeObjectRefs = Array.isArray(entry["largeObjectRefs"])
+            ? (entry["largeObjectRefs"] as Array<{ name?: string; count?: number }>).filter((ref) => Number(ref.count ?? 0) > 2)
+            : []
+          const notes: string[] = []
+          if (validationCode) notes.push(`blocked=${validationCode}`)
+          if (missingMirrors.length > 0) notes.push(`mirror=${missingMirrors.join(",")}`)
+          if (largeObjectRefs.length > 0) notes.push(largeObjectRefs.map((ref) => `${ref.name ?? "object"}×${Number(ref.count ?? 0)}`).join(", "))
+          if (tempScalarSubqueryCount > 0) notes.push(`temp-subq=${tempScalarSubqueryCount}`)
+          return `${String(entry["phase"] ?? "checked")} · ${notes.join(" · ") || "ok"}`
+        }
+        case "planner-prompt-budget": {
+          const before = Number(entry["totalBeforeChars"] ?? 0)
+          const after = Number(entry["totalAfterChars"] ?? 0)
+          const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+          const tail = dropped.length > 0 ? ` · dropped=${dropped.join(",")}` : ""
+          return `prompt-budget ${before.toLocaleString()} → ${after.toLocaleString()} chars${tail}`
+        }
         default: {
           // Fall through to generic candidates below.
         }

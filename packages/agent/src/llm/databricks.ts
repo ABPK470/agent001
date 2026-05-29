@@ -16,7 +16,7 @@
  * server side for token acquisition + caching.
  */
 
-import type { LLMClient, LLMResponse, Message, Tool } from "../types.js"
+import type { LLMClient, LLMResponse, Message, Tool } from "../domain/agent-types.js"
 import { OpenAICompatibleClient } from "./openai-compat.js"
 
 export class DatabricksClient implements LLMClient {

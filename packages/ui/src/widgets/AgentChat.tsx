@@ -22,7 +22,7 @@ import { formatMs } from "../util"
 // when something went wrong that the user cannot fix. The chat must render
 // these as a small notice card with the run reference, NOT as a normal
 // agent answer. Keep these strings in lockstep with
-// packages/agent/src/planner/platform-errors.ts.
+// packages/agent/src/application/core/planner-cluster/platform-errors.ts.
 const PLATFORM_UNCONFIGURED_PREFIX = "This request can\u2019t be completed right now."
 const GENERIC_FAILURE_PREFIX = "This request couldn\u2019t be completed."
 // Invisible marker prepended to LLM-polished failure replies (zero-width
@@ -393,6 +393,7 @@ export function AgentChat() {
       if (e.kind === "planner-verification") return "Verifying"
       if (e.kind === "planner-retry") return `Retry #${e.attempt}`
       if (e.kind === "planner-escalation") return "Escalating"
+      if (e.kind === "planner-sql-quality") return e.phase === "blocked" ? "Blocking SQL query" : "Reviewing SQL query"
 
       // Coherent generation phases
       if (e.kind === "coherent-generation-repair-needed") return `Repairing — ${e.issueCount} issue${e.issueCount !== 1 ? "s" : ""}`

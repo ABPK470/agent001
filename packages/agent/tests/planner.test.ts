@@ -3,13 +3,13 @@
  * pipeline execution, and circuit breaker behavior.
  */
 import { describe, expect, it, vi } from "vitest"
-import * as delegationDecision from "../src/delegation/decision/index.js"
-import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/planner/index.js"
-import { assessPlannerDecision, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, compilePlannerRuntime, enrichVerifierAssessments, executePipeline, executePlannerPath, generatePlan, inferForcedOutputDirectoryFromGoal, isGibberishIssue, isLLMGibberish, isValidArtifactPath, parseBlueprintContractBlock, parseCoherentSolutionBundle, runDeterministicProbes, synthesizeAnswer, validatePlan } from "../src/planner/index.js"
-import * as plannerVerifier from "../src/planner/verifier/index.js"
-import { ToolFailureCircuitBreaker } from "../src/recovery/index.js"
+import * as plannerVerifier from "../src/application/core/planner-cluster/verifier/index.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/application/core/planner.js"
+import { assessPlannerDecision, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, compilePlannerRuntime, enrichVerifierAssessments, executePipeline, executePlannerPath, generatePlan, inferForcedOutputDirectoryFromGoal, isGibberishIssue, isLLMGibberish, isValidArtifactPath, parseBlueprintContractBlock, parseCoherentSolutionBundle, runDeterministicProbes, synthesizeAnswer, validatePlan } from "../src/application/core/planner.js"
+import { ToolFailureCircuitBreaker } from "../src/application/core/recovery.js"
+import * as delegationDecision from "../src/application/shell/delegation-cluster/decision/index.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
-import type { LLMClient, Tool } from "../src/types.js"
+import type { LLMClient, Tool } from "../src/domain/agent-types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -743,9 +743,9 @@ describe("Planner path execution", () => {
     // full_planner_decomposition, explicitDelegationRequested must be set to true so
     // the decompositionBenefit term is counted and utility clears the 0.20 threshold.
     const capturedDelegationInputs: unknown[] = []
-    const realAssess = (await import("../src/delegation/decision/index.js")).assessDelegationDecision
+    const realAssess = (await import("../src/application/shell/delegation-cluster/decision/index.js")).assessDelegationDecision
     const delegationSpy = vi.spyOn(
-      await import("../src/delegation/decision/index.js"),
+      await import("../src/application/shell/delegation-cluster/decision/index.js"),
       "assessDelegationDecision",
     ).mockImplementation((input) => {
       capturedDelegationInputs.push(input)

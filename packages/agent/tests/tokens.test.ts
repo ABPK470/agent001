@@ -2,7 +2,7 @@
  * Token estimation per-model factor sanity (Phase 0 / Gap 7).
  */
 import { describe, expect, it } from "vitest"
-import { charPerToken, estimateTokensFromText } from "../src/context/tokens.js"
+import { charPerToken, estimateTokensFromText } from "../src/memory/tokens.js"
 
 describe("charPerToken", () => {
   it("returns 4 by default", () => {

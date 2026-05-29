@@ -10,18 +10,19 @@ import { persist } from "zustand/middleware"
 import { api } from "./api"
 import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
-  AuditEntry,
-  LayoutItem,
-  LogEntry,
-  Notification,
-  Run,
-  RunDetail,
-  SseEvent,
-  Step,
-  TraceEntry,
-  ViewConfig,
-  Widget,
-  WidgetType,
+    AuditEntry,
+    BusMessage,
+    LayoutItem,
+    LogEntry,
+    Notification,
+    Run,
+    RunDetail,
+    SseEvent,
+    Step,
+    TraceEntry,
+    ViewConfig,
+    Widget,
+    WidgetType,
 } from "./types"
 import { randomId } from "./util"
 
@@ -159,6 +160,17 @@ interface AppState {
   addAudit: (entry: AuditEntry) => void
   setAudit: (entries: AuditEntry[]) => void
 
+  // Inter-agent bus messages (active run only). Mirrors AgentBusMessage
+  // SSE — every message published anywhere in the run tree appears here
+  // chronologically. `helpUnread` is the count of Help-protocol messages
+  // that arrived since the user last opened the BusFeed; cleared by
+  // ackBusHelp().
+  busMessages: BusMessage[]
+  helpUnread: number
+  addBusMessage: (msg: BusMessage) => void
+  setBusMessages: (msgs: BusMessage[]) => void
+  ackBusHelp: () => void
+
   // Live usage for current run (updated via WS)
   liveUsage: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number }
   resetLiveUsage: () => void
@@ -293,12 +305,26 @@ const DEFAULT_ENV_SYNC_FORM: EnvSyncFormState = {
 
 const DEFAULT_VIEW_ID = "default"
 
+/**
+ * Default view seed.
+ *
+ * Surgical change for login-flow → app continuity: a single full-canvas
+ * term-chat widget is pre-seeded so the app's first paint after login
+ * shows the same chat surface the login screen morphed into.
+ *
+ * Revert: replace `widgets`/`layouts` with `[]`/`{}` to restore the
+ * original empty-canvas default. Existing users with saved layouts
+ * are unaffected — only fresh users hit this seed.
+ */
 function makeDefaultView(): ViewConfig {
+  const widgetId = "default-term-chat"
   return {
     id: DEFAULT_VIEW_ID,
     name: "Main",
-    widgets: [],
-    layouts: {},
+    widgets: [{ id: widgetId, type: "term-chat" }],
+    layouts: {
+      lg: [{ i: widgetId, x: 0, y: 0, w: 12, h: 12, minW: 2, minH: 2 }],
+    },
   }
 }
 
@@ -320,6 +346,13 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "active-users": { w: 10, h: 10, minW: 2, minH: 2 },
   "env-sync": { w: 12, h: 14, minW: 4, minH: 4 },
   "operation-log": { w: 8, h: 12, minW: 4, minH: 4 },
+  "entity-registry": { w: 12, h: 14, minW: 6, minH: 6 },
+  "scd2-strategies": { w: 12, h: 14, minW: 6, minH: 6 },
+  "freeze-windows":  { w: 10, h: 12, minW: 4, minH: 4 },
+  "sync-proposals": { w: 12, h: 14, minW: 6, minH: 6 },
+  "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
+  "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },
+  "sync-admin":     { w: 12, h: 14, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12
@@ -483,7 +516,10 @@ function eventType(type: string): string {
   if (type.startsWith("tool_call.")) return "step"
   if (type.startsWith("delegation.")) return "agent"
   if (type.startsWith("planner.")) return "agent"
+  if (type === "debug.trace") return "agent"
   if (type === "agent.thinking") return "agent"
+  if (type === "agent.bus.message") return "agent"
+  if (type === "agent.help.requested") return "agent"
   if (type === "answer.chunk") return "agent"
   if (type === "api.request") return "api"
   return "system"
@@ -513,6 +549,45 @@ function formatLogEntryInner(
   timestamp: string,
 ): LogEntry | null {
   const t = eventType(type)
+
+  if (type === "debug.trace") {
+    const entry = data["entry"] as Record<string, unknown> | undefined
+    if ((entry?.["kind"] as string | undefined) === "planner-sql-quality") {
+      const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
+      const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
+        ? (entry["missingPersistedMirrorCandidates"] as string[])
+        : []
+      const tempScalarSubqueryCount = Number(entry["tempScalarSubqueryCount"] ?? 0)
+      const largeObjectRefs = Array.isArray(entry["largeObjectRefs"])
+        ? (entry["largeObjectRefs"] as Array<{ name?: string; count?: number }>).filter((ref) => Number(ref.count ?? 0) > 2)
+        : []
+      const notes: string[] = []
+      if (validationCode) notes.push(`blocked=${validationCode}`)
+      if (missingMirrors.length > 0) notes.push(`mirror=${missingMirrors.join(",")}`)
+      if (largeObjectRefs.length > 0) notes.push(largeObjectRefs.map((ref) => `${ref.name ?? "object"}×${Number(ref.count ?? 0)}`).join(", "))
+      if (tempScalarSubqueryCount > 0) notes.push(`temp-subq=${tempScalarSubqueryCount}`)
+      return {
+        type: t,
+        message: `SQL quality — ${String(entry["phase"] ?? "checked")}${notes.length ? ` · ${notes.join(" · ")}` : " · ok"}`,
+        timestamp,
+        error: validationCode != null || entry["phase"] === "blocked",
+      }
+    }
+    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+      const before = Number(entry["totalBeforeChars"] ?? 0)
+      const after = Number(entry["totalAfterChars"] ?? 0)
+      const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []
+      const parts = [`${before.toLocaleString()} → ${after.toLocaleString()} chars`]
+      if (dropped.length > 0) parts.push(`dropped=${dropped.join(",")}`)
+      return {
+        type: t,
+        message: `Prompt budget · ${parts.join(" · ")}`,
+        timestamp,
+        error: false,
+      }
+    }
+    return null
+  }
 
   // ── Sync events ─────────────────────────────────────────────
   if (type.startsWith("sync.")) {
@@ -631,6 +706,18 @@ function formatLogEntryInner(
     // Thinking
     case "agent.thinking":
       return { type: t, message: (data["content"] as string) ?? "", timestamp }
+    case "agent.bus.message": {
+      const from = (data["fromAgent"] as string) ?? "?"
+      const proto = (data["protocol"] as string) ?? "broadcast"
+      const topic = (data["topic"] as string) ?? "?"
+      const content = ((data["content"] as string) ?? "").slice(0, 120)
+      return { type: t, message: `[bus ${proto}] ${from} → ${topic}: ${content}`, timestamp }
+    }
+    case "agent.help.requested": {
+      const from = (data["fromAgent"] as string) ?? "?"
+      const content = ((data["content"] as string) ?? "").slice(0, 120)
+      return { type: t, error: true, message: `[HELP] ${from}: ${content}`, timestamp }
+    }
     case "answer.chunk":
       return null
 
@@ -745,9 +832,42 @@ export const useStore = create<AppState>()(
         }
       }),
       updateLayouts: (viewId, layouts) => set((s) => ({
-        views: s.views.map((v) =>
-          v.id === viewId ? { ...v, layouts: { ...v.layouts, lg: layouts } } : v,
-        ),
+        views: s.views.map((v) => {
+          if (v.id !== viewId) return v
+          // RGL's onLayoutChange fires for many reasons besides a real user
+          // gesture: mount, child sync, breakpoint/width changes,
+          // compaction. During its `synchronizeLayoutWithChildren` pass it
+          // can briefly emit items at the default 1×1 size — smaller than
+          // the widget's configured minW/minH. If we blindly accepted those
+          // and clamped them to the minimum, we would permanently shrink
+          // user-sized widgets to their floor on every restore. So: when an
+          // incoming item is smaller than its widget's configured minimum,
+          // treat it as a bookkeeping emission and KEEP the previously
+          // stored w/h instead of overwriting. Real user resizes always
+          // produce w ≥ minW (RGL enforces that on the resize handle) and
+          // pass through unchanged. We still re-inject the current
+          // minW/minH so layouts saved before this guard pick them up.
+          const prevById = new Map(
+            (v.layouts["lg"] ?? []).map((item) => [item.i, item]),
+          )
+          const normalized = layouts.map((item) => {
+            const widget = v.widgets.find((w) => w.id === item.i)
+            if (!widget) return item
+            const defaults = WIDGET_DEFAULTS[widget.type]
+            if (!defaults) return item
+            const prev = prevById.get(item.i)
+            const undersized =
+              item.w < defaults.minW || item.h < defaults.minH
+            return {
+              ...item,
+              minW: defaults.minW,
+              minH: defaults.minH,
+              w: undersized && prev ? prev.w : Math.max(item.w, defaults.minW),
+              h: undersized && prev ? prev.h : Math.max(item.h, defaults.minH),
+            }
+          })
+          return { ...v, layouts: { ...v.layouts, lg: normalized } }
+        }),
       })),
 
       // Agent selection
@@ -836,10 +956,15 @@ export const useStore = create<AppState>()(
           updated[idx] = { ...current, ...run }
           return { runs: updated }
         }
-        // New run — always select it so the UI shows it immediately
+        // New run — insert it. Only auto-select if nothing is selected yet:
+        // events for background runs (e.g. started by another widget while
+        // the user is reading a different run) must NOT hijack the active
+        // selection. This used to be the root cause of "I started a run in
+        // termchat, switched to IOE, came back, and my run is gone" — a
+        // sync.run started by IOE silently became the new active run.
         return {
           runs: [run as Run, ...s.runs],
-          activeRunId: run.id,
+          activeRunId: s.activeRunId ?? run.id,
         }
       }),
 
@@ -894,6 +1019,15 @@ export const useStore = create<AppState>()(
       audit: [],
       addAudit: (entry) => set((s) => ({ audit: [...s.audit, entry] })),
       setAudit: (audit) => set({ audit }),
+
+      busMessages: [],
+      helpUnread: 0,
+      addBusMessage: (msg) => set((s) => ({
+        busMessages: [...s.busMessages, msg].slice(-500),
+        helpUnread: msg.protocol === "help" ? s.helpUnread + 1 : s.helpUnread,
+      })),
+      setBusMessages: (msgs) => set({ busMessages: msgs.slice(-500) }),
+      ackBusHelp: () => set({ helpUnread: 0 }),
 
       // Live usage
       liveUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, llmCalls: 0 },
@@ -1017,6 +1151,8 @@ export const useStore = create<AppState>()(
             store.setTrace([])
             store.setSteps([])
             store.setAudit([])
+            store.setBusMessages([])
+            set({ helpUnread: 0 })
             store.resetLiveUsage()
             store.clearStreamingAnswer()
             store.addTrace({ kind: "goal", text: data["goal"] as string })
@@ -1341,6 +1477,39 @@ export const useStore = create<AppState>()(
               const runId = (data["runId"] as string) ?? get().activeRunId
               if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
             }
+            break
+          }
+
+          case "agent.bus.message": {
+            // Inter-agent bus message — append to live BusFeed. Help
+            // protocol additionally fires `agent.help.requested`, which
+            // bumps the unread counter; do NOT bump it from here or it
+            // would double-count.
+            const msg: BusMessage = {
+              id: data["messageId"] as string,
+              runId: data["runId"] as string,
+              topic: data["topic"] as string,
+              protocol: data["protocol"] as string,
+              fromRunId: data["fromRunId"] as string,
+              fromAgent: data["fromAgent"] as string,
+              content: data["content"] as string,
+              replyTo: (data["replyTo"] as string | null) ?? null,
+              timestamp: (data["timestamp"] as number) ?? Date.parse(timestamp),
+            }
+            // Avoid double-add when agent.help.requested arrives right after.
+            // We dedupe by id.
+            set((s) => s.busMessages.some((m) => m.id === msg.id)
+              ? s
+              : { busMessages: [...s.busMessages, msg].slice(-500) })
+            break
+          }
+
+          case "agent.help.requested": {
+            // Same payload as agent.bus.message but routed to a
+            // dedicated event so the UI can highlight it. Bump the
+            // help-unread badge; the message itself was already added
+            // by the agent.bus.message case (which fires first).
+            set((s) => ({ helpUnread: s.helpUnread + 1 }))
             break
           }
 

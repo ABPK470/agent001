@@ -8,40 +8,40 @@
  */
 
 import type {
-  DecompositionStrategy,
-  DelegationEndStatus,
-  DirectLoopFallbackSource,
-  EffectClass,
-  EscalationAction,
-  EscalationReason,
-  EventType,
-  PlannerNeedLevel,
-  PlannerRepairActivePath,
-  PlannerRepairCompatibilityMode,
-  PlannerRoute,
-  PlannerStepPhase,
-  PolicySource,
-  VerificationMode,
-  VerifierMode,
-  VerifierOutcome,
+    DecompositionStrategy,
+    DelegationEndStatus,
+    DirectLoopFallbackSource,
+    EffectClass,
+    EscalationAction,
+    EscalationReason,
+    EventType,
+    PlannerNeedLevel,
+    PlannerRepairActivePath,
+    PlannerRepairCompatibilityMode,
+    PlannerRoute,
+    PlannerStepPhase,
+    PolicySource,
+    VerificationMode,
+    VerifierMode,
+    VerifierOutcome,
 } from "@mia/shared-enums"
 
 export type {
-  DecompositionStrategy,
-  DelegationEndStatus,
-  DirectLoopFallbackSource,
-  EffectClass,
-  EscalationAction,
-  EscalationReason,
-  EventType,
-  PlannerNeedLevel,
-  PlannerRepairActivePath,
-  PlannerRepairCompatibilityMode,
-  PlannerRoute,
-  PlannerStepPhase,
-  VerificationMode,
-  VerifierMode,
-  VerifierOutcome
+    DecompositionStrategy,
+    DelegationEndStatus,
+    DirectLoopFallbackSource,
+    EffectClass,
+    EscalationAction,
+    EscalationReason,
+    EventType,
+    PlannerNeedLevel,
+    PlannerRepairActivePath,
+    PlannerRepairCompatibilityMode,
+    PlannerRoute,
+    PlannerStepPhase,
+    VerificationMode,
+    VerifierMode,
+    VerifierOutcome
 }
 
 
@@ -63,6 +63,10 @@ export interface Run {
   completionTokens: number
   llmCalls: number
   pendingWorkspaceChanges?: number
+  /** Owner UPN — present when the server returns all runs (e.g. admin scope). */
+  upn?: string | null
+  /** Owner display name — present alongside upn for admin-scope responses. */
+  displayName?: string | null
   trace?: TraceEntry[]
   streamingAnswer?: string
   coherentStream?: string
@@ -132,6 +136,36 @@ export interface AuditEntry {
   timestamp: string
 }
 
+// ── Inter-agent bus message (Phase B) ────────────────────────────
+
+/**
+ * Snapshot of an inter-agent bus message as observed by the UI.
+ * Mirrors the SSE payload emitted by `AgentBus.emitSse` and the row
+ * shape from `agent_messages`. The `protocol` field is a free string
+ * here (rather than the closed enum) so the UI can tolerate forward
+ * compatibility — unknown protocols just render as their string.
+ */
+export interface BusMessage {
+  /** Server-assigned message id; stable for reply_to / wait_for_response. */
+  id: string
+  /** Root run id (the run tree this message belongs to). */
+  runId: string
+  /** Free-form domain channel — e.g. "research-results". */
+  topic: string
+  /** Coordination intent: status | result | help | question | answer | broadcast. */
+  protocol: string
+  /** Run id of the publisher (a child run within the same root). */
+  fromRunId: string
+  /** Display name of the publishing agent. */
+  fromAgent: string
+  /** Message body. */
+  content: string
+  /** id of the message this is replying to, when protocol === "answer". */
+  replyTo: string | null
+  /** Wall-clock time the message was persisted (ms epoch). */
+  timestamp: number
+}
+
 // ── Log ──────────────────────────────────────────────────────────
 
 export interface LogEntry {
@@ -192,6 +226,65 @@ export type TraceEntry =
   | { kind: "planner-validation-failed"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-remediated"; diagnostics: Array<{ code: string; message: string }> }
   | { kind: "planner-validation-warnings"; warningCount: number; diagnostics: Array<{ code: string; message: string }> }
+  | {
+    kind: "planner-sql-quality"
+    toolCallId: string
+    toolName: string
+    iteration: number
+    toolMode: "query" | "export"
+    phase: "blocked" | "executed" | "failed"
+    connection: string
+    database: string | null
+    validationOk: boolean
+    validationCode: string | null
+    largeObjectRefs: Array<{ name: string; count: number }>
+    usesPersistedMirrors: string[]
+    missingPersistedMirrorCandidates: string[]
+    hasWhereClause: boolean
+    unsafeScanReason: string | null
+    tempTableRefs: number
+    tempTablesCreated: number
+    tempTableSuffixes: string[]
+    malformedTempSuffixes: string[]
+    missingTempCreations: string[]
+    aggregateWarningCount: number
+    aggregateBlockCount: number
+    tempScalarSubqueryCount: number
+    stagePatternLikely: boolean
+    durationMs: number | null
+    rowCount: number | null
+    error: string | null
+    sqlPreview: string
+    sqlLength: number
+    /**
+     * Active doctrine module versions at trace-emission time. Lets downstream
+     * tooling correlate a run with the exact policy bodies in force. Optional
+     * for backwards compatibility with traces emitted before the registry shipped.
+     */
+    doctrineVersions?: Record<string, string>
+  }
+  | {
+    /**
+     * Phase 6 telemetry: per-iteration prompt budget allocation snapshot.
+     * Emitted once per agent iteration when the budget actually constrained
+     * the prompt (drops, truncations, or hard cap reached). Lets the
+     * dashboard track p95 prompt size and flag section-over-injection.
+     */
+    kind: "planner-prompt-budget"
+    iteration: number
+    model: string | null
+    totalBeforeChars: number
+    totalAfterChars: number
+    totalChars: number
+    constrained: boolean
+    droppedSections: string[]
+    /** Per-section bytes after allocation. Keys are PromptBudgetSection strings. */
+    sectionAfterChars: Record<string, number>
+    /** Per-section message count after allocation. */
+    sectionAfterMessages: Record<string, number>
+    /** Per-section messages truncated (content-only truncation, not drop). */
+    sectionTruncatedMessages: Record<string, number>
+  }
   | { kind: "direct_loop_fallback"; source: DirectLoopFallbackSource; reason: string }
   | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
@@ -290,6 +383,7 @@ export type TraceEntry =
   // Debug/inspector entries
   | { kind: "system-prompt"; text: string }
   | { kind: "tools-resolved"; tools: Array<{ name: string; description: string; parameters?: Record<string, unknown> }> }
+  | { kind: "tools-filtered"; dropped: string[]; kept: number; dbScore: number; syncTrigger: boolean; reason: string }
   | { kind: "nudge"; tag: string; message: string; iteration: number }
   | { kind: "llm-request"; iteration: number; messageCount: number; toolCount: number; messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }> }
   | { kind: "llm-response"; iteration: number; durationMs: number; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null }
@@ -328,6 +422,13 @@ export type WidgetType =
   | "active-users"
   | "env-sync"
   | "operation-log"
+  | "entity-registry"
+  | "scd2-strategies"
+  | "freeze-windows"
+  | "sync-proposals"
+  | "sync-approvals"
+  | "sync-evidence"
+  | "sync-admin"
 
 /**
  * Widget types visible AND interactive for non-admin "visitor" users.
@@ -341,6 +442,7 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "operation-log",
   "mymi-db",
   "run-history",
+  "operator-env",
 ])
 
 export interface ViewConfig {
@@ -376,23 +478,26 @@ export interface SseEvent {
 
 // ── ABI Environment Sync ─────────────────────────────────────────
 
-export type SyncEntityType =
-  | "contract"
-  | "dataset"
-  | "rule"
-  | "pipelineActivity"
-  | "gateMetadata"
-  | "content"
+/**
+ * Identifier for a sync entity (e.g. "contract", "dataset", "rule",
+ * "pipelineActivity", "gateMetadata", "content" — or any tenant-defined
+ * id from the entity registry).
+ *
+ * Historically this was a compile-time string union; Phase 0 lifts it to
+ * a plain string to let the registry add new entities at runtime without
+ * a code change. Validation against the registered set happens at the
+ * boundaries (route handlers + orchestrator).
+ */
+export type SyncEntityType = string
 
 export interface SyncEnvironment {
   name: string
   displayName: string
   color: string
   role: "source" | "target" | "both"
-  linkedServerName: string | null
   ringOrder: number
   syncAllowlist: string[]
-  linkedServiceName?: string | null
+  allowedSyncTargets: string[] | null
 }
 
 export interface SyncRecipeTable {
@@ -495,6 +600,211 @@ export interface SyncPlan {
   warnings: string[]
   estimatedDurationSec: number
   recipeSnapshot: { entityType: SyncEntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+  executionContract?: CompiledSyncPlanContract | null
+  decisionLog?: CompiledSyncDecisionRecord[] | null
+  governanceDecision?: CompiledSyncGovernanceDecision | null
+}
+
+export type AuthoredSyncFlowPhase =
+  | "pre-transaction"
+  | "metadata"
+  | "post-metadata"
+  | "post-commit"
+
+export type AuthoredSyncFlowKind =
+  | "metadataSync"
+  | "auditCheck"
+  | "targetLock"
+  | "targetUnlock"
+  | "contractUndeploy"
+  | "contractPreScript"
+  | "contractCreateStageDataset"
+  | "contractCreateArchiveDataset"
+  | "contractCreateListDataset"
+  | "contractCreateDimDataset"
+  | "contractCreateFactDataset"
+  | "contractCreateDatasetFks"
+  | "contractDeployEtl"
+  | "contractDeployRoutine"
+  | "contractPostScript"
+  | "datasetDeploy"
+  | "rulesDeploy"
+  | "pipelineRegister"
+  | "metaRefresh"
+  | "pipelineStart"
+  | "handleDependencies"
+  | "syncDate"
+  | "deployDate"
+
+export interface AuthoredSyncDefinitionGovernance {
+  freezeWindowIds: string[]
+  riskMultiplier: number
+}
+
+export interface AuthoredSyncDefinitionStrategyRef {
+  strategyId: string
+  strategyVersion: number | "latest"
+}
+
+export interface AuthoredSyncDefinitionBindingRefs {
+  serviceProfileRef: string
+  environmentPolicyRef: string
+}
+
+export interface AuthoredSyncDefinitionOwnership {
+  team: string
+  owner: string | null
+  reviewStatus: "legacy-review-required" | "reviewed"
+  notes: string[]
+}
+
+export interface AuthoredSyncFlowStep {
+  id: string
+  phase: AuthoredSyncFlowPhase
+  kind: AuthoredSyncFlowKind
+  title: string
+  description: string
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
+}
+
+export interface AuthoredSyncDefinitionTable {
+  name: string
+  scopeColumn: string | null
+  predicate: string
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
+  verified: boolean
+  groundedByPipeline: boolean
+  enabledByDefault: boolean
+  userControllable: boolean
+  note?: string
+}
+
+export interface AuthoredSyncDefinitionDiscrepancy {
+  table: string
+  kind: "leak" | "implicit" | "drift"
+  note: string
+}
+
+export interface AuthoredSyncDefinition {
+  schemaVersion: 1
+  id: string
+  displayName: string
+  description: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  selfJoinColumn: string | null
+  legacy: {
+    pipelineId: number | null
+    entrySproc: string | null
+  }
+  governance: AuthoredSyncDefinitionGovernance
+  strategy: AuthoredSyncDefinitionStrategyRef
+  bindings: AuthoredSyncDefinitionBindingRefs
+  ownership: AuthoredSyncDefinitionOwnership
+  metadata: {
+    tables: AuthoredSyncDefinitionTable[]
+    executionOrder: string[]
+    reverseOrder: string[]
+    discrepancies: AuthoredSyncDefinitionDiscrepancy[]
+  }
+  executionFlow: {
+    steps: AuthoredSyncFlowStep[]
+  }
+  provenance: {
+    kind: "manual" | "legacy-migration"
+    sourceArtifact?: string | null
+    sourceVersion?: string | null
+  }
+}
+
+export interface PublishedSyncDefinition extends AuthoredSyncDefinition {
+  publishedAt: string
+  publishedVersion: string
+}
+
+export interface PublishSyncDefinitionsResponse {
+  publishedAt: string
+  publishedVersion: string
+  definitionCount: number
+  publishedBundlePath: string
+  stdout: string[]
+  stderr: string[]
+}
+
+export type SyncDefinitionFlowTemplateId =
+  | "contract"
+  | "dataset"
+  | "rule"
+  | "pipelineActivity"
+  | "gateMetadata"
+  | "content"
+  | "metadata-only"
+
+export interface EntityRegistrySyncDefinitionScaffoldRequest {
+  flowTemplateId?: SyncDefinitionFlowTemplateId
+  serviceProfileRef?: string
+  environmentPolicyRef?: string
+}
+
+export interface EntityRegistrySyncDefinitionScaffoldResponse {
+  suggestedPath: string
+  definition: AuthoredSyncDefinition
+  stderr: string[]
+}
+
+export interface CompiledSyncPlanStep {
+  id: string
+  phase: AuthoredSyncFlowPhase
+  kind: AuthoredSyncFlowKind
+  title: string
+  description: string
+  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  objectName?: string | null
+  auditObjectType?: string | null
+  pipelineName?: string | null
+}
+
+export interface CompiledSyncPlanContract {
+  definitionId: string
+  definitionVersion: string
+  steps: CompiledSyncPlanStep[]
+  governance: AuthoredSyncDefinitionGovernance
+  bindings: AuthoredSyncDefinitionBindingRefs
+  allowedSchemas: string[]
+}
+
+export interface CompiledSyncGovernanceDecision {
+  evaluatedAt: string
+  governance: AuthoredSyncDefinitionGovernance
+  freezeWindows: {
+    active: boolean
+    activeWindows: Array<{ id: string; displayName: string; startsAt: string; endsAt: string }>
+    unknownIds: string[]
+  }
+  targetEnvironment: {
+    name: string
+    role: string
+    prodSyncUnlocked: boolean
+    syncAllowlistEnabled: boolean
+    actorUpn: string | null
+    actorAllowed: boolean | null
+  }
+  warnings: string[]
+}
+
+export interface CompiledSyncDecisionRecord {
+  id: string
+  recordedAt: string
+  stage: "preview" | "execute"
+  category: "definition" | "flow" | "scope" | "preflight" | "governance" | "execution"
+  severity: "info" | "warning" | "error"
+  title: string
+  summary: string
+  details: Record<string, unknown>
 }
 
 export interface SyncExecuteProgress {
@@ -505,6 +815,317 @@ export interface SyncExecuteProgress {
   rowsTotal?: number
   message?: string
   error?: string
+}
+
+// ── Entity registry (Phase 0 config uplift) ──────────────────────
+//
+// Wire shape for the entity registry's REST + SSE surface. The full
+// in-memory shape (with discriminated `scope.kind`, override semantics,
+// validation codes, etc.) lives in `@mia/agent` — these DTOs are just
+// JSON-stable mirrors used by the UI store and route bodies.
+
+export type EntityRegistryProvenanceKind = "bundled" | "imported" | "manual" | "agent"
+
+export type EntityRegistryTableScope =
+  | { kind: "rootPk"; column: string }
+  | { kind: "fkPath"; through: Array<{ table: string; fromColumn: string; toColumn: string }> }
+  | { kind: "sql"; predicate: string }
+
+export type EntityRegistryProvenance =
+  | { kind: "manual" }
+  | { kind: "bundled" }
+  | { kind: "agent"; runId?: string | null }
+  | { kind: "imported"; sourceManifestId?: string; source?: string }
+  | { kind: "template"; templateId: string; templateVersion?: number; entityId?: string }
+  | { kind: "legacy-migration"; legacyPipelineId: number | null }
+
+export interface EntityRegistryTable {
+  name: string
+  scope: EntityRegistryTableScope
+  executionOrder: number
+  scd2Override: EntityRegistryScd2Override | null
+  verified: boolean
+  archiveTable: string | null
+  note: string | null
+  provenance: EntityRegistryProvenance
+  scopeColumn: string | null
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual" | null
+  groundedByPipeline: boolean | null
+  enabledByDefault: boolean | null
+  userControllable: boolean | null
+}
+
+export interface EntityRegistryPolicies {
+  freezeWindowIds: string[]
+  riskMultiplier: number
+}
+
+export interface EntityRegistryLineageRef {
+  object: string
+  kind: "view-source" | "report-source" | "downstream-consumer"
+  note: string | null
+}
+
+export interface EntityRegistryScd2Override {
+  validFromCol?: string | null
+  validToCol?: string | null
+  isLockedCol?: string | null
+  syncDateCol?: string | null
+  deployDateCol?: string | null
+  identityHandling?: "none" | "setIdentityInsertOn" | "preserveSequence"
+  excludedFromDiffCols?: string[]
+  onInsert?: Record<string, string>
+  onUpdate?: Record<string, string>
+}
+
+export interface EntityRegistryStrategyRef {
+  strategyId: string
+  strategyVersion: number | "latest"
+  entityOverride: EntityRegistryScd2Override | null
+}
+
+export interface EntityRegistryDefinition {
+  id: string
+  tenantId: string
+  displayName: string
+  description: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  selfJoinColumn: string | null
+  tables: EntityRegistryTable[]
+  policies: EntityRegistryPolicies
+  scd2: EntityRegistryStrategyRef
+  lineageRefs: EntityRegistryLineageRef[]
+  provenance: EntityRegistryProvenance
+  // Enriched (additive)
+  legacyEntrySproc: string | null
+  reverseOrder: string[]
+  discrepancies: string[]
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  reason: string
+  createdAt: string
+  retiredAt: string | null
+}
+
+export interface EntityRegistryStrategy {
+  id: string
+  displayName: string
+  description: string
+  validFromCol: string | null
+  validToCol: string | null
+  isLockedCol: string | null
+  syncDateCol: string | null
+  deployDateCol: string | null
+  identityHandling: "none" | "setIdentityInsertOn" | "skipIdentityCols"
+  excludedFromDiffCols: string[]
+  onInsert: Record<string, string>
+  onUpdate: Record<string, string>
+  provenance: EntityRegistryProvenance
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+}
+
+export interface EntityRegistryValidationIssue {
+  path: string
+  code: string
+  message: string
+  hint?: string
+}
+
+export interface EntityRegistryValidationWarning {
+  path: string
+  code: string
+  message: string
+}
+
+export interface EntityRegistryValidationResult {
+  ok: boolean
+  errors: EntityRegistryValidationIssue[]
+  warnings: EntityRegistryValidationWarning[]
+}
+
+export type EntityRegistryChangeKind =
+  | "created" | "renamed" | "rootTableChanged" | "idColumnChanged"
+  | "scd2StrategyChanged" | "scd2OverrideChanged"
+  | "tableAdded" | "tableRemoved" | "tableReordered"
+  | "scopeChanged" | "verifiedFlagChanged"
+  | "policiesChanged" | "lineageChanged"
+  | "retired" | "unretired"
+
+export interface EntityRegistryChange {
+  kind: EntityRegistryChangeKind
+  tableName: string | null
+  description: string
+  before?: unknown
+  after?: unknown
+}
+
+export interface EntityRegistryHistoryEntry {
+  tenantId: string
+  id: string
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+  reason: string
+  diff: EntityRegistryChange[]
+}
+
+export interface EntityRegistrySaveRequest {
+  def: EntityRegistryDefinition
+  reason: string
+  versionLabel?: string | null
+}
+
+export interface EntityRegistrySaveResponse {
+  tenantId: string
+  id: string
+  version: number
+  diff: EntityRegistryChange[]
+}
+
+export interface EntityRegistryStrategySaveRequest {
+  strategy: EntityRegistryStrategy
+  reason: string
+}
+
+export interface EntityRegistryYamlImportRequest {
+  yaml: string
+  reason: string
+  /** When true the server validates + diffs but does NOT persist. */
+  dryRun?: boolean
+}
+
+export type EntityRegistryImportFormat = "yaml" | "json"
+
+export interface EntityRegistryDocumentImportRequest {
+  content: string
+  format: EntityRegistryImportFormat
+  reason: string
+  /** When true the server validates + diffs but does NOT persist. */
+  dryRun?: boolean
+}
+
+export interface EntityRegistryYamlImportResponse {
+  ok: boolean
+  saved: Array<{ id: string; version: number; created: boolean }>
+  skipped: Array<{ id: string; reason: string }>
+  errors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
+  dryRun: boolean
+}
+
+export type EntityRegistrySyncFlowTemplateId =
+  | "contract"
+  | "dataset"
+  | "rule"
+  | "pipelineActivity"
+  | "gateMetadata"
+  | "content"
+  | "metadata-only"
+
+export interface SyncDefinitionRuntimeOption<T extends string = string> {
+  id: T
+  label: string
+  description?: string | null
+}
+
+export interface SyncDefinitionRuntimeOptions {
+  flowTemplates: SyncDefinitionRuntimeOption<EntityRegistrySyncFlowTemplateId>[]
+  flowTemplateSteps: Record<EntityRegistrySyncFlowTemplateId, AuthoredSyncFlowStep[]>
+  serviceProfiles: SyncDefinitionRuntimeOption[]
+  environmentPolicies: SyncDefinitionRuntimeOption[]
+}
+
+export interface EntityRegistrySyncDefinitionExportRequest {
+  flowTemplateId?: EntityRegistrySyncFlowTemplateId
+  serviceProfileRef?: string
+  environmentPolicyRef?: string
+}
+
+export interface EntityRegistrySyncDefinitionStatusLayer {
+  id: "compatibility-recipe-export" | "entity-registry-projector" | "entity-registry-yaml-bootstrap"
+  title: string
+  runtimeAuthority: boolean
+  status: "migration" | "cleanup-required"
+  description: string
+}
+
+export interface EntityRegistrySyncDefinitionStatusItem {
+  id: string
+  displayName: string
+  definitionPath: string
+  provenanceKind: "manual" | "legacy-migration"
+  ownershipTeam: string
+  ownershipOwner: string | null
+  reviewStatus: "legacy-review-required" | "reviewed"
+  sourceArtifact: string | null
+  sourceVersion: string | null
+  unverifiedTableCount: number
+  cleanupWarnings: string[]
+}
+
+export interface EntityRegistrySyncDefinitionStatusResponse {
+  runtimeAuthority: {
+    sourceDirectory: string
+    publishedBundlePath: string
+    compatibilityExportPath: string
+  }
+  draftExport: {
+    route: string
+    defaultOutputDirectory: string
+    supportedFlowTemplates: EntityRegistrySyncFlowTemplateId[]
+  }
+  compatibilityLayers: EntityRegistrySyncDefinitionStatusLayer[]
+  definitions: EntityRegistrySyncDefinitionStatusItem[]
+}
+
+export interface EntityRegistrySyncDefinitionExportResponse {
+  tenantId: string
+  entityId: string
+  outputPath: string
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
+  warnings: string[]
+  draft: AuthoredSyncDefinition
+  status: EntityRegistrySyncDefinitionStatusItem | null
+}
+
+// ── Freeze windows (governance) ─────────────────────────────────
+
+/**
+ * Tenant-scoped scheduled blackout window. Entities reference these by
+ * id via `EntityRegistryPolicies.freezeWindowIds[]`. Evaluator semantics
+ * are `[startsAt, endsAt)` (start inclusive, end exclusive, ISO-8601).
+ */
+export interface FreezeWindow {
+  tenantId:    string
+  id:          string
+  displayName: string
+  description: string
+  /** ISO-8601 inclusive start. */
+  startsAt:    string
+  /** ISO-8601 exclusive end. */
+  endsAt:      string
+  createdBy:   string
+  createdAt:   string
+  updatedAt:   string
+}
+
+export interface FreezeWindowSaveRequest {
+  id:          string
+  displayName: string
+  description: string
+  startsAt:    string
+  endsAt:      string
+}
+
+export interface FreezeWindowListResponse {
+  tenantId: string
+  items:    FreezeWindow[]
 }
 
 // ── Agent Definitions ────────────────────────────────────────────
@@ -549,14 +1170,42 @@ export type EnvOperation =
 export interface SyncEnvironmentAdmin {
   name: string
   displayName: string
+  color: string
   role: "source" | "target" | "both"
+  ringOrder: number
+  agentServiceBaseUrl: string | null
+  etlServiceBaseUrl: string | null
+  gateServiceBaseUrl: string | null
   defaultAccessMode: EnvAccessMode
   allowedOperations: EnvOperation[]
   denyDml: boolean
   denyDdl: boolean
   approvalRequiredOperations: EnvOperation[]
   syncAllowlist: string[]
-  override: { fields: Record<string, unknown>; updatedAt: string; updatedBy: string | null } | null
+  allowedSyncTargets: string[] | null
+  updatedAt: string
+  updatedBy: string | null
+}
+
+export type SyncDefinitionAdminReviewStatus = "legacy-review-required" | "reviewed"
+
+export interface SyncDefinitionAdminItem {
+  id: string
+  displayName: string
+  entityVersion: number
+  tableCount: number
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
+  executionSteps: AuthoredSyncFlowStep[]
+  serviceProfileRef: string
+  environmentPolicyRef: string
+  ownershipTeam: string
+  ownershipOwner: string | null
+  reviewStatus: SyncDefinitionAdminReviewStatus
+  ownershipNotes: string[]
+  updatedAt: string
+  updatedBy: string | null
+  publishedVersion: string | null
+  publishedAt: string | null
 }
 
 // ── Notifications ────────────────────────────────────────────────

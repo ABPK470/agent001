@@ -28,9 +28,9 @@ const ORIGINAL_REG     = process.env["MIA_ALLOW_LOCAL_REGISTRATION"]
 const ORIGINAL_SECRET  = process.env["MIA_SESSION_SECRET"]
 
 async function buildApp(): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   const { registerIdentity }   = await import("../src/auth/identity.js")
-  const { registerAuthRoutes } = await import("../src/routes/auth.js")
+  const { registerAuthRoutes } = await import("../src/api/auth.js")
   const { registerLocalUser }  = await import("../src/auth/users.js")
   _setDb(testDb)
   _migrate(testDb)
@@ -105,6 +105,35 @@ describe("auth routes — local registration", () => {
       })
       expect(who.statusCode).toBe(200)
       expect(who.json()).toMatchObject({ upn: "alice", displayName: "Alice", isAdmin: false })
+    } finally { await app.close() }
+  })
+
+  it("accepts uppercase username input but canonicalizes the local-account key to lowercase", async () => {
+    const app = await buildApp()
+    try {
+      const reg = await app.inject({
+        method: "POST",
+        url:    "/api/auth/register",
+        payload: { username: "PKA", password: "hunter2pw", displayName: "PKA" },
+      })
+      expect(reg.statusCode).toBe(201)
+      expect(reg.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
+
+      const login = await app.inject({
+        method: "POST",
+        url:    "/api/auth/login",
+        payload: { username: "PKA", password: "hunter2pw" },
+      })
+      expect(login.statusCode).toBe(200)
+
+      const cookie = cookieFromSetCookie(login.headers["set-cookie"])
+      const who = await app.inject({
+        method: "GET",
+        url:    "/api/auth/whoami",
+        headers: { cookie },
+      })
+      expect(who.statusCode).toBe(200)
+      expect(who.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
     } finally { await app.close() }
   })
 
@@ -213,7 +242,7 @@ describe("auth — gate", () => {
       expect(before.json()).toEqual({ upn: "harry" })
 
       // Server-side revoke — kill the row.
-      const { deleteSessionsForUser } = await import("../src/db/sessions.js")
+      const { deleteSessionsForUser } = await import("../src/adapters/persistence/db/sessions.js")
       deleteSessionsForUser("harry")
 
       const after = await app.inject({
@@ -262,7 +291,7 @@ describe("auth — SSO header path", () => {
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ upn: "sso.user@corp", displayName: "SSO User" })
 
-      const { findUserByUpn } = await import("../src/db/users.js")
+      const { findUserByUpn } = await import("../src/adapters/persistence/db/users.js")
       const row = findUserByUpn("sso.user@corp")
       expect(row?.source).toBe("sso")
       expect(row?.password_hash).toBeNull()

@@ -382,7 +382,7 @@ export function RunStatus() {
             Cancel
           </button>
         )}
-        {(run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled) && (
+        {(run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled || run.status === RunStatusEnum.Crashed) && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
             onClick={handleResume}
@@ -391,7 +391,7 @@ export function RunStatus() {
             Resume
           </button>
         )}
-        {(run.status === RunStatusEnum.Completed || run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled) && !rolledBack && (
+        {(run.status === RunStatusEnum.Completed || run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled || run.status === RunStatusEnum.Crashed) && !rolledBack && (
           <button
             className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
             onClick={handleRollbackPreview}

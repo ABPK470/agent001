@@ -47,17 +47,9 @@ export function computeStats(graph: CatalogGraph): CatalogStats {
 export function formatPromptSummary(graph: CatalogGraph): string {
   const s = computeStats(graph)
   const age = Math.round((Date.now() - graph.builtAt.getTime()) / 3600000)
-  const lineageViews = graph.listLineage()
   const lines = [
     `Schema Catalog (built ${age}h ago): ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges.`,
     `Total rows: ~${(s.totalRows / 1e6).toFixed(0)}M.`,
   ]
-  if (lineageViews.length > 0) {
-    lines.push(`Lineage maps available: ${lineageViews.join(", ")} — use search_catalog(lineage='view') to explore.`)
-  }
-  const conceptList = graph.listConcepts()
-  if (conceptList.length > 0) {
-    lines.push(`Business concepts: ${conceptList.map((c) => c.concept).join(", ")} — use search_catalog(concepts='table') for semantic tags, search_catalog(concept_path=['A','B']) to trace cross-concept paths.`)
-  }
   return lines.join("\n")
 }

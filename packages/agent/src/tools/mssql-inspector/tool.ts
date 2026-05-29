@@ -1,8 +1,10 @@
 import type sql from "mssql"
-import type { Tool } from "../../types.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
+import type { Tool } from "../../domain/agent-types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
-import { runDependsOn, runSearch } from "./handlers/dependency.js"
 import { runObjectInspection } from "./handlers/definition.js"
+import { runDependsOn, runSearch } from "./handlers/dependency.js"
 import { runIndexUsage, runMissingIndexes, runSlowQueries } from "./handlers/observability.js"
 import { runScanDuplicates } from "./handlers/scan-duplicates.js"
 
@@ -13,12 +15,12 @@ import { runScanDuplicates } from "./handlers/scan-duplicates.js"
  * @module
  */
 
-export const inspectDefinitionTool: Tool = {
+function buildInspectDefinitionTool(host: AgentHost): Tool { return {
   name: "inspect_definition",
   description:
     "Read and analyze T-SQL source code of views, stored procedures, and functions. " +
     "Use this to find performance problems: duplicate/redundant joins, inefficient view layers, " +
-    "and unnecessary cross-joins. CRITICAL for diagnosing slow ETL pipelines and publish views. " +
+    "and unnecessary cross-joins. CRITICAL for diagnosing slow ETL pipelines and wide views. " +
     "Modes: " +
     "(1) object='schema.Name' — read T-SQL source, list all table references, flag duplicate joins. " +
     "(2) depends_on='schema.Name' — full dependency tree (what tables/views does it ultimately read?). " +
@@ -29,9 +31,9 @@ export const inspectDefinitionTool: Tool = {
     "(7) scan_duplicates=true — bulk scan many objects for duplicate FROM/JOIN refs in a single round-trip. " +
     "Use this to answer counting questions like 'how many of these N datasets/views have duplicate joins?' " +
     "without delegating per-object inspection. Scope (one of these is REQUIRED): " +
-    "names_query='SELECT name FROM core.Dataset' (tool runs the query, scans every returned name) — " +
-    "PREFERRED when names live in a table; OR names='core.vDataset,publish.Revenue' (CSV, max 5000); " +
-    "OR schema='core' (only objects defined IN that schema — DO NOT use this for a list sourced from another table). " +
+    "names_query='SELECT name FROM <metadataTable>' (tool runs the query, scans every returned name) — " +
+    "PREFERRED when names live in a table; OR names='<schemaA>.<TableA>,<schemaB>.<TableB>' (CSV, max 5000); " +
+    "OR schema='<schema>' (only objects defined IN that schema — DO NOT use this for a list sourced from another table). " +
     "Optional: object_types='VIEW,SQL_STORED_PROCEDURE'.",
   parameters: {
     type: "object",
@@ -40,8 +42,8 @@ export const inspectDefinitionTool: Tool = {
         type: "string",
         description:
           "Get T-SQL source + joint reference analysis for this object. " +
-          "Schema-qualified: 'publish.ClientBase', 'core.vDataset'. " +
-          "For persistedView objects use 3-part form: 'persistedView.fact.Revenue', 'persistedView.publish.Client'. " +
+          "Schema-qualified: '<schema>.<Object>'. " +
+          "For mirrored objects (when the deployment defines a mirror schema) use 3-part form: '<mirrorSchema>.<schema>.<Object>'. " +
           "Highlights duplicate table references that indicate redundant joins.",
       },
       depends_on: {
@@ -62,7 +64,7 @@ export const inspectDefinitionTool: Tool = {
       },
       index_usage: {
         type: "string",
-        description: "Show index seek/scan/update counts for a specific table. Schema-qualified: 'publish.ClientBase'.",
+        description: "Show index seek/scan/update counts for a specific table. Schema-qualified.",
       },
       scan_duplicates: {
         type: "boolean",
@@ -74,15 +76,15 @@ export const inspectDefinitionTool: Tool = {
       schema: {
         type: "string",
         description:
-          "Restrict scan_duplicates to objects DEFINED in this single schema (e.g. 'core', 'publish'). " +
+          "Restrict scan_duplicates to objects DEFINED in this single schema. " +
           "WARNING: this filters by where the object lives, NOT by membership in some other list. " +
-          "If the user gave you a list sourced from a table (e.g. core.Dataset.name), do NOT use schema= — use names= or names_query= instead.",
+          "If the user gave you a list sourced from a table, do NOT use schema= — use names= or names_query= instead.",
       },
       names: {
         type: "string",
         description:
           "Comma-separated qualified object names to limit scan_duplicates to (max 5000). " +
-          "Example: 'core.vDataset,publish.Revenue,publish.Client'. " +
+          "Example: '<schemaA>.<TableA>,<schemaB>.<TableB>'. " +
           "Use names_query= instead when the list is large or comes from a SELECT.",
       },
       names_query: {
@@ -90,8 +92,8 @@ export const inspectDefinitionTool: Tool = {
         description:
           "A SELECT statement returning a single column of qualified object names ('schema.name' format). " +
           "The tool runs it, then scan_duplicates uses the returned values as the names list. " +
-          "Use this when the user references a list-bearing table — e.g. for 'how many datasets in core.Dataset have duplicate joins?', " +
-          "pass names_query='SELECT name FROM core.Dataset'. Avoids constructing a 4000-element CSV by hand.",
+          "Use this when the user references a list-bearing table — pass a query like " +
+          "'SELECT name FROM <metadataTable>'. Avoids constructing a multi-thousand-element CSV by hand.",
       },
       object_types: {
         type: "string",
@@ -110,9 +112,21 @@ export const inspectDefinitionTool: Tool = {
   async execute(args) {
     const connName = args.connection ? String(args.connection).trim() : undefined
 
+    // Cache pre-flight for `object=` mode — the T-SQL body of a view / proc
+    // changes only on DDL, which the catalog fingerprint captures via
+    // column-shape changes. Dynamic modes (slow_queries, missing_indexes,
+    // index_usage, scan_duplicates, depends_on, search) are NOT cached:
+    // they either depend on live runtime stats or take ad-hoc scope.
+    if (args.object && typeof args.object === "string") {
+      const qn = args.object.trim()
+      const fp = fingerprintForQname(host, qn, connName)
+      const cached = tryServeFromCache(host, "inspect_definition", qn, "definition", connName, fp)
+      if (cached !== null) return cached
+    }
+
     let p: sql.ConnectionPool
     try {
-      const r = await getPool(connName)
+      const r = await getPool(host, connName)
       p = r.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -132,11 +146,36 @@ export const inspectDefinitionTool: Tool = {
           object_types: typeof args.object_types === "string" ? args.object_types : undefined,
         })
       }
-      if (args.object) return runObjectInspection(p, String(args.object).trim())
+      if (args.object) {
+        const qn = String(args.object).trim()
+        const out = await runObjectInspection(p, qn)
+        if (typeof out === "string" && !out.startsWith("SQL Error:") && !out.startsWith("Error:")) {
+          const fp = fingerprintForQname(host, qn, connName)
+          persistToCache(host, "inspect_definition", qn, "definition", connName, out, fp)
+        }
+        return out
+      }
 
       return "Error: Provide at least one parameter: object, depends_on, search, slow_queries, missing_indexes, index_usage, or scan_duplicates."
     } catch (err) {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+} }
+
+export const inspectDefinitionTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildInspectDefinitionTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("inspectDefinitionTool must be built via createInspectDefinitionTool(host)")
+    },
+  }
+})()
+
+export function createInspectDefinitionTool(host: AgentHost): Tool {
+  return buildInspectDefinitionTool(host)
 }

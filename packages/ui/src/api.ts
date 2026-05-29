@@ -4,8 +4,12 @@
 
 import type {
     AgentDefinition,
+    EntityRegistrySyncDefinitionScaffoldRequest,
+    EntityRegistrySyncDefinitionScaffoldResponse,
     Notification,
     PolicyRule,
+    PublishedSyncDefinition,
+    PublishSyncDefinitionsResponse,
     RollbackPreview,
     RollbackResult,
     Run,
@@ -15,7 +19,6 @@ import type {
     SyncEnvironment,
     SyncExecuteProgress,
     SyncPlan,
-    SyncRecipeBundle,
     ToolInfo,
     ViewConfig,
     WorkspaceDiff,
@@ -125,15 +128,33 @@ export const api = {
       method: "DELETE",
     }),
 
-  // Sync-environment overrides (admin)
+  // Sync environments (admin)
   listSyncEnvironments: () => json<import("./types").SyncEnvironmentAdmin[]>("/api/sync-environments"),
+  createSyncEnvironment: (fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>("/api/sync-environments", {
+      method: "POST",
+      body: JSON.stringify(fields),
+    }),
   updateSyncEnvironment: (name: string, fields: Record<string, unknown>) =>
     json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
       method: "PUT",
       body: JSON.stringify(fields),
     }),
-  resetSyncEnvironment: (name: string) =>
+  deleteSyncEnvironment: (name: string) =>
     json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+
+  // Sync definition config (admin)
+  listSyncDefinitionConfigs: () => json<import("./types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
+  getSyncDefinitionConfigOptions: () => json<import("./types").SyncDefinitionRuntimeOptions>("/api/sync-definition-config-options"),
+  updateSyncDefinitionConfig: (entityId: string, fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
+      method: "PUT",
+      body: JSON.stringify(fields),
+    }),
+  resetSyncDefinitionConfig: (entityId: string) =>
+    json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
       method: "DELETE",
     }),
 
@@ -273,10 +294,6 @@ export const api = {
     json<{ columns: Array<{ name: string; type: string }>; rows: Record<string, unknown>[] }>(
       `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/preview?${new URLSearchParams({ ...(db ? { db } : {}), ...(limit ? { limit: String(limit) } : {}) }).toString()}`,
     ),
-  mymiLineage: (schema: string, table: string, db?: string) =>
-    json<Record<string, unknown>>(
-      `/api/mymi/schema/${encodeURIComponent(schema)}/table/${encodeURIComponent(table)}/lineage${db ? `?db=${encodeURIComponent(db)}` : ""}`,
-    ),
   mymiDataModel: (db?: string) =>
     json<{
       objects: Array<{ schema: string; name: string; isTable: boolean; rowCount: number; sizeMb: number; columnCount: number; fkOut: number; fkIn: number }>
@@ -285,7 +302,8 @@ export const api = {
 
   // ── ABI Environment Sync ────────────────────────────────────
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
-  syncRecipes: () => json<SyncRecipeBundle>("/api/sync/recipes"),
+  syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
+  publishSyncDefinitions: () => json<PublishSyncDefinitionsResponse>("/api/sync/definitions/publish", { method: "POST" }),
   syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
     json<Array<{ id: string | number; name: string | null }>>(
       `/api/sync/search?entityType=${encodeURIComponent(params.entityType)}&source=${encodeURIComponent(params.source)}&q=${encodeURIComponent(params.q)}${params.limit ? `&limit=${params.limit}` : ""}`,
@@ -398,6 +416,258 @@ export const api = {
 
   deleteAttachment: (id: string) =>
     json<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" }),
+
+  // ── Entity registry ──────────────────────────────────────────
+  listEntityRegistry: (opts?: { tenant?: string; includeRetired?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.includeRetired) p.set("includeRetired", "true")
+    const qs = p.toString()
+    return json<{ tenantId: string; items: import("./types").EntityRegistryDefinition[] }>(
+      `/api/entity-registry/entities${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistry: (id: string, opts?: { tenant?: string; version?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.version !== undefined) p.set("version", String(opts.version))
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryDefinition>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistryHistory: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryHistoryEntry[]>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}/history${qs ? `?${qs}` : ""}`,
+    )
+  },
+  getEntityRegistryYaml: async (id: string, opts?: { tenant?: string }): Promise<string> => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.yaml${qs ? `?${qs}` : ""}`, { credentials: "include" })
+    if (!res.ok) throw new Error(await res.text())
+    return await res.text()
+  },
+  getEntityRegistrySyncDefinitionScaffold: (id: string, opts?: { tenant?: string } & EntityRegistrySyncDefinitionScaffoldRequest) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.flowTemplateId) p.set("flowTemplateId", opts.flowTemplateId)
+    if (opts?.serviceProfileRef) p.set("serviceProfileRef", opts.serviceProfileRef)
+    if (opts?.environmentPolicyRef) p.set("environmentPolicyRef", opts.environmentPolicyRef)
+    const qs = p.toString()
+    return json<EntityRegistrySyncDefinitionScaffoldResponse>(
+      `/api/entity-registry/entities/${encodeURIComponent(id)}/scaffold-sync-definition${qs ? `?${qs}` : ""}`,
+    )
+  },
+  saveEntityRegistry: (def: import("./types").EntityRegistryDefinition, reason: string, opts?: { tenant?: string; versionLabel?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistrySaveResponse>(
+      `/api/entity-registry/entities${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ def, reason, versionLabel: opts?.versionLabel ?? null }),
+      },
+    )
+  },
+  retireEntityRegistry: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ retiredAt: string }>(`/api/entity-registry/entities/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`, { method: "DELETE" })
+  },
+  importEntityRegistryYaml: (yaml: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import-yaml${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ yaml, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
+  importEntityRegistryDocument: (content: string, format: import("./types").EntityRegistryImportFormat, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body:   JSON.stringify({ content, format, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
+  listEntityRegistryStrategies: (opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ tenantId: string; items: import("./types").EntityRegistryStrategy[] }>(
+      `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
+    )
+  },
+  saveEntityRegistryStrategy: (
+    strategy: import("./types").EntityRegistryStrategy,
+    reason: string,
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ tenantId: string; id: string; version: number }>(
+      `/api/entity-registry/strategies${qs ? `?${qs}` : ""}`,
+      { method: "POST", body: JSON.stringify({ strategy, reason }) },
+    )
+  },
+
+  // ── Freeze windows (governance) ──────────────────────────────
+  listFreezeWindows: (opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").FreezeWindowListResponse>(
+      `/api/sync/freeze-windows${qs ? `?${qs}` : ""}`,
+    )
+  },
+  upsertFreezeWindow: (
+    body: import("./types").FreezeWindowSaveRequest,
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").FreezeWindow>(
+      `/api/sync/freeze-windows${qs ? `?${qs}` : ""}`,
+      { method: "POST", body: JSON.stringify(body) },
+    )
+  },
+  deleteFreezeWindow: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ ok: true }>(
+      `/api/sync/freeze-windows/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+      { method: "DELETE" },
+    )
+  },
+
+  // ── F1 — Reconciliation proposer ─────────────────────────────
+  listProposerRuns:  (opts?: { tenant?: string; limit?: number }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    if (opts?.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/proposer/runs${qs ? `?${qs}` : ""}`)
+  },
+  triggerProposerRun: (source: string, target: string, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/proposer/run${qs}`, {
+      method: "POST", body: JSON.stringify({ source, target }),
+    })
+  },
+  listProposals: (opts: {
+    tenant?: string; status?: string; riskTier?: string;
+    source?: string; target?: string; limit?: number;
+  } = {}) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(opts)) if (v != null) p.set(k, String(v))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/proposer/proposals${qs ? `?${qs}` : ""}`)
+  },
+  getProposal: (id: string) =>
+    json<Record<string, unknown>>(`/api/proposer/proposals/${encodeURIComponent(id)}`),
+  updateProposalStatus: (id: string, body: { to: string; reason?: string; planId?: string; snoozeUntil?: string; supersededBy?: string }) =>
+    json<Record<string, unknown>>(`/api/proposer/proposals/${encodeURIComponent(id)}/status`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  listProposerSchedules: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/proposer/schedules${qs}`)
+  },
+  upsertProposerSchedule: (body: { source: string; target: string; cron: string; enabled?: boolean }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/proposer/schedules${qs}`, {
+      method: "POST", body: JSON.stringify(body),
+    })
+  },
+  deleteProposerSchedule: (tenant: string, source: string, target: string) =>
+    json<{ ok: boolean }>(
+      `/api/proposer/schedules/${encodeURIComponent(tenant)}/${encodeURIComponent(source)}/${encodeURIComponent(target)}`,
+      { method: "DELETE" },
+    ),
+
+  // ── F1 — Approvals ──────────────────────────────────────────
+  listApprovals: (opts: { tenant?: string; state?: string; proposalId?: string } = {}) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(opts)) if (v != null) p.set(k, String(v))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/approvals${qs ? `?${qs}` : ""}`)
+  },
+  getApproval: (id: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}`),
+  createApproval: (body: { proposalId: string; planId?: string; planHash?: string; ttlMs?: number }) =>
+    json<Record<string, unknown>>(`/api/approvals`, { method: "POST", body: JSON.stringify(body) }),
+  grantApproval: (id: string, planHashAtGrant?: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/grant`, {
+      method: "POST", body: JSON.stringify({ planHashAtGrant }),
+    }),
+  rejectApproval: (id: string, reason: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/reject`, {
+      method: "POST", body: JSON.stringify({ reason }),
+    }),
+  bypassApproval: (id: string, reason: string) =>
+    json<Record<string, unknown>>(`/api/approvals/${encodeURIComponent(id)}/bypass`, {
+      method: "POST", body: JSON.stringify({ reason }),
+    }),
+  listApprovalPolicies: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/approvals/policies${qs}`)
+  },
+  upsertApprovalPolicy: (body: { riskTier: string; kind: "none"|"single"|"dual"; ttlMs: number; allowSelfRequester?: boolean; bypassRole?: string }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<{ ok: boolean }>(`/api/approvals/policies${qs}`, { method: "PUT", body: JSON.stringify(body) })
+  },
+
+  // ── F1 — Evidence ───────────────────────────────────────────
+  listEvidence: (opts: { tenant?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.tenant) p.set("tenant", opts.tenant)
+    if (opts.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/evidence${qs ? `?${qs}` : ""}`)
+  },
+  getEvidenceByPlan: (planId: string) =>
+    json<Record<string, unknown>>(`/api/evidence/by-plan/${encodeURIComponent(planId)}`),
+  verifyEvidence: (id: string) =>
+    json<Record<string, unknown>>(`/api/evidence/${encodeURIComponent(id)}/verify`, { method: "POST" }),
+  evidenceEnvelopeUrl: (id: string) => `/api/evidence/${encodeURIComponent(id)}/envelope.json`,
+  evidencePdfUrl:      (id: string) => `/api/evidence/${encodeURIComponent(id)}/evidence.pdf`,
+
+  // ── F1 — Notification routes ────────────────────────────────
+  listNotificationRoutes: (tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Array<Record<string, unknown>>>(`/api/notification-routes${qs}`)
+  },
+  upsertNotificationRoute: (body: { id?: string; eventType: string; filter: Record<string, unknown>; channel: "email"|"teams"|"slack"; target: string; enabled?: boolean }, tenant?: string) => {
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
+    return json<Record<string, unknown>>(`/api/notification-routes${qs}`, { method: "POST", body: JSON.stringify(body) })
+  },
+  deleteNotificationRoute: (id: string) =>
+    json<{ ok: boolean }>(`/api/notification-routes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  listNotificationLog: (opts: { status?: "sent"|"retrying"|"dlq"|"suppressed"; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (opts.status) p.set("status", opts.status)
+    if (opts.limit)  p.set("limit", String(opts.limit))
+    const qs = p.toString()
+    return json<Array<Record<string, unknown>>>(`/api/notification-routes/log${qs ? `?${qs}` : ""}`)
+  },
 }
 
 export interface UploadedAttachment {

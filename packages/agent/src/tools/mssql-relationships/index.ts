@@ -8,21 +8,23 @@
  */
 
 import sql from "mssql"
-import type { Tool } from "../../types.js"
-import {
-  bfs,
-  buildAdjacency,
-  FK_ALL,
-  FK_FOR_SCHEMA,
-  FK_FOR_TABLE,
-  formatPath,
-  IMPLICIT_JOINS,
-  type FkEdge,
-} from "./queries.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
+import type { Tool } from "../../domain/agent-types.js"
+import { fingerprintForCatalogBuild, fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
+import {
+    bfs,
+    buildAdjacency,
+    FK_ALL,
+    FK_FOR_SCHEMA,
+    FK_FOR_TABLE,
+    formatPath,
+    IMPLICIT_JOINS,
+    type FkEdge,
+} from "./queries.js"
 
-// ── The tool ─────────────────────────────────────────────────────
-export const discoverRelationshipsTool: Tool = {
+// ── The tool ────────────────────────────────────
+function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
   name: "discover_relationships",
   description:
     "Discover database relationships — foreign key graphs, join paths between tables, and implicit column-name matches. " +
@@ -39,14 +41,14 @@ export const discoverRelationshipsTool: Tool = {
         type: "string",
         description:
           "Show all foreign key relationships involving this table (both incoming and outgoing). " +
-          "Use schema-qualified name: 'core.Dataset', 'dim.Client', 'fact.AfricaFlex'.",
+          "Use schema-qualified name: '<schema>.<Table>'.",
       },
       between: {
         type: "array",
         items: { type: "string" },
         description:
           "Find FK join paths between two tables. Provide exactly two schema-qualified table names. " +
-          "E.g. ['dim.Client', 'fact.AfricaFlexDailyBalances']. Returns up to 5 shortest paths.",
+          "Two schema-qualified table names. Returns up to 5 shortest paths.",
       },
       schema: {
         type: "string",
@@ -71,9 +73,36 @@ export const discoverRelationshipsTool: Tool = {
   async execute(args) {
     const connName = args.connection ? String(args.connection).trim() : undefined
 
+    // ── Cache pre-flight (all four modes) ─────────────────────────
+    // Relationship topology changes only on DDL; pure data churn never
+    // affects the result. We cache by mode-specific cache key and use the
+    // catalog-shape fingerprint so schema changes invalidate cleanly.
+    if (args.table && typeof args.table === "string") {
+      const qn = String(args.table).trim()
+      const fp = fingerprintForQname(host, qn, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", qn, "fk", connName, fp)
+      if (cached !== null) return cached
+    } else if (Array.isArray(args.between) && (args.between as unknown[]).length === 2) {
+      const pair = (args.between as unknown[]).map((t) => String(t).trim().toLowerCase()).sort()
+      const key = `${pair[0]}|${pair[1]}`
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", key, "paths", connName, fp)
+      if (cached !== null) return cached
+    } else if (args.schema && typeof args.schema === "string") {
+      const schema = String(args.schema).trim()
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", schema, "schema", connName, fp)
+      if (cached !== null) return cached
+    } else if (args.column && typeof args.column === "string") {
+      const col = String(args.column).trim()
+      const fp = fingerprintForCatalogBuild(host, connName)
+      const cached = tryServeFromCache(host, "discover_relationships", col, "column", connName, fp)
+      if (cached !== null) return cached
+    }
+
     let p: sql.ConnectionPool
     try {
-      const result = await getPool(connName)
+      const result = await getPool(host, connName)
       p = result.pool
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -85,7 +114,7 @@ export const discoverRelationshipsTool: Tool = {
         const tableName = String(args.table)
         const parts = tableName.split(".")
         if (parts.length !== 2) {
-          return "Error: table must be schema-qualified (e.g. 'core.Dataset'). Use explore_mssql_schema(search='name') to find the full name."
+          return "Error: table must be schema-qualified (e.g. '<schema>.<Table>'). Use explore_mssql_schema(search='name') to find the full name."
         }
         const request = p.request()
         request.input("schema", sql.NVarChar, parts[0])
@@ -118,7 +147,16 @@ export const discoverRelationshipsTool: Tool = {
           `\nTotal: ${outgoing.length} outgoing, ${incoming.length} incoming FK relationships.`,
           `Tip: Use between=['${tableName}','other.Table'] to find indirect paths.`,
         )
-        return sections.join("\n")
+        const out = sections.join("\n")
+        persistToCache(host,
+          "discover_relationships",
+          tableName,
+          "fk",
+          connName,
+          out,
+          fingerprintForQname(host, tableName, connName),
+        )
+        return out
       }
 
       // Mode 2: Find paths between two tables
@@ -130,7 +168,7 @@ export const discoverRelationshipsTool: Tool = {
         const [startTable, endTable] = tables.map((t) => String(t).trim())
         for (const t of [startTable, endTable]) {
           if (!t.includes(".")) {
-            return `Error: '${t}' must be schema-qualified (e.g. 'dim.Client').`
+            return `Error: '${t}' must be schema-qualified (e.g. '<schema>.<Table>').`
           }
         }
 
@@ -160,7 +198,17 @@ export const discoverRelationshipsTool: Tool = {
           sections.push(formatPath(paths[i]))
         }
         sections.push(`\n${paths.length} path${paths.length !== 1 ? "s" : ""} found.`)
-        return sections.join("\n")
+        const out = sections.join("\n")
+        const pair = [startTable, endTable].map((t) => t.toLowerCase()).sort()
+        persistToCache(host,
+          "discover_relationships",
+          `${pair[0]}|${pair[1]}`,
+          "paths",
+          connName,
+          out,
+          fingerprintForCatalogBuild(host, connName),
+        )
+        return out
       }
 
       // Mode 3: Schema-wide FK map
@@ -190,7 +238,16 @@ export const discoverRelationshipsTool: Tool = {
           const colPairs = cols.map((col) => `${col.parent_column} → ${col.referenced_column}`).join(", ")
           lines.push(`  ${c.parent_schema}.${c.parent_table} → ${c.referenced_schema}.${c.referenced_table}  [${colPairs}]  (${name})`)
         }
-        return lines.join("\n")
+        const out = lines.join("\n")
+        persistToCache(host,
+          "discover_relationships",
+          schema,
+          "schema",
+          connName,
+          out,
+          fingerprintForCatalogBuild(host, connName),
+        )
+        return out
       }
 
       // Mode 4: Implicit join candidates by column name
@@ -228,7 +285,16 @@ export const discoverRelationshipsTool: Tool = {
           `\nThese tables can potentially be JOINed on matching column names.`,
           `Verify data types match before joining. Use explore_mssql_schema(table='schema.Table') to confirm.`,
         )
-        return lines.join("\n")
+        const out = lines.join("\n")
+        persistToCache(host,
+          "discover_relationships",
+          colName,
+          "column",
+          connName,
+          out,
+          fingerprintForCatalogBuild(host, connName),
+        )
+        return out
       }
 
       return "Error: Provide at least one parameter: table, between, schema, or column."
@@ -236,4 +302,21 @@ export const discoverRelationshipsTool: Tool = {
       return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
     }
   },
+} }
+
+export const discoverRelationshipsTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildDiscoverRelationshipsTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("discoverRelationshipsTool must be built via createDiscoverRelationshipsTool(host)")
+    },
+  }
+})()
+
+export function createDiscoverRelationshipsTool(host: AgentHost): Tool {
+  return buildDiscoverRelationshipsTool(host)
 }

@@ -1,4 +1,4 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
 /**
  * write_file execution logic. Extracted from read-write.ts.
  *
@@ -7,15 +7,39 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
 
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../governance/index.js"
-import type { ToolResultEnvelope } from "../../types.js"
+import { detectPlaceholderPatterns } from "../../application/core/governance.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
+import type { ToolResultEnvelope } from "../../domain/agent-types.js"
 import { checkWriteIntegrity, extractDefinedNames, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
-import { buildToolOutcome, getBasePath, safePathResolved } from "../filesystem-security.js"
+import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"
 
-export async function executeWriteFile(args: Record<string, unknown>): Promise<string | ToolResultEnvelope> {
+/**
+ * Doctrine-shaped variant: run the write-file logic sourcing the sandbox
+ * root from the provided {@link AgentHost} (no ambient state, no
+ * runtime fallback).
+ */
+export function executeWriteFileWith(
+  host: AgentHost,
+  args: Record<string, unknown>,
+): Promise<string | ToolResultEnvelope> {
+  return executeWriteFileCore(args, {
+    basePath: host.filesystem.basePath,
+    resolveSafe: (p) => safePathResolvedWith(host, p),
+  })
+}
+
+interface WriteFileCtx {
+  basePath: string
+  resolveSafe: (p: string) => Promise<string>
+}
+
+async function executeWriteFileCore(
+  args: Record<string, unknown>,
+  ctx: WriteFileCtx,
+): Promise<string | ToolResultEnvelope> {
     try {
       // Use safePathResolved to prevent writing through symlinks that point outside workspace
-      const target = await safePathResolved(String(args.path))
+      const target = await ctx.resolveSafe(String(args.path))
       const filePath = String(args.path)
       const isCodeFile = /\.(js|jsx|ts|tsx|py)$/i.test(filePath)
 
@@ -46,8 +70,8 @@ export async function executeWriteFile(args: Record<string, unknown>): Promise<s
         const mkdirCode = (mkdirErr as NodeJS.ErrnoException).code
         if (mkdirCode === "ENOTDIR" || mkdirCode === "EEXIST") {
           // Walk up to find the file blocking directory creation
-          const parts = parentDir.slice(getBasePath().length + 1).split("/")
-          let cur = getBasePath()
+          const parts = parentDir.slice(ctx.basePath.length + 1).split("/")
+          let cur = ctx.basePath
           for (const part of parts) {
             cur = resolve(cur, part)
             try {

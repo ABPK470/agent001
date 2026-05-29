@@ -13,8 +13,8 @@
  * renderer-compatible payload.
  */
 
-import { CHART_CATALOGUE_SECTION } from "../loop/system-prompt.js"
-import type { Tool } from "../types.js"
+import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../application/shell/loop.js"
+import type { Tool } from "../domain/agent-types.js"
 
 export const getChartSpecsTool: Tool = {
   name: "get_chart_specs",
@@ -30,6 +30,6 @@ export const getChartSpecsTool: Tool = {
   },
 
   async execute() {
-    return CHART_CATALOGUE_SECTION
+    return renderPromptVars(CHART_CATALOGUE_SECTION)
   },
 }

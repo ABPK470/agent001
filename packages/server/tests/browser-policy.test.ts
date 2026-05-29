@@ -19,7 +19,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/db/index.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
   _migrate(testDb)
   _setDb(testDb)
   seedTestUsers(testDb)

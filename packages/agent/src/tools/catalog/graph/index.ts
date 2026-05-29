@@ -1,11 +1,7 @@
-import { buildConceptGraph } from "../concepts.js"
+import type { TableVerdictsReader } from "../../../application/shell/runtime.js"
 import { tokenize } from "../helpers.js"
-import { findConceptPath as findConceptPathModule, findFkPath } from "../paths.js"
+import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
-import { loadCatalogFromDb } from "./build.js"
-import { loadCatalogFromSnapshot } from "./snapshot.js"
-import { computeStats, formatPromptSummary } from "./stats.js"
-import { buildSysCatalog, buildSysIndex } from "./sys-catalog.js"
 import type {
     CatalogBuildOptions,
     CatalogColumn,
@@ -14,12 +10,13 @@ import type {
     CatalogSnapshot,
     CatalogStats,
     CatalogTable,
-    ConceptNode,
-    ConceptPathResult,
     ImplicitEdge,
     SysEntry,
-    ViewLineage,
 } from "../types.js"
+import { loadCatalogFromDb } from "./build.js"
+import { loadCatalogFromSnapshot } from "./snapshot.js"
+import { computeStats, formatPromptSummary } from "./stats.js"
+import { buildSysCatalog, buildSysIndex } from "./sys-catalog.js"
 
 // ── CatalogGraph ─────────────────────────────────────────────────
 
@@ -27,8 +24,6 @@ export class CatalogGraph {
   readonly tables: Map<string, CatalogTable>
   readonly implicitEdges: ImplicitEdge[]
   readonly builtAt: Date
-  /** Curated lineage maps for critical views, keyed by qualifiedName. */
-  readonly lineageMap: Map<string, ViewLineage>
 
   readonly nameIndex: Map<string, Set<string>>
   readonly columnIndex: Map<string, Set<string>>
@@ -36,18 +31,21 @@ export class CatalogGraph {
   /** tableKey → implicit edges involving this table */
   readonly implicitJoinIndex: Map<string, ImplicitEdge[]>
   /**
+   * Lowercased qualified name → canonical (original-case) key.
+   * SQL identifiers are case-insensitive; the LLM and tool callers send
+   * `publish.revenue`, `Publish.Revenue`, `PUBLISH.REVENUE` interchangeably.
+   * Built once at construction so every `getTable` call is O(1) regardless
+   * of casing. Required: was the root cause of the May 2026 production
+   * "Table 'publish.revenue' not found" failure when the catalog stored
+   * the view as `publish.Revenue`.
+   */
+  private readonly tablesLower: Map<string, string>
+  /**
    * For every publish VIEW: sum of row_counts of the physical tables it directly references.
    * Built at catalog-build time from Q_VIEW_DEPS — zero runtime cost for the agent.
    * Key = "publish.ViewName", value = total source rows.
    */
   readonly viewSourceRows: Map<string, number>
-
-  /** Concept nodes indexed by concept name (lowercase) — e.g. "revenue" → ConceptNode */
-  readonly conceptNodes: Map<string, ConceptNode>
-  /** Source view (lowercase) → ConceptNode — fast lookup by view name */
-  readonly conceptByView: Map<string, ConceptNode>
-  /** tableKey → list of concept nodes this table contributes to (reverse index) */
-  readonly conceptEdgeIndex: Map<string, ConceptNode[]>
 
   /**
    * sys.* catalog — entries for SQL Server system objects (DMVs, catalog views, TVFs).
@@ -66,11 +64,12 @@ export class CatalogGraph {
     adjacency: Map<string, Array<{ target: string; fk: CatalogFK }>>,
     implicitEdges: ImplicitEdge[],
     builtAt?: Date,
-    lineage?: ViewLineage[],
     viewSourceRows?: Map<string, number>,
     sysCatalog?: SysEntry[],
   ) {
     this.tables = tables
+    this.tablesLower = new Map()
+    for (const key of tables.keys()) this.tablesLower.set(key.toLowerCase(), key)
     this.nameIndex = nameIndex
     this.columnIndex = columnIndex
     this.adjacency = adjacency
@@ -85,16 +84,6 @@ export class CatalogGraph {
         this.implicitJoinIndex.get(tk)!.push(edge)
       }
     }
-    // Lineage index
-    this.lineageMap = new Map()
-    if (lineage) for (const l of lineage) this.lineageMap.set(l.view, l)
-    // Concept graph (pure in-memory derivation from lineage — zero SQL)
-    this.conceptNodes = new Map()
-    this.conceptByView = new Map()
-    this.conceptEdgeIndex = new Map()
-    if (lineage && lineage.length > 0) {
-      buildConceptGraph(this.conceptNodes, this.conceptByView, this.conceptEdgeIndex, lineage)
-    }
     // Sys catalog and its search index
     this.sysCatalog = new Map()
     this.sysIndex = new Map()
@@ -106,15 +95,12 @@ export class CatalogGraph {
 
   // ── Build ─────────────────────────────────────────────────────
 
-  static async build(connection?: string): Promise<CatalogGraph> {
-    const r = await loadCatalogFromDb(connection)
-    const graph = new CatalogGraph(
+  static async build(host: import("../../../application/shell/runtime.js").AgentHost, connection?: string): Promise<CatalogGraph> {
+    const r = await loadCatalogFromDb(host, connection)
+    return new CatalogGraph(
       r.tables, r.nameIndex, r.columnIndex, r.adjacency, r.implicitEdges,
-      undefined, undefined, r.viewSourceRows, r.sysCatalog,
+      undefined, r.viewSourceRows, r.sysCatalog,
     )
-    // Auto-lineage merged first; hand-curated loadLineage() runs after build() and overwrites these.
-    if (r.autoLineage.length > 0) graph.mergeLineage(r.autoLineage)
-    return graph
   }
 
   /**
@@ -130,12 +116,11 @@ export class CatalogGraph {
   /** Serialize to a JSON-safe snapshot for disk persistence. */
   toSnapshot(source = "default"): CatalogSnapshot {
     return {
-      version: 6,
+      version: 7,
       builtAt: this.builtAt.toISOString(),
       source,
       tables: [...this.tables.values()],
       implicitEdges: this.implicitEdges,
-      lineage: [...this.lineageMap.values()],
       viewSourceRows: [...this.viewSourceRows.entries()].map(([name, sourceRows]) => ({ name, sourceRows })),
       sysCatalog: [...this.sysCatalog.values()],
     }
@@ -147,70 +132,20 @@ export class CatalogGraph {
     return new CatalogGraph(
       r.tables, r.nameIndex, r.columnIndex, r.adjacency,
       snap.implicitEdges, new Date(snap.builtAt),
-      (snap as { lineage?: ViewLineage[] }).lineage ?? [],
       r.viewSourceRows,
       r.sysCatalog,
     )
   }
 
-  // ── Concept graph ────────────────────────────────────────────
-
-  /** Merge externally-curated lineage maps into the catalog. Rebuilds concept graph. */
-  mergeLineage(lineages: ViewLineage[]): void {
-    for (const l of lineages) this.lineageMap.set(l.view, l)
-    buildConceptGraph(this.conceptNodes, this.conceptByView, this.conceptEdgeIndex, [...this.lineageMap.values()])
-  }
-
-  /** Get lineage for a specific view. */
-  getLineage(qualifiedName: string): ViewLineage | null {
-    return this.lineageMap.get(qualifiedName) ?? null
-  }
-
-  /** List all views that have lineage maps. */
-  listLineage(): string[] {
-    return [...this.lineageMap.keys()]
-  }
-
-  /** Check if a table appears as a source in any lineage map. */
-  getLineageParents(qualifiedName: string): Array<{ view: string; businessArea: string }> {
-    const results: Array<{ view: string; businessArea: string }> = []
-    for (const l of this.lineageMap.values()) {
-      for (const s of l.sources) {
-        if (s.qualifiedName.toLowerCase() === qualifiedName.toLowerCase()) {
-          results.push({ view: l.view, businessArea: s.businessArea })
-        }
-      }
-    }
-    return results
-  }
-
-  /** Get all business concepts a table/view contributes to (derived from lineage maps). */
-  getTableConcepts(qualifiedName: string): ConceptNode[] {
-    return this.conceptEdgeIndex.get(qualifiedName) ?? []
-  }
-
-  /**
-   * Get a concept node by concept name (e.g. "Revenue") or source view
-   * (e.g. "publish.Revenue"). Case-insensitive.
-   */
-  getConcept(nameOrView: string): ConceptNode | null {
-    return this.conceptNodes.get(nameOrView.toLowerCase())
-      ?? this.conceptByView.get(nameOrView.toLowerCase())
-      ?? null
-  }
-
-  /** List all loaded concept nodes (one per lineage view). */
-  listConcepts(): ConceptNode[] {
-    return [...this.conceptNodes.values()]
-  }
-
   // ── Search & traversal ────────────────────────────────────────
 
   /** Keyword search across table names and column names. Returns ranked results. */
-  search(query: string, limit = 15): CatalogSearchHit[] {
+  search(query: string, limit = 15, tableVerdicts?: TableVerdictsReader | null): CatalogSearchHit[] {
     return searchCatalog(
       this.tables, this.nameIndex, this.columnIndex,
-      this.implicitJoinIndex, this.conceptNodes, query, limit,
+      this.implicitJoinIndex, query, limit,
+      this.viewSourceRows,
+      tableVerdicts,
     )
   }
 
@@ -246,22 +181,68 @@ export class CatalogGraph {
     return this.sysCatalog.get(name.toLowerCase().replace(/^sys\./, "")) ?? null
   }
 
-  /** Concept-aware path finding between two tables (FK + implicit + concept edges). */
-  findConceptPath(from: string, to: string, maxDepth = 6): ConceptPathResult[] {
-    return findConceptPathModule(
-      this.tables, this.adjacency, this.implicitJoinIndex,
-      this.conceptEdgeIndex, from, to, maxDepth,
-    )
-  }
-
   /** BFS path-finding between two tables via FK edges. */
   findPath(from: string, to: string, maxDepth = 5): CatalogFK[][] {
     return findFkPath(this.tables, this.adjacency, from, to, maxDepth)
   }
 
-  /** Get a specific table by qualified name ("schema.Table"). */
+  /**
+   * Get a specific table by qualified name ("schema.Table"), case-insensitive.
+   *
+   * SQL Server identifiers are case-insensitive by default; LLM tool
+   * arguments arrive in any case (`publish.revenue` vs `publish.Revenue`).
+   * This method tries the exact original-case key first (fast path), then
+   * falls back to the lowercased-key index. Returns `null` only when the
+   * name truly isn't in the catalog under ANY casing.
+   */
   getTable(qualifiedName: string): CatalogTable | null {
-    return this.tables.get(qualifiedName) ?? null
+    const direct = this.tables.get(qualifiedName)
+    if (direct) return direct
+    const canonical = this.tablesLower.get(qualifiedName.toLowerCase())
+    return canonical ? (this.tables.get(canonical) ?? null) : null
+  }
+
+  /**
+   * For a VIEW defined as `SELECT … FROM a UNION ALL SELECT … FROM b
+   * UNION ALL SELECT … FROM c`, return the list of `FROM`-target
+   * qualified names — one per branch, in source order.
+   *
+   * Replaces the curated `getLineage(qn).sources` path. Pure parse over
+   * `viewDefinition`: comments and string literals are stripped first,
+   * then the body is split on `\bUNION(\s+ALL)?\b`. Each segment's
+   * first `FROM <ident>(.<ident>)?` (square-bracket aware) becomes a
+   * branch entry.
+   *
+   * Returns `[]` when the object isn't a view, has no definition, or
+   * has no `UNION` (single-branch views aren't "branched"). Never throws.
+   */
+  getUnionBranches(qualifiedName: string): string[] {
+    const t = this.tables.get(qualifiedName)
+    if (!t || t.type !== "VIEW" || !t.viewDefinition) return []
+    return parseUnionBranches(t.viewDefinition)
+  }
+
+  /**
+   * Reverse of `getUnionBranches`: given a base table qualified name,
+   * return every VIEW whose UNION branch list contains that table.
+   * Used by the branch-coverage doctrine in mssql/validation.ts to
+   * detect ranking-universe ≠ reporting-universe gaps. Case-insensitive
+   * comparison so `[publish].[Revenue]` and `publish.Revenue` match.
+   *
+   * Pure scan over all VIEW tables; cost is O(views × branches/view).
+   * Bounded; called rarely (only on query validation paths).
+   */
+  getUnionParents(qualifiedName: string): string[] {
+    const target = qualifiedName.toLowerCase()
+    const out: string[] = []
+    for (const t of this.tables.values()) {
+      if (t.type !== "VIEW" || !t.viewDefinition) continue
+      const branches = parseUnionBranches(t.viewDefinition)
+      if (branches.some((b) => b.toLowerCase() === target)) {
+        out.push(t.qualifiedName)
+      }
+    }
+    return out
   }
 
   /** Find all tables that have a column with this exact name. */
@@ -294,7 +275,64 @@ export class CatalogGraph {
   promptSummary(): string {
     return formatPromptSummary(this)
   }
+
+  /**
+   * Stable short fingerprint of the schema shape (qualifiedName + column
+   * names). Used by the memory provenance layer to demote entries whose
+   * stored schema no longer matches the live one. Pure: same set of
+   * tables/columns produces the same fingerprint regardless of build
+   * order, builtAt, or row counts.
+   *
+   * Format: `sha1:<hex16>` — 16-char prefix is enough for collision-free
+   * comparison across a single workspace's lifetime; never used for
+   * cryptographic purposes.
+   */
+  schemaFingerprint(): string {
+    const sorted = [...this.tables.values()]
+      .map((t) => {
+        const cols = t.columns.map((c) => c.name).sort().join(",")
+        return `${t.qualifiedName}(${cols})`
+      })
+      .sort()
+      .join("\n")
+    // Lightweight non-crypto hash (FNV-1a 32-bit, doubled into 16 hex chars).
+    // Avoids pulling node:crypto into the catalog hot path.
+    let h1 = 0x811c9dc5
+    let h2 = 0x9dc5811c
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted.charCodeAt(i)
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0
+      h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0
+    }
+    const hex = (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0"))
+    return `sha1:${hex}`
+  }
 }
 
 // Re-export CatalogBuildOptions so store.ts doesn't need to import from types directly
 export type { CatalogBuildOptions }
+
+/**
+ * Parse the `FROM` target qualified names out of each `UNION (ALL)?`
+ * branch of a view definition. Returns `[]` when the body has no UNION.
+ * Shared by `getUnionBranches` and `getUnionParents`.
+ */
+function parseUnionBranches(viewDefinition: string): string[] {
+  const stripped = viewDefinition
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/'[^']*'/g, "''")
+  const segments = stripped.split(/\bUNION(?:\s+ALL)?\b/i)
+  if (segments.length < 2) return []
+  // FROM <schema>.<table> OR FROM <table> — bracket-aware. We only want
+  // the FIRST FROM per branch (joined tables in the same branch are
+  // intentionally not extracted — they're not the branch source).
+  const FROM_RE = /\bFROM\s+(\[?[\w]+\]?(?:\.\[?[\w]+\]?)?)/i
+  const out: string[] = []
+  for (const seg of segments) {
+    const m = FROM_RE.exec(seg)
+    if (!m) continue
+    out.push(m[1].replace(/\[|\]/g, ""))
+  }
+  return out
+}

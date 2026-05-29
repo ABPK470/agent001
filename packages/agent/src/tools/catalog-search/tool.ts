@@ -1,11 +1,9 @@
-import type { Tool } from "../../types.js"
+import type { AgentHost } from "../../application/shell/runtime.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
     handleColumn,
-    handleConceptPath,
-    handleConcepts,
     handleJoins,
-    handleLineage,
     handlePath,
     handleSearch,
     handleStats,
@@ -13,7 +11,7 @@ import {
     handleTable,
 } from "./handlers.js"
 
-export const searchCatalogTool: Tool = {
+function buildSearchCatalogTool(host: AgentHost): Tool { return {
   name: "search_catalog",
   description:
     "Search the pre-built schema catalog — your PRIMARY tool for finding tables, columns, and relationships. " +
@@ -21,17 +19,14 @@ export const searchCatalogTool: Tool = {
     "FK relationships, and implicit join edges (shared column names). It is pre-computed and cached on disk; searches " +
     "are instant (no SQL queries). ALWAYS use this BEFORE explore_mssql_schema or query_mssql. " +
     "Modes: " +
-    "(1) search='revenue' — keyword search across all table and column names (also searches sys.* DMV catalog). " +
-    "(2) table='publish.Revenue' — get full detail for a specific table. " +
-    "(3) column='clientId' — find every table that has this column. " +
-    "(4) joins='dim.Client' — show ALL join edges (FK + implicit) for a table. " +
-    "(5) path=['dim.Client','fact.X'] — find FK join paths between two tables. " +
-    "(6) lineage='publish.Revenue' — show full lineage map: all source views, dimension joins, business areas. " +
-    "(7) stats=true — catalog summary. " +
-    "(8) refresh=true — rebuild from live database and update cache. " +
-    "(9) concepts='fact.CommissionAllocation' — show which business concepts this table contributes to (semantic tags from lineage). " +
-    "(10) concept_path=['tableA','tableB'] — BFS across FK + implicit join + concept edges; finds paths even without FK relationships. " +
-    "(11) sys='tombstone' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
+    "(1) search='<keyword>' — keyword search across all table and column names (also searches sys.* DMV catalog). " +
+    "(2) table='<schema>.<Table>' — get full detail for a specific table. " +
+    "(3) column='<columnName>' — find every table that has this column. " +
+    "(4) joins='<schema>.<Table>' — show ALL join edges (FK + implicit) for a table. " +
+    "(5) path=['<schemaA>.<TableA>','<schemaB>.<TableB>'] — find FK join paths between two tables. " +
+    "(6) stats=true — catalog summary. " +
+    "(7) refresh=true — rebuild from live database and update cache. " +
+    "(8) sys='<sysKeyword>' — search the SQL Server system catalog (sys.* DMVs, catalog views, TVFs). " +
     "Use sys= for: columnstore internals, index fragmentation, query performance, wait statistics, locking, " +
     "memory, partitioning, HA/Always On, server config. sys= returns the right DMV + example query — " +
     "then call query_mssql to run it.",
@@ -39,29 +34,16 @@ export const searchCatalogTool: Tool = {
     type: "object",
     properties: {
       search: { type: "string", description: "Keyword search across all table names and column names." },
-      schema: { type: "string", description: "Filter search results to a specific schema, e.g. 'fact', 'publish', 'core'. Use with search= to scope results." },
-      table: { type: "string", description: "Get full details for a specific table. Schema-qualified: 'publish.Revenue', 'dim.Client'." },
+      schema: { type: "string", description: "Filter search results to a specific schema. Use with search= to scope results." },
+      table: { type: "string", description: "Get full details for a specific table. Schema-qualified: '<schema>.<Table>'." },
       column: { type: "string", description: "Find all tables that have a column with this exact name." },
-      joins: { type: "string", description: "Show ALL join edges for a table — FK relationships and implicit joins. Schema-qualified: 'dim.Client'." },
+      joins: { type: "string", description: "Show ALL join edges for a table — FK relationships and implicit joins. Schema-qualified." },
       path: {
         type: "array",
         items: { type: "string" },
         description: "Find FK join paths between two tables. Provide exactly two schema-qualified names.",
       },
       stats: { type: "boolean", description: "Return high-level catalog summary: schema count, table/view count, largest tables." },
-      lineage: {
-        type: "string",
-        description: "Show the full lineage map for a critical view. Schema-qualified: 'publish.Revenue'.",
-      },
-      concept_path: {
-        type: "array",
-        items: { type: "string" },
-        description: "Find concept-aware paths between two tables (FK + implicit + concept edges). Provide exactly two schema-qualified names.",
-      },
-      concepts: {
-        type: "string",
-        description: "Show which business concepts a table contributes to, derived from lineage maps.",
-      },
       refresh: { type: "boolean", description: "Rebuild the catalog from the live database and update the disk cache." },
       connection: { type: "string", description: "Named database connection. Omit for default." },
     },
@@ -73,7 +55,7 @@ export const searchCatalogTool: Tool = {
 
     if (args.refresh) {
       try {
-        const catalog = await buildCatalog({ connection: connName, forceFresh: true })
+        const catalog = await buildCatalog(host, { connection: connName, forceFresh: true })
         const s = catalog.stats()
         return `Catalog rebuilt from live DB and cached to disk: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs, ${s.implicitEdges} implicit join edges.`
       } catch (err) {
@@ -81,9 +63,9 @@ export const searchCatalogTool: Tool = {
       }
     }
 
-    const catalog = getCatalog(connName)
+    const catalog = getCatalog(host, connName)
     if (!catalog) {
-      const available = getCatalogConnectionNames()
+      const available = getCatalogConnectionNames(host)
       const hint = available.length > 0
         ? `Available connections: ${available.join(", ")}. Pass connection='${available[0]}' to target that database, or omit for auto-select.`
         : "No catalogs loaded. The catalog is built at server startup when MSSQL is configured. " +
@@ -93,17 +75,6 @@ export const searchCatalogTool: Tool = {
 
     if (args.stats) return handleStats(catalog)
     if (args.sys) return handleSys(catalog, String(args.sys).trim())
-    if (args.lineage) return handleLineage(catalog, String(args.lineage).trim())
-    if (args.concepts) return handleConcepts(catalog, String(args.concepts).trim())
-
-    if (args.concept_path) {
-      const tables = args.concept_path as string[]
-      if (!Array.isArray(tables) || tables.length !== 2) {
-        return "Error: 'concept_path' requires exactly two schema-qualified table names."
-      }
-      const [from, to] = tables.map((t) => String(t).trim())
-      return handleConceptPath(catalog, from, to)
-    }
 
     if (args.table) return handleTable(catalog, String(args.table).trim())
     if (args.joins) return handleJoins(catalog, String(args.joins).trim())
@@ -120,9 +91,28 @@ export const searchCatalogTool: Tool = {
 
     if (args.search) {
       const schemaFilter = args.schema ? String(args.schema).trim() : undefined
-      return handleSearch(catalog, String(args.search).trim(), schemaFilter)
+      return handleSearch(catalog, String(args.search).trim(), schemaFilter, host.tableVerdicts)
     }
 
-    return "Error: Provide at least one parameter: search, table, column, joins, path, lineage, stats, or refresh."
+    return "Error: Provide at least one parameter: search, table, column, joins, path, stats, refresh, or sys."
   },
+} }
+
+export const searchCatalogTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildSearchCatalogTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("searchCatalogTool must be built via createSearchCatalogTool(host)")
+    },
+  }
+})()
+
+// ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
+
+export function createSearchCatalogTool(host: AgentHost): Tool {
+  return buildSearchCatalogTool(host)
 }

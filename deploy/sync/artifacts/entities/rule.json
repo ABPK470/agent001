@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "id": "rule",
+  "displayName": "Rule",
+  "description": "Rule sync definition bootstrapped from legacy pipeline ground truth.",
+  "rootTable": "core.Rule",
+  "idColumn": "ruleId",
+  "labelColumn": "name",
+  "selfJoinColumn": "parentRuleId",
+  "legacy": {
+    "pipelineId": 791,
+    "entrySproc": "core.uspSyncRuleObjectsTran"
+  },
+  "governance": {
+    "approvalPolicyId": null,
+    "freezeWindowIds": [],
+    "riskMultiplier": 1
+  },
+  "strategy": {
+    "strategyId": "mymi-scd2",
+    "strategyVersion": "latest"
+  },
+  "bindings": {
+    "serviceProfileRef": "default",
+    "environmentPolicyRef": "default"
+  },
+  "ownership": {
+    "team": "sync-platform",
+    "owner": null,
+    "reviewStatus": "reviewed",
+    "notes": [
+      "Bootstrapped from legacy pipeline ground truth.",
+      "All current rule tables are verified; assign a named owner when the operating team is finalized."
+    ]
+  },
+  "metadata": {
+    "tables": [
+      {
+        "name": "core.Rule",
+        "scopeColumn": "ruleId",
+        "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleColumn",
+        "scopeColumn": "ruleId",
+        "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleCondition",
+        "scopeColumn": "ruleId",
+        "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleLink",
+        "scopeColumn": "ruleId",
+        "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleConditionValue",
+        "scopeColumn": "ruleConditionId",
+        "predicate": "ruleConditionId IN (SELECT ruleConditionId FROM [core].[RuleCondition] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetMappingColumn",
+        "scopeColumn": "datasetMappingId",
+        "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})) ) )))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetMapping",
+        "scopeColumn": "datasetMappingId",
+        "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})) ) )))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetColumn",
+        "scopeColumn": "datasetId",
+        "predicate": "datasetId IN (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}))))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Dataset",
+        "scopeColumn": "datasetId",
+        "predicate": "datasetId IN (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}))))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleLinkType",
+        "scopeColumn": "ruleLinkTypeId",
+        "predicate": "ruleLinkTypeId IN (SELECT ruleLinkTypeId FROM [core].[RuleLink] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.RuleType",
+        "scopeColumn": "ruleTypeId",
+        "predicate": "ruleTypeId IN (SELECT ruleTypeId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      }
+    ],
+    "executionOrder": [
+      "core.DatasetMappingColumn",
+      "core.DatasetMapping",
+      "core.DatasetColumn",
+      "core.Dataset",
+      "core.RuleLinkType",
+      "core.RuleLink",
+      "core.RuleConditionValue",
+      "core.RuleCondition",
+      "core.RuleType",
+      "core.RuleColumn",
+      "core.Rule"
+    ],
+    "reverseOrder": [
+      "core.Rule",
+      "core.RuleColumn",
+      "core.RuleType",
+      "core.RuleCondition",
+      "core.RuleConditionValue",
+      "core.RuleLink",
+      "core.RuleLinkType",
+      "core.Dataset",
+      "core.DatasetColumn",
+      "core.DatasetMapping",
+      "core.DatasetMappingColumn"
+    ],
+    "discrepancies": []
+  },
+  "executionFlow": {
+    "steps": [
+      {
+        "id": "metadata-sync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected rule scope."
+      },
+      {
+        "id": "dataset-deploy",
+        "phase": "post-metadata",
+        "kind": "datasetDeploy",
+        "title": "Dataset deploy",
+        "description": "Deploy datasets required by the rule on the target ETL service.",
+        "subjectRef": "ruleInputDatasetId"
+      },
+      {
+        "id": "rules-deploy",
+        "phase": "post-metadata",
+        "kind": "rulesDeploy",
+        "title": "Rules deploy",
+        "description": "Deploy the rule package on the target ETL service."
+      },
+      {
+        "id": "handle-dependencies",
+        "phase": "post-metadata",
+        "kind": "handleDependencies",
+        "title": "Handle dependencies",
+        "description": "Refresh direct dependency state after rule deployment.",
+        "objectName": "rule"
+      },
+      {
+        "id": "sync-date",
+        "phase": "post-metadata",
+        "kind": "syncDate",
+        "title": "Sync date",
+        "description": "Stamp the rule sync date.",
+        "auditObjectType": "Rule"
+      },
+      {
+        "id": "deploy-date",
+        "phase": "post-metadata",
+        "kind": "deployDate",
+        "title": "Deploy date",
+        "description": "Stamp the rule deploy date.",
+        "auditObjectType": "Rule"
+      }
+    ]
+  },
+  "provenance": {
+    "kind": "legacy-migration",
+    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
+    "sourceVersion": "2026-05-29T12:08:36.914Z"
+  }
+}

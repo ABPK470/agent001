@@ -1,6 +1,29 @@
 // ── Query validation ─────────────────────────────────────────────
 
+import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../application/core/doctrine-cluster/fix-hints.js"
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
+import type { CatalogAccessor } from "../catalog/index.js"
+import {
+  _resetCatalogQueriesCache,
+  calendarDimensionTable,
+  canonicalQualifiedName,
+  isLargeObject as catalogIsLargeObject,
+  dateGrainColumn,
+  highCardinalityKeyColumns,
+  isExpensiveUnionView,
+  listLargeObjects,
+  listSchemas,
+  persistedMirrorOf,
+  primaryKeyColumns,
+  unionBranchCount,
+} from "../catalog/queries.js"
+
+/** Appends a doctrine-owned fixHint to an error string, when one is registered. */
+function withFixHint(error: string, code: string): string {
+  const hint = DOCTRINE_FIX_HINTS[code]
+  return hint ? `${error}\n\nFix: ${hint}` : error
+}
 
 const READ_ONLY_PATTERN = /^\s*(SELECT|WITH|EXPLAIN|SET\s+SHOWPLAN|SP_HELP|SP_COLUMNS|SP_TABLES)\b/i
 
@@ -74,70 +97,893 @@ export function findNonTmpMutations(query: string): { target: string; label: str
 
 // ── Scan-guard: tables/views known to be large ──────────────────
 //
-// Any table or view in this list will be checked for the absence of
-// a WHERE clause before the query is executed. An unfiltered query
-// against these objects will time out or run for minutes — it must be
-// blocked at the tool level regardless of what the LLM produces.
+// "Large" is derived entirely from the live catalog (rowCount from
+// sys.dm_db_partition_stats for tables, viewSourceRows — sum of
+// referenced physical-table row-counts — for views). Threshold is
+// configurable via `tenantConfig.largeObjectRows`; default 10M.
 //
-// Format: lowercased "schema.object" strings.
-// Covers both the base view and its persistedView mirror.
-const LARGE_OBJECTS = new Set([
-  // publish views — each is a UNION of 10–60 large fact tables
-  "publish.revenue",
-  "publish.balances",
-  "publish.clientprofitability",
-  "publish.financialdisclosurerules",
-  "publish.africasalescredittradesrules",
-  "publish.rwa",
-  "publish.impairment",
-  // large fact tables
-  "fact.unotranspose",
-  "fact.imexcommissionsdealbalance",
-  "fact.africaflexdailybalances",
-  "fact.financialdisclosuredaily",
-  "fact.financialdisclosuredailysap",
-  "fact.backdatedtransactions",
-  "fact.counterpartystructures",
-  "fact.acmaccountfacilitymapping",
-  "fact.acmfacility",
-  "fact.pnlrevenuemtd",
-  "fact.africafrontarena",
-  "fact.merchantservices",
-  // large dim tables
-  "dim.account",
-  "dim.client",
-  // large ext tables
-  "ext.ghanadailyaccountsall",
-  "ext.botswana dailyaccountsall",
-  "ext.zambiadailyaccountsall",
-  "ext.africaflexdailybalanceskenyacasa",
-  // large log/agent tables
-  "log.detail",
-  "agent.activityrun",
-  "agent.activityrunarchive",
-])
+// There is NO hardcoded customer-name fallback. When the catalog isn't
+// loaded yet (early startup, unit tests with no fixture), the guard is
+// silent — `isUnsafeScan` still catches unfiltered shapes structurally,
+// and the agent's own discipline (search_catalog before query_mssql)
+// surfaces the size before any scan.
+
+/** Re-export — kept for test cache invalidation. */
+export function _resetLargeObjectCache(): void {
+  _resetCatalogQueriesCache()
+}
 
 /**
- * Returns the set of large schema.object names referenced in the query (lowercased).
- * Handles: schema.table, [schema].[table], schema.[table], "schema"."table"
+ * Predicate: is the given schema-qualified name a known-large object?
+ * Delegates to the catalog facade so the threshold and shape rules stay
+ * defined in one place. Returns false when no catalog is loaded.
  */
-export function referencedLargeObjects(query: string): string[] {
-  // Strip comments first
+export function isLargeObject(
+  qualifiedName: string,
+  accessor?: () => unknown,
+): boolean {
+  return catalogIsLargeObject(qualifiedName, {
+    threshold: getTenantConfig().largeObjectRows,
+    accessor: accessor as never,
+  })
+}
+
+/**
+ * Match every schema.object reference (including 3-part `<mirrorSchema>.<schema>.<object>`
+ * forms) in the query text. Strips comments first. The set of "large"
+ * objects comes from the catalog at call time, so adding a new fact
+ * table or growing a view past the threshold takes effect immediately.
+ */
+function* iterateObjectRefs(query: string): IterableIterator<string> {
   const stripped = query
     .replace(/--[^\r\n]*/g, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-
-  const found: string[] = []
-  // Match schema.object in various bracket/quote forms
-  const re = /\[?(\w+)\]?\.\[?(\w+)\]?/g
+  // 2-part: [schema].[name] / schema.name (`name` may itself contain a dot
+  // when bracketed — e.g. mirrorSchema.[publish.Revenue]).
+  const re = /\[?(\w+)\]?\.\[?([\w]+(?:\.\w+)?)\]?/g
   let m: RegExpExecArray | null
   while ((m = re.exec(stripped)) !== null) {
-    const key = `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
-    if (LARGE_OBJECTS.has(key) && !found.includes(key)) {
-      found.push(key)
-    }
+    yield `${m[1].toLowerCase()}.${m[2].toLowerCase()}`
+  }
+}
+
+/** Lowercased schema.object names in `query` that the catalog classifies as large. */
+export function referencedLargeObjects(query: string, accessor?: CatalogAccessor): string[] {
+  const large = listLargeObjects({ accessor, threshold: getTenantConfig().largeObjectRows })
+  const found: string[] = []
+  for (const key of iterateObjectRefs(query)) {
+    if (large.has(key) && !found.includes(key)) found.push(key)
   }
   return found
+}
+
+/** Per-object reference counts (lowercased) of catalog-large objects in `query`. */
+export function countReferencedLargeObjects(query: string, accessor?: CatalogAccessor): Map<string, number> {
+  const large = listLargeObjects({ accessor, threshold: getTenantConfig().largeObjectRows })
+  const counts = new Map<string, number>()
+  for (const key of iterateObjectRefs(query)) {
+    if (!large.has(key)) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+export interface TempTableBatchAnalysis {
+  readonly refs: readonly string[]
+  readonly created: readonly string[]
+  readonly suffixes: readonly string[]
+  readonly malformedSuffixes: readonly string[]
+  readonly missingCreations: readonly string[]
+}
+
+export interface MssqlQueryQualityAnalysis {
+  readonly largeObjectRefs: ReadonlyArray<{ name: string; count: number }>
+  readonly usesPersistedMirrors: readonly string[]
+  readonly missingPersistedMirrorCandidates: readonly string[]
+  readonly hasWhereClause: boolean
+  readonly unsafeScanReason: string | null
+  readonly tempTableRefs: number
+  readonly tempTablesCreated: number
+  readonly tempTableSuffixes: readonly string[]
+  readonly malformedTempSuffixes: readonly string[]
+  readonly missingTempCreations: readonly string[]
+  readonly aggregateWarningCount: number
+  readonly aggregateBlockCount: number
+  readonly tempScalarSubqueryCount: number
+  readonly stagePatternLikely: boolean
+}
+
+export type QueryValidationCode =
+  | "dangerous_operation"
+  | "aggregate_semantic_mismatch"
+  | "temp_table_integrity"
+  | "temp_scalar_subquery_overused"
+  | "publish_view_topn_without_branch_aggregation"
+  | "avg_of_coalesce_zero"
+  | "invented_column"
+  | "write_disabled"
+  | "non_temp_mutation"
+  | "large_object_overused"
+  | "unsafe_large_object_scan"
+
+export interface QueryValidationDiagnostics {
+  readonly ok: boolean
+  readonly error: string | null
+  readonly code: QueryValidationCode | null
+  readonly analysis: MssqlQueryQualityAnalysis
+  /**
+   * Optional auto-note payload (Gap 2). When a doctrine block fires AND a
+   * lesson template exists for its code, the validator emits the lesson so
+   * the calling tool can route it to the agent's memory writer. Pure data;
+   * the validator has no side effects.
+   */
+  readonly lesson?: import("../../application/core/doctrine-cluster/fix-hints.js").NoteLessonPayload | null
+}
+
+function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
+  const refs = extractLocalTempRefs(query)
+  const created = extractCreatedLocalTemps(query)
+  const malformedSuffixes = refs.filter((name) => /_[A-Fa-f0-9]+$/.test(name) && !/_([A-Fa-f0-9]{8})$/.test(name))
+  const missingCreations = created.length > 0
+    ? refs.filter((name) => !created.includes(name))
+    : []
+  const suffixes = Array.from(new Set(
+    refs
+      .map((name) => /_([A-Fa-f0-9]{8})$/.exec(name)?.[1]?.toLowerCase() ?? null)
+      .filter((suffix): suffix is string => suffix !== null),
+  ))
+  return { refs, created, suffixes, malformedSuffixes, missingCreations }
+}
+
+/**
+ * Walks a SQL string and returns every parenthesised SELECT subquery whose
+ * FROM clause references a local #temp table, classified as scalar or not.
+ *
+ * "Scalar" here means the anti-pattern we actually care about: a subquery
+ * that returns ONE value (aggregate or TOP 1, single output column) embedded
+ * in a SELECT-list expression — typically `SELECT ..., (SELECT SUM(x) FROM
+ * #temp WHERE corr), (SELECT COUNT(*) FROM #temp WHERE corr), ...`. That
+ * shape forces N re-scans of the staged data.
+ *
+ * Disqualified (these are LEGITIMATE shapes that older heuristic flagged):
+ *   • `IN (SELECT ... FROM #temp)`       — set predicate
+ *   • `EXISTS (SELECT ... FROM #temp)`   — set predicate
+ *   • `ANY/SOME/ALL (SELECT …)`          — set predicate
+ *   • `FROM (SELECT ... FROM #temp) x`   — derived table
+ *   • `JOIN (SELECT ...) x ON …`         — derived table
+ *   • `OUTER/CROSS APPLY (SELECT …)`     — apply operator
+ *   • `WITH name AS (SELECT ... FROM #temp …)` — CTE body
+ *   • Subquery body without aggregate / TOP 1 (returns a set, not a scalar)
+ *   • Subquery body with multiple top-level select-list columns
+ *
+ * Uses a real paren walker (not a non-greedy regex) so nested parens in
+ * aggregate calls don't confuse the boundaries.
+ */
+interface TempSubqueryFinding {
+  readonly temp: string
+  readonly scalar: boolean
+}
+
+function findTempSubqueries(query: string): TempSubqueryFinding[] {
+  const text = stripForScan(query)
+  const findings: TempSubqueryFinding[] = []
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "(") continue
+    // Look ahead past whitespace for SELECT
+    let j = i + 1
+    while (j < text.length && /\s/.test(text[j])) j++
+    if (!/^select\b/i.test(text.slice(j, j + 7))) continue
+
+    // Find matching close paren
+    let depth = 1
+    let k = i + 1
+    while (k < text.length && depth > 0) {
+      const c = text[k]
+      if (c === "(") depth++
+      else if (c === ")") depth--
+      if (depth === 0) break
+      k++
+    }
+    if (depth !== 0) continue
+    const body = text.slice(i + 1, k)
+
+    // Must reference a #temp in its FROM clause
+    const tempMatch = /\bFROM\s+(#[A-Za-z_][\w]*)/i.exec(body)
+    if (!tempMatch) continue
+    const temp = tempMatch[1]
+
+    // Classify by the token immediately preceding the opening paren
+    const before = text.slice(Math.max(0, i - 40), i)
+    const lastTokenMatch = /([A-Za-z_][\w]*)\s*$/.exec(before)
+    const lastToken = lastTokenMatch?.[1]?.toUpperCase() ?? ""
+    const isSetOrDerived = /^(IN|EXISTS|ANY|SOME|ALL|FROM|JOIN|AS|APPLY|UNION|INTERSECT|EXCEPT)$/.test(lastToken)
+
+    // Body shape: scalar requires aggregate or TOP 1, AND a single select-list column
+    const selectListMatch = /\bSELECT\s+(?:DISTINCT\s+|TOP\s+\d+\s+)?([\s\S]*?)\s+FROM\b/i.exec(body)
+    const selectList = selectListMatch?.[1] ?? ""
+    const hasAgg = /\b(SUM|AVG|MIN|MAX|COUNT|STRING_AGG|STDEV|VAR)\s*\(/i.test(selectList)
+    const hasTop1 = /\bTOP\s+1\b/i.test(body)
+    const singleColumn = selectList.length > 0 && countTopLevelCommas(selectList) === 0
+
+    const scalar = !isSetOrDerived && singleColumn && (hasAgg || hasTop1)
+    findings.push({ temp, scalar })
+
+    i = k // skip past this subquery
+  }
+
+  return findings
+}
+
+function countTopLevelCommas(expr: string): number {
+  let depth = 0
+  let count = 0
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i]
+    if (c === "(") depth++
+    else if (c === ")") depth--
+    else if (c === "," && depth === 0) count++
+  }
+  return count
+}
+
+function countTempScalarSubqueries(query: string): number {
+  return findTempSubqueries(query).filter((f) => f.scalar).length
+}
+
+export function countTempScalarSubqueriesByTemp(query: string): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const finding of findTempSubqueries(query)) {
+    if (!finding.scalar) continue
+    counts.set(finding.temp, (counts.get(finding.temp) ?? 0) + 1)
+  }
+  return counts
+}
+
+// ── Branch-aggregation guard for wide UNION views ───────────────
+//
+// Any TABLE/VIEW the catalog classifies as an "expensive UNION view"
+// (≥ tenantConfig.unionBranchThreshold UNION ALL branches) cannot be the
+// outer FROM of a `TOP N … GROUP BY <high-cardinality-key>` statement —
+// the engine has to expand every branch, materialise the full union,
+// then group and sort globally. No branch-local index can help and the
+// statement times out.
+//
+// The correct shape is per-branch pre-aggregation under a derived
+// table, then UNION ALL of the branch results, then the outer TOP/GROUP.
+// The fix is documented in the wide-union-view-policy doctrine.
+//
+// What counts as "high-cardinality": the live catalog's PK columns plus
+// FK-out columns whose target is a centrally-referenced dimension (≥3
+// incoming FKs). No name list — pkClient/pkAccount/cust_id/whatever the
+// deployment calls them is discovered from PK/FK metadata.
+export interface WideUnionViewTopnOffender {
+  /** The wide UNION view at the outer FROM, e.g. "publish.Revenue". */
+  readonly object: string
+  /** The high-card key found in GROUP BY (the column NAME as written). */
+  readonly groupKey: string
+  /** Branches the catalog reports for `object`. */
+  readonly branchCount: number
+}
+
+/**
+ * Extract every `FROM <schema>.<table>` reference in the outer query
+ * statement (i.e. not inside a parenthesised derived table). Returns the
+ * normalised lowercased `schema.table` keys in source order.
+ *
+ * We approximate "outer" by tracking paren depth: anything opened with
+ * `(` that contains a SELECT is a subquery and is skipped. This is
+ * good enough for the branch-aggregation guard — false-positives on
+ * deeply-nested derived tables only suppress a (correctly-applied)
+ * block, never invent one.
+ */
+function outerFromTargets(stmt: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  const re = /[()]|\bFROM\s+\[?(\w+)\]?\.\[?([\w]+(?:\.\w+)?)\]?/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stmt)) !== null) {
+    const token = m[0][0]
+    if (token === "(") { depth++; continue }
+    if (token === ")") { depth = Math.max(0, depth - 1); continue }
+    if (depth === 0 && m[1] && m[2]) out.push(`${m[1].toLowerCase()}.${m[2].toLowerCase()}`)
+  }
+  return out
+}
+
+export function detectWideUnionViewTopnWithoutBranchAggregation(
+  query: string,
+  options: { accessor?: CatalogAccessor } = {},
+): WideUnionViewTopnOffender | null {
+  const tc = getTenantConfig()
+  const stripped = stripForScan(query)
+  // Naive statement split — `stripForScan` already removed string literals and
+  // comments, so semicolons here are real statement boundaries.
+  for (const stmt of stripped.split(/;\s*/)) {
+    if (!stmt.trim()) continue
+    if (!/\bTOP\s+\d+\b/i.test(stmt)) continue
+    const groupByMatch = /\bGROUP\s+BY\b([\s\S]*?)(?:\bORDER\s+BY\b|\bHAVING\b|\bOPTION\b|$)/i.exec(stmt)
+    if (!groupByMatch) continue
+    const groupBody = groupByMatch[1]
+
+    for (const fromTarget of outerFromTargets(stmt)) {
+      if (!isExpensiveUnionView(fromTarget, { accessor: options.accessor, threshold: tc.unionBranchThreshold })) continue
+      // Catalog says this FROM target is a wide UNION view. Check whether
+      // GROUP BY mentions any of its high-cardinality keys.
+      const highCardKeys = highCardinalityKeyColumns(fromTarget, { accessor: options.accessor })
+      if (highCardKeys.length === 0) continue
+      let matchedKey: string | null = null
+      for (const key of highCardKeys) {
+        const keyRe = new RegExp(`\\b${escapeRegExp(key)}\\b`, "i")
+        if (keyRe.test(groupBody)) { matchedKey = key; break }
+      }
+      if (!matchedKey) continue
+
+      // Escape valve: a JOIN to a #temp on the same key is exactly the
+      // narrowing pattern we WANT (the temp's small key set pushes into
+      // each branch).
+      const narrowingJoin = new RegExp(
+        `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${escapeRegExp(matchedKey)}\\b\\s*=`,
+        "i",
+      ).test(stmt)
+      if (narrowingJoin) continue
+
+      return {
+        object: canonicalQualifiedName(fromTarget, { accessor: options.accessor }),
+        groupKey: matchedKey,
+        branchCount: unionBranchCount(fromTarget, { accessor: options.accessor }),
+      }
+    }
+  }
+  return null
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/** @deprecated Renamed to `detectWideUnionViewTopnWithoutBranchAggregation`. */
+export const detectPublishViewTopnWithoutBranchAggregation = detectWideUnionViewTopnWithoutBranchAggregation
+export type PublishViewTopnOffender = WideUnionViewTopnOffender
+
+// ── AVG-of-zero-coalesce statistical guard ──────────────────────────
+//
+// `AVG(COALESCE(col, 0))` or `AVG(ISNULL(col, 0))` is almost never what a
+// controller wants: it treats a missing observation as an observed zero,
+// dragging the average down. Trace 2026-05-21 had the agent emit
+// `AVG(COALESCE(bl.AverageCreditBalanceZARMTD, 0))` across 6 balance columns —
+// every reported "average balance" would have been silently understated for
+// any client missing a month.
+//
+// The correct shape is `AVG(col)` (T-SQL `AVG` already ignores NULLs) or, if
+// the model is "missing month = real zero", an explicit denominator —
+// `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)`. The latter makes the
+// assumption visible.
+export interface AvgOfCoalesceZeroOffender {
+  readonly snippet: string  // the offending expression, trimmed for display
+}
+
+export function detectAvgOfCoalesceZero(query: string): AvgOfCoalesceZeroOffender[] {
+  const stripped = stripForScan(query)
+  const offenders: AvgOfCoalesceZeroOffender[] = []
+  // AVG ( {COALESCE|ISNULL} ( <expr>, 0 ) )  — `<expr>` may contain qualified
+  // column names and dots/brackets but no commas (the 2-arg form is what bites).
+  const re = /\bAVG\s*\(\s*(?:COALESCE|ISNULL)\s*\(\s*[^,()]+,\s*0\s*\)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    const snippet = m[0].replace(/\s+/g, " ").trim()
+    if (!offenders.some((o) => o.snippet === snippet)) offenders.push({ snippet })
+  }
+  return offenders
+}
+
+// ── Invented-column guard ───────────────────────────────────────
+//
+// The 2026-05-21 cancelled run had the model emit `r.ClientName`,
+// `publish.Officer.fullName`, `rbb.RBBBanker` — none of which exist in the
+// live catalog. The agent had no way to know it was hallucinating, so it
+// burned a 60-second timeout per attempt and silently produced rows whose
+// "names" / "bankers" were just whatever the unionised mapping branch chose
+// to surface (which is usually NULL or an obscure code).
+//
+// This guard reads the live catalog (built at startup from sys.all_columns)
+// and rejects qualified column references whose column does NOT exist on
+// the table the alias points to. It is intentionally CONSERVATIVE: when
+// alias provenance is ambiguous (CTE, derived table, UNION), it skips the
+// whole statement rather than risk a false positive.
+//
+// Catalog access is sync (`getCatalog()` returns an in-memory snapshot).
+// When no catalog is loaded (early startup, unit tests, server-less mode),
+// the detector returns [] — it never blocks on absence of evidence.
+
+export interface InventedColumnOffender {
+  /** The qualified reference as it appears, e.g. "r.ClientName". */
+  readonly reference: string
+  /** The catalog table that was inspected, e.g. "publish.Revenue". */
+  readonly table: string
+  /** The column name that was not found. */
+  readonly column: string
+  /** Closest live column names on the same table, for the fix hint. */
+  readonly suggestions: readonly string[]
+}
+
+/** SQL keywords that must never be treated as an alias when seen left of `.col`. */
+const ALIAS_RESERVED_KEYWORDS = new Set([
+  "select", "from", "where", "join", "inner", "outer", "left", "right", "full",
+  "cross", "apply", "on", "as", "and", "or", "not", "in", "exists", "between",
+  "is", "null", "case", "when", "then", "else", "end", "by", "group", "order",
+  "having", "union", "intersect", "except", "with", "into", "values", "set",
+  "top", "distinct", "all", "any", "some", "over", "partition", "rows", "range",
+  "unbounded", "preceding", "following", "current", "row", "asc", "desc",
+  "option", "recompile", "maxdop", "nolock", "readonly", "tablock", "tablockx",
+  "holdlock", "updlock", "rowlock", "paglock", "index", "noexpand", "fastfirstrow",
+  // System schemas that are universal across MSSQL deployments.
+  "sys", "information_schema", "dbo",
+])
+
+/**
+ * Full reserved-alias set = SQL keywords above + every live schema in the
+ * catalog + tenant-configured extras. Aliasing a schema name confuses the
+ * column-reference resolver, so we treat schemas the same as keywords.
+ *
+ * Recomputed on each call — the catalog query is O(1) (precomputed list)
+ * and the set construction is cheap; this avoids stale caches when the
+ * catalog or tenant config changes between calls.
+ */
+function reservedAliasSet(): Set<string> {
+  const out = new Set(ALIAS_RESERVED_KEYWORDS)
+  for (const s of listSchemas()) out.add(s)
+  for (const s of getTenantConfig().reservedAliases) out.add(s.toLowerCase())
+  return out
+}
+
+/** Bare table/column tokens that almost certainly aren't real columns. */
+const NON_COLUMN_TOKEN = new Set([
+  "asc", "desc", "as", "and", "or", "is", "null", "on", "in", "from", "join",
+])
+
+interface AliasBinding {
+  alias: string
+  qualifiedTable: string  // "schema.table" — guaranteed to exist in the catalog
+}
+
+interface CatalogLike {
+  getTable(qualifiedName: string): { columns: ReadonlyArray<{ name: string }> } | null
+}
+
+const EMPTY_CATALOG_ACCESSOR: CatalogAccessor = () => null
+
+/** Editor distance for "did you mean" suggestions; small + cheap, no deps. */
+function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>, k = 3): string[] {
+  const t = target.toLowerCase()
+  const scored = columns.map((c) => {
+    const n = c.name.toLowerCase()
+    let d = 0
+    // Substring containment scores best, then shared-prefix length.
+    if (n === t) d = -100
+    else if (n.includes(t) || t.includes(n)) d = -50 + Math.abs(n.length - t.length)
+    else {
+      let prefix = 0
+      while (prefix < Math.min(n.length, t.length) && n[prefix] === t[prefix]) prefix++
+      d = Math.max(n.length, t.length) - prefix
+    }
+    return { name: c.name, d }
+  })
+  scored.sort((a, b) => a.d - b.d)
+  return scored.slice(0, k).map((s) => s.name)
+}
+
+/**
+ * Conservative column-existence guard. Returns the list of qualified
+ * column references whose column is provably absent from the catalog table
+ * the alias resolves to. Statements with CTEs, derived tables, set
+ * operators, or sys.* references are skipped (returned offenders only
+ * cover statements where alias provenance is unambiguous).
+ */
+export function detectInventedColumns(
+  query: string,
+  accessor: () => CatalogLike | null = EMPTY_CATALOG_ACCESSOR,
+): InventedColumnOffender[] {
+  const catalog = accessor()
+  if (!catalog) return []
+
+  const stripped = stripForScan(query)
+    // Strip MSSQL table hints — `WITH (NOLOCK)`, `WITH (INDEX=ix)` — they contain
+    // identifiers that must not be mistaken for column references.
+    .replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
+
+  const reservedAliases = reservedAliasSet()
+  const offenders: InventedColumnOffender[] = []
+  const seen = new Set<string>()
+
+  // Statement split — stripForScan already removed string literals/comments.
+  const statements = stripped.split(/;\s*/)
+  for (const stmt of statements) {
+    if (!stmt.trim()) continue
+
+    // Skip provenance-ambiguous shapes — safer to under-report than false-block.
+    //
+    // Note (2026-05-23): the CTE skip (`WITH … AS (…)`) was REMOVED here.
+    // It was suppressing the check on every analytical query in the wild
+    // (the model almost always uses CTEs), so hallucinated columns like
+    // `r.VolumeUSDMTD` / `r.RevenueAmountCY` against `publish.Revenue` were
+    // sailing through to SQL Server. The remaining skips below stay because
+    // they materially change alias→table provenance; a CTE introduces a new
+    // *name* but every alias bound to a real `schema.table` in FROM/JOIN
+    // still resolves unambiguously (CTE aliases lack a schema prefix and
+    // therefore never enter `fromJoinRe`). The narrow residual risk is a
+    // CTE that re-uses the same alias letter as the outer query against a
+    // different base table — accepted in exchange for catching the entire
+    // hallucinated-column family at parse time instead of at SQL Server.
+    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived FROM
+    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived JOIN
+    if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue   // set ops
+    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) continue       // system catalog
+    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) continue  // TVFs
+
+    // Build alias map from FROM/JOIN <schema>.<table> [AS] <alias>.
+    // Anchor on schema.table to avoid mis-parsing #temp / @var / single-name
+    // tables — we only validate against catalog-resolvable bases.
+    const aliasMap = new Map<string, AliasBinding>()
+    const fromJoinRe = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?(?:\s+(?:AS\s+)?\[?(\w+)\]?)?/gi
+    let fm: RegExpExecArray | null
+    while ((fm = fromJoinRe.exec(stmt)) !== null) {
+      const schema = fm[1]
+      const table = fm[2]
+      const aliasRaw = fm[3]
+      const qualified = `${schema}.${table}`
+      const catalogTable = catalog.getTable(qualified)
+      if (!catalogTable) continue   // Not in catalog → cannot validate; stay silent.
+
+      // Effective alias: explicit alias if given AND not a reserved keyword
+      // (otherwise it's our regex eating the next clause: `FROM x.y WHERE` →
+      // `aliasRaw=WHERE`). Fall back to bare table name.
+      const candidate = aliasRaw && !reservedAliases.has(aliasRaw.toLowerCase())
+        ? aliasRaw
+        : table
+      aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
+    }
+
+    if (aliasMap.size === 0) continue
+
+    // Validate qualified column references.
+    //  - 2-part: `alias.col` (most common in the wild)
+    //  - 3-part: `schema.table.col`
+    // We require the trailing char NOT to be `(` (else it's a function call).
+    const refRe = /\b\[?(\w+)\]?\.\[?(\w+)\]?(?:\.\[?(\w+)\]?)?/g
+    let rm: RegExpExecArray | null
+    while ((rm = refRe.exec(stmt)) !== null) {
+      const a = rm[1]
+      const b = rm[2]
+      const c = rm[3]
+      // Trailing `(` → function call (e.g. `dbo.fnFoo(...)`, `r.ToString()`).
+      const after = stmt.charAt(rm.index + rm[0].length)
+      if (after === "(") continue
+
+      let table: string
+      let column: string
+      let referenceText: string
+      if (c) {
+        // 3-part `schema.table.col`
+        const qualified = `${a}.${b}`
+        const tbl = catalog.getTable(qualified)
+        if (!tbl) continue   // Unknown schema.table → can't claim "invented".
+        table = qualified
+        column = c
+        referenceText = `${a}.${b}.${c}`
+      } else {
+        // 2-part `alias.col`
+        const aliasLower = a.toLowerCase()
+        if (reservedAliases.has(aliasLower)) continue
+        const binding = aliasMap.get(aliasLower)
+        if (!binding) continue   // Unknown alias → silent.
+        if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
+        // `alias.*` is whitespace by now; the regex won't match `*` anyway.
+        table = binding.qualifiedTable
+        column = b
+        referenceText = `${binding.alias}.${b}`
+      }
+
+      const catalogTable = catalog.getTable(table)
+      if (!catalogTable) continue
+      const colLower = column.toLowerCase()
+      const exists = catalogTable.columns.some((cc) => cc.name.toLowerCase() === colLower)
+      if (exists) continue
+
+      const key = `${table}::${colLower}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      offenders.push({
+        reference: referenceText,
+        table,
+        column,
+        suggestions: nearestColumns(column, catalogTable.columns),
+      })
+    }
+  }
+  return offenders
+}
+
+// ── Lineage branch-coverage advisor (Phase 2) ────────────────────
+//
+// Doctrine: `publish.Revenue` is a UNION ALL over ~59 source-mapping views
+// (branches). A query that ranks clients from a #temp built from only 3
+// of those branches, then reports back against the full `publish.Revenue`
+// view, produces a ranking-universe ≠ reporting-universe mismatch — observed
+// in trace 2026-05-21T20-32-25 where stage-1 used 3 branches and stage-2
+// pulled from the full view, yielding an ~11× revenue understatement on the
+// top client. Soft-warn (not block): branch sub-sampling is sometimes
+// intentional — but it must be explicit.
+//
+// Escape comment (case-insensitive substring match): `-- sampled K of N`,
+// `-- branches:` followed by an explicit list, or `-- branch-sample`.
+
+interface BranchCatalogLike {
+  getUnionParents(qualifiedName: string): string[]
+  getUnionBranches(qualifiedName: string): string[]
+}
+
+export interface BranchCoverageGap {
+  /** Parent view that the referenced branches roll up to, e.g. "publish.Revenue". */
+  parent: string
+  /** Branches the query actually references (qualified names). */
+  referenced: string[]
+  /** Total branch count for the parent according to lineage. */
+  totalBranches: number
+}
+
+const EMPTY_BRANCH_ACCESSOR = (): BranchCatalogLike | null => null
+
+const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|branch-sample)/i
+
+/**
+ * Detect view-UNION branch-coverage gaps: queries that reference ≥2 base
+ * tables that feed the same big UNION view, but cover fewer than the
+ * view's full branch set, without an explicit `-- sampled K of N`
+ * annotation.
+ *
+ * Conservative: a single-branch reference is treated as intentional;
+ * gaps are only reported when the model has clearly started branch-by-
+ * branch staging but stopped short of full coverage.
+ */
+export function detectLineageBranchCoverage(
+  query: string,
+  accessor: () => BranchCatalogLike | null = EMPTY_BRANCH_ACCESSOR,
+): BranchCoverageGap[] {
+  if (BRANCH_SAMPLE_COMMENT.test(query)) return []
+
+  const catalog = accessor()
+  if (!catalog) return []
+
+  const stripped = stripForScan(query).replace(/\bWITH\s*\([^)]*\)/gi, " ")
+
+  // Extract every schema.table reference in FROM/JOIN positions.
+  const tableRefRe = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?/gi
+  const referencedBranches = new Set<string>()
+  let m: RegExpExecArray | null
+  while ((m = tableRefRe.exec(stripped)) !== null) {
+    referencedBranches.add(`${m[1]}.${m[2]}`)
+  }
+
+  // Group referenced tables by UNION parent view.
+  const parentMap = new Map<string, Set<string>>()
+  for (const qn of referencedBranches) {
+    const parents = catalog.getUnionParents(qn)
+    for (const parent of parents) {
+      let set = parentMap.get(parent)
+      if (!set) {
+        set = new Set<string>()
+        parentMap.set(parent, set)
+      }
+      set.add(qn)
+    }
+  }
+
+  const gaps: BranchCoverageGap[] = []
+  for (const [parent, refs] of parentMap.entries()) {
+    if (refs.size < 2) continue // single-branch is treated as intentional
+    const branches = catalog.getUnionBranches(parent)
+    const total = branches.length
+    if (total === 0) continue
+    if (refs.size >= total) continue // full coverage
+    gaps.push({
+      parent,
+      referenced: [...refs].sort(),
+      totalBranches: total,
+    })
+  }
+  return gaps.sort((a, b) => a.parent.localeCompare(b.parent))
+}
+
+// ── Big-view profile_data nudge — REMOVED 2026-05-21 ─────────────
+//
+// Previous iteration of this module exported `detectBigViewWithoutProfile`
+// which warned the agent to call `profile_data` on every large view
+// before any analytical query. That advice was actively harmful:
+// profile_data runs unfiltered COUNT_BIG(*) + per-column NULL/DISTINCT/TOP-N
+// aggregates which scan every branch of a UNION view and time out at 60s.
+// The correct fix is to refuse the operation at the profile_data tool itself
+// (see `isLargeObject` guard in mssql-profiler.ts) and let the validator's
+// existing `isUnsafeScan` continue to handle unfiltered query_mssql scans.
+
+/**
+ * @deprecated Always returns []. Profile-first guidance is now enforced
+ * by refusing profile_data on large objects, not by warning on query_mssql.
+ */
+export function detectBigViewWithoutProfile(
+  _query: string,
+  _profiledTables: ReadonlySet<string> | null,
+): string[] {
+  return []
+}
+
+function liveProfiledTables(): ReadonlySet<string> | null {
+  return null
+}
+
+export interface QueryValidationOptions {
+  accessor?: CatalogAccessor
+  profiledTables?: ReadonlySet<string> | null
+}
+
+// ── Cross-source reconciliation guard (Phase 5) ──────────────────
+//
+// Trace 2026-05-21 showed the agent ranking from a `#temp` derived from a
+// 3-branch subset, then joining a wide UNION view that covers all
+// branches to "enrich" the aggregate — silently mixing two universes.
+// The reported SUM was correct for the SQL but wrong for the user's
+// intent.
+//
+// Soft-warn (not block) when:
+//   - query references both a `#temp` table AND a wide-UNION view
+//     (per catalog), AND
+//   - the SELECT list contains an aggregate (SUM/COUNT/AVG/MIN/MAX), AND
+//   - the escape comment `-- universes intentional` is absent.
+//
+// The advisory is informational; aggregating across mixed universes is
+// sometimes the right thing. The escape comment makes intent explicit.
+
+const UNIVERSES_INTENTIONAL_COMMENT = /--\s*universes\s+intentional/i
+const TEMP_TABLE_REF = /(?:^|\s)#\w+/
+const AGGREGATE_IN_SELECT = /\b(?:sum|count|avg|min|max)\s*\(/i
+
+export interface RankingReportingMismatch {
+  readonly tempTouched: boolean
+  readonly bigViews: string[]
+}
+
+export function detectRankingVsReportingMismatch(query: string, accessor?: CatalogAccessor): RankingReportingMismatch | null {
+  if (UNIVERSES_INTENTIONAL_COMMENT.test(query)) return null
+  const stripped = query
+    .replace(/--[^\r\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+  if (!TEMP_TABLE_REF.test(stripped)) return null
+  if (!AGGREGATE_IN_SELECT.test(stripped)) return null
+  const tc = getTenantConfig()
+  const bigViews = referencedLargeObjects(query, accessor).filter((r) =>
+    isExpensiveUnionView(r, { accessor, threshold: tc.unionBranchThreshold }),
+  )
+  if (bigViews.length === 0) return null
+  return { tempTouched: true, bigViews }
+}
+
+export function analyzeMssqlQueryQuality(query: string, accessor?: CatalogAccessor): MssqlQueryQualityAnalysis {
+  const largeObjectRefs = Array.from(countReferencedLargeObjects(query, accessor).entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const temp = analyzeTempTableBatch(query)
+  const aggregateIssues = findAggregateSemanticIssues(query)
+
+  // Mirror analysis: "persisted mirror" is a tenant-configured naming
+  // convention (config.mirrorSchema). When set, any reference of shape
+  // `<mirrorSchema>.<x>` counts as "using the mirror", and any large
+  // base object whose mirror EXISTS in the catalog but isn't referenced
+  // becomes a `missingPersistedMirrorCandidates` entry.
+  const mirrorSchema = getTenantConfig().mirrorSchema
+  const usesPersistedMirrors = mirrorSchema
+    ? largeObjectRefs.map((e) => e.name).filter((n) => n.startsWith(`${mirrorSchema.toLowerCase()}.`))
+    : []
+  const missingPersistedMirrorCandidates: string[] = []
+  if (mirrorSchema) {
+    for (const ref of largeObjectRefs) {
+      // Skip if the ref IS itself a mirror.
+      if (ref.name.startsWith(`${mirrorSchema.toLowerCase()}.`)) continue
+      // persistedMirrorOf does case-insensitive catalog lookup internally.
+      const mirror = persistedMirrorOf(ref.name, { accessor, mirrorSchema })
+      if (!mirror) continue
+      const mirrorKey = mirror.toLowerCase()
+      if (!usesPersistedMirrors.includes(mirrorKey)) missingPersistedMirrorCandidates.push(ref.name)
+    }
+  }
+
+  const hasWhere = hasWhereClause(query)
+  const unsafeScanReason = isUnsafeScan(query, largeObjectRefs.map((entry) => entry.name))
+  return {
+    largeObjectRefs,
+    usesPersistedMirrors,
+    missingPersistedMirrorCandidates,
+    hasWhereClause: hasWhere,
+    unsafeScanReason,
+    tempTableRefs: temp.refs.length,
+    tempTablesCreated: temp.created.length,
+    tempTableSuffixes: temp.suffixes,
+    malformedTempSuffixes: temp.malformedSuffixes,
+    missingTempCreations: temp.missingCreations,
+    aggregateWarningCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Warn).length,
+    aggregateBlockCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Block).length,
+    tempScalarSubqueryCount: countTempScalarSubqueries(query),
+    stagePatternLikely:
+      largeObjectRefs.length > 0 &&
+      largeObjectRefs.every((entry) => entry.count <= 2) &&
+      temp.created.length > 0,
+  }
+}
+
+function extractLocalTempRefs(query: string): string[] {
+  const stripped = stripForScan(query)
+  const refs: string[] = []
+  const re = /##?[A-Za-z_][\w]*/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    const name = m[0]
+    if (name.startsWith("##")) continue
+    if (!refs.includes(name)) refs.push(name)
+  }
+  return refs
+}
+
+function extractCreatedLocalTemps(query: string): string[] {
+  const stripped = stripForScan(query)
+  const created: string[] = []
+  const patterns = [
+    /\bCREATE\s+TABLE\s+(#[A-Za-z_][\w]*)/gi,
+    /\bSELECT\b[\s\S]*?\bINTO\s+(#[A-Za-z_][\w]*)\s+FROM\b/gi,
+  ]
+  for (const re of patterns) {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(stripped)) !== null) {
+      const name = m[1]
+      if (!created.includes(name)) created.push(name)
+    }
+  }
+  return created
+}
+
+export function validateTempTableBatch(query: string): string | null {
+  const temp = analyzeTempTableBatch(query)
+  if (temp.refs.length === 0) return null
+
+  const malformedSuffixTemps = temp.malformedSuffixes
+  if (malformedSuffixTemps.length > 0) {
+    return [
+      `Query blocked — malformed #temp suffix (expected 8 hex chars): ${malformedSuffixTemps.join(", ")}.`,
+      ``,
+      `Use names like \`#range_a3f91c08\` and reuse that exact 8-hex suffix across the whole batch.`,
+    ].join("\n")
+  }
+
+  if (temp.created.length > 0) {
+    if (temp.missingCreations.length > 0) {
+      return [
+        `Query blocked — local #temp table referenced without being created in the same batch: ${temp.missingCreations.join(", ")}.`,
+        ``,
+        `This usually means a typo or suffix drift (for example one reference says \`#balLines_ab12cd34\` and another says \`#balLines_ab12dc34\`).`,
+        `In pooled connections, assuming a #temp from a prior call still exists is unsafe. Create every #temp in the same batch that reads it, then DROP it at the end.`,
+      ].join("\n")
+    }
+  }
+
+  if (temp.suffixes.length > 1) {
+    return [
+      `Query blocked — inconsistent #temp suffixes in one batch: ${temp.suffixes.join(", ")}.`,
+      ``,
+      `Use exactly one 8-hex suffix across every local #temp in the batch so references cannot drift by one character.`,
+      `Pattern: pick one suffix once (for example \`a3f91c08\`) and reuse it literally in every #temp, index name and DROP statement.`,
+    ].join("\n")
+  }
+
+  return null
 }
 
 /**
@@ -191,13 +1037,31 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
   return `no WHERE clause`
 }
 
-export function validateQuery(query: string, writeEnabled: boolean): string | null {
+export function validateQuery(
+  query: string,
+  writeEnabled: boolean,
+  options: QueryValidationOptions = {},
+): string | null {
+  return validateQueryDetailed(query, writeEnabled, options).error
+}
+
+export function validateQueryDetailed(
+  query: string,
+  writeEnabled: boolean,
+  options: QueryValidationOptions = {},
+): QueryValidationDiagnostics {
+  const analysis = analyzeMssqlQueryQuality(query, options.accessor)
   // Always block dangerous operations regardless of write mode — must run BEFORE
   // the write-mode gate so that EXEC / OPENROWSET / DBCC produce the dangerous
   // error message instead of the generic "write disabled" one.
   for (const pattern of DANGEROUS_PATTERNS) {
     if (pattern.test(query)) {
-      return "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.)."
+      return {
+        ok: false,
+        error: "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.).",
+        code: "dangerous_operation",
+        analysis,
+      }
     }
   }
 
@@ -209,16 +1073,132 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
   // findAggregateSemanticIssues() for the full taxonomy and rationale.
   for (const issue of findAggregateSemanticIssues(query)) {
     if (issue.severity !== AggregateSeverity.Block) continue
-    return [
+    const head = [
       `Query blocked — aggregate-semantic mismatch on line ${issue.line}:`,
       ``,
       `    ${issue.snippet}`,
       ``,
       issue.message,
-      ``,
-      `Fix: change the aggregate function to match the alias (or vice-versa). The function name `,
-      `is the implementation; the output alias is the contract with the reader. They MUST agree.`,
     ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "aggregate_semantic_mismatch"),
+      code: "aggregate_semantic_mismatch",
+      analysis,
+      lesson: getDoctrineLessonTemplate("aggregate_semantic_mismatch")?.({
+        query,
+        detail: issue.snippet,
+      }) ?? null,
+    }
+  }
+
+  const tempBatchError = validateTempTableBatch(query)
+  if (tempBatchError) {
+    return {
+      ok: false,
+      error: withFixHint(tempBatchError, "temp_table_integrity"),
+      code: "temp_table_integrity",
+      analysis,
+      lesson: getDoctrineLessonTemplate("temp_table_integrity")?.({
+        query,
+        detail: tempBatchError.split("\n")[0],
+      }) ?? null,
+    }
+  }
+
+  const tempScalarCounts = countTempScalarSubqueriesByTemp(query)
+  const repeatedTempScalarProbes = Array.from(tempScalarCounts.entries()).filter(([, count]) => count > 1)
+  if (repeatedTempScalarProbes.length > 0) {
+    const list = repeatedTempScalarProbes.map(([name, count]) => `${name} (${count} scalar probes)`).join(", ")
+    const head = [
+      `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
+      ``,
+      `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
+    ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "temp_scalar_subquery_overused"),
+      code: "temp_scalar_subquery_overused",
+      analysis,
+      lesson: getDoctrineLessonTemplate("temp_scalar_subquery_overused")?.({
+        query,
+        detail: list,
+      }) ?? null,
+    }
+  }
+
+  // Block direct top-N + GROUP BY <high-card key> against any wide UNION view
+  // the catalog classifies as expensive (≥ tenantConfig.unionBranchThreshold
+  // branches). The fix is per-branch aggregation — see doctrine
+  // `mssql.wide-union-view-policy`.
+  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query, { accessor: options.accessor })
+  if (wideUnionOffender) {
+    const head = [
+      `Query blocked — direct TOP-N + GROUP BY ${wideUnionOffender.groupKey} against ${wideUnionOffender.object}.`,
+      ``,
+      `${wideUnionOffender.object} is a UNION ALL over ${wideUnionOffender.branchCount} source-mapping views (per live catalog). A single GROUP BY ${wideUnionOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on wide UNION views.`,
+    ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "publish_view_topn_without_branch_aggregation"),
+      code: "publish_view_topn_without_branch_aggregation",
+      analysis,
+      lesson: getDoctrineLessonTemplate("publish_view_topn_without_branch_aggregation")?.({
+        query,
+        detail: `${wideUnionOffender.object} GROUP BY ${wideUnionOffender.groupKey}`,
+      }) ?? null,
+    }
+  }
+
+  // Block AVG(COALESCE/ISNULL(col, 0)) — silently understates true average.
+  const avgCoalesceOffenders = detectAvgOfCoalesceZero(query)
+  if (avgCoalesceOffenders.length > 0) {
+    const list = avgCoalesceOffenders.map((o) => o.snippet).join("; ")
+    const head = [
+      `Query blocked — statistical mistake: ${list}.`,
+      ``,
+      `Wrapping NULL in COALESCE(..., 0) inside AVG treats a missing observation as an observed zero — it drags the reported average down and the controller has no way to detect it from the result. T-SQL AVG already skips NULLs.`,
+    ].join("\n")
+    return {
+      ok: false,
+      error: withFixHint(head, "avg_of_coalesce_zero"),
+      code: "avg_of_coalesce_zero",
+      analysis,
+      lesson: getDoctrineLessonTemplate("avg_of_coalesce_zero")?.({
+        query,
+        detail: avgCoalesceOffenders[0].snippet,
+      }) ?? null,
+    }
+  }
+
+  // Block references to columns that do not exist on the catalog table the
+  // alias resolves to. Only fires when (a) a live catalog is loaded and
+  // (b) the alias provenance is unambiguous (no CTE/derived/UNION). Catches
+  // hallucinated columns like `r.ClientName`, `publish.Officer.fullName`.
+  const inventedColumns = detectInventedColumns(query, options.accessor ?? EMPTY_CATALOG_ACCESSOR)
+  if (inventedColumns.length > 0) {
+    const lines = inventedColumns.slice(0, 5).map((o) => {
+      const hint = o.suggestions.length > 0 ? `  (closest live columns on ${o.table}: ${o.suggestions.join(", ")})` : ""
+      return `  - ${o.reference} → column "${o.column}" not in ${o.table}${hint}`
+    })
+    const more = inventedColumns.length > 5 ? `\n  …and ${inventedColumns.length - 5} more.` : ""
+    const head = [
+      `Query blocked — references columns that do not exist in the live catalog:`,
+      lines.join("\n") + more,
+      ``,
+      `The catalog is the live sys.all_columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`,
+    ].join("\n")
+    const first = inventedColumns[0]
+    return {
+      ok: false,
+      error: withFixHint(head, "invented_column"),
+      code: "invented_column",
+      analysis,
+      lesson: getDoctrineLessonTemplate("invented_column")?.({
+        query,
+        detail: `${first.table}.${first.column}`,
+      }) ?? null,
+    }
   }
 
   if (!writeEnabled) {
@@ -231,51 +1211,128 @@ export function validateQuery(query: string, writeEnabled: boolean): string | nu
     const isPureRead = READ_ONLY_PATTERN.test(query)
     const opensWithMutation = TMP_TABLE_OPENER.test(query)
     if (!isPureRead && !opensWithMutation) {
-      return "Write operations are disabled. Only SELECT/WITH queries are allowed " +
-             "(or DDL/DML targeting local #temp tables only)."
+      return {
+        ok: false,
+        error: "Write operations are disabled. Only SELECT/WITH queries are allowed (or DDL/DML targeting local #temp tables only).",
+        code: "write_disabled",
+        analysis,
+      }
     }
     if (opensWithMutation) {
       const offenders = findNonTmpMutations(query)
       if (offenders.length > 0) {
         const list = offenders.map((o) => `${o.label} ${o.target}`).join(", ")
-        return [
-          `Query blocked: write operation against non-temp object(s): ${list}.`,
-          ``,
-          `You may only CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / MERGE / SELECT INTO `,
-          `against LOCAL #temp tables (names starting with a single '#'). Existing schema-qualified `,
-          `tables, views, indexes and global ##temp tables are READ-ONLY.`,
-          ``,
-          `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
-          `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
-        ].join("\n")
+        return {
+          ok: false,
+          error: [
+            `Query blocked: write operation against non-temp object(s): ${list}.`,
+            ``,
+            `You may only CREATE / INSERT / UPDATE / DELETE / DROP / TRUNCATE / MERGE / SELECT INTO `,
+            `against LOCAL #temp tables (names starting with a single '#'). Existing schema-qualified `,
+            `tables, views, indexes and global ##temp tables are READ-ONLY.`,
+            ``,
+            `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
+            `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
+          ].join("\n"),
+          code: "non_temp_mutation",
+          analysis,
+        }
       }
+    }
+  }
+
+  const largeRefCounts = countReferencedLargeObjects(query, options.accessor)
+  const overusedLargeObjects = Array.from(largeRefCounts.entries()).filter(([, count]) => count > 2)
+  if (overusedLargeObjects.length > 0) {
+    const list = overusedLargeObjects.map(([name, count]) => `${name} (${count} references)`).join(", ")
+    return {
+      ok: false,
+      error: [
+        `Query blocked — large object referenced too many times in one batch: ${list}.`,
+        ``,
+        `Large publish views and their persisted mirrors still represent very large scans. Referencing one more than twice usually means the query will rescan the warehouse slice and miss the 2-minute budget.`,
+        `Required fix: Stage keys on the first touch, fetch detail rows on the second touch, then derive every remaining metric from #temp tables only.`,
+      ].join("\n"),
+      code: "large_object_overused",
+      analysis,
     }
   }
 
   // ── Scan guard ────────────────────────────────────────────────
   // Block queries that would trigger a full table/view scan on known large objects.
-  const largeRefs = referencedLargeObjects(query)
+  const largeRefs = referencedLargeObjects(query, options.accessor)
   const scanReason = isUnsafeScan(query, largeRefs)
   if (scanReason) {
     const objects = largeRefs.join(", ")
-    return [
-      `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
-      ``,
-      `Large views like publish.Revenue are UNION views over 10–60 fact tables with 100M–2B rows each.`,
-      `An unfiltered query re-executes the entire view and will run for minutes / never complete.`,
-      ``,
-      `Required fix:`,
-      `1. First resolve the date/key range from a small lookup table:`,
-      `      SELECT MIN(pkDate) AS from, MAX(pkDate) AS to FROM dim.Date WITH (NOLOCK) WHERE calYear = 2025`,
-      `2. Then query the large view WITH a WHERE predicate that narrows the scan:`,
-      `      SELECT ... FROM ${largeRefs[0] ?? "publish.Revenue"} WITH (NOLOCK) WHERE pkMonth BETWEEN <from> AND <to> GROUP BY ...`,
-      `3. Add WITH (NOLOCK) for read-only analytical queries.`,
-      `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
-      `5. If checking what data exists: query sys.partitions or dim.Date — NOT the view itself.`,
-    ].join("\n")
+    return {
+      ok: false,
+      error: scanGuardErrorMessage(objects, scanReason, largeRefs, options.accessor),
+      code: "unsafe_large_object_scan",
+      analysis,
+    }
   }
 
-  return null // valid
+  return { ok: true, error: null, code: null, analysis }
+}
+
+/**
+ * Compose the scan-guard error so the fix-hint uses catalog-derived
+ * facts instead of hardcoded customer names: the FIRST large object the
+ * query touched picks the example mirror/calendar/date-key. When the
+ * catalog can't supply one, the hint falls back to generic shape advice.
+ */
+function scanGuardErrorMessage(
+  objects: string,
+  scanReason: string,
+  largeRefs: string[],
+  accessor?: CatalogAccessor,
+): string {
+  const tc = getTenantConfig()
+  const firstRef = largeRefs[0]
+  const catalog = accessor ? accessor() : null
+  const firstTable = firstRef && catalog ? catalog.getTable(firstRef) : null
+  const firstQn = firstTable?.qualifiedName ?? firstRef ?? "<large-object>"
+
+  const mirror = firstTable && tc.mirrorSchema
+    ? persistedMirrorOf(firstTable.qualifiedName, { accessor, mirrorSchema: tc.mirrorSchema })
+    : null
+  const exampleObject = mirror ?? firstQn
+  const dateKey = firstTable ? dateGrainColumn(firstTable.qualifiedName, { accessor }) : null
+  const calendar = calendarDimensionTable({ accessor })
+  const calendarKey = calendar ? primaryKeyColumns(calendar, { accessor })[0] ?? null : null
+
+  const lines = [
+    `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
+    ``,
+    `Large warehouse views/tables are UNION views or partitioned facts spanning many tables. Use the persisted mirror when available.`,
+    `An unfiltered query re-executes the entire scan and will run for minutes / never complete.`,
+    ``,
+    `Required fix:`,
+  ]
+  if (calendar && calendarKey && dateKey) {
+    lines.push(
+      `1. First resolve the date/key range from the small calendar dimension:`,
+      `      SELECT MIN(${calendarKey}) AS fromKey, MAX(${calendarKey}) AS toKey FROM ${calendar} WITH (NOLOCK) WHERE <date-predicate>`,
+      `2. Then query the large object WITH a WHERE predicate that narrows the scan:`,
+      `      SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} BETWEEN <fromKey> AND <toKey> GROUP BY ...`,
+    )
+  } else if (dateKey) {
+    lines.push(
+      `1. Add a narrowing predicate on the time-grain column \`${dateKey}\` (the catalog's FK to your calendar dimension).`,
+      `2. Then query the large object: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} = <value> GROUP BY ...`,
+    )
+  } else {
+    lines.push(
+      `1. Identify a high-selectivity column on ${firstQn} (PK, FK to a small dim, or a date column) and add a WHERE predicate on it.`,
+      `2. Then query: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE <predicate> GROUP BY ...`,
+    )
+  }
+  lines.push(
+    `3. Add WITH (NOLOCK) for read-only analytical queries.`,
+    `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
+    `5. If checking what data exists: query sys.partitions or the calendar dim — NOT the view itself.`,
+  )
+  return lines.join("\n")
 }
 
 // ── Aggregate-semantic guard ─────────────────────────────────
@@ -338,14 +1395,29 @@ const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
 
 // Source-column-name tokens that indicate the column IS ALREADY pre-aggregated.
 // Used by the soft-warn rule: SUM-ing one of these almost always returns the
-// wrong number (N× the true value).
-//
-// Camelcase-aware: matches either at a word boundary (`\bAverageCredit…`,
-// `EOMBalance`) OR right after a lowercase letter (`MonthlyAvg`, `dailySpot`).
-// We DO NOT require a trailing word boundary — `AverageCreditBalanceZARMTD`
-// must trigger on `Average`, even though `Average` is followed by `C`
-// (camelcase, no `\b` between them).
-const PREAGGREGATED_COL_RE = /(?:\b|(?<=[a-z]))(Average|Avg|Mean|Median|Spot|EOM|Eod|Latest|Snapshot|EndOf|AsOf|StartOf|MTD|YTD|QTD|WTD)/i
+// wrong number (N× the true value). Tokens come from tenant config
+// (`preAggregationTokens`); regex is rebuilt when the config or list reference
+// changes. Camelcase-aware: matches either at a word boundary
+// (`\bAverageCredit…`, `EOMBalance`) OR right after a lowercase letter
+// (`MonthlyAvg`, `dailySpot`). We DO NOT require a trailing word boundary —
+// `AverageCreditBalanceZARMTD` must trigger on `Average`.
+const validationCache = {
+  preAggregatedColReCache: null as { tokensRef: object; re: RegExp } | null,
+}
+
+function preAggregatedColRe(): RegExp {
+  const tokens = getTenantConfig().preAggregationTokens
+  if (validationCache.preAggregatedColReCache && validationCache.preAggregatedColReCache.tokensRef === (tokens as unknown as object)) {
+    return validationCache.preAggregatedColReCache.re
+  }
+  const alternation = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+  // Empty tenant config → regex that never matches.
+  const re = alternation.length > 0
+    ? new RegExp(`(?:\\b|(?<=[a-z]))(${alternation})`, "i")
+    : /a^/
+  validationCache.preAggregatedColReCache = { tokensRef: tokens as unknown as object, re }
+  return re
+}
 
 /** Strip comments + string literals while preserving newline positions for line counts. */
 function stripForScan(query: string): string {
@@ -444,7 +1516,7 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
 
     // ── WARN rule: SUM-like applied to a pre-aggregated column name ──
     if (fnFamily === AggregateFamily.Sum) {
-      const colMatch = PREAGGREGATED_COL_RE.exec(argText)
+      const colMatch = preAggregatedColRe().exec(argText)
       if (colMatch) {
         // Suppress the warning if the alias EXPLICITLY acknowledges that this is
         // a sum of pre-aggregated values — e.g. `SumOfMonthlyAverages`,
@@ -476,9 +1548,38 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
  * subtle hints. Bug-equivalence with a controller spotting it on review is
  * the bar.
  */
-export function getQueryWarnings(query: string): string | null {
+export interface QueryWarningOptions {
+  accessor?: CatalogAccessor
+  branchAccessor?: () => BranchCatalogLike | null
+  /** @deprecated alias for branchAccessor */
+  lineageAccessor?: () => BranchCatalogLike | null
+  /** Per-run set of lowercased schema.table names already profiled. */
+  profiledTables?: ReadonlySet<string> | null
+}
+
+export function getQueryWarnings(
+  query: string,
+  options: QueryWarningOptions | (() => BranchCatalogLike | null) = {},
+): string | null {
+  // Back-compat: a bare accessor function is still accepted.
+  const opts: QueryWarningOptions = typeof options === "function"
+    ? { branchAccessor: options }
+    : options
+  const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? EMPTY_BRANCH_ACCESSOR
+  const profiledTables = opts.profiledTables ?? liveProfiledTables()
+  const rankingAccessor = opts.accessor ?? EMPTY_CATALOG_ACCESSOR
+
   const warns = findAggregateSemanticIssues(query).filter((i) => i.severity === AggregateSeverity.Warn)
-  if (warns.length === 0) return null
+  const branchGaps = detectLineageBranchCoverage(query, branchAccessor)
+  const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
+  const mixedUniverses = detectRankingVsReportingMismatch(query, rankingAccessor)
+  if (
+    warns.length === 0
+    && branchGaps.length === 0
+    && profileTriggers.length === 0
+    && !mixedUniverses
+  ) return null
+
   const lines = [
     `⚠ SQL CORRECTNESS WARNING — review BEFORE trusting the numbers below:`,
     ``,
@@ -488,7 +1589,27 @@ export function getQueryWarnings(query: string): string | null {
     lines.push(`    ${w.message}`)
     lines.push(``)
   }
-  lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+  for (const gap of branchGaps) {
+    lines.push(`  • lineage coverage: ${gap.parent} has ${gap.totalBranches} source branches; this query references only ${gap.referenced.length} of them`)
+    lines.push(`    Referenced: ${gap.referenced.join(", ")}`)
+    lines.push(`    If the ranking and the final reporting both pull from ${gap.parent}, the unreferenced branches will inflate the reporting metric vs the ranking metric.`)
+    lines.push(`    Fix: either rank from the full ${gap.parent} (use the branch-aggregation pattern from the doctrine), or add an explicit \`-- sampled K of N\` comment to confirm the sub-sample is intentional.`)
+    lines.push(``)
+  }
+  for (const view of profileTriggers) {
+    lines.push(`  • profile-first: ${view} is a canonical big view and has not been profiled in this run`)
+    lines.push(`    Call \`profile_data table='${view}'\` (with a narrow \`columns\` list) BEFORE the analytical pass so you know its row count, NULL rates, and key cardinality. Skip this step and the next query may run for minutes or return a misleading row.`)
+    lines.push(``)
+  }
+  if (mixedUniverses) {
+    lines.push(`  • universe mismatch: this query aggregates across a #temp table AND ${mixedUniverses.bigViews.join(", ")}`)
+    lines.push(`    The #temp was likely derived from a sub-set (specific branches, months, or clients). Joining ${mixedUniverses.bigViews.join("/")} unfiltered then SUM/COUNT will report the BIG-view universe, not the #temp universe — even though rows appear filtered.`)
+    lines.push(`    Fix: either (a) derive the aggregate from a single source, (b) filter ${mixedUniverses.bigViews[0]} by the same predicates that built the #temp, or (c) add \`-- universes intentional\` to acknowledge the cross-universe aggregate.`)
+    lines.push(``)
+  }
+  if (warns.length > 0) {
+    lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+  }
   lines.push(`---`)
   return lines.join("\n")
 }

@@ -29,6 +29,13 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "active-users": "Active Users",
   "env-sync": "Sync",
   "operation-log": "Pipelines",
+  "entity-registry": "Entity Registry",
+  "scd2-strategies": "SCD2 Strategies",
+  "freeze-windows":  "Freeze Windows",
+  "sync-proposals": "Sync Proposals",
+  "sync-approvals": "Sync Admin · Approvals",
+  "sync-evidence":  "Sync Evidence",
+  "sync-admin":     "Sync Admin",
 }
 
 interface Props {

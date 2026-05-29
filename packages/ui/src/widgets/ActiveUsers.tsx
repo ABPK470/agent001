@@ -14,7 +14,8 @@
  */
 
 import type { ReactNode } from "react"
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useStore } from "../store"
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -58,8 +59,15 @@ interface HistoryState { rows: HistoryRow[]; total: number; offset: number; load
 type SortKey = "name" | "upn" | "sessions" | "runs24h" | "failed24h" | "tokens24h" | "llmCalls24h" | "totalRuns" | "lastModel" | "firstSeen" | "lastSeen" | "status"
 type SortDir = "asc" | "desc"
 
-const REFRESH_MS = 5000
 const PAGE_SIZE = 50
+
+// Event types whose arrival means the user/run aggregates in this widget
+// may have changed. Used to gate the SSE-driven refresh — we ignore the
+// firehose of step/trace/token events and only react to lifecycle changes.
+const REFRESH_EVENT_PREFIXES = ["run.", "session.", "user.", "notification."] as const
+function isRefreshEvent(type: unknown): boolean {
+  return typeof type === "string" && REFRESH_EVENT_PREFIXES.some((p) => type.startsWith(p))
+}
 
 // ── Sorting helpers ────────────────────────────────────────────
 
@@ -97,6 +105,7 @@ export function ActiveUsers(): ReactNode {
   const [activeRuns, setActiveRuns] = useState<ActiveRunRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const connected = useStore((s) => s.connected)
 
   // Table state
   const [filter, setFilter] = useState("")
@@ -128,14 +137,6 @@ export function ActiveUsers(): ReactNode {
       setLoading(false)
     }
   }, [])
-
-  useEffect(() => {
-    let alive = true
-    const tick = () => { if (alive) void refresh() }
-    tick()
-    const interval = setInterval(tick, REFRESH_MS)
-    return () => { alive = false; clearInterval(interval) }
-  }, [refresh])
 
   // ── Run history (paginated) ──────────────────────────────────
 
@@ -170,6 +171,57 @@ export function ActiveUsers(): ReactNode {
       return next
     })
   }, [history, loadHistory])
+
+  // Refs mirror the latest expanded/history values so the SSE-driven effect
+  // below can read them without listing them as dependencies. Putting
+  // `history` (or the `loadHistory` callback, which closes over setHistory)
+  // in the deps array would cause: event → loadHistory → setHistory →
+  // history identity changes → effect re-runs → fetch — an unbounded loop
+  // that exhausts the browser socket pool (ERR_INSUFFICIENT_RESOURCES).
+  const expandedRef = useRef<string | null>(null)
+  const historyRef = useRef(history)
+  const loadHistoryRef = useRef(loadHistory)
+  useEffect(() => { expandedRef.current = expanded }, [expanded])
+  useEffect(() => { historyRef.current = history }, [history])
+  useEffect(() => { loadHistoryRef.current = loadHistory }, [loadHistory])
+
+  const refreshExpandedHistory = useCallback(() => {
+    const exp = expandedRef.current
+    if (!exp) return
+    const offset = historyRef.current[exp]?.offset ?? 0
+    void loadHistoryRef.current(exp, offset)
+  }, [])
+
+  // SSE-driven refresh: count the lifecycle events we care about and re-run
+  // the fetch whenever that count changes. No polling — the only periodic
+  // refresh in this widget used to be a 5s setInterval; it has been removed.
+  const refreshTick = useStore((s) => s.sseEventLog.filter((e) => isRefreshEvent(e.type)).length)
+
+  useEffect(() => {
+    void refresh()
+    refreshExpandedHistory()
+  }, [refresh, refreshTick, refreshExpandedHistory])
+
+  useEffect(() => {
+    if (!connected) return
+    void refresh()
+    refreshExpandedHistory()
+  }, [connected, refresh, refreshExpandedHistory])
+
+  useEffect(() => {
+    const refreshVisibleData = () => {
+      if (document.visibilityState !== "visible") return
+      void refresh()
+      refreshExpandedHistory()
+    }
+
+    const interval = window.setInterval(refreshVisibleData, 30_000)
+    document.addEventListener("visibilitychange", refreshVisibleData)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", refreshVisibleData)
+    }
+  }, [refresh, refreshExpandedHistory])
 
   // ── Derived data ─────────────────────────────────────────────
 
@@ -313,7 +365,7 @@ export function ActiveUsers(): ReactNode {
               <SortTh k="lastModel"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden lg:table-cell"             label="Model" />
               <SortTh k="firstSeen"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="First Seen" />
               <SortTh k="lastSeen"   current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="Last Seen" />
-              <th className="py-2 px-3 w-6 hidden sm:table-cell" />
+              <th className="py-2 px-3 w-6 hidden sm:table-cell bg-surface" />
             </tr>
           </thead>
           <tbody>
@@ -428,7 +480,7 @@ function SortTh({ k, current, dir, onClick, label, className }: {
   const active = current === k
   return (
     <th
-      className={`py-2 px-3 font-semibold cursor-pointer select-none hover:text-text transition-colors ${active ? "text-text" : ""} ${className ?? ""}`}
+      className={`py-2 px-3 font-semibold cursor-pointer select-none hover:text-text transition-colors bg-surface ${active ? "text-text" : ""} ${className ?? ""}`}
       onClick={() => onClick(k)}
       title={label ? (active ? (dir === "asc" ? "Sort descending ↓" : "Sort ascending ↑") : `Sort by ${label}`) : undefined}
     >
@@ -527,7 +579,7 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
     const active = runSort === k
     return (
       <th
-        className={`py-2 px-3 text-[10px] uppercase tracking-wider font-semibold cursor-pointer select-none whitespace-nowrap transition-colors ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
+        className={`py-2 px-3 text-[10px] uppercase tracking-wider font-semibold cursor-pointer select-none whitespace-nowrap transition-colors bg-canvas ${active ? "text-text" : "text-text-muted/50 hover:text-text-muted"} ${right ? "text-right" : "text-left"}`}
         onClick={() => onRunSort(k)}
       >
         {label}
@@ -543,7 +595,7 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
 
       {/* ── Sticky context banner ──────────────────────── */}
       <div
-        className="sticky top-[34px] z-[18] flex items-center gap-2.5 px-4 py-2.5 bg-surface border-b border-border-subtle rounded-t-md cursor-pointer select-none hover:bg-overlay-hover transition-colors"
+        className="sticky top-[34px] z-[18] flex items-center gap-2.5 px-4 py-2.5 bg-surface hover:bg-canvas border-b border-border-subtle rounded-t-md cursor-pointer select-none transition-colors"
         onClick={onCollapse}
         title="Click to collapse"
       >
@@ -656,17 +708,17 @@ function UserDetail({ user, liveRuns, history, onPageChange, onCollapse }: {
         {history && history.rows.length > 0 && (
           <div className="rounded-b-md">
           <table className={`w-full text-xs border-collapse ${history.loading ? "opacity-40" : ""}`}>
-            <thead className="sticky top-[70px] z-[16]">
+            <thead className="sticky top-[70px] z-[16] bg-canvas">
               <tr className="bg-canvas">
-                <th className="py-2 px-3 w-6" onClick={() => onRunSort("status")} />
-                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default">Run</th>
+                <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />
+                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default bg-canvas">Run</th>
                 <RSortTh k="started"  label="Started" />
                 <RSortTh k="duration" label="Duration" right />
                 <RSortTh k="steps"    label="Steps" right />
                 <RSortTh k="tokens"   label="Tokens" right />
                 <RSortTh k="llmCalls" label="LLM Calls" right />
                 <RSortTh k="model"    label="Model" />
-                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default">Goal</th>
+                <th className="py-2 px-3 text-left text-[10px] uppercase tracking-wider font-semibold text-text-muted/50 cursor-default bg-canvas">Goal</th>
               </tr>
             </thead>
             <tbody>

@@ -6,11 +6,10 @@
  *   sync_execute     : execute a previously-computed plan with safety rails
  */
 
-import { getEnvironments } from "../sync/index.js"
-import { executeSync, previewSync } from "../sync/index.js"
-import { loadPlan } from "../sync/index.js"
-import type { EntityType } from "../sync/index.js"
-import type { Tool } from "../types.js"
+import type { EntityType } from "@mia/sync"
+import { executeSync, getEnvironments, loadPlan, previewSync } from "@mia/sync"
+import type { AgentHost } from "../application/shell/runtime.js"
+import type { Tool } from "../domain/agent-types.js"
 import { getPool } from "./mssql/index.js"
 
 const VALID_ENTITY_TYPES = new Set<EntityType>([
@@ -24,7 +23,7 @@ const VALID_ENTITY_TYPES = new Set<EntityType>([
 
 // ── compare_catalogs ─────────────────────────────────────────────
 
-export const compareCatalogsTool: Tool = {
+function buildCompareCatalogsTool(host: AgentHost): Tool { return {
   name: "compare_catalogs",
   description:
     "Compare the schema (tables + columns) of two MSSQL connections (source vs target). " +
@@ -43,7 +42,7 @@ export const compareCatalogsTool: Tool = {
     const source = String(args.source).trim()
     const target = String(args.target).trim()
     try {
-      const [src, tgt] = await Promise.all([fetchSchema(source), fetchSchema(target)])
+      const [src, tgt] = await Promise.all([fetchSchema(host, source), fetchSchema(host, target)])
       const issues: string[] = []
       // Tables missing on target
       for (const t of src.tables) if (!tgt.tables.has(t)) issues.push(`Missing on target: ${t}`)
@@ -73,10 +72,27 @@ export const compareCatalogsTool: Tool = {
       return `Error: ${e instanceof Error ? e.message : String(e)}`
     }
   },
+} }
+
+export const compareCatalogsTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildCompareCatalogsTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("compareCatalogsTool must be built via createCompareCatalogsTool(host)")
+    },
+  }
+})()
+
+export function createCompareCatalogsTool(host: AgentHost): Tool {
+  return buildCompareCatalogsTool(host)
 }
 
-async function fetchSchema(connection: string): Promise<{ tables: Set<string>; cols: Map<string, Map<string, string>> }> {
-  const { pool } = await getPool(connection)
+async function fetchSchema(host: AgentHost, connection: string): Promise<{ tables: Set<string>; cols: Map<string, Map<string, string>> }> {
+  const { pool } = await getPool(host, connection)
   const r = await pool.request().query(`
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
     FROM INFORMATION_SCHEMA.COLUMNS
@@ -98,7 +114,7 @@ async function fetchSchema(connection: string): Promise<{ tables: Set<string>; c
 
 // ── sync_preview ─────────────────────────────────────────────────
 
-export const syncPreviewTool: Tool = {
+function buildSyncPreviewTool(host: AgentHost): Tool { return {
   name: "sync_preview",
   description:
     "Compute a SyncPlan for migrating one ABI entity (Contract / Dataset / Rule / Pipeline / Gate Metadata / Content) " +
@@ -127,6 +143,7 @@ export const syncPreviewTool: Tool = {
     }
     try {
       const plan = await previewSync({
+        host,
         entityType,
         entityId: args.entityId as string | number,
         source: String(args.source),
@@ -174,11 +191,28 @@ export const syncPreviewTool: Tool = {
       return `Error: ${e instanceof Error ? e.message : String(e)}`
     }
   },
+} }
+
+export const syncPreviewTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildSyncPreviewTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("syncPreviewTool must be built via createSyncPreviewTool(host)")
+    },
+  }
+})()
+
+export function createSyncPreviewTool(host: AgentHost): Tool {
+  return buildSyncPreviewTool(host)
 }
 
-// ── sync_execute ─────────────────────────────────────────────────
+// ── sync_execute ──────────────────────────────────────
 
-export const syncExecuteTool: Tool = {
+function buildSyncExecuteTool(host: AgentHost): Tool { return {
   name: "sync_execute",
   description:
     "Apply a previously-computed sync plan (from sync_preview) to the target environment. " +
@@ -198,31 +232,65 @@ export const syncExecuteTool: Tool = {
     const planId = String(args.planId)
     const confirm = Boolean(args.confirm)
     if (!confirm) return `Error: confirm must be true to execute.`
-    const plan = loadPlan(planId)
+    const plan = loadPlan(host, planId)
     if (!plan) return `Error: plan ${planId} not found or expired.`
     try {
-      const result = await executeSync(planId, { confirm: true, userUpn: "agent" })
+      const result = await executeSync(planId, { host, confirm: true, userUpn: "agent" })
       if (result.success) return `Plan ${planId} executed successfully against ${plan.target}.`
       return `Execute failed: ${result.error}`
     } catch (e) {
       return `Error: ${e instanceof Error ? e.message : String(e)}`
     }
   },
+} }
+
+export const syncExecuteTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildSyncExecuteTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("syncExecuteTool must be built via createSyncExecuteTool(host)")
+    },
+  }
+})()
+
+export function createSyncExecuteTool(host: AgentHost): Tool {
+  return buildSyncExecuteTool(host)
 }
 
 // ── list_environments (helper) ───────────────────────────────────
 
-export const listEnvironmentsTool: Tool = {
+function buildListEnvironmentsTool(host: AgentHost): Tool { return {
   name: "list_environments",
   description: "List all configured ABI environments (source/target candidates for sync).",
   parameters: { type: "object", properties: {}, required: [] },
   async execute() {
-    const envs = getEnvironments()
+    const envs = getEnvironments(host)
     if (envs.length === 0) return "No environments configured."
     const lines = ["Configured ABI environments:"]
     for (const e of envs) {
-      lines.push(`  • ${e.name} — ${e.displayName} (${e.role}, ring ${e.ringOrder}${e.linkedServerName ? `, linkedServer=${e.linkedServerName}` : ""})`)
+      lines.push(`  • ${e.name} — ${e.displayName} (${e.role}, ring ${e.ringOrder})`)
     }
     return lines.join("\n")
   },
+} }
+
+export const listEnvironmentsTool: Tool = (() => {
+  const stub = {} as AgentHost
+  const t = buildListEnvironmentsTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    async execute(_args) {
+      throw new Error("listEnvironmentsTool must be built via createListEnvironmentsTool(host)")
+    },
+  }
+})()
+
+export function createListEnvironmentsTool(host: AgentHost): Tool {
+  return buildListEnvironmentsTool(host)
 }

@@ -15,6 +15,7 @@ import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
+import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -107,7 +108,7 @@ interface ResponseErrorPart {
 type ResponsePart = ResponseProgressPart | ResponseToolPart | ResponseIterationPart | ResponseMarkdownPart | ResponseNarrativePart | ResponseInputPart | ResponseErrorPart
 
 // Invisible marker the backend prepends to LLM-polished failure replies.
-// Mirrors POLISHED_FAILURE_MARKER in packages/agent/src/planner/platform-errors.ts.
+// Mirrors POLISHED_FAILURE_MARKER in packages/agent/src/application/core/planner-cluster/platform-errors.ts.
 const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
 function stripFailureMarker(text: string): string {
   return text.startsWith(POLISHED_FAILURE_MARKER) ? text.slice(POLISHED_FAILURE_MARKER.length) : text
@@ -190,38 +191,100 @@ void TOOL_PAST_TENSE
 // (`run`, `read`) and silently fell through to "used run_command" — that's
 // what produced the buggy "I used run_command `python3 ...`" lines.
 const TOOL_VERB: Record<string, string> = {
+  // Filesystem
   read_file: "read",
   write_file: "wrote",
+  append_file: "appended to",
   replace_in_file: "edited",
-  list_dir: "listed",
-  grep_search: "searched",
+  list_directory: "listed",
   search_files: "searched",
-  file_search: "found",
+  // Shell / commands
   run_command: "ran",
+  // Web / browser
   fetch_url: "fetched",
+  browse_web: "browsed",
+  web_search: "searched the web for",
   browser_check: "checked",
+  browser_auto_login: "auto-logged into",
+  browser_human_handoff: "handed off to user in",
+  // Delegation / planning
   delegate: "delegated to",
+  delegate_parallel: "delegated in parallel to",
   ask_user: "asked",
+  think: "thought about",
+  note: "noted",
+  // Catalog / metadata
   search_catalog: "searched catalog for",
+  compare_catalogs: "compared catalogs of",
+  inspect_definition: "inspected definition of",
+  discover_relationships: "mapped relationships for",
+  profile_data: "profiled",
+  // Database
   explore_mssql_schema: "inspected schema of",
   query_mssql: "queried",
+  export_query_to_file: "exported query to",
+  // Charts
+  get_chart_specs: "loaded chart specs for",
+  // Sync / environments
+  sync_preview: "previewed sync for",
+  sync_execute: "ran sync for",
+  list_environments: "listed environments",
+  // Attachments
+  list_attachments: "listed attachments",
+  read_attachment: "read attachment",
+  import_attachment: "imported attachment",
+  promote_attachment: "promoted attachment",
+  // Reflection / meta tools — normally hidden via HIDDEN_TOOLS, but if they
+  // ever leak into the visible thread they should at least read cleanly
+  // (instead of "used record_table_verdict something").
+  record_table_verdict: "recorded a verdict for",
 }
+
+// Tools whose calls we deliberately suppress from the user-visible thread.
+// These are orchestrator-internal: they run AFTER the user-facing answer
+// (reflection / verdict recording) or are otherwise noise that doesn't help
+// the user follow what the agent is doing. Hidden from individual tool rows,
+// from iteration-block headers, and from the live shimmer label.
+const HIDDEN_TOOLS = new Set<string>([
+  "record_table_verdict",
+])
 
 const VERB_DEFAULT_NOUN: Record<string, string> = {
   read: "files",
   wrote: "files",
+  "appended to": "a file",
   edited: "files",
   listed: "a directory",
   searched: "the codebase",
-  found: "files",
   ran: "a command",
   fetched: "a URL",
+  browsed: "the web",
+  "searched the web for": "something",
   checked: "the browser",
+  "auto-logged into": "the browser",
+  "handed off to user in": "the browser",
   "delegated to": "a subagent",
+  "delegated in parallel to": "subagents",
   asked: "a question",
+  "thought about": "the problem",
+  noted: "an observation",
   "searched catalog for": "tables",
+  "compared catalogs of": "two environments",
+  "inspected definition of": "an object",
+  "mapped relationships for": "a table",
+  profiled: "a table",
   "inspected schema of": "a table",
   queried: "the database",
+  "exported query to": "a file",
+  "loaded chart specs for": "a dataset",
+  "previewed sync for": "an environment",
+  "ran sync for": "an environment",
+  "listed environments": "",
+  "listed attachments": "",
+  "read attachment": "",
+  "imported attachment": "",
+  "promoted attachment": "",
+  "recorded a verdict for": "a table",
 }
 
 function basename(p: string): string {
@@ -299,7 +362,9 @@ function formatVerbPhrase(verb: string, targets: string[]): string {
     if (!unique.includes(t)) unique.push(t)
   }
   if (unique.length === 0) {
-    return `${verb} ${VERB_DEFAULT_NOUN[verb] ?? "something"}`
+    // Unknown verb with no extractable target — humanize cleanly
+    // (drop the placeholder "something" that used to appear here).
+    return VERB_DEFAULT_NOUN[verb] ? `${verb} ${VERB_DEFAULT_NOUN[verb]}` : verb
   }
   if (unique.length === 1) return `${verb} ${unique[0]}`
   if (unique.length === 2) return `${verb} ${unique[0]} and ${unique[1]}`
@@ -357,19 +422,39 @@ function buildIterationHeader(tools: Array<{ tool: string; target?: string }>): 
 const TOOL_PRESENT_TENSE: Record<string, string> = {
   read_file:           "Reading",
   write_file:          "Writing",
+  append_file:         "Appending to",
   replace_in_file:     "Editing",
-  list_dir:            "Listing",
-  grep_search:         "Searching",
+  list_directory:      "Listing",
   search_files:        "Searching",
-  file_search:         "Finding",
   run_command:         "Running",
   fetch_url:           "Fetching",
+  browse_web:          "Browsing",
+  web_search:          "Searching web for",
   browser_check:       "Checking browser",
+  browser_auto_login:  "Logging into",
+  browser_human_handoff: "Handing off to user in",
   delegate:            "Delegating to",
+  delegate_parallel:   "Delegating in parallel to",
   ask_user:            "Asking",
+  think:               "Thinking about",
+  note:                "Noting",
   search_catalog:      "Searching catalog for",
+  compare_catalogs:    "Comparing catalogs of",
+  inspect_definition:  "Inspecting definition of",
+  discover_relationships: "Mapping relationships for",
+  profile_data:        "Profiling",
   explore_mssql_schema:"Inspecting schema of",
   query_mssql:         "Querying",
+  export_query_to_file:"Exporting query to",
+  get_chart_specs:     "Loading chart specs for",
+  sync_preview:        "Previewing sync for",
+  sync_execute:        "Running sync for",
+  list_environments:   "Listing environments",
+  list_attachments:    "Listing attachments",
+  read_attachment:     "Reading attachment",
+  import_attachment:   "Importing attachment",
+  promote_attachment:  "Promoting attachment",
+  record_table_verdict:"Recording verdict for",
 }
 
 function presentTenseLabel(tool: string, target?: string): string {
@@ -381,6 +466,7 @@ function presentTenseLabel(tool: string, target?: string): string {
   }
   return target ? `${verb} ${target}` : verb
 }
+void presentTenseLabel
 
 // Coarse, high-level verb for the parent live shimmer ("Querying" rather
 // than "Querying ;WITH latest_month AS (\n SELECT MAX(...)). Per-tool
@@ -393,15 +479,13 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   write_file:              "Writing",
   replace_in_file:         "Writing",
   append_file:             "Writing",
-  list_dir:                "Listing",
-  grep_search:             "Searching",
+  list_directory:          "Listing",
   search_files:            "Searching",
-  file_search:             "Searching",
   search_catalog:          "Searching",
   web_search:              "Searching",
   run_command:             "Executing",
   query_mssql:             "Executing",
-  export_query_to_file:    "Executing",
+  export_query_to_file:    "Exporting",
   explore_mssql_schema:    "Analyzing",
   inspect_definition:      "Analyzing",
   discover_relationships:  "Analyzing",
@@ -410,14 +494,22 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   fetch_url:               "Fetching",
   browse_web:              "Browsing",
   browser_check:           "Checking",
+  browser_auto_login:      "Logging in",
+  browser_human_handoff:   "Waiting for user",
   delegate:                "Delegating",
   delegate_parallel:       "Delegating",
   ask_user:                "Asking",
   think:                   "Thinking",
+  note:                    "Noting",
   get_chart_specs:         "Loading chart specs",
   sync_preview:            "Synchronizing",
   sync_execute:            "Synchronizing",
   list_environments:       "Synchronizing",
+  list_attachments:        "Reading attachments",
+  read_attachment:         "Reading attachments",
+  import_attachment:       "Importing attachment",
+  promote_attachment:      "Promoting attachment",
+  record_table_verdict:    "Reflecting",
 }
 
 function liveActivityVerb(tool: string): string {
@@ -601,6 +693,55 @@ function pushNarrativePart(
   return parts.concat({ kind: "narrative", id, text: trimmedText, tone })
 }
 
+// Guard against rendering fragmentary thinking previews that look like
+// jibberish in the chat (e.g. "The generic key search noisy target"
+// when the model emitted a clipped reasoning blurb). We require the
+// text to read as a complete-ish thought: end with sentence punctuation
+// AND be long enough to actually carry meaning. When the gate rejects,
+// the bottom shimmer takes over and the user sees a live activity hint
+// instead of a frozen-looking partial sentence.
+function looksLikeCompleteThought(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 40) return false
+  return /[.!?…"”'’)\]]$/.test(t)
+}
+
+// Mid-stream guard for `liveStreamingAnswer`. Returns the longest prefix
+// of `text` that ends at a sentence terminator (or paragraph break) so
+// the chat only ever shows complete sentences. Anything past the last
+// terminator is held back — that tail is incomplete and would otherwise
+// freeze on screen as a fragment between iterations.
+//
+// Terminator family kept in sync with `looksLikeCompleteThought` so the
+// live-stream gate and the post-iteration thinking gate agree on what
+// "a complete thought" looks like.
+//
+// Falls back to the last paragraph break (\n\n) when there is no
+// sentence terminator — useful when the model emits markdown chunks
+// (lists / code) that don't end in punctuation but ARE structurally
+// complete at the paragraph boundary. Returns "" when nothing is yet
+// complete; the caller suppresses the markdown part and the bottom
+// "Working / Executing / …" shimmer takes over.
+function truncateToLastCompleteSentence(text: string): string {
+  const t = text.replace(/\s+$/, "")
+  if (!t) return ""
+  // Scan for the last sentence terminator that is followed by whitespace
+  // or end-of-string — that is the boundary the model has actually
+  // closed. A terminator mid-word (e.g. "v1.2" or "Dr.") is excluded by
+  // the lookahead.
+  const re = /[.!?…"”'’)\]](?=\s|$)/g
+  let lastTerm = -1
+  let m: RegExpExecArray | null
+  while ((m = re.exec(t)) !== null) lastTerm = m.index
+  if (lastTerm >= 0) return t.slice(0, lastTerm + 1)
+  // No sentence terminator yet. If the buffer spans multiple paragraphs
+  // (e.g. a streamed markdown list), keep everything before the last
+  // paragraph break so the partial last paragraph is held back.
+  const lastBreak = text.lastIndexOf("\n\n")
+  if (lastBreak > 0) return text.slice(0, lastBreak).replace(/\s+$/, "")
+  return ""
+}
+
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
   const full = (details ?? "").trim()
   if (!full) return false
@@ -632,6 +773,88 @@ function summarizeThinking(raw: string): string {
   return ""
 }
 void summarizeThinking
+
+function summarizeSqlQualityEntry(entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>): string {
+  const notes: string[] = []
+  if (entry.validationCode) notes.push(`blocked by ${entry.validationCode}`)
+  if (entry.missingPersistedMirrorCandidates.length > 0) {
+    notes.push(`missed persisted mirror for ${entry.missingPersistedMirrorCandidates.join(", ")}`)
+  }
+  const overusedRefs = entry.largeObjectRefs.filter((ref) => ref.count > 2)
+  if (overusedRefs.length > 0) {
+    notes.push(overusedRefs.map((ref) => `${ref.name} referenced ${ref.count}x`).join(", "))
+  }
+  if (entry.tempScalarSubqueryCount > 0) notes.push(`temp scalar subqueries ${entry.tempScalarSubqueryCount}`)
+  if (entry.malformedTempSuffixes.length > 0) notes.push(`bad temp suffix ${entry.malformedTempSuffixes.join(", ")}`)
+  if (entry.missingTempCreations.length > 0) notes.push(`missing temp create ${entry.missingTempCreations.join(", ")}`)
+  if (notes.length === 0) return entry.phase === "executed" ? "checked" : entry.phase
+  return notes.join(" · ")
+}
+
+// Strip the noisy driver/wrapper prefixes off a raw SQL Server error so the
+// chat line reads as the actual server message, not a stack-frame label.
+// Caps length so a giant message (multi-line plan / parser dump) doesn't
+// dominate the conversation — full error remains on the tool-result row.
+function cleanSqlError(raw: string | null | undefined): string {
+  if (!raw) return ""
+  let s = raw.trim()
+  // Drop common driver prefixes like "RequestError: ", "Error: ",
+  // "[Microsoft][ODBC Driver 17 for SQL Server][SQL Server]"
+  s = s.replace(/^(RequestError|Error|TypeError|MssqlError):\s*/i, "")
+  s = s.replace(/^\[[^\]]+\](\[[^\]]+\])*\s*/g, "")
+  // Collapse whitespace and keep first line — server returns the salient
+  // line first; following lines are usually "Procedure …, Line …".
+  const firstLine = s.split(/\r?\n/)[0].trim()
+  const result = firstLine.length > 0 ? firstLine : s
+  return result.length > 240 ? result.slice(0, 240) + "…" : result
+}
+
+// Human-readable narrative for an SQL-quality trace event. Returns "" to
+// suppress narration entirely (e.g. clean `executed` with no notes).
+//
+// Phases (see `packages/agent/src/tools/mssql/tools.ts`):
+//   - `blocked`  → our own validator refused to send the SQL.
+//   - `executed` → sent and returned rows without server error.
+//   - `failed`   → sent, SQL Server itself returned an error at runtime.
+function describeSqlQualityForChat(
+  entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>,
+): { text: string; tone: "neutral" | "error" } {
+  const notes = summarizeSqlQualityEntry(entry)
+  if (entry.phase === "blocked") {
+    const reason = entry.validationCode
+      ? entry.validationCode
+      : notes !== "blocked"
+        ? notes
+        : "validator refused the query"
+    return { text: `I caught a problem in my own SQL before sending it (${reason}).`, tone: "error" }
+  }
+  if (entry.phase === "failed") {
+    const err = cleanSqlError(entry.error)
+    return {
+      text: err
+        ? `SQL Server rejected my query: ${err}`
+        : "SQL Server rejected my query (no error message returned).",
+      tone: "error",
+    }
+  }
+  // executed
+  if (notes && notes !== "checked") {
+    return { text: `Query ran. Quality notes: ${notes}.`, tone: "neutral" }
+  }
+  return { text: "", tone: "neutral" }
+}
+
+// Stable signature of an SQL-quality event for coalescing identical
+// consecutive retries into a single "× N" narrative line. Identical
+// signature == "this is the same failure we already narrated"; bump the
+// counter instead of stacking a duplicate line.
+function sqlQualitySignature(
+  entry: Extract<TraceEntry, { kind: "planner-sql-quality" }>,
+): string {
+  if (entry.phase === "failed") return `failed::${cleanSqlError(entry.error)}`
+  if (entry.phase === "blocked") return `blocked::${entry.validationCode ?? summarizeSqlQualityEntry(entry)}`
+  return `executed::${summarizeSqlQualityEntry(entry)}`
+}
 
 function preserveToggleAnchor(button: HTMLButtonElement | null, toggle: () => void) {
   if (!button) {
@@ -675,6 +898,19 @@ function buildResponseParts(
   let pendingTools: ResponseToolPart[] = []
   let pendingTargets: Array<{ tool: string; target?: string }> = []
   let blockSeq = 0
+  // SQL-quality coalescing state. Consecutive sql-quality events that
+  // produce the same narrative signature (same blocker / same server
+  // error) are collapsed into one narrative line with a "(× N)" suffix
+  // — three retries of the same `Invalid column name 'pkMonth'` now
+  // read as one line, not three identical lines that look like the
+  // agent is stuck in a loop.
+  let lastSqlNarrative: {
+    sig: string
+    narrativeId: string
+    count: number
+    baseText: string
+    tone: "neutral" | "error"
+  } | null = null
 
   const flushIterationBlock = (boundaryIndex: number) => {
     if (pendingTools.length === 0) return
@@ -731,7 +967,7 @@ function buildResponseParts(
           if (next === "tool-call") { leadsToTool = true; break }
           if (next === "thinking" || next === "answer") break
         }
-        if (leadsToTool && entry.text.trim()) {
+        if (leadsToTool && entry.text.trim() && looksLikeCompleteThought(entry.text)) {
           parts = pushNarrativePart(parts, `narrative-thinking-${index}`, entry.text.trim())
         }
         break
@@ -834,11 +1070,60 @@ function buildResponseParts(
         parts = setActivityPart(parts, `repair-${entry.attempt}`, "Repairing", "running", `attempt ${entry.attempt}`, true)
         parts = pushNarrativePart(parts, `narrative-repair-${index}`, `I found an issue and started repair attempt ${entry.attempt}.`, "error")
         break
+      case "planner-sql-quality": {
+        const summary = summarizeSqlQualityEntry(entry)
+        const status: "done" | "error" = entry.phase === "blocked" || entry.phase === "failed" || !!entry.validationCode ? "error" : "done"
+        // Compact "SQL review" progress chip — short phase tag plus a
+        // hint of the cause so the chip itself carries signal even
+        // before the narrative line below.
+        const chipDetail =
+          entry.phase === "failed"
+            ? `failed: ${cleanSqlError(entry.error) || "server error"}`
+            : entry.phase === "blocked"
+              ? `blocked: ${entry.validationCode ?? summary}`
+              : summary
+        parts = parts.concat({
+          kind: "progress",
+          id: `sql-quality-${index}`,
+          label: "SQL review",
+          status,
+          detail: chipDetail,
+        })
+        const { text, tone } = describeSqlQualityForChat(entry)
+        if (!text) {
+          // executed cleanly with no notes — no chat narration needed.
+          lastSqlNarrative = null
+          break
+        }
+        const sig = sqlQualitySignature(entry)
+        if (lastSqlNarrative && lastSqlNarrative.sig === sig) {
+          // Same blocker / same server error as the immediately previous
+          // sql-quality narrative — bump the retry counter in place
+          // instead of stacking a duplicate line.
+          lastSqlNarrative.count += 1
+          const narrId = lastSqlNarrative.narrativeId
+          const updatedText = `${lastSqlNarrative.baseText} (× ${lastSqlNarrative.count})`
+          parts = parts.map((part) =>
+            part.kind === "narrative" && part.id === narrId
+              ? { ...part, text: updatedText }
+              : part,
+          )
+        } else {
+          const narrativeId = `narrative-sql-quality-${index}`
+          parts = pushNarrativePart(parts, narrativeId, text, tone)
+          lastSqlNarrative = { sig, narrativeId, count: 1, baseText: text, tone }
+        }
+        break
+      }
       case "direct_loop_fallback":
         parts = settlePrimaryActivities(parts, "direct")
         parts = setActivityPart(parts, "direct", "Direct", "running", undefined, true)
         break
       case "tool-call": {
+        // Hide orchestrator-internal / meta tools from the visible thread.
+        // They don't help the user follow what's happening and produce
+        // confusing headers like "Used record_table_verdict something".
+        if (HIDDEN_TOOLS.has(entry.tool)) break
         // Once tools start, the bare "Thinking" indicator is no longer
         // truthful — the real activity is the tool call below. Other
         // primary phases (Plan/Generation/Verification) terminate via
@@ -876,6 +1161,9 @@ function buildResponseParts(
       }
       case "tool-result": {
         if (!entry.invocationId) break
+        // No HIDDEN_TOOLS check needed here: tool-result doesn't carry
+        // the tool name, and patchToolStatus is a no-op for invocation
+        // ids we never pushed (because tool-call was filtered out).
         parts = patchToolStatus(parts, entry.invocationId, "done", entry.text)
         // Keep pendingTools mirror in sync so the next flush sees the
         // updated status (and hasRunning flips correctly).
@@ -928,12 +1216,36 @@ function buildResponseParts(
   // reveal cursor — the user sees the typewriter continue smoothly into
   // the final text instead of snapping it in at completion.
   if (liveStreamingAnswer) {
-    parts = parts.map((part) =>
-      part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)
-        ? { ...part, status: "done", shimmer: false }
-        : part,
-    )
-    parts.push({ kind: "markdown", id: `answer-${runId}`, text: stripFailureMarker(liveStreamingAnswer), streaming: true })
+    // ── Mid-stream fragment guard ────────────────────────────────
+    //
+    // `liveStreamingAnswer` is the raw accumulating token buffer for the
+    // current iteration's LLM response. It includes intermediate
+    // reasoning text — the model's "I'm going to look at X next" pre-
+    // tool narration — and gets cleared by `stream.reset` once tool
+    // calls arrive. Between bursts (network jitter, the model pausing,
+    // a tool taking a few seconds to return) the buffer often holds a
+    // truncated half-sentence like "I have attributes next product, fast"
+    // that sits frozen on screen for several seconds and reads as
+    // jibberish. Worse, while ANY text exists in the buffer we suppress
+    // the bottom "Executing / Planning / Thinking" shimmer (see
+    // `hasStreamingAnswer` below) — so the UI looks completely stalled.
+    //
+    // Fix: only render whole sentences. Anything after the last sentence
+    // terminator is held back until the model closes it. When the
+    // truncated string is empty, we don't push a markdown part at all —
+    // and the bottom shimmer carries the "we're still working" signal
+    // for the user. The held-back tail will appear the moment the model
+    // emits its terminator (or in the next iteration's complete-thinking
+    // entry, which has its own gate).
+    const display = truncateToLastCompleteSentence(stripFailureMarker(liveStreamingAnswer))
+    if (display) {
+      parts = parts.map((part) =>
+        part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)
+          ? { ...part, status: "done", shimmer: false }
+          : part,
+      )
+      parts.push({ kind: "markdown", id: `answer-${runId}`, text: display, streaming: true })
+    }
   } else if (finalAnswer) {
     // Pass streaming=true if the run is still active (rare race: completed
     // but render hasn't observed it yet), false otherwise. TypewriterAnswer
@@ -1102,20 +1414,22 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
       {expanded && (hasInput || hasOutput) && (
         <div className="ml-[14px] mt-1 pl-3 space-y-2">
           {hasInput && row.argsFormatted && (
-            extractedInput ? (
-              <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
-            ) : (
-              <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
-            )
+            <div className="rounded-md border border-border-subtle overflow-hidden">
+              {extractedInput ? (
+                <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
+              ) : (
+                <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
+              )}
+            </div>
           )}
           {hasOutput && row.details && (
-            extractedOutput ? (
-              <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
-            ) : (
-              <div className={isError ? "border-l border-error/50 pl-3" : ""}>
+            <div className={`rounded-md border overflow-hidden ${isError ? "border-error/40 bg-error-soft/30" : "border-border-subtle bg-overlay-1"}`}>
+              {extractedOutput ? (
+                <CodeBlock code={extractedOutput.code} lang={extractedOutput.lang} maxHeight={176} />
+              ) : (
                 <ScrollMaskedDetails text={row.details} maxHeight={176} />
-              </div>
-            )
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1505,7 +1819,7 @@ function WorkspaceDiffCard({ runId }: { runId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-overlay-1 overflow-hidden">
+    <div className="rounded-xl border border-border-subtle overflow-hidden">
       <button
         type="button"
         className="flex items-center gap-2 w-full px-3 py-2 text-left"
@@ -1810,7 +2124,7 @@ function TermChatInputBar({
   isRunning: boolean
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   sending: boolean
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  textareaRef: React.Ref<HTMLTextAreaElement>
   attachments: PendingAttachment[]
   onChange: (value: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
@@ -1822,52 +2136,62 @@ function TermChatInputBar({
 }) {
   const attachDisabled = isRunning || !!pendingInput
   return (
-    <div className={`${className} mx-auto bg-panel-2 dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}>
-      <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onAttach}
-          disabled={attachDisabled}
-          title="Attach file"
-          aria-label="Attach file"
-          className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
-        >
-          <Paperclip size={16} />
-        </button>
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter a goal…"}
-          rows={1}
-          disabled={isRunning || !!pendingInput}
-          className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
-        />
-        {isRunning ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
-            title="Cancel"
-          >
-            <Square size={16} fill="currentColor" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={(!input.trim() && attachments.length === 0) || sending}
-            className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-            title="Send"
-          >
-            <Send size={16} />
-          </button>
-        )}
+      <div
+          data-intro-target="termchat-input"
+          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}
+      >
+          <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+          <div className="flex items-center gap-2">
+              <button
+                  type="button"
+                  onClick={onAttach}
+                  disabled={attachDisabled}
+                  title="Attach file"
+                  aria-label="Attach file"
+                  className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+              >
+                  <Paperclip size={16} />
+              </button>
+              <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => onChange(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  autoFocus
+                  placeholder={
+                      pendingInput
+                          ? "Respond in the prompt above ↑"
+                          : "Enter your goal or question here..."
+                  }
+                  rows={1}
+                  disabled={isRunning || !!pendingInput}
+                  className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
+              />
+              {isRunning ? (
+                  <button
+                      type="button"
+                      onClick={onCancel}
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
+                      title="Cancel"
+                  >
+                      <Square size={16} fill="currentColor" />
+                  </button>
+              ) : (
+                  <button
+                      type="button"
+                      onClick={onSend}
+                      disabled={
+                          (!input.trim() && attachments.length === 0) || sending
+                      }
+                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
+                      title="Send"
+                  >
+                      <Send size={16} />
+                  </button>
+              )}
+          </div>
       </div>
-    </div>
-  )
+  );
 }
 
 // ── Main widget ───────────────────────────────────────────────────
@@ -1879,6 +2203,8 @@ export function TermChat() {
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+
+  const { me } = useMe()
 
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
@@ -1893,10 +2219,33 @@ export function TermChat() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const transcriptInnerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const shouldStickToBottomRef = useRef(true)
   const previousActiveRunIdRef = useRef<string | null>(null)
+
+  // Reset the textarea to its intrinsic 1-row height when empty and to
+  // its content's scrollHeight when not. Called both from the callback
+  // ref (so a freshly-mounted textarea — e.g. when the empty-state ↔
+  // chat-state JSX swap toggles which copy of the input bar is in the
+  // tree — gets sized correctly on its very first paint) AND from the
+  // input-change layout effect below (so it grows/shrinks as the user
+  // types). Skipping the scrollHeight write when value is empty matters
+  // because otherwise we'd lock in whatever scrollHeight the browser
+  // reports for an empty textarea (varies by font load + layout context),
+  // which is the root cause of the "input box is huge until F5" bug.
+  const autosizeTextarea = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = "auto"
+    if (el.value.length > 0) {
+      el.style.height = `${el.scrollHeight}px`
+    }
+  }, [])
+
+  const setTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el
+    autosizeTextarea(el)
+  }, [autosizeTextarea])
 
   // Load agents
   useEffect(() => {
@@ -1933,13 +2282,11 @@ export function TermChat() {
     return () => observer.disconnect()
   }, [])
 
-  // Auto-grow textarea
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
-  }, [input])
+  // Auto-grow textarea as the user types. Uses useLayoutEffect so the
+  // height is committed before the browser paints — no visible jump.
+  useLayoutEffect(() => {
+    autosizeTextarea(textareaRef.current)
+  }, [input, autosizeTextarea])
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
@@ -2048,16 +2395,20 @@ export function TermChat() {
     shouldStickToBottomRef.current = isNearBottom(host)
   }, [])
 
-  // Build message list: each "run" is a (user msg, assistant response) pair
-  // Show all non-active terminal runs + the active one at the end
+  // Build message list: each "run" is a (user msg, assistant response) pair.
+  // Show every non-active run (terminal OR in-flight) as history, oldest
+  // first, with the active run pinned at the bottom so the input bar
+  // anchors to the most recent activity. Including in-flight runs here
+  // matters: if `activeRunId` ever drifts to a different run (another
+  // widget calling setActiveRun, an unrelated background SSE event, etc.)
+  // the run the user just started would otherwise vanish from view.
   const displayRuns = useMemo(() => {
-    const TERMINAL = new Set<string>([RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled])
-    const completed = runs
-      .filter((r) => r.id !== activeRunId && TERMINAL.has(r.status))
+    const history = runs
+      .filter((r) => r.id !== activeRunId)
       .slice()
       .reverse()
-    if (activeRun) return [...completed, activeRun]
-    return completed
+    if (activeRun) return [...history, activeRun]
+    return history
   }, [runs, activeRunId, activeRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
@@ -2129,13 +2480,13 @@ export function TermChat() {
         >
           {showEmptyState && (
             <div className="flex flex-col items-center justify-center min-h-[58vh] px-6 text-center">
-              <div className="w-full max-w-[860px] space-y-10">
-                <div className="space-y-1.5">
+              <div className="w-full max-w-[860px] space-y-8">
+                <div className="space-y-2">
                   <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
-                    What can I help you with today?
+                    What are you working on?
                   </p>
-                  <p className="text-[13px] leading-5 text-text-faint max-w-[620px] mx-auto">
-                    Ask for business data, metadata analysis, reports, or synchronization between our environments.
+                  <p className="text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto">
+                    Query business data, inspect metadata or run environment synchronization.
                   </p>
                 </div>
                 <TermChatInputBar
@@ -2143,7 +2494,7 @@ export function TermChat() {
                   isRunning={isRunning}
                   pendingInput={pendingInput}
                   sending={sending}
-                  textareaRef={textareaRef}
+                  textareaRef={setTextareaRef}
                   attachments={pendingAttachments}
                   onChange={setInput}
                   onKeyDown={onKey}
@@ -2154,7 +2505,7 @@ export function TermChat() {
                   className="w-full max-w-[860px]"
                 />
                 {attachError && (
-                  <p className="-mt-6 text-[12px] text-error text-center">{attachError}</p>
+                  <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
                 )}
               </div>
             </div>
@@ -2162,14 +2513,29 @@ export function TermChat() {
 
           {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className="space-y-6">
-              {/* User goal */}
+              {/* User goal — with optional attribution for admin-view runs */}
               <div className="flex justify-end py-8">
-                <div
-                  className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
-                  style={{ boxShadow: "var(--shadow-bubble)" }}
-                >
-                  {run.goal}
-                </div>
+                {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
+                      {run.displayName ?? run.upn}
+                    </span>
+                    <div
+                      className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                      style={{ boxShadow: "var(--shadow-bubble)" }}
+                    >
+                      {run.goal}
+                    </div>
+                  </div>
+                )}
+                {(!run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()) && (
+                  <div
+                    className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                    style={{ boxShadow: "var(--shadow-bubble)" }}
+                  >
+                    {run.goal}
+                  </div>
+                )}
               </div>
 
               {/* Agent response */}
@@ -2196,7 +2562,7 @@ export function TermChat() {
             isRunning={isRunning}
             pendingInput={pendingInput}
             sending={sending}
-            textareaRef={textareaRef}
+            textareaRef={setTextareaRef}
             attachments={pendingAttachments}
             onChange={setInput}
             onKeyDown={onKey}

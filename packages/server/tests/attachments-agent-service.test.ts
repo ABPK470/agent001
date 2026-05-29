@@ -5,10 +5,10 @@
  *   - sandbox path validation (rejects ../ , absolute, NUL, drive escape)
  *   - text/binary classification on read()
  *   - importToSandbox copies bytes and records the import row
- *   - list() defaults to the active run (resolved via HostedPolicyContext)
+ *   - list() defaults to the active run (resolved from explicit bound context)
  */
 
-import { runWithPolicyContext, type HostedPolicyContext } from "@mia/agent"
+import type { HostedPolicyContext } from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -49,10 +49,18 @@ function makeCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
   }
 }
 
+async function withAttachmentService<T>(
+  ctx: HostedPolicyContext,
+  fn: (service: import("@mia/agent").AttachmentService) => Promise<T>,
+): Promise<T> {
+  const { createServerAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+  return fn(createServerAttachmentService(() => ctx))
+}
+
 describe("server attachment service", () => {
   it("rejects path-traversal and absolute destinations", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -64,18 +72,18 @@ describe("server attachment service", () => {
       bytes: new TextEncoder().encode("hello"),
     })
 
-    await runWithPolicyContext(makeCtx(), async () => {
-      await expect(serverAttachmentService.importToSandbox(a.id, "../escape.txt")).rejects.toThrow(/escapes/)
-      await expect(serverAttachmentService.importToSandbox(a.id, "/abs/path.txt")).rejects.toThrow(/sandbox-relative/)
-      await expect(serverAttachmentService.importToSandbox(a.id, "")).rejects.toThrow(/empty/)
-      await expect(serverAttachmentService.importToSandbox(a.id, "with\0null.txt")).rejects.toThrow(/illegal/)
+    await withAttachmentService(makeCtx(), async (service) => {
+      await expect(service.importToSandbox(a.id, "../escape.txt")).rejects.toThrow(/escapes/)
+      await expect(service.importToSandbox(a.id, "/abs/path.txt")).rejects.toThrow(/sandbox-relative/)
+      await expect(service.importToSandbox(a.id, "")).rejects.toThrow(/empty/)
+      await expect(service.importToSandbox(a.id, "with\0null.txt")).rejects.toThrow(/illegal/)
     })
   })
 
   it("imports a file into the sandbox and records the import", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
     const { uploadAttachment, serverAttachmentService, listAttachmentImports }
-      = await import("../src/attachments/index.js")
+      = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -87,8 +95,8 @@ describe("server attachment service", () => {
       bytes: new TextEncoder().encode("a,b\n1,2\n"),
     })
 
-    const result = await runWithPolicyContext(makeCtx(), () =>
-      serverAttachmentService.importToSandbox(a.id, "inputs/data.csv"),
+    const result = await withAttachmentService(makeCtx(), (service) =>
+      service.importToSandbox(a.id, "inputs/data.csv"),
     )
     expect(result.sandboxPath).toBe(join(sandboxRoot, "inputs/data.csv"))
     expect(result.sizeBytes).toBe(8)
@@ -100,8 +108,8 @@ describe("server attachment service", () => {
   })
 
   it("read() returns text for text-media and binary for the rest, honouring maxBytes", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -117,14 +125,14 @@ describe("server attachment service", () => {
       bytes: new Uint8Array([1, 2, 3, 4, 5]),
     })
 
-    await runWithPolicyContext(makeCtx(), async () => {
-      const t = await serverAttachmentService.read(text.id, { maxBytes: 4 })
+    await withAttachmentService(makeCtx(), async (service) => {
+      const t = await service.read(text.id, { maxBytes: 4 })
       expect(t.kind).toBe("text")
       expect(t.text).toBe("abcd")
       expect(t.truncated).toBe(true)
       expect(t.sizeBytes).toBe(10)
 
-      const b = await serverAttachmentService.read(bin.id)
+      const b = await service.read(bin.id)
       expect(b.kind).toBe("binary")
       expect(b.bytes).toEqual(new Uint8Array([1, 2, 3, 4, 5]))
       expect(b.truncated).toBe(false)
@@ -132,8 +140,8 @@ describe("server attachment service", () => {
   })
 
   it("list() defaults to the active run when no filter is supplied", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -143,16 +151,16 @@ describe("server attachment service", () => {
     await uploadAttachment({ scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "a.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("x") })
     await uploadAttachment({ scope: "run", runId: "run-other", ownerUpn: "u@x", originalName: "b.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("y") })
 
-    const rows = await runWithPolicyContext(makeCtx({ runId: "run-1" }), () =>
-      serverAttachmentService.list(),
+    const rows = await withAttachmentService(makeCtx({ runId: "run-1" }), (service) =>
+      service.list(),
     )
     expect(rows).toHaveLength(1)
     expect(rows[0]?.originalName).toBe("a.txt")
   })
 
   it("throws a clear error when called outside a run context", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { serverAttachmentService } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
@@ -161,8 +169,8 @@ describe("server attachment service", () => {
   })
 
   it("promoteFromSandbox stores generated files with source=generated bound to the run", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { serverAttachmentService, getAttachment } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { serverAttachmentService, getAttachment } = await import("../src/adapters/persistence/attachments/index.js")
     const { writeFileSync, mkdirSync } = await import("node:fs")
     _setDb(testDb)
     _migrate(testDb)
@@ -175,9 +183,9 @@ describe("server attachment service", () => {
     mkdirSync(join(sandboxRoot, "out"), { recursive: true })
     writeFileSync(join(sandboxRoot, "out/report.csv"), "a,b\n1,2\n")
 
-    const meta = await runWithPolicyContext(
+    const meta = await withAttachmentService(
       makeCtx({ runId: "run-promote", actorUpn: "owner@example.com", sessionId: "sid-x" }),
-      () => serverAttachmentService.promoteFromSandbox("out/report.csv"),
+      (service) => service.promoteFromSandbox("out/report.csv"),
     )
 
     expect(meta.normalizedName).toBe("report.csv")
@@ -194,15 +202,15 @@ describe("server attachment service", () => {
   })
 
   it("promoteFromSandbox refuses paths that escape the sandbox", async () => {
-    const { _setDb, _migrate } = await import("../src/db/index.js")
-    const { serverAttachmentService } = await import("../src/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb);
 
-    await runWithPolicyContext(makeCtx(), async () => {
-      await expect(serverAttachmentService.promoteFromSandbox("../escape.txt")).rejects.toThrow(/escapes/)
-      await expect(serverAttachmentService.promoteFromSandbox("/abs/path.txt")).rejects.toThrow(/sandbox-relative/)
+    await withAttachmentService(makeCtx(), async (service) => {
+      await expect(service.promoteFromSandbox("../escape.txt")).rejects.toThrow(/escapes/)
+      await expect(service.promoteFromSandbox("/abs/path.txt")).rejects.toThrow(/sandbox-relative/)
     })
   })
 })

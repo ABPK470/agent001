@@ -26,8 +26,8 @@ interface BuildOptions {
 
 async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   // Dynamic import after env is set so storage uses our temp dir.
-  const { _setDb, _migrate } = await import("../src/db/index.js")
-  const { registerAttachmentRoutes } = await import("../src/routes/attachments.js")
+  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { registerAttachmentRoutes } = await import("../src/api/attachments.js")
   _setDb(testDb)
   _migrate(testDb)
   seedTestUsers(testDb);

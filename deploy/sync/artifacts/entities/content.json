@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "id": "content",
+  "displayName": "Content",
+  "description": "Content sync definition bootstrapped from legacy pipeline ground truth.",
+  "rootTable": "gate.Content",
+  "idColumn": "contentId",
+  "labelColumn": "title",
+  "selfJoinColumn": "parentContentId",
+  "legacy": {
+    "pipelineId": 692,
+    "entrySproc": "core.uspSyncContentObjectsTran"
+  },
+  "governance": {
+    "approvalPolicyId": null,
+    "freezeWindowIds": [],
+    "riskMultiplier": 1
+  },
+  "strategy": {
+    "strategyId": "mymi-scd2",
+    "strategyVersion": "latest"
+  },
+  "bindings": {
+    "serviceProfileRef": "default",
+    "environmentPolicyRef": "default"
+  },
+  "ownership": {
+    "team": "sync-platform",
+    "owner": null,
+    "reviewStatus": "legacy-review-required",
+    "notes": [
+      "Bootstrapped from legacy pipeline ground truth.",
+      "Content still contains inferred optional scope that requires review."
+    ]
+  },
+  "metadata": {
+    "tables": [
+      {
+        "name": "gate.Content",
+        "scopeColumn": "contentId",
+        "predicate": "contentId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "gate.ContentLink",
+        "scopeColumn": "contentId",
+        "predicate": "contentId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "gate.UserGroupPermission",
+        "scopeColumn": "contentId",
+        "predicate": "contentId = {id}",
+        "source": "fk-only",
+        "verified": false,
+        "groundedByPipeline": false,
+        "enabledByDefault": false,
+        "userControllable": true,
+        "note": "Predicate inferred from FK graph. Verify against core.uspSyncContentObjectsTran body."
+      },
+      {
+        "name": "gate.ContentType",
+        "scopeColumn": "contentTypeId",
+        "predicate": "contentTypeId IN (SELECT contentTypeId FROM [gate].[Content] WHERE contentId = {id})",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "gate.ContentLinkType",
+        "scopeColumn": "contentLinkTypeId",
+        "predicate": "contentLinkTypeId IN (SELECT contentLinkTypeId FROM [gate].[ContentLink] WHERE contentId = {id})",
+        "source": "pipeline-only",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      }
+    ],
+    "executionOrder": [
+      "gate.Content",
+      "gate.ContentLink",
+      "gate.ContentType",
+      "gate.ContentLinkType",
+      "gate.UserGroupPermission"
+    ],
+    "reverseOrder": [
+      "gate.UserGroupPermission",
+      "gate.ContentLinkType",
+      "gate.ContentType",
+      "gate.ContentLink",
+      "gate.Content"
+    ],
+    "discrepancies": []
+  },
+  "executionFlow": {
+    "steps": [
+      {
+        "id": "metadata-sync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected content scope."
+      },
+      {
+        "id": "handle-dependencies",
+        "phase": "post-metadata",
+        "kind": "handleDependencies",
+        "title": "Handle dependencies",
+        "description": "Refresh downstream content dependency state.",
+        "objectName": "content"
+      }
+    ]
+  },
+  "provenance": {
+    "kind": "legacy-migration",
+    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
+    "sourceVersion": "2026-05-29T12:08:36.914Z"
+  }
+}

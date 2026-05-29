@@ -3,18 +3,17 @@
  *
  * Issued queries (in order):
  *   Q_OBJECTS, Q_COLUMNS, Q_FKS                      — required, build core graph
- *   Q_FULL_VIEW_DEPS                                  — non-fatal, view source rows + auto-lineage
+ *   Q_FULL_VIEW_DEPS                                  — non-fatal, view source rows
  *   Q_VIEW_DEFINITIONS                                — non-fatal, attaches CREATE VIEW SQL
  *   Q_SYS_COLUMNS  (in parallel via buildSysCatalog) — non-fatal, sys.* catalog
  *
- * Returns the values needed by the CatalogGraph constructor along with
- * any auto-lineage rows that should be merged after construction.
+ * Returns the values needed by the CatalogGraph constructor.
  *
  * @module
  */
 
+import type { AgentHost } from "../../../application/shell/runtime.js"
 import { getPool } from "../../mssql/index.js"
-import { buildAutoLineage, type ViewDepRow } from "../auto-lineage.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"
 import type {
@@ -23,7 +22,6 @@ import type {
     CatalogTable,
     ImplicitEdge,
     SysEntry,
-    ViewLineage,
 } from "../types.js"
 import { buildSysCatalog } from "./sys-catalog.js"
 
@@ -35,11 +33,10 @@ export interface CatalogLoadResult {
   implicitEdges: ImplicitEdge[]
   viewSourceRows: Map<string, number>
   sysCatalog: SysEntry[]
-  autoLineage: ViewLineage[]
 }
 
-export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoadResult> {
-  const { pool } = await getPool(connection)
+export async function loadCatalogFromDb(host: AgentHost, connection?: string): Promise<CatalogLoadResult> {
+  const { pool } = await getPool(host, connection)
   // Start sys catalog fetch in parallel with user catalog (non-fatal if it fails)
   const sysCatalogPromise = buildSysCatalog(pool)
 
@@ -107,29 +104,22 @@ export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoa
   // Step 5: Compute implicit join edges (shared column names + compatible types)
   const implicitEdges = computeImplicitEdges(tables, columnIndex)
 
-  // Step 6: View dependencies — single query gives us:
-  //   (a) per-view source-row totals (filter source_type='U', sum physical table rows)
-  //   (b) comprehensive auto-lineage for ALL views (tables + view sources combined)
-  // Non-fatal: older SQL Server versions or restricted permissions skip both.
+  // Step 6: View dependencies — per-view source-row totals (filter
+  // source_type='U', sum physical table rows). Non-fatal: older SQL
+  // Server versions or restricted permissions skip it.
   const viewSourceRows = new Map<string, number>()
-  let autoLineage: ViewLineage[] = []
   try {
     const depResult = await pool.request().query(Q_FULL_VIEW_DEPS)
-    const depRows: ViewDepRow[] = depResult.recordset.map((r: Record<string, unknown>) => ({
-      viewName:   String(r.view_name),
-      sourceName: String(r.source_name),
-      sourceType: String(r.source_type),
-    }))
-
-    for (const row of depRows) {
-      if (row.sourceType !== "U") continue
-      const refTable = tables.get(row.sourceName)
+    for (const r of depResult.recordset) {
+      const sourceType = String(r.source_type)
+      if (sourceType !== "U") continue
+      const viewName = String(r.view_name)
+      const sourceName = String(r.source_name)
+      const refTable = tables.get(sourceName)
       if (refTable?.rowCount) {
-        viewSourceRows.set(row.viewName, (viewSourceRows.get(row.viewName) ?? 0) + refTable.rowCount)
+        viewSourceRows.set(viewName, (viewSourceRows.get(viewName) ?? 0) + refTable.rowCount)
       }
     }
-
-    autoLineage = buildAutoLineage(tables, depRows)
   } catch { /* non-fatal */ }
 
   // Step 7: Fetch view definitions from sys.sql_modules (non-fatal)
@@ -147,5 +137,5 @@ export async function loadCatalogFromDb(connection?: string): Promise<CatalogLoa
   // Step 8: Await sys catalog
   const sysCatalog = await sysCatalogPromise
 
-  return { tables, nameIndex, columnIndex, adjacency, implicitEdges, viewSourceRows, sysCatalog, autoLineage }
+  return { tables, nameIndex, columnIndex, adjacency, implicitEdges, viewSourceRows, sysCatalog }
 }

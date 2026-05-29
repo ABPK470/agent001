@@ -3,7 +3,7 @@
  *
  * Uses GitHub Device Flow with the VS Code Copilot extension's OAuth client
  * to obtain a token compatible with the Copilot internal API:
- *   1. Device Flow → GitHub OAuth token (cached to ~/.mia/copilot-token.json)
+ *   1. Device Flow → GitHub OAuth token (cached to ~/.agent001/copilot-token.json)
  *   2. OAuth token → Copilot session token via api.github.com/copilot_internal/v2/token
  *   3. Session token → chat completions via the Copilot endpoint
  *
@@ -14,11 +14,10 @@
  * Requires an active GitHub Copilot Pro/Business/Enterprise subscription.
  */
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@mia/agent"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@agent001/agent"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { MessageRole } from "@mia/agent"
 
 function safeParseArgs(raw: string): Record<string, unknown> {
   try {
@@ -34,7 +33,7 @@ function safeParseArgs(raw: string): Record<string, unknown> {
  */
 const COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98"
 
-const TOKEN_CACHE_DIR = join(homedir(), ".mia")
+const TOKEN_CACHE_DIR = join(homedir(), ".agent001")
 const TOKEN_CACHE_PATH = join(TOKEN_CACHE_DIR, "copilot-token.json")
 
 interface CachedOAuthToken {
@@ -58,7 +57,7 @@ export class CopilotChatClient implements LLMClient {
 
   constructor(opts?: { token?: string; model?: string }) {
     this.oauthToken = opts?.token ?? null
-    this.model = opts?.model ?? "gpt-5.4"
+    this.model = opts?.model ?? "gpt-4o"
   }
 
   // ── OAuth token management ───────────────────────────────────
@@ -135,7 +134,7 @@ export class CopilotChatClient implements LLMClient {
       }
 
       if (poll.access_token) {
-        console.log("  ✓ Authorized! Token cached to ~/.mia/copilot-token.json\n")
+        console.log("  ✓ Authorized! Token cached to ~/.agent001/copilot-token.json\n")
         saveCachedToken({
           access_token: poll.access_token,
           token_type: poll.token_type ?? "bearer",
@@ -436,9 +435,9 @@ interface ApiMessage {
 }
 
 function formatMessage(msg: Message): ApiMessage {
-  if (msg.role === MessageRole.Assistant && msg.toolCalls?.length) {
+  if (msg.role === "assistant" && msg.toolCalls?.length) {
     return {
-      role: MessageRole.Assistant,
+      role: "assistant",
       content: msg.content,
       tool_calls: msg.toolCalls.map((tc) => ({
         id: tc.id,
@@ -451,9 +450,9 @@ function formatMessage(msg: Message): ApiMessage {
     }
   }
 
-  if (msg.role === MessageRole.Tool) {
+  if (msg.role === "tool") {
     return {
-      role: MessageRole.Tool,
+      role: "tool",
       content: msg.content,
       tool_call_id: msg.toolCallId,
     }

@@ -37,7 +37,7 @@ const COLS = 36
 const ROWS = 20
 
 // ── Wordmark ─────────────────────────────────────────────────────────────
-const WORD = "agentMyMI"
+const WORD = "MI:A"
 const SCRAMBLE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*<>?/+="
 const SCRAMBLE_TICK_MS     = 50
 const SCRAMBLE_DURATION_MS = 90

@@ -160,10 +160,13 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Warm off-white / paper aesthetic per design reference */
-  --canvas: #efeae0;
-  --panel: #f6f2ea;
-  --panel-2: #fbf8f1;
+  /* Warm off-white / paper aesthetic per design reference.
+     Palette lifted one step lighter (2026-05): canvas takes what used to
+     be --panel; each surface shifts up so the whole app reads lighter
+     while preserving contrast relationships between layers. */
+  --canvas: #f6f2ea;
+  --panel: #fbf8f1;
+  --panel-2: #ffffff;
   --panel-3: #ffffff;
 
   --overlay-1: rgba(0, 0, 0, 0.025);
@@ -204,7 +207,7 @@
   --info-soft: rgba(29, 78, 216, 0.10);
 
   --scrim: rgba(0, 0, 0, 0.40);
-  --bubble-user: #e8e2d3;
+  --bubble-user: #efeae0;
   --shadow-bubble: 0 2px 8px rgba(60, 50, 30, 0.06);
 
   --dt-int: #1d4ed8;
@@ -218,7 +221,7 @@
   --sa: #18181b;
   --sd: #c0bbac;
 
-  --bg: #efeae0;
+  --bg: #f6f2ea;
 }
 
 /* ── Base ──────────────────────────────────────────────────────── */
@@ -277,6 +280,66 @@ body {
 
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Generic form input ──────────────────────────────────────────
+ * Used across admin modals (entity-registry, etc.). Matches the
+ * platform-native style of EnvSync search inputs.
+ */
+.input {
+  width: 100%;
+  background: var(--color-panel-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  padding: 0.375rem 0.5rem;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 120ms;
+}
+.input:focus {
+  border-color: var(--color-accent);
+}
+.input::placeholder {
+  color: var(--color-text-faint);
+}
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.modal-surface .input {
+  background: var(--color-panel);
+  border-color: var(--color-border);
+}
+.modal-control {
+  width: 100%;
+  background: color-mix(in srgb, var(--color-panel-2) 78%, transparent);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 120ms, background-color 120ms;
+}
+.modal-control:focus {
+  border-color: var(--color-accent);
+  background: var(--color-panel-2);
+}
+.modal-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.modal-control-group {
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-panel-2) 78%, transparent);
+}
+textarea.input {
+  font-family: var(--font-mono);
+  resize: vertical;
 }
 
 /* ── Activity shimmer — "Thinking" sweep animation ────────────── */
@@ -459,4 +522,457 @@ body {
   .group:hover .group-hover\:opacity-60 {
     opacity: unset;
   }
+}
+
+/* ── Intro route / single-pill login ────────────────────────────── */
+
+@keyframes intro-slash-cursor {
+  0%, 46% { opacity: 1; }
+  47%, 100% { opacity: 0.24; }
+}
+
+/* Shrink the pill to a small orb, then expand a destination-coloured
+   cover via box-shadow until it fills the viewport. The orb's own
+   border / drop-shadow are nulled the moment it reaches --canvas so
+   there is no visible disc / ring sitting on top of the cover. */
+@keyframes intro-orb-close {
+  0% {
+    width: min(calc(100vw - 40px), 1520px);
+    min-height: 86px;
+    border-radius: 999px;
+    background: #1d1f23;
+    border-color: rgba(255, 247, 235, 0.82);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+  }
+  44% {
+    width: 96px;
+    min-height: 86px;
+    border-radius: 999px;
+    background: #1d1f23;
+    border-color: rgba(255, 247, 235, 0.82);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+  }
+  /* Hard cut: dark pill → invisible canvas-coloured disc with no
+     border or shadow. From here only the expanding cover is visible. */
+  45% {
+    width: 96px;
+    min-height: 86px;
+    border-radius: 999px;
+    background: var(--canvas);
+    border-color: transparent;
+    box-shadow: 0 0 0 0 var(--canvas);
+  }
+  100% {
+    width: 96px;
+    min-height: 86px;
+    border-radius: 999px;
+    background: var(--canvas);
+    border-color: transparent;
+    box-shadow: 0 0 0 200vmax var(--canvas);
+  }
+}
+
+.intro-page {
+  position: relative;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  /* Match the destination so the post-orb expansion is a no-op visually. */
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.intro-centerbar {
+  position: relative;
+  z-index: 3;
+  width: min(calc(100vw - 40px), 1520px);
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 26px;
+  /* Dark pill regardless of theme — this is the design. */
+  background: #1d1f23;
+  color: #f4efe7;
+  border-radius: 999px;
+  border: 1.4px solid rgba(255, 247, 235, 0.82);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.intro-centerbar__prompt {
+  font-size: clamp(34px, 3.4vw, 56px);
+  line-height: 1;
+  color: rgba(244, 239, 231, 0.98);
+  animation: intro-slash-cursor 1.05s steps(1, end) infinite;
+}
+
+.intro-centerbar__rail {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.intro-centerbar__display {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  pointer-events: none;
+}
+
+.intro-centerbar__segment,
+.intro-centerbar__placeholder {
+  font-size: clamp(34px, 3.4vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  white-space: pre;
+}
+
+.intro-centerbar__segment--prefix,
+.intro-centerbar__segment--active {
+  color: rgba(244, 239, 231, 0.98);
+}
+
+.intro-centerbar__segment--muted,
+.intro-centerbar__segment--sep {
+  color: rgba(244, 239, 231, 0.32);
+}
+
+.intro-centerbar__placeholder {
+  color: rgba(244, 239, 231, 0.32);
+  text-transform: lowercase;
+  white-space: nowrap;
+  margin-left: 0.15ch;
+}
+
+.intro-centerbar__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: clamp(34px, 3.4vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: transparent;
+  caret-color: transparent;
+}
+
+.intro-centerbar--error {
+  border-color: rgba(248, 113, 113, 0.88);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(248, 113, 113, 0.24);
+}
+
+.intro-centerbar--entering {
+  overflow: hidden;
+  animation: intro-orb-close 1100ms cubic-bezier(0.55, 0.04, 0.18, 1) forwards;
+  pointer-events: none;
+}
+
+.intro-centerbar--entering .intro-centerbar__prompt,
+.intro-centerbar--entering .intro-centerbar__rail {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+@media (max-width: 720px) {
+  .intro-centerbar {
+    width: min(calc(100vw - 18px), 1520px);
+    min-height: 72px;
+    padding: 0 20px;
+  }
+}
+
+/* ───────────────────────── intro3 shell transition ─────────────────────────
+   Surgical block for the conversational login flow → main platform morph.
+   All selectors are scoped to .intro3-* so they touch nothing else.
+   Revert: delete this block. */
+
+.intro3-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: inherit;
+}
+
+/* ── Generative ASCII field ─────────────────────────────────────────── */
+/* Sits behind every intro3 child but above the canvas bg. Pointer-events
+   off so it never blocks the input. Fades out during the morph so the
+   platform surface comes through clean. */
+.intro3-ascii-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.intro3-root--entering .intro3-ascii-field {
+  opacity: 0;
+}
+/* All other intro3 children must sit above the ascii field. */
+.intro3-root > header,
+.intro3-root > main,
+.intro3-root > .intro3-input-pad {
+  position: relative;
+  z-index: 1;
+}
+
+/* Crystal cells — glyphs that haven't settled yet appear as muted
+   ASCII noise (same ink as the field) so the text reads as coalescing
+   out of the bg, then locks into normal weight. Monospace width keeps
+   the line from jittering as letters swap. */
+.intro3-crystal-cell {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+/* ── Header (h-14, mirrors Toolbar position & sizing) ───────────────── */
+.intro3-header {
+  background: transparent;
+  transition: background-color 700ms cubic-bezier(0.4, 0, 0.2, 1) 300ms;
+}
+.intro3-root--entering .intro3-header {
+  background: var(--canvas);
+}
+
+/* ── MI:A wordmark — scrambled decode on load, collapses on morph ─── */
+/* Same font / palette as WelcomeIntro: mono, single text colour, bold. */
+.intro3-wordmark {
+  display: inline-flex;
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  max-width: 6ch;
+  opacity: 1;
+  margin-left: 0;
+  transition:
+    max-width   600ms cubic-bezier(0.4, 0, 0.2, 1) 0ms,
+    opacity     320ms ease 0ms,
+    margin-left 600ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+}
+.intro3-root--entering .intro3-wordmark {
+  /* MI:A collapses as part of the transition — the platform Toolbar
+     has no wordmark, so it slides away cleanly during the morph. */
+  max-width: 0;
+  opacity: 0;
+  margin-left: -0.5rem;
+}
+
+/* ── Route overlay cross-fade ──────────────────────────────────────── */
+/* The intro renders on top of <App/> during the layered phase.
+   When the morph finishes we cross-fade the overlay to 0 over the
+   already-painted App below — no pop, no reload-blip. */
+.intro3-route-overlay {
+  opacity: 1;
+  transition: opacity 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.intro3-route-overlay--fading {
+  opacity: 0;
+  pointer-events: none;
+}
+.intro3-wm-letter {
+  display: inline-block;
+  width: 0.7em;
+  text-align: center;
+  color: var(--text);
+}
+.intro3-wm-scramble {
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+
+/* ── Stage (Canvas-equivalent) ──────────────────────────────────────── */
+/* Staggered transition-delays cascade the reveal so it feels continuous
+   rather than a single hard edge: header(0) → stage(120) → widget(240)
+   → handle(360) → input(480). */
+.intro3-stage {
+  padding: 0;
+  transition: padding 700ms cubic-bezier(0.4, 0, 0.2, 1) 120ms;
+}
+.intro3-root--entering .intro3-stage {
+  padding: 0.5rem;            /* matches Canvas p-2 */
+}
+
+/* ── Widget shell (WidgetFrame-equivalent) ──────────────────────────── */
+.intro3-widget {
+  background: transparent;
+  border-radius: 0;
+  transition:
+    background-color 700ms cubic-bezier(0.4, 0, 0.2, 1) 240ms,
+    border-radius    700ms cubic-bezier(0.4, 0, 0.2, 1) 240ms;
+}
+.intro3-root--entering .intro3-widget {
+  background: var(--panel);
+  border-radius: 0.75rem;     /* matches WidgetFrame rounded-xl */
+}
+
+/* Drag handle reveal */
+.intro3-handle {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transition:
+    height  600ms cubic-bezier(0.4, 0, 0.2, 1) 360ms,
+    opacity 360ms ease 420ms;
+}
+.intro3-root--entering .intro3-handle {
+  height: 2rem;               /* matches WidgetFrame h-8 */
+  opacity: 1;
+}
+
+/* ── Conversation column ────────────────────────────────────────────── */
+/* Bubbles flow top-down like the platform chat. The scroll area gets
+   a top fade mask so messages dissolve into the canvas at the top
+   instead of getting hard-cut by the scroll edge. */
+.intro3-scroll-inner {
+  justify-content: flex-start;
+  padding-top: 5rem;       /* keep the first message clear of the top fade */
+  padding-bottom: 6.5rem;  /* clears the docked input bar */
+}
+
+/* Top-edge transparent gradient — messages fade out as they reach
+   the top of the scroll viewport. Uses CSS mask so any bg works. */
+.intro3-scroll-area {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 3.5rem,
+    #000 calc(100% - 1.5rem),
+    transparent 100%
+  );
+          mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 3.5rem,
+    #000 calc(100% - 1.5rem),
+    transparent 100%
+  );
+}
+
+/* Activity slot — reserves constant vertical space so the chat does not
+   jump when the shimmer ("Thinking" / "Loading" / "Verifying") appears
+   or disappears. Height matches the shimmer's py-1.5 + leading-6. */
+.intro3-activity-slot {
+  min-height: 2.25rem;
+}
+
+/* User bubble — keep bg/border/shadow from Tailwind classes for the
+   idle state (matches platform). On entering, fade the chrome OFF
+   before the letters scramble away so the text doesn't abandon an
+   empty bubble shell. */
+.intro3-bubble-user {
+  transition:
+    background-color 220ms ease,
+    border-color     220ms ease,
+    box-shadow       220ms ease;
+}
+.intro3-root--entering .intro3-bubble-user {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── Input bar — docked at the bottom of the widget, platform-style.
+       Fades in once the opening greeting finishes streaming.       ── */
+.intro3-input-pad {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 1.25rem 1.25rem;  /* matches TermChat px-5 pb-5 */
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity   260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.intro3-input-pad--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+/* Morph: when --entering, the inline style switches the pad to
+   position:fixed at the measured target rect. Animate left/top/
+   width/height so it glides onto the platform's input bar. */
+.intro3-root--entering .intro3-input-pad {
+  transition:
+    left   800ms cubic-bezier(0.4, 0, 0.2, 1),
+    top    800ms cubic-bezier(0.4, 0, 0.2, 1),
+    width  800ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 800ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Mode "nochat" — there is no destination input bar on the platform,
+   so the intro bar dissolves upward as part of the cross-fade. */
+.intro3-mode-nochat.intro3-root--entering .intro3-input-pad {
+  opacity: 0;
+  transform: translateY(-32px);
+  transition:
+    opacity   520ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.intro3-input {
+  width: 90%;
+  max-width: 1400px;
+}
+/* When morphing to a measured rect the .intro3-input wrapper must
+   fill the pad (which is sized to that rect), not its idle 90%. */
+.intro3-root--entering.intro3-mode-empty .intro3-input,
+.intro3-root--entering.intro3-mode-chat  .intro3-input {
+  width: 100%;
+  max-width: 100%;
+  transition: width 800ms cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 800ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Streaming-text caret */
+.intro3-caret {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--text-muted);
+  animation: intro3-caret-blink 0.9s steps(2) infinite;
+}
+@keyframes intro3-caret-blink {
+  to { opacity: 0; }
+}
+
+/* Outro decay — per-letter encrypt-then-disappear. Mirrors the
+   WelcomeIntro letter scramble palette: faint colour while
+   scrambling, no glyph once hidden. */
+.intro3-decay {
+  display: inline;
+  white-space: pre-wrap;
+}
+.intro3-decay-cell {
+  display: inline-block;
+  transition: opacity 180ms ease;
+}
+.intro3-decay-cell--scramble {
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+.intro3-decay-cell--hidden {
+  opacity: 0;
 }

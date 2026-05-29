@@ -1,12 +1,11 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
-import { AgentRuntime } from "../../agent-runtime.js"
-import { Agent } from "../../agent/index.js"
+import { detectPlaceholderPatterns } from "../../application/core/governance.js"
+import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../application/core/planner.js"
+import { Agent } from "../../application/shell/agent.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import { detectPlaceholderPatterns } from "../../governance/index.js"
-import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../planner/index.js"
-import type { Tool } from "../../types.js"
+import type { Tool } from "../../domain/agent-types.js"
 import { canonicalizeEnvelope, computePlannerChildBudgetMetrics, wrapPlannerChildToolsForWriteScope } from "../delegate-paths.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext } from "../delegate/index.js"
 import { buildPlanChildGoal } from "./build-goal.js"
@@ -52,11 +51,27 @@ export async function spawnChildForPlan(
     )
   }
 
+  // Per-child run id — used to attribute bus messages and queue slots
+  // to the actual publisher rather than the parent. See spawn-child.ts
+  // for the same pattern.
+  const childRunId = `plan-${step.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const childAgentName = `Planner:${step.name}`
+
+  // Inject extra tools — per-child factory takes priority over a flat
+  // `extraChildTools` list (Phase B.3).
+  const builtPerChild = ctx.buildChildTools ? ctx.buildChildTools(childRunId, childAgentName) : []
+  const builtPerChildNames = new Set(builtPerChild.map(t => t.name))
   if (ctx.extraChildTools) {
     const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
     childTools = [
-      ...childTools.filter(t => !extraNames.has(t.name)),
-      ...ctx.extraChildTools,
+      ...childTools.filter(t => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
+      ...ctx.extraChildTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
+    ]
+  } else if (builtPerChild.length > 0) {
+    childTools = [
+      ...childTools.filter(t => !builtPerChildNames.has(t.name)),
+      ...builtPerChild,
     ]
   }
 
@@ -85,7 +100,7 @@ export async function spawnChildForPlan(
 
   let releaseSlot: (() => void) | undefined
   if (ctx.acquireSlot) {
-    const childRunId = `plan-${step.name}-${Date.now()}`
+    // Reuse the same childRunId we generated above so queue + bus see one entity.
     releaseSlot = await ctx.acquireSlot(childRunId)
   }
 
@@ -127,12 +142,6 @@ export async function spawnChildForPlan(
     return null
   } : undefined
 
-  // Per-child AgentRuntime — see spawn-child.ts for rationale.
-  const childRuntime = new AgentRuntime({
-    inheritFrom: AgentRuntime.current(),
-    signal: ctx.signal,
-  })
-
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
     // If the parent resolved system prompt is available (contains DB knowledge, schema context,
@@ -143,7 +152,6 @@ export async function spawnChildForPlan(
       : CHILD_SYSTEM_PROMPT,
     verbose: false,
     signal: ctx.signal,
-    runtime: childRuntime,
     deferRecoveryHintsUntilCompletionAttempt: true,
     completionValidator,
     onThinking: (_content, _toolCalls, iteration) => {
@@ -157,6 +165,16 @@ export async function spawnChildForPlan(
       for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
       pendingPlannerLlmEvents = []
       ctx.onChildUsage?.(child.usage, child.llmCalls)
+      // Phase B.3: notify the orchestrator on every iteration so it can
+      // auto-publish a Status to the bus on this child's behalf.
+      ctx.onChildIteration?.({
+        childRunId,
+        childAgentName,
+        iteration: iteration + 1,
+        maxIterations: maxIter,
+        content: _content ? _content.slice(0, 200) : null,
+        toolNames: _toolCalls.map((c) => c.name),
+      })
     },
     onStep: () => {
       ctx.onChildUsage?.(child.usage, child.llmCalls)
@@ -239,7 +257,6 @@ export async function spawnChildForPlan(
       execution: buildChildExecutionResult(output, child.allToolCalls),
     }
   } finally {
-    await childRuntime.dispose()
     releaseSlot?.()
   }
 }

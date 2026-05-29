@@ -13,13 +13,18 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT } from "../src/loop/system-prompt.js"
+import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MIA_DATA_PERSONA_SECTION } from "../src/application/shell/loop-cluster/system-prompt.js"
 
 const KB = 1024
 
 describe("prompt source-of-truth — byte ceilings", () => {
-  it("DEFAULT_SYSTEM_PROMPT stays under 13 KB (current ~12 KB; ETL playbook lives in BIG_TABLE_ETL_SECTION)", () => {
-    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThan(13 * KB)
+  it("DEFAULT_SYSTEM_PROMPT stays under 7 KB (slimmed; data persona lives in MIA_DATA_PERSONA_SECTION)", () => {
+    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThan(7 * KB)
+  })
+
+  it("MIA_DATA_PERSONA_SECTION stays under 6.5 KB", () => {
+    expect(MIA_DATA_PERSONA_SECTION.length).toBeGreaterThan(2 * KB)
+    expect(MIA_DATA_PERSONA_SECTION.length).toBeLessThan(6.5 * KB)
   })
 
   it("CHART_CATALOGUE_SECTION stays under 6 KB (current ~5 KB)", () => {
@@ -30,9 +35,9 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(ABI_SYNC_SECTION.length).toBeLessThan(8 * KB)
   })
 
-  it("BIG_TABLE_ETL_SECTION stays under 7 KB (canonical 2-stage pattern + anti-patterns + checklist)", () => {
+  it("BIG_TABLE_ETL_SECTION stays under 7.5 KB (canonical 2-stage pattern + anti-patterns + checklist + profile_data mode doctrine)", () => {
     expect(BIG_TABLE_ETL_SECTION.length).toBeGreaterThan(2 * KB)
-    expect(BIG_TABLE_ETL_SECTION.length).toBeLessThan(7 * KB)
+    expect(BIG_TABLE_ETL_SECTION.length).toBeLessThan(7.5 * KB)
   })
 
   it("BIG_TABLE_ETL_SECTION teaches the must-have rules", () => {
@@ -48,6 +53,12 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i)            // warns about SUM(Average…)
     expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i)                   // names the per-row anti-pattern
     expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i)      // TOP n needs a tiebreaker
+    // Note: the structural anti-pattern statements (find-all on every #temp,
+    // ≤ 2× large-object touches) moved into the doctrine SSoT
+    // (packages/agent/src/application/core/doctrine-cluster/) — see doctrine-registry tests. The prompt
+    // file no longer re-states them; the validator enforces them as hard blocks.
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/\{\{\s*mirrorSchema\s*\}\}\.\[\{\{\s*wideUnionView\s*\}\}\]/)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/Repeated scalar subqueries against the same `#detail` temp/i)
   })
 })
 
@@ -79,9 +90,47 @@ describe("prompt source-of-truth — no duplication across blocks", () => {
   it("the BIG_TABLE_ETL canonical example is NOT inlined in DEFAULT_SYSTEM_PROMPT", () => {
     // Only injected on data-shaped goals via decideSections.
     // A one-line reality reminder is allowed; the canonical SQL + anti-pattern list is not.
-    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("INTO #topClients")
-    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("ix_revLines")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("INTO #topEntities")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("ix_detailLines")
     expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(/Anti-patterns?\s*(to avoid|—)/i)
     expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(/STAGE\s*1.*narrow the keys/i)
   })
+
+  it("the MIA data persona (HARD RULES / domain anchors / number formatting) is NOT inlined in DEFAULT_SYSTEM_PROMPT", () => {
+    // Persona ships only on DB/chart/sync-shaped goals via includeDataPersona.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("HARD RULES")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("pkClient")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("Aggregate-name discipline")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("Domain anchors")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("MyMI SME")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("33,189,259,794")
+  })
+
+  it("the persona content lives in MIA_DATA_PERSONA_SECTION", () => {
+    expect(MIA_DATA_PERSONA_SECTION).toContain("HARD RULES")
+    expect(MIA_DATA_PERSONA_SECTION).toMatch(/\{\{\s*keyColumnExample\s*\}\}/)
+    expect(MIA_DATA_PERSONA_SECTION).toContain("MyMI SME")
+  })
+})
+
+describe("prompt source-of-truth — no hardcoded tenant identifiers", () => {
+  // Phase 7 of the de-hardcode refactor: customer-specific schema /
+  // table / column names must NOT appear as literals in the four
+  // primary prompts — they are filled at render time via
+  // `renderPromptVars()` (loop/prompt-vars.ts). This guard catches
+  // regressions where somebody re-introduces a `publish.Revenue`
+  // example because it's familiar.
+  const FORBIDDEN = /publish\.|persistedView\b|pkClient\b|pkMonth\b|pkAccount\b|pkProduct\b|pkDate\b|RevenueZAR\b|UnoTranspose\b|MappingTransactional|AfricaFlex|FrontArena|\bdim\.(?:Client|Account|Date|Product)\b|\bfact\.(?:UnoTranspose|RWA)\b/
+  const PROMPTS: Array<[string, string]> = [
+    ["DEFAULT_SYSTEM_PROMPT",     DEFAULT_SYSTEM_PROMPT],
+    ["MIA_DATA_PERSONA_SECTION",  MIA_DATA_PERSONA_SECTION],
+    ["BIG_TABLE_ETL_SECTION",     BIG_TABLE_ETL_SECTION],
+    ["CHART_CATALOGUE_SECTION",   CHART_CATALOGUE_SECTION],
+  ]
+  for (const [name, body] of PROMPTS) {
+    it(`${name} contains no customer-specific schema / table / column literals`, () => {
+      const m = body.match(FORBIDDEN)
+      expect(m, `forbidden token in ${name}: ${m?.[0]}`).toBeNull()
+    })
+  }
 })
