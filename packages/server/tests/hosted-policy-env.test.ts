@@ -113,7 +113,13 @@ describe("policyRulesFromEnvironments", () => {
     const denies = rules.filter((r) => r.effect === PolicyEffect.Deny).map((r) => r.name).sort()
     expect(denies).toContain("env_uat_deny_dml")
     expect(denies).toContain("env_uat_deny_ddl")
-    // Per-env approval for sync_execute is the single approval default.
+    const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
+    expect(approvals).toHaveLength(0)
+  })
+
+  it("emits approval rules only when approvalRequiredOperations is explicitly configured", () => {
+    const env = withPermissionDefaults({ name: "uat", approvalRequiredOperations: ["sync_execute"] })
+    const rules = policyRulesFromEnvironments([env])
     const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
     expect(approvals).toContain("env_uat_approval_sync_execute")
   })
@@ -144,7 +150,7 @@ describe("withPermissionDefaults", () => {
     expect(e.defaultAccessMode).toBe("read_only")
     expect(e.denyDml).toBe(true)
     expect(e.denyDdl).toBe(true)
-    expect(e.approvalRequiredOperations).toContain("sync_execute")
+    expect(e.approvalRequiredOperations).toEqual([])
   })
 
   it("prod is read-only with DML+DDL denied by default", () => {

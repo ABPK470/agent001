@@ -68,8 +68,13 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-sync-routes-data-"))
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-routes-root-"))
+  mkdirSync(join(projectRoot, "deploy", "sync", "artifacts"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
+  writeFileSync(
+    join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
+    readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8"),
+  )
   writeFileSync(join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"), JSON.stringify({
     schemaVersion: 1,
     id: "pipelineActivity",
@@ -154,7 +159,7 @@ describe("sync routes", () => {
           provenance: { kind: "manual" },
         },
       ],
-      policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+      policies: { freezeWindowIds: [], riskMultiplier: 1 },
       scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
       lineageRefs: [],
       provenance: { kind: "manual" },

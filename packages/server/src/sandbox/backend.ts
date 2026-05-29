@@ -186,6 +186,7 @@ class HostSandboxBackend implements SandboxBackend {
       let timedOut = false
       let settled = false
       let timeoutEscalation: NodeJS.Timeout | null = null
+      const knownDescendantPids = new Set<number>()
 
       const collect = (which: "stdout" | "stderr") => (chunk: Buffer | string) => {
         const text = typeof chunk === "string" ? chunk : chunk.toString("utf8")
@@ -210,9 +211,12 @@ class HostSandboxBackend implements SandboxBackend {
           try { spawnSync("taskkill", ["/pid", String(child.pid), "/f", "/t"], { windowsHide: true }) }
           catch { /* fall through to child.kill below */ }
         } else {
+          for (const descendantPid of collectPosixDescendantPids(child.pid)) {
+            knownDescendantPids.add(descendantPid)
+          }
           // POSIX: negative pid → process group kill.
           try { process.kill(-child.pid, signal) } catch { /* ignore ESRCH */ }
-          for (const descendantPid of collectPosixDescendantPids(child.pid)) {
+          for (const descendantPid of knownDescendantPids) {
             try { process.kill(descendantPid, signal) } catch { /* ignore ESRCH */ }
           }
         }

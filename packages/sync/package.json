@@ -8,9 +8,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "sync-definitions:compile": "tsx src/cli/compile-sync-definitions.ts",
-    "sync-definitions:scaffold-all": "tsx src/cli/scaffold-sync-definitions.ts",
-    "sync-definitions:scaffold": "tsx src/cli/scaffold-sync-definition.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },

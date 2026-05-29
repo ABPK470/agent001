@@ -19,11 +19,11 @@
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
 
 import type {
-    EntityDefinition,
-    EntityFkHop,
-    EntityTable,
-    EntityTableScope,
-    Scd2Override,
+  EntityDefinition,
+  EntityFkHop,
+  EntityTable,
+  EntityTableScope,
+  Scd2Override,
 } from "@mia/sync"
 
 // ── Export ──────────────────────────────────────────────────────────

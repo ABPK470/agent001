@@ -49,10 +49,10 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
       //
       // Generous timings so the assertion isn't a CI-load race:
       //   - parent runs `sleep 10` (so it can't naturally exit before we kill it)
-      //   - descendant sleeps 4s before writing
+      //   - descendant sleeps 8s before writing
       //   - we time out the parent at 1500ms (well after spawn settles)
-      //   - then wait 5s before asserting the stamp was never written
-      const cmd = `( sleep 4; printf alive > ${JSON.stringify(stamp)} ) & echo started; sleep 10`
+      //   - then wait 9s before asserting the stamp was never written
+      const cmd = `( sleep 8; printf alive > ${JSON.stringify(stamp)} ) & echo started; sleep 15`
       const backend = getSandboxBackend("host")
       const t0 = Date.now()
       const result = await backend.exec(cmd, sandbox, { timeout: 1_500 })
@@ -60,7 +60,7 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
       expect(result.timedOut).toBe(true)
       // Should die soon after the timeout, not at the parent's natural 10s.
       expect(elapsed).toBeLessThan(5_000)
-      await new Promise((r) => setTimeout(r, 5_000))
+      await new Promise((r) => setTimeout(r, 9_000))
       let descendantRan = false
       try {
         const { readFile } = await import("node:fs/promises")
@@ -69,7 +69,7 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
       } catch { /* expected: file never created */ }
       expect(descendantRan).toBe(false)
     },
-    20_000,
+    25_000,
   )
 
   it("strips HTTP/HTTPS proxy env vars when network is not opted-in (default)", async () => {

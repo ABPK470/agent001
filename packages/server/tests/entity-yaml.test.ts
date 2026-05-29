@@ -63,7 +63,7 @@ const FULL_DEF: EntityDefinition = {
     },
   ],
   policies: {
-    approvalPolicyId: "high-risk",
+    approvalPolicyId: null,
     freezeWindowIds:  ["month-end"],
     riskMultiplier:   1.5,
   },
@@ -89,6 +89,10 @@ const FULL_DEF: EntityDefinition = {
 function stripServerStamped(def: EntityDefinition): Omit<EntityDefinition, "version" | "versionLabel" | "createdAt" | "createdBy" | "reason" | "retiredAt"> {
   const { version, versionLabel, createdAt, createdBy, reason, retiredAt, ...rest } = def
   void version; void versionLabel; void createdAt; void createdBy; void reason; void retiredAt
+  rest.policies = {
+    freezeWindowIds: rest.policies.freezeWindowIds,
+    riskMultiplier: rest.policies.riskMultiplier,
+  }
   return rest
 }
 
@@ -99,6 +103,16 @@ describe("entity-yaml round-trip", () => {
     expect(parsed.ok).toBe(true)
     expect(parsed.def).not.toBeNull()
     expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
+  })
+
+  it("does not round-trip approvalPolicyId because runtime ignores it", () => {
+    const yaml = formatEntityYaml({
+      ...FULL_DEF,
+      policies: { ...FULL_DEF.policies, approvalPolicyId: "high-risk" },
+    })
+    const parsed = parseEntityYaml(yaml)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.def?.policies).not.toHaveProperty("approvalPolicyId")
   })
 
   it("emits valid YAML for multi-doc bulk export", () => {
