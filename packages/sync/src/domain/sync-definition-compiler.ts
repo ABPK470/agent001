@@ -15,7 +15,7 @@ export interface RepoPublishedSyncDefinitionBundle {
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
-export const DEFAULT_AUTHORED_DEFINITIONS_DIR = "deploy/sync/entities"
+export const DEFAULT_AUTHORED_DEFINITIONS_DIR = "deploy/sync/artifacts/entities"
 export const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
 export function loadAuthoredSyncDefinitions(projectRoot: string, relDir = DEFAULT_AUTHORED_DEFINITIONS_DIR): LoadedAuthoredSyncDefinition[] {

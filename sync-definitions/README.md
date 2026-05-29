@@ -23,7 +23,7 @@ used to create an initial starting point.
 
 ## Repo Draft Artifacts
 
-- `deploy/sync/entities/*.json`
+- `deploy/sync/artifacts/entities/*.json`
 
 These files are review/export artifacts in the repo. They can still be used for
 draft authoring, diff review, or external editing, but they are not the live
@@ -37,7 +37,7 @@ Those artifacts are migration inputs, not the source to edit.
 
 ## Current Runtime Lifecycle
 
-1. `deploy/sync/flow-templates.json` provides the initial flow template for a
+1. `deploy/sync/artifacts/flow-templates.json` provides the initial flow template for a
 	named template id such as `contract` or `dataset`.
 2. When a sync definition config row is first created, that template seeds the
 	initial `execution_steps_json` in the DB.
@@ -50,7 +50,7 @@ Those artifacts are migration inputs, not the source to edit.
 
 ## Repo Draft Workflow
 
-1. Edit one or more files in `deploy/sync/entities/`.
+1. Edit one or more files in `deploy/sync/artifacts/entities/`.
 2. Run:
 
 ```bash
@@ -106,7 +106,7 @@ This keeps the split explicit:
 - Entity Registry is the DB-backed authoring surface.
 - flow templates only supply the initial step list.
 - YAML remains an import/export draft format.
-- `deploy/sync/entities/*.json` is a repo draft / review artifact.
+- `deploy/sync/artifacts/entities/*.json` is a repo draft / review artifact.
 - `sync-definitions/published/definitions.bundle.json` remains the runtime bundle consumed by preview/execute.
 
 The separate Entity Registry workspace can export the same draft shape directly

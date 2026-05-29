@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "dataset",
   "displayName": "Dataset",
-  "description": "Dataset sync definition migrated from legacy recipe bundle.",
+  "description": "Dataset sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "core.Dataset",
   "idColumn": "datasetId",
   "labelColumn": "name",
@@ -29,7 +29,7 @@
     "owner": null,
     "reviewStatus": "legacy-review-required",
     "notes": [
-      "Bootstrapped from legacy sync-recipes.json.",
+      "Bootstrapped from legacy pipeline ground truth.",
       "Dataset still contains inferred downstream rule scope that requires review."
     ]
   },
@@ -220,7 +220,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/mssql/sync-recipes.json",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
+    "sourceVersion": "2026-05-29T12:08:36.914Z"
   }
 }

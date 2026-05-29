@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "content",
   "displayName": "Content",
-  "description": "Content sync definition migrated from legacy recipe bundle.",
+  "description": "Content sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "gate.Content",
   "idColumn": "contentId",
   "labelColumn": "title",
@@ -29,8 +29,8 @@
     "owner": null,
     "reviewStatus": "legacy-review-required",
     "notes": [
-      "Bootstrapped from legacy sync-recipes.json.",
-      "Review optional FK-only content scope before treating this definition as curated."
+      "Bootstrapped from legacy pipeline ground truth.",
+      "Content still contains inferred optional scope that requires review."
     ]
   },
   "metadata": {
@@ -124,7 +124,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/mssql/sync-recipes.json",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
+    "sourceVersion": "2026-05-29T12:08:36.914Z"
   }
 }

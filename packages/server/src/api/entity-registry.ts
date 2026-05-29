@@ -145,7 +145,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 				environmentPolicyRef: req.query.environmentPolicyRef ?? "default",
 			})
 			return {
-				suggestedPath: `deploy/sync/entities/${req.params.id}.json`,
+				suggestedPath: `deploy/sync/artifacts/entities/${req.params.id}.json`,
 				definition,
 				stderr: [],
 			}

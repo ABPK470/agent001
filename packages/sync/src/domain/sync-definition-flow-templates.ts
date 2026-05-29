@@ -14,7 +14,7 @@ export interface SyncDefinitionFlowTemplateCatalog {
   flowTemplates: Record<EntityRegistrySyncFlowTemplateId, SyncDefinitionFlowTemplate>
 }
 
-export const DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH = "deploy/sync/flow-templates.json"
+export const DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH = "deploy/sync/artifacts/flow-templates.json"
 
 const KNOWN_FLOW_TEMPLATE_IDS: EntityRegistrySyncFlowTemplateId[] = ["contract", "dataset", "rule", "pipelineActivity", "gateMetadata", "content", "metadata-only"]
 

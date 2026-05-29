@@ -37,7 +37,7 @@ function main(): void {
   const serialized = `${JSON.stringify(scaffold, null, 2)}\n`
 
   if (options.write || options.output) {
-    const outputPath = resolve(ROOT, options.output ?? `deploy/sync/entities/${entity.id}.json`)
+    const outputPath = resolve(ROOT, options.output ?? `deploy/sync/artifacts/entities/${entity.id}.json`)
     if (existsSync(outputPath) && !options.force) {
       fail(`Refusing to overwrite existing file without --force: ${relative(ROOT, outputPath)}`)
     }

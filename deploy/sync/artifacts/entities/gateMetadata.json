@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "gateMetadata",
   "displayName": "Gate Metadata",
-  "description": "Gate Metadata sync definition migrated from legacy recipe bundle.",
+  "description": "Gate Metadata sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "gate.MetaTable",
   "idColumn": "tableId",
   "labelColumn": "name",
@@ -29,8 +29,8 @@
     "owner": null,
     "reviewStatus": "legacy-review-required",
     "notes": [
-      "Bootstrapped from legacy sync-recipes.json.",
-      "Gate metadata still has optional content tables that need deliberate verification."
+      "Bootstrapped from legacy pipeline ground truth.",
+      "Gate metadata still has optional content scope that needs deliberate verification."
     ]
   },
   "metadata": {
@@ -157,7 +157,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/mssql/sync-recipes.json",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
+    "sourceVersion": "2026-05-29T12:08:36.914Z"
   }
 }

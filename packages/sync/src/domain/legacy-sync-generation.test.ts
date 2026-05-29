@@ -1,0 +1,122 @@
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
+
+import { describe, expect, it } from "vitest"
+
+import { buildCatalogIndex, deriveSyncDefinitions } from "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs"
+
+const repoRoot = resolve(import.meta.dirname, "../../../..")
+const entitiesScript = resolve(repoRoot, "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs")
+const flowTemplatesScript = resolve(repoRoot, "deploy/sync/generators/generate-flow-templates-from-legacy-pipelines.mjs")
+const evidenceFixture = resolve(repoRoot, "notes/sync/legacy-pipeline-evidence.fixture.json")
+const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-templates.json")
+const catalogCacheFile = "packages/server/data/catalog-cache.uat.json"
+const generatedAt = "2026-05-10T11:19:07.694Z"
+const pipelineIds = "692,780,788,791,792,798"
+
+const expectedEntities = {
+  content: {
+    pipelineId: 692,
+    rootTable: "gate.Content",
+    idColumn: "contentId",
+    labelColumn: "title",
+    entrySproc: "core.uspSyncContentObjectsTran",
+    requiredTables: ["gate.Content", "gate.ContentLink", "gate.ContentType", "gate.ContentLinkType"],
+  },
+  gateMetadata: {
+    pipelineId: 780,
+    rootTable: "gate.MetaTable",
+    idColumn: "tableId",
+    labelColumn: "name",
+    entrySproc: "core.uspSyncDataListObjectsTran",
+    requiredTables: ["gate.MetaTable", "gate.MetaView", "gate.MetaColumn", "gate.jsonSchema"],
+  },
+  contract: {
+    pipelineId: 788,
+    rootTable: "core.Contract",
+    idColumn: "contractId",
+    labelColumn: "name",
+    entrySproc: "core.uspSyncCoreObjectsTran",
+    requiredTables: ["core.ContractColumn", "core.Contract", "core.Dataset", "core.Pipeline", "core.Activity"],
+  },
+  rule: {
+    pipelineId: 791,
+    rootTable: "core.Rule",
+    idColumn: "ruleId",
+    labelColumn: "name",
+    entrySproc: "core.uspSyncRuleObjectsTran",
+    requiredTables: ["core.Rule", "core.RuleColumn", "core.RuleCondition", "core.RuleLink", "core.RuleType"],
+  },
+  dataset: {
+    pipelineId: 792,
+    rootTable: "core.Dataset",
+    idColumn: "datasetId",
+    labelColumn: "name",
+    entrySproc: "core.uspSyncDatasetObjectsTran",
+    requiredTables: ["core.Dataset", "core.DatasetColumn", "core.DatasetMapping", "core.Pipeline", "core.Activity"],
+  },
+  pipelineActivity: {
+    pipelineId: 798,
+    rootTable: "core.Pipeline",
+    idColumn: "pipelineId",
+    labelColumn: "name",
+    entrySproc: "core.uspSyncPipelineObjectsTran",
+    requiredTables: ["core.Pipeline", "core.Activity"],
+  },
+}
+
+describe("legacy sync generators", () => {
+  it("rebuilds flow-templates.json from the reviewed legacy pipeline set", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "legacy-flow-templates-"))
+    const outputPath = join(tempRoot, "flow-templates.json")
+
+    execFileSync("node", [
+      flowTemplatesScript,
+      "--pipeline-ids", pipelineIds,
+      "--evidence-file", evidenceFixture,
+      "--output", outputPath,
+      "--force",
+    ], { cwd: repoRoot, stdio: "pipe" })
+
+    const actual = JSON.parse(readFileSync(outputPath, "utf-8"))
+    const expected = JSON.parse(readFileSync(flowTemplatesSeed, "utf-8"))
+    expect(actual).toEqual(expected)
+  })
+
+  it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", () => {
+    const evidence = JSON.parse(readFileSync(evidenceFixture, "utf-8"))
+    const catalogSnapshot = JSON.parse(readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8"))
+    const catalogIndex = buildCatalogIndex(catalogSnapshot)
+    const definitions = deriveSyncDefinitions(evidence.pipelines, catalogIndex, generatedAt)
+    const byId = new Map(definitions.map((definition) => [definition.id, definition]))
+
+    for (const name of Object.keys(expectedEntities)) {
+      const actual = byId.get(name)
+      const expected = expectedEntities[name as keyof typeof expectedEntities]
+      expect(actual).toBeTruthy()
+      expect(actual.id).toBe(name)
+      expect(actual.rootTable).toBe(expected.rootTable)
+      expect(actual.idColumn).toBe(expected.idColumn)
+      expect(actual.labelColumn).toBe(expected.labelColumn)
+      expect(actual.legacy).toEqual({ pipelineId: expected.pipelineId, entrySproc: expected.entrySproc })
+      expect(Array.isArray(actual.metadata.tables)).toBe(true)
+      expect(actual.metadata.tables.length).toBeGreaterThanOrEqual(expected.requiredTables.length)
+      expect(actual.metadata.executionOrder.length).toBeGreaterThan(0)
+      expect(actual.metadata.reverseOrder).toEqual([...actual.metadata.executionOrder].reverse())
+
+      const actualTables = new Set(actual.metadata.tables.map((table: { name: string }) => table.name))
+      for (const tableName of expected.requiredTables) {
+        expect(actualTables.has(tableName), `${name} missing ${tableName}`).toBe(true)
+      }
+
+      for (const table of actual.metadata.tables) {
+        expect(typeof table.name).toBe("string")
+        expect(typeof table.predicate).toBe("string")
+        expect(table.predicate.length).toBeGreaterThan(0)
+        expect(["fk+pipeline", "fk-only", "pipeline-only"]).toContain(table.source)
+      }
+    }
+  })
+})

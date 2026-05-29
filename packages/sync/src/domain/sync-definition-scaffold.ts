@@ -6,11 +6,11 @@ import { parseAllDocuments } from "yaml"
 
 import type { EntityDefinition } from "./entity-registry/types.js"
 import {
-    defaultSyncDefinitionFlowTemplateId,
-    getSyncDefinitionFlowTemplateSteps,
-    hasSyncDefinitionFlowTemplate,
-    loadSyncDefinitionFlowTemplateCatalog,
-    type SyncDefinitionFlowTemplateCatalog,
+  defaultSyncDefinitionFlowTemplateId,
+  getSyncDefinitionFlowTemplateSteps,
+  hasSyncDefinitionFlowTemplate,
+  loadSyncDefinitionFlowTemplateCatalog,
+  type SyncDefinitionFlowTemplateCatalog,
 } from "./sync-definition-flow-templates.js"
 
 export interface SyncDefinitionScaffoldOptions {

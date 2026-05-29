@@ -22,7 +22,7 @@ import * as db from "../adapters/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const PUBLISHED_BUNDLE_PATH = "sync-definitions/published/definitions.bundle.json"
-const AUTHORED_DEFINITIONS_DIR = "deploy/sync/entities"
+const AUTHORED_DEFINITIONS_DIR = "deploy/sync/artifacts/entities"
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
   {

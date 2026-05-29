@@ -126,7 +126,7 @@ describe("entity registry scaffold route", () => {
       }
       stderr: string[]
     }
-    expect(body.suggestedPath).toBe("deploy/sync/entities/contract.json")
+    expect(body.suggestedPath).toBe("deploy/sync/artifacts/entities/contract.json")
     expect(body.definition.id).toBe("contract")
     expect(body.definition.bindings).toEqual({
       serviceProfileRef: "default",

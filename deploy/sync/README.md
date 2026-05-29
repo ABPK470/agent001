@@ -1,16 +1,18 @@
 # Sync Deploy Seeds
 
-This folder contains deployment-owned sync bootstrap artifacts.
+This folder contains deployment-owned sync bootstrap generators, helpers, and artifacts.
 
 ## Files
 
-- `flow-templates.json`: initial execution-flow templates used to seed DB-backed sync definition configs.
+- `artifacts/flow-templates.json`: initial execution-flow templates used to seed DB-backed sync definition configs.
+- `artifacts/entities/*.json`: repo draft/bootstrap sync definitions used for review, seed fallback, and compile checks.
+- `generators/*.mjs`: executable legacy bootstrap seed builders.
+- `helpers/*.mjs`: non-executable derivation helpers used by the generators.
 - `entity-registry.seed.yaml`: exported Entity Registry snapshot used as scaffold input for initial draft creation.
-- `entities/*.json`: repo draft/bootstrap sync definitions used for review, seed fallback, and compile checks.
 - `export-entity-registry.sh`: exports current Entity Registry rows from SQLite into `entity-registry.seed.yaml`.
-- `create-initial-sync-drafts.sh`: one-shot bootstrap wrapper that exports the Entity Registry snapshot and scaffolds `entities/*.json` from it.
-- `scaffold-entity-draft.sh`: convenience wrapper that generates one entity draft JSON into `entities/` by delegating to the package-owned scaffold CLI.
-- `scaffold-entity-drafts.sh`: convenience wrapper that generates all entity draft JSON files from one entity-registry input document into `entities/`.
+- `create-initial-sync-drafts.sh`: one-shot bootstrap wrapper that exports the Entity Registry snapshot and scaffolds `artifacts/entities/*.json` from it.
+- `scaffold-entity-draft.sh`: convenience wrapper that generates one entity draft JSON into `artifacts/entities/` by delegating to the package-owned scaffold CLI.
+- `scaffold-entity-drafts.sh`: convenience wrapper that generates all entity draft JSON files from one entity-registry input document into `artifacts/entities/`.
 
 ## Authority
 
@@ -18,20 +20,21 @@ These files are initial data and review artifacts. After operators edit and save
 
 ## Initial Draft Creation
 
-For the original legacy bootstrap path, start from MSSQL pipeline introspection, not from the app DB.
+For the original legacy bootstrap path, start from the deploy/sync generators, not from the app DB.
 
 Run:
 
 ```sh
-node deploy/mssql/introspect-sync-pipelines.mjs --force
+node deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs --connection uat --force
+node deploy/sync/generators/generate-flow-templates-from-legacy-pipelines.mjs --connection uat --force
 ```
 
-That script:
+These scripts:
 
-- reads the legacy MSSQL `core.Pipeline` / `core.Activity` definitions for the known ABI sync pipeline ids
-- verifies the expected `storedProcedure` wiring in activity `properties`
-- writes `deploy/mssql/sync-recipes.json`
-- writes `deploy/sync/entities/*.json`
+- read the legacy MSSQL `core.Pipeline` / `core.Activity` definitions for the known ABI sync pipeline ids
+- verify the expected `storedProcedure` wiring in activity `properties`
+- write `deploy/sync/artifacts/entities/*.json`
+- write `deploy/sync/artifacts/flow-templates.json`
 
 The YAML scaffold path below is a different tool. It is useful after you already have Entity Registry definitions, but it is not the historical first-step bootstrap for the legacy ABI sync entities.
 
@@ -41,7 +44,7 @@ If you already have an entity-registry YAML or JSON document and want to scaffol
 deploy/sync/scaffold-entity-drafts.sh --input path/to/entities.yaml --force
 ```
 
-This is a bootstrap/import tool. It is for creating `deploy/sync/entities/*.json`, not for live publish.
+This is a bootstrap/import tool. It is for creating `deploy/sync/artifacts/entities/*.json`, not for live publish.
 
 If you want an export of the current app DB Entity Registry first, run:
 
