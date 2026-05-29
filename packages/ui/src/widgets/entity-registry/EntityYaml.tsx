@@ -143,7 +143,7 @@ export function EntityYaml({ yaml, def, entityId, isAdmin }: EntityYamlProps): J
       </div>
       {isAdmin && (
         <div className="rounded-lg border border-border-subtle bg-panel px-3 py-2 text-[11px] leading-6 text-text-muted">
-          Repo draft export scaffolds the authoritative `sync-definitions/entities/*.json` shape from this saved registry record. Review and edit that repo file before publish.
+          Repo draft export scaffolds the deployment draft `deploy/sync/entities/*.json` shape from this saved registry record. Review and edit that repo file before publish.
         </div>
       )}
       {draftError && (

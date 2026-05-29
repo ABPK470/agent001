@@ -735,7 +735,7 @@ export interface PublishSyncDefinitionsResponse {
   stderr: string[]
 }
 
-export type SyncDefinitionFlowPreset =
+export type SyncDefinitionFlowTemplateId =
   | "contract"
   | "dataset"
   | "rule"
@@ -745,7 +745,7 @@ export type SyncDefinitionFlowPreset =
   | "metadata-only"
 
 export interface EntityRegistrySyncDefinitionScaffoldRequest {
-  flowPreset?: SyncDefinitionFlowPreset
+  flowTemplateId?: SyncDefinitionFlowTemplateId
   serviceProfileRef?: string
   environmentPolicyRef?: string
 }
@@ -1019,7 +1019,7 @@ export interface EntityRegistryYamlImportResponse {
   dryRun: boolean
 }
 
-export type EntityRegistrySyncFlowPreset =
+export type EntityRegistrySyncFlowTemplateId =
   | "contract"
   | "dataset"
   | "rule"
@@ -1035,14 +1035,14 @@ export interface SyncDefinitionRuntimeOption<T extends string = string> {
 }
 
 export interface SyncDefinitionRuntimeOptions {
-  flowPresets: SyncDefinitionRuntimeOption<EntityRegistrySyncFlowPreset>[]
-  flowPresetTemplates: Record<EntityRegistrySyncFlowPreset, AuthoredSyncFlowStep[]>
+  flowTemplates: SyncDefinitionRuntimeOption<EntityRegistrySyncFlowTemplateId>[]
+  flowTemplateSteps: Record<EntityRegistrySyncFlowTemplateId, AuthoredSyncFlowStep[]>
   serviceProfiles: SyncDefinitionRuntimeOption[]
   environmentPolicies: SyncDefinitionRuntimeOption[]
 }
 
 export interface EntityRegistrySyncDefinitionExportRequest {
-  flowPreset?: EntityRegistrySyncFlowPreset
+  flowTemplateId?: EntityRegistrySyncFlowTemplateId
   serviceProfileRef?: string
   environmentPolicyRef?: string
 }
@@ -1078,7 +1078,7 @@ export interface EntityRegistrySyncDefinitionStatusResponse {
   draftExport: {
     route: string
     defaultOutputDirectory: string
-    supportedFlowPresets: EntityRegistrySyncFlowPreset[]
+    supportedFlowTemplates: EntityRegistrySyncFlowTemplateId[]
   }
   compatibilityLayers: EntityRegistrySyncDefinitionStatusLayer[]
   definitions: EntityRegistrySyncDefinitionStatusItem[]
@@ -1088,7 +1088,7 @@ export interface EntityRegistrySyncDefinitionExportResponse {
   tenantId: string
   entityId: string
   outputPath: string
-  flowPreset: EntityRegistrySyncFlowPreset
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
   warnings: string[]
   draft: AuthoredSyncDefinition
   status: EntityRegistrySyncDefinitionStatusItem | null
@@ -1194,7 +1194,7 @@ export interface SyncDefinitionAdminItem {
   displayName: string
   entityVersion: number
   tableCount: number
-  flowPreset: EntityRegistrySyncFlowPreset
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
   executionSteps: AuthoredSyncFlowStep[]
   serviceProfileRef: string
   environmentPolicyRef: string

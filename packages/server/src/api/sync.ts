@@ -32,7 +32,7 @@ interface PreviewBody {
 }
 
 function sanitiseDefinitionConfig(body: Record<string, unknown>): {
-	flowPreset?: string
+	flowTemplateId?: string
 	serviceProfileRef?: string
 	environmentPolicyRef?: string
 	executionSteps?: AuthoredSyncFlowStep[]
@@ -42,7 +42,7 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 	ownershipNotes?: string[]
 } | string {
 	const out: {
-		flowPreset?: string
+		flowTemplateId?: string
 		serviceProfileRef?: string
 		environmentPolicyRef?: string
 		executionSteps?: AuthoredSyncFlowStep[]
@@ -51,7 +51,7 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>): {
 		reviewStatus?: "legacy-review-required" | "reviewed"
 		ownershipNotes?: string[]
 	} = {}
-	for (const field of ["flowPreset", "serviceProfileRef", "environmentPolicyRef", "ownershipTeam"] as const) {
+	for (const field of ["flowTemplateId", "serviceProfileRef", "environmentPolicyRef", "ownershipTeam"] as const) {
 		if (body[field] !== undefined) {
 			if (typeof body[field] !== "string" || body[field].trim() === "") return `${field} must be a non-empty string`
 			out[field] = body[field].trim()
@@ -126,7 +126,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 			reply.code(403)
 			return { error: "admin only" }
 		}
-		return listSyncDefinitionRuntimeOptions()
+		return listSyncDefinitionRuntimeOptions(projectRoot)
 	})
 	app.put<{ Params: { entityId: string }; Body: Record<string, unknown> }>("/api/sync-definition-configs/:entityId", async (req, reply) => {
 		if (!req.session?.isAdmin) {
@@ -143,10 +143,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 			reply.code(400)
 			return { error: sanitised }
 		}
-		const runtimeOptions = listSyncDefinitionRuntimeOptions()
-		if (sanitised.flowPreset !== undefined && !runtimeOptions.flowPresets.some((option) => option.id === sanitised.flowPreset)) {
+		const runtimeOptions = listSyncDefinitionRuntimeOptions(projectRoot)
+		if (sanitised.flowTemplateId !== undefined && !runtimeOptions.flowTemplates.some((option) => option.id === sanitised.flowTemplateId)) {
 			reply.code(400)
-			return { error: `unknown flowPreset "${sanitised.flowPreset}"` }
+			return { error: `unknown flowTemplateId "${sanitised.flowTemplateId}"` }
 		}
 		if (sanitised.serviceProfileRef !== undefined && !runtimeOptions.serviceProfiles.some((option) => option.id === sanitised.serviceProfileRef)) {
 			reply.code(400)
@@ -160,7 +160,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		upsertSyncDefinitionConfig(projectRoot, {
 			tenant_id: "_default",
 			entity_id: req.params.entityId,
-			flow_preset: sanitised.flowPreset ?? existing?.flow_preset ?? req.params.entityId,
+			flow_preset: sanitised.flowTemplateId ?? existing?.flow_preset ?? req.params.entityId,
 			execution_steps_json: JSON.stringify(sanitised.executionSteps ?? (existing ? JSON.parse(existing.execution_steps_json) as AuthoredSyncFlowStep[] : [])),
 			service_profile_ref: sanitised.serviceProfileRef ?? existing?.service_profile_ref ?? "default",
 			environment_policy_ref: sanitised.environmentPolicyRef ?? existing?.environment_policy_ref ?? "default",

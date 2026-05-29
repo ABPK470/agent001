@@ -8,16 +8,22 @@
   },
   "scripts": {
     "build": "tsc",
+    "sync-definitions:compile": "tsx src/cli/compile-sync-definitions.ts",
+    "sync-definitions:scaffold-all": "tsx src/cli/scaffold-sync-definitions.ts",
+    "sync-definitions:scaffold": "tsx src/cli/scaffold-sync-definition.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@mia/shared-types": "*",
     "@mia/shared-enums": "*",
-    "mssql": "^12.2.1"
+    "mssql": "^12.2.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/mssql": "^9.1.11",
     "@types/node": "^22.16.4",
+    "tsx": "^4.7.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

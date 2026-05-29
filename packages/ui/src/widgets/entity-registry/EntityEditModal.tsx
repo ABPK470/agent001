@@ -21,7 +21,7 @@ import type { JSX } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import type { AuthoredSyncFlowStep, EntityRegistryDefinition, EntityRegistrySyncFlowPreset, SyncDefinitionAdminItem, SyncDefinitionRuntimeOptions } from "../../types"
+import type { AuthoredSyncFlowStep, EntityRegistryDefinition, EntityRegistrySyncFlowTemplateId, SyncDefinitionAdminItem, SyncDefinitionRuntimeOptions } from "../../types"
 import { deriveDisplayName, deriveEntityId, deriveIdColumn } from "./derive"
 import { FormSurface, FormSurfaceExecutionSteps, YamlSurface } from "./EntityEditSurfaces"
 import { ModalShell } from "./ModalShell"
@@ -36,19 +36,9 @@ export interface EntityEditModalProps {
 type AuthoringMode = "form" | "yaml"
 
 const ID_RE = /^[a-z][a-z0-9_-]{0,63}$/
-const FLOW_PRESETS: EntityRegistrySyncFlowPreset[] = ["contract", "dataset", "rule", "pipelineActivity", "gateMetadata", "content", "metadata-only"]
-const FLOW_PRESET_LABELS: Record<EntityRegistrySyncFlowPreset, string> = {
-  contract: "Contract deploy",
-  dataset: "Dataset deploy",
-  rule: "Rule deploy",
-  pipelineActivity: "Pipeline register",
-  gateMetadata: "Gate refresh",
-  content: "Content dependencies",
-  "metadata-only": "Metadata only",
-}
 const DEFAULT_RUNTIME_OPTIONS: SyncDefinitionRuntimeOptions = {
-  flowPresets: FLOW_PRESETS.map((preset) => ({ id: preset, label: FLOW_PRESET_LABELS[preset], description: null })),
-  flowPresetTemplates: Object.fromEntries(FLOW_PRESETS.map((preset) => [preset, []])) as SyncDefinitionRuntimeOptions["flowPresetTemplates"],
+  flowTemplates: [],
+  flowTemplateSteps: {} as SyncDefinitionRuntimeOptions["flowTemplateSteps"],
   serviceProfiles: [{ id: "default", label: "Default service routing", description: "Use the standard environment-resolved service endpoints." }],
   environmentPolicies: [{ id: "default", label: "Default environment rules", description: "Apply the standard environment access and allowlist checks." }],
 }
@@ -126,7 +116,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   const [yamlLoading, setYamlLoading] = useState(false)
   const [runtimeLoading, setRuntimeLoading] = useState(true)
   const [runtimeOptions, setRuntimeOptions] = useState<SyncDefinitionRuntimeOptions>(DEFAULT_RUNTIME_OPTIONS)
-  const [flowPreset, setFlowPreset] = useState<EntityRegistrySyncFlowPreset>(defaultRuntimeFlowPreset(seed.id))
+  const [flowTemplateId, setFlowTemplateId] = useState<EntityRegistrySyncFlowTemplateId>("metadata-only")
   const [executionSteps, setExecutionSteps] = useState<AuthoredSyncFlowStep[]>([])
   const [serviceProfileRef, setServiceProfileRef] = useState("default")
   const [environmentPolicyRef, setEnvironmentPolicyRef] = useState("default")
@@ -171,9 +161,9 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
         const config = rows.find((row) => row.id === seed.id)
         if (config) hydrateRuntimeConfig(config, options)
         else {
-          const selectedPreset = pickRuntimeValue(options.flowPresets, defaultRuntimeFlowPreset(seed.id), "metadata-only")
-          setFlowPreset(selectedPreset)
-          setExecutionSteps(cloneSteps(options.flowPresetTemplates[selectedPreset] ?? []))
+          const selectedTemplateId = pickRuntimeValue(options.flowTemplates, defaultRuntimeFlowTemplateId(seed.id, options), "metadata-only")
+          setFlowTemplateId(selectedTemplateId)
+          setExecutionSteps(cloneSteps(options.flowTemplateSteps[selectedTemplateId] ?? []))
           setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, "default"))
           setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, "default"))
         }
@@ -187,11 +177,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     return () => { cancelled = true }
   }, [mode, seed.id])
 
-  const flowPresetOptions = useMemo<ListboxOption<EntityRegistrySyncFlowPreset>[]>(() => runtimeOptions.flowPresets.map((option) => ({
+  const flowTemplateOptions = useMemo<ListboxOption<EntityRegistrySyncFlowTemplateId>[]>(() => runtimeOptions.flowTemplates.map((option) => ({
     value: option.id,
     label: option.label,
     hint: option.description ?? undefined,
-  })), [runtimeOptions.flowPresets])
+  })), [runtimeOptions.flowTemplates])
   const serviceProfileOptions = useMemo<ListboxOption<string>[]>(() => runtimeOptions.serviceProfiles.map((option) => ({
     value: option.id,
     label: option.label,
@@ -250,7 +240,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     }
     const r = await api.saveEntityRegistry(def, reason, versionLabel.trim() ? { versionLabel } : undefined)
     await api.updateSyncDefinitionConfig(r.id, {
-      flowPreset,
+      flowTemplateId,
       executionSteps,
       serviceProfileRef,
       environmentPolicyRef,
@@ -273,7 +263,7 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     const saved = r.saved[0]
     if (!saved) throw new Error("import returned no saved entity")
     await api.updateSyncDefinitionConfig(saved.id, {
-      flowPreset,
+      flowTemplateId,
       executionSteps,
       serviceProfileRef,
       environmentPolicyRef,
@@ -352,8 +342,8 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
           freezeWindowIds={freezeWindowIds}   onFreezeWindowIds={setFreezeWindowIds}
           riskMultiplier={riskMultiplier} onRiskMultiplier={setRiskMultiplier}
           tablesJson={tablesJson}         onTablesJson={setTablesJson}
-          flowPreset={flowPreset}         onFlowPreset={setFlowPresetChange}
-          flowPresetOptions={flowPresetOptions}
+          flowTemplateId={flowTemplateId}         onFlowTemplateId={setFlowTemplateIdChange}
+          flowTemplateOptions={flowTemplateOptions}
           executionSteps={executionSteps} onExecutionSteps={setExecutionSteps}
           serviceProfileRef={serviceProfileRef} onServiceProfileRef={setServiceProfileRef}
           serviceProfileOptions={serviceProfileOptions}
@@ -374,9 +364,9 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
           />
           <div className="border-t border-border-subtle px-6 py-4">
             <RuntimeConfigSection
-              flowPreset={flowPreset}
-              onFlowPreset={setFlowPresetChange}
-              flowPresetOptions={flowPresetOptions}
+              flowTemplateId={flowTemplateId}
+              onFlowTemplateId={setFlowTemplateIdChange}
+              flowTemplateOptions={flowTemplateOptions}
               executionSteps={executionSteps}
               onExecutionSteps={setExecutionSteps}
               rootTable={rootTable}
@@ -395,16 +385,16 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   )
 
   function hydrateRuntimeConfig(config: SyncDefinitionAdminItem, options: SyncDefinitionRuntimeOptions): void {
-    const selectedPreset = pickRuntimeValue(options.flowPresets, config.flowPreset, "metadata-only")
-    setFlowPreset(selectedPreset)
-    setExecutionSteps(cloneSteps(config.executionSteps.length > 0 ? config.executionSteps : (options.flowPresetTemplates[selectedPreset] ?? [])))
+    const selectedTemplateId = pickRuntimeValue(options.flowTemplates, config.flowTemplateId, "metadata-only")
+    setFlowTemplateId(selectedTemplateId)
+    setExecutionSteps(cloneSteps(config.executionSteps.length > 0 ? config.executionSteps : (options.flowTemplateSteps[selectedTemplateId] ?? [])))
     setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, config.serviceProfileRef))
     setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, config.environmentPolicyRef))
   }
 
-  function setFlowPresetChange(value: EntityRegistrySyncFlowPreset): void {
-    setFlowPreset(value)
-    setExecutionSteps(cloneSteps(runtimeOptions.flowPresetTemplates[value] ?? []))
+  function setFlowTemplateIdChange(value: EntityRegistrySyncFlowTemplateId): void {
+    setFlowTemplateId(value)
+    setExecutionSteps(cloneSteps(runtimeOptions.flowTemplateSteps[value] ?? []))
   }
 }
 
@@ -447,16 +437,16 @@ function ModeToggle({ value, onChange }: { value: AuthoringMode; onChange: (m: A
   )
 }
 
-function defaultRuntimeFlowPreset(entityId: string): EntityRegistrySyncFlowPreset {
-  return FLOW_PRESETS.includes(entityId as EntityRegistrySyncFlowPreset)
-    ? entityId as EntityRegistrySyncFlowPreset
+function defaultRuntimeFlowTemplateId(entityId: string, runtimeOptions: SyncDefinitionRuntimeOptions): EntityRegistrySyncFlowTemplateId {
+  return runtimeOptions.flowTemplates.some((option) => option.id === entityId)
+    ? entityId as EntityRegistrySyncFlowTemplateId
     : "metadata-only"
 }
 
 function RuntimeConfigSection({
-  flowPreset,
-  onFlowPreset,
-  flowPresetOptions,
+  flowTemplateId,
+  onFlowTemplateId,
+  flowTemplateOptions,
   executionSteps,
   onExecutionSteps,
   rootTable,
@@ -468,9 +458,9 @@ function RuntimeConfigSection({
   environmentPolicyOptions,
   loading,
 }: {
-  flowPreset: EntityRegistrySyncFlowPreset
-  onFlowPreset: (value: EntityRegistrySyncFlowPreset) => void
-  flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
+  onFlowTemplateId: (value: EntityRegistrySyncFlowTemplateId) => void
+  flowTemplateOptions: ListboxOption<EntityRegistrySyncFlowTemplateId>[]
   executionSteps: AuthoredSyncFlowStep[]
   onExecutionSteps: (value: AuthoredSyncFlowStep[]) => void
   rootTable: string
@@ -496,7 +486,7 @@ function RuntimeConfigSection({
         <div className="space-y-3">
           <label className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-wider text-text-muted">Sync behavior</span>
-            <Listbox value={flowPreset} options={flowPresetOptions} onChange={onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
+            <Listbox value={flowTemplateId} options={flowTemplateOptions} onChange={onFlowTemplateId} className="w-full" ariaLabel="Sync behavior" />
           </label>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1">

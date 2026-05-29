@@ -455,7 +455,7 @@ export const api = {
   getEntityRegistrySyncDefinitionScaffold: (id: string, opts?: { tenant?: string } & EntityRegistrySyncDefinitionScaffoldRequest) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
-    if (opts?.flowPreset) p.set("flowPreset", opts.flowPreset)
+    if (opts?.flowTemplateId) p.set("flowTemplateId", opts.flowTemplateId)
     if (opts?.serviceProfileRef) p.set("serviceProfileRef", opts.serviceProfileRef)
     if (opts?.environmentPolicyRef) p.set("environmentPolicyRef", opts.environmentPolicyRef)
     const qs = p.toString()

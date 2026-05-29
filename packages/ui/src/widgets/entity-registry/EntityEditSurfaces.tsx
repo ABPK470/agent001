@@ -16,7 +16,7 @@ import { ChevronDown, FileCode2, Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { useState } from "react"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import type { AuthoredSyncFlowStep, EntityRegistrySyncFlowPreset } from "../../types"
+import type { AuthoredSyncFlowStep, EntityRegistrySyncFlowTemplateId } from "../../types"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
 import { StrategySelect } from "./StrategySelect"
 
@@ -86,8 +86,8 @@ export interface FormSurfaceProps {
   freezeWindowIds: readonly string[]; onFreezeWindowIds: (v: string[]) => void
   riskMultiplier: string;  onRiskMultiplier: (v: string) => void
   tablesJson: string;      onTablesJson: (v: string) => void
-  flowPreset: EntityRegistrySyncFlowPreset; onFlowPreset: (v: EntityRegistrySyncFlowPreset) => void
-  flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  flowTemplateId: EntityRegistrySyncFlowTemplateId; onFlowTemplateId: (v: EntityRegistrySyncFlowTemplateId) => void
+  flowTemplateOptions: ListboxOption<EntityRegistrySyncFlowTemplateId>[]
   executionSteps: AuthoredSyncFlowStep[]; onExecutionSteps: (v: AuthoredSyncFlowStep[]) => void
   rootTable: string
   serviceProfileRef: string; onServiceProfileRef: (v: string) => void
@@ -180,7 +180,7 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
       <Disclosure
         title="Sync behavior"
         summary={summary([
-          ["mode", p.flowPreset],
+          ["mode", p.flowTemplateId],
           ["steps", `${p.executionSteps.length}`],
           ["service", p.serviceProfileRef || "default"],
           ["env", p.environmentPolicyRef || "default"],
@@ -195,7 +195,7 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
           <>
             <Grid2>
               <Field label="Sync behavior">
-                <Listbox value={p.flowPreset} options={p.flowPresetOptions} onChange={p.onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
+                <Listbox value={p.flowTemplateId} options={p.flowTemplateOptions} onChange={p.onFlowTemplateId} className="w-full" ariaLabel="Sync behavior" />
               </Field>
               <Field label="Service profile">
                 <Listbox value={p.serviceProfileRef} options={p.serviceProfileOptions} onChange={p.onServiceProfileRef} className="w-full" ariaLabel="Service profile" />

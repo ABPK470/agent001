@@ -2,105 +2,27 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { resolve } from "node:path"
 
 import type {
-  AuthoredSyncDefinition,
-  AuthoredSyncFlowStep,
-  EntityRegistrySyncFlowPreset,
-  PublishedSyncDefinition,
-  SyncDefinitionRuntimeOptions,
+    AuthoredSyncDefinition,
+    AuthoredSyncFlowStep,
+    EntityRegistrySyncFlowTemplateId,
+    PublishedSyncDefinition,
+    SyncDefinitionRuntimeOptions,
 } from "@mia/shared-types"
-import type { EntityDefinition } from "@mia/sync"
+import {
+    buildSyncDefinitionFlowTemplateSteps,
+    buildSyncDefinitionRuntimeFlowOptions,
+    defaultSyncDefinitionFlowTemplateId,
+    getSyncDefinitionFlowTemplateSteps,
+    loadSyncDefinitionFlowTemplateCatalog,
+    type EntityDefinition,
+    type SyncDefinitionFlowTemplateCatalog,
+} from "@mia/sync"
 
 import * as db from "../adapters/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const PUBLISHED_BUNDLE_PATH = "sync-definitions/published/definitions.bundle.json"
-const AUTHORED_DEFINITIONS_DIR = "sync-definitions/entities"
-
-const FLOW_PRESETS: Record<EntityRegistrySyncFlowPreset, AuthoredSyncDefinition["executionFlow"]["steps"]> = {
-  contract: [
-    step("audit-check", "pre-transaction", "auditCheck", "Audit check", "Validate target state before contract sync.", { auditObjectType: "Contract" }),
-    step("target-lock", "pre-transaction", "targetLock", "Target lock", "Lock the target contract deployment window."),
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected contract scope."),
-    step("pipeline-register", "post-metadata", "pipelineRegister", "Pipeline register", "Register affected pipelines with the target agent service.", { subjectRef: "contractPipelineId" }),
-    step("contract-undeploy", "post-metadata", "contractUndeploy", "Contract undeploy", "Undeploy the target contract before redeployment."),
-    step("contract-unlock-after-undeploy", "post-metadata", "targetUnlock", "Unlock after undeploy", "Unlock the contract after undeploy."),
-    step("audit-check-2", "post-metadata", "auditCheck", "Pre-deploy audit check", "Run a second contract audit check before deployment.", { auditObjectType: "Contract" }),
-    step("contract-lock-for-deploy", "post-metadata", "targetLock", "Lock for deploy", "Lock the contract for deployment."),
-    step("contract-pre-script", "post-metadata", "contractPreScript", "Pre-deploy script", "Run contract pre-deployment scripts."),
-    step("contract-create-dataset-stage", "post-metadata", "contractCreateStageDataset", "Create stage dataset", "Create the stage dataset."),
-    step("contract-create-dataset-archive", "post-metadata", "contractCreateArchiveDataset", "Create archive dataset", "Create the archive dataset."),
-    step("contract-create-dataset-list", "post-metadata", "contractCreateListDataset", "Create list dataset", "Create the list dataset."),
-    step("contract-create-dataset-dim", "post-metadata", "contractCreateDimDataset", "Create dim dataset", "Create the dimension dataset."),
-    step("contract-create-dataset-fact", "post-metadata", "contractCreateFactDataset", "Create fact dataset", "Create the fact dataset."),
-    step("contract-create-fks", "post-metadata", "contractCreateDatasetFks", "Create dataset FKs", "Reconcile contract dataset foreign keys."),
-    step("contract-deploy-etl", "post-metadata", "contractDeployEtl", "Deploy ETL", "Deploy ETL custom transformations."),
-    step("contract-deploy-routine", "post-metadata", "contractDeployRoutine", "Deploy routines", "Deploy contract routines."),
-    step("contract-post-script", "post-metadata", "contractPostScript", "Post-deploy script", "Run contract post-deployment scripts."),
-    step("contract-unlock-after-deploy", "post-metadata", "targetUnlock", "Unlock after deploy", "Unlock the contract after deployment."),
-    step("set-sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the contract sync date.", { auditObjectType: "Contract" }),
-    step("set-deploy-date", "post-metadata", "deployDate", "Deploy date", "Stamp the contract deploy date.", { auditObjectType: "Contract" }),
-  ],
-  dataset: [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected dataset scope."),
-    step("dataset-deploy", "post-metadata", "datasetDeploy", "Dataset deploy", "Deploy the dataset using the target ETL service."),
-    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the dataset sync date after deployment.", { auditObjectType: "Dataset" }),
-  ],
-  rule: [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected rule scope."),
-    step("dataset-deploy", "post-metadata", "datasetDeploy", "Dataset deploy", "Deploy datasets required by the rule on the target ETL service.", { subjectRef: "ruleInputDatasetId" }),
-    step("rules-deploy", "post-metadata", "rulesDeploy", "Rules deploy", "Deploy the rule package on the target ETL service."),
-    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh direct dependency state after rule deployment.", { objectName: "rule" }),
-    step("sync-date", "post-metadata", "syncDate", "Sync date", "Stamp the rule sync date.", { auditObjectType: "Rule" }),
-    step("deploy-date", "post-metadata", "deployDate", "Deploy date", "Stamp the rule deploy date.", { auditObjectType: "Rule" }),
-  ],
-  pipelineActivity: [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected pipeline activity scope."),
-    step("pipeline-register", "post-metadata", "pipelineRegister", "Pipeline register", "Register the target pipeline with the agent service."),
-  ],
-  gateMetadata: [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected gate metadata scope."),
-    step("meta-refresh", "post-metadata", "metaRefresh", "Meta refresh", "Refresh target gate metadata."),
-    step("pipeline-start", "post-metadata", "pipelineStart", "Pipeline start", "Start the downstream gate refresh pipeline.", { pipelineName: "All Lists content item population" }),
-  ],
-  content: [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected content scope."),
-    step("handle-dependencies", "post-metadata", "handleDependencies", "Handle dependencies", "Refresh downstream content dependency state.", { objectName: "content" }),
-  ],
-  "metadata-only": [
-    step("metadata-sync", "metadata", "metadataSync", "Metadata sync", "Apply transactional metadata changes for the selected entity scope."),
-  ],
-}
-
-const FLOW_PRESET_DETAILS: Record<EntityRegistrySyncFlowPreset, { label: string; description: string }> = {
-  contract: {
-    label: "Contract deploy",
-    description: "Metadata sync plus full contract deployment, ETL, routines, and deploy stamps.",
-  },
-  dataset: {
-    label: "Dataset deploy",
-    description: "Metadata sync followed by dataset deployment on the target ETL service.",
-  },
-  rule: {
-    label: "Rule deploy",
-    description: "Metadata sync, dependent dataset deploy, rule deploy, and dependency refresh.",
-  },
-  pipelineActivity: {
-    label: "Pipeline register",
-    description: "Metadata sync followed by registering the target pipeline with the agent service.",
-  },
-  gateMetadata: {
-    label: "Gate refresh",
-    description: "Metadata sync followed by gate metadata refresh and downstream pipeline start.",
-  },
-  content: {
-    label: "Content dependencies",
-    description: "Metadata sync followed by downstream dependency refresh for content entities.",
-  },
-  "metadata-only": {
-    label: "Metadata only",
-    description: "Only apply metadata changes; do not trigger downstream deploy or refresh steps.",
-  },
-}
+const AUTHORED_DEFINITIONS_DIR = "deploy/sync/entities"
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
   {
@@ -123,7 +45,7 @@ export interface SyncDefinitionAdminItem {
   displayName: string
   entityVersion: number
   tableCount: number
-  flowPreset: EntityRegistrySyncFlowPreset
+  flowTemplateId: EntityRegistrySyncFlowTemplateId
   executionSteps: AuthoredSyncFlowStep[]
   serviceProfileRef: string
   environmentPolicyRef: string
@@ -137,16 +59,11 @@ export interface SyncDefinitionAdminItem {
   publishedAt: string | null
 }
 
-export function listSyncDefinitionRuntimeOptions(): SyncDefinitionRuntimeOptions {
+export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefinitionRuntimeOptions {
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   return {
-    flowPresets: (Object.keys(FLOW_PRESET_DETAILS) as EntityRegistrySyncFlowPreset[]).map((id) => ({
-      id,
-      label: FLOW_PRESET_DETAILS[id].label,
-      description: FLOW_PRESET_DETAILS[id].description,
-    })),
-    flowPresetTemplates: Object.fromEntries(
-      (Object.keys(FLOW_PRESETS) as EntityRegistrySyncFlowPreset[]).map((id) => [id, FLOW_PRESETS[id]]),
-    ) as SyncDefinitionRuntimeOptions["flowPresetTemplates"],
+    flowTemplates: buildSyncDefinitionRuntimeFlowOptions(flowTemplateCatalog),
+    flowTemplateSteps: buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog),
     serviceProfiles: SERVICE_PROFILE_OPTIONS,
     environmentPolicies: ENVIRONMENT_POLICY_OPTIONS,
   }
@@ -159,29 +76,22 @@ interface PersistedPublishedBundle {
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
-function step(
-  id: string,
-  phase: AuthoredSyncDefinition["executionFlow"]["steps"][number]["phase"],
-  kind: AuthoredSyncDefinition["executionFlow"]["steps"][number]["kind"],
-  title: string,
-  description: string,
-  extra: Partial<AuthoredSyncDefinition["executionFlow"]["steps"][number]> = {},
-): AuthoredSyncDefinition["executionFlow"]["steps"][number] {
-  return { id, phase, kind, title, description, ...extra }
+function loadFlowTemplateCatalog(projectRoot: string): SyncDefinitionFlowTemplateCatalog {
+  return loadSyncDefinitionFlowTemplateCatalog(projectRoot)
 }
 
-function defaultFlowPreset(entityId: string): EntityRegistrySyncFlowPreset {
-  return entityId in FLOW_PRESETS ? entityId as EntityRegistrySyncFlowPreset : "metadata-only"
+function defaultFlowTemplateId(entityId: string, flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog): EntityRegistrySyncFlowTemplateId {
+  return defaultSyncDefinitionFlowTemplateId(entityId, flowTemplateCatalog)
 }
 
-function defaultConfigForEntity(entity: EntityDefinition): db.DbSyncDefinitionConfig {
+function defaultConfigForEntity(entity: EntityDefinition, flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog): db.DbSyncDefinitionConfig {
   const now = new Date().toISOString()
-  const flowPreset = defaultFlowPreset(entity.id)
+  const flowTemplateId = defaultFlowTemplateId(entity.id, flowTemplateCatalog)
   return {
     tenant_id: entity.tenantId,
     entity_id: entity.id,
-    flow_preset: flowPreset,
-    execution_steps_json: JSON.stringify(FLOW_PRESETS[flowPreset]),
+    flow_preset: flowTemplateId,
+    execution_steps_json: JSON.stringify(getSyncDefinitionFlowTemplateSteps(flowTemplateCatalog, flowTemplateId)),
     service_profile_ref: "default",
     environment_policy_ref: "default",
     ownership_team: "sync-platform",
@@ -196,35 +106,46 @@ function defaultConfigForEntity(entity: EntityDefinition): db.DbSyncDefinitionCo
   }
 }
 
-function inferFlowPreset(entityId: string, definition: Partial<AuthoredSyncDefinition>): EntityRegistrySyncFlowPreset {
+function inferFlowTemplateId(
+  entityId: string,
+  definition: Partial<AuthoredSyncDefinition>,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+): EntityRegistrySyncFlowTemplateId {
   const kinds = (definition.executionFlow?.steps ?? []).map((step) => step.kind)
-  for (const [preset, steps] of Object.entries(FLOW_PRESETS) as Array<[EntityRegistrySyncFlowPreset, AuthoredSyncDefinition["executionFlow"]["steps"]]>) {
-    if (steps.map((step) => step.kind).join("|") === kinds.join("|")) return preset
+  for (const [templateId, steps] of Object.entries(buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog)) as Array<[EntityRegistrySyncFlowTemplateId, AuthoredSyncDefinition["executionFlow"]["steps"]]>) {
+    if (steps.map((step) => step.kind).join("|") === kinds.join("|")) return templateId
   }
-  return defaultFlowPreset(entityId)
+  return defaultFlowTemplateId(entityId, flowTemplateCatalog)
 }
 
-function resolveExecutionSteps(config: Pick<db.DbSyncDefinitionConfig, "execution_steps_json" | "flow_preset">, entityId: string): AuthoredSyncFlowStep[] {
+function resolveExecutionSteps(
+  config: Pick<db.DbSyncDefinitionConfig, "execution_steps_json" | "flow_preset">,
+  entityId: string,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+): AuthoredSyncFlowStep[] {
   try {
     const parsed = JSON.parse(config.execution_steps_json) as unknown
     if (Array.isArray(parsed) && parsed.length > 0) return parsed as AuthoredSyncFlowStep[]
   } catch {
     // fall through to preset-derived default
   }
-  const preset = (config.flow_preset in FLOW_PRESETS ? config.flow_preset : defaultFlowPreset(entityId)) as EntityRegistrySyncFlowPreset
-  return FLOW_PRESETS[preset]
+  const flowTemplateId = (config.flow_preset in flowTemplateCatalog.flowTemplates
+    ? config.flow_preset
+    : defaultFlowTemplateId(entityId, flowTemplateCatalog)) as EntityRegistrySyncFlowTemplateId
+  return getSyncDefinitionFlowTemplateSteps(flowTemplateCatalog, flowTemplateId)
 }
 
 function seedFromRepoDefinition(projectRoot: string, entity: EntityDefinition): db.DbSyncDefinitionConfig | null {
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const path = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR, `${entity.id}.json`)
   if (!existsSync(path)) return null
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<AuthoredSyncDefinition>
-    const base = defaultConfigForEntity(entity)
+    const base = defaultConfigForEntity(entity, flowTemplateCatalog)
     return {
       ...base,
-      flow_preset: inferFlowPreset(entity.id, parsed),
-      execution_steps_json: JSON.stringify(parsed.executionFlow?.steps ?? resolveExecutionSteps(base, entity.id)),
+      flow_preset: inferFlowTemplateId(entity.id, parsed, flowTemplateCatalog),
+      execution_steps_json: JSON.stringify(parsed.executionFlow?.steps ?? resolveExecutionSteps(base, entity.id, flowTemplateCatalog)),
       service_profile_ref: parsed.bindings?.serviceProfileRef ?? base.service_profile_ref,
       environment_policy_ref: parsed.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
       ownership_team: parsed.ownership?.team ?? base.ownership_team,
@@ -248,10 +169,11 @@ function predicateForTable(entity: EntityDefinition, table: EntityDefinition["ta
 function composeDefinition(
   entity: EntityDefinition,
   config: db.DbSyncDefinitionConfig,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
   publishedAt: string,
   publishedVersion: string,
 ): PublishedSyncDefinition {
-  const executionSteps = resolveExecutionSteps(config, entity.id)
+  const executionSteps = resolveExecutionSteps(config, entity.id, flowTemplateCatalog)
   const executionOrder = entity.tables
     .slice()
     .sort((left, right) => Number(left.executionOrder ?? 0) - Number(right.executionOrder ?? 0))
@@ -329,30 +251,34 @@ function loadPublishedBundle(projectRoot: string): PersistedPublishedBundle | nu
 }
 
 export function ensureSyncDefinitionConfigs(projectRoot: string, tenantId = DEFAULT_TENANT_ID): void {
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const entities = db.listEntityDefinitions(tenantId)
   if (entities.length === 0) return
   const existing = new Set(db.listSyncDefinitionConfigs(tenantId).map((row) => row.entity_id))
   for (const entity of entities) {
     if (existing.has(entity.id)) continue
-    db.saveSyncDefinitionConfig(seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity))
+    db.saveSyncDefinitionConfig(seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, flowTemplateCatalog))
   }
 }
 
 export function listSyncDefinitionAdminItems(projectRoot: string, tenantId = DEFAULT_TENANT_ID): SyncDefinitionAdminItem[] {
   ensureSyncDefinitionConfigs(projectRoot, tenantId)
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const entities = db.listEntityDefinitions(tenantId)
   const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
   const published = loadPublishedBundle(projectRoot)
   return entities.map((entity) => {
-    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity)
+    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
     const publishedDefinition = published?.definitions?.[entity.id] ?? null
     return {
       id: entity.id,
       displayName: entity.displayName,
       entityVersion: entity.version,
       tableCount: entity.tables.length,
-      flowPreset: (config.flow_preset in FLOW_PRESETS ? config.flow_preset : defaultFlowPreset(entity.id)) as EntityRegistrySyncFlowPreset,
-      executionSteps: resolveExecutionSteps(config, entity.id),
+      flowTemplateId: (config.flow_preset in flowTemplateCatalog.flowTemplates
+        ? config.flow_preset
+        : defaultFlowTemplateId(entity.id, flowTemplateCatalog)) as EntityRegistrySyncFlowTemplateId,
+      executionSteps: resolveExecutionSteps(config, entity.id, flowTemplateCatalog),
       serviceProfileRef: config.service_profile_ref,
       environmentPolicyRef: config.environment_policy_ref,
       ownershipTeam: config.ownership_team,
@@ -369,14 +295,18 @@ export function listSyncDefinitionAdminItems(projectRoot: string, tenantId = DEF
 
 export function upsertSyncDefinitionConfig(projectRoot: string, row: db.DbSyncDefinitionConfig): void {
   ensureSyncDefinitionConfigs(projectRoot, row.tenant_id)
-  db.saveSyncDefinitionConfig(row)
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
+  db.saveSyncDefinitionConfig({
+    ...row,
+    flow_preset: row.flow_preset || defaultFlowTemplateId(row.entity_id, flowTemplateCatalog),
+  })
 }
 
 export function resetSyncDefinitionConfig(projectRoot: string, tenantId: string, entityId: string): db.DbSyncDefinitionConfig | null {
   const entity = db.getEntityDefinition(tenantId, entityId)
   if (!entity) return null
   db.deleteSyncDefinitionConfig(tenantId, entityId)
-  const reset = seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity)
+  const reset = seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, loadFlowTemplateCatalog(projectRoot))
   db.saveSyncDefinitionConfig(reset)
   return reset
 }
@@ -390,6 +320,7 @@ export function publishSyncDefinitionsFromDb(projectRoot: string, tenantId = DEF
   stderr: string[]
 } {
   ensureSyncDefinitionConfigs(projectRoot, tenantId)
+  const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const entities = db.listEntityDefinitions(tenantId)
   const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
   const publishedAt = new Date().toISOString()
@@ -397,8 +328,8 @@ export function publishSyncDefinitionsFromDb(projectRoot: string, tenantId = DEF
   const definitions: Record<string, PublishedSyncDefinition | null> = {}
 
   for (const entity of entities) {
-    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity)
-    definitions[entity.id] = composeDefinition(entity, config, publishedAt, publishedVersion)
+    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
+    definitions[entity.id] = composeDefinition(entity, config, flowTemplateCatalog, publishedAt, publishedVersion)
   }
 
   const bundle: PersistedPublishedBundle = {
