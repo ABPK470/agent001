@@ -282,18 +282,17 @@ export function OperationLog() {
             )}
           </div>
 
-          <div className={`min-w-0 ${compact ? "flex items-center gap-2" : "flex items-center gap-1.5 shrink-0"}`}>
-            {!compact && <div className="flex-1 min-w-0" />}
+          <div className={`min-w-0 ${compact ? "flex items-center gap-2" : "ml-auto flex items-center gap-2 flex-[0_1_32rem] min-w-[18rem]"}`}>
 
             {/* Search — big, fills remaining space */}
-            <div className={`relative flex items-center min-w-0 ${compact ? "flex-1" : "flex-1 max-w-md shrink-0"}`}>
+            <div className={`relative flex items-center min-w-0 ${compact ? "flex-1" : "flex-1 min-w-[16rem]"}`}>
               <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Filter operations…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
-                className="pl-8 pr-7 py-1.5 h-[32px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
+                className="pl-8 pr-7 py-1.5 h-[40px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
               />
               {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
               {search && !histLoading && (
