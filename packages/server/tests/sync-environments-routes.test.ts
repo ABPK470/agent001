@@ -80,8 +80,8 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-sync-env-data-"))
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-env-root-"))
-  mkdirSync(join(projectRoot, "deploy", "mssql"), { recursive: true })
-  writeFileSync(join(projectRoot, "deploy", "mssql", "sync-environments.json"), JSON.stringify({
+  mkdirSync(join(projectRoot, "deploy", "sync"), { recursive: true })
+  writeFileSync(join(projectRoot, "deploy", "sync", "sync-environments.json"), JSON.stringify({
     version: 1,
     environments: [
       {
@@ -153,7 +153,7 @@ describe("sync-environment routes", () => {
   it("does not drift when the legacy JSON file changes after DB seeding", async () => {
     const { app, host } = await buildApp(adminSession())
 
-    writeFileSync(join(projectRoot, "deploy", "mssql", "sync-environments.json"), JSON.stringify({
+    writeFileSync(join(projectRoot, "deploy", "sync", "sync-environments.json"), JSON.stringify({
       version: 1,
       environments: [
         {

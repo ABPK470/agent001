@@ -155,7 +155,7 @@ export const SELECTOR_KEYS: ReadonlyArray<SelectorKeyMeta> = Object.freeze([
   {
     key:         "dbEnvironment",
     label:       "DB environment",
-    description: "Target MSSQL environment as configured in deploy/mssql/sync-environments.json.",
+    description: "Target MSSQL environment as configured in deploy/sync/sync-environments.json.",
     type:        "enum",
     enumValues:  [
       { value: "dev",  description: "Development environment." },

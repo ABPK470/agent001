@@ -7,7 +7,7 @@
  * and a per-env sync allowlist.
  *
  * Loading priority:
- *   1. `deploy/mssql/sync-environments.json` if present — explicit config that
+ *   1. `deploy/sync/sync-environments.json` if present — explicit config that
  *      maps each MSSQL_DATABASES connection to a sync env.
  *   2. Else fall back to synthesising one entry per configured MSSQL connection
  *      with role `both`.
@@ -156,7 +156,7 @@ export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetE
  * UAT/PROD are read-only with DML+DDL denied; DEV is read-write. These
  * defaults are intentionally conservative — operators widen them by
  * explicitly setting the corresponding fields in
- * `deploy/mssql/sync-environments.json`.
+ * `deploy/sync/sync-environments.json`.
  */
 export function withPermissionDefaults(
   e: Partial<SyncEnvironment> & Pick<SyncEnvironment, "name">,
@@ -195,7 +195,7 @@ export function withPermissionDefaults(
   }
 }
 
-const DEFAULT_CONFIG_PATH = "deploy/mssql/sync-environments.json"
+const DEFAULT_CONFIG_PATH = "deploy/sync/sync-environments.json"
 
 export function loadSyncEnvironments(
   projectRoot: string,
@@ -254,7 +254,7 @@ export function loadSyncEnvironments(
 }
 
 /**
- * Initialise environments. Reads `deploy/mssql/sync-environments.json` if
+ * Initialise environments. Reads `deploy/sync/sync-environments.json` if
  * present; otherwise synthesises one entry per configured MSSQL connection.
  */
 export async function setupEnvironments(host: AgentHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {

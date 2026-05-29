@@ -277,7 +277,7 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
 /**
  * Derive selector rules from the per-environment permission config so
  * operators can widen or tighten the per-environment defaults from
- * `deploy/mssql/sync-environments.json` without forking this file.
+ * `deploy/sync/sync-environments.json` without forking this file.
  *
  * For each environment we emit:
  *   - one DENY rule per `denyDml` / `denyDdl` flag (priority above defaults

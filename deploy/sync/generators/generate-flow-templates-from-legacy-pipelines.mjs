@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { buildFlowTemplateCatalogForPipelineIds, parsePipelineIds } from "../../../notes/sync/legacy-sync-ground-truth.mjs"
+import { buildFlowTemplateCatalogFromPipelines, parsePipelineIds } from "../helpers/legacy-flow-template-derivation.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, "../../..")
@@ -21,13 +21,14 @@ async function main() {
   const pipelineIds = parsePipelineIds(options.pipelineIds)
   const evidence = await loadEvidence(options)
   validateEvidence(pipelineIds, evidence)
+  const selectedPipelines = evidence.pipelines.filter((pipeline) => pipelineIds.includes(Number(pipeline.pipelineId)))
 
   const outputPath = resolve(ROOT, options.output)
   if (existsSync(outputPath) && !options.force) {
     fail(`Refusing to overwrite existing file without --force: ${relative(ROOT, outputPath)}`)
   }
   mkdirSync(dirname(outputPath), { recursive: true })
-  const catalog = buildFlowTemplateCatalogForPipelineIds(pipelineIds)
+  const catalog = buildFlowTemplateCatalogFromPipelines(selectedPipelines)
   writeFileSync(outputPath, `${JSON.stringify(catalog, null, 2)}\n`, "utf-8")
   console.log(`Wrote ${relative(ROOT, outputPath)}`)
 }

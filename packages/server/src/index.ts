@@ -177,7 +177,7 @@ async function main() {
   if (syncEnvironments.source === "db") {
     console.log(`ABI environments (from persisted DB): ${syncEnvironments.summary}`)
   } else if (syncEnvironments.source === "file") {
-    console.log(`ABI environments seeded from deploy/mssql/sync-environments.json: ${syncEnvironments.summary}`)
+    console.log(`ABI environments seeded from deploy/sync/sync-environments.json: ${syncEnvironments.summary}`)
   } else if (syncEnvironments.source === "mssql") {
     console.log(`ABI environments seeded from MSSQL_DATABASES: ${syncEnvironments.summary}`)
   }

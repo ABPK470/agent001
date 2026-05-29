@@ -5,8 +5,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { parsePipelineIds } from "../../../notes/sync/legacy-sync-ground-truth.mjs"
 import { buildCatalogIndexFromQueryResults, deriveSyncDefinitions, extractSyncObjectCalls } from "../helpers/legacy-entity-derivation.mjs"
+import { parsePipelineIds } from "../helpers/legacy-flow-template-derivation.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, "../../..")
