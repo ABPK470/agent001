@@ -184,7 +184,7 @@ function StrategyDetail({ s, isAdmin, onEdit }: {
 function Bullet({ active, children }: { active: boolean; children: JSX.Element | (JSX.Element | string | false)[] | string }): JSX.Element {
   return (
     <li className="flex items-start gap-2">
-      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-emerald-400" : "bg-text-faint/40"}`} />
+      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-success" : "bg-text-faint/40"}`} />
       <span className={active ? "text-text" : "text-text-muted"}>{children}</span>
     </li>
   )

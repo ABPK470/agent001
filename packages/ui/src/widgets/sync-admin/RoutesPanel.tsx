@@ -9,6 +9,7 @@ import { Hash, Mail, MessageSquare, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { useContainerSize } from "../../hooks/useContainerSize"
 import { useMe } from "../../hooks/useMe"
 import { timeAgo } from "../../util"
@@ -37,6 +38,12 @@ const DEFAULT_DRAFT: Draft = {
   filter:    "{}",
   enabled:   true,
 }
+
+const CHANNEL_OPTIONS: ListboxOption<Channel>[] = [
+  { value: "email", label: "email" },
+  { value: "teams", label: "teams" },
+  { value: "slack", label: "slack" },
+]
 
 export function RoutesPanel(): JSX.Element {
   const layoutRef = useRef<HTMLDivElement>(null)
@@ -94,11 +101,7 @@ export function RoutesPanel(): JSX.Element {
           <div className="mx-5 mt-4 rounded-lg border border-border-subtle bg-panel p-3">
             <div className={compactForm ? "grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" : "grid grid-cols-[1.4fr_110px_1.6fr_1.4fr_auto_auto] items-center gap-2 text-xs"}>
               <input className="input min-w-0 font-mono" placeholder="event type (e.g. sync.approval.requested)" value={draft.eventType} onChange={(e) => setDraft({ ...draft, eventType: e.target.value })} />
-              <select className="input min-w-0" value={draft.channel} onChange={(e) => setDraft({ ...draft, channel: e.target.value as Channel })}>
-                <option value="email">email</option>
-                <option value="teams">teams</option>
-                <option value="slack">slack</option>
-              </select>
+              <Listbox value={draft.channel} options={CHANNEL_OPTIONS} onChange={(channel) => setDraft({ ...draft, channel })} className="min-w-0 w-full" ariaLabel="Route channel" />
               <input className={`input min-w-0 ${compactForm ? "sm:col-span-2" : ""}`} placeholder="email address or webhook URL" value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
               <input className={`input min-w-0 font-mono ${compactForm ? "sm:col-span-2" : ""}`} placeholder='{"riskTier":["high"]}' value={draft.filter} onChange={(e) => setDraft({ ...draft, filter: e.target.value })} />
               <label className="flex min-h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[11px] text-text-muted">
@@ -132,7 +135,7 @@ export function RoutesPanel(): JSX.Element {
                   <td>{r.enabled ? "✓" : "—"}</td>
                   <td className="text-text-muted" title={r.updated_at}>{timeAgo(r.updated_at)}</td>
                   <td>{isAdmin && (
-                    <button onClick={() => void remove(r)} className="text-rose-300 hover:text-rose-200">
+                    <button onClick={() => void remove(r)} className="text-error hover:opacity-75">
                       <Trash2 className="h-3 w-3" />
                     </button>
                   )}</td>

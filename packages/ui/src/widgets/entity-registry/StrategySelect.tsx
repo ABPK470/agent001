@@ -2,10 +2,10 @@
  * StrategySelect — dropdown of SCD2 strategies + version picker.
  *
  * Pulls from `GET /api/entity-registry/strategies` (bundled ⊕ tenant
- * custom). Each option shows the displayName and is grouped by
- * provenance: bundled vs tenant-custom.
+ * custom). Each option shows the displayName and keeps provenance visible
+ * as a hint inside the shared listbox.
  *
- * Version dropdown is a separate `<select>` whose options are
+ * Version dropdown is a separate picker whose options are
  * `"latest"` plus every concrete version we've seen for the chosen
  * strategy id. Pinning to a number freezes against historical schema
  * evolution; `"latest"` tracks the current pointer.
@@ -15,6 +15,7 @@ import { Loader2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../types"
 
 export interface StrategySelectProps {
@@ -43,15 +44,41 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
 
   const chosen = useMemo(() => items.find((s) => s.id === p.strategyId), [items, p.strategyId])
 
-  // Group by provenance.kind for the `<optgroup>` layout.
   const groups = useMemo(() => {
     const by: Record<string, EntityRegistryStrategy[]> = {}
     for (const s of items) {
-      const k = s.provenance.kind
-      ;(by[k] ??= []).push(s)
+      const kind = s.provenance.kind
+      ;(by[kind] ??= []).push(s)
     }
     return by
   }, [items])
+
+  const strategyOptions = useMemo<ListboxOption<string>[]>(() => {
+    const options: ListboxOption<string>[] = []
+    if (!chosen && p.strategyId) {
+      options.push({ value: p.strategyId, label: `${p.strategyId} (unresolved)`, hint: "Current" })
+    }
+    for (const [kind, list] of Object.entries(groups)) {
+      for (const strategy of list) {
+        options.push({
+          value: strategy.id,
+          label: `${strategy.displayName} — ${strategy.id}`,
+          hint: labelFor(kind),
+        })
+      }
+    }
+    return options
+  }, [chosen, groups, p.strategyId])
+
+  const versionOptions = useMemo<ListboxOption<string>[]>(() => {
+    const options: ListboxOption<string>[] = [
+      { value: "latest", label: "latest (current pointer)" },
+    ]
+    if (chosen) {
+      options.push({ value: String(chosen.version), label: `v${chosen.version} (pinned)` })
+    }
+    return options
+  }, [chosen])
 
   if (loading) {
     return (
@@ -68,28 +95,16 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
         <span className="text-[10px] uppercase tracking-wider text-text-muted">
           scd2.strategyId <span className="text-rose-400">*</span>
         </span>
-        <select
+        <Listbox
           value={p.strategyId}
-          onChange={(e) => {
-            p.onStrategyId(e.target.value)
-            // Reset version to "latest" when switching strategy id.
+          options={strategyOptions}
+          onChange={(value) => {
+            p.onStrategyId(value)
             p.onStrategyVersion("latest")
           }}
-          className="input font-mono"
-        >
-          {!chosen && p.strategyId && (
-            <option value={p.strategyId}>{p.strategyId} (unresolved)</option>
-          )}
-          {Object.entries(groups).map(([kind, list]) => (
-            <optgroup key={kind} label={labelFor(kind)}>
-              {list.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.displayName} — {s.id}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+          className="w-full font-mono"
+          ariaLabel="SCD2 strategy"
+        />
         {chosen && (
           <span className="text-[10px] text-text-faint">{chosen.description}</span>
         )}
@@ -99,19 +114,15 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
         <span className="text-[10px] uppercase tracking-wider text-text-muted">
           scd2.strategyVersion
         </span>
-        <select
+        <Listbox
           value={String(p.strategyVersion)}
-          onChange={(e) => {
-            const v = e.target.value
-            p.onStrategyVersion(v === "latest" ? "latest" : Number(v))
+          options={versionOptions}
+          onChange={(value) => {
+            p.onStrategyVersion(value === "latest" ? "latest" : Number(value))
           }}
-          className="input font-mono"
-        >
-          <option value="latest">latest (current pointer)</option>
-          {chosen && (
-            <option value={String(chosen.version)}>v{chosen.version} (pinned)</option>
-          )}
-        </select>
+          className="w-full font-mono"
+          ariaLabel="SCD2 strategy version"
+        />
       </label>
     </div>
   )
@@ -124,6 +135,6 @@ function labelFor(kind: string): string {
     case "imported": return "Imported"
     case "agent":    return "Agent-authored"
     case "manual":   return "Manual"
-    default:         return kind
+    default:          return kind
   }
 }

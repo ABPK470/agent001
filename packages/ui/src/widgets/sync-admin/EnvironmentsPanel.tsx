@@ -1,12 +1,24 @@
+import { EventType } from "@mia/shared-enums"
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "../../api"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { useStore } from "../../store"
 import type { EnvOperation, SyncEnvironmentAdmin } from "../../types"
 import { Empty, ListItem, PanelChrome, SplitView } from "./shared"
 
 const ALL_OPS: EnvOperation[] = ["query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml"]
+const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
+  { value: "source", label: "source" },
+  { value: "target", label: "target" },
+  { value: "both", label: "both" },
+]
+const ACCESS_MODE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["defaultAccessMode"]>[] = [
+  { value: "read_only", label: "read_only" },
+  { value: "read_write", label: "read_write" },
+]
 
 export function EnvironmentsPanel(): JSX.Element {
   const [items, setItems] = useState<SyncEnvironmentAdmin[]>([])
@@ -18,9 +30,32 @@ export function EnvironmentsPanel(): JSX.Element {
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
 
+  const loadingRef = useRef(false)
+  const queuedRef = useRef(false)
+  const lastLiveTickRef = useRef<number | null>(null)
+
+  const liveRefreshTick = useStore((s) =>
+    s.sseEventLog.filter((e) => e.type === EventType.SyncEnvUpdate || e.type === EventType.SyncEnvReset).length,
+  )
+
   useEffect(() => { void load() }, [])
 
+  useEffect(() => {
+    if (lastLiveTickRef.current === null) {
+      lastLiveTickRef.current = liveRefreshTick
+      return
+    }
+    if (liveRefreshTick === lastLiveTickRef.current) return
+    lastLiveTickRef.current = liveRefreshTick
+    void load()
+  }, [liveRefreshTick])
+
   async function load(): Promise<void> {
+    if (loadingRef.current) {
+      queuedRef.current = true
+      return
+    }
+    loadingRef.current = true
     setBusy(true)
     setErr(null)
     try {
@@ -32,6 +67,11 @@ export function EnvironmentsPanel(): JSX.Element {
       setErr(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
+      loadingRef.current = false
+      if (queuedRef.current) {
+        queuedRef.current = false
+        void load()
+      }
     }
   }
 
@@ -89,7 +129,6 @@ export function EnvironmentsPanel(): JSX.Element {
       title="Environments"
       subtitle="Persisted sync environments managed in DB. JSON is now only a one-time seed, not the live source of truth."
       busy={busy}
-      onRefresh={() => void load()}
       err={err}
       ok={ok}
       onClearErr={() => setErr(null)}
@@ -184,7 +223,7 @@ function EnvironmentDetail({ item, busy, onEdit, onDelete }: {
           type="button"
           disabled={busy}
           onClick={() => void onDelete(item.name)}
-          className="flex items-center gap-1 rounded border border-rose-500/30 px-3 py-1.5 text-[12px] text-rose-200 hover:bg-rose-500/10 disabled:opacity-40"
+          className="flex items-center gap-1 rounded border border-error/30 px-3 py-1.5 text-[12px] text-error hover:bg-error-soft disabled:opacity-40"
         >
           <Trash2 className="h-3.5 w-3.5" /> delete
         </button>
@@ -227,9 +266,9 @@ function EnvironmentModal({
   const syncAllowlist = parseCsv(syncAllowlistText)
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 p-4">
+    <div className="modal-surface fixed inset-0 z-40 flex items-center justify-center bg-black/72 p-4">
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3.5">
           <div>
             <h3 className="text-sm font-semibold text-text">{title}</h3>
             <p className="text-[11px] text-text-muted">Environment names must match configured MSSQL connection names.</p>
@@ -237,39 +276,32 @@ function EnvironmentModal({
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-text-muted hover:bg-overlay-2 hover:text-text">close</button>
         </div>
 
-        <div className="space-y-4 overflow-auto px-5 py-5 text-xs">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="space-y-5 overflow-auto px-5 py-5 text-xs">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
             <Field label="Connection name" hint="Required. Must match a configured MSSQL connection.">
-              <input value={name} disabled={Boolean(env)} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text disabled:opacity-50" />
+              <input value={name} disabled={Boolean(env)} onChange={(event) => setName(event.target.value)} className="modal-control" />
             </Field>
             <Field label="Display name" hint="Human-friendly label shown in UI.">
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="modal-control" />
             </Field>
           </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-3">
             <Field label="Color token" hint="Free-form accent token for UI rendering.">
-              <input value={color} onChange={(event) => setColor(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={color} onChange={(event) => setColor(event.target.value)} className="modal-control" />
             </Field>
             <Field label="Role" hint="Whether this environment can be source, target, or both.">
-              <select value={role} onChange={(event) => setRole(event.target.value as SyncEnvironmentAdmin["role"])} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text">
-                <option value="source">source</option>
-                <option value="target">target</option>
-                <option value="both">both</option>
-              </select>
+              <Listbox value={role} options={ROLE_OPTIONS} onChange={setRole} className="w-full" ariaLabel="Environment role" />
             </Field>
             <Field label="Ring order" hint="Lower numbers are earlier in the promotion path.">
-              <input value={ringOrder} onChange={(event) => setRingOrder(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={ringOrder} onChange={(event) => setRingOrder(event.target.value)} className="modal-control" />
             </Field>
           </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
             <Field label="Default access mode" hint="Read-only blocks write tools unless explicitly allowed.">
-              <select value={defaultAccessMode} onChange={(event) => setDefaultAccessMode(event.target.value as SyncEnvironmentAdmin["defaultAccessMode"])} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text">
-                <option value="read_only">read_only</option>
-                <option value="read_write">read_write</option>
-              </select>
+              <Listbox value={defaultAccessMode} options={ACCESS_MODE_OPTIONS} onChange={setDefaultAccessMode} className="w-full" ariaLabel="Default access mode" />
             </Field>
             <Field label="Allowed operations" hint="Operations permitted after access mode and deny flags are applied.">
-              <div className="flex flex-wrap gap-2 rounded-lg border border-border-subtle bg-canvas px-3 py-2">
+              <div className="modal-control-group flex flex-wrap gap-1.5 px-2.5 py-2">
                 {ALL_OPS.map((op) => {
                   const selected = allowedOperations.includes(op)
                   return (
@@ -277,7 +309,7 @@ function EnvironmentModal({
                       key={op}
                       type="button"
                       onClick={() => setAllowedOperations((current) => selected ? current.filter((item) => item !== op) : [...current, op])}
-                      className={`rounded-full border px-2 py-1 text-[11px] ${selected ? "border-accent bg-accent/10 text-accent" : "border-border-subtle text-text-muted hover:text-text"}`}
+                      className={`rounded-full border px-2.5 py-1 text-[10.5px] ${selected ? "border-accent bg-accent/10 text-accent" : "border-border-subtle/80 text-text-muted hover:text-text"}`}
                     >
                       {op}
                     </button>
@@ -290,28 +322,28 @@ function EnvironmentModal({
             <Toggle label="Block DML" checked={denyDml} onChange={setDenyDml} />
             <Toggle label="Block DDL" checked={denyDdl} onChange={setDenyDdl} />
           </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-3">
             <Field label="Agent service URL" hint="Optional direct base URL used for post-sync callbacks.">
-              <input value={agentServiceBaseUrl} onChange={(event) => setAgentServiceBaseUrl(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={agentServiceBaseUrl} onChange={(event) => setAgentServiceBaseUrl(event.target.value)} className="modal-control" />
             </Field>
             <Field label="ETL service URL" hint="Optional direct base URL used for dataset/rule deployment callbacks.">
-              <input value={etlServiceBaseUrl} onChange={(event) => setEtlServiceBaseUrl(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={etlServiceBaseUrl} onChange={(event) => setEtlServiceBaseUrl(event.target.value)} className="modal-control" />
             </Field>
             <Field label="Gate service URL" hint="Optional direct base URL used for gate refresh callbacks.">
-              <input value={gateServiceBaseUrl} onChange={(event) => setGateServiceBaseUrl(event.target.value)} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <input value={gateServiceBaseUrl} onChange={(event) => setGateServiceBaseUrl(event.target.value)} className="modal-control" />
             </Field>
           </div>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
             <Field label="Allowed sync targets" hint="Comma-separated environment names.">
-              <textarea value={allowedTargetsText} onChange={(event) => setAllowedTargetsText(event.target.value)} rows={3} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <textarea value={allowedTargetsText} onChange={(event) => setAllowedTargetsText(event.target.value)} rows={3} className="modal-control min-h-[88px]" />
             </Field>
             <Field label="Sync allowlist" hint="Comma-separated entity ids allowed in this environment.">
-              <textarea value={syncAllowlistText} onChange={(event) => setSyncAllowlistText(event.target.value)} rows={3} className="w-full rounded-lg border border-border-subtle bg-canvas px-3 py-2 text-[12.5px] text-text" />
+              <textarea value={syncAllowlistText} onChange={(event) => setSyncAllowlistText(event.target.value)} rows={3} className="modal-control min-h-[88px]" />
             </Field>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-border-subtle px-5 py-4">
+        <div className="flex items-center gap-2 border-t border-border-subtle px-5 py-3.5">
           <button
             type="button"
             disabled={busy || !name.trim()}
@@ -347,9 +379,9 @@ function EnvironmentModal({
 function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }): JSX.Element {
   return (
     <div>
-      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">{label}</div>
+      <div className="mb-1 text-[11px] font-medium text-text">{label}</div>
       {children}
-      <div className="mt-1.5 text-[11px] leading-5 text-text-muted">{hint}</div>
+      <div className="mt-1 text-[10px] leading-4 text-text-faint">{hint}</div>
     </div>
   )
 }

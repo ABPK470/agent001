@@ -58,14 +58,14 @@ export function PanelChrome({
       </header>
 
       {err && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-rose-500/30 bg-rose-500/10 px-5 py-2 text-xs text-rose-200">
+        <div className="flex shrink-0 items-center gap-2 border-b border-error/30 bg-error-soft px-5 py-2 text-xs text-error">
           <AlertTriangle className="h-3 w-3" />
           <span className="flex-1 truncate">{err}</span>
-          {onClearErr && <button onClick={onClearErr} className="text-rose-200/70 hover:text-rose-100"><X className="h-3 w-3" /></button>}
+          {onClearErr && <button onClick={onClearErr} className="text-error/70 hover:text-error"><X className="h-3 w-3" /></button>}
         </div>
       )}
       {ok && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-xs text-emerald-200">
+        <div className="flex shrink-0 items-center gap-2 border-b border-success/30 bg-success-soft px-5 py-2 text-xs text-success">
           <CheckCircle2 className="h-3 w-3" /> {ok}
         </div>
       )}

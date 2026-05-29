@@ -308,6 +308,35 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.modal-surface .input {
+  background: var(--color-panel);
+  border-color: var(--color-border);
+}
+.modal-control {
+  width: 100%;
+  background: color-mix(in srgb, var(--color-panel-2) 78%, transparent);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 120ms, background-color 120ms;
+}
+.modal-control:focus {
+  border-color: var(--color-accent);
+  background: var(--color-panel-2);
+}
+.modal-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.modal-control-group {
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-panel-2) 78%, transparent);
+}
 textarea.input {
   font-family: var(--font-mono);
   resize: vertical;

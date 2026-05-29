@@ -81,7 +81,7 @@ export function StrategyEditorModal({ seed, onClose, onSaved }: {
       widthClass="max-w-3xl"
       footer={
         <>
-          {err && <span className="text-[11px] text-rose-300">{err}</span>}
+          {err && <span className="text-[11px] text-error">{err}</span>}
           {missing && !err && !busy && (
             <span className="text-[11px] text-text-faint">{missing}</span>
           )}

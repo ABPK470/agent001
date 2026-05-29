@@ -222,14 +222,14 @@ function ApprovalDetail({
             <button
               type="button"
               onClick={() => void onGrant(approval)}
-              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-100 hover:bg-emerald-500/20"
+              className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success-soft px-3 py-1.5 text-[12px] text-success hover:opacity-85"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> Grant
             </button>
             <button
               type="button"
               onClick={() => void onReject(approval)}
-              className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-[12px] text-rose-100 hover:bg-rose-500/20"
+              className="flex items-center gap-1.5 rounded-lg border border-error/30 bg-error-soft px-3 py-1.5 text-[12px] text-error hover:opacity-85"
             >
               <ShieldX className="h-3.5 w-3.5" /> Reject
             </button>
@@ -237,7 +237,7 @@ function ApprovalDetail({
               <button
                 type="button"
                 onClick={() => void onBypass(approval)}
-                className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-100 hover:bg-amber-500/20"
+                className="flex items-center gap-1.5 rounded-lg border border-warning/30 bg-warning-soft px-3 py-1.5 text-[12px] text-warning hover:opacity-85"
               >
                 <ShieldAlert className="h-3.5 w-3.5" /> Bypass
               </button>
@@ -262,8 +262,8 @@ function Info({ label, value }: { label: string; value: string }): JSX.Element {
 
 function Callout({ tone, title, children }: { tone: "warn" | "error"; title: string; children: string }): JSX.Element {
   const cls = tone === "warn"
-    ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-    : "border-rose-500/30 bg-rose-500/10 text-rose-100"
+    ? "border-warning/30 bg-warning-soft text-warning"
+    : "border-error/30 bg-error-soft text-error"
   return (
     <div className={`rounded-lg border px-4 py-3 text-[12px] leading-6 ${cls}`}>
       <div className="mb-1 font-medium">{title}</div>
@@ -274,11 +274,11 @@ function Callout({ tone, title, children }: { tone: "warn" | "error"; title: str
 
 function StateBadge({ state }: { state: Approval["state"] }): JSX.Element {
   const colour =
-    state === "granted" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100" :
-    state === "rejected" ? "border-rose-500/30 bg-rose-500/10 text-rose-100" :
+    state === "granted" ? "border-success/30 bg-success-soft text-success" :
+    state === "rejected" ? "border-error/30 bg-error-soft text-error" :
     state === "expired" ? "border-border-subtle bg-panel text-text-muted" :
-    state === "bypassed" ? "border-amber-500/30 bg-amber-500/10 text-amber-100" :
-    state === "partially_granted" ? "border-sky-500/30 bg-sky-500/10 text-sky-100" :
+    state === "bypassed" ? "border-warning/30 bg-warning-soft text-warning" :
+    state === "partially_granted" ? "border-info/30 bg-info-soft text-info" :
     "border-border-subtle bg-overlay-2 text-text"
   return <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${colour}`}>{state.replaceAll("_", " ")}</span>
 }

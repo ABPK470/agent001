@@ -147,6 +147,7 @@ export const api = {
 
   // Sync definition config (admin)
   listSyncDefinitionConfigs: () => json<import("./types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
+  getSyncDefinitionConfigOptions: () => json<import("./types").SyncDefinitionRuntimeOptions>("/api/sync-definition-config-options"),
   updateSyncDefinitionConfig: (entityId: string, fields: Record<string, unknown>) =>
     json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
       method: "PUT",

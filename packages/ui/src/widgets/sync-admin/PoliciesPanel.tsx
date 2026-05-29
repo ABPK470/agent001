@@ -10,6 +10,7 @@ import { ShieldCheck } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { useContainerSize } from "../../hooks/useContainerSize"
 import { useMe } from "../../hooks/useMe"
 import { HelpBanner, PanelChrome } from "./shared"
@@ -28,6 +29,12 @@ type Kind = "none" | "single" | "dual"
 interface Draft { riskTier: string; kind: Kind; ttlMs: number; allowSelfRequester: boolean; bypassRole: string }
 
 const DEFAULT_DRAFT: Draft = { riskTier: "medium", kind: "single", ttlMs: 86_400_000, allowSelfRequester: false, bypassRole: "admin" }
+
+const KIND_OPTIONS: ListboxOption<Kind>[] = [
+  { value: "none", label: "none" },
+  { value: "single", label: "single" },
+  { value: "dual", label: "dual" },
+]
 
 export function PoliciesPanel(): JSX.Element {
   const layoutRef = useRef<HTMLDivElement>(null)
@@ -74,11 +81,7 @@ export function PoliciesPanel(): JSX.Element {
           <div className="mx-5 mt-4 rounded-lg border border-border-subtle bg-panel p-3">
             <div className={compactForm ? "grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" : "grid grid-cols-[120px_120px_160px_160px_auto_auto] items-center gap-2 text-xs"}>
               <input className="input min-w-0" value={draft.riskTier} onChange={(e) => setDraft({ ...draft, riskTier: e.target.value })} placeholder="risk tier" />
-              <select className="input min-w-0" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Kind })}>
-                <option value="none">none</option>
-                <option value="single">single</option>
-                <option value="dual">dual</option>
-              </select>
+              <Listbox value={draft.kind} options={KIND_OPTIONS} onChange={(kind) => setDraft({ ...draft, kind })} className="min-w-0 w-full" ariaLabel="Approval kind" />
               <input className="input min-w-0" type="number" value={draft.ttlMs} onChange={(e) => setDraft({ ...draft, ttlMs: Number(e.target.value) })} placeholder="TTL ms" />
               <input className="input min-w-0" value={draft.bypassRole} onChange={(e) => setDraft({ ...draft, bypassRole: e.target.value })} placeholder="bypass role" />
               <label className="flex min-h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-[11px] text-text-muted">
@@ -123,8 +126,8 @@ export function PoliciesPanel(): JSX.Element {
 function KindBadge({ kind }: { kind: Kind }): JSX.Element {
   const cls =
     kind === "none"   ? "bg-overlay-2     text-text-muted   border-border-subtle"
-  : kind === "single" ? "bg-sky-500/15    text-sky-200      border-sky-500/40"
-  :                     "bg-amber-500/15  text-amber-200    border-amber-500/40"
+  : kind === "single" ? "bg-info-soft    text-info      border-info/30"
+  :                     "bg-warning-soft  text-warning    border-warning/30"
   return <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}>{kind}</span>
 }
 

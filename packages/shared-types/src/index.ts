@@ -1034,6 +1034,18 @@ export type EntityRegistrySyncFlowPreset =
   | "content"
   | "metadata-only"
 
+export interface SyncDefinitionRuntimeOption<T extends string = string> {
+  id: T
+  label: string
+  description?: string | null
+}
+
+export interface SyncDefinitionRuntimeOptions {
+  flowPresets: SyncDefinitionRuntimeOption<EntityRegistrySyncFlowPreset>[]
+  serviceProfiles: SyncDefinitionRuntimeOption[]
+  environmentPolicies: SyncDefinitionRuntimeOption[]
+}
+
 export interface EntityRegistrySyncDefinitionExportRequest {
   flowPreset?: EntityRegistrySyncFlowPreset
   serviceProfileRef?: string

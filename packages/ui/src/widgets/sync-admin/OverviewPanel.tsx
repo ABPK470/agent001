@@ -170,7 +170,7 @@ function Card({ icon: Icon, title, primary, secondary, onClick, accent }: {
   icon: typeof Database; title: string; primary: number; secondary: string; onClick: () => void
   accent?: "rose"
 }): JSX.Element {
-  const accentCls = accent === "rose" ? "border-rose-500/40" : "border-border-subtle hover:border-accent"
+  const accentCls = accent === "rose" ? "border-error/30" : "border-border-subtle hover:border-accent"
   return (
     <button onClick={onClick}
       className={`group flex flex-col items-start gap-1 rounded-xl border bg-panel p-4 text-left transition hover:bg-overlay-2 ${accentCls}`}>

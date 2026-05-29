@@ -112,7 +112,7 @@ export function SchedulesPanel(): JSX.Element {
                   <td className="text-text-muted" title={s.next_run_at ?? ""}>{s.next_run_at ? timeAgo(s.next_run_at) : "—"}</td>
                   <td className="text-text-muted" title={s.last_run_at ?? ""}>{s.last_run_at ? timeAgo(s.last_run_at) : "—"}</td>
                   <td>{isAdmin && (
-                    <button onClick={() => void remove(s)} className="text-rose-300 hover:text-rose-200">
+                    <button onClick={() => void remove(s)} className="text-error hover:opacity-75">
                       <Trash2 className="h-3 w-3" />
                     </button>
                   )}</td>

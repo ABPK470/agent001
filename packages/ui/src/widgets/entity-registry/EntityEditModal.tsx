@@ -20,7 +20,8 @@ import { AlertTriangle, FileCode2, FormInput, Loader2, Save } from "lucide-react
 import type { JSX } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
-import type { EntityRegistryDefinition } from "../../types"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
+import type { EntityRegistryDefinition, EntityRegistrySyncFlowPreset, SyncDefinitionAdminItem, SyncDefinitionRuntimeOptions } from "../../types"
 import { deriveDisplayName, deriveEntityId, deriveIdColumn } from "./derive"
 import { FormSurface, YamlSurface } from "./EntityEditSurfaces"
 import { ModalShell } from "./ModalShell"
@@ -35,6 +36,21 @@ export interface EntityEditModalProps {
 type AuthoringMode = "form" | "yaml"
 
 const ID_RE = /^[a-z][a-z0-9_-]{0,63}$/
+const FLOW_PRESETS: EntityRegistrySyncFlowPreset[] = ["contract", "dataset", "rule", "pipelineActivity", "gateMetadata", "content", "metadata-only"]
+const FLOW_PRESET_LABELS: Record<EntityRegistrySyncFlowPreset, string> = {
+  contract: "Contract deploy",
+  dataset: "Dataset deploy",
+  rule: "Rule deploy",
+  pipelineActivity: "Pipeline register",
+  gateMetadata: "Gate refresh",
+  content: "Content dependencies",
+  "metadata-only": "Metadata only",
+}
+const DEFAULT_RUNTIME_OPTIONS: SyncDefinitionRuntimeOptions = {
+  flowPresets: FLOW_PRESETS.map((preset) => ({ id: preset, label: FLOW_PRESET_LABELS[preset], description: null })),
+  serviceProfiles: [{ id: "default", label: "Default service routing", description: "Use the standard environment-resolved service endpoints." }],
+  environmentPolicies: [{ id: "default", label: "Default environment rules", description: "Apply the standard environment access and allowlist checks." }],
+}
 
 const NEW_ENTITY_YAML_TEMPLATE = `# Required fields. See the YAML tab of an existing entity for a full example.
 id: my-entity
@@ -109,6 +125,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
   // YAML-mode body state. Lazy-loaded for edit mode on first tab switch.
   const [yamlBody,    setYamlBody]    = useState<string>(mode === "new" ? NEW_ENTITY_YAML_TEMPLATE : "")
   const [yamlLoading, setYamlLoading] = useState(false)
+  const [runtimeLoading, setRuntimeLoading] = useState(true)
+  const [runtimeOptions, setRuntimeOptions] = useState<SyncDefinitionRuntimeOptions>(DEFAULT_RUNTIME_OPTIONS)
+  const [flowPreset, setFlowPreset] = useState<EntityRegistrySyncFlowPreset>(defaultRuntimeFlowPreset(seed.id))
+  const [serviceProfileRef, setServiceProfileRef] = useState("default")
+  const [environmentPolicyRef, setEnvironmentPolicyRef] = useState("default")
 
   // Auto-derive id / displayName / idColumn from rootTable in `new` mode,
   // but only as long as the operator hasn't manually overridden each one.
@@ -136,6 +157,49 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setYamlLoading(false))
   }, [authoring, mode, seed.id, yamlBody])
+
+  useEffect(() => {
+    let cancelled = false
+    setRuntimeLoading(true)
+    void Promise.all([
+      api.getSyncDefinitionConfigOptions(),
+      mode === "edit" ? api.listSyncDefinitionConfigs() : Promise.resolve<SyncDefinitionAdminItem[]>([]),
+    ])
+      .then(([options, rows]) => {
+        if (cancelled) return
+        setRuntimeOptions(options)
+        const config = rows.find((row) => row.id === seed.id)
+        if (config) hydrateRuntimeConfig(config, options)
+        else {
+          setFlowPreset(pickRuntimeValue(options.flowPresets, defaultRuntimeFlowPreset(seed.id), "metadata-only"))
+          setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, "default"))
+          setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, "default"))
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setRuntimeLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [mode, seed.id])
+
+  const flowPresetOptions = useMemo<ListboxOption<EntityRegistrySyncFlowPreset>[]>(() => runtimeOptions.flowPresets.map((option) => ({
+    value: option.id,
+    label: option.label,
+    hint: option.description ?? undefined,
+  })), [runtimeOptions.flowPresets])
+  const serviceProfileOptions = useMemo<ListboxOption<string>[]>(() => runtimeOptions.serviceProfiles.map((option) => ({
+    value: option.id,
+    label: option.label,
+    hint: option.description ?? undefined,
+  })), [runtimeOptions.serviceProfiles])
+  const environmentPolicyOptions = useMemo<ListboxOption<string>[]>(() => runtimeOptions.environmentPolicies.map((option) => ({
+    value: option.id,
+    label: option.label,
+    hint: option.description ?? undefined,
+  })), [runtimeOptions.environmentPolicies])
 
   async function doSave() {
     setErr(null)
@@ -184,6 +248,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
       scd2: { ...seed.scd2, strategyId, strategyVersion },
     }
     const r = await api.saveEntityRegistry(def, reason, versionLabel.trim() ? { versionLabel } : undefined)
+    await api.updateSyncDefinitionConfig(r.id, {
+      flowPreset,
+      serviceProfileRef,
+      environmentPolicyRef,
+    })
     onSaved(r.id, r.version)
     onClose()
   }
@@ -201,6 +270,11 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
     }
     const saved = r.saved[0]
     if (!saved) throw new Error("import returned no saved entity")
+    await api.updateSyncDefinitionConfig(saved.id, {
+      flowPreset,
+      serviceProfileRef,
+      environmentPolicyRef,
+    })
     onSaved(saved.id, saved.version)
     onClose()
   }
@@ -276,20 +350,60 @@ export function EntityEditModal({ mode, initial, onClose, onSaved }: EntityEditM
           freezeWindowIds={freezeWindowIds}   onFreezeWindowIds={setFreezeWindowIds}
           riskMultiplier={riskMultiplier} onRiskMultiplier={setRiskMultiplier}
           tablesJson={tablesJson}         onTablesJson={setTablesJson}
+          flowPreset={flowPreset}         onFlowPreset={setFlowPreset}
+          flowPresetOptions={flowPresetOptions}
+          serviceProfileRef={serviceProfileRef} onServiceProfileRef={setServiceProfileRef}
+          serviceProfileOptions={serviceProfileOptions}
+          environmentPolicyRef={environmentPolicyRef} onEnvironmentPolicyRef={setEnvironmentPolicyRef}
+          environmentPolicyOptions={environmentPolicyOptions}
+          runtimeLoading={runtimeLoading}
           reason={reason}                 onReason={setReason}
           versionLabel={versionLabel}     onVersionLabel={setVersionLabel}
         />
       ) : (
-        <YamlSurface
-          loading={yamlLoading}
-          body={yamlBody}
-          onBody={setYamlBody}
-          reason={reason}
-          onReason={setReason}
-        />
+        <div className="flex h-full flex-col">
+          <YamlSurface
+            loading={yamlLoading}
+            body={yamlBody}
+            onBody={setYamlBody}
+            reason={reason}
+            onReason={setReason}
+          />
+          <div className="border-t border-border-subtle px-6 py-4">
+            <RuntimeConfigSection
+              flowPreset={flowPreset}
+              onFlowPreset={setFlowPreset}
+              flowPresetOptions={flowPresetOptions}
+              serviceProfileRef={serviceProfileRef}
+              onServiceProfileRef={setServiceProfileRef}
+              serviceProfileOptions={serviceProfileOptions}
+              environmentPolicyRef={environmentPolicyRef}
+              onEnvironmentPolicyRef={setEnvironmentPolicyRef}
+              environmentPolicyOptions={environmentPolicyOptions}
+              loading={runtimeLoading}
+            />
+          </div>
+        </div>
       )}
     </ModalShell>
   )
+
+  function hydrateRuntimeConfig(config: SyncDefinitionAdminItem, options: SyncDefinitionRuntimeOptions): void {
+    setFlowPreset(pickRuntimeValue(options.flowPresets, config.flowPreset, "metadata-only"))
+    setServiceProfileRef(pickRuntimeValue(options.serviceProfiles, config.serviceProfileRef))
+    setEnvironmentPolicyRef(pickRuntimeValue(options.environmentPolicies, config.environmentPolicyRef))
+  }
+}
+
+function pickRuntimeValue<T extends string>(
+  options: Array<{ id: T }>,
+  value: string,
+  fallback?: T,
+): T {
+  const match = options.find((option) => option.id === value)
+  if (match) return match.id
+  if (fallback) return fallback
+  return options[0]?.id ?? value as T
 }
 
 // ── Mode toggle ────────────────────────────────────────────────────
@@ -313,5 +427,66 @@ function ModeToggle({ value, onChange }: { value: AuthoringMode; onChange: (m: A
       {item("form", "Form",      FormInput)}
       {item("yaml", "YAML body", FileCode2)}
     </nav>
+  )
+}
+
+function defaultRuntimeFlowPreset(entityId: string): EntityRegistrySyncFlowPreset {
+  return FLOW_PRESETS.includes(entityId as EntityRegistrySyncFlowPreset)
+    ? entityId as EntityRegistrySyncFlowPreset
+    : "metadata-only"
+}
+
+function RuntimeConfigSection({
+  flowPreset,
+  onFlowPreset,
+  flowPresetOptions,
+  serviceProfileRef,
+  onServiceProfileRef,
+  serviceProfileOptions,
+  environmentPolicyRef,
+  onEnvironmentPolicyRef,
+  environmentPolicyOptions,
+  loading,
+}: {
+  flowPreset: EntityRegistrySyncFlowPreset
+  onFlowPreset: (value: EntityRegistrySyncFlowPreset) => void
+  flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  serviceProfileRef: string
+  onServiceProfileRef: (value: string) => void
+  serviceProfileOptions: ListboxOption<string>[]
+  environmentPolicyRef: string
+  onEnvironmentPolicyRef: (value: string) => void
+  environmentPolicyOptions: ListboxOption<string>[]
+  loading: boolean
+}): JSX.Element {
+  return (
+    <section className="rounded-lg border border-border-subtle bg-panel/60 p-4">
+      <div className="mb-3">
+        <h3 className="text-xs font-medium text-text">Sync behavior</h3>
+        <p className="mt-1 text-[11px] text-text-faint">Save stores this with the entity. Publish later makes it live for preview and execute.</p>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-[11px] text-text-muted">
+          <Loader2 className="h-3 w-3 animate-spin" /> loading current runtime config...
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-text-muted">Sync behavior</span>
+            <Listbox value={flowPreset} options={flowPresetOptions} onChange={onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-text-muted">Service profile</span>
+              <Listbox value={serviceProfileRef} options={serviceProfileOptions} onChange={onServiceProfileRef} className="w-full" ariaLabel="Service profile" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-text-muted">Environment rules</span>
+              <Listbox value={environmentPolicyRef} options={environmentPolicyOptions} onChange={onEnvironmentPolicyRef} className="w-full" ariaLabel="Environment rules" />
+            </label>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }

@@ -5,6 +5,7 @@ import type {
     AuthoredSyncDefinition,
     EntityRegistrySyncFlowPreset,
     PublishedSyncDefinition,
+  SyncDefinitionRuntimeOptions,
 } from "@mia/shared-types"
 import type { EntityDefinition } from "@mia/sync"
 
@@ -69,6 +70,53 @@ const FLOW_PRESETS: Record<EntityRegistrySyncFlowPreset, AuthoredSyncDefinition[
   ],
 }
 
+const FLOW_PRESET_DETAILS: Record<EntityRegistrySyncFlowPreset, { label: string; description: string }> = {
+  contract: {
+    label: "Contract deploy",
+    description: "Metadata sync plus full contract deployment, ETL, routines, and deploy stamps.",
+  },
+  dataset: {
+    label: "Dataset deploy",
+    description: "Metadata sync followed by dataset deployment on the target ETL service.",
+  },
+  rule: {
+    label: "Rule deploy",
+    description: "Metadata sync, dependent dataset deploy, rule deploy, and dependency refresh.",
+  },
+  pipelineActivity: {
+    label: "Pipeline register",
+    description: "Metadata sync followed by registering the target pipeline with the agent service.",
+  },
+  gateMetadata: {
+    label: "Gate refresh",
+    description: "Metadata sync followed by gate metadata refresh and downstream pipeline start.",
+  },
+  content: {
+    label: "Content dependencies",
+    description: "Metadata sync followed by downstream dependency refresh for content entities.",
+  },
+  "metadata-only": {
+    label: "Metadata only",
+    description: "Only apply metadata changes; do not trigger downstream deploy or refresh steps.",
+  },
+}
+
+const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
+  {
+    id: "default",
+    label: "Default service routing",
+    description: "Use the standard environment-resolved agent, ETL, and gate service endpoints.",
+  },
+]
+
+const ENVIRONMENT_POLICY_OPTIONS: SyncDefinitionRuntimeOptions["environmentPolicies"] = [
+  {
+    id: "default",
+    label: "Default environment rules",
+    description: "Apply the standard environment access mode, allowlist, and target checks.",
+  },
+]
+
 export interface SyncDefinitionAdminItem {
   id: string
   displayName: string
@@ -85,6 +133,18 @@ export interface SyncDefinitionAdminItem {
   updatedBy: string | null
   publishedVersion: string | null
   publishedAt: string | null
+}
+
+export function listSyncDefinitionRuntimeOptions(): SyncDefinitionRuntimeOptions {
+  return {
+    flowPresets: (Object.keys(FLOW_PRESET_DETAILS) as EntityRegistrySyncFlowPreset[]).map((id) => ({
+      id,
+      label: FLOW_PRESET_DETAILS[id].label,
+      description: FLOW_PRESET_DETAILS[id].description,
+    })),
+    serviceProfiles: SERVICE_PROFILE_OPTIONS,
+    environmentPolicies: ENVIRONMENT_POLICY_OPTIONS,
+  }
 }
 
 interface PersistedPublishedBundle {

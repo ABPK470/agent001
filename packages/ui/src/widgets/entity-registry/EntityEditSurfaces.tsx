@@ -15,6 +15,8 @@
 import { ChevronDown, FileCode2, Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { useState } from "react"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
+import type { EntityRegistrySyncFlowPreset } from "../../types"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
 import { StrategySelect } from "./StrategySelect"
 
@@ -35,6 +37,13 @@ export interface FormSurfaceProps {
   freezeWindowIds: readonly string[]; onFreezeWindowIds: (v: string[]) => void
   riskMultiplier: string;  onRiskMultiplier: (v: string) => void
   tablesJson: string;      onTablesJson: (v: string) => void
+  flowPreset: EntityRegistrySyncFlowPreset; onFlowPreset: (v: EntityRegistrySyncFlowPreset) => void
+  flowPresetOptions: ListboxOption<EntityRegistrySyncFlowPreset>[]
+  serviceProfileRef: string; onServiceProfileRef: (v: string) => void
+  serviceProfileOptions: ListboxOption<string>[]
+  environmentPolicyRef: string; onEnvironmentPolicyRef: (v: string) => void
+  environmentPolicyOptions: ListboxOption<string>[]
+  runtimeLoading: boolean
   reason: string;          onReason: (v: string) => void
   versionLabel: string;    onVersionLabel: (v: string) => void
 }
@@ -115,6 +124,34 @@ export function FormSurface(p: FormSurfaceProps): JSX.Element {
           onStrategyId={p.onStrategyId}
           onStrategyVersion={p.onStrategyVersion}
         />
+      </Disclosure>
+
+      <Disclosure
+        title="Sync behavior"
+        summary={summary([
+          ["mode", p.flowPreset],
+          ["service", p.serviceProfileRef || "default"],
+          ["env", p.environmentPolicyRef || "default"],
+        ])}
+        defaultOpen
+      >
+        {p.runtimeLoading ? (
+          <div className="flex items-center gap-2 text-text-muted">
+            <Loader2 className="h-3 w-3 animate-spin" /> loading current runtime config…
+          </div>
+        ) : (
+          <Grid2>
+            <Field label="Sync behavior">
+              <Listbox value={p.flowPreset} options={p.flowPresetOptions} onChange={p.onFlowPreset} className="w-full" ariaLabel="Sync behavior" />
+            </Field>
+            <Field label="Service profile">
+              <Listbox value={p.serviceProfileRef} options={p.serviceProfileOptions} onChange={p.onServiceProfileRef} className="w-full" ariaLabel="Service profile" />
+            </Field>
+            <Field label="Environment rules">
+              <Listbox value={p.environmentPolicyRef} options={p.environmentPolicyOptions} onChange={p.onEnvironmentPolicyRef} className="w-full" ariaLabel="Environment rules" />
+            </Field>
+          </Grid2>
+        )}
       </Disclosure>
 
       <Disclosure

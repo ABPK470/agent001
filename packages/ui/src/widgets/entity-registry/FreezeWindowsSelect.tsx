@@ -63,7 +63,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
       {items.map((w) => {
         const checked = selected.includes(w.id)
         return (
-          <label key={w.id} className="flex items-start gap-2 rounded border border-border-subtle bg-canvas px-2 py-1.5 hover:bg-overlay-2">
+          <label key={w.id} className="flex items-start gap-2 rounded border border-border-subtle bg-panel px-2 py-1.5 hover:bg-overlay-2">
             <input
               type="checkbox"
               checked={checked}

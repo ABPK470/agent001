@@ -37,6 +37,7 @@ import { EntityEditModal } from "./entity-registry/EntityEditModal"
 import { EntityHistory } from "./entity-registry/EntityHistory"
 import { EntityImportModal } from "./entity-registry/EntityImportModal"
 import { EntityList } from "./entity-registry/EntityList"
+import { ModalShell } from "./entity-registry/ModalShell"
 import { EntityOverview } from "./entity-registry/EntityOverview"
 import { EntityTables } from "./entity-registry/EntityTables"
 import { EntityYaml } from "./entity-registry/EntityYaml"
@@ -58,6 +59,7 @@ export function EntityRegistry(): JSX.Element {
   const [busy, setBusy]             = useState(false)
   const [banner, setBanner]         = useState<Banner | null>(null)
   const [modal, setModal]           = useState<null | { kind: "import" } | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
+  const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -106,12 +108,12 @@ export function EntityRegistry(): JSX.Element {
 
   // ── Actions ─────────────────────────────────────────────────────
   async function doRetire() {
-    if (!selected || !isAdmin) return
-    if (!confirm(`Retire entity "${selected.id}"?\n\nHistorical pinned references will keep resolving via prior versions.`)) return
+    if (!retireCandidate || !isAdmin) return
     setBusy(true)
     try {
-      await api.retireEntityRegistry(selected.id)
-      setBanner({ kind: "success", text: `Retired ${selected.id}` })
+      await api.retireEntityRegistry(retireCandidate.id)
+      setBanner({ kind: "success", text: `Retired ${retireCandidate.id}` })
+      setRetireCandidate(null)
       await refreshList({ keepSelection: true })
     } catch (e) {
       setBanner({ kind: "error", text: e instanceof Error ? e.message : String(e) })
@@ -233,7 +235,7 @@ export function EntityRegistry(): JSX.Element {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => void doRetire()}
+                        onClick={() => setRetireCandidate(selected)}
                         disabled={busy}
                         className="flex items-center gap-1.5 rounded border border-rose-500/40 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10"
                       >
@@ -277,6 +279,67 @@ export function EntityRegistry(): JSX.Element {
           onSaved={(id, v) => { setBanner({ kind: "success", text: `Saved ${id} · v${v}` }); void refreshList({ keepSelection: true }) }}
         />
       )}
+      {retireCandidate && (
+        <RetireEntityModal
+          entityId={retireCandidate.id}
+          busy={busy}
+          onClose={() => { if (!busy) setRetireCandidate(null) }}
+          onConfirm={() => void doRetire()}
+        />
+      )}
     </div>
+  )
+}
+
+function RetireEntityModal({
+  entityId,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  entityId: string
+  busy: boolean
+  onClose: () => void
+  onConfirm: () => void
+}): JSX.Element {
+  return (
+    <ModalShell
+      title={`Retire entity \u00b7 ${entityId}`}
+      compact
+      widthClass="max-w-xl"
+      onClose={onClose}
+      footer={(
+        <>
+          <div className="text-[11px] text-text-faint">
+            Historical pinned references will keep resolving via prior versions.
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded bg-rose-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-400 disabled:opacity-50"
+            >
+              <Trash2 className="h-3 w-3" /> Retire
+            </button>
+          </div>
+        </>
+      )}
+    >
+      <div className="space-y-3 px-5 py-5 text-sm text-text">
+        <p>Retire entity <span className="font-mono">{entityId}</span>?</p>
+        <p className="text-xs text-text-muted">
+          This keeps the entity for history and pinned references, but removes it from active editing and day-to-day use.
+        </p>
+      </div>
+    </ModalShell>
   )
 }

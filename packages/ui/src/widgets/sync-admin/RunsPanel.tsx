@@ -221,9 +221,9 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
 function statusTone(status: SyncRunRow["status"]): string {
   switch (status) {
     case "success":
-      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+      return "border-success/30 bg-success-soft text-success"
     case "failed":
-      return "border-rose-500/40 bg-rose-500/10 text-rose-200"
+      return "border-error/30 bg-error-soft text-error"
     default:
       return "border-border-subtle bg-overlay-2 text-text-muted"
   }
@@ -232,11 +232,11 @@ function statusTone(status: SyncRunRow["status"]): string {
 function decisionSeverityTone(severity: string): string {
   switch (severity) {
     case "error":
-      return "bg-rose-500/15 text-rose-200"
+      return "bg-error-soft text-error"
     case "warning":
-      return "bg-amber-500/15 text-amber-200"
+      return "bg-warning-soft text-warning"
     default:
-      return "bg-accent/15 text-accent"
+      return "bg-info-soft text-info"
   }
 }
 

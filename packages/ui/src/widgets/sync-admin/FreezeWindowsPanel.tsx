@@ -115,8 +115,8 @@ type Status = "active" | "scheduled" | "past"
 
 function StatusBadge({ s }: { s: Status }): JSX.Element {
   const cls =
-    s === "active"    ? "bg-rose-500/20  text-rose-200  border-rose-500/40"
-  : s === "scheduled" ? "bg-amber-500/15 text-amber-200 border-amber-500/40"
+    s === "active"    ? "bg-error-soft  text-error  border-error/30"
+  : s === "scheduled" ? "bg-warning-soft text-warning border-warning/30"
   :                     "bg-overlay-2    text-text-muted border-border-subtle"
   return <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}>{s}</span>
 }
@@ -134,7 +134,7 @@ function FreezeDetail({ w, isAdmin, onEdit, onDelete }: {
         {isAdmin && (
           <div className="flex gap-1.5">
             <button onClick={onEdit} className="rounded bg-accent px-2 py-1 text-[11px] text-text-on-accent hover:bg-accent-hover">edit</button>
-            <button onClick={onDelete} className="flex items-center gap-1 rounded border border-rose-500/40 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-500/10">
+            <button onClick={onDelete} className="flex items-center gap-1 rounded border border-error/30 px-2 py-1 text-[11px] text-error hover:bg-error-soft">
               <Trash2 className="h-3 w-3" /> delete
             </button>
           </div>

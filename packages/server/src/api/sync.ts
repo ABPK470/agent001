@@ -7,7 +7,7 @@ import { EventType } from "@mia/shared-enums"
 import { executeSync, getEnvironments, listPublishedSyncDefinitions, loadPlan, previewSync, searchEntities, type EntityType, type ExecuteProgress } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import * as db from "../adapters/persistence/sqlite.js"
-import { listSyncDefinitionAdminItems, publishSyncDefinitionsFromDb, resetSyncDefinitionConfig, upsertSyncDefinitionConfig } from "../domain/sync-definition-admin.js"
+import { listSyncDefinitionAdminItems, listSyncDefinitionRuntimeOptions, publishSyncDefinitionsFromDb, resetSyncDefinitionConfig, upsertSyncDefinitionConfig } from "../domain/sync-definition-admin.js"
 import { buildSyncAuditDetail, loadPersistedSyncPlanSummary, summarizeSyncPlan } from "../domain/sync-plan-summary.js"
 import { rebuildLiveSyncEnvironments } from "../domain/sync/live-environments.js"
 import { broadcast } from "../event-broadcaster.js"
@@ -90,6 +90,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		}
 		return listSyncDefinitionAdminItems(projectRoot)
 	})
+	app.get("/api/sync-definition-config-options", async (req, reply) => {
+		if (!req.session?.isAdmin) {
+			reply.code(403)
+			return { error: "admin only" }
+		}
+		return listSyncDefinitionRuntimeOptions()
+	})
 	app.put<{ Params: { entityId: string }; Body: Record<string, unknown> }>("/api/sync-definition-configs/:entityId", async (req, reply) => {
 		if (!req.session?.isAdmin) {
 			reply.code(403)
@@ -104,6 +111,19 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
 		if (typeof sanitised === "string") {
 			reply.code(400)
 			return { error: sanitised }
+		}
+		const runtimeOptions = listSyncDefinitionRuntimeOptions()
+		if (sanitised.flowPreset !== undefined && !runtimeOptions.flowPresets.some((option) => option.id === sanitised.flowPreset)) {
+			reply.code(400)
+			return { error: `unknown flowPreset "${sanitised.flowPreset}"` }
+		}
+		if (sanitised.serviceProfileRef !== undefined && !runtimeOptions.serviceProfiles.some((option) => option.id === sanitised.serviceProfileRef)) {
+			reply.code(400)
+			return { error: `unknown serviceProfileRef "${sanitised.serviceProfileRef}"` }
+		}
+		if (sanitised.environmentPolicyRef !== undefined && !runtimeOptions.environmentPolicies.some((option) => option.id === sanitised.environmentPolicyRef)) {
+			reply.code(400)
+			return { error: `unknown environmentPolicyRef "${sanitised.environmentPolicyRef}"` }
 		}
 		const existing = db.getSyncDefinitionConfig("_default", req.params.entityId)
 		upsertSyncDefinitionConfig(projectRoot, {
