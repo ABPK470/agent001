@@ -36,6 +36,14 @@ interface DerivedSyncDefinition {
   }
 }
 
+interface CatalogSnapshot {
+  tables: Array<{
+    schema: string
+    name: string
+    fkOutgoing?: Array<{ toSchema: string; toTable: string }>
+  }>
+}
+
 interface LegacyEntityDerivationModule {
   buildCatalogIndex(snapshot: unknown): unknown
   deriveSyncDefinitions(pipelines: unknown, catalogIndex: unknown, generatedAt: string): DerivedSyncDefinition[]
@@ -114,10 +122,24 @@ describe("legacy sync generators", () => {
     const modulePath = new URL("../../../../deploy/sync/helpers/legacy-entity-derivation.mjs", import.meta.url).href
     const { buildCatalogIndex, deriveSyncDefinitions } = await import(modulePath) as LegacyEntityDerivationModule
     const evidence = JSON.parse(readFileSync(evidenceFixture, "utf-8"))
-    const catalogSnapshot = JSON.parse(readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8"))
+    const catalogSnapshot = JSON.parse(readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8")) as CatalogSnapshot
     const catalogIndex = buildCatalogIndex(catalogSnapshot)
     const definitions = deriveSyncDefinitions(evidence.pipelines, catalogIndex, generatedAt)
     const byId = new Map<string, DerivedSyncDefinition>(definitions.map((definition) => [definition.id, definition]))
+    const fkChildrenByParent = new Map<string, Set<string>>()
+    for (const table of catalogSnapshot.tables) {
+      const child = `${table.schema}.${table.name}`.toLowerCase()
+      for (const fk of table.fkOutgoing ?? []) {
+        const parent = `${fk.toSchema}.${fk.toTable}`.toLowerCase()
+        if (parent === child) continue
+        let children = fkChildrenByParent.get(parent)
+        if (!children) {
+          children = new Set<string>()
+          fkChildrenByParent.set(parent, children)
+        }
+        children.add(child)
+      }
+    }
 
     for (const name of Object.keys(expectedEntities)) {
       const actual = byId.get(name)
@@ -137,6 +159,19 @@ describe("legacy sync generators", () => {
       const actualTables = new Set(actual.metadata.tables.map((table: { name: string }) => table.name))
       for (const tableName of expected.requiredTables) {
         expect(actualTables.has(tableName), `${name} missing ${tableName}`).toBe(true)
+      }
+
+      const positions = new Map(actual.metadata.executionOrder.map((tableName, index) => [tableName.toLowerCase(), index]))
+      for (const [parent, children] of fkChildrenByParent) {
+        if (!positions.has(parent)) continue
+        const parentPos = positions.get(parent)
+        if (parentPos == null) continue
+        for (const child of children) {
+          if (!positions.has(child)) continue
+          const childPos = positions.get(child)
+          if (childPos == null) continue
+          expect(parentPos).toBeLessThan(childPos)
+        }
       }
 
       for (const table of actual.metadata.tables) {

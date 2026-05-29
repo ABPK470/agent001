@@ -13,12 +13,12 @@
 
 import sqlMod from "mssql"
 import { EventType, SyncProgressKind, type AgentHost } from "../../../ports/index.js"
-import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
+import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
 import { maybeArchive } from "./archive.js"
 import { qtable, trackedQuery } from "./db-helpers.js"
-import type { ExecuteProgress } from "./types.js"
+import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "./types.js"
 
 export interface RunMetadataSyncInput {
   host: AgentHost
@@ -53,14 +53,41 @@ export async function runMetadataSync(
     }
   }
 
+  const fail = (error: unknown, context: { table?: string; op?: string }) => {
+    const failure = toSyncExecuteError(error, {
+      step: "metadata-sync",
+      table: context.table,
+      op: context.op,
+    })
+    onProgress({
+      type: SyncProgressKind.Step,
+      step: failure.step,
+      table: failure.table,
+      message: failure.message,
+      error: failure.causeDetail,
+    })
+    emit(host, EventType.SyncExecuteStepFailed, {
+      planId,
+      step: failure.step,
+      table: failure.table ?? null,
+      op: failure.op ?? null,
+      error: failure.message,
+      cause: failure.causeDetail ?? null,
+    })
+    return failure
+  }
+
   try {
     await tx.begin()
 
     // Disable FK constraints only on tables with changes
     for (const t of allTables) {
       if (!affectedTables.has(t)) continue
-      try { await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`, `nocheck-constraint(${t})`, target, telemetryContext) }
-      catch (e) { console.warn(`[sync.execute] NOCHECK CONSTRAINT failed for ${t}:`, e) }
+      try {
+        await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`, `nocheck-constraint(${t})`, target, telemetryContext)
+      } catch (error) {
+        throw fail(error, { table: t, op: "nocheck-constraint" })
+      }
     }
 
     // Inserts + Updates: parents → children
@@ -71,11 +98,15 @@ export async function runMetadataSync(
       const rowsTotal = tableResult.counts.insert + tableResult.counts.update
       onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal })
       emit(host, EventType.SyncExecuteTableStart, { planId, table: tableName, op: "upsert", rowsTotal })
-      await maybeArchive(host, plan, tableName, triggerCache)
-      const applied = await applyInsertsUpdates(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
-      appliedTotals.update += applied
-      onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-      emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "upsert", rowsApplied: applied })
+      try {
+        await maybeArchive(host, plan, tableName, triggerCache)
+        const applied = await applyInsertsUpdates(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
+        appliedTotals.update += applied
+        onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
+        emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "upsert", rowsApplied: applied })
+      } catch (error) {
+        throw fail(error, { table: tableName, op: "upsert" })
+      }
     }
 
     // Deletes: children → parents
@@ -84,20 +115,31 @@ export async function runMetadataSync(
       if (!tableResult || tableResult.counts.delete === 0) continue
       onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal: tableResult.counts.delete })
       emit(host, EventType.SyncExecuteTableStart, { planId, table: tableName, op: "delete", rowsTotal: tableResult.counts.delete })
-      const applied = await applyDeletes(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
-      appliedTotals.delete += applied
-      onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-      emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "delete", rowsApplied: applied })
+      try {
+        const applied = await applyDeletes(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
+        appliedTotals.delete += applied
+        onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
+        emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "delete", rowsApplied: applied })
+      } catch (error) {
+        throw fail(error, { table: tableName, op: "delete" })
+      }
     }
 
     // Re-enable FK constraints only on tables we disabled them on
     for (const t of allTables) {
       if (!affectedTables.has(t)) continue
-      try { await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`, `check-constraint(${t})`, target, telemetryContext) }
-      catch (e) { console.warn(`[sync.execute] CHECK CONSTRAINT failed for ${t}:`, e) }
+      try {
+        await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`, `check-constraint(${t})`, target, telemetryContext)
+      } catch (error) {
+        throw fail(error, { table: t, op: "check-constraint" })
+      }
     }
 
-    await tx.commit()
+    try {
+      await tx.commit()
+    } catch (error) {
+      throw fail(error, { op: "commit" })
+    }
     return { applied: appliedTotals }
   } catch (e) {
     // Re-enable FK constraints even on failure — best-effort
@@ -106,6 +148,6 @@ export async function runMetadataSync(
       catch { /* tx may already be aborted */ }
     }
     try { await tx.rollback() } catch { /* ignore */ }
-    throw e
+    throw e instanceof SyncExecuteError ? e : fail(e, { op: "transaction" })
   }
 }

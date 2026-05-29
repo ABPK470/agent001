@@ -14,6 +14,7 @@ import {
     defaultSyncDefinitionFlowTemplateId,
     getSyncDefinitionFlowTemplateSteps,
     loadSyncDefinitionFlowTemplateCatalog,
+    orderEntityTables,
     type EntityDefinition,
     type SyncDefinitionFlowTemplateCatalog,
 } from "@mia/sync"
@@ -174,10 +175,8 @@ function composeDefinition(
   publishedVersion: string,
 ): PublishedSyncDefinition {
   const executionSteps = resolveExecutionSteps(config, entity.id, flowTemplateCatalog)
-  const executionOrder = entity.tables
-    .slice()
-    .sort((left, right) => Number(left.executionOrder ?? 0) - Number(right.executionOrder ?? 0))
-    .map((table) => table.name)
+  const orderedTables = orderEntityTables(entity)
+  const executionOrder = orderedTables.map((table) => table.name)
   const reverseOrder = entity.reverseOrder.length > 0 ? entity.reverseOrder : [...executionOrder].reverse()
 
   return {

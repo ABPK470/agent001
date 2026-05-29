@@ -30,11 +30,21 @@
     "reviewStatus": "legacy-review-required",
     "notes": [
       "Bootstrapped from legacy pipeline ground truth.",
-      "Pipeline activity still contains inferred step scope that needs review."
+      "Contains FK-inferred optional scope that still needs deliberate review."
     ]
   },
   "metadata": {
     "tables": [
+      {
+        "name": "core.Activity",
+        "scopeColumn": "pipelineId",
+        "predicate": "pipelineId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
       {
         "name": "core.Pipeline",
         "scopeColumn": "pipelineId",
@@ -55,51 +65,26 @@
         "enabledByDefault": false,
         "userControllable": true,
         "note": "Predicate inferred from FK graph. Verify against core.uspSyncPipelineObjectsTran body."
-      },
-      {
-        "name": "core.Activity",
-        "scopeColumn": "pipelineId",
-        "predicate": "pipelineId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
       }
     ],
     "executionOrder": [
-      "core.Activity",
       "core.Pipeline",
+      "core.Activity",
       "core.Step"
     ],
     "reverseOrder": [
       "core.Step",
-      "core.Pipeline",
-      "core.Activity"
+      "core.Activity",
+      "core.Pipeline"
     ],
     "discrepancies": []
   },
   "executionFlow": {
-    "steps": [
-      {
-        "id": "metadata-sync",
-        "phase": "metadata",
-        "kind": "metadataSync",
-        "title": "Metadata sync",
-        "description": "Apply transactional metadata changes for the selected pipeline activity scope."
-      },
-      {
-        "id": "pipeline-register",
-        "phase": "post-metadata",
-        "kind": "pipelineRegister",
-        "title": "Pipeline register",
-        "description": "Register the target pipeline with the agent service."
-      }
-    ]
+    "steps": []
   },
   "provenance": {
     "kind": "legacy-migration",
     "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-29T12:08:36.914Z"
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
   }
 }

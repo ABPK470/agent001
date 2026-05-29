@@ -30,7 +30,7 @@
     "reviewStatus": "legacy-review-required",
     "notes": [
       "Bootstrapped from legacy pipeline ground truth.",
-      "Content still contains inferred optional scope that requires review."
+      "Contains FK-inferred optional scope that still needs deliberate review."
     ]
   },
   "metadata": {
@@ -56,6 +56,28 @@
         "userControllable": false
       },
       {
+        "name": "gate.ContentType",
+        "scopeColumn": "contentTypeId",
+        "predicate": "contentTypeId IN (/* review contentTypeIds */)",
+        "source": "pipeline-only",
+        "verified": false,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false,
+        "note": "Predicate unresolved from legacy pipeline variable @contentTypeIds. Verify against core.uspSyncContentObjectsTran body."
+      },
+      {
+        "name": "gate.ContentLinkType",
+        "scopeColumn": "contentLinkTypeId",
+        "predicate": "contentLinkTypeId IN (/* review contentLinkTypeIds */)",
+        "source": "pipeline-only",
+        "verified": false,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false,
+        "note": "Predicate unresolved from legacy pipeline variable @contentLinkTypeIds. Verify against core.uspSyncContentObjectsTran body."
+      },
+      {
         "name": "gate.UserGroupPermission",
         "scopeColumn": "contentId",
         "predicate": "contentId = {id}",
@@ -65,66 +87,30 @@
         "enabledByDefault": false,
         "userControllable": true,
         "note": "Predicate inferred from FK graph. Verify against core.uspSyncContentObjectsTran body."
-      },
-      {
-        "name": "gate.ContentType",
-        "scopeColumn": "contentTypeId",
-        "predicate": "contentTypeId IN (SELECT contentTypeId FROM [gate].[Content] WHERE contentId = {id})",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.ContentLinkType",
-        "scopeColumn": "contentLinkTypeId",
-        "predicate": "contentLinkTypeId IN (SELECT contentLinkTypeId FROM [gate].[ContentLink] WHERE contentId = {id})",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
       }
     ],
     "executionOrder": [
-      "gate.Content",
-      "gate.ContentLink",
       "gate.ContentType",
+      "gate.Content",
       "gate.ContentLinkType",
+      "gate.ContentLink",
       "gate.UserGroupPermission"
     ],
     "reverseOrder": [
       "gate.UserGroupPermission",
-      "gate.ContentLinkType",
-      "gate.ContentType",
       "gate.ContentLink",
-      "gate.Content"
+      "gate.ContentLinkType",
+      "gate.Content",
+      "gate.ContentType"
     ],
     "discrepancies": []
   },
   "executionFlow": {
-    "steps": [
-      {
-        "id": "metadata-sync",
-        "phase": "metadata",
-        "kind": "metadataSync",
-        "title": "Metadata sync",
-        "description": "Apply transactional metadata changes for the selected content scope."
-      },
-      {
-        "id": "handle-dependencies",
-        "phase": "post-metadata",
-        "kind": "handleDependencies",
-        "title": "Handle dependencies",
-        "description": "Refresh downstream content dependency state.",
-        "objectName": "content"
-      }
-    ]
+    "steps": []
   },
   "provenance": {
     "kind": "legacy-migration",
     "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-29T12:08:36.914Z"
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
   }
 }

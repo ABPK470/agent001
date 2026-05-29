@@ -96,8 +96,9 @@ function deriveSyncDefinition(pipeline, catalogIndex, fkEdges, generatedAt, sour
   const pipelineCalls = normalizePipelineCalls(pipeline.syncObjectCalls ?? [], rootKey)
   const fkTables = fkClosure(hint.rootTable, rootKey, fkEdges)
   const tables = reconcileTables(pipelineCalls, fkTables, entrySproc)
-  const executionOrder = [...pipelineCalls.map((call) => canonicalizeQualifiedName(call.qualifiedName, catalogIndex)), ...tables.filter((table) => table.source === "fk-only").map((table) => table.name)]
+  const preferredOrder = [...pipelineCalls.map((call) => canonicalizeQualifiedName(call.qualifiedName, catalogIndex)), ...tables.filter((table) => table.source === "fk-only").map((table) => table.name)]
     .filter((name, index, values) => values.indexOf(name) === index)
+  const executionOrder = orderTablesByCatalogDependencies(preferredOrder, hint.rootTable, fkEdges)
   const reverseOrder = [...executionOrder].reverse()
 
   return {
@@ -298,4 +299,59 @@ function findSelfJoinColumn(table, rootKey) {
 
 function canonicalizeQualifiedName(name, catalogIndex) {
   return catalogIndex.tables.get(name.toLowerCase())?.qualifiedName ?? name
+}
+
+function orderTablesByCatalogDependencies(names, rootTable, fkEdges) {
+  const canonicalNames = [...new Set(names.map((name) => name.toLowerCase()))]
+  const included = new Set(canonicalNames)
+  const preferredIndex = new Map(names.map((name, index) => [name.toLowerCase(), index]))
+  const outgoing = new Map()
+  const indegree = new Map(canonicalNames.map((name) => [name, 0]))
+
+  for (const edge of fkEdges) {
+    const parent = `${edge.parentSchema}.${edge.parentTable}`.toLowerCase()
+    const child = `${edge.childSchema}.${edge.childTable}`.toLowerCase()
+    if (!included.has(parent) || !included.has(child) || parent === child) continue
+    let children = outgoing.get(parent)
+    if (!children) {
+      children = new Set()
+      outgoing.set(parent, children)
+    }
+    if (children.has(child)) continue
+    children.add(child)
+    indegree.set(child, (indegree.get(child) ?? 0) + 1)
+  }
+
+  const compare = (left, right) => {
+    const leftRoot = left === rootTable.toLowerCase() ? -1 : 0
+    const rightRoot = right === rootTable.toLowerCase() ? -1 : 0
+    return leftRoot - rightRoot
+      || (preferredIndex.get(left) ?? Number.MAX_SAFE_INTEGER) - (preferredIndex.get(right) ?? Number.MAX_SAFE_INTEGER)
+      || left.localeCompare(right)
+  }
+
+  const ready = canonicalNames.filter((name) => (indegree.get(name) ?? 0) === 0).sort(compare)
+  const ordered = []
+
+  while (ready.length > 0) {
+    const current = ready.shift()
+    ordered.push(current)
+    const children = outgoing.get(current)
+    if (!children) continue
+    for (const child of children) {
+      indegree.set(child, (indegree.get(child) ?? 0) - 1)
+      if ((indegree.get(child) ?? 0) === 0) {
+        ready.push(child)
+        ready.sort(compare)
+      }
+    }
+  }
+
+  if (ordered.length !== canonicalNames.length) {
+    const remaining = canonicalNames.filter((name) => !ordered.includes(name)).sort(compare)
+    ordered.push(...remaining)
+  }
+
+  const canonicalToOriginal = new Map(names.map((name) => [name.toLowerCase(), name]))
+  return ordered.map((name) => canonicalToOriginal.get(name) ?? name)
 }

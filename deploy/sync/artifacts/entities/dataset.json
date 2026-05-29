@@ -30,15 +30,45 @@
     "reviewStatus": "legacy-review-required",
     "notes": [
       "Bootstrapped from legacy pipeline ground truth.",
-      "Dataset still contains inferred downstream rule scope that requires review."
+      "Contains FK-inferred optional scope that still needs deliberate review."
     ]
   },
   "metadata": {
     "tables": [
       {
-        "name": "core.Dataset",
+        "name": "core.Activity",
+        "scopeColumn": "pipelineId",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Activity].pipelineId AND p.datasetId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.Pipeline",
         "scopeColumn": "datasetId",
         "predicate": "datasetId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetMappingColumn",
+        "scopeColumn": "datasetMappingId",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[DatasetMappingColumn].datasetColumnId_Left AND p.datasetId = {id})",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "core.DatasetMapping",
+        "scopeColumn": "datasetId_Left",
+        "predicate": "datasetId_Left = {id}",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -56,9 +86,9 @@
         "userControllable": false
       },
       {
-        "name": "core.DatasetMapping",
-        "scopeColumn": "datasetMappingId",
-        "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( {id}))",
+        "name": "core.Dataset",
+        "scopeColumn": "datasetId",
+        "predicate": "datasetId = {id}",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -75,26 +105,6 @@
         "enabledByDefault": false,
         "userControllable": true,
         "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
-      },
-      {
-        "name": "core.Pipeline",
-        "scopeColumn": "pipelineId",
-        "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE datasetId IN ( {id} ) )",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetMappingColumn",
-        "scopeColumn": "datasetMappingId",
-        "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( {id}))",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
       },
       {
         "name": "core.RuleColumn",
@@ -141,19 +151,9 @@
         "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
       },
       {
-        "name": "core.Activity",
-        "scopeColumn": "pipelineId",
-        "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE datasetId IN ( {id} ) )",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
         "name": "core.RuleConditionValue",
         "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p1.datasetId = {id})",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId)",
         "source": "fk-only",
         "verified": false,
         "groundedByPipeline": false,
@@ -163,12 +163,12 @@
       }
     ],
     "executionOrder": [
-      "core.Activity",
+      "core.Dataset",
       "core.Pipeline",
-      "core.DatasetMappingColumn",
+      "core.Activity",
       "core.DatasetMapping",
       "core.DatasetColumn",
-      "core.Dataset",
+      "core.DatasetMappingColumn",
       "core.Rule",
       "core.RuleColumn",
       "core.RuleCondition",
@@ -183,44 +183,21 @@
       "core.RuleCondition",
       "core.RuleColumn",
       "core.Rule",
-      "core.Dataset",
+      "core.DatasetMappingColumn",
       "core.DatasetColumn",
       "core.DatasetMapping",
-      "core.DatasetMappingColumn",
+      "core.Activity",
       "core.Pipeline",
-      "core.Activity"
+      "core.Dataset"
     ],
     "discrepancies": []
   },
   "executionFlow": {
-    "steps": [
-      {
-        "id": "metadata-sync",
-        "phase": "metadata",
-        "kind": "metadataSync",
-        "title": "Metadata sync",
-        "description": "Apply transactional metadata changes for the selected dataset scope."
-      },
-      {
-        "id": "dataset-deploy",
-        "phase": "post-metadata",
-        "kind": "datasetDeploy",
-        "title": "Dataset deploy",
-        "description": "Deploy the dataset using the target ETL service."
-      },
-      {
-        "id": "sync-date",
-        "phase": "post-metadata",
-        "kind": "syncDate",
-        "title": "Sync date",
-        "description": "Stamp the dataset sync date after deployment.",
-        "auditObjectType": "Dataset"
-      }
-    ]
+    "steps": []
   },
   "provenance": {
     "kind": "legacy-migration",
     "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-29T12:08:36.914Z"
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
   }
 }

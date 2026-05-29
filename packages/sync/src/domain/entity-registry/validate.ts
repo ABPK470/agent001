@@ -23,6 +23,7 @@
  * browser.
  */
 
+import { findEntityTableOrderViolations, orderEntityTablesDetailed } from "./order.js"
 import {
     type EntityDefinition,
     type EntityTable,
@@ -220,6 +221,25 @@ function validateTables(
       message: "Entity has no tables. Preview/execute will be a no-op until at least one table is added.",
       path: "/tables",
     })
+  } else {
+    const violations = findEntityTableOrderViolations(def)
+    const tableIndexByName = new Map(def.tables.map((table, index) => [table.name.toLowerCase(), index]))
+    for (const violation of violations) {
+      const childIndex = tableIndexByName.get(violation.child.toLowerCase())
+      errors.push({
+        code: "execution_order_cycle",
+        message: `executionOrder violates dependency order: "${violation.parent}" must precede "${violation.child}" (${violation.reason}).`,
+        path: childIndex == null ? "/tables" : `/tables/${childIndex}/executionOrder`,
+      })
+    }
+    const ordered = orderEntityTablesDetailed(def)
+    if (ordered.cycleDetected) {
+      errors.push({
+        code: "execution_order_cycle",
+        message: "executionOrder dependencies contain a cycle or unresolved ordering ambiguity.",
+        path: "/tables",
+      })
+    }
   }
 }
 

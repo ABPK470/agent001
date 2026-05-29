@@ -30,13 +30,34 @@
     "reviewStatus": "legacy-review-required",
     "notes": [
       "Bootstrapped from legacy pipeline ground truth.",
-      "Gate metadata still has optional content scope that needs deliberate verification."
+      "Contains FK-inferred optional scope that still needs deliberate review."
     ]
   },
   "metadata": {
     "tables": [
       {
-        "name": "gate.MetaTable",
+        "name": "gate.jsonSchema",
+        "scopeColumn": "jsonSchemaId",
+        "predicate": "jsonSchemaId IN (/* review jsonSchemaIds */)",
+        "source": "pipeline-only",
+        "verified": false,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false,
+        "note": "Predicate unresolved from legacy pipeline variable @jsonSchemaIds. Verify against core.uspSyncDataListObjectsTran body."
+      },
+      {
+        "name": "gate.MetaColumn",
+        "scopeColumn": "refTableId",
+        "predicate": "refTableId = {id}",
+        "source": "fk+pipeline",
+        "verified": true,
+        "groundedByPipeline": true,
+        "enabledByDefault": true,
+        "userControllable": false
+      },
+      {
+        "name": "gate.MetaView",
         "scopeColumn": "tableId",
         "predicate": "tableId = {id}",
         "source": "fk+pipeline",
@@ -46,19 +67,9 @@
         "userControllable": false
       },
       {
-        "name": "gate.MetaColumn",
-        "scopeColumn": "viewId",
-        "predicate": "viewId IN (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} ))",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.MetaView",
-        "scopeColumn": "viewId",
-        "predicate": "viewId IN (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} ))",
+        "name": "gate.MetaTable",
+        "scopeColumn": "tableId",
+        "predicate": "tableId = {id}",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -79,7 +90,7 @@
       {
         "name": "gate.ContentLink",
         "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[ContentLink].contentId AND _p1.tableId = {id})",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[ContentLink].contentId)",
         "source": "fk-only",
         "verified": false,
         "groundedByPipeline": false,
@@ -90,30 +101,20 @@
       {
         "name": "gate.UserGroupPermission",
         "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[UserGroupPermission].contentId AND _p1.tableId = {id})",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[UserGroupPermission].contentId)",
         "source": "fk-only",
         "verified": false,
         "groundedByPipeline": false,
         "enabledByDefault": false,
         "userControllable": true,
         "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
-      },
-      {
-        "name": "gate.jsonSchema",
-        "scopeColumn": "jsonSchemaId",
-        "predicate": "jsonSchemaId IN (SELECT jsonSchemaId FROM [gate].[MetaColumn] WHERE columnId IN ( (SELECT columnId FROM [gate].[MetaColumn] WHERE viewId IN ( (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} )) )) ))",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
       }
     ],
     "executionOrder": [
-      "gate.jsonSchema",
-      "gate.MetaColumn",
-      "gate.MetaView",
       "gate.MetaTable",
+      "gate.JsonSchema",
+      "gate.MetaView",
+      "gate.MetaColumn",
       "gate.Content",
       "gate.ContentLink",
       "gate.UserGroupPermission"
@@ -122,42 +123,19 @@
       "gate.UserGroupPermission",
       "gate.ContentLink",
       "gate.Content",
-      "gate.MetaTable",
-      "gate.MetaView",
       "gate.MetaColumn",
-      "gate.jsonSchema"
+      "gate.MetaView",
+      "gate.JsonSchema",
+      "gate.MetaTable"
     ],
     "discrepancies": []
   },
   "executionFlow": {
-    "steps": [
-      {
-        "id": "metadata-sync",
-        "phase": "metadata",
-        "kind": "metadataSync",
-        "title": "Metadata sync",
-        "description": "Apply transactional metadata changes for the selected gate metadata scope."
-      },
-      {
-        "id": "meta-refresh",
-        "phase": "post-metadata",
-        "kind": "metaRefresh",
-        "title": "Meta refresh",
-        "description": "Refresh target gate metadata."
-      },
-      {
-        "id": "pipeline-start",
-        "phase": "post-metadata",
-        "kind": "pipelineStart",
-        "title": "Pipeline start",
-        "description": "Start the downstream gate refresh pipeline.",
-        "pipelineName": "All Lists content item population"
-      }
-    ]
+    "steps": []
   },
   "provenance": {
     "kind": "legacy-migration",
     "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-29T12:08:36.914Z"
+    "sourceVersion": "2026-05-10T11:19:07.694Z"
   }
 }

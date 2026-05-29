@@ -13,6 +13,12 @@ export {
     bundledStrategyById
 } from "./bundled-strategies.js"
 export { diffEntityDefinitions } from "./diff.js"
+export {
+    findEntityTableOrderViolations,
+    listEntityTableOrderEdges,
+    orderEntityTables,
+    orderEntityTablesDetailed
+} from "./order.js"
 export { projectRecipe, type ProjectedSyncRecipe } from "./projector.js"
 export {
     resolveEffectiveScd2

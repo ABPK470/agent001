@@ -25,7 +25,7 @@ import { DRIFT_ABORT_PCT } from "./db-helpers.js"
 import { revalidatePlanDrift } from "./drift.js"
 import { runMetadataSync } from "./metadata-sync.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
-import type { ExecuteOptions, ExecuteProgress } from "./types.js"
+import { toSyncExecuteError, type ExecuteOptions, type ExecuteProgress } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 
 function requireAuditObjectType(step: { id: string; auditObjectType?: string | null }): string {
@@ -306,14 +306,19 @@ async function executeSyncInner(
       catch { /* best-effort */ }
     }
 
-    const msg = e instanceof Error ? e.message : String(e)
+    const failure = toSyncExecuteError(e, { step: "execute" })
+    const msg = failure.message
     console.error(`[sync.execute] plan ${planId} failed:`, e)
-    onProgress({ type: SyncProgressKind.Failed, error: msg })
+    onProgress({ type: SyncProgressKind.Failed, step: failure.step, table: failure.table, error: msg, message: failure.causeDetail })
     emit(opts.host, EventType.SyncExecuteFailed, {
       planId,
       definitionId: executionContract.definitionId,
       definitionPublishedVersion: executionContract.definitionPublishedVersion,
       error: msg,
+      step: failure.step,
+      table: failure.table ?? null,
+      op: failure.op ?? null,
+      cause: failure.causeDetail ?? null,
       durationMs: Date.now() - execT0,
     })
     try { getSyncRunSink(opts.host).finish({ planId, status: SyncRunStatus.Failed, error: msg, driftDetectedPct: driftPct, durationMs: Date.now() - execT0 }) }

@@ -615,7 +615,16 @@ function formatLogEntryInner(
       case "sync.execute.step":
         return { type: t, message: `${data["step"]}`, timestamp }
       case "sync.execute.step.failed":
-        return { type: t, error: true, message: `${data["step"]} (${data["sproc"] ?? "?"}) failed — ${data["error"] ?? "unknown"}`, timestamp }
+        return {
+          type: t,
+          error: true,
+          message: [
+            data["step"],
+            data["op"],
+            data["table"],
+          ].filter(Boolean).join(" · ") + ` failed — ${data["cause"] ?? data["error"] ?? "unknown"}`,
+          timestamp,
+        }
       case "sync.execute.table.start":
         return { type: t, message: `${data["table"]} — ${data["op"]} ${data["rowsTotal"]} rows…`, timestamp }
       case "sync.execute.table.done":
@@ -628,7 +637,16 @@ function formatLogEntryInner(
         return { type: t, error: !!(warns && warns.length > 0), message: `Execute complete — plan ${planId}${durStr}${warnStr}`, timestamp }
       }
       case "sync.execute.failed":
-        return { type: t, error: true, message: `Execute failed — plan ${planId}: ${data["error"] ?? "unknown"}`, timestamp }
+        return {
+          type: t,
+          error: true,
+          message: `Execute failed — plan ${planId}: ${[
+            data["step"],
+            data["op"],
+            data["table"],
+          ].filter(Boolean).join(" · ") || "execute"} — ${data["cause"] ?? data["error"] ?? "unknown"}`,
+          timestamp,
+        }
       case "sync.execute.drift.revalidated": {
         const pct = data["maxDriftPct"] as number | undefined
         return { type: t, message: `Drift re-validated — max ${((pct ?? 0) * 100).toFixed(1)}%`, timestamp }

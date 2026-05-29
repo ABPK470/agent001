@@ -32,6 +32,7 @@ import type {
     SyncRecipe,
     SyncRecipeTable,
 } from "../recipes.js"
+import { orderEntityTables } from "./order.js"
 import { resolveEffectiveScd2 } from "./strategy-resolver.js"
 import type {
     EffectiveScd2,
@@ -73,13 +74,7 @@ export function projectRecipe(args: {
   const generatedAt = args.generatedAt ?? new Date().toISOString()
   const hasSelfJoin = def.selfJoinColumn !== null && def.selfJoinColumn.trim() !== ""
 
-  // Stable ordering: respect executionOrder; ties broken by index. Tables
-  // with identical executionOrder retain their declaration order, which
-  // is the natural editing convention.
-  const sortedTables = [...def.tables]
-    .map((t, idx) => ({ table: t, idx }))
-    .sort((a, b) => a.table.executionOrder - b.table.executionOrder || a.idx - b.idx)
-    .map((x) => x.table)
+  const sortedTables = orderEntityTables(def)
 
   const tables: SyncRecipeTable[] = []
   const effectiveScd2: EffectiveScd2[] = []

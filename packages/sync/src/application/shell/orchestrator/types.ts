@@ -19,6 +19,44 @@ export interface ExecuteProgress {
   error?: string
 }
 
+export interface SyncExecuteFailureContext {
+  step: string
+  table?: string
+  op?: string
+  cause?: string
+}
+
+export class SyncExecuteError extends Error {
+  readonly step: string
+  readonly table?: string
+  readonly op?: string
+  readonly causeDetail?: string
+  readonly raw: unknown
+
+  constructor(context: SyncExecuteFailureContext, detail: string, raw?: unknown) {
+    super(formatSyncExecuteFailure(context, detail))
+    this.name = "SyncExecuteError"
+    this.step = context.step
+    this.table = context.table
+    this.op = context.op
+    this.causeDetail = context.cause ?? detail
+    this.raw = raw
+  }
+}
+
+export function toSyncExecuteError(error: unknown, fallback: SyncExecuteFailureContext): SyncExecuteError {
+  if (error instanceof SyncExecuteError) return error
+  const detail = error instanceof Error ? error.message : String(error)
+  return new SyncExecuteError({ ...fallback, cause: fallback.cause ?? detail }, detail, error)
+}
+
+export function formatSyncExecuteFailure(context: SyncExecuteFailureContext, detail: string): string {
+  const segments = [context.step]
+  if (context.op) segments.push(context.op)
+  if (context.table) segments.push(context.table)
+  return `${segments.join(" / ")} failed — ${detail}`
+}
+
 export interface ExecuteOptions {
   host: AgentHost
   confirm: boolean

@@ -160,8 +160,8 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onClose }
               <div className="font-mono text-sm px-5 py-3 space-y-0.5">
                 {events.map((event, index) => (
                   <div key={index} className="flex items-baseline gap-2 min-w-0">
-                    <span className={`text-xs w-28 shrink-0 ${event.type === "step" ? "text-accent/60" : "text-text-muted/40"}`}>
-                      {event.type === "step" ? (event.step ?? "step") : event.type}
+                    <span className={`text-xs w-28 shrink-0 ${event.type === "step" ? "text-accent/60" : event.type === "failed" ? "text-warning" : "text-text-muted/40"}`}>
+                      {event.step ?? event.type}
                     </span>
                     {event.table && <span className="text-accent shrink-0">{event.table.split(".").pop()}</span>}
                     {typeof event.rowsApplied === "number" && <span className="text-text-muted tabular-nums shrink-0">{event.rowsApplied} rows</span>}

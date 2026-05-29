@@ -611,8 +611,25 @@ function pickEventSummary(ev: OperationEvent): string {
   }
   if (ev.type === "sync.execute.step.failed") {
     const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : "step"
-    const error = typeof ev.data["error"] === "string" ? String(ev.data["error"]) : "unknown error"
-    return `${humanizeToken(step)} — ${error}`
+    const op = typeof ev.data["op"] === "string" ? String(ev.data["op"]) : null
+    const table = typeof ev.data["table"] === "string" ? String(ev.data["table"]) : null
+    const error = typeof ev.data["cause"] === "string"
+      ? String(ev.data["cause"])
+      : typeof ev.data["error"] === "string"
+        ? String(ev.data["error"])
+        : "unknown error"
+    return [humanizeToken(step), op, table, error].filter(Boolean).join(" — ")
+  }
+  if (ev.type === "sync.execute.failed") {
+    const step = typeof ev.data["step"] === "string" ? humanizeToken(String(ev.data["step"])) : null
+    const op = typeof ev.data["op"] === "string" ? String(ev.data["op"]) : null
+    const table = typeof ev.data["table"] === "string" ? String(ev.data["table"]) : null
+    const error = typeof ev.data["cause"] === "string"
+      ? String(ev.data["cause"])
+      : typeof ev.data["error"] === "string"
+        ? String(ev.data["error"])
+        : "unknown error"
+    return [step, op, table, error].filter(Boolean).join(" — ")
   }
   if (ev.type === "sync.execute.started") {
     return `${ev.data["source"] ?? "?"} → ${ev.data["target"] ?? "?"}`
@@ -648,7 +665,7 @@ function pickEventSummary(ev: OperationEvent): string {
   }
   const d = ev.data
   const parts: string[] = []
-  for (const key of ["table", "step", "tool", "label", "sproc", "message", "rowsApplied", "rowCount", "durationMs", "error"]) {
+  for (const key of ["table", "step", "op", "tool", "label", "sproc", "message", "rowsApplied", "rowCount", "durationMs", "cause", "error"]) {
     const v = d[key]
     if (v == null) continue
     if (key === "durationMs" && typeof v === "number") parts.push(`${v}ms`)

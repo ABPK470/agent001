@@ -4,13 +4,14 @@ import { relative, resolve } from "node:path"
 import type { AuthoredSyncDefinition, EntityRegistrySyncFlowTemplateId } from "@mia/shared-types"
 import { parseAllDocuments } from "yaml"
 
+import { orderEntityTables } from "./entity-registry/order.js"
 import type { EntityDefinition } from "./entity-registry/types.js"
 import {
-  defaultSyncDefinitionFlowTemplateId,
-  getSyncDefinitionFlowTemplateSteps,
-  hasSyncDefinitionFlowTemplate,
-  loadSyncDefinitionFlowTemplateCatalog,
-  type SyncDefinitionFlowTemplateCatalog,
+    defaultSyncDefinitionFlowTemplateId,
+    getSyncDefinitionFlowTemplateSteps,
+    hasSyncDefinitionFlowTemplate,
+    loadSyncDefinitionFlowTemplateCatalog,
+    type SyncDefinitionFlowTemplateCatalog,
 } from "./sync-definition-flow-templates.js"
 
 export interface SyncDefinitionScaffoldOptions {
@@ -49,8 +50,7 @@ export function scaffoldSyncDefinition(entity: EntityDefinition, options: SyncDe
     throw new Error(`Unknown flow template "${flowTemplateId}".`)
   }
 
-  const tables = [...(Array.isArray(entity.tables) ? entity.tables : [])]
-    .sort((left, right) => Number(left.executionOrder ?? 0) - Number(right.executionOrder ?? 0))
+  const tables = orderEntityTables({ rootTable: entity.rootTable, tables: Array.isArray(entity.tables) ? entity.tables : [] })
     .map((table) => projectMetadataTable(entity, table))
   const executionOrder = tables.map((table) => table.name)
   const reverseOrder = Array.isArray(entity.reverseOrder) && entity.reverseOrder.length > 0
