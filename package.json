@@ -21,8 +21,6 @@
     "dev": "npx concurrently -k -n server,ui,term -c blue,magenta,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
     "dev:classic": "npx concurrently -k -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\"",
     "dev:term": "npx concurrently -k -n server,term -c blue,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
-    "sync:definitions:compile": "npm run sync-definitions:compile -w packages/sync",
-    "sync:definitions:scaffold": "npm run sync-definitions:scaffold -w packages/sync",
     "test": "npm test --workspaces",
     "build:dev": "npm run build --workspaces",
     "build": "node scripts/build.mjs",

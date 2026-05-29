@@ -125,6 +125,21 @@ function collectPosixDescendantPids(rootPid: number): number[] {
   return descendants.sort((left, right) => right - left)
 }
 
+function collectPosixProcessGroupPids(groupPid: number): number[] {
+  const ps = spawnSync("ps", ["-Ao", "pid=,pgid="], { encoding: "utf8", windowsHide: true })
+  if (ps.status !== 0 || typeof ps.stdout !== "string") return []
+
+  const members: number[] = []
+  for (const line of ps.stdout.split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s*$/)
+    if (!match) continue
+    const pid = Number(match[1])
+    const pgid = Number(match[2])
+    if (pgid === groupPid) members.push(pid)
+  }
+  return members.sort((left, right) => right - left)
+}
+
 // ── Host backend (cross-platform Node child_process) ─────────────────
 
 class HostSandboxBackend implements SandboxBackend {
@@ -213,6 +228,9 @@ class HostSandboxBackend implements SandboxBackend {
         } else {
           for (const descendantPid of collectPosixDescendantPids(child.pid)) {
             knownDescendantPids.add(descendantPid)
+          }
+          for (const groupPid of collectPosixProcessGroupPids(child.pid)) {
+            knownDescendantPids.add(groupPid)
           }
           // POSIX: negative pid → process group kill.
           try { process.kill(-child.pid, signal) } catch { /* ignore ESRCH */ }

@@ -5,8 +5,6 @@ import { join, resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
-import { buildCatalogIndex, deriveSyncDefinitions } from "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs"
-
 const repoRoot = resolve(import.meta.dirname, "../../../..")
 const entitiesScript = resolve(repoRoot, "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs")
 const flowTemplatesScript = resolve(repoRoot, "deploy/sync/generators/generate-flow-templates-from-legacy-pipelines.mjs")
@@ -15,6 +13,33 @@ const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-template
 const catalogCacheFile = "packages/server/data/catalog-cache.uat.json"
 const generatedAt = "2026-05-10T11:19:07.694Z"
 const pipelineIds = "692,780,788,791,792,798"
+
+interface DerivedMetadataTable {
+  name: string
+  predicate: string
+  source: "fk+pipeline" | "fk-only" | "pipeline-only"
+}
+
+interface DerivedSyncDefinition {
+  id: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  legacy: {
+    pipelineId: number | null
+    entrySproc: string | null
+  }
+  metadata: {
+    tables: DerivedMetadataTable[]
+    executionOrder: string[]
+    reverseOrder: string[]
+  }
+}
+
+interface LegacyEntityDerivationModule {
+  buildCatalogIndex(snapshot: unknown): unknown
+  deriveSyncDefinitions(pipelines: unknown, catalogIndex: unknown, generatedAt: string): DerivedSyncDefinition[]
+}
 
 const expectedEntities = {
   content: {
@@ -85,17 +110,20 @@ describe("legacy sync generators", () => {
     expect(actual).toEqual(expected)
   })
 
-  it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", () => {
+  it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", async () => {
+    const modulePath = new URL("../../../../deploy/sync/helpers/legacy-entity-derivation.mjs", import.meta.url).href
+    const { buildCatalogIndex, deriveSyncDefinitions } = await import(modulePath) as LegacyEntityDerivationModule
     const evidence = JSON.parse(readFileSync(evidenceFixture, "utf-8"))
     const catalogSnapshot = JSON.parse(readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8"))
     const catalogIndex = buildCatalogIndex(catalogSnapshot)
     const definitions = deriveSyncDefinitions(evidence.pipelines, catalogIndex, generatedAt)
-    const byId = new Map(definitions.map((definition) => [definition.id, definition]))
+    const byId = new Map<string, DerivedSyncDefinition>(definitions.map((definition) => [definition.id, definition]))
 
     for (const name of Object.keys(expectedEntities)) {
       const actual = byId.get(name)
       const expected = expectedEntities[name as keyof typeof expectedEntities]
       expect(actual).toBeTruthy()
+      if (!actual) throw new Error(`Missing derived definition for ${name}`)
       expect(actual.id).toBe(name)
       expect(actual.rootTable).toBe(expected.rootTable)
       expect(actual.idColumn).toBe(expected.idColumn)
