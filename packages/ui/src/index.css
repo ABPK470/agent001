@@ -916,13 +916,17 @@ textarea.input {
 }
 
 .chathome--hero-copy-ready {
-  --hero-pill-shadow-live: var(--hero-pill-shadow);
+  --hero-pill-shadow-live: none;
 }
 
-.chathome--hero-copy-ready .chathome-empty-spotlight,
 .chathome--hero-copy-ready .chathome-empty-copy {
   opacity: 1;
   visibility: visible;
+}
+
+.chathome--hero-copy-ready .chathome-empty-spotlight {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .chathome--hero-copy-ready .chathome-empty-copy {
