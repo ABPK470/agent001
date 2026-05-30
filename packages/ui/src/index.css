@@ -843,27 +843,14 @@ textarea.input {
       rgba(0,0,0,0) 90%,
       rgba(0,0,0,0.55) 94%, rgba(0,0,0,1) 97%, rgba(0,0,0,1) 100%);
   mask-composite: add;
-  clip-path: polygon(evenodd,
-    0% 0%, 100% 0%, 100% 100%, 0% 100%,
-    50% 50%, 50% 50%, 50% 50%, 50% 50%
-  );
-  -webkit-clip-path: polygon(evenodd,
-    0% 0%, 100% 0%, 100% 100%, 0% 100%,
-    50% 50%, 50% 50%, 50% 50%, 50% 50%
-  );
+  clip-path: inset(0 0 0 0);
+  -webkit-clip-path: inset(0 0 0 0);
+  opacity: 1;
   transition:
-    clip-path 1400ms cubic-bezier(0.5, 0, 0.15, 1) 200ms,
-    -webkit-clip-path 1400ms cubic-bezier(0.5, 0, 0.15, 1) 200ms;
+    opacity 720ms cubic-bezier(0.4, 0, 0.2, 1) 220ms;
 }
 .chathome--revealed .chathome-frame {
-  clip-path: polygon(evenodd,
-    0% 0%, 100% 0%, 100% 100%, 0% 100%,
-    11% 7%, 89% 7%, 89% 84%, 11% 84%
-  );
-  -webkit-clip-path: polygon(evenodd,
-    0% 0%, 100% 0%, 100% 100%, 0% 100%,
-    11% 7%, 89% 7%, 89% 84%, 11% 84%
-  );
+  opacity: 1;
 }
 
 /* Content fades in as the converge enters its dissolve phase, so the

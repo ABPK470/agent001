@@ -35,7 +35,7 @@ export function ChatHomePage({
   return (
     <div className={`chathome ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}>
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
-        <IntroAsciiField />
+        <IntroAsciiField surface="home" />
       </div>
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">

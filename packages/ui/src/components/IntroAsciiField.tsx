@@ -52,6 +52,7 @@ const REVEAL_SOFT_EDGE_MS = 120      // per-cell fade-in window (alpha ramp)
 
 export type IntroAsciiTargetStage = "hidden" | "pill" | "copy"
 export type IntroAsciiTargetMode = "activity" | "frame"
+export type IntroAsciiSurface = "default" | "home"
 
 export interface IntroAsciiRenderTarget {
   left: number
@@ -62,6 +63,35 @@ export interface IntroAsciiRenderTarget {
   mode: IntroAsciiTargetMode
   radius?: number
   progress?: number
+}
+
+function mirroredSurfaceColumn(surface: IntroAsciiSurface, c: number, cols: number): number {
+  if (surface !== "home") return c
+  return c < cols * 0.5 ? cols - 1 - c : c
+}
+
+function isMirroredHomeSurface(surface: IntroAsciiSurface): boolean {
+  return false
+}
+
+function surfaceNoise(
+  surface: IntroAsciiSurface,
+  c: number,
+  r: number,
+  cols: number,
+  rows: number,
+  t: number,
+): number {
+  const base = vnoise(c, r, t)
+  if (surface !== "home") return base
+
+  // The new-chat home surface must read the same on the left and the
+  // right. Sample the entire left half from mirrored right-half
+  // coordinates so the home background is horizontally symmetric.
+  const sampleC = mirroredSurfaceColumn(surface, c, cols)
+  const primary = vnoise(sampleC, r, t)
+  const detail = vnoise(sampleC * 0.61 + 23, r * 0.74 + 17, t * 0.86 + 4.2)
+  return Math.max(0, Math.min(0.999, primary * 0.84 + detail * 0.16))
 }
 
 function clamp01(value: number): number {
@@ -146,7 +176,8 @@ export function IntroAsciiField({
   onReady,
   boost = false,
   renderTarget,
-}: { onReady?: () => void; boost?: boolean; renderTarget?: IntroAsciiRenderTarget } = {}): JSX.Element {
+  surface = "default",
+}: { onReady?: () => void; boost?: boolean; renderTarget?: IntroAsciiRenderTarget; surface?: IntroAsciiSurface } = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onReadyRef = useRef(onReady)
   const renderTargetRef = useRef(renderTarget)
@@ -265,27 +296,37 @@ export function IntroAsciiField({
       const radialNorm = Math.sqrt(cx * cx + cy * cy) || 1
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
+          const sampleC = mirroredSurfaceColumn(surface, c, cols)
           const dx = c - cx
           const dy = r - cy
           const radial = Math.sqrt(dx * dx + dy * dy) / radialNorm  // 0..~1
-          const jitter = hash2(c, r)                                 // [0,1)
+          const jitter = hash2(sampleC, r)                           // [0,1)
           const u = centerBias * radial + (1 - centerBias) * jitter
           revealTimes[r * cols + c] = u * revealDuration
         }
       }
     }
 
+
     function repaintAll(t: number) {
       ctx!.clearRect(0, 0, canvas!.width / dpr, canvas!.height / dpr)
       ctx!.fillStyle = ink
       for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const v = vnoise(c, r, t)
+        const startC = isMirroredHomeSurface(surface) ? Math.floor(cols * 0.5) : 0
+        for (let c = startC; c < cols; c++) {
+          const v = surfaceNoise(surface, c, r, cols, rows, t)
           const idx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
           cells[r * cols + c] = idx
           const ch = PALETTE[idx]!
           const alpha = cellAlpha(c, r, performance.now())
           if (ch !== " " && alpha > 0.001) paintCellAt(c, r, ch, alpha)
+
+          if (isMirroredHomeSurface(surface)) {
+            const mirrorC = cols - 1 - c
+            cells[r * cols + mirrorC] = idx
+            const mirrorAlpha = cellAlpha(mirrorC, r, performance.now())
+            if (ch !== " " && mirrorAlpha > 0.001) paintCellAt(mirrorC, r, ch, mirrorAlpha)
+          }
         }
       }
     }
@@ -369,7 +410,7 @@ export function IntroAsciiField({
             if (painted[idx]) continue
             const rt = revealTimes[idx]!
             if (elapsed < rt) { anyPending = true; continue }
-            const v = vnoise(c, r, t)
+            const v = surfaceNoise(surface, c, r, cols, rows, t)
             const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
             cells[idx] = palIdx
             painted[idx] = 1
@@ -385,6 +426,18 @@ export function IntroAsciiField({
                 ? 1
                 : Math.max(0, age / REVEAL_SOFT_EDGE_MS)
               paintCellAt(c, r, ch, alpha * targetAlpha)
+            }
+
+            if (surface === "home") {
+              const mirrorC = cols - 1 - c
+              const mirrorIdx = r * cols + mirrorC
+              if (!painted[mirrorIdx]) {
+                cells[mirrorIdx] = palIdx
+                painted[mirrorIdx] = 1
+                if (ch !== " ") {
+                  paintCellAt(mirrorC, r, ch, alpha * cellAlpha(mirrorC, r, now))
+                }
+              }
             }
           }
         }
@@ -406,14 +459,25 @@ export function IntroAsciiField({
       ctx!.fillStyle = ink
       for (let i = 0; i < updates; i++) {
         const r = (Math.random() * rows) | 0
-        const c = (Math.random() * cols) | 0
+        const c = surface === "home"
+          ? Math.max(Math.floor(cols * 0.5), (Math.random() * cols) | 0)
+          : (Math.random() * cols) | 0
         const idx = r * cols + c
         if (!painted[idx]) continue
-        const v = vnoise(c, r, t)
+        const v = surfaceNoise(surface, c, r, cols, rows, t)
         const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
         if (palIdx === cells[idx]) continue
         cells[idx] = palIdx
         paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
+
+        if (surface === "home") {
+          const mirrorC = cols - 1 - c
+          const mirrorIdx = r * cols + mirrorC
+          cells[mirrorIdx] = palIdx
+          if (painted[mirrorIdx]) {
+            paintCellAt(mirrorC, r, PALETTE[palIdx]!, cellAlpha(mirrorC, r, now))
+          }
+        }
       }
     }
 
