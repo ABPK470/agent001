@@ -2106,6 +2106,20 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 const FORCE_EMPTY_STATE_PREVIEW = false
 const HOME_CHAT_MAX_WIDTH_CLASS = "max-w-[840px]"
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function smoothstep(min: number, max: number, value: number): number {
+  if (max === min) return value >= max ? 1 : 0
+  const t = clamp01((value - min) / (max - min))
+  return t * t * (3 - 2 * t)
+}
+
+function lerp(start: number, end: number, t: number): number {
+  return start + (end - start) * t
+}
+
 function TermChatInputBar({
   input,
   isRunning,
@@ -2121,6 +2135,7 @@ function TermChatInputBar({
   onRemoveAttachment,
   className = "w-[90%]",
   variant = "default",
+  heroRevealProgress = 1,
 }: {
   input: string
   isRunning: boolean
@@ -2136,13 +2151,23 @@ function TermChatInputBar({
   onRemoveAttachment: (id: string) => void
   className?: string
   variant?: "default" | "hero"
+  heroRevealProgress?: number
 }) {
   const attachDisabled = isRunning || !!pendingInput
   const isHero = variant === "hero"
+  const reveal = Math.pow(smoothstep(0.46, 1, clamp01(heroRevealProgress)), 1.35)
+  const heroStyle: React.CSSProperties | undefined = isHero
+    ? {
+        opacity: reveal,
+        filter: `blur(${lerp(6, 0, reveal).toFixed(2)}px) saturate(${lerp(0.88, 1, reveal).toFixed(3)})`,
+        boxShadow: reveal > 0.94 ? "var(--hero-pill-shadow-live, var(--hero-pill-shadow))" : "none",
+      }
+    : undefined
   return (
     <div
       data-intro-target="termchat-input"
-        className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+      className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+      style={heroStyle}
     >
       <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
       {isHero ? (
@@ -2244,7 +2269,7 @@ function TermChatInputBar({
 
 // ── Main widget ───────────────────────────────────────────────────
 
-export function TermChat({ mode = "widget" }: { mode?: "widget" | "home" } = {}) {
+export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "widget" | "home"; heroRevealProgress?: number } = {}) {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
@@ -2528,19 +2553,15 @@ export function TermChat({ mode = "widget" }: { mode?: "widget" | "home" } = {})
           }
         >
           {showEmptyState && (
-            <div className={`relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
+            <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
               {isHomeMode && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
-                  style={{
-                    background: "radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 12%, transparent) 0%, color-mix(in srgb, var(--accent) 7%, transparent) 28%, transparent 72%)",
-                    filter: "blur(14px)",
-                  }}
+                  className="chathome-empty-spotlight pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
                 />
               )}
               <div className={`relative z-10 w-full ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} space-y-8` : "max-w-[860px] space-y-8"}`}>
-                <div className={isHomeMode ? "space-y-3" : "space-y-2"}>
+                <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
                   <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
                     {isHomeMode ? "How can I help?" : "What are you working on?"}
                   </p>
@@ -2550,22 +2571,25 @@ export function TermChat({ mode = "widget" }: { mode?: "widget" | "home" } = {})
                       : "Query business data, inspect metadata or run environment synchronization."}
                   </p>
                 </div>
-                <TermChatInputBar
-                  input={input}
-                  isRunning={isRunning}
-                  pendingInput={pendingInput}
-                  sending={sending}
-                  textareaRef={setTextareaRef}
-                  attachments={pendingAttachments}
-                  onChange={setInput}
-                  onKeyDown={onKey}
-                  onCancel={cancel}
-                  onSend={send}
-                  onAttach={openFilePicker}
-                  onRemoveAttachment={removeAttachment}
-                  className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-full max-w-[860px]"}
-                  variant={isHomeMode ? "hero" : "default"}
-                />
+                <div className="chathome-empty-input">
+                  <TermChatInputBar
+                    input={input}
+                    isRunning={isRunning}
+                    pendingInput={pendingInput}
+                    sending={sending}
+                    textareaRef={setTextareaRef}
+                    attachments={pendingAttachments}
+                    onChange={setInput}
+                    onKeyDown={onKey}
+                    onCancel={cancel}
+                    onSend={send}
+                    onAttach={openFilePicker}
+                    onRemoveAttachment={removeAttachment}
+                    className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-full max-w-[860px]"}
+                    variant={isHomeMode ? "hero" : "default"}
+                    heroRevealProgress={heroRevealProgress}
+                  />
+                </div>
                 {attachError && (
                   <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
                 )}
@@ -2634,6 +2658,7 @@ export function TermChat({ mode = "widget" }: { mode?: "widget" | "home" } = {})
             onRemoveAttachment={removeAttachment}
             className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-[90%]"}
             variant={isHomeMode ? "hero" : "default"}
+            heroRevealProgress={heroRevealProgress}
           />
           {attachError && (
             <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>

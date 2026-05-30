@@ -34,15 +34,27 @@ import {
 } from "./IntroConversation"
 
 export type WelcomeFlowProps = WelcomeFlowLegacyProps & {
+  /** Called when the intro begins its local enter morph.
+   *  Use this to kick off shell-local pill emergence at the same moment
+   *  the overlay starts transforming, rather than waiting for the wrapper fade. */
+  onEnteringStart?: () => void
+  /** Called on each intro morph frame with the renderer-owned local
+   *  pill formation progress so the shell reveal can follow the same
+   *  signal instead of a separate CSS timeline. */
+  onPillRevealProgress?: (progress: number) => void
   /** Called when the login overlay begins its final opacity fade-out.
    *  Use this to start revealing the underlying shell content so the two
    *  cross-fade rather than sequencing with a blank canvas gap. */
   onFading?: () => void
+  /** Called once the intro has completed its local morph and starts the
+   *  wrapper fade. Use this to synchronize shell-local reveal steps to the
+   *  actual overlay handoff instead of guessed timers. */
+  onEntered?: () => void
 }
 export { WelcomeFlowLegacy }
 
 export function WelcomeFlow(props: WelcomeFlowProps) {
-  const { mode = "intro", onSubmit, onDone, onFading } = props
+  const { mode = "intro", onSubmit, onDone, onEnteringStart, onPillRevealProgress, onFading, onEntered } = props
 
   // Non-intro modes (outro / reveal / switching) still play the legacy
   // mosaic animation — IntroConversation is purely an entry flow.
@@ -50,7 +62,7 @@ export function WelcomeFlow(props: WelcomeFlowProps) {
     return <WelcomeFlowLegacy {...props} />
   }
 
-  return <IntroConversationLoginAdapter onSubmit={onSubmit} onDone={onDone} onFading={onFading} />
+  return <IntroConversationLoginAdapter onSubmit={onSubmit} onDone={onDone} onEnteringStart={onEnteringStart} onPillRevealProgress={onPillRevealProgress} onFading={onFading} onEntered={onEntered} />
 }
 
 /**
@@ -69,11 +81,17 @@ export function WelcomeFlow(props: WelcomeFlowProps) {
 function IntroConversationLoginAdapter({
   onSubmit,
   onDone,
+  onEnteringStart,
+  onPillRevealProgress,
   onFading,
+  onEntered,
 }: {
   onSubmit:  WelcomeFlowProps["onSubmit"]
   onDone:    WelcomeFlowProps["onDone"]
+  onEnteringStart?: WelcomeFlowProps["onEnteringStart"]
+  onPillRevealProgress?: WelcomeFlowProps["onPillRevealProgress"]
   onFading?: WelcomeFlowProps["onFading"]
+  onEntered?: WelcomeFlowProps["onEntered"]
 }) {
   const [phase, setPhase] =
     useState<"intro" | "layered" | "fading">("intro")
@@ -94,19 +112,40 @@ function IntroConversationLoginAdapter({
     }
   }
 
-  // After login succeeds, wait two frames for the shell to paint, then
-  // kick off the enter animation. Fire onFading immediately so the
-  // chat-home starts fading in at the same moment the login content
-  // starts disappearing — they crossfade rather than sequence.
+  // After login succeeds, fire onFading (which mounts chathome under
+  // the overlay), then poll across animation frames until the
+  // destination input pill is in the DOM with a non-zero rect — that's
+  // where the AsciiConverge layer needs to flow the glyphs into.
+  // Once measured, trigger the entering morph.
   function measureAndTrigger(_mode: IntroMorphMode) {
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        window.setTimeout(() => {
-          onFading?.()        // chat-home reveal starts NOW
-          setEnterTrigger(true)
-        }, 80)
-      }),
-    )
+    onFading?.()  // chat-home reveal starts NOW
+    let attempts = 0
+    const tryMeasure = () => {
+      attempts++
+      const el = document.querySelector<HTMLElement>(
+        '[data-intro-target="termchat-input"]'
+      )
+      const r = el?.getBoundingClientRect()
+      if (r && r.width > 0 && r.height > 0) {
+        setMorphTarget({
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+        })
+        // Give one frame for the rootStyle CSS vars + AsciiConverge
+        // to mount before flipping enterTrigger.
+        requestAnimationFrame(() => setEnterTrigger(true))
+        return
+      }
+      if (attempts < 30) {
+        requestAnimationFrame(tryMeasure)
+      } else {
+        // Last resort — fire anyway so we don't hang the flow.
+        setEnterTrigger(true)
+      }
+    }
+    requestAnimationFrame(tryMeasure)
   }
 
   return (
@@ -126,6 +165,8 @@ function IntroConversationLoginAdapter({
         morphMode={morphMode}
         morphTarget={morphTarget}
         enterTrigger={enterTrigger}
+        onEnteringStart={onEnteringStart}
+        onPillRevealProgress={onPillRevealProgress}
         onLoginSuccess={() => {
           const mode = detectMode()
           setMorphMode(mode)
@@ -136,6 +177,7 @@ function IntroConversationLoginAdapter({
           // Login content has gone — start the overlay wrapper fade.
           // onFading already fired at entering start so the chat-home
           // is already well into its own fade by now.
+          onEntered?.()
           setPhase("fading")
         }}
       />

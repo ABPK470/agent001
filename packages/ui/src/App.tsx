@@ -77,6 +77,8 @@ export function App() {
   // Becomes true when the login overlay starts its final fade so ChatHomePage
   // crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
+  const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
+  const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
 
   const popOut = getPopOutWidget()
@@ -171,6 +173,8 @@ export function App() {
   useEffect(() => {
     if (phase === AppPhase.Login) {
       setShellRevealing(false)
+      setChatHomeHeroStage("hidden")
+      setChatHomeHeroRevealProgress(0)
       try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch { /* ignore */ }
     }
   }, [phase])
@@ -374,8 +378,17 @@ export function App() {
       <WelcomeFlow
         key="login"
         onSubmit={loginOrRegister}
-        onDone={() => setPhase(AppPhase.Shell)}
+        onDone={() => {
+          setChatHomeHeroRevealProgress(1)
+          setChatHomeHeroStage("copy")
+          setPhase(AppPhase.Shell)
+        }}
         onFading={() => setShellRevealing(true)}
+        onEnteringStart={() => {
+          setChatHomeHeroStage("pill")
+          setChatHomeHeroRevealProgress(0)
+        }}
+        onPillRevealProgress={setChatHomeHeroRevealProgress}
       />
     ) : phase === AppPhase.Outro ? (
       <WelcomeFlow
@@ -442,6 +455,8 @@ export function App() {
         {welcomeOverlay}
         <ChatHomePage
           revealed={shellRevealing || phase === AppPhase.Shell}
+          heroStage={phase === AppPhase.Shell ? "copy" : chatHomeHeroStage}
+          heroRevealProgress={phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress}
           connected={connected}
           onOpenPlatform={() => setShellMode("platform")}
           onLogout={handleSwitchUser}

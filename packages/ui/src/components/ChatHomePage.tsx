@@ -9,46 +9,35 @@ interface Props {
   connected: boolean
   onOpenPlatform: () => void
   onLogout: () => void
-  /** False while the login overlay is still covering this page.
-   *  The ASCII layer is always painted underneath — it shares the
-   *  noise field's start timestamp with the login overlay's ASCII so
-   *  both render identical glyphs at any moment. When `revealed` flips
-   *  true the ASCII *carves itself open*: a rounded-rectangle hole
-   *  grows from the page centre outward via an animated polygon(evenodd)
-   *  clip-path, removing the chat region from the ASCII frame. At the
-   *  pill location, a smaller ASCII patch draws itself into a thin
-   *  rounded-rectangle outline (same polygon-with-hole trick at small
-   *  scale) — the pill literally forms from ASCII. The real pill then
-   *  fades in inside that outline and the outline dissolves. */
   revealed?: boolean
+  heroStage?: "hidden" | "pill" | "copy"
+  heroRevealProgress?: number
 }
 
-export function ChatHomePage({ connected, onOpenPlatform, onLogout, revealed = true }: Props) {
-  // Latch revealed once true so we never re-veil mid-session.
+export function ChatHomePage({
+  connected,
+  onOpenPlatform,
+  onLogout,
+  revealed = true,
+  heroStage,
+  heroRevealProgress = 1,
+}: Props) {
   const [materialised, setMaterialised] = useState(revealed)
+
   useEffect(() => {
     if (revealed && !materialised) setMaterialised(true)
   }, [revealed, materialised])
 
-  const stateClass = materialised ? "chathome--revealed" : "chathome--veiled"
+  const resolvedHeroStage = heroStage ?? (revealed ? "copy" : "hidden")
+
+  const stateClass = `${materialised ? "chathome--revealed" : "chathome--veiled"}${resolvedHeroStage !== "hidden" ? " chathome--hero-ready" : ""}${resolvedHeroStage === "pill" ? " chathome--hero-pill" : ""}${resolvedHeroStage === "copy" ? " chathome--hero-copy-ready" : ""}`
 
   return (
     <div className={`chathome ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}>
-      {/* THE ASCII FRAME — single full-screen ASCII field. clip-path is
-          a polygon with an inner hole (evenodd fill-rule). Initially
-          the inner hole is a zero-size point at centre, so the field
-          covers everything and matches the login overlay's ASCII
-          exactly. On reveal the inner hole grows to the chat region's
-          bounds, carving the ASCII away from the centre and leaving a
-          natural frame around the edges. This is the literal motion:
-          the ASCII makes space. */}
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
         <IntroAsciiField />
       </div>
 
-      {/* Foreground — header + chat. Fades in as the frame carve nears
-          its final state, so the heading + pill arrive inside the
-          newly-cleared space (not on top of still-visible ASCII). */}
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between px-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -81,24 +70,10 @@ export function ChatHomePage({ connected, onOpenPlatform, onLogout, revealed = t
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col">
-          <TermChat mode="home" />
+          <TermChat mode="home" heroRevealProgress={heroRevealProgress} />
         </main>
       </div>
 
-      {/* THE PILL OUTLINE — a small ASCII patch pinned to the exact
-          pill rectangle. Its clip-path is the same polygon-evenodd
-          shape at small scale, animated so the inner hole grows from
-          zero to *almost* the full patch — leaving only a thin ASCII
-          ring around the pill rect. That ring is the pill being drawn
-          in ASCII. The real pill fades in inside it; then the ring
-          itself dissolves outward to nothing. */}
-      <div
-        aria-hidden="true"
-        className="chathome-pill-frame pointer-events-none absolute left-1/2 top-[60%] z-20 h-[120px] w-[min(840px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[28px]"
-      >
-        <IntroAsciiField />
-      </div>
     </div>
   )
 }
-

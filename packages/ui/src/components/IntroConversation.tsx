@@ -1,6 +1,6 @@
 import { ExternalLink, LayoutGrid, LogOut, Plus, Send, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField } from "./IntroAsciiField"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { Logo } from "./Logo"
 
 interface Msg { role: "bot" | "user"; text: string; streamed?: boolean }
@@ -303,14 +303,17 @@ export interface IntroMorphTarget {
 export function IntroConversation({
   onEntered,
   onEnteringStart,
+  onPillRevealProgress,
   onLoginSuccess,
   onLogin,
   enterTrigger = false,
   morphMode = "chat",
   morphTarget,
+  autoplay,
 }: {
   onEntered?: () => void
   onEnteringStart?: () => void
+  onPillRevealProgress?: (progress: number) => void
   /** Fired right after "come in." finishes streaming, BEFORE the morph
    *  begins. Parent uses this to mount the platform underneath and
    *  measure the target landing rect for the input bar. */
@@ -325,12 +328,20 @@ export function IntroConversation({
   enterTrigger?: boolean
   morphMode?: IntroMorphMode
   morphTarget?: IntroMorphTarget
+  /** Optional test-only helper that auto-submits username/password so
+   *  the transition can be replayed without manual login cycles. */
+  autoplay?: {
+    username?: string
+    password?: string
+    stepDelayMs?: number
+  }
 } = {}) {
   const [step, setStep]             = useState<"username" | "password" | "done">("username")
   const [username, setUsername]     = useState("")
   const [draft, setDraft]           = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [entering, setEntering]     = useState(false)
+  const [enterProgress, setEnterProgress] = useState(0)
   const [error, setError]           = useState<string | null>(null)
   const [botTyping, setBotTyping]   = useState(false)
   const [shimmerLabel, setShimmerLabel] = useState<string>("Loading")
@@ -339,6 +350,7 @@ export function IntroConversation({
   // in sequence: wordmark → bot greeting → input bar.
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [inputReady, setInputReady] = useState(false)
+  const autoplayPhaseRef = useRef<"idle" | "username" | "password" | "done">("idle")
   // Resolved when the ambient ASCII field finishes rolling out from left
   // to right. We hold the opening "who am I talking to?" until then so
   // the screen reads as: wordmark → field arrives → bot greets.
@@ -409,10 +421,8 @@ export function IntroConversation({
     await new Promise<void>((r) => window.setTimeout(r, streamDuration))
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  async function submitValue(value: string) {
     if (submitting || entering) return
-    const value = draft.trim()
     if (!value) return
 
     if (step === "username") {
@@ -484,48 +494,170 @@ export function IntroConversation({
     }
   }
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    await submitValue(draft.trim())
+  }
+
+  useEffect(() => {
+    if (!autoplay || entering || submitting || botTyping || !inputReady) return
+    if (step === "done") {
+      autoplayPhaseRef.current = "done"
+      return
+    }
+    const stepDelayMs = autoplay.stepDelayMs ?? 420
+    if (step === "username" && autoplayPhaseRef.current === "idle") {
+      autoplayPhaseRef.current = "username"
+      const t = window.setTimeout(() => {
+        void submitValue((autoplay.username ?? "test-user").trim())
+      }, stepDelayMs)
+      return () => window.clearTimeout(t)
+    }
+    if (step === "password" && autoplayPhaseRef.current === "username") {
+      autoplayPhaseRef.current = "password"
+      const t = window.setTimeout(() => {
+        void submitValue((autoplay.password ?? "test-pass").trim())
+      }, stepDelayMs)
+      return () => window.clearTimeout(t)
+    }
+  }, [autoplay, botTyping, entering, inputReady, step, submitting])
+
   const inputDisabled = submitting || entering || botTyping
   const canSend = draft.trim().length > 0 && !inputDisabled
+
+  // Ref to the login input pad so we can measure its actual current
+  // screen rect at entering time. The focus mask is anchored to THIS
+  // rect, not the chathome destination — the pill must stay where it
+  // is and be consumed in place by the ASCII.
+  const loginPillRef = useRef<HTMLDivElement | null>(null)
+  const [loginPillRect, setLoginPillRect] = useState<
+    { left: number; top: number; width: number; height: number } | null
+  >(null)
 
   // Parent-driven morph trigger: when enterTrigger flips true we kick
   // off the entering animation and schedule the "morph done" hand-off.
   useEffect(() => {
     if (!enterTrigger || entering) return
     if (onEnteringStart) onEnteringStart()
+    // Measure the login pill BEFORE flipping to entering so the focus
+    // mask is anchored on the pill's current resting position. (After
+    // entering=true the pill starts fading; rect should be unaffected
+    // but we capture it first to be safe.)
+    const el = loginPillRef.current
+    if (el) {
+      const r = el.getBoundingClientRect()
+      setLoginPillRect({ left: r.left, top: r.top, width: r.width, height: r.height })
+    }
     setEntering(true)
-    // No position morph for chat-home landing — just the transcript fade
-    // + ASCII fade, then the overlay crossfade begins.
-    const morphMs = 480
-    const t = window.setTimeout(() => onEntered?.(), morphMs)
-    return () => window.clearTimeout(t)
+    const morphMs = 1500
+    setEnterProgress(0)
+    onPillRevealProgress?.(0)
+    const startedAt = performance.now()
+    let rafId = 0
+    const tickProgress = (now: number) => {
+      const nextProgress = Math.max(0, Math.min(1, (now - startedAt) / morphMs))
+      setEnterProgress(nextProgress)
+      onPillRevealProgress?.(nextProgress)
+      if (nextProgress < 1) {
+        rafId = window.requestAnimationFrame(tickProgress)
+      }
+    }
+    rafId = window.requestAnimationFrame(tickProgress)
+    const t = window.setTimeout(() => {
+      setEnterProgress(1)
+      onPillRevealProgress?.(1)
+      onEntered?.()
+    }, morphMs)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.clearTimeout(t)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enterTrigger])
 
-  // Build inline style for the input bar so it lands on the platform's
-  // actual TermChat input rect (pixel-perfect) for both "empty" and
-  // "chat" modes. Mode "nochat" has no target — the CSS class handles
-  // a fade-up dissolve instead.
-  const inputPadStyle: React.CSSProperties | undefined =
-    entering && (morphMode === "empty" || morphMode === "chat") && morphTarget
-      ? {
-          position: "fixed",
-          left:   morphTarget.left,
-          top:    morphTarget.top,
-          width:  morphTarget.width,
-          height: morphTarget.height,
-          padding: 0,
-          justifyContent: "flex-start",
-        }
-      : undefined
+  // Login pill stays put during the morph — it's consumed in place by
+  // the boosted ASCII, not teleported to the chathome destination.
+  const inputPadStyle: React.CSSProperties | undefined = undefined
+
+  const introPillActivityStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!loginPillRect) return undefined
+    const width = loginPillRect.width * 2.2
+    const height = loginPillRect.height * 4.2
+    const build = Math.max(0, Math.min(1, (enterProgress - 0.02) / 0.34))
+    const buildEase = build * build * (3 - 2 * build)
+    const decayBase = Math.max(0, Math.min(1, (enterProgress - 0.66) / 0.34))
+    const decayEase = decayBase * decayBase * (3 - 2 * decayBase)
+    const opacity = 0.82 * buildEase * (1 - decayEase)
+    const scale = 0.9 + 0.12 * Math.max(0, Math.min(1, enterProgress / 0.84))
+    const saturation = 1.01 + 0.14 * buildEase - 0.18 * decayEase
+    const brightness = 1.01 + 0.08 * buildEase - 0.1 * decayEase
+    return {
+      left: `${loginPillRect.left + loginPillRect.width / 2}px`,
+      top: `${loginPillRect.top + loginPillRect.height / 2}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+      opacity,
+      transform: `translate3d(-50%, -50%, 0) scale(${scale})`,
+      filter: `saturate(${saturation}) brightness(${brightness})`,
+    }
+  }, [enterProgress, loginPillRect])
+
+  const introPillActivityTarget = useMemo<IntroAsciiRenderTarget | undefined>(() => {
+    if (!loginPillRect) return undefined
+    const width = loginPillRect.width * 2.2
+    const height = loginPillRect.height * 4.2
+    return {
+      left: (width - loginPillRect.width) / 2,
+      top: (height - loginPillRect.height) / 2,
+      width: loginPillRect.width,
+      height: loginPillRect.height,
+      radius: Math.min(24, loginPillRect.height / 2),
+      mode: "activity",
+      stage: "pill",
+      progress: enterProgress,
+    }
+  }, [enterProgress, loginPillRect])
+
+  // Publish only the live LOGIN pill rect. The consume/reveal effect is
+  // intentionally local to the current pill position; the destination
+  // shell should be revealed underneath rather than visually morphed to.
+  const rootStyle: React.CSSProperties = loginPillRect
+    ? ({
+        "--pill-cx": `${loginPillRect.left + loginPillRect.width / 2}px`,
+        "--pill-cy": `${loginPillRect.top + loginPillRect.height / 2}px`,
+        "--pill-w": `${loginPillRect.width}px`,
+        "--pill-h": `${loginPillRect.height}px`,
+      } as React.CSSProperties)
+    : {}
 
   return (
     <div
       className={`intro3-root intro3-mode-${morphMode}${entering ? " intro3-root--entering" : ""}`}
+      style={rootStyle}
       aria-label="mia-entry conversation"
     >
       {/* Generative ASCII texture — ambient life behind the conversation.
           Fades out during the morph so it doesn't bleed into the platform. */}
       <IntroAsciiField onReady={() => asciiReadyRef.current?.resolve()} />
+
+      {/* Pill-area focus — mounted only during the entering morph so
+          the boosted ASCII field MATERIALIZES per-cell each time
+          (organic appearance, exactly like the bg field on login load).
+          Same shared startTs so its glyphs line up with the bg field.
+          Soft elliptical mask sized to the pill rect + halo keeps the
+          active area shaped around the pill (no hard circle). The pill
+          fades into it; when the field dissolves the new pill is
+          uncovered underneath. */}
+      {entering ? (
+        <div className="intro3-pill-focus" aria-hidden="true">
+          <div
+            className="intro3-pill-focus__activity"
+            style={introPillActivityStyle}
+          >
+            <IntroAsciiField boost renderTarget={introPillActivityTarget} />
+          </div>
+        </div>
+      ) : null}
 
       {/* Platform-shaped header — bg fades in from transparent → bg-canvas
           during the morph. Matches Toolbar's h-14 px-3 sm:px-6. */}
@@ -636,6 +768,7 @@ export function IntroConversation({
                   morph it slides down + expands to its full TermChat-
                   bottom-docked position. */}
               <div
+                ref={loginPillRef}
                 className={`intro3-input-pad${inputReady ? " intro3-input-pad--visible" : ""}`}
                 style={inputPadStyle}
               >

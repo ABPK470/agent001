@@ -36,6 +36,7 @@ const TARGET_FPS = 18
 const UPDATE_FRACTION = 0.020       // ~2% of cells repaint per frame
 const NOISE_T_PER_SEC = 0.32        // how fast the noise field drifts
 const INK_OPACITY = 0.18            // applied to var(--text), works in both themes
+const BOOST_INK_OPACITY = 0.34
 
 // Roll-out animation — non-directional "materialize". Every cell has
 // its own stable reveal time computed from a per-cell hash blended
@@ -49,22 +50,60 @@ const REVEAL_DURATION_MS = 900       // time from first to last cell appearing
 const CENTER_BIAS = 0.30             // 0 = pure random, 1 = pure radial
 const REVEAL_SOFT_EDGE_MS = 120      // per-cell fade-in window (alpha ramp)
 
-function readInk(): string {
-  if (typeof document === "undefined") return `rgba(120,120,120,${INK_OPACITY})`
+export type IntroAsciiTargetStage = "hidden" | "pill" | "copy"
+export type IntroAsciiTargetMode = "activity" | "frame"
+
+export interface IntroAsciiRenderTarget {
+  left: number
+  top: number
+  width: number
+  height: number
+  stage: IntroAsciiTargetStage
+  mode: IntroAsciiTargetMode
+  radius?: number
+  progress?: number
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = clamp01((value - edge0) / (edge1 - edge0))
+  return t * t * (3 - 2 * t)
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+function roundedRectSdf(px: number, py: number, target: IntroAsciiRenderTarget): number {
+  const radius = Math.min(target.radius ?? 24, target.width / 2, target.height / 2)
+  const cx = target.left + target.width / 2
+  const cy = target.top + target.height / 2
+  const qx = Math.abs(px - cx) - (target.width / 2 - radius)
+  const qy = Math.abs(py - cy) - (target.height / 2 - radius)
+  const ox = Math.max(qx, 0)
+  const oy = Math.max(qy, 0)
+  return Math.hypot(ox, oy) + Math.min(Math.max(qx, qy), 0) - radius
+}
+
+function readInk(alpha = INK_OPACITY): string {
+  if (typeof document === "undefined") return `rgba(120,120,120,${alpha})`
   const raw = getComputedStyle(document.documentElement).getPropertyValue("--text").trim()
   const m6 = raw.match(/^#([0-9a-f]{6})$/i)
   if (m6) {
     const v = parseInt(m6[1]!, 16)
-    return `rgba(${(v >> 16) & 0xff}, ${(v >> 8) & 0xff}, ${v & 0xff}, ${INK_OPACITY})`
+    return `rgba(${(v >> 16) & 0xff}, ${(v >> 8) & 0xff}, ${v & 0xff}, ${alpha})`
   }
   const m3 = raw.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i)
   if (m3) {
     const r = parseInt(m3[1]! + m3[1], 16)
     const g = parseInt(m3[2]! + m3[2], 16)
     const b = parseInt(m3[3]! + m3[3], 16)
-    return `rgba(${r}, ${g}, ${b}, ${INK_OPACITY})`
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
-  return `rgba(120,120,120,${INK_OPACITY})`
+  return `rgba(120,120,120,${alpha})`
 }
 
 // 2-D integer hash → [0,1). Stable, no allocations.
@@ -103,10 +142,16 @@ function glyphFor(v: number): string {
   return PALETTE[idx]!
 }
 
-export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX.Element {
+export function IntroAsciiField({
+  onReady,
+  boost = false,
+  renderTarget,
+}: { onReady?: () => void; boost?: boolean; renderTarget?: IntroAsciiRenderTarget } = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onReadyRef = useRef(onReady)
+  const renderTargetRef = useRef(renderTarget)
   onReadyRef.current = onReady
+  renderTargetRef.current = renderTarget
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -117,7 +162,21 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
 
-    let ink = readInk()
+    // Boost mode — same noise field, just painted *hotter* and *more
+    // alive*. Used for the local pill-area focus during the entering
+    // morph so the user reads it as the existing ASCII becoming denser
+    // and more active around the pill, not as a new layer.
+    const palettePow = boost ? 1.0 : 2.0       // lower exponent → fewer spaces
+    const updateFraction = boost ? 0.10 : UPDATE_FRACTION  // ~5× shimmer
+    // In boost mode the field is mounted fresh per entering, so let
+    // it materialize per-cell like the bg field does on first load.
+    // Faster duration + pure-jitter ordering (no center bias) so the
+    // cells appear randomly within whatever region the mask shows.
+    const skipReveal = false
+    const revealDuration = boost ? 600 : REVEAL_DURATION_MS
+    const centerBias = boost ? 0 : CENTER_BIAS
+
+    let ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
     let cols = 0
     let rows = 0
     let cells = new Uint8Array(0)   // last-painted palette index per cell
@@ -127,12 +186,77 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
     let rafId = 0
     let lastFrame = 0
     let startTs = 0
+    let forceFullRepaint = false
+    const stageState = {
+      mode: renderTargetRef.current?.mode,
+      stage: renderTargetRef.current?.stage,
+      phaseStartTs: performance.now(),
+    }
+    // revealStartTs is ALWAYS local-to-this-mount so the per-cell
+    // materialize replays each time the field mounts (boost field
+    // mounts mid-session and needs a fresh organic appearance). The
+    // shared startTs is only used for noise sampling so multiple
+    // instances line up exactly.
+    const revealStartTs = performance.now()
 
-    function paintCellAt(c: number, r: number, ch: string) {
+    function paintCellAt(c: number, r: number, ch: string, alpha = 1) {
       const x = c * CHAR_W
       const y = r * LINE_H
       ctx!.clearRect(x, y, CHAR_W, LINE_H)
-      if (ch !== " ") ctx!.fillText(ch, x, y)
+      if (ch !== " " && alpha > 0.001) {
+        if (alpha < 0.999) ctx!.globalAlpha = alpha
+        ctx!.fillText(ch, x, y)
+        if (alpha < 0.999) ctx!.globalAlpha = 1
+      }
+    }
+
+    function cellAlpha(c: number, r: number, now: number): number {
+      const target = renderTargetRef.current
+      if (!target) return 1
+
+      if (target.mode !== stageState.mode || target.stage !== stageState.stage) {
+        stageState.mode = target.mode
+        stageState.stage = target.stage
+        stageState.phaseStartTs = now
+        forceFullRepaint = true
+      }
+
+      const px = c * CHAR_W + CHAR_W * 0.5
+      const py = r * LINE_H + LINE_H * 0.5
+      const jitter = 0.82 + hash2(c + 97, r + 31) * 0.18
+
+      if (target.mode === "activity") {
+        if (target.stage === "copy") return 0
+        const progress = clamp01(target.progress ?? (target.stage === "pill" ? 1 : 0))
+        const cx = target.left + target.width / 2
+        const cy = target.top + target.height / 2
+        const dx = (px - cx) / Math.max(1, target.width * 0.7)
+        const dy = (py - cy) / Math.max(1, target.height * 1.08)
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const primaryNoise = vnoise(c * 0.72 + 19, r * 0.84 + 31, now * 0.00042 + progress * 0.55)
+        const filamentNoise = vnoise(c * 1.8 + 73, r * 1.34 + 11, now * 0.00076 + progress * 1.3)
+        const radius = lerp(1.22, 0.42, progress)
+        const softness = lerp(0.42, 0.16, progress)
+        const warp = (primaryNoise - 0.5) * lerp(0.62, 0.2, progress) + (filamentNoise - 0.5) * 0.18
+        const warpedDist = dist + warp
+        const envelope = 1 - smoothstep(radius - softness, radius + softness, warpedDist)
+        const density = smoothstep(
+          lerp(0.78, 0.52, progress),
+          lerp(1.06, 0.82, progress),
+          envelope + primaryNoise * 0.42 + filamentNoise * 0.18 - (1 - progress) * 0.22,
+        )
+        const stageGain = lerp(0.14, 0.96, progress)
+        return density * stageGain * jitter
+      }
+
+      if (target.stage !== "pill") return 0
+      const elapsed = now - stageState.phaseStartTs
+      const progress = clamp01(elapsed / 680)
+      const sdf = roundedRectSdf(px, py, target)
+      const ringWidth = lerp(24, 7, progress)
+      const ring = 1 - smoothstep(ringWidth * 0.15, ringWidth * 1.35, Math.abs(sdf))
+      const dissolve = 1 - smoothstep(0.18, 1, progress)
+      return ring * dissolve * jitter
     }
 
     function computeRevealTimes() {
@@ -145,8 +269,8 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
           const dy = r - cy
           const radial = Math.sqrt(dx * dx + dy * dy) / radialNorm  // 0..~1
           const jitter = hash2(c, r)                                 // [0,1)
-          const u = CENTER_BIAS * radial + (1 - CENTER_BIAS) * jitter
-          revealTimes[r * cols + c] = u * REVEAL_DURATION_MS
+          const u = centerBias * radial + (1 - centerBias) * jitter
+          revealTimes[r * cols + c] = u * revealDuration
         }
       }
     }
@@ -157,17 +281,35 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const v = vnoise(c, r, t)
-          const idx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
+          const idx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
           cells[r * cols + c] = idx
           const ch = PALETTE[idx]!
-          if (ch !== " ") ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
+          const alpha = cellAlpha(c, r, performance.now())
+          if (ch !== " " && alpha > 0.001) paintCellAt(c, r, ch, alpha)
         }
       }
     }
 
+    function measureSurface() {
+      if (renderTargetRef.current && canvas!.parentElement instanceof HTMLElement) {
+        const rect = canvas!.parentElement.getBoundingClientRect()
+        return {
+          width: Math.max(0, rect.width),
+          height: Math.max(0, rect.height),
+        }
+      }
+
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }
+    }
+
     function resize(initial: boolean) {
-      const w = window.innerWidth
-      const h = window.innerHeight
+      const surface = measureSurface()
+      const w = surface.width
+      const h = surface.height
+      if (w <= 0 || h <= 0) return
       canvas!.width = Math.floor(w * dpr)
       canvas!.height = Math.floor(h * dpr)
       canvas!.style.width = w + "px"
@@ -184,9 +326,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       revealTimes = new Float32Array(cols * rows)
       computeRevealTimes()
 
-      if (!initial || reduced) {
-        // After first sizing (or with reduced motion) snap to fully
-        // revealed — don't replay the wave on every viewport change.
+      if (!initial || reduced || skipReveal) {
+        // After first sizing (or with reduced motion, or in boost mode
+        // where the bg field is already revealed) snap to fully
+        // revealed — don't replay the wave.
         const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
         repaintAll(t)
         painted.fill(1)
@@ -206,6 +349,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       lastFrame = now
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
+      if (forceFullRepaint) {
+        forceFullRepaint = false
+        repaintAll(t)
+      }
 
       // Per-cell materialize. While the field is rolling out we walk
       // every cell once per frame and reveal any whose per-cell time
@@ -213,7 +360,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       // they fade in instead of popping — that's what kills the
       // "wavefront" look the directional sweep had.
       if (!revealed) {
-        const elapsed = now - startTs
+        const elapsed = now - revealStartTs
         let anyPending = false
         ctx!.fillStyle = ink
         for (let r = 0; r < rows; r++) {
@@ -223,11 +370,13 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
             const rt = revealTimes[idx]!
             if (elapsed < rt) { anyPending = true; continue }
             const v = vnoise(c, r, t)
-            const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
+            const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
             cells[idx] = palIdx
             painted[idx] = 1
             const ch = PALETTE[palIdx]!
             if (ch !== " ") {
+              const targetAlpha = cellAlpha(c, r, now)
+              if (targetAlpha <= 0.001) continue
               // Soft per-cell fade-in (one-shot — subsequent ambient
               // updates use full ink). Cheap because each cell only
               // gets one of these paints in its lifetime.
@@ -235,13 +384,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
               const alpha = age >= REVEAL_SOFT_EDGE_MS
                 ? 1
                 : Math.max(0, age / REVEAL_SOFT_EDGE_MS)
-              if (alpha < 1) {
-                ctx!.globalAlpha = alpha
-                ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
-                ctx!.globalAlpha = 1
-              } else {
-                ctx!.fillText(ch, c * CHAR_W, r * LINE_H)
-              }
+              paintCellAt(c, r, ch, alpha * targetAlpha)
             }
           }
         }
@@ -249,7 +392,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
         // was going to land has landed (some cells with mid-jitter
         // landed earlier; we just need the last ones to finish their
         // fade-in before switching off the per-cell pass).
-        if (!anyPending && elapsed >= REVEAL_DURATION_MS + REVEAL_SOFT_EDGE_MS) {
+        if (!anyPending && elapsed >= revealDuration + REVEAL_SOFT_EDGE_MS) {
           revealed = true
           onReadyRef.current?.()
         }
@@ -259,7 +402,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       // hits whatever is already painted (which is scattered across
       // the whole screen, not stuck to one edge), so the field feels
       // alive from the very first frame.
-      const updates = Math.max(48, Math.floor(cols * rows * UPDATE_FRACTION))
+      const updates = Math.max(48, Math.floor(cols * rows * updateFraction))
       ctx!.fillStyle = ink
       for (let i = 0; i < updates; i++) {
         const r = (Math.random() * rows) | 0
@@ -267,10 +410,10 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
         const idx = r * cols + c
         if (!painted[idx]) continue
         const v = vnoise(c, r, t)
-        const palIdx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
+        const palIdx = Math.min(PALETTE.length - 1, Math.floor(Math.pow(v, palettePow) * PALETTE.length))
         if (palIdx === cells[idx]) continue
         cells[idx] = palIdx
-        paintCellAt(c, r, PALETTE[palIdx]!)
+        paintCellAt(c, r, PALETTE[palIdx]!, cellAlpha(c, r, now))
       }
     }
 
@@ -286,7 +429,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
           if (!painted[idx]) continue
           const palIdx = cells[idx]
           const ch = PALETTE[palIdx]!
-          paintCellAt(c, r, ch)
+          paintCellAt(c, r, ch, cellAlpha(c, r, performance.now()))
         }
       }
       // Suppress unused-variable warning — t reserved for future use.
@@ -304,6 +447,12 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
     startTs = window.__miaIntroAsciiStartTs
     const onResize = () => resize(false)
     window.addEventListener("resize", onResize)
+    const parentObserver = canvas.parentElement instanceof HTMLElement
+      ? new ResizeObserver(() => resize(false))
+      : null
+    if (parentObserver && canvas.parentElement instanceof HTMLElement) {
+      parentObserver.observe(canvas.parentElement)
+    }
     const themeObserver = new MutationObserver(onThemeChange)
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] })
     // System theme (when site follows `prefers-color-scheme` indirectly)
@@ -314,6 +463,7 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
 
     return () => {
       window.removeEventListener("resize", onResize)
+      parentObserver?.disconnect()
       themeObserver.disconnect()
       sysMql?.removeEventListener?.("change", onThemeChange)
       if (rafId) cancelAnimationFrame(rafId)
