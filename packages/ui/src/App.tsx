@@ -2,6 +2,7 @@ import { Activity, MoreVertical, Shield, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
+import { ChatHomePage } from "./components/ChatHomePage"
 import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
@@ -72,6 +73,10 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [shellMode, setShellMode] = useState<"chat" | "platform">("chat")
+  // Becomes true when the login overlay starts its final fade so ChatHomePage
+  // crossfades with it instead of waiting for it to fully disappear.
+  const [shellRevealing, setShellRevealing] = useState(false)
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
 
   const popOut = getPopOutWidget()
@@ -152,6 +157,23 @@ export function App() {
   const handleSwitchUi = useCallback(() => {
     setPhase(AppPhase.Switching)
   }, [])
+
+  useEffect(() => {
+    if (!me?.upn) return
+    setShellMode("chat")
+  }, [me?.upn])
+
+  // Reset reveal flag each time we return to login so the next login
+  // starts with the chat content hidden. Also clear the shared ASCII
+  // start timestamp so IntroAsciiField re-runs its per-cell fade-in
+  // from t=0 — otherwise the login page would inherit the chat-home's
+  // long-settled timestamp and the field would pop in fully populated.
+  useEffect(() => {
+    if (phase === AppPhase.Login) {
+      setShellRevealing(false)
+      try { delete (window as { __miaIntroAsciiStartTs?: number }).__miaIntroAsciiStartTs } catch { /* ignore */ }
+    }
+  }, [phase])
 
   // Connect event stream — main window uses SSE, popouts use BroadcastChannel relay.
   //
@@ -353,6 +375,7 @@ export function App() {
         key="login"
         onSubmit={loginOrRegister}
         onDone={() => setPhase(AppPhase.Shell)}
+        onFading={() => setShellRevealing(true)}
       />
     ) : phase === AppPhase.Outro ? (
       <WelcomeFlow
@@ -412,6 +435,20 @@ export function App() {
     )
   }
   const widgets = currentView?.widgets ?? []
+
+  if (shellMode === "chat") {
+    return (
+      <>
+        {welcomeOverlay}
+        <ChatHomePage
+          revealed={shellRevealing || phase === AppPhase.Shell}
+          connected={connected}
+          onOpenPlatform={() => setShellMode("platform")}
+          onLogout={handleSwitchUser}
+        />
+      </>
+    )
+  }
 
   // Clamp mobile index if widgets were removed
   const clampedIdx = Math.min(mobileWidgetIdx, Math.max(0, widgets.length - 1))
@@ -540,7 +577,13 @@ export function App() {
     <>
     {welcomeOverlay}
     <div className="flex flex-col h-screen bg-base">
-      <Toolbar onAddWidget={() => canvasRef.current?.openCatalog()} onSwitchUser={handleSwitchUser} onSwitchUi={handleSwitchUi} me={me} />
+      <Toolbar
+        onAddWidget={() => canvasRef.current?.openCatalog()}
+        onSwitchUser={handleSwitchUser}
+        onSwitchUi={handleSwitchUi}
+        onShowChatHome={() => setShellMode("chat")}
+        me={me}
+      />
       <Canvas ref={canvasRef} />
       <WidgetModal />
     </div>

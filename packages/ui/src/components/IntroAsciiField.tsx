@@ -17,6 +17,12 @@
 
 import { useEffect, useRef } from "react"
 
+declare global {
+  interface Window {
+    __miaIntroAsciiStartTs?: number
+  }
+}
+
 // Discrete ASCII palette ordered sparse → dense. Cell glyph is picked
 // by noise bucket; the same noise value always maps to the same glyph
 // so motion comes from the noise field drifting, not from re-randomising
@@ -287,7 +293,15 @@ export function IntroAsciiField({ onReady }: { onReady?: () => void } = {}): JSX
       void t
     }
 
-    startTs = performance.now()
+    // Share startTs across every IntroAsciiField mount on the page so
+    // multiple instances (e.g. login overlay + chat-home veil + chat-home
+    // masked) render the exact same noise field at any given moment.
+    // That visual identity is what makes the materialize → veil → carved
+    // hand-off feel like one continuous surface instead of three layers.
+    if (typeof window.__miaIntroAsciiStartTs !== "number") {
+      window.__miaIntroAsciiStartTs = performance.now()
+    }
+    startTs = window.__miaIntroAsciiStartTs
     const onResize = () => resize(false)
     window.addEventListener("resize", onResize)
     const themeObserver = new MutationObserver(onThemeChange)

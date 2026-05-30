@@ -1,4 +1,4 @@
-import { ExternalLink, Send, X } from "lucide-react"
+import { ExternalLink, LayoutGrid, LogOut, Plus, Send, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField } from "./IntroAsciiField"
 import { Logo } from "./Logo"
@@ -55,7 +55,7 @@ function wmRandomGlyph(seed: number): string {
 type WmCellState = "hidden" | "scrambling" | "locked"
 interface WmCell { state: WmCellState; glyph: string }
 
-function MiaWordmark() {
+export function MiaWordmark() {
   const [cells, setCells] = useState<WmCell[]>(
     () => WORDMARK.split("").map(() => ({ state: "hidden", glyph: "" })),
   )
@@ -493,7 +493,9 @@ export function IntroConversation({
     if (!enterTrigger || entering) return
     if (onEnteringStart) onEnteringStart()
     setEntering(true)
-    const morphMs = 1550
+    // No position morph for chat-home landing — just the transcript fade
+    // + ASCII fade, then the overlay crossfade begins.
+    const morphMs = 480
     const t = window.setTimeout(() => onEntered?.(), morphMs)
     return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -531,6 +533,22 @@ export function IntroConversation({
         <div className="flex items-center gap-2.5 shrink-0">
           <Logo size={30} online />
           <MiaWordmark />
+        </div>
+        <div className="intro3-shell-actions ml-auto flex items-center gap-2" aria-hidden="true">
+          <button
+            type="button"
+            className="intro3-shell-action flex h-10 w-10 items-center justify-center rounded-full"
+            tabIndex={-1}
+          >
+            <LayoutGrid size={17} />
+          </button>
+          <button
+            type="button"
+            className="intro3-shell-action flex h-10 w-10 items-center justify-center rounded-full"
+            tabIndex={-1}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </header>
 
@@ -573,8 +591,8 @@ export function IntroConversation({
                 ref={scrollRef}
                 className="intro3-scroll-area flex-1 overflow-y-auto px-6 py-5 min-h-0"
               >
-                <div className="intro3-scroll-inner w-[90%] max-w-[1400px] min-h-full mx-auto flex flex-col">
-                  <div className="w-full max-w-[1200px] mx-auto space-y-4">
+                <div className="intro3-scroll-inner w-[90%] max-w-[840px] min-h-full mx-auto flex flex-col">
+                  <div className="w-full max-w-[840px] mx-auto space-y-4">
                     {msgs.map((m, i) => {
                       const isLast = i === msgs.length - 1
                       if (m.role === "user") {
@@ -584,9 +602,7 @@ export function IntroConversation({
                               className="intro3-bubble-user max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
                               style={{ boxShadow: "var(--shadow-bubble)" }}
                             >
-                              {entering
-                                ? <DecayText text={m.text} active={entering} />
-                                : m.text}
+                              {m.text}
                             </div>
                           </div>
                         )
@@ -596,11 +612,9 @@ export function IntroConversation({
                       // sync with the chrome reveal.
                       return (
                         <div key={i} className="text-[15px] text-text leading-relaxed font-medium">
-                          {entering
-                            ? <DecayText text={m.text} active={entering} />
-                            : isLast
-                              ? <StreamingText text={m.text} />
-                              : m.text}
+                          {isLast && !entering
+                            ? <StreamingText text={m.text} />
+                            : m.text}
                         </div>
                       )
                     })}
@@ -627,9 +641,9 @@ export function IntroConversation({
               >
                 <form
                   onSubmit={handleSubmit}
-                  className="intro3-input mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors"
+                  className="intro3-input mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-[24px] px-5 py-4 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-3">
                     {/* Slash-command suggester. When the user starts a
                         line with `/` we (a) flip the field to plain
                         text (so it's no longer dot-masked) and (b)
@@ -683,20 +697,30 @@ export function IntroConversation({
                             autoFocus
                             disabled={inputDisabled || step === "done"}
                             aria-label={step}
-                            className="relative w-full bg-transparent text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed disabled:opacity-30"
+                            className="relative w-full bg-transparent text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-6 disabled:opacity-30"
                           />
                         </div>
                       )
                     })()}
-                    <button
-                      type="submit"
-                      disabled={!canSend}
-                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-                      title="Send"
-                      aria-label="Send"
-                    >
-                      <Send size={16} />
-                    </button>
+                    <div className="flex items-center justify-between gap-3 pt-1.5">
+                      <button
+                        type="button"
+                        className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-text-muted bg-overlay-2/70"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      >
+                        <Plus size={18} />
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!canSend}
+                        className="shrink-0 flex items-center justify-center w-10 h-10 bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text rounded-xl transition-colors disabled:opacity-30"
+                        title="Send"
+                        aria-label="Send"
+                      >
+                        <Send size={18} />
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>

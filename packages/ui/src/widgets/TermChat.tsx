@@ -6,7 +6,7 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { Check, ChevronDown, ChevronRight, FolderOpen, Paperclip, Send, Square } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, FolderOpen, Paperclip, Plus, Send, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -2104,6 +2104,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 })
 
 const FORCE_EMPTY_STATE_PREVIEW = false
+const HOME_CHAT_MAX_WIDTH_CLASS = "max-w-[840px]"
 
 function TermChatInputBar({
   input,
@@ -2119,6 +2120,7 @@ function TermChatInputBar({
   onAttach,
   onRemoveAttachment,
   className = "w-[90%]",
+  variant = "default",
 }: {
   input: string
   isRunning: boolean
@@ -2133,70 +2135,116 @@ function TermChatInputBar({
   onAttach: () => void
   onRemoveAttachment: (id: string) => void
   className?: string
+  variant?: "default" | "hero"
 }) {
   const attachDisabled = isRunning || !!pendingInput
+  const isHero = variant === "hero"
   return (
-      <div
-          data-intro-target="termchat-input"
-          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border rounded-2xl px-4 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors`}
-      >
-          <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
-          <div className="flex items-center gap-2">
+    <div
+      data-intro-target="termchat-input"
+        className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border shadow-[0_4px_24px_rgba(0,0,0,0.07)] ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+    >
+      <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+      {isHero ? (
+        <div className="flex flex-col gap-3">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            autoFocus
+            placeholder={pendingInput ? "Respond in the prompt above ↑" : "Ask MI:A anything"}
+            rows={1}
+            disabled={isRunning || !!pendingInput}
+            className="min-w-0 bg-transparent resize-none text-[15px] leading-6 text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
+          />
+          <div className="flex items-center justify-between gap-3 pt-1.5">
+            <div className="flex items-center gap-1.5">
               <button
-                  type="button"
-                  onClick={onAttach}
-                  disabled={attachDisabled}
-                  title="Attach file"
-                  aria-label="Attach file"
-                  className="shrink-0 flex items-center justify-center w-9 h-9 text-text-faint hover:text-text hover:bg-overlay-2 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+                type="button"
+                onClick={onAttach}
+                disabled={attachDisabled}
+                title="Attach file"
+                aria-label="Attach file"
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
               >
-                  <Paperclip size={16} />
+                <Plus size={18} />
               </button>
-              <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => onChange(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  autoFocus
-                  placeholder={
-                      pendingInput
-                          ? "Respond in the prompt above ↑"
-                          : "Enter your goal or question here..."
-                  }
-                  rows={1}
-                  disabled={isRunning || !!pendingInput}
-                  className="flex-1 min-w-0 bg-transparent resize-none text-[15px] text-text placeholder:text-text-faint focus:outline-none leading-relaxed max-h-36 overflow-y-auto disabled:opacity-30"
-              />
-              {isRunning ? (
-                  <button
-                      type="button"
-                      onClick={onCancel}
-                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-error-soft hover:bg-error/25 text-error rounded-lg transition-colors"
-                      title="Cancel"
-                  >
-                      <Square size={16} fill="currentColor" />
-                  </button>
-              ) : (
-                  <button
-                      type="button"
-                      onClick={onSend}
-                      disabled={
-                          (!input.trim() && attachments.length === 0) || sending
-                      }
-                      className="shrink-0 flex items-center justify-center w-9 h-9 bg-accent hover:bg-accent-hover text-text-on-accent rounded-lg transition-colors disabled:opacity-40"
-                      title="Send"
-                  >
-                      <Send size={16} />
-                  </button>
-              )}
+            </div>
+            {isRunning ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors"
+                title="Cancel"
+              >
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onSend}
+                disabled={(!input.trim() && attachments.length === 0) || sending}
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
+                title="Send"
+              >
+                <Send size={18} />
+              </button>
+            )}
           </div>
-      </div>
-  );
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onAttach}
+            disabled={attachDisabled}
+            title="Attach file"
+            aria-label="Attach file"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+          >
+            <Paperclip size={16} />
+          </button>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            autoFocus
+            placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter your goal or question here..."}
+            rows={1}
+            disabled={isRunning || !!pendingInput}
+            className="flex-1 min-w-0 bg-transparent resize-none text-[15px] leading-relaxed text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
+          />
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors"
+              title="Cancel"
+            >
+              <Square size={16} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSend}
+              disabled={(!input.trim() && attachments.length === 0) || sending}
+              className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-accent hover:bg-accent-hover text-text-on-accent transition-colors disabled:opacity-40"
+              title="Send"
+            >
+              <Send size={16} />
+            </button>
+          )}
+          </div>
+      )}
+    </div>
+  )
 }
 
 // ── Main widget ───────────────────────────────────────────────────
 
-export function TermChat() {
+export function TermChat({ mode = "widget" }: { mode?: "widget" | "home" } = {}) {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
@@ -2412,6 +2460,7 @@ export function TermChat() {
   }, [runs, activeRunId, activeRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
+  const isHomeMode = mode === "home"
 
   return (
     <div
@@ -2469,24 +2518,36 @@ export function TermChat() {
       <div
         ref={scrollHostRef}
         onScroll={onTranscriptScroll}
-        className="flex-1 overflow-y-auto px-6 py-5 space-y-10 min-h-0"
+        className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-2 pb-5 space-y-8" : "px-6 py-5 space-y-10"}`}
       >
         <div
           ref={transcriptInnerRef}
           className={showEmptyState
-            ? "w-[90%] max-w-[1400px] min-h-full mx-auto flex flex-col justify-center"
-            : "w-[90%] max-w-[1400px] mx-auto"
+            ? `w-[90%] ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} pb-[10vh]` : "max-w-[1400px]"} min-h-full mx-auto flex flex-col justify-center`
+            : `relative z-10 w-[90%] ${isHomeMode ? HOME_CHAT_MAX_WIDTH_CLASS : "max-w-[1400px]"} mx-auto`
           }
         >
           {showEmptyState && (
-            <div className="flex flex-col items-center justify-center min-h-[58vh] px-6 text-center">
-              <div className="w-full max-w-[860px] space-y-8">
-                <div className="space-y-2">
-                  <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
-                    What are you working on?
+            <div className={`relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
+              {isHomeMode && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
+                  style={{
+                    background: "radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 12%, transparent) 0%, color-mix(in srgb, var(--accent) 7%, transparent) 28%, transparent 72%)",
+                    filter: "blur(14px)",
+                  }}
+                />
+              )}
+              <div className={`relative z-10 w-full ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} space-y-8` : "max-w-[860px] space-y-8"}`}>
+                <div className={isHomeMode ? "space-y-3" : "space-y-2"}>
+                  <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
+                    {isHomeMode ? "How can I help?" : "What are you working on?"}
                   </p>
-                  <p className="text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto">
-                    Query business data, inspect metadata or run environment synchronization.
+                  <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[520px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
+                    {isHomeMode
+                      ? "Start with a goal, question, or task."
+                      : "Query business data, inspect metadata or run environment synchronization."}
                   </p>
                 </div>
                 <TermChatInputBar
@@ -2502,7 +2563,8 @@ export function TermChat() {
                   onSend={send}
                   onAttach={openFilePicker}
                   onRemoveAttachment={removeAttachment}
-                  className="w-full max-w-[860px]"
+                  className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-full max-w-[860px]"}
+                  variant={isHomeMode ? "hero" : "default"}
                 />
                 {attachError && (
                   <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
@@ -2514,7 +2576,7 @@ export function TermChat() {
           {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className="space-y-6">
               {/* User goal — with optional attribution for admin-view runs */}
-              <div className="flex justify-end py-8">
+              <div className={`flex justify-end ${isHomeMode ? "py-2" : "py-8"}`}>
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
                   <div className="flex flex-col items-end gap-1.5">
                     <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
@@ -2539,7 +2601,7 @@ export function TermChat() {
               </div>
 
               {/* Agent response */}
-              <div className="pr-6">
+              <div className={isHomeMode ? "" : "pr-6"}>
                 <RunMessage
                   run={run}
                   isActive={run.id === activeRunId}
@@ -2570,6 +2632,8 @@ export function TermChat() {
             onSend={send}
             onAttach={openFilePicker}
             onRemoveAttachment={removeAttachment}
+            className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-[90%]"}
+            variant={isHomeMode ? "hero" : "default"}
           />
           {attachError && (
             <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>

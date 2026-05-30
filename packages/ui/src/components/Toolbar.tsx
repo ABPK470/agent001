@@ -2,7 +2,7 @@
  * Toolbar — top bar with branding, view tabs, menu dropdown, and widget button.
  */
 
-import { Activity, Bot, ChevronDown, LayoutGrid, LogOut, Menu, Plus, Shield, Terminal, X } from "lucide-react"
+import { Activity, Bot, ChevronDown, LayoutGrid, LogOut, Menu, MessageSquare, Plus, Shield, Terminal, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
@@ -17,10 +17,11 @@ interface Props {
   onAddWidget?: () => void
   onSwitchUser?: () => void
   onSwitchUi?: () => void
+  onShowChatHome?: () => void
   me?: Me | null
 }
 
-export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
+export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, onShowChatHome, me }: Props) {
   const connected = useStore((s) => s.connected)
   const views = useStore((s) => s.views)
   const activeViewId = useStore((s) => s.activeViewId)
@@ -263,6 +264,13 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, me }: Props) {
                   admin
                 </span>
               )}
+              <button
+                onClick={() => onShowChatHome?.()}
+                title="Open chat home"
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
+              >
+                <MessageSquare size={15} />
+              </button>
               <button
                 onClick={() => onSwitchUi?.()}
                 title="Switch to terminal UI (MI:A/term)"
