@@ -21,17 +21,12 @@ export { DomainError, InvalidTransitionError, PolicyViolationError } from "./err
 
 // Models
 export {
-    cancelRun,
-    completeRun,
-    completeStep,
+    addStepToRunPure, cancelRun, cancelRunPure, completeRun, completeRunPure, completeStep,
+    completeStepPure,
     createAuditEntry,
     createRun,
-    failRun,
-    failStep,
-    startPlanning,
-    startRunning,
-    startStep,
-    type AgentRun,
+    failRun, failRunPure, failStep, replaceStepInRunPure, startPlanning, startPlanningPure, startRunning, startRunningPure, startStep,
+    startStepPure, type AgentRun,
     type AuditEntry,
     type ExecutionRecord,
     type PolicyRule,

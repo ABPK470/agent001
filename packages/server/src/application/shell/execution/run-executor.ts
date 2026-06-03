@@ -23,8 +23,8 @@ import {
   runFailed,
   runStarted,
   spawnChildForPlan,
-  startPlanning,
-  startRunning,
+  startPlanningPure,
+  startRunningPure,
   synthesizeGenericFailureAnswer,
   type AgentHost,
   type DelegateContext,
@@ -147,9 +147,9 @@ export async function executeRunImpl(
   if (activeRun) activeRun.workspace = runWorkspace
 
   // Create tracked workflow run
-  const run = createRun("agent-session", { goal }, runId)
-  startPlanning(run)
-  startRunning(run, [])
+  let run = createRun("agent-session", { goal }, runId)
+  run = startPlanningPure(run)
+  run = startRunningPure(run, [])
 
   // Wire domain events → SEE
   const boundSaveTrace = (rId: string, entry: Record<string, unknown>) => saveTrace(ctx.activeRuns, rId, entry)

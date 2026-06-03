@@ -58,6 +58,30 @@ export function failStep(step: Step, error: string): void {
   step.completedAt = new Date()
 }
 
+// ── Pure (immutable) Step helpers ─────────────────────────────────
+
+function assertStepTransitionAllowed(step: Step, target: StepStatus): void {
+  const allowed = STEP_TRANSITIONS[step.status]
+  if (!allowed?.has(target)) {
+    throw new InvalidTransitionError("Step", step.status, target)
+  }
+}
+
+export function startStepPure(step: Step): Step {
+  assertStepTransitionAllowed(step, StepStatus.Running)
+  return { ...step, status: StepStatus.Running, startedAt: new Date() }
+}
+
+export function completeStepPure(step: Step, output?: Record<string, unknown>): Step {
+  assertStepTransitionAllowed(step, StepStatus.Completed)
+  return { ...step, status: StepStatus.Completed, output: output ?? {}, completedAt: new Date() }
+}
+
+export function failStepPure(step: Step, error: string): Step {
+  assertStepTransitionAllowed(step, StepStatus.Failed)
+  return { ...step, status: StepStatus.Failed, error, completedAt: new Date() }
+}
+
 // ── AgentRun ─────────────────────────────────────────────────────
 
 export interface AgentRun {
@@ -119,6 +143,50 @@ export function failRun(run: AgentRun): void {
 export function cancelRun(run: AgentRun): void {
   transitionRun(run, RunStatus.Cancelled)
   run.completedAt = new Date()
+}
+
+// ── Pure (immutable) Run helpers ──────────────────────────────────
+
+function assertRunTransitionAllowed(run: AgentRun, target: RunStatus): void {
+  const allowed = RUN_TRANSITIONS[run.status]
+  if (!allowed?.has(target)) {
+    throw new InvalidTransitionError("Run", run.status, target)
+  }
+}
+
+export function startPlanningPure(run: AgentRun): AgentRun {
+  assertRunTransitionAllowed(run, RunStatus.Planning)
+  return { ...run, status: RunStatus.Planning }
+}
+
+export function startRunningPure(run: AgentRun, steps: Step[]): AgentRun {
+  const updated = { ...run, steps: steps }
+  assertRunTransitionAllowed(updated, RunStatus.Running)
+  return { ...updated, status: RunStatus.Running }
+}
+
+export function completeRunPure(run: AgentRun): AgentRun {
+  assertRunTransitionAllowed(run, RunStatus.Completed)
+  return { ...run, status: RunStatus.Completed, completedAt: new Date() }
+}
+
+export function failRunPure(run: AgentRun): AgentRun {
+  assertRunTransitionAllowed(run, RunStatus.Failed)
+  return { ...run, status: RunStatus.Failed, completedAt: new Date() }
+}
+
+export function cancelRunPure(run: AgentRun): AgentRun {
+  assertRunTransitionAllowed(run, RunStatus.Cancelled)
+  return { ...run, status: RunStatus.Cancelled, completedAt: new Date() }
+}
+
+// Utilities for run step composition
+export function addStepToRunPure(run: AgentRun, step: Step): AgentRun {
+  return { ...run, steps: [...run.steps, step] }
+}
+
+export function replaceStepInRunPure(run: AgentRun, step: Step): AgentRun {
+  return { ...run, steps: run.steps.map((s) => (s.id === step.id ? step : s)) }
 }
 
 // ── Policy Rule ──────────────────────────────────────────────────
