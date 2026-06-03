@@ -20,7 +20,7 @@ function safeParseArgs(raw: string): Record<string, unknown> {
   }
 }
 
-interface OpenAIMessage {
+export interface OpenAIMessage {
   role: string
   content: string | null | OpenAIContentBlock[]
   tool_calls?: OpenAIToolCall[]
@@ -39,13 +39,13 @@ interface OpenAIContentBlock {
   cache_control?: { type: "ephemeral" }
 }
 
-interface OpenAIToolCall {
+export interface OpenAIToolCall {
   id: string
   type: "function"
   function: { name: string; arguments: string }
 }
 
-interface OpenAITool {
+export interface OpenAITool {
   type: "function"
   function: {
     name: string
@@ -75,13 +75,13 @@ export class OpenAICompatibleClient implements LLMClient {
   private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
-      messages: messages.map((m) => formatMessage(m, this.enablePromptCaching)),
+      messages: messages.map((m) => formatOpenAICompatibleMessage(m, this.enablePromptCaching)),
       max_completion_tokens: opts?.maxTokens ?? 16384,
       stream: true,
       stream_options: { include_usage: true },
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
-    if (tools.length > 0) body.tools = tools.map(formatTool)
+    if (tools.length > 0) body.tools = formatOpenAICompatibleTools(tools)
 
     const maxRetries = 5
     let res: Response | undefined
@@ -153,13 +153,13 @@ export class OpenAICompatibleClient implements LLMClient {
   private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number }): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
-      messages: messages.map((m) => formatMessage(m, this.enablePromptCaching)),
+      messages: messages.map((m) => formatOpenAICompatibleMessage(m, this.enablePromptCaching)),
       max_completion_tokens: opts?.maxTokens ?? 16384,
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
 
     if (tools.length > 0) {
-      body.tools = tools.map(formatTool)
+      body.tools = formatOpenAICompatibleTools(tools)
     }
 
     const maxRetries = 5
@@ -191,53 +191,14 @@ export class OpenAICompatibleClient implements LLMClient {
       throw new Error(`OpenAI API error ${res!.status}: ${text}`)
     }
 
-    const data = (await res!.json()) as {
-      choices: Array<{
-        message: {
-          content: string | null
-          tool_calls?: OpenAIToolCall[]
-        }
-        finish_reason: string | null
-      }>
-      usage?: {
-        prompt_tokens: number
-        completion_tokens: number
-        total_tokens: number
-      }
-    }
-
-    const finish = data.choices[0].finish_reason
-    if (finish === "length") {
-      throw new Error(
-        "LLM response truncated (finish_reason=length). " +
-        "The model hit its completion token limit before finishing. " +
-        "This usually means a tool call argument (like file content) was too large."
-      )
-    }
-
-    const choice = data.choices[0].message
-
-    return {
-      content: choice.content,
-      toolCalls: (choice.tool_calls ?? []).map(
-        (tc): ToolCall => ({
-          id: tc.id,
-          name: tc.function.name,
-          arguments: safeParseArgs(tc.function.arguments),
-        }),
-      ),
-      usage: data.usage ? {
-        promptTokens: data.usage.prompt_tokens,
-        completionTokens: data.usage.completion_tokens,
-        totalTokens: data.usage.total_tokens,
-      } : undefined,
-    }
+    const data = await res!.json()
+    return parseOpenAICompatibleResponse(data)
   }
 }
 
 // ── Format helpers ───────────────────────────────────────────────
 
-function formatMessage(msg: Message, enablePromptCaching = false): OpenAIMessage {
+export function formatOpenAICompatibleMessage(msg: Message, enablePromptCaching = false): OpenAIMessage {
   if (msg.role === MessageRole.Assistant && msg.toolCalls?.length) {
     return {
       role: MessageRole.Assistant,
@@ -283,5 +244,41 @@ function formatTool(tool: Tool): OpenAITool {
       description: tool.description,
       parameters: tool.parameters,
     },
+  }
+}
+
+export function formatOpenAICompatibleTools(tools: Tool[]): OpenAITool[] {
+  return tools.map(formatTool)
+}
+
+export function parseOpenAICompatibleResponse(data: any): LLMResponse {
+  const finish = data?.choices?.[0]?.finish_reason ?? null
+  if (finish === "length") {
+    throw new Error(
+      "LLM response truncated (finish_reason=length). " +
+      "The model hit its completion token limit before finishing. " +
+      "This usually means a tool call argument (like file content) was too large."
+    )
+  }
+
+  const choice = data?.choices?.[0]?.message
+  if (!choice) {
+    throw new Error(`OpenAI-compatible response missing choices[0].message: ${JSON.stringify(data)}`)
+  }
+
+  return {
+    content: typeof choice.content === "string" || choice.content === null ? choice.content : JSON.stringify(choice.content),
+    toolCalls: (choice.tool_calls ?? []).map(
+      (tc: OpenAIToolCall): ToolCall => ({
+        id: tc.id,
+        name: tc.function.name,
+        arguments: safeParseArgs(tc.function.arguments),
+      }),
+    ),
+    usage: data?.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined,
   }
 }

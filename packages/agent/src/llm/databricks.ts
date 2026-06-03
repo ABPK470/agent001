@@ -17,7 +17,12 @@
  */
 
 import type { LLMClient, LLMResponse, Message, Tool } from "../domain/agent-types.js"
-import { OpenAICompatibleClient } from "./openai-compat.js"
+import {
+  formatOpenAICompatibleMessage,
+  formatOpenAICompatibleTools,
+  OpenAICompatibleClient,
+  parseOpenAICompatibleResponse,
+} from "./openai-compat.js"
 
 export class DatabricksClient implements LLMClient {
   private readonly host: string
@@ -79,14 +84,14 @@ export class DatabricksClient implements LLMClient {
     token: string,
   ): Promise<LLMResponse> {
     const url = `${this.host}/serving-endpoints/${this.endpoint}/invocations`
-    // Convert the chat messages into an OpenAI-like `messages` array.
-    // Databricks invocations for chat models expect a `messages` field.
-    const body = {
-      messages: messages.map((m) => {
-        const content = typeof m.content === "string" ? m.content : ""
-        return { role: m.role, content }
-      }),
+    const body: Record<string, unknown> = {
+      model: this.endpoint,
+      messages: messages.map((m) => formatOpenAICompatibleMessage(m, true)),
+      max_completion_tokens: opts?.maxTokens ?? 16384,
     }
+    if (opts?.temperature !== undefined) body.temperature = opts.temperature
+    if (tools.length > 0) body.tools = formatOpenAICompatibleTools(tools)
+
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, Accept: "application/json" },
@@ -99,31 +104,17 @@ export class DatabricksClient implements LLMClient {
       throw new Error(`Databricks invocations error ${res.status}: ${text}`)
     }
 
-    // Try to parse a JSON shape commonly returned; otherwise return raw text.
-    let parsed: any = text
+    let parsed: unknown = text
     try { parsed = JSON.parse(text) } catch { /* keep raw text */ }
 
-    // Databricks responses vary; try common keys then fallback to raw text.
-    let content: string | null = null
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        content = typeof parsed[0] === "string" ? parsed[0] : JSON.stringify(parsed[0])
-      } else if (parsed.predictions && Array.isArray(parsed.predictions) && parsed.predictions.length > 0) {
-        content = typeof parsed.predictions[0] === "string" ? parsed.predictions[0] : JSON.stringify(parsed.predictions[0])
-      } else if (parsed.outputs && Array.isArray(parsed.outputs) && parsed.outputs.length > 0) {
-        content = typeof parsed.outputs[0] === "string" ? parsed.outputs[0] : JSON.stringify(parsed.outputs[0])
-      } else if (typeof parsed === "string") {
-        content = parsed
-      } else {
-        content = JSON.stringify(parsed)
-      }
-    } else if (typeof parsed === "string") {
-      content = parsed
+    if (parsed && typeof parsed === "object" && "choices" in parsed) {
+      const response = parseOpenAICompatibleResponse(parsed)
+      if (opts?.onToken && response.content) opts.onToken(response.content)
+      return response
     }
 
-    // If streaming callback provided, deliver the whole response as one chunk.
-    if (opts?.onToken && content) opts.onToken(content)
-
-    return { content: content || null, toolCalls: [], usage: undefined }
+    const fallbackContent = typeof parsed === "string" ? parsed : JSON.stringify(parsed)
+    if (opts?.onToken && fallbackContent) opts.onToken(fallbackContent)
+    return { content: fallbackContent || null, toolCalls: [], usage: undefined }
   }
 }
