@@ -16,7 +16,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 	app.get<{ Querystring: { scope?: "session" | "all" } }>("/api/runs", async (req) => {
 		const s = req.session
 		const sessionOnly = req.query.scope === "session"
-		const runs = s?.isAdmin ? db.listRunsWithUsage() : db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
+		const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
 		return runs.map((run): Run => {
 			const diff = orchestrator.getRunWorkspaceDiff(run.id)
 			const pendingWorkspaceChanges = diff ? diff.added.length + diff.modified.length + diff.deleted.length : 0
@@ -250,10 +250,10 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
 	app.get("/api/runs/active", async (req) => {
 		const ids = orchestrator.getActiveRunIds()
-		if (req.session?.isAdmin) return { runIds: ids }
 		const visible = ids.filter((id) => {
 			const run = db.getRun(id)
-			return canAccessRun(req.session, run ?? null)
+			if (!req.session || !run) return false
+			return !!run.upn && run.upn.toLowerCase() === req.session.upn.toLowerCase()
 		})
 		return { runIds: visible }
 	})

@@ -6,6 +6,12 @@ import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
 import { getDb } from "./connection.js"
 
+function resolveExistingSessionId(sessionId: string | null | undefined): string | null {
+  if (!sessionId) return null
+  const row = getDb().prepare("SELECT sid FROM sessions WHERE sid = ?").get(sessionId) as { sid: string } | undefined
+  return row?.sid ?? null
+}
+
 // ── Run queries ──────────────────────────────────────────────────
 
 /** A persisted run row. `status` is enum-bound so the DB layer cannot
@@ -68,9 +74,10 @@ export function saveRun(run: DbRun): void {
   // Existing rows keep their stamp on update (we read first via getRun and merge).
   const existing = getDb().prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?").get(run.id) as
     { session_id: string | null; upn: string | null; display_name: string | null } | undefined
+  const resolvedSessionId = resolveExistingSessionId(run.session_id ?? existing?.session_id ?? null)
   upsertRun().run({
     ...run,
-    session_id:   run.session_id   ?? existing?.session_id   ?? null,
+    session_id:   resolvedSessionId,
     upn:          run.upn          ?? existing?.upn          ?? null,
     display_name: run.display_name ?? existing?.display_name ?? null,
   })

@@ -22,10 +22,21 @@ import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from ".
 export const DEFAULT_MODEL = "gpt-5.4"
 
 /** Default models per provider shown in the UI picker. */
-export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
-  "copilot-chat": { model: DEFAULT_MODEL,                  baseUrl: "", placeholder: "Automatic (Device Flow — authorize once)" },
-  databricks:     { model: "databricks-claude-sonnet-4",   baseUrl: "", placeholder: "Automatic (M2M OAuth from .env)" },
-}
+export const PROVIDER_DEFAULTS: Record<
+    string,
+    { model: string; baseUrl: string; placeholder: string }
+> = {
+    "copilot-chat": {
+        model: DEFAULT_MODEL,
+        baseUrl: "",
+        placeholder: "Automatic (Device Flow — authorize once)",
+    },
+    databricks: {
+        model: "databricks-gpt-5-4",
+        baseUrl: "",
+        placeholder: "Automatic (M2M OAuth from .env)",
+    },
+};
 
 /**
  * Build an LLMClient from a persisted config row.

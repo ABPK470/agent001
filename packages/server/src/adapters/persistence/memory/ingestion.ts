@@ -1,8 +1,9 @@
 import { EventType, getCatalogSchemaFingerprint, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { getDb } from "../sqlite.js"
 import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../../../enums/memory.js"
 import { broadcast } from "../../../event-broadcaster.js"
+import { getSession } from "../db/sessions.js"
+import { getDb } from "../sqlite.js"
 import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import type { MemoryEntry } from "./types.js"
@@ -163,7 +164,9 @@ export function ingestRunTurns(run: {
   /** Owner UPN — used to scope this run's memories to the originating user. */
   upn?: string | null
 }): void {
-  const sessionId = run.sessionId ?? run.agentId ?? "default"
+  const sessionId = run.sessionId
+    ? (getSession(run.sessionId)?.sid ?? null)
+    : null
   const upn = run.upn ?? null
 
   // 1. (goal text intentionally NOT stored in working memory — it is INPUT,

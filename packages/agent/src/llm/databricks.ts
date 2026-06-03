@@ -26,7 +26,7 @@ export class DatabricksClient implements LLMClient {
 
   constructor(opts: {
     host: string                      // e.g. "https://dbc-...cloud.databricks.com"
-    endpoint: string                  // serving-endpoint name, e.g. "databricks-claude-sonnet-4"
+    endpoint: string                  // serving-endpoint name
     getToken: () => Promise<string>   // returns a fresh M2M bearer
   }) {
     this.host = opts.host.replace(/\/$/, "")
@@ -46,17 +46,84 @@ export class DatabricksClient implements LLMClient {
     // resolves correctly. The "model" field is ignored by Databricks
     // (the endpoint name in the URL determines the model) but we still
     // pass the endpoint name for log-correlation.
+    const base = `${this.host}/serving-endpoints/${this.endpoint}`
+    // Log the attempted path and token source for easier debugging.
+    const tokenSource = process.env["DATABRICKS_TOKEN"] ? "pat" : "m2m"
+    console.debug(`[databricks] host=${this.host} endpoint=${this.endpoint} tokenSource=${tokenSource}`)
+
     const client = new OpenAICompatibleClient({
       apiKey: token,
       model: this.endpoint,
-      baseUrl: `${this.host}/serving-endpoints/${this.endpoint}`,
-      // Databricks Claude serving endpoints honour Anthropic-style
-      // cache_control on system blocks. Marking the byte-stable system
-      // prefix saves ~80 % on input tokens for calls 2..N within a run
-      // (cache TTL is ~5 minutes for ephemeral). Vanilla OpenAI ignores
-      // the field, so this is safe even when an endpoint is mis-routed.
+      baseUrl: base,
       enablePromptCaching: true,
     })
-    return client.chat(messages, tools, opts)
+
+    try {
+      return await client.chat(messages, tools, opts)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // If Databricks indicates the OpenAI-compatible alias is not present,
+      // fall back to the older /invocations path which many workspaces use.
+      if (msg.includes("ENDPOINT_NOT_FOUND") || msg.includes("/invocations") || msg.includes("404")) {
+        console.warn(`[databricks] OpenAI-compatible path failed for ${base}/v1/chat/completions — falling back to ${base}/invocations: ${msg}`)
+        return await this.invocationsChat(messages, tools, opts, token)
+      }
+      throw err
+    }
+  }
+
+  private async invocationsChat(
+    messages: Message[],
+    tools: Tool[],
+    opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void } | undefined,
+    token: string,
+  ): Promise<LLMResponse> {
+    const url = `${this.host}/serving-endpoints/${this.endpoint}/invocations`
+    // Convert the chat messages into an OpenAI-like `messages` array.
+    // Databricks invocations for chat models expect a `messages` field.
+    const body = {
+      messages: messages.map((m) => {
+        const content = typeof m.content === "string" ? m.content : ""
+        return { role: m.role, content }
+      }),
+    }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, Accept: "application/json" },
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+    })
+
+    const text = await res.text()
+    if (!res.ok) {
+      throw new Error(`Databricks invocations error ${res.status}: ${text}`)
+    }
+
+    // Try to parse a JSON shape commonly returned; otherwise return raw text.
+    let parsed: any = text
+    try { parsed = JSON.parse(text) } catch { /* keep raw text */ }
+
+    // Databricks responses vary; try common keys then fallback to raw text.
+    let content: string | null = null
+    if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        content = typeof parsed[0] === "string" ? parsed[0] : JSON.stringify(parsed[0])
+      } else if (parsed.predictions && Array.isArray(parsed.predictions) && parsed.predictions.length > 0) {
+        content = typeof parsed.predictions[0] === "string" ? parsed.predictions[0] : JSON.stringify(parsed.predictions[0])
+      } else if (parsed.outputs && Array.isArray(parsed.outputs) && parsed.outputs.length > 0) {
+        content = typeof parsed.outputs[0] === "string" ? parsed.outputs[0] : JSON.stringify(parsed.outputs[0])
+      } else if (typeof parsed === "string") {
+        content = parsed
+      } else {
+        content = JSON.stringify(parsed)
+      }
+    } else if (typeof parsed === "string") {
+      content = parsed
+    }
+
+    // If streaming callback provided, deliver the whole response as one chunk.
+    if (opts?.onToken && content) opts.onToken(content)
+
+    return { content: content || null, toolCalls: [], usage: undefined }
   }
 }

@@ -638,7 +638,7 @@ export function IntroConversation({
     >
       {/* Generative ASCII texture — ambient life behind the conversation.
           Fades out during the morph so it doesn't bleed into the platform. */}
-      <IntroAsciiField onReady={() => asciiReadyRef.current?.resolve()} />
+      <IntroAsciiField surface="login" onReady={() => asciiReadyRef.current?.resolve()} />
 
       {/* Pill-area focus — mounted only during the entering morph so
           the boosted ASCII field MATERIALIZES per-cell each time

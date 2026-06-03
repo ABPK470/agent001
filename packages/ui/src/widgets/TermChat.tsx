@@ -23,6 +23,85 @@ import { formatMs } from "../util"
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
 const ATTACH_MAX_BYTES = 32 * 1024 * 1024
+const USER_GOAL_COLLAPSE_LINES = 8
+
+function isUserGoalOverflowing(node: HTMLDivElement): boolean {
+  const prevDisplay = node.style.display
+  const prevOrient = node.style.webkitBoxOrient
+  const prevClamp = node.style.webkitLineClamp
+  const prevOverflow = node.style.overflow
+
+  node.style.display = "-webkit-box"
+  node.style.webkitBoxOrient = "vertical"
+  node.style.webkitLineClamp = String(USER_GOAL_COLLAPSE_LINES)
+  node.style.overflow = "hidden"
+
+  const overflowing = node.scrollHeight > node.clientHeight + 1
+
+  node.style.display = prevDisplay
+  node.style.webkitBoxOrient = prevOrient
+  node.style.webkitLineClamp = prevClamp
+  node.style.overflow = prevOverflow
+
+  return overflowing
+}
+
+function UserGoalText({ text }: { text: string }): React.ReactElement {
+  const [expanded, setExpanded] = useState(false)
+  const [collapsible, setCollapsible] = useState(false)
+  const textRef = useRef<HTMLDivElement | null>(null)
+
+  useLayoutEffect(() => {
+    const node = textRef.current
+    if (!node) return
+
+    const measure = () => {
+      setCollapsible(isUserGoalOverflowing(node))
+    }
+
+    measure()
+
+    const observer = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => measure())
+      : null
+    observer?.observe(node)
+    window.addEventListener("resize", measure)
+
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener("resize", measure)
+    }
+  }, [text])
+
+  return (
+    <div className="space-y-2">
+      <div
+        ref={textRef}
+        className="whitespace-pre-wrap break-words"
+        style={collapsible && !expanded
+          ? {
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: USER_GOAL_COLLAPSE_LINES,
+              overflow: "hidden",
+            }
+          : undefined}
+      >
+        {text}
+      </div>
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="inline-flex items-center gap-1 text-[13px] font-medium text-text-muted transition-colors hover:text-text"
+        >
+          <span>{expanded ? "Show less" : "Show more"}</span>
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      )}
+    </div>
+  )
+}
 
 // ── Trace → Timeline model ────────────────────────────────────────
 
@@ -2164,107 +2243,121 @@ function TermChatInputBar({
       }
     : undefined
   return (
-    <div
-      data-intro-target="termchat-input"
-      className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
-      style={heroStyle}
-    >
-      <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
-      {isHero ? (
-        <div className="flex flex-col gap-3">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            autoFocus
-            placeholder={pendingInput ? "Respond in the prompt above ↑" : "Ask MI:A anything"}
-            rows={1}
-            disabled={isRunning || !!pendingInput}
-            className="min-w-0 bg-transparent resize-none text-[15px] leading-6 text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
-          />
-          <div className="flex items-center justify-between gap-3 pt-1.5">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onAttach}
-                disabled={attachDisabled}
-                title="Attach file"
-                aria-label="Attach file"
-                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
-              >
-                <Plus size={18} />
-              </button>
-            </div>
-            {isRunning ? (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors"
-                title="Cancel"
-              >
-                <Square size={16} fill="currentColor" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onSend}
-                disabled={(!input.trim() && attachments.length === 0) || sending}
-                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
-                title="Send"
-              >
-                <Send size={18} />
-              </button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onAttach}
-            disabled={attachDisabled}
-            title="Attach file"
-            aria-label="Attach file"
-            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
-          >
-            <Paperclip size={16} />
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            autoFocus
-            placeholder={pendingInput ? "Respond in the prompt above ↑" : "Enter your goal or question here..."}
-            rows={1}
-            disabled={isRunning || !!pendingInput}
-            className="flex-1 min-w-0 bg-transparent resize-none text-[15px] leading-relaxed text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
-          />
-          {isRunning ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors"
-              title="Cancel"
-            >
-              <Square size={16} fill="currentColor" />
-            </button>
+      <div
+          data-intro-target="termchat-input"
+          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+          style={heroStyle}
+      >
+          <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+          {isHero ? (
+              <div className="flex flex-col gap-3">
+                  <textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => onChange(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      autoFocus
+                      placeholder={
+                          pendingInput
+                              ? "Respond in the prompt above ↑"
+                              : "Enter your goal or question here..."
+                      }
+                      rows={1}
+                      disabled={isRunning || !!pendingInput}
+                      className="min-w-0 bg-transparent resize-none text-[15px] leading-6 text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
+                  />
+                  <div className="flex items-center justify-between gap-3 pt-1.5">
+                      <div className="flex items-center gap-1.5">
+                          <button
+                              type="button"
+                              onClick={onAttach}
+                              disabled={attachDisabled}
+                              title="Attach file"
+                              aria-label="Attach file"
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+                          >
+                              <Plus size={18} />
+                          </button>
+                      </div>
+                      {isRunning ? (
+                          <button
+                              type="button"
+                              onClick={onCancel}
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors"
+                              title="Cancel"
+                          >
+                              <Square size={16} fill="currentColor" />
+                          </button>
+                      ) : (
+                          <button
+                              type="button"
+                              onClick={onSend}
+                              disabled={
+                                  (!input.trim() && attachments.length === 0) ||
+                                  sending
+                              }
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
+                              title="Send"
+                          >
+                              <Send size={18} />
+                          </button>
+                      )}
+                  </div>
+              </div>
           ) : (
-            <button
-              type="button"
-              onClick={onSend}
-              disabled={(!input.trim() && attachments.length === 0) || sending}
-              className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-accent hover:bg-accent-hover text-text-on-accent transition-colors disabled:opacity-40"
-              title="Send"
-            >
-              <Send size={16} />
-            </button>
+              <div className="flex items-center gap-2">
+                  <button
+                      type="button"
+                      onClick={onAttach}
+                      disabled={attachDisabled}
+                      title="Attach file"
+                      aria-label="Attach file"
+                      className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
+                  >
+                      <Paperclip size={16} />
+                  </button>
+                  <textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => onChange(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      autoFocus
+                      placeholder={
+                          pendingInput
+                              ? "Respond in the prompt above ↑"
+                              : "Enter your goal or question here..."
+                      }
+                      rows={1}
+                      disabled={isRunning || !!pendingInput}
+                      className="flex-1 min-w-0 bg-transparent resize-none text-[15px] leading-relaxed text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
+                  />
+                  {isRunning ? (
+                      <button
+                          type="button"
+                          onClick={onCancel}
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors"
+                          title="Cancel"
+                      >
+                          <Square size={16} fill="currentColor" />
+                      </button>
+                  ) : (
+                      <button
+                          type="button"
+                          onClick={onSend}
+                          disabled={
+                              (!input.trim() && attachments.length === 0) ||
+                              sending
+                          }
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-accent hover:bg-accent-hover text-text-on-accent transition-colors disabled:opacity-40"
+                          title="Send"
+                      >
+                          <Send size={16} />
+                      </button>
+                  )}
+              </div>
           )}
-          </div>
-      )}
-    </div>
-  )
+      </div>
+  );
 }
 
 // ── Main widget ───────────────────────────────────────────────────
@@ -2610,7 +2703,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                       className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
                       style={{ boxShadow: "var(--shadow-bubble)" }}
                     >
-                      {run.goal}
+                      <UserGoalText text={run.goal} />
                     </div>
                   </div>
                 )}
@@ -2619,7 +2712,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                     className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
                     style={{ boxShadow: "var(--shadow-bubble)" }}
                   >
-                    {run.goal}
+                    <UserGoalText text={run.goal} />
                   </div>
                 )}
               </div>

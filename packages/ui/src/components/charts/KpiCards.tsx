@@ -9,7 +9,7 @@ import { formatValue, pickColor, type ValueFormat } from "./helpers"
 
 export interface KpiCard {
   label: string
-  value: number
+  value: number | string
   unit?: string
   valueFormat?: ValueFormat
   precision?: number
@@ -35,7 +35,7 @@ export function KpiCards({ data }: { data: KpiCardsData }): React.ReactElement {
 
   return (
     <ChartFrame title={data.title} subtitle={data.subtitle} badge="kpi">
-      <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      <div className="grid w-full min-w-0 gap-2.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {cards.map((c, i) => <Card key={i} card={c} accent={pickColor(i)} />)}
       </div>
     </ChartFrame>
@@ -54,15 +54,21 @@ function Card({ card, accent }: { card: KpiCard; accent: string }): React.ReactE
     isGood == null ? "text-text-muted"
     : isGood ? "text-success"
     : "text-error"
+  const valueText = typeof card.value === "number"
+    ? formatValue(card.value, fmt, precision, card.unit)
+    : String(card.value)
+  const valueClass = typeof card.value === "number"
+    ? "text-lg"
+    : "text-[clamp(1rem,2.2vw,1.75rem)]"
 
   return (
-    <div className="rounded-md border border-border-subtle p-2.5 flex flex-col gap-1 min-w-0">
-      <div className="text-[11px] text-text-muted truncate" title={card.label}>{card.label}</div>
-      <div className="text-lg font-semibold text-text tabular-nums leading-tight">
-        {formatValue(card.value, fmt, precision, card.unit)}
+    <div className="rounded-md border border-border-subtle p-2.5 flex min-w-0 flex-col gap-1 overflow-hidden">
+      <div className="min-w-0 text-[11px] leading-snug text-text-muted [overflow-wrap:anywhere]" title={card.label}>{card.label}</div>
+      <div className={`${valueClass} min-w-0 font-semibold leading-tight text-text [overflow-wrap:anywhere] whitespace-normal`}>
+        {valueText}
       </div>
       {card.delta != null && (
-        <div className={`text-[11px] tabular-nums ${deltaColor}`}>
+        <div className={`min-w-0 text-[11px] tabular-nums ${deltaColor}`}>
           {deltaDir === "up" ? "▲" : deltaDir === "down" ? "▼" : "—"}{" "}
           {Math.abs(card.delta).toFixed(precision)}{card.deltaUnit ?? ""}
         </div>

@@ -90,7 +90,7 @@ export class EventBroadcaster {
     const owner = runId ? this.resolveOwner(runId) : null
 
     const allowed = (identity: WsClientIdentity): boolean => {
-      if (!owner || identity.isAdmin) return true
+      if (!owner) return true
       const matchesUpn = !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
       // Sid match was previously gated on `!identity.upn`. That gate caused
       // the chat-stuck-on-Thinking bug: a client whose SSE socket was opened

@@ -52,7 +52,7 @@ const REVEAL_SOFT_EDGE_MS = 120      // per-cell fade-in window (alpha ramp)
 
 export type IntroAsciiTargetStage = "hidden" | "pill" | "copy"
 export type IntroAsciiTargetMode = "activity" | "frame"
-export type IntroAsciiSurface = "default" | "home"
+export type IntroAsciiSurface = "default" | "home" | "login"
 
 export interface IntroAsciiRenderTarget {
   left: number
@@ -83,6 +83,7 @@ function surfaceNoise(
   t: number,
 ): number {
   const base = vnoise(c, r, t)
+  if (surface === "login") return base
   if (surface !== "home") return base
 
   // The new-chat home surface must read the same on the left and the
@@ -197,15 +198,19 @@ export function IntroAsciiField({
     // alive*. Used for the local pill-area focus during the entering
     // morph so the user reads it as the existing ASCII becoming denser
     // and more active around the pill, not as a new layer.
-    const palettePow = boost ? 1.0 : 2.0       // lower exponent → fewer spaces
-    const updateFraction = boost ? 0.10 : UPDATE_FRACTION  // ~5× shimmer
+    const isLoginSurface = surface === "login"
+    const palettePow = boost ? 1.0 : 2.0
+    const updateFraction = boost ? 0.10 : UPDATE_FRACTION
     // In boost mode the field is mounted fresh per entering, so let
     // it materialize per-cell like the bg field does on first load.
     // Faster duration + pure-jitter ordering (no center bias) so the
     // cells appear randomly within whatever region the mask shows.
     const skipReveal = false
-    const revealDuration = boost ? 600 : REVEAL_DURATION_MS
-    const centerBias = boost ? 0 : CENTER_BIAS
+    const revealDuration = boost ? 600 : isLoginSurface ? 1220 : REVEAL_DURATION_MS
+    const centerBias = boost ? 0 : isLoginSurface ? 0.12 : CENTER_BIAS
+    const revealJitterPow = boost ? 1 : isLoginSurface ? 0.58 : 1
+    const revealLeadInMs = boost ? 0 : isLoginSurface ? 80 : 0
+    const revealSoftEdgeMs = isLoginSurface ? 180 : REVEAL_SOFT_EDGE_MS
 
     let ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
     let cols = 0
@@ -300,9 +305,9 @@ export function IntroAsciiField({
           const dx = c - cx
           const dy = r - cy
           const radial = Math.sqrt(dx * dx + dy * dy) / radialNorm  // 0..~1
-          const jitter = hash2(sampleC, r)                           // [0,1)
+          const jitter = Math.pow(hash2(sampleC, r), revealJitterPow) // [0,1)
           const u = centerBias * radial + (1 - centerBias) * jitter
-          revealTimes[r * cols + c] = u * revealDuration
+          revealTimes[r * cols + c] = revealLeadInMs + u * revealDuration
         }
       }
     }
@@ -422,9 +427,9 @@ export function IntroAsciiField({
               // updates use full ink). Cheap because each cell only
               // gets one of these paints in its lifetime.
               const age = elapsed - rt
-              const alpha = age >= REVEAL_SOFT_EDGE_MS
+              const alpha = age >= revealSoftEdgeMs
                 ? 1
-                : Math.max(0, age / REVEAL_SOFT_EDGE_MS)
+                : Math.max(0, age / revealSoftEdgeMs)
               paintCellAt(c, r, ch, alpha * targetAlpha)
             }
 
@@ -445,7 +450,7 @@ export function IntroAsciiField({
         // was going to land has landed (some cells with mid-jitter
         // landed earlier; we just need the last ones to finish their
         // fade-in before switching off the per-cell pass).
-        if (!anyPending && elapsed >= revealDuration + REVEAL_SOFT_EDGE_MS) {
+        if (!anyPending && elapsed >= revealLeadInMs + revealDuration + revealSoftEdgeMs) {
           revealed = true
           onReadyRef.current?.()
         }
