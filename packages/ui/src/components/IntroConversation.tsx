@@ -1,4 +1,4 @@
-import { ExternalLink, LayoutGrid, LogOut, Plus, Send, X } from "lucide-react"
+import { ArrowUp, ExternalLink, LayoutGrid, LogOut, Plus, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { ASCII_SCRAMBLE_GLYPHS, IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { Logo } from "./Logo"
@@ -851,7 +851,7 @@ export function IntroConversation({
                         title="Send"
                         aria-label="Send"
                       >
-                        <Send size={18} />
+                        <ArrowUp size={18} />
                       </button>
                     </div>
                   </div>

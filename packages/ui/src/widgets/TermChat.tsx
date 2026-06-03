@@ -6,7 +6,7 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { Check, ChevronDown, ChevronRight, FolderOpen, Paperclip, Plus, Send, Square } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Plus, Send, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -2299,7 +2299,7 @@ function TermChatInputBar({
                               className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
                               title="Send"
                           >
-                              <Send size={18} />
+                              <ArrowUp size={18} />
                           </button>
                       )}
                   </div>
@@ -2314,7 +2314,7 @@ function TermChatInputBar({
                       aria-label="Attach file"
                       className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg text-text-faint hover:text-text hover:bg-overlay-2 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-faint"
                   >
-                      <Paperclip size={16} />
+                      <Plus size={18} />
                   </button>
                   <textarea
                       ref={textareaRef}
@@ -2389,6 +2389,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const fileInputRef = useRef<HTMLInputElement>(null)
   const shouldStickToBottomRef = useRef(true)
   const previousActiveRunIdRef = useRef<string | null>(null)
+  const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
 
   // Reset the textarea to its intrinsic 1-row height when empty and to
   // its content's scrollHeight when not. Called both from the callback
@@ -2442,6 +2443,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     const observer = new ResizeObserver(() => {
       if (!shouldStickToBottomRef.current) return
       host.scrollTop = host.scrollHeight
+      setTranscriptFadeTop(host.scrollTop > 4)
     })
 
     observer.observe(inner)
@@ -2559,6 +2561,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     const host = scrollHostRef.current
     if (!host) return
     shouldStickToBottomRef.current = isNearBottom(host)
+    setTranscriptFadeTop(host.scrollTop > 4)
   }, [])
 
   // Build message list: each "run" is a (user msg, assistant response) pair.
@@ -2579,6 +2582,16 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const isHomeMode = mode === "home"
+  const transcriptMaskStyle = useMemo<React.CSSProperties>(() => {
+    if (!isHomeMode || showEmptyState || !transcriptFadeTop) return {}
+    const mask = "linear-gradient(180deg, transparent 0px, black 34px, black 100%)"
+    return {
+      WebkitMaskImage: mask,
+      maskImage: mask,
+      WebkitMaskRepeat: "no-repeat",
+      maskRepeat: "no-repeat",
+    }
+  }, [isHomeMode, showEmptyState, transcriptFadeTop])
 
   return (
     <div
@@ -2637,6 +2650,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         ref={scrollHostRef}
         onScroll={onTranscriptScroll}
         className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-2 pb-5 space-y-8" : "px-6 py-5 space-y-10"}`}
+        style={transcriptMaskStyle}
       >
         <div
           ref={transcriptInnerRef}
@@ -2733,7 +2747,6 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         </div>
       </div>
 
-      {/* Input bar — no separator line */}
       {!showEmptyState && (
         <div className="shrink-0 px-5 pb-5">
           <TermChatInputBar

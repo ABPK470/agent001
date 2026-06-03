@@ -59,10 +59,13 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
         )
       }
       return new DatabricksClient({
-        host:     base_url || getDatabricksHost(),
-        endpoint: model    || process.env["DATABRICKS_DEFAULT_ENDPOINT"] || "databricks-claude-sonnet-4",
-        getToken: getDatabricksToken,
-      })
+          host: base_url || getDatabricksHost(),
+          endpoint:
+              model ||
+              process.env["DATABRICKS_DEFAULT_ENDPOINT"] ||
+              "databricks-gpt-5-4-mini",
+          getToken: getDatabricksToken,
+      });
 
     default:
       throw new Error(`Unknown LLM provider: ${provider}. Allowed: copilot-chat, databricks.`)

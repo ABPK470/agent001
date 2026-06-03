@@ -348,7 +348,7 @@ export async function buildSystemMessages(opts: {
         priorResultsCount: priorResults.length,
       }
       let findings = detectAmbiguities(ctx)
-      if (findings.length === 0 && opts.llmForClarification && shouldInvokePlanner(ctx, findings)) {
+      if (decision.includeDataPersona && findings.length === 0 && opts.llmForClarification && shouldInvokePlanner(ctx, findings)) {
         findings = await runLlmPlanner(ctx, opts.llmForClarification)
         opts.onClarificationTrace?.({ kind: "planner-invoked", findingsCount: findings.length })
       }

@@ -1,40 +1,40 @@
 import {
-    Agent,
-    cancelRun,
-    completeRun,
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createRun,
-    detectInternalFailure,
-    EventType,
-    failRun,
-    fillRunReference,
-    getCatalog,
-    governTool,
-    isPlatformUnconfiguredAnswer,
-    isUserSafeFailureAnswer,
-    makeRunContext,
-    mapFailureKindForPolish,
-    markPolishedFailure,
-    PolicyRole,
-    PolicyRunMode,
-    polishFailureForUser,
-    runCompleted,
-    runFailed,
-    runStarted,
-    spawnChildForPlan,
-    startPlanning,
-    startRunning,
-    synthesizeGenericFailureAnswer,
-    type AgentHost,
-    type DelegateContext,
-    type EngineServices,
-    type HostedPolicyContext,
-    type Message,
-    type ResolvedAgent,
-    type RunState,
-    type Tool,
-    type ToolKillManager
+  Agent,
+  cancelRun,
+  completeRun,
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createRun,
+  detectInternalFailure,
+  EventType,
+  failRun,
+  fillRunReference,
+  getCatalog,
+  governTool,
+  isPlatformUnconfiguredAnswer,
+  isUserSafeFailureAnswer,
+  makeRunContext,
+  mapFailureKindForPolish,
+  markPolishedFailure,
+  PolicyRole,
+  PolicyRunMode,
+  polishFailureForUser,
+  runCompleted,
+  runFailed,
+  runStarted,
+  spawnChildForPlan,
+  startPlanning,
+  startRunning,
+  synthesizeGenericFailureAnswer,
+  type AgentHost,
+  type DelegateContext,
+  type EngineServices,
+  type HostedPolicyContext,
+  type Message,
+  type ResolvedAgent,
+  type RunState,
+  type Tool,
+  type ToolKillManager
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { SyncRunStatus } from "@mia/sync"
@@ -147,8 +147,7 @@ export async function executeRunImpl(
   if (activeRun) activeRun.workspace = runWorkspace
 
   // Create tracked workflow run
-  const run = createRun("agent-session", { goal })
-  ;(run as { id: string }).id = runId
+  const run = createRun("agent-session", { goal }, runId)
   startPlanning(run)
   startRunning(run, [])
 
@@ -290,23 +289,23 @@ export async function executeRunImpl(
     episodic: perTier.episodic,
   })
 
-  const _toolDecision = decideSections({ goal, memory: perTier, context: classificationContext })
-  const _toolFilter   = filterToolsByGoal(tools, _toolDecision)
-  if (!_toolFilter.passThrough) {
+  const toolDecision = decideSections({ goal, memory: perTier, context: classificationContext })
+  const toolFilter   = filterToolsByGoal(tools, toolDecision)
+  if (!toolFilter.passThrough) {
     // eslint-disable-next-line no-console
-    console.log(`[tools] run=${runId} dropped ${_toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${_toolFilter.tools.length}): ${_toolFilter.dropped.join(", ")}`)
+    console.log(`[tools] run=${runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`)
     const filteredEntry = {
       kind: TrajectoryEventKind.ToolsFiltered,
-      dropped: _toolFilter.dropped,
-      kept: _toolFilter.tools.length,
-      dbScore: _toolDecision.dbScore ?? 0,
-      syncTrigger: !!_toolDecision.triggers?.sync,
-      reason: `goal classified non-DB (dbScore=${_toolDecision.dbScore ?? 0}, sync=${!!_toolDecision.triggers?.sync})`,
+      dropped: toolFilter.dropped,
+      kept: toolFilter.tools.length,
+      dbScore: toolDecision.dbScore ?? 0,
+      syncTrigger: !!toolDecision.triggers?.sync,
+      reason: `goal classified non-DB (dbScore=${toolDecision.dbScore ?? 0}, sync=${!!toolDecision.triggers?.sync})`,
     } as const
     boundSaveTrace(runId, filteredEntry)
     broadcastTrace(runId, debugSeqRef.value++, filteredEntry)
   }
-  const effectiveTools = _toolFilter.tools
+  const effectiveTools = toolFilter.tools
 
   const trackedTools = effectiveTools.map((t) => wrapWithEffects(t, runId, runWorkspace.executionRoot))
   const governedTools = trackedTools.map(governRuntimeTool)
@@ -854,7 +853,7 @@ export async function executeRunImpl(
     // invocations. Best-effort; failures are logged and swallowed so
     // they cannot affect the user-visible run outcome.
     if (
-      _toolDecision.includeDataPersona
+      toolDecision.includeDataPersona
       && !isPlatformUnconfiguredAnswer(answer)
       && !detectInternalFailure(answer)
     ) {
@@ -918,7 +917,7 @@ export async function executeRunImpl(
         verdictsRecorded: 0,
         toolResults: [],
         detail:
-          `gate: includeDataPersona=${_toolDecision.includeDataPersona ? 1 : 0} ` +
+          `gate: includeDataPersona=${toolDecision.includeDataPersona ? 1 : 0} ` +
           `platformUnconfigured=${isPlatformUnconfiguredAnswer(answer) ? 1 : 0} ` +
           `internalFailure=${detectInternalFailure(answer) ? 1 : 0}`,
       })

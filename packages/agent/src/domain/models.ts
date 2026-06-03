@@ -85,9 +85,9 @@ function transitionRun(run: AgentRun, target: RunStatus): void {
   run.status = target
 }
 
-export function createRun(workflowId: string, input: Record<string, unknown> = {}): AgentRun {
+export function createRun(workflowId: string, input: Record<string, unknown> = {}, customId?: string): AgentRun {
   return {
-    id: randomUUID(),
+    id: customId ?? randomUUID(),
     workflowId,
     input,
     status: RunStatus.Pending,
