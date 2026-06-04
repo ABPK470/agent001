@@ -1,4 +1,4 @@
-import type { DomainEvent, EngineServices } from "@mia/agent"
+import type { DomainEvent, EngineServices, Unsubscribe } from "@mia/agent"
 import { EventType } from "@mia/agent"
 import * as db from "../../../adapters/persistence/sqlite.js"
 import { NotificationActionType } from "../../../enums/notifications.js"
@@ -27,18 +27,22 @@ type RunLike = {
 export function wireEventBroadcasting(
   services: EngineServices,
   runId: string,
-  run: RunLike,
+  // Accept a getter so callers can provide the canonical, up-to-date run
+  // object (call sites may rebind / replace the run reference).
+  getRun: () => RunLike,
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
   createNotification: (opts: NotificationOpts) => void,
-): void {
+): Unsubscribe {
   const events: EventType[] = [EventType.RunStarted, EventType.StepStarted, EventType.StepCompleted, EventType.StepFailed]
+  const subscriptions: Unsubscribe[] = []
   for (const eventType of events) {
-    services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
+    const unsubscribe = services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
       const data = toBroadcastData(event)
 
       // Enrich step events with details from the run
       if (eventType.startsWith("step.")) {
         const stepId = data["stepId"] as string
+        const run = getRun()
         const step = run.steps.find((s) => s.id === stepId)
         if (step) {
           data["name"] = step.name
@@ -106,18 +110,16 @@ export function wireEventBroadcasting(
         timestamp: new Date().toISOString(),
       })
     })
+    subscriptions.push(unsubscribe)
   }
 
-  // Intercept audit service to broadcast entries in real-time
-  const originalLog = services.auditService.log.bind(services.auditService)
-  services.auditService.log = async (entry) => {
-    const result = await originalLog(entry)
+  const unsubscribeAudit = services.auditService.subscribe(async (entry) => {
     broadcast({ type: EventType.Audit, data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} } })
-    return result
-  }
+  })
+  subscriptions.push(unsubscribeAudit)
 
   // Approval requests → notifications
-  services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
+  const unsubscribeApproval = services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
     const data = toBroadcastData(event)
     const toolName = data["toolName"] as string
     const reason = data["reason"] as string
@@ -135,4 +137,11 @@ export function wireEventBroadcasting(
     })
     broadcast({ type: EventType.ApprovalRequired, data: { runId, stepId, toolName, reason } })
   })
+  subscriptions.push(unsubscribeApproval)
+
+  return () => {
+    for (const unsubscribe of subscriptions.splice(0)) {
+      unsubscribe()
+    }
+  }
 }

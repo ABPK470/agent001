@@ -1,14 +1,14 @@
 import {
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createEngineServices,
-    EventType,
-    PolicyEffect,
-    PolicyRole,
-    RunStatus,
-    type LLMClient,
-    type Message,
-    type Tool
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createEngineServices,
+  EventType,
+  PolicyEffect,
+  PolicyRole,
+  RunStatus,
+  type LLMClient,
+  type Message,
+  type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import type { CurrentSession } from "../../adapters/auth/context.js"
@@ -25,6 +25,7 @@ import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
+import type { ExecuteRunInput } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff } from "./execution/workspace-effects.js"
 import { RunPriority, RunQueue } from "./queue/run-queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/run-workspace.js"
@@ -128,7 +129,20 @@ export class AgentOrchestrator {
     broadcast({ type: EventType.RunQueued, data: { runId, goal, agentId, queueStats: this.queue.stats() } })
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
-    this.executeRun(runId, goal, tools, config?.systemPrompt, agentId, services, controller, bus).catch((err) => {
+    const input: ExecuteRunInput = {
+      ctx: this.getCtx(),
+      runId,
+      goal,
+      tools,
+      systemPrompt: config?.systemPrompt,
+      agentId,
+      services,
+      controller,
+      bus,
+      priority: RunPriority.Normal,
+    }
+
+    this.executeRun(input).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
       // executeRun threw before its own try/catch could mark the run
       // failed (e.g. crash during prepareWorkspace). Without this the
@@ -253,7 +267,21 @@ export class AgentOrchestrator {
       tools = filterToolsForVisitor(tools)
     }
 
-    this.executeRun(newRunId, originalRun.goal, tools, systemPrompt, originalRun.agent_id ?? null, services, controller, bus, { messages, iteration, parentRunId: runId }).catch((err) => {
+    const input: ExecuteRunInput = {
+      ctx: this.getCtx(),
+      runId: newRunId,
+      goal: originalRun.goal,
+      tools,
+      systemPrompt,
+      agentId: originalRun.agent_id ?? null,
+      services,
+      controller,
+      bus,
+      resume: { messages, iteration, parentRunId: runId },
+      priority: RunPriority.Normal,
+    }
+
+    this.executeRun(input).catch((err) => {
       console.error(`Resumed run ${newRunId} crashed:`, err)
     })
 
@@ -379,18 +407,7 @@ export class AgentOrchestrator {
     }
   }
 
-  private async executeRun(
-    runId: string,
-    goal: string,
-    tools: Tool[],
-    systemPrompt: string | undefined,
-    agentId: string | null,
-    services: ReturnType<typeof createEngineServices>,
-    controller: AbortController,
-    bus: AgentBus,
-    resume?: { messages: Message[]; iteration: number; parentRunId: string },
-    priority: RunPriority = RunPriority.Normal,
-  ): Promise<void> {
-    return executeRunImpl(this.getCtx(), runId, goal, tools, systemPrompt, agentId, services, controller, bus, resume, priority)
+  private async executeRun(input: ExecuteRunInput): Promise<void> {
+    return executeRunImpl(input)
   }
 }

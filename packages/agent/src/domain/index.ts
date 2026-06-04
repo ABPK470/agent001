@@ -52,7 +52,8 @@ export type {
     EventBus,
     ExecutionRecordRepository,
     PolicyEvaluator,
-    RunRepository
+    RunRepository,
+    Unsubscribe
 } from "./interfaces.js"
 
 // Services

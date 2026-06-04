@@ -6,7 +6,7 @@
  */
 
 import type { DomainEvent } from "./events.js"
-import type { AuditRepository, EventBus, ExecutionRecordRepository, RunRepository } from "./interfaces.js"
+import type { AuditRepository, EventBus, ExecutionRecordRepository, RunRepository, Unsubscribe } from "./interfaces.js"
 import type { AgentRun, AuditEntry, ExecutionRecord } from "./models.js"
 
 // ── Repositories ─────────────────────────────────────────────────
@@ -38,19 +38,30 @@ export class MemoryExecutionRecordRepository implements ExecutionRecordRepositor
 type Handler = (event: DomainEvent) => Promise<void>
 
 export class MemoryEventBus implements EventBus {
-  private handlers = new Map<string, Handler[]>()
+  private handlers = new Map<string, Set<Handler>>()
   private _history: DomainEvent[] = []
 
-  subscribe(eventType: string, handler: Handler): void {
-    const list = this.handlers.get(eventType) ?? []
-    list.push(handler)
-    this.handlers.set(eventType, list)
+  subscribe(eventType: string, handler: Handler): Unsubscribe {
+    const listeners = this.handlers.get(eventType) ?? new Set<Handler>()
+    listeners.add(handler)
+    this.handlers.set(eventType, listeners)
+
+    return () => {
+      const current = this.handlers.get(eventType)
+      if (!current) return
+      current.delete(handler)
+      if (current.size === 0) {
+        this.handlers.delete(eventType)
+      }
+    }
   }
 
   async publish(event: DomainEvent): Promise<void> {
     this._history.push(event)
-    const list = this.handlers.get(event.type) ?? []
-    for (const handler of list) {
+    const listeners = this.handlers.get(event.type)
+    if (!listeners) return
+
+    for (const handler of [...listeners]) {
       try { await handler(event) }
       catch (err) { console.error(`Event handler error for ${event.type}:`, err) }
     }

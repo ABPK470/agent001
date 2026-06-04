@@ -27,7 +27,9 @@ export interface PolicyEvaluator {
   evaluatePreStep(run: AgentRun, step: Step, ctx?: HostedPolicyContext | null): Promise<string | null>
 }
 
+export type Unsubscribe = () => void
+
 export interface EventBus {
   publish(event: DomainEvent): Promise<void>
-  subscribe(eventType: string, handler: (event: DomainEvent) => Promise<void>): void
+  subscribe(eventType: string, handler: (event: DomainEvent) => Promise<void>): Unsubscribe
 }
