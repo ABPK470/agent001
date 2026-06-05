@@ -514,7 +514,9 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
     await input.services.eventBus.publish(runStarted(state.run.id, "agent-session"))
   }
 
-  const disposeEventWiring = wireEventBroadcasting(input.services, input.runId, () => state.run, boundSaveTrace, createNotification)
+  // register listeners / subscribe to events
+  const disposeEventWiring = wireEventBroadcasting(input.services, input.runId, state, boundSaveTrace, createNotification)
+  // 1. time set state.run (in-memory state)
   await saveCurrentRun()
   await input.services.auditService.log({
     actor,
@@ -530,6 +532,7 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
       workspaceRoot: runWorkspace.executionRoot,
     },
   })
+  // store to database (durable state)
   persistCurrentRun()
 
   const runContext = createRunContextForExecution(activeRun, input.runId, input.controller)

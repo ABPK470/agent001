@@ -17,6 +17,10 @@ type RunLike = {
   }>
 }
 
+type RunStateLike = {
+  run: RunLike
+}
+
 // ── Event wiring ──────────────────────────────────────────────────
 
 /**
@@ -27,9 +31,9 @@ type RunLike = {
 export function wireEventBroadcasting(
   services: EngineServices,
   runId: string,
-  // Accept a getter so callers can provide the canonical, up-to-date run
-  // object (call sites may rebind / replace the run reference).
-  getRun: () => RunLike,
+  // Keep a live reference to the mutable state holder because state.run is
+  // replaced immutably during execution.
+  state: RunStateLike,
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
   createNotification: (opts: NotificationOpts) => void,
 ): Unsubscribe {
@@ -42,8 +46,7 @@ export function wireEventBroadcasting(
       // Enrich step events with details from the run
       if (eventType.startsWith("step.")) {
         const stepId = data["stepId"] as string
-        const run = getRun()
-        const step = run.steps.find((s) => s.id === stepId)
+        const step = state.run.steps.find((s) => s.id === stepId)
         if (step) {
           data["name"] = step.name
           data["action"] = step.action
