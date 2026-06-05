@@ -257,12 +257,12 @@ export function OperatorEnvironment() {
 
   const handleRespondToInput = useCallback(async (response: string) => {
     if (!pendingInput) return
+    clearPendingInput()
     try {
       await api.respondToRun(pendingInput.runId, response)
     } catch {
       /* swallow */
     }
-    clearPendingInput()
   }, [pendingInput, clearPendingInput])
 
   const handleKillToolCall = useCallback(async (message: string) => {

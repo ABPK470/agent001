@@ -95,7 +95,7 @@ export interface AgentRun {
 }
 
 const RUN_TRANSITIONS: Record<string, Set<string>> = {
-  [RunStatus.Pending]: new Set([RunStatus.Planning, RunStatus.Crashed]),
+  [RunStatus.Pending]: new Set([RunStatus.Planning, RunStatus.Running, RunStatus.Failed, RunStatus.Crashed]),
   [RunStatus.Planning]: new Set([RunStatus.Running, RunStatus.Failed, RunStatus.Crashed]),
   [RunStatus.Running]: new Set([RunStatus.WaitingForApproval, RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled, RunStatus.Crashed]),
   [RunStatus.WaitingForApproval]: new Set([RunStatus.Running, RunStatus.Cancelled, RunStatus.Crashed]),

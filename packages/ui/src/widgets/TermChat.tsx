@@ -955,6 +955,7 @@ function buildResponseParts(
   runStatus: string,
   liveStreamingAnswer: string,
   finalAnswer: string | null,
+  finalError: string | null,
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null,
   runId: string,
 ): ResponsePart[] {
@@ -1273,6 +1274,8 @@ function buildResponseParts(
         parts = parts.filter((part) => part.kind !== "input")
         break
       case "error":
+        if (entry.text === "Run cancelled by user") break
+        if (finalError && entry.text === finalError) break
         parts.push({ kind: "error", id: `error-${index}`, text: entry.text })
         break
       default:
@@ -1994,8 +1997,8 @@ function RunMessageImpl({
   const trace = run.trace ?? []
   const liveStreamingAnswer = isActive && isRunActiveStatus(run.status) ? (run.streamingAnswer ?? "") : ""
   const responseParts = useMemo(
-    () => buildResponseParts(trace, run.status, liveStreamingAnswer, run.answer, pendingInput ?? null, run.id),
-    [trace, run.status, liveStreamingAnswer, run.answer, pendingInput, run.id],
+    () => buildResponseParts(trace, run.status, liveStreamingAnswer, run.answer, run.error, pendingInput ?? null, run.id),
+    [trace, run.status, liveStreamingAnswer, run.answer, run.error, pendingInput, run.id],
   )
   const isDone = !isRunActiveStatus(run.status)
 
@@ -2157,8 +2160,20 @@ function RunMessageImpl({
       )}
 
       {/* Error */}
-      {run.error && (
-        <div className="text-[13px] text-error font-mono">{run.error}</div>
+      {run.status === "cancelled" && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[13px] text-warning">
+          Run cancelled.
+        </div>
+      )}
+      {run.error && run.status !== "cancelled" && (
+        <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2 space-y-1">
+          <div className="text-[13px] font-medium text-error">Run failed</div>
+          <div className="text-[13px] text-error/80 whitespace-pre-wrap break-words">
+            {run.error.toLowerCase().startsWith("device flow") || run.error.toLowerCase().startsWith("copilot oauth token expired")
+              ? "Authentication with Copilot expired. Please re-authorize and try again."
+              : run.error}
+          </div>
+        </div>
       )}
 
       {/* Workspace diff */}

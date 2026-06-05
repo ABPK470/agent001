@@ -44,6 +44,14 @@ function extractRunRef(text: string): string | null {
   return m ? m[1] : null
 }
 
+function formatRunFailureMessage(text: string): string {
+  const normalized = text.trim().toLowerCase()
+  if (normalized.startsWith("device flow") || normalized.startsWith("copilot oauth token expired")) {
+    return "Authentication with Copilot expired. Please re-authorize and try again."
+  }
+  return text
+}
+
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList
@@ -675,7 +683,7 @@ export function AgentChat() {
             {run.error && (
               <div className="flex items-start gap-2">
                 <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
-                <span className="text-error/80 text-base">{run.error}</span>
+                <span className="text-error/80 text-base whitespace-pre-wrap break-words">{formatRunFailureMessage(run.error)}</span>
               </div>
             )}
 

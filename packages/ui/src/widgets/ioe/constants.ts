@@ -512,6 +512,24 @@ export interface ChatMessage {
   sensitive?: boolean
 }
 
+function isUiStatusOnlyMessage(text: string): boolean {
+  const normalized = text.trim().toLowerCase()
+  return normalized === "run cancelled by user"
+    || normalized.startsWith("device flow failed:")
+    || normalized.startsWith("device flow initiation failed:")
+    || normalized.startsWith("device flow timed out")
+    || normalized.startsWith("copilot oauth token expired")
+}
+
+function formatUiStatusOnlyMessage(text: string): string {
+  const normalized = text.trim().toLowerCase()
+  if (normalized === "run cancelled by user") return "Run cancelled."
+  if (normalized.startsWith("device flow") || normalized.startsWith("copilot oauth token expired")) {
+    return "Authentication with Copilot expired. Please re-authorize and try again."
+  }
+  return text
+}
+
 export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
   const msgs: ChatMessage[] = []
   for (const e of trace) {
@@ -522,7 +540,7 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
     else if (e.kind === "tool-result") msgs.push({ role: "tool", content: e.text })
     else if (e.kind === "tool-error") msgs.push({ role: "system", content: `Error: ${e.text}` })
     else if (e.kind === "answer") msgs.push({ role: "assistant", content: e.text })
-    else if (e.kind === "error") msgs.push({ role: "system", content: e.text })
+    else if (e.kind === "error") msgs.push({ role: "system", content: formatUiStatusOnlyMessage(e.text) })
     else if (e.kind === "delegation-start")
       msgs.push({ role: "system", content: `Delegating to ${e.agentName ?? "sub-agent"}: ${e.goal}` })
     else if (e.kind === "delegation-end")
@@ -543,7 +561,7 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
       msgs.push({ role: "system", content: `Workspace diff applied (+${e.summary.added} ~${e.summary.modified} -${e.summary.deleted})` })
     else if (e.kind === "user-input-request")
       msgs.push({ role: "input-request", content: e.question, options: e.options, sensitive: e.sensitive })
-    else if (e.kind === "user-input-response")
+    else if (e.kind === "user-input-response" && e.text && e.text !== "Response sent")
       msgs.push({ role: "user", content: e.text })
   }
   return msgs

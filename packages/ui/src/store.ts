@@ -10,19 +10,19 @@ import { persist } from "zustand/middleware"
 import { api } from "./api"
 import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
-    AuditEntry,
-    BusMessage,
-    LayoutItem,
-    LogEntry,
-    Notification,
-    Run,
-    RunDetail,
-    SseEvent,
-    Step,
-    TraceEntry,
-    ViewConfig,
-    Widget,
-    WidgetType,
+  AuditEntry,
+  BusMessage,
+  LayoutItem,
+  LogEntry,
+  Notification,
+  Run,
+  RunDetail,
+  SseEvent,
+  Step,
+  TraceEntry,
+  ViewConfig,
+  Widget,
+  WidgetType,
 } from "./types"
 import { randomId } from "./util"
 
@@ -49,6 +49,16 @@ function mapRunTrace(runs: Run[], runId: string, update: (trace: TraceEntry[]) =
   const next = [...runs]
   next[index] = { ...next[index], trace: update(next[index].trace ?? []) }
   return next
+}
+
+function isTerminalInfrastructureError(message: string | null | undefined): boolean {
+  if (!message) return false
+  const text = message.trim().toLowerCase()
+  return text === "run cancelled by user"
+    || text.startsWith("device flow failed:")
+    || text.startsWith("device flow initiation failed:")
+    || text.startsWith("device flow timed out")
+    || text.startsWith("copilot oauth token expired")
 }
 
 /**
@@ -1227,7 +1237,9 @@ export const useStore = create<AppState>()(
 
           case "run.failed":
             store.clearStreamingAnswer()
-            store.addTrace({ kind: "error", text: data["error"] as string })
+            if (!isTerminalInfrastructureError(data["error"] as string)) {
+              store.addTrace({ kind: "error", text: data["error"] as string })
+            }
             store.upsertRun({
               id: data["runId"] as string,
               status: RunStatus.Failed,
@@ -1240,20 +1252,20 @@ export const useStore = create<AppState>()(
               llmCalls: (data["llmCalls"] as number) ?? 0,
               streamingAnswer: "",
             })
-            set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: data["error"] as string }) }))
+            if (!isTerminalInfrastructureError(data["error"] as string)) {
+              set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: data["error"] as string }) }))
+            }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
 
           case "run.cancelled":
             store.clearStreamingAnswer()
-            store.addTrace({ kind: "error", text: "Run cancelled by user" })
             store.upsertRun({
               id: data["runId"] as string,
               status: RunStatus.Cancelled,
               completedAt: timestamp,
               streamingAnswer: "",
             })
-            set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: "Run cancelled by user" }) }))
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
             break
 
@@ -1678,6 +1690,16 @@ export const useStore = create<AppState>()(
           }
 
           case "user_input.response": {
+            const runId = data["runId"] as string
+            const traceEntry: TraceEntry = {
+              kind: "user-input-response",
+              text: "Response sent",
+            }
+            store.addTrace(traceEntry)
+            if (runId) {
+              runTraceBuf.push({ runId, entry: traceEntry })
+              scheduleRunFlush(set)
+            }
             set({ pendingInput: null })
             break
           }
