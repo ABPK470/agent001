@@ -5,7 +5,7 @@
  * Each agent is defined by name, description, system prompt, and tool subset.
  */
 
-import { Bot, Check, ChevronLeft, Plus, Trash2, X } from "lucide-react"
+import { Brain, Check, ChevronLeft, Plus, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { api } from "../api"
 import type { AgentDefinition, ToolInfo } from "../types"
@@ -136,7 +136,7 @@ export function AgentEditor({ onClose }: Props) {
                 <ChevronLeft size={18} />
               </button>
             )}
-            <Bot size={20} className="text-text-muted" />
+            <Brain size={20} className="text-text-muted" />
             <h2 className="text-lg font-semibold text-text">
               {view === "list" ? "Agents" : editId ? "Edit Agent" : "New Agent"}
             </h2>
@@ -171,7 +171,7 @@ export function AgentEditor({ onClose }: Props) {
                   onClick={() => openEdit(agent)}
                 >
                   <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                    <Bot size={16} className="text-accent" />
+                    <Brain size={16} className="text-accent" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">

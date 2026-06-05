@@ -6,7 +6,7 @@
  * Layout: operations grouped by day.
  */
 
-import { ChevronRight, Database, Loader2, Search, Settings, VenetianMask, X, XCircle } from "lucide-react"
+import { Brain, ChevronRight, Database, Loader2, Search, Settings, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -14,12 +14,27 @@ import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Visuals ──────────────────────────────────────────────────────
 
-const KIND_META: Record<OperationKind, { label: string; Icon: typeof VenetianMask; color: string }> = {
-  "agent-run":    { label: "agent",   Icon: VenetianMask, color: "var(--color-accent)" },
-  "sync-preview": { label: "preview", Icon: Database, color: "var(--color-info)" },
-  "sync-execute": { label: "execute", Icon: Database, color: "var(--color-success)" },
-  "system":       { label: "system",  Icon: Settings, color: "var(--color-text-muted)" },
-}
+const KIND_META: Record<
+    OperationKind,
+    { label: string; Icon: typeof Brain; color: string }
+> = {
+    "agent-run": { label: "agent", Icon: Brain, color: "var(--color-accent)" },
+    "sync-preview": {
+        label: "preview",
+        Icon: Database,
+        color: "var(--color-info)",
+    },
+    "sync-execute": {
+        label: "execute",
+        Icon: Database,
+        color: "var(--color-success)",
+    },
+    system: {
+        label: "system",
+        Icon: Settings,
+        color: "var(--color-text-muted)",
+    },
+};
 
 const STATUS_META: Record<OperationStatus, { color: string; tone: string }> = {
   running:   { color: "var(--color-info)", tone: "bg-info-soft text-info" },

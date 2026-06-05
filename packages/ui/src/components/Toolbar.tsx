@@ -2,7 +2,7 @@
  * Toolbar — top bar with branding, view tabs, menu dropdown, and widget button.
  */
 
-import { Activity, Bot, ChevronDown, LayoutGrid, LogOut, Menu, MessageSquare, Plus, Shield, Terminal, X } from "lucide-react"
+import { Activity, Brain, ChevronDown, LayoutGrid, LogOut, Menu, MessageSquare, Plus, Shield, Terminal, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
@@ -231,7 +231,7 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, onShowChatHome,
                     className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-text-secondary hover:text-text hover:bg-overlay-hover transition-colors"
                     onClick={() => { setAgentOpen(true); setMenuOpen(false) }}
                   >
-                    <Bot size={15} className="text-text-muted" />
+                    <Brain size={15} className="text-text-muted" />
                     Agents
                   </button>
                   <button

@@ -10,55 +10,55 @@
  */
 
 import {
-    ASK_USER_DESCRIPTION,
-    ASK_USER_PARAMETERS,
-    bindNoteTool,
-    bindRecallPriorResultTool,
-    bindRecordTableVerdictTool,
-    configureAgent,
-    createAppendFileTool,
-    createAskUserTool,
-    createBrowseWebTool,
-    createBrowserAutoLoginTool,
-    createBrowserCheckTool,
-    createBrowserHumanHandoffTool,
-    createDelegateTools,
-    createDiscoverRelationshipsTool,
-    createExportQueryToFileTool,
-    createFetchUrlTool,
-    createImportAttachmentTool,
-    createInspectDefinitionTool,
-    createListAttachmentsTool,
-    createListDirectoryTool,
-    createMssqlSchemaTool,
-    createMssqlTool,
-    createProfileDataTool,
-    createPromoteAttachmentTool,
-    createReadAttachmentTool,
-    createReadFileTool,
-    createReplaceInFileTool,
-    createSearchCatalogTool,
-    createSearchFilesTool,
-    createShellTool,
-    createWebSearchTool,
-    createWriteFileTool,
-    getChartSpecsTool,
-    noteTool,
-    recallPriorResultTool,
-    recordTableVerdictTool,
-    thinkTool,
-    type AgentHost,
-    type DelegateContext,
-    type GovernToolOptions,
-    type LLMClient,
-    type RunContext,
-    type Tool
+  ASK_USER_DESCRIPTION,
+  ASK_USER_PARAMETERS,
+  bindNoteTool,
+  bindRecallPriorResultTool,
+  bindRecordTableVerdictTool,
+  configureAgent,
+  createAppendFileTool,
+  createAskUserTool,
+  createBrowseWebTool,
+  createBrowserAutoLoginTool,
+  createBrowserCheckTool,
+  createBrowserHumanHandoffTool,
+  createDelegateTools,
+  createDiscoverRelationshipsTool,
+  createExportQueryToFileTool,
+  createFetchUrlTool,
+  createImportAttachmentTool,
+  createInspectDefinitionTool,
+  createListAttachmentsTool,
+  createListDirectoryTool,
+  createMssqlSchemaTool,
+  createMssqlTool,
+  createProfileDataTool,
+  createPromoteAttachmentTool,
+  createReadAttachmentTool,
+  createReadFileTool,
+  createReplaceInFileTool,
+  createSearchCatalogTool,
+  createSearchFilesTool,
+  createShellTool,
+  createWebSearchTool,
+  createWriteFileTool,
+  getChartSpecsTool,
+  noteTool,
+  recallPriorResultTool,
+  recordTableVerdictTool,
+  thinkTool,
+  type AgentHost,
+  type DelegateContext,
+  type GovernToolOptions,
+  type LLMClient,
+  type RunContext,
+  type Tool
 } from "@mia/agent"
 import {
-    createCompareCatalogsTool,
-    createListEnvironmentsTool,
-    createSyncExecuteTool,
-    createSyncPreviewTool,
+  createCompareCatalogsTool,
+  createListEnvironmentsTool,
+  createSyncExecuteTool,
+  createSyncPreviewTool,
 } from "@mia/sync"
 import { ingestAgentNote, recordTableVerdict } from "./adapters/persistence/memory.js"
 import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./adapters/persistence/tool-results.js"
@@ -72,11 +72,19 @@ export interface ToolInfo {
 }
 
 // ── Factories ─────────────────────────────────────────────────────
-// Each entry produces ONE tool bound to the supplied host. Tools that
-// still rely on runtime-owned compatibility scaffolding internally (mssql, catalog,
-// note, recall_prior_result, record_table_verdict, get_chart_specs,
-// think, sync_*) are returned as-is — the host argument is ignored for
-// those. Migrating them is a follow-up task outside this refactor's scope.
+// Each entry produces ONE tool from the supplied host/run context.
+//
+// Current split:
+// - host-bound factories: filesystem, shell/browser, MSSQL, catalog,
+//   attachments, and sync tools
+// - ambient/static tools: think, get_chart_specs
+// - compatibility stubs that must be rebound per run via
+//   composePerRunTools/PER_RUN_FACTORIES: note, recall_prior_result,
+//   record_table_verdict
+//
+// Those compatibility tools intentionally expose a placeholder execute()
+// at registry time so accidental use without the server-side runtime
+// wiring fails loudly instead of silently dropping writes/lookups.
 
 type ToolFactory = (host: AgentHost, run?: RunContext) => Tool
 

@@ -6,7 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
+import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -597,523 +597,867 @@ export function AgentChat() {
   const recentRuns = runs.slice(0, 20)
 
   return (
-    <div ref={rootRef} className="flex flex-col h-full gap-2">
-      {/* Messages area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-      <div ref={messagesInnerRef} className="space-y-3 py-1">
-        {recentRuns.length === 0 && (
-          <div className="text-text-muted text-sm text-center pt-8">
-            {/* Hi there! I'm MI:A */}
-          </div>
-        )}
+      <div ref={rootRef} className="flex flex-col h-full gap-2">
+          {/* Messages area */}
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+              <div ref={messagesInnerRef} className="space-y-3 py-1">
+                  {recentRuns.length === 0 && (
+                      <div className="text-text-muted text-sm text-center pt-8">
+                          {/* Hi there! I'm MI:A */}
+                      </div>
+                  )}
 
-        {[...recentRuns].reverse().map((run) => (
-          <div
-            key={run.id}
-            className="space-y-2 rounded-lg p-2"
-          >
-            {/* Goal (user message) — right-aligned */}
-            <div className="flex justify-end">
-              <div className="flex items-start gap-2 max-w-[95%]">
-                <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">{run.goal}</span>
-                <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-accent/20">
-                  <User size={14} className="text-accent" />
-                </div>
-              </div>
-            </div>
+                  {[...recentRuns].reverse().map((run) => (
+                      <div key={run.id} className="space-y-2 rounded-lg p-2">
+                          {/* Goal (user message) — right-aligned */}
+                          <div className="flex justify-end">
+                              <div className="flex items-start gap-2 max-w-[95%]">
+                                  <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">
+                                      {run.goal}
+                                  </span>
+                                  <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-accent/20">
+                                      <User size={14} className="text-accent" />
+                                  </div>
+                              </div>
+                          </div>
 
-            {/* Answer (agent response) — left-aligned. User-safe failure
+                          {/* Answer (agent response) — left-aligned. User-safe failure
                 messages get a distinct, smaller notice style with the run
                 reference highlighted so the user can copy/share it. */}
-            {run.answer && (
-              isUserSafeFailureAnswer(run.answer) ? (() => {
-                const ref = extractRunRef(run.answer)
-                // Strip invisible marker + the trailing "Reference: <id>"
-                // line so we render only the model's friendly prose.
-                const stripped = stripFailureMarkers(run.answer)
-                const body = (ref
-                  ? stripped.replace(/\n*\s*Reference:\s*[A-Za-z0-9._-]+\s*$/i, "")
-                  : stripped
-                ).trim()
-                return (
-                  <div className="flex items-start gap-2 w-full">
-                    <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-warning/20">
-                      <ShieldAlert size={14} className="text-warning" />
-                    </div>
-                    <div className="flex-1 min-w-0 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
-                      <div className="text-text text-base leading-relaxed whitespace-pre-wrap">
-                        {body}
-                      </div>
-                      {ref && (
-                        <div className="mt-2 inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-2 py-1 font-mono text-base text-accent select-all">
-                          <span className="text-accent/60">ref</span>
-                          <span className="text-text">{ref}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })() : (
-                <div className="flex items-start gap-2 w-full">
-                  <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
-                    <MessageSquare size={14} className="text-success" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {run.id === activeRunId && !runningStep && executingToolCalls.size === 0
-                      ? <TypewriterAnswer text={run.answer} streaming={run.status === "running" || run.status === "planning"} />
-                      : <SmartAnswer text={run.answer} />
-                    }
-                  </div>
-                </div>
-              )
-            )}
+                          {run.answer &&
+                              (isUserSafeFailureAnswer(run.answer) ? (
+                                  (() => {
+                                      const ref = extractRunRef(run.answer);
+                                      // Strip invisible marker + the trailing "Reference: <id>"
+                                      // line so we render only the model's friendly prose.
+                                      const stripped = stripFailureMarkers(
+                                          run.answer,
+                                      );
+                                      const body = (
+                                          ref
+                                              ? stripped.replace(
+                                                    /\n*\s*Reference:\s*[A-Za-z0-9._-]+\s*$/i,
+                                                    "",
+                                                )
+                                              : stripped
+                                      ).trim();
+                                      return (
+                                          <div className="flex items-start gap-2 w-full">
+                                              <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-warning/20">
+                                                  <ShieldAlert
+                                                      size={14}
+                                                      className="text-warning"
+                                                  />
+                                              </div>
+                                              <div className="flex-1 min-w-0 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                                                  <div className="text-text text-base leading-relaxed whitespace-pre-wrap">
+                                                      {body}
+                                                  </div>
+                                                  {ref && (
+                                                      <div className="mt-2 inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-2 py-1 font-mono text-base text-accent select-all">
+                                                          <span className="text-accent/60">
+                                                              ref
+                                                          </span>
+                                                          <span className="text-text">
+                                                              {ref}
+                                                          </span>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          </div>
+                                      );
+                                  })()
+                              ) : (
+                                  <div className="flex items-start gap-2 w-full">
+                                      <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-success/20">
+                                          <MessageSquare
+                                              size={14}
+                                              className="text-success"
+                                          />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                          {run.id === activeRunId &&
+                                          !runningStep &&
+                                          executingToolCalls.size === 0 ? (
+                                              <TypewriterAnswer
+                                                  text={run.answer}
+                                                  streaming={
+                                                      run.status ===
+                                                          "running" ||
+                                                      run.status === "planning"
+                                                  }
+                                              />
+                                          ) : (
+                                              <SmartAnswer text={run.answer} />
+                                          )}
+                                      </div>
+                                  </div>
+                              ))}
 
-            {/* Streaming answer — live preview while the agent is generating.
+                          {/* Streaming answer — live preview while the agent is generating.
                 Only shown when there are no active tool calls — during tool use
                 the agent streams internal reasoning/markdown that looks garbled.
                 We only reveal streaming text when the agent is in "pure answer"
                 mode (no running step, no executing tool calls). */}
-            {run.id === activeRunId && !run.answer && streamingAnswer && !runningStep && executingToolCalls.size === 0 && (
-              <div className="flex-1 min-w-0">
-                <TypewriterAnswer text={streamingAnswer} streaming />
-              </div>
-            )}
+                          {run.id === activeRunId &&
+                              !run.answer &&
+                              streamingAnswer &&
+                              !runningStep &&
+                              executingToolCalls.size === 0 && (
+                                  <div className="flex-1 min-w-0">
+                                      <TypewriterAnswer
+                                          text={streamingAnswer}
+                                          streaming
+                                      />
+                                  </div>
+                              )}
 
-            {/* Error */}
-            {run.error && (
-              <div className="flex items-start gap-2">
-                <AlertCircle size={14} className="text-error shrink-0 mt-0.5" />
-                <span className="text-error/80 text-base whitespace-pre-wrap break-words">{formatRunFailureMessage(run.error)}</span>
-              </div>
-            )}
+                          {/* Error */}
+                          {run.error && (
+                              <div className="flex items-start gap-2">
+                                  <AlertCircle
+                                      size={14}
+                                      className="text-error shrink-0 mt-0.5"
+                                  />
+                                  <span className="text-error/80 text-base whitespace-pre-wrap break-words">
+                                      {formatRunFailureMessage(run.error)}
+                                  </span>
+                              </div>
+                          )}
 
-            {/* Post-completion tool review — for the active run, after the
+                          {/* Post-completion tool review — for the active run, after the
                 answer (or error) lands, keep the inline expandable tool list
                 visible so the user can drill into each `Ran <tool>` row to
                 see the FULL command/args and the FULL output, mirroring
                 Copilot Chat's "Used X" disclosure. The live progress section
                 below renders the same list during execution; this block
                 preserves the same UX once the run has finished. */}
-            {run.id === activeRunId && steps.length > 0 && (run.status === "completed" || run.status === "failed" || run.status === "cancelled") && (
-              <div className="flex items-start gap-2 w-full">
-                <div className="flex-1 min-w-0">
-                  <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
-                    <div className="divide-y divide-border-subtle">
-                      {steps.map((step) => {
-                        const isFailed = step.status === "failed"
-                        const label = TOOL_LABELS[step.action] ?? step.action
-                        const detail = getToolDetail(step.action, step.input)
-                        const duration = step.startedAt && step.completedAt
-                          ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
-                          : null
-                        const isExpanded = expandedSteps.has(step.id)
-                        const fullArgs = formatToolArgs(step.input)
-                        const fullOutput = formatToolOutput(step.output, step.error)
-                        const canExpand = fullArgs.length > 0 || fullOutput.length > 0
-                        return (
-                          <div key={`done-${step.id}`}>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); if (canExpand) toggleStep(step.id) }}
-                              disabled={!canExpand}
-                              className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
-                            >
-                              {canExpand ? (
-                                isExpanded
-                                  ? <ChevronDown size={10} className="shrink-0 text-text-muted" />
-                                  : <ChevronRight size={10} className="shrink-0 text-text-muted" />
-                              ) : (
-                                <span className="w-2.5 shrink-0" />
-                              )}
-                              {isFailed
-                                ? <XCircle size={12} className="shrink-0 text-error" />
-                                : <CheckCircle2 size={12} className="shrink-0 text-success/50" />}
-                              <span className="text-base shrink-0 text-text-muted">{label}</span>
-                              {detail ? (
-                                <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">{detail}</span>
-                              ) : (
-                                <span className="flex-1" />
-                              )}
-                              {duration !== null && (
-                                <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
-                              )}
-                            </button>
-                            {isExpanded && canExpand && (
-                              <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
-                                {fullArgs && (
-                                  <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
-                                    <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
-                                      <span className="text-accent">{step.action}</span> {fullArgs}
-                                    </pre>
+                          {run.id === activeRunId &&
+                              steps.length > 0 &&
+                              (run.status === "completed" ||
+                                  run.status === "failed" ||
+                                  run.status === "cancelled") && (
+                                  <div className="flex items-start gap-2 w-full">
+                                      <div className="flex-1 min-w-0">
+                                          <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
+                                              <div className="divide-y divide-border-subtle">
+                                                  {steps.map((step) => {
+                                                      const isFailed =
+                                                          step.status ===
+                                                          "failed";
+                                                      const label =
+                                                          TOOL_LABELS[
+                                                              step.action
+                                                          ] ?? step.action;
+                                                      const detail =
+                                                          getToolDetail(
+                                                              step.action,
+                                                              step.input,
+                                                          );
+                                                      const duration =
+                                                          step.startedAt &&
+                                                          step.completedAt
+                                                              ? new Date(
+                                                                    step.completedAt,
+                                                                ).getTime() -
+                                                                new Date(
+                                                                    step.startedAt,
+                                                                ).getTime()
+                                                              : null;
+                                                      const isExpanded =
+                                                          expandedSteps.has(
+                                                              step.id,
+                                                          );
+                                                      const fullArgs =
+                                                          formatToolArgs(
+                                                              step.input,
+                                                          );
+                                                      const fullOutput =
+                                                          formatToolOutput(
+                                                              step.output,
+                                                              step.error,
+                                                          );
+                                                      const canExpand =
+                                                          fullArgs.length > 0 ||
+                                                          fullOutput.length > 0;
+                                                      return (
+                                                          <div
+                                                              key={`done-${step.id}`}
+                                                          >
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={(
+                                                                      e,
+                                                                  ) => {
+                                                                      e.stopPropagation();
+                                                                      if (
+                                                                          canExpand
+                                                                      )
+                                                                          toggleStep(
+                                                                              step.id,
+                                                                          );
+                                                                  }}
+                                                                  disabled={
+                                                                      !canExpand
+                                                                  }
+                                                                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
+                                                              >
+                                                                  {canExpand ? (
+                                                                      isExpanded ? (
+                                                                          <ChevronDown
+                                                                              size={
+                                                                                  10
+                                                                              }
+                                                                              className="shrink-0 text-text-muted"
+                                                                          />
+                                                                      ) : (
+                                                                          <ChevronRight
+                                                                              size={
+                                                                                  10
+                                                                              }
+                                                                              className="shrink-0 text-text-muted"
+                                                                          />
+                                                                      )
+                                                                  ) : (
+                                                                      <span className="w-2.5 shrink-0" />
+                                                                  )}
+                                                                  {isFailed ? (
+                                                                      <XCircle
+                                                                          size={
+                                                                              12
+                                                                          }
+                                                                          className="shrink-0 text-error"
+                                                                      />
+                                                                  ) : (
+                                                                      <CheckCircle2
+                                                                          size={
+                                                                              12
+                                                                          }
+                                                                          className="shrink-0 text-success/50"
+                                                                      />
+                                                                  )}
+                                                                  <span className="text-base shrink-0 text-text-muted">
+                                                                      {label}
+                                                                  </span>
+                                                                  {detail ? (
+                                                                      <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
+                                                                          {
+                                                                              detail
+                                                                          }
+                                                                      </span>
+                                                                  ) : (
+                                                                      <span className="flex-1" />
+                                                                  )}
+                                                                  {duration !==
+                                                                      null && (
+                                                                      <span className="shrink-0 text-xs text-text-muted font-mono">
+                                                                          {formatMs(
+                                                                              duration,
+                                                                          )}
+                                                                      </span>
+                                                                  )}
+                                                              </button>
+                                                              {isExpanded &&
+                                                                  canExpand && (
+                                                                      <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
+                                                                          {fullArgs && (
+                                                                              <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
+                                                                                  <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
+                                                                                      <span className="text-accent">
+                                                                                          {
+                                                                                              step.action
+                                                                                          }
+                                                                                      </span>{" "}
+                                                                                      {
+                                                                                          fullArgs
+                                                                                      }
+                                                                                  </pre>
+                                                                              </div>
+                                                                          )}
+                                                                          {fullOutput && (
+                                                                              <div
+                                                                                  className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}
+                                                                              >
+                                                                                  <pre
+                                                                                      className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}
+                                                                                  >
+                                                                                      {
+                                                                                          fullOutput
+                                                                                      }
+                                                                                  </pre>
+                                                                              </div>
+                                                                          )}
+                                                                      </div>
+                                                                  )}
+                                                          </div>
+                                                      );
+                                                  })}
+                                              </div>
+                                          </div>
+                                      </div>
                                   </div>
-                                )}
-                                {fullOutput && (
-                                  <div className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}>
-                                    <pre className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}>
-                                      {fullOutput}
-                                    </pre>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+                              )}
 
-            {/* Pending workspace file changes — accept/reject card (like ask_user) */}
-            {(run.pendingWorkspaceChanges ?? 0) > 0 && !dismissedWorkspaceDiffRunIds.has(run.id) && (
-              <WorkspaceChangesCard
-                runId={run.id}
-                onDismiss={() => dismissWorkspaceDiff(run.id)}
-              />
-            )}
+                          {/* Pending workspace file changes — accept/reject card (like ask_user) */}
+                          {(run.pendingWorkspaceChanges ?? 0) > 0 &&
+                              !dismissedWorkspaceDiffRunIds.has(run.id) && (
+                                  <WorkspaceChangesCard
+                                      runId={run.id}
+                                      onDismiss={() =>
+                                          dismissWorkspaceDiff(run.id)
+                                      }
+                                  />
+                              )}
 
-            {/* Rich progress — shown while agent is working and no answer yet. */}
-            {run.id === activeRunId && (run.status === "running" || run.status === "pending" || run.status === "planning") && !run.answer && (
-              <div className="flex items-start gap-2 w-full">
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  {run.status === "pending" ? (
-                    <span className="text-base text-text-muted">Queued…</span>
-                  ) : pendingInput?.runId === run.id ? (
-                    /* ask_user is active — show the response prompt */
-                    <AskUserPrompt
-                      question={pendingInput.question}
-                      options={pendingInput.options}
-                      sensitive={pendingInput.sensitive}
-                      onSubmit={handleRespond}
-                    />
-                  ) : (
-                    <>
-                      {/* Copilot-style inline step list — shows each tool call as a
+                          {/* Rich progress — shown while agent is working and no answer yet. */}
+                          {run.id === activeRunId &&
+                              (run.status === "running" ||
+                                  run.status === "pending" ||
+                                  run.status === "planning") &&
+                              !run.answer && (
+                                  <div className="flex items-start gap-2 w-full">
+                                      <div className="flex-1 min-w-0 space-y-1.5">
+                                          {run.status === "pending" ? (
+                                              <span className="text-base text-text-muted">
+                                                  Queued…
+                                              </span>
+                                          ) : pendingInput?.runId === run.id ? (
+                                              /* ask_user is active — show the response prompt */
+                                              <AskUserPrompt
+                                                  question={
+                                                      pendingInput.question
+                                                  }
+                                                  options={pendingInput.options}
+                                                  sensitive={
+                                                      pendingInput.sensitive
+                                                  }
+                                                  onSubmit={handleRespond}
+                                              />
+                                          ) : (
+                                              <>
+                                                  {/* Copilot-style inline step list — shows each tool call as a
                           row with its status icon, label, and detail. Running step
                           gets a spinner + cancel; completed steps show a checkmark.
                           Matches GitHub Copilot Chat's "Used tools" inline display. */}
-                      {steps.length > 0 ? (
-                        <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
-                          <div className="divide-y divide-border-subtle">
-                            {steps.slice(-8).map((step) => {
-                              const isRunning = step.status === "running"
-                              const isFailed = step.status === "failed"
-                              const label = TOOL_LABELS[step.action] ?? step.action
-                              const detail = getToolDetail(step.action, step.input)
-                              const duration = step.startedAt && step.completedAt
-                                ? new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
-                                : null
-                              const tc = isRunning
-                                ? [...executingToolCalls.values()].find((t) => t.toolName === step.action)
-                                : null
-                              const isExpanded = expandedSteps.has(step.id)
-                              const fullArgs = formatToolArgs(step.input)
-                              const fullOutput = formatToolOutput(step.output, step.error)
-                              const canExpand = fullArgs.length > 0 || fullOutput.length > 0
-                              return (
-                                <div key={step.id} className={isRunning ? "bg-overlay-1" : ""}>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); if (canExpand) toggleStep(step.id) }}
-                                    disabled={!canExpand}
-                                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
-                                  >
-                                    {/* Disclosure chevron — only when there's something to reveal */}
-                                    {canExpand ? (
-                                      isExpanded
-                                        ? <ChevronDown size={10} className="shrink-0 text-text-muted" />
-                                        : <ChevronRight size={10} className="shrink-0 text-text-muted" />
-                                    ) : (
-                                      <span className="w-2.5 shrink-0" />
-                                    )}
+                                                  {steps.length > 0 ? (
+                                                      <div className="rounded-lg border border-border-subtle bg-elevated/20 overflow-hidden">
+                                                          <div className="divide-y divide-border-subtle">
+                                                              {steps
+                                                                  .slice(-8)
+                                                                  .map(
+                                                                      (
+                                                                          step,
+                                                                      ) => {
+                                                                          const isRunning =
+                                                                              step.status ===
+                                                                              "running";
+                                                                          const isFailed =
+                                                                              step.status ===
+                                                                              "failed";
+                                                                          const label =
+                                                                              TOOL_LABELS[
+                                                                                  step
+                                                                                      .action
+                                                                              ] ??
+                                                                              step.action;
+                                                                          const detail =
+                                                                              getToolDetail(
+                                                                                  step.action,
+                                                                                  step.input,
+                                                                              );
+                                                                          const duration =
+                                                                              step.startedAt &&
+                                                                              step.completedAt
+                                                                                  ? new Date(
+                                                                                        step.completedAt,
+                                                                                    ).getTime() -
+                                                                                    new Date(
+                                                                                        step.startedAt,
+                                                                                    ).getTime()
+                                                                                  : null;
+                                                                          const tc =
+                                                                              isRunning
+                                                                                  ? [
+                                                                                        ...executingToolCalls.values(),
+                                                                                    ].find(
+                                                                                        (
+                                                                                            t,
+                                                                                        ) =>
+                                                                                            t.toolName ===
+                                                                                            step.action,
+                                                                                    )
+                                                                                  : null;
+                                                                          const isExpanded =
+                                                                              expandedSteps.has(
+                                                                                  step.id,
+                                                                              );
+                                                                          const fullArgs =
+                                                                              formatToolArgs(
+                                                                                  step.input,
+                                                                              );
+                                                                          const fullOutput =
+                                                                              formatToolOutput(
+                                                                                  step.output,
+                                                                                  step.error,
+                                                                              );
+                                                                          const canExpand =
+                                                                              fullArgs.length >
+                                                                                  0 ||
+                                                                              fullOutput.length >
+                                                                                  0;
+                                                                          return (
+                                                                              <div
+                                                                                  key={
+                                                                                      step.id
+                                                                                  }
+                                                                                  className={
+                                                                                      isRunning
+                                                                                          ? "bg-overlay-1"
+                                                                                          : ""
+                                                                                  }
+                                                                              >
+                                                                                  <button
+                                                                                      type="button"
+                                                                                      onClick={(
+                                                                                          e,
+                                                                                      ) => {
+                                                                                          e.stopPropagation();
+                                                                                          if (
+                                                                                              canExpand
+                                                                                          )
+                                                                                              toggleStep(
+                                                                                                  step.id,
+                                                                                              );
+                                                                                      }}
+                                                                                      disabled={
+                                                                                          !canExpand
+                                                                                      }
+                                                                                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${canExpand ? "hover:bg-overlay-1 cursor-pointer" : "cursor-default"}`}
+                                                                                  >
+                                                                                      {/* Disclosure chevron — only when there's something to reveal */}
+                                                                                      {canExpand ? (
+                                                                                          isExpanded ? (
+                                                                                              <ChevronDown
+                                                                                                  size={
+                                                                                                      10
+                                                                                                  }
+                                                                                                  className="shrink-0 text-text-muted"
+                                                                                              />
+                                                                                          ) : (
+                                                                                              <ChevronRight
+                                                                                                  size={
+                                                                                                      10
+                                                                                                  }
+                                                                                                  className="shrink-0 text-text-muted"
+                                                                                              />
+                                                                                          )
+                                                                                      ) : (
+                                                                                          <span className="w-2.5 shrink-0" />
+                                                                                      )}
 
-                                    {/* Status icon */}
-                                    {isRunning ? (
-                                      <Loader2 size={12} className="shrink-0 text-accent animate-spin" />
-                                    ) : isFailed ? (
-                                      <XCircle size={12} className="shrink-0 text-error" />
-                                    ) : (
-                                      <CheckCircle2 size={12} className="shrink-0 text-success/50" />
-                                    )}
+                                                                                      {/* Status icon */}
+                                                                                      {isRunning ? (
+                                                                                          <Loader2
+                                                                                              size={
+                                                                                                  12
+                                                                                              }
+                                                                                              className="shrink-0 text-accent animate-spin"
+                                                                                          />
+                                                                                      ) : isFailed ? (
+                                                                                          <XCircle
+                                                                                              size={
+                                                                                                  12
+                                                                                              }
+                                                                                              className="shrink-0 text-error"
+                                                                                          />
+                                                                                      ) : (
+                                                                                          <CheckCircle2
+                                                                                              size={
+                                                                                                  12
+                                                                                              }
+                                                                                              className="shrink-0 text-success/50"
+                                                                                          />
+                                                                                      )}
 
-                                    {/* Tool label */}
-                                    <span className={`text-base shrink-0 ${isRunning ? "text-text" : "text-text-muted"}`}>
-                                      {label}
-                                    </span>
+                                                                                      {/* Tool label */}
+                                                                                      <span
+                                                                                          className={`text-base shrink-0 ${isRunning ? "text-text" : "text-text-muted"}`}
+                                                                                      >
+                                                                                          {
+                                                                                              label
+                                                                                          }
+                                                                                      </span>
 
-                                    {/* Brief detail — path, query, command, etc. */}
-                                    {detail ? (
-                                      <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
-                                        {detail}
-                                      </span>
-                                    ) : (
-                                      <span className="flex-1" />
-                                    )}
+                                                                                      {/* Brief detail — path, query, command, etc. */}
+                                                                                      {detail ? (
+                                                                                          <span className="font-mono text-xs text-text-muted truncate flex-1 min-w-0">
+                                                                                              {
+                                                                                                  detail
+                                                                                              }
+                                                                                          </span>
+                                                                                      ) : (
+                                                                                          <span className="flex-1" />
+                                                                                      )}
 
-                                    {/* Duration (completed) or cancel (running) */}
-                                    {duration !== null && !isRunning && (
-                                      <span className="shrink-0 text-xs text-text-muted font-mono">{formatMs(duration)}</span>
-                                    )}
-                                    {isRunning && (
-                                      <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          if (tc) {
-                                            api.killToolCall(activeRunId!, tc.toolCallId, "Cancelled by user").catch(() => {})
-                                          } else {
-                                            handleCancel()
-                                          }
-                                        }}
-                                        className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
-                                        title="Stop this tool call"
-                                      >
-                                        <Square size={8} fill="currentColor" />
-                                      </span>
-                                    )}
-                                  </button>
+                                                                                      {/* Duration (completed) or cancel (running) */}
+                                                                                      {duration !==
+                                                                                          null &&
+                                                                                          !isRunning && (
+                                                                                              <span className="shrink-0 text-xs text-text-muted font-mono">
+                                                                                                  {formatMs(
+                                                                                                      duration,
+                                                                                                  )}
+                                                                                              </span>
+                                                                                          )}
+                                                                                      {isRunning && (
+                                                                                          <span
+                                                                                              role="button"
+                                                                                              tabIndex={
+                                                                                                  0
+                                                                                              }
+                                                                                              onClick={(
+                                                                                                  e,
+                                                                                              ) => {
+                                                                                                  e.stopPropagation();
+                                                                                                  if (
+                                                                                                      tc
+                                                                                                  ) {
+                                                                                                      api.killToolCall(
+                                                                                                          activeRunId!,
+                                                                                                          tc.toolCallId,
+                                                                                                          "Cancelled by user",
+                                                                                                      ).catch(
+                                                                                                          () => {},
+                                                                                                      );
+                                                                                                  } else {
+                                                                                                      handleCancel();
+                                                                                                  }
+                                                                                              }}
+                                                                                              className="shrink-0 flex items-center justify-center w-5 h-5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-colors"
+                                                                                              title="Stop this tool call"
+                                                                                          >
+                                                                                              <Square
+                                                                                                  size={
+                                                                                                      8
+                                                                                                  }
+                                                                                                  fill="currentColor"
+                                                                                              />
+                                                                                          </span>
+                                                                                      )}
+                                                                                  </button>
 
-                                  {/* Expanded detail panel — full input as `key="value"` pairs
+                                                                                  {/* Expanded detail panel — full input as `key="value"` pairs
                                       and the raw tool output below. Mirrors the screenshot the
                                       user shared: clicking the leaf reveals the actual command
                                       that was dispatched and what it returned. */}
-                                  {isExpanded && canExpand && (
-                                    <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
-                                      {fullArgs && (
-                                        <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
-                                          <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
-                                            <span className="text-accent">{step.action}</span> {fullArgs}
-                                          </pre>
-                                        </div>
-                                      )}
-                                      {fullOutput && (
-                                        <div className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}>
-                                          <pre className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}>
-                                            {fullOutput}
-                                          </pre>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        /* No steps yet — show phase label with animated dots */
-                        <div className="flex flex-col gap-1.5 py-1">
-                          <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:0ms]" />
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:150ms]" />
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:300ms]" />
-                            <span className="text-base text-text-muted font-mono">
-                              {currentPhase ?? (run.status === "planning" ? "Plan" : "Thinking")}
-                            </span>
-                          </div>
-                          {coherentStream && (
-                            <div className="ml-6 max-w-xs overflow-hidden">
-                              <span className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-tight">
-                                {coherentStream.slice(-120)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                                                                                  {isExpanded &&
+                                                                                      canExpand && (
+                                                                                          <div className="px-2.5 pb-2 pt-0.5 space-y-1.5">
+                                                                                              {fullArgs && (
+                                                                                                  <div className="rounded border border-border-subtle bg-surface/40 px-2 py-1.5">
+                                                                                                      <pre className="text-xs font-mono text-text-secondary whitespace-pre-wrap break-all leading-snug">
+                                                                                                          <span className="text-accent">
+                                                                                                              {
+                                                                                                                  step.action
+                                                                                                              }
+                                                                                                          </span>{" "}
+                                                                                                          {
+                                                                                                              fullArgs
+                                                                                                          }
+                                                                                                      </pre>
+                                                                                                  </div>
+                                                                                              )}
+                                                                                              {fullOutput && (
+                                                                                                  <div
+                                                                                                      className={`rounded border px-2 py-1.5 ${isFailed ? "border-error/40 bg-error/5" : "border-border-subtle bg-surface/40"}`}
+                                                                                                  >
+                                                                                                      <pre
+                                                                                                          className={`text-xs font-mono whitespace-pre-wrap break-all leading-snug max-h-64 overflow-auto ${isFailed ? "text-error" : "text-text-secondary"}`}
+                                                                                                      >
+                                                                                                          {
+                                                                                                              fullOutput
+                                                                                                          }
+                                                                                                      </pre>
+                                                                                                  </div>
+                                                                                              )}
+                                                                                          </div>
+                                                                                      )}
+                                                                              </div>
+                                                                          );
+                                                                      },
+                                                                  )}
+                                                          </div>
+                                                      </div>
+                                                  ) : (
+                                                      /* No steps yet — show phase label with animated dots */
+                                                      <div className="flex flex-col gap-1.5 py-1">
+                                                          <div className="flex items-center gap-2">
+                                                              <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:0ms]" />
+                                                              <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:150ms]" />
+                                                              <span className="w-1.5 h-1.5 rounded-full bg-success animate-bounce [animation-delay:300ms]" />
+                                                              <span className="text-base text-text-muted font-mono">
+                                                                  {currentPhase ??
+                                                                      (run.status ===
+                                                                      "planning"
+                                                                          ? "Plan"
+                                                                          : "Thinking")}
+                                                              </span>
+                                                          </div>
+                                                          {coherentStream && (
+                                                              <div className="ml-6 max-w-xs overflow-hidden">
+                                                                  <span className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-tight">
+                                                                      {coherentStream.slice(
+                                                                          -120,
+                                                                      )}
+                                                                  </span>
+                                                              </div>
+                                                          )}
+                                                      </div>
+                                                  )}
 
-                      {/* Active phase label — current pipeline step name or macro phase.
+                                                  {/* Active phase label — current pipeline step name or macro phase.
                           Shown below the step list so the user always knows WHY the
                           tool calls are happening (e.g. "Generating blueprint chess contract"). */}
-                      {currentPhase && steps.length > 0 && (
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="relative flex shrink-0 h-1.5 w-1.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-40" />
-                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent/60" />
-                            </span>
-                            <span className="text-xs text-text-muted font-mono truncate">{currentPhase}</span>
+                                                  {currentPhase &&
+                                                      steps.length > 0 && (
+                                                          <div className="flex flex-col gap-0.5">
+                                                              <div className="flex items-center gap-1.5">
+                                                                  <span className="relative flex shrink-0 h-1.5 w-1.5">
+                                                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-40" />
+                                                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent/60" />
+                                                                  </span>
+                                                                  <span className="text-xs text-text-muted font-mono truncate">
+                                                                      {
+                                                                          currentPhase
+                                                                      }
+                                                                  </span>
+                                                              </div>
+                                                              {coherentStream && (
+                                                                  <div className="ml-3 max-w-xs overflow-hidden">
+                                                                      <span className="text-xs text-text-muted/50 font-mono whitespace-pre-wrap break-all leading-tight">
+                                                                          {coherentStream.slice(
+                                                                              -120,
+                                                                          )}
+                                                                      </span>
+                                                                  </div>
+                                                              )}
+                                                          </div>
+                                                      )}
+
+                                                  {/* Live stats row — iteration · tokens · elapsed */}
+                                                  {(latestIteration ||
+                                                      liveUsage.totalTokens >
+                                                          0 ||
+                                                      totalElapsed > 0) && (
+                                                      <div className="flex items-center gap-3 text-xs text-text-muted font-mono opacity-70 pt-0.5">
+                                                          {latestIteration && (
+                                                              <span>
+                                                                  iter{" "}
+                                                                  {
+                                                                      latestIteration.current
+                                                                  }
+                                                                  /
+                                                                  {
+                                                                      latestIteration.max
+                                                                  }
+                                                              </span>
+                                                          )}
+                                                          {liveUsage.totalTokens >
+                                                              0 && (
+                                                              <span>
+                                                                  {liveUsage.totalTokens.toLocaleString()}{" "}
+                                                                  tk
+                                                              </span>
+                                                          )}
+                                                          {liveUsage.llmCalls >
+                                                              0 && (
+                                                              <span>
+                                                                  {
+                                                                      liveUsage.llmCalls
+                                                                  }{" "}
+                                                                  LLM calls
+                                                              </span>
+                                                          )}
+                                                          {totalElapsed > 0 && (
+                                                              <span className="flex items-center gap-0.5">
+                                                                  <Clock
+                                                                      size={9}
+                                                                  />
+                                                                  {totalElapsed}
+                                                                  s
+                                                              </span>
+                                                          )}
+                                                      </div>
+                                                  )}
+                                              </>
+                                          )}
+                                      </div>
+                                  </div>
+                              )}
+                      </div>
+                  ))}
+                  <div ref={bottomRef} />
+              </div>
+          </div>
+
+          {/* Agent picker + Input */}
+          <div className="shrink-0 space-y-2">
+              {/* Agent picker */}
+              {agents.length > 1 && (
+                  <div className="relative" ref={pickerRef}>
+                      <button
+                          className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
+                          onClick={() => setPickerOpen(!pickerOpen)}
+                      >
+                          <Brain size={12} className="text-accent" />
+                          <span className="truncate max-w-[140px]">
+                              {selectedAgent?.name ?? "Select agent"}
+                          </span>
+                          <ChevronDown size={12} />
+                      </button>
+
+                      {pickerOpen && (
+                          <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-border-subtle rounded-lg shadow-xl z-10 overflow-hidden">
+                              {agents.map((agent) => (
+                                  <button
+                                      key={agent.id}
+                                      className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm transition-colors ${
+                                          agent.id === selectedAgent?.id
+                                              ? "bg-accent/10 text-accent"
+                                              : "text-text-secondary hover:bg-overlay-2 hover:text-text"
+                                      }`}
+                                      onClick={() => {
+                                          setSelectedAgent(agent.id);
+                                          setPickerOpen(false);
+                                      }}
+                                  >
+                                      <Brain size={13} className="shrink-0" />
+                                      <div className="min-w-0">
+                                          <div className="truncate">
+                                              {agent.name}
+                                          </div>
+                                          {agent.description && (
+                                              <div className="text-sm text-text-muted truncate">
+                                                  {agent.description}
+                                              </div>
+                                          )}
+                                      </div>
+                                  </button>
+                              ))}
                           </div>
-                          {coherentStream && (
-                            <div className="ml-3 max-w-xs overflow-hidden">
-                              <span className="text-xs text-text-muted/50 font-mono whitespace-pre-wrap break-all leading-tight">
-                                {coherentStream.slice(-120)}
+                      )}
+                  </div>
+              )}
+
+              {/* Attachment chips */}
+              {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                      {attachments.map((att, i) => (
+                          <span
+                              key={i}
+                              className="flex items-center gap-1 text-sm bg-elevated text-text-secondary rounded-md pl-2 pr-1 py-0.5 max-w-[180px]"
+                          >
+                              <Paperclip
+                                  size={10}
+                                  className="shrink-0 text-accent"
+                              />
+                              <span className="truncate" title={att.name}>
+                                  {att.name}
                               </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                              <button
+                                  className="text-text-muted hover:text-error transition-colors ml-0.5 shrink-0"
+                                  onClick={() => removeAttachment(i)}
+                                  title="Remove"
+                              >
+                                  <X size={11} />
+                              </button>
+                          </span>
+                      ))}
+                  </div>
+              )}
 
-                      {/* Live stats row — iteration · tokens · elapsed */}
-                      {(latestIteration || liveUsage.totalTokens > 0 || totalElapsed > 0) && (
-                        <div className="flex items-center gap-3 text-xs text-text-muted font-mono opacity-70 pt-0.5">
-                          {latestIteration && (
-                            <span>iter {latestIteration.current}/{latestIteration.max}</span>
-                          )}
-                          {liveUsage.totalTokens > 0 && (
-                            <span>{liveUsage.totalTokens.toLocaleString()} tk</span>
-                          )}
-                          {liveUsage.llmCalls > 0 && (
-                            <span>{liveUsage.llmCalls} LLM calls</span>
-                          )}
-                          {totalElapsed > 0 && (
-                            <span className="flex items-center gap-0.5">
-                              <Clock size={9} />
-                              {totalElapsed}s
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
-      </div>
-
-      {/* Agent picker + Input */}
-      <div className="shrink-0 space-y-2">
-        {/* Agent picker */}
-        {agents.length > 1 && (
-          <div className="relative" ref={pickerRef}>
-            <button
-              className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
-              onClick={() => setPickerOpen(!pickerOpen)}
-            >
-              <Bot size={12} className="text-accent" />
-              <span className="truncate max-w-[140px]">{selectedAgent?.name ?? "Select agent"}</span>
-              <ChevronDown size={12} />
-            </button>
-
-            {pickerOpen && (
-              <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface border border-border-subtle rounded-lg shadow-xl z-10 overflow-hidden">
-                {agents.map((agent) => (
+              {/* Input */}
+              <div className="flex items-end gap-2">
+                  <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all resize-none overflow-hidden"
+                      style={{ maxHeight: "9rem" }}
+                      placeholder={
+                          pendingInput
+                              ? "Respond in the prompt above ↑"
+                              : listening
+                                ? "Listening..."
+                                : isRunning
+                                  ? "Agent is working..."
+                                  : "Enter a goal..."
+                      }
+                      value={input}
+                      onChange={(e) => {
+                          setInput(e.target.value);
+                          const el = e.target;
+                          el.style.height = "auto";
+                          el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSend();
+                          }
+                      }}
+                      disabled={sending || !!pendingInput}
+                  />
+                  {/* Hidden file input — triggered by Paperclip button */}
+                  <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                  />
                   <button
-                    key={agent.id}
-                    className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm transition-colors ${
-                      agent.id === selectedAgent?.id
-                        ? "bg-accent/10 text-accent"
-                        : "text-text-secondary hover:bg-overlay-2 hover:text-text"
-                    }`}
-                    onClick={() => {
-                      setSelectedAgent(agent.id)
-                      setPickerOpen(false)
-                    }}
+                      className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors`}
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Attach file"
                   >
-                    <Bot size={13} className="shrink-0" />
-                    <div className="min-w-0">
-                      <div className="truncate">{agent.name}</div>
-                      {agent.description && (
-                        <div className="text-sm text-text-muted truncate">{agent.description}</div>
-                      )}
-                    </div>
+                      <Paperclip size={16} />
                   </button>
-                ))}
+                  {SpeechRecognition && (
+                      <button
+                          className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} rounded-lg transition-colors ${
+                              listening
+                                  ? "bg-error/20 text-error hover:bg-error/30"
+                                  : "bg-elevated text-text-muted hover:text-text hover:bg-elevated/80"
+                          }`}
+                          onClick={toggleVoice}
+                          title={listening ? "Stop listening" : "Voice input"}
+                      >
+                          {listening ? <MicOff size={16} /> : <Mic size={16} />}
+                      </button>
+                  )}
+                  {/* Cancel (while running) / Send (idle) */}
+                  {isRunning ? (
+                      <button
+                          className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-error/15 hover:bg-error/25 text-error rounded-lg transition-colors`}
+                          onClick={handleCancel}
+                          title="Stop agent"
+                      >
+                          <Square size={16} fill="currentColor" />
+                      </button>
+                  ) : (
+                      <button
+                          className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-accent hover:bg-accent-hover text-text rounded-lg transition-colors disabled:opacity-40`}
+                          onClick={handleSend}
+                          disabled={
+                              sending ||
+                              (!input.trim() && attachments.length === 0)
+                          }
+                      >
+                          <Send size={16} />
+                      </button>
+                  )}
               </div>
-            )}
           </div>
-        )}
-
-        {/* Attachment chips */}
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {attachments.map((att, i) => (
-              <span
-                key={i}
-                className="flex items-center gap-1 text-sm bg-elevated text-text-secondary rounded-md pl-2 pr-1 py-0.5 max-w-[180px]"
-              >
-                <Paperclip size={10} className="shrink-0 text-accent" />
-                <span className="truncate" title={att.name}>{att.name}</span>
-                <button
-                  className="text-text-muted hover:text-error transition-colors ml-0.5 shrink-0"
-                  onClick={() => removeAttachment(i)}
-                  title="Remove"
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all resize-none overflow-hidden"
-            style={{ maxHeight: "9rem" }}
-            placeholder={
-              pendingInput ? "Respond in the prompt above ↑" :
-              listening ? "Listening..." :
-              isRunning ? "Agent is working..." :
-              "Enter a goal..."
-            }
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value)
-              const el = e.target
-              el.style.height = "auto"
-              el.style.height = `${Math.min(el.scrollHeight, 144)}px`
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
-            }}
-            disabled={sending || !!pendingInput}
-          />
-          {/* Hidden file input — triggered by Paperclip button */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <button
-            className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors`}
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach file"
-          >
-            <Paperclip size={16} />
-          </button>
-          {SpeechRecognition && (
-            <button
-              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} rounded-lg transition-colors ${
-                listening
-                  ? "bg-error/20 text-error hover:bg-error/30"
-                  : "bg-elevated text-text-muted hover:text-text hover:bg-elevated/80"
-              }`}
-              onClick={toggleVoice}
-              title={listening ? "Stop listening" : "Voice input"}
-            >
-              {listening ? <MicOff size={16} /> : <Mic size={16} />}
-            </button>
-          )}
-          {/* Cancel (while running) / Send (idle) */}
-          {isRunning ? (
-            <button
-              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-error/15 hover:bg-error/25 text-error rounded-lg transition-colors`}
-              onClick={handleCancel}
-              title="Stop agent"
-            >
-              <Square size={16} fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              className={`shrink-0 flex items-center justify-center ${compact ? 'w-8 h-8' : 'w-11 h-11'} bg-accent hover:bg-accent-hover text-text rounded-lg transition-colors disabled:opacity-40`}
-              onClick={handleSend}
-              disabled={sending || (!input.trim() && attachments.length === 0)}
-            >
-              <Send size={16} />
-            </button>
-          )}
-        </div>
       </div>
-    </div>
-  )
+  );
 }
